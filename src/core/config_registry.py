@@ -1090,6 +1090,23 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {"enum": ["simple", "full", "brief"]},
         "display_order": 55,
     },
+    "REPORT_LANGUAGE": {
+        "title": "Report Language",
+        "description": "Default output language for reports and notification templates. Supported values: zh, en.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "select",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "zh",
+        "options": [
+            {"label": "Chinese", "value": "zh"},
+            {"label": "English", "value": "en"},
+        ],
+        "validation": {"enum": ["zh", "en"]},
+        "display_order": 56,
+    },
     "REPORT_TEMPLATES_DIR": {
         "title": "Report Templates Dir",
         "description": "Directory for Jinja2 report templates (relative to project root).",
@@ -1102,7 +1119,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "templates",
         "options": [],
         "validation": {},
-        "display_order": 56,
+        "display_order": 57,
     },
     "REPORT_RENDERER_ENABLED": {
         "title": "Report Renderer Enabled",
@@ -1116,7 +1133,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "false",
         "options": [],
         "validation": {},
-        "display_order": 57,
+        "display_order": 58,
     },
     "REPORT_INTEGRITY_ENABLED": {
         "title": "Report Integrity Enabled",

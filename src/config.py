@@ -20,6 +20,11 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv, dotenv_values
 from dataclasses import dataclass, field
 
+from src.report_language import (
+    is_supported_report_language_value,
+    normalize_report_language,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -573,6 +578,7 @@ class Config:
 
     # 报告类型：simple(精简) 或 full(完整)
     report_type: str = "simple"
+    report_language: str = "zh"
 
     # 仅分析结果摘要：true 时只推送汇总，不含个股详情（Issue #262）
     report_summary_only: bool = False
@@ -793,6 +799,8 @@ class Config:
         2. .env 文件
         3. 代码中的默认值
         """
+        preexisting_report_language = os.environ.get("REPORT_LANGUAGE")
+
         # 确保环境变量已加载
         setup_env()
 
@@ -1036,6 +1044,10 @@ class Config:
             if schedule_run_immediately_env is not None
             else legacy_run_immediately
         )
+
+        report_language_raw = cls._resolve_report_language_env_value(
+            preexisting_report_language
+        )
         
         return cls(
             stock_list=stock_list,
@@ -1167,6 +1179,7 @@ class Config:
             astrbot_token=os.getenv('ASTRBOT_TOKEN'),
             single_stock_notify=os.getenv('SINGLE_STOCK_NOTIFY', 'false').lower() == 'true',
             report_type=cls._parse_report_type(os.getenv('REPORT_TYPE', 'simple')),
+            report_language=cls._parse_report_language(report_language_raw),
             report_summary_only=os.getenv('REPORT_SUMMARY_ONLY', 'false').lower() == 'true',
             report_templates_dir=os.getenv('REPORT_TEMPLATES_DIR', 'templates'),
             report_renderer_enabled=os.getenv('REPORT_RENDERER_ENABLED', 'false').lower() == 'true',
@@ -1576,6 +1589,69 @@ class Config:
             f"REPORT_TYPE '{value}' invalid, fallback to 'simple' (valid: simple/full/brief)"
         )
         return 'simple'
+
+    @classmethod
+    def _get_env_file_value(cls, key: str) -> Optional[str]:
+        """Read one config key directly from the active `.env` file."""
+        env_file = os.getenv("ENV_FILE")
+        env_path = Path(env_file) if env_file else (Path(__file__).parent.parent / ".env")
+        if not env_path.exists():
+            return None
+
+        try:
+            env_values = dotenv_values(env_path)
+        except Exception as exc:  # pragma: no cover - defensive branch
+            logging.getLogger(__name__).warning(
+                "Failed to read %s while resolving %s: %s",
+                env_path,
+                key,
+                exc,
+            )
+            return None
+
+        value = env_values.get(key)
+        if value is None:
+            return None
+        return str(value)
+
+    @classmethod
+    def _resolve_report_language_env_value(
+        cls,
+        preexisting_env_value: Optional[str],
+    ) -> str:
+        """Resolve REPORT_LANGUAGE while preserving real process env overrides."""
+        file_value = cls._get_env_file_value("REPORT_LANGUAGE")
+        env_value = os.getenv("REPORT_LANGUAGE")
+
+        if preexisting_env_value is not None:
+            env_text = preexisting_env_value.strip()
+            file_text = (file_value or "").strip()
+            if file_text and env_text and env_text.lower() != file_text.lower():
+                env_file = os.getenv("ENV_FILE") or str(Path(__file__).parent.parent / ".env")
+                logging.getLogger(__name__).warning(
+                    "REPORT_LANGUAGE environment value '%s' overrides %s ('%s')",
+                    preexisting_env_value,
+                    env_file,
+                    file_value,
+                )
+            return preexisting_env_value
+
+        if file_value is not None:
+            return file_value
+
+        return env_value or "zh"
+
+    @classmethod
+    def _parse_report_language(cls, value: Optional[str]) -> str:
+        """Parse REPORT_LANGUAGE, fallback to zh for invalid values."""
+        normalized = normalize_report_language(value, default="zh")
+        raw = (value or "").strip()
+        if raw and not is_supported_report_language_value(raw):
+            logging.getLogger(__name__).warning(
+                "REPORT_LANGUAGE '%s' invalid, fallback to 'zh' (valid: zh/en)",
+                value,
+            )
+        return normalized
 
     @classmethod
     def _parse_news_strategy_profile(cls, value: Optional[str]) -> str:
