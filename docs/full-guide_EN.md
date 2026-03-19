@@ -775,6 +775,7 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 - The FX status card on the Web `/portfolio` page includes a manual refresh action.
 - The button calls the existing `POST /api/v1/portfolio/fx/refresh` endpoint and reloads snapshot/risk data only.
 - If upstream FX fetch fails, the page may still remain stale after refresh and will explain the fallback result inline.
+- When `PORTFOLIO_FX_UPDATE_ENABLED=false`, the refresh API returns an explicit disabled status and the page shows that online FX refresh is disabled instead of implying that no refreshable pairs exist.
 
 ---
 
