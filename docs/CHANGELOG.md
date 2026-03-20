@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Dashboard state slice and workspace closure** — moved Home / Dashboard state into `stockPoolStore`, consolidated history selection, report loading, task syncing, polling refresh, and markdown drawer handling under a single state slice.
 - **Dashboard panel standardization** — kept the current dashboard layout contract stable while unifying history, report, news, and markdown presentation with shared tokens, standardized states, and bounded in-panel scrolling for the history list.
 - **Dashboard-to-chat follow-up bridge** — routed “Ask AI” follow-ups through report-context hydration instead of direct cross-page state coupling, while keeping chat sends usable when enriched history context is still loading.
+- 🧩 **Agent skill unification**（#779）— Multi-Agent runtime, API, Web chat, and config metadata now treat YAML trading profiles as a single `skill` concept; `/api/v1/agent/skills` becomes the primary discovery endpoint, `AGENT_SKILL_*` becomes the primary config surface, and legacy `strategy` names remain only as compatibility aliases.
+- 🗂️ **Skill bundle alignment** — `SkillManager` now supports mainstream `SKILL.md` bundles with YAML frontmatter and supporting files, while the multi-agent runtime’s optional forked execution path is renamed to `specialist` mode to keep “skills” and “specialist sub-agents” as separate concepts.
+- 🧭 **Skill metadata drives defaults** — built-in skill YAML files now declare their own aliases, default activation flags, router fallback participation, ordering priority, and market-regime tags; factory/router/Bot `/ask`/Web chat default selection no longer hardcode `bull_trend`-centric behavior in code.
 - 💼 **持仓账本并发写入串行化**（#742）— 持仓源事件写入/删除现在会在 SQLite 下先获取串行化写锁，减少并发卖出把超售流水写入账本的窗口；直接持仓写接口在锁竞争时返回 `409 portfolio_busy`，CSV 导入保持逐条提交并把 busy 计入 `failed_count`。
 - 💱 **持仓页汇率手动刷新入口补齐**（#748）— Web `/portfolio` 页面现在会在“汇率状态”卡片中展示“刷新汇率”按钮，直接调用现有 `POST /api/v1/portfolio/fx/refresh` 接口；刷新后会仅重载快照与风险数据，并以内联摘要反馈“已更新 / 仍 stale / 刷新失败”的结果，减少用户对 `fxStale` 长时间停留的误解。
 
@@ -49,12 +52,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 🤖 **Agent timeout and config hardening** — `AGENT_ORCHESTRATOR_TIMEOUT_S` now also protects the legacy single-agent ReAct loop, parallel tool batches stop waiting once the remaining budget is exhausted, and invalid numeric `.env` values fall back to safe defaults with warnings instead of crashing startup.
 - 🌐 **CORS wildcard + credentials compatibility** — `CORS_ALLOW_ALL=true` no longer combines `allow_origins=["*"]` with credentialed requests, avoiding browser-side cross-origin failures in demo/development setups.
 - 🧭 **Unavailable Agent settings hidden from Web UI** — Deep Research / Event Monitor controls are now treated as compatibility-only metadata in the current branch and are removed from the Settings page to avoid exposing non-functional toggles.
+- 🔧 **Skill compatibility hardening** — `allowed-tools` from `SKILL.md` now stays as bundle metadata instead of leaking into runtime tool selection, `/api/v1/agent/strategies` again preserves the legacy `strategies` payload shape, explicit `skills: []` clears stale chat context, and skill-level backtest rollups stay neutral until real per-skill stats exist.
+- 🎯 **显式策略选择不再叠加默认多头基线** — Agent 仅在未显式选择策略时才注入默认趋势交易基线；当用户或配置明确指定某个策略 skill 时，分析将只遵循所选策略，不再偷偷附带旧的 bull-trend 默认哲学。
+- 🧭 **隐式默认策略收敛为单一多头默认值** — 当 `AGENT_SKILLS` 留空且请求未显式传入策略时，后端不再同时激活多个 `default_active=true` 的 skill，而是统一回落到主默认策略 skill（当前为 `bull_trend`），让 API / Bot / Web 对“默认策略”的理解保持一致。
 
 ### 文档
 
 - 新增 Ollama 本地模型配置说明，同步更新 `README.md` 与 `docs/README_EN.md`（Fixes #690）
 - 完善 Ollama 配置说明：`docs/full-guide.md` / `docs/full-guide_EN.md` 环境变量表与 Note 补充 `OLLAMA_API_BASE`，避免英文用户误以为 Ollama 不能作为独立配置入口；合并重复的 `OLLAMA_API_BASE` 条目为单一条目
 - 明确文档同步治理边界：补充 `README.md`、专题文档、双语文档与交付说明之间的默认同步规则，减少后续文档漂移
+- 调整 Agent 术语兼容文案：用户入口继续以“策略”为主称呼，README、双语文档、设置页与问股界面补充 `skill` 作为内部统一命名，降低迁移期理解成本
 
 ## [3.8.0] - 2026-03-17
 

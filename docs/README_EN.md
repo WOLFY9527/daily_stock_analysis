@@ -44,7 +44,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Market | Global Markets | A-shares, Hong Kong stocks, US stocks |
 | Review | Market Review | Daily overview, sectors, northbound capital flow |
 | Backtest | AI Backtest Validation | Auto-evaluate historical analysis accuracy, direction win rate, SL/TP hit rates |
-| Agent Q&A | Strategy Chat | Multi-turn strategy chat with 11 built-in skills (Web/Bot/API) |
+| Agent Q&A | Strategy Chat | Multi-turn strategy chat with 11 built-in trading strategies (internally loaded as skills) (Web/Bot/API) |
 | Notifications | Multi-channel Push | Telegram, Discord, Slack, Email, WeChat Work, Feishu, etc. |
 | Automation | Scheduled Runs | GitHub Actions scheduled execution, no server required |
 
@@ -140,10 +140,11 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key (CN market review index enhancement; breadth also uses TickFlow when the plan supports universe queries) | Optional |
 | `WECHAT_MSG_TYPE` | WeChat Work message type, default `markdown`, set to `text` for plain markdown text | Optional |
-| `AGENT_MODE` | Enable Agent strategy chat mode (`true`/`false`, default `false`) | Optional |
+| `AGENT_MODE` | Enable Agent strategy chat mode (internally normalized as `skill`, `true`/`false`, default `false`) | Optional |
 | `AGENT_LITELLM_MODEL` | Optional Agent-only primary model; when empty it inherits `LITELLM_MODEL`, and bare names are normalized to `openai/<model>` | Optional |
 | `AGENT_MAX_STEPS` | Max reasoning steps for Agent mode (default `10`) | Optional |
-| `AGENT_STRATEGY_DIR` | Custom strategy directory (default built-in `strategies/`) | Optional |
+| `AGENT_SKILLS` | Comma-separated active strategy-skill ids. Leave empty to use the primary default strategy skill declared in metadata (built-in default: `bull_trend`); use `all` to activate every loaded strategy skill. | Optional |
+| `AGENT_SKILL_DIR` | Custom strategy-skill directory (default built-in `strategies/` compatibility path) | Optional |
 
 **Stock Code Format**
 
@@ -452,7 +453,7 @@ Enable the FastAPI service for configuration management and triggering analysis 
 | `/api/v1/backtest/results` | GET | Query backtest results (paginated) |
 | `/api/v1/backtest/performance` | GET | Get overall backtest performance |
 | `/api/v1/backtest/performance/{code}` | GET | Get per-stock backtest performance |
-| `/api/v1/agent/strategies` | GET | Get available built-in/custom strategies |
+| `/api/v1/agent/skills` | GET | Get available built-in/custom strategy skills |
 | `/api/v1/agent/chat/stream` | POST (SSE) | Stream multi-turn Agent strategy chat |
 | `/api/health` | GET | Health check |
 

@@ -135,10 +135,11 @@
 | `SEARXNG_BASE_URLS` | SearXNG 自建實例（無配額兜底，需在 settings.yml 啟用 format: json）；留空時預設自動發現公共實例 | 可選 |
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 為空時自動從 `searx.space` 取得公共實例（預設 `true`） | 可選 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可選 |
-| `AGENT_MODE` | 啟用 Agent 策略問股模式（`true`/`false`，預設 `false`） | 可選 |
+| `AGENT_MODE` | 啟用 Agent 策略問股模式（內部統一命名為 skill，`true`/`false`，預設 `false`） | 可選 |
 | `AGENT_LITELLM_MODEL` | Agent 專用主模型（可選）；留空時繼承 `LITELLM_MODEL`，無 provider 前綴時按 `openai/<model>` 解析 | 可選 |
 | `AGENT_MAX_STEPS` | Agent 最大推理步數（預設 `10`） | 可選 |
-| `AGENT_STRATEGY_DIR` | 自訂策略目錄（預設內建 `strategies/`） | 可選 |
+| `AGENT_SKILLS` | 逗號分隔的策略技能 id。留空時使用 metadata 宣告的主預設策略 skill（內建預設為 `bull_trend`）；使用 `all` 可啟用所有已載入策略技能。 | 可選 |
+| `AGENT_SKILL_DIR` | 自訂策略技能目錄（預設沿用內建 `strategies/` 相容路徑） | 可選 |
 
 #### 3. 啟用 Actions
 
@@ -232,7 +233,7 @@
 | `/api/v1/backtest/results` | GET | 查詢回測結果（分頁） |
 | `/api/v1/backtest/performance` | GET | 獲取整體回測表現 |
 | `/api/v1/backtest/performance/{code}` | GET | 獲取單股回測表現 |
-| `/api/v1/agent/strategies` | GET | 取得可用策略清單（內建/自訂） |
+| `/api/v1/agent/skills` | GET | 取得可用策略技能清單（內建/自訂） |
 | `/api/v1/agent/chat/stream` | POST (SSE) | Agent 多輪策略對話（流式） |
 | `/api/health` | GET | 健康檢查 |
 
