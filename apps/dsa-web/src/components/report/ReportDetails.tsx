@@ -45,7 +45,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
         <button
           type="button"
           onClick={() => copyToClipboard(jsonStr)}
-          className="home-accent-link absolute top-2 right-2 text-xs text-muted-text"
+          className="home-accent-link absolute top-2 right-2 z-10 text-xs text-muted-text"
         >
           {copied ? text.copied : text.copy}
         </button>
