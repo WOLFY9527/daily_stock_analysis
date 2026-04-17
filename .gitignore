@@ -100,3 +100,45 @@ scripts/fetch_one_us_stooq.py
 scripts/fetch_one_us_test.py
 scripts/fetch_us_stooq_watchlist.py
 scripts/fetch_us_watchlist.py
+
+# large data / generated artifacts
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.npz
+*.npy
+
+# archives / packaged exports
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# spreadsheets / exports
+*.csv
+*.tsv
+*.xlsx
+.xls
+
+# notebooks and temp analysis
+.ipynb_checkpoints/
+.ipynb~
+.tmp
+.temp
+
+# local caches / runtime artifacts
+tmp/
+temp/
+artifacts/
+cache/
+.cache-loader/
+
+# keep only intentional small fixtures/examples under version control
+!tests/fixtures/
+!docs/examples/
