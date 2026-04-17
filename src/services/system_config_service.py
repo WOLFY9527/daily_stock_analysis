@@ -9,6 +9,8 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from urllib.parse import urlparse
 
+import requests
+
 from src.config import (
     SUPPORTED_LLM_CHANNEL_PROTOCOLS,
     Config,
@@ -33,8 +35,12 @@ from src.core.config_registry import (
     get_field_definition,
     get_registered_field_keys,
 )
+from src.services.execution_log_service import ExecutionLogService
+from src.storage import get_db
 
 logger = logging.getLogger(__name__)
+
+FACTORY_RESET_CONFIRMATION_PHRASE = "FACTORY RESET"
 
 
 class ConfigValidationError(Exception):
@@ -83,6 +89,77 @@ class SystemConfigService:
 
         reset_fetcher_manager()
         reset_search_service()
+
+    def reset_runtime_caches(self) -> Dict[str, Any]:
+        """Reset bounded runtime caches/singletons for admin maintenance."""
+        self._reload_runtime_singletons()
+        return {
+            "success": True,
+            "action": "reset_runtime_caches",
+            "message": "Runtime provider/search caches were reset",
+            "cleared": ["data_fetcher_manager", "search_service"],
+        }
+
+    def factory_reset_system(
+        self,
+        *,
+        confirmation_phrase: str,
+        actor_user_id: Optional[str] = None,
+        actor_display_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run a bounded destructive factory reset while preserving bootstrap admin access."""
+        normalized_phrase = str(confirmation_phrase or "").strip()
+        if normalized_phrase != FACTORY_RESET_CONFIRMATION_PHRASE:
+            raise ValueError("Factory reset confirmation phrase did not match")
+
+        db = get_db()
+        result = db.factory_reset_non_bootstrap_state()
+        counts = result.get("counts") if isinstance(result.get("counts"), dict) else {}
+        cleared = [
+            str(item)
+            for item in (result.get("cleared") or [])
+            if str(item or "").strip()
+        ]
+        preserved = [
+            "bootstrap_admin_access",
+            "system_configuration",
+            "execution_logs",
+        ]
+
+        ExecutionLogService().record_admin_action(
+            action="factory_reset_system",
+            message="Factory reset completed for bounded non-bootstrap user-owned state.",
+            actor={
+                "user_id": actor_user_id,
+                "display_name": actor_display_name,
+                "role": "admin",
+            },
+            subsystem="system_control",
+            destructive=True,
+            detail={
+                "cleared": cleared,
+                "counts": counts,
+                "preserved": preserved,
+            },
+            request={
+                "confirmation_phrase": FACTORY_RESET_CONFIRMATION_PHRASE,
+            },
+            result={
+                "cleared": cleared,
+                "counts": counts,
+                "preserved": preserved,
+            },
+        )
+
+        return {
+            "success": True,
+            "action": "factory_reset_system",
+            "message": "Factory reset completed for bounded non-bootstrap user-owned state.",
+            "cleared": cleared,
+            "preserved": preserved,
+            "counts": counts,
+            "confirmation_phrase": FACTORY_RESET_CONFIRMATION_PHRASE,
+        }
 
     @classmethod
     def _normalize_display_value(cls, key: str, value: str) -> str:
@@ -140,9 +217,28 @@ class SystemConfigService:
 
         return display_map
 
+    @staticmethod
+    def _sync_phase_g_config_shadow(
+        *,
+        raw_config_map: Dict[str, str],
+        updated_by_user_id: Optional[str] = None,
+    ) -> None:
+        db = get_db()
+        schema_by_key: Dict[str, Dict[str, Any]] = {
+            key: get_field_definition(key, raw_config_map.get(key, ""))
+            for key in set(raw_config_map.keys()) | set(get_registered_field_keys())
+        }
+        db.sync_phase_g_runtime_config_shadow(
+            raw_config_map=raw_config_map,
+            field_schema_by_key=schema_by_key,
+            updated_by_user_id=updated_by_user_id,
+        )
+
     def get_config(self, include_schema: bool = True, mask_token: str = "******") -> Dict[str, Any]:
         """Return current config values without server-side secret masking."""
-        config_map = self._build_display_config_map(self._manager.read_config_map())
+        raw_config_map = self._manager.read_config_map()
+        self._sync_phase_g_config_shadow(raw_config_map=raw_config_map)
+        config_map = self._build_display_config_map(raw_config_map)
         registered_keys = set(get_registered_field_keys())
         all_keys = set(config_map.keys()) | registered_keys
 
@@ -296,6 +392,119 @@ class SystemConfigService:
                 "latency_ms": None,
             }
 
+    def test_custom_data_source(
+        self,
+        *,
+        name: str,
+        base_url: str,
+        credential_schema: str,
+        credential: str,
+        secret: str = "",
+        timeout_seconds: float = 5.0,
+    ) -> Dict[str, Any]:
+        """Run a bounded connectivity probe for a custom data source base URL."""
+        normalized_name = str(name or "").strip() or "custom_data_source"
+        normalized_url = str(base_url or "").strip()
+        parsed = urlparse(normalized_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return {
+                "success": False,
+                "message": "Base URL format is invalid",
+                "error": "Use a full http(s) URL before testing connectivity.",
+                "status_code": None,
+                "checked_url": normalized_url,
+                "latency_ms": None,
+            }
+
+        headers = {
+            "User-Agent": "WolfyStock-Config-Validation/1.0",
+            "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
+        }
+        trimmed_credential = str(credential or "").strip()
+        trimmed_secret = str(secret or "").strip()
+        if credential_schema == "key_secret":
+            if trimmed_credential:
+                headers["X-API-Key"] = trimmed_credential
+            if trimmed_secret:
+                headers["X-API-Secret"] = trimmed_secret
+        elif trimmed_credential:
+            headers["Authorization"] = f"Bearer {trimmed_credential}"
+
+        methods = ["HEAD", "GET"]
+        for index, method in enumerate(methods):
+            try:
+                started_at = time.perf_counter()
+                response = requests.request(
+                    method,
+                    normalized_url,
+                    headers=headers,
+                    timeout=max(2.0, float(timeout_seconds)),
+                    allow_redirects=True,
+                    stream=(method == "GET"),
+                )
+                latency_ms = int((time.perf_counter() - started_at) * 1000)
+                status_code = int(getattr(response, "status_code", 0) or 0)
+                try:
+                    return self._classify_custom_data_source_probe(
+                        status_code=status_code,
+                        checked_url=normalized_url,
+                        latency_ms=latency_ms,
+                    )
+                finally:
+                    close_fn = getattr(response, "close", None)
+                    if callable(close_fn):
+                        close_fn()
+            except requests.exceptions.SSLError as exc:
+                return {
+                    "success": False,
+                    "message": "TLS handshake failed while testing the endpoint",
+                    "error": "The server certificate could not be verified. Check HTTPS/TLS configuration.",
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+            except requests.exceptions.Timeout:
+                return {
+                    "success": False,
+                    "message": "Endpoint timed out during connectivity validation",
+                    "error": "The server did not respond before the timeout window elapsed.",
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+            except requests.exceptions.ConnectionError as exc:
+                classified = self._classify_custom_data_source_connection_error(exc)
+                return {
+                    "success": False,
+                    "message": classified[0],
+                    "error": classified[1],
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+            except requests.exceptions.RequestException as exc:
+                logger.warning("Custom data source probe failed for %s: %s", normalized_name, exc)
+                return {
+                    "success": False,
+                    "message": "Endpoint probe failed before a valid HTTP response was returned",
+                    "error": "The request could not be completed. Check proxy, URL, and server reachability.",
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+
+            if index == 0:
+                continue
+
+        return {
+            "success": False,
+            "message": "Endpoint probe did not complete",
+            "error": "No usable probe result was produced.",
+            "status_code": None,
+            "checked_url": normalized_url,
+            "latency_ms": None,
+        }
+
     @staticmethod
     def _extract_llm_response_text(response: Any) -> str:
         """Extract plain text content from heterogeneous LiteLLM response shapes."""
@@ -323,6 +532,89 @@ class SystemConfigService:
             if delta is not None:
                 return str(getattr(delta, "content", "") or "").strip()
         return str(content or "").strip()
+
+    @staticmethod
+    def _classify_custom_data_source_connection_error(
+        exc: requests.exceptions.ConnectionError,
+    ) -> Tuple[str, str]:
+        raw_error = str(exc).strip().lower()
+        dns_tokens = (
+            "name or service not known",
+            "temporary failure in name resolution",
+            "nodename nor servname provided",
+            "getaddrinfo failed",
+            "no address associated with hostname",
+        )
+        if any(token in raw_error for token in dns_tokens):
+            return (
+                "DNS resolution failed while testing the endpoint",
+                "The hostname could not be resolved. Check the Base URL host spelling and DNS availability.",
+            )
+        return (
+            "Connection to the endpoint failed",
+            "The host was reached incorrectly or refused the connection. Check host, port, firewall, and service status.",
+        )
+
+    @staticmethod
+    def _classify_custom_data_source_probe(
+        *,
+        status_code: int,
+        checked_url: str,
+        latency_ms: int,
+    ) -> Dict[str, Any]:
+        if 200 <= status_code < 300:
+            return {
+                "success": True,
+                "message": "Endpoint reachable and responded successfully",
+                "error": None,
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if 300 <= status_code < 400:
+            return {
+                "success": True,
+                "message": "Endpoint reachable and responded with a redirect",
+                "error": "The URL redirected during validation. Verify that the final target is the intended API endpoint.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if status_code in {401, 403}:
+            return {
+                "success": False,
+                "message": "Endpoint reachable, but the server rejected the supplied credentials",
+                "error": "Connectivity is working, but authentication/authorization failed.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if status_code == 404:
+            return {
+                "success": False,
+                "message": "Endpoint reachable, but the Base URL path was not found",
+                "error": "The server responded with 404. Check the Base URL path and version suffix.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if status_code in {405, 501}:
+            return {
+                "success": True,
+                "message": "Endpoint reachable, but the probe method is not supported",
+                "error": "The server rejected the validation method, but network reachability is confirmed.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        return {
+            "success": False,
+            "message": f"Endpoint responded with unexpected HTTP status {status_code}",
+            "error": "The server was reachable, but the response was not usable for validation.",
+            "status_code": status_code,
+            "checked_url": checked_url,
+            "latency_ms": latency_ms,
+        }
 
     @staticmethod
     def _build_llm_empty_response_hint(
@@ -402,6 +694,7 @@ class SystemConfigService:
         items: Sequence[Dict[str, str]],
         mask_token: str = "******",
         reload_now: bool = True,
+        actor_user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Validate and persist updates into `.env`, then reload runtime config."""
         current_version = self._manager.get_config_version()
@@ -429,6 +722,10 @@ class SystemConfigService:
             updates=updates,
             sensitive_keys=sensitive_keys,
             mask_token=mask_token,
+        )
+        self._sync_phase_g_config_shadow(
+            raw_config_map=self._manager.read_config_map(),
+            updated_by_user_id=actor_user_id,
         )
 
         warnings: List[str] = []
@@ -528,6 +825,9 @@ class SystemConfigService:
             updates=updates,
             sensitive_keys=set(),
             mask_token=mask_token,
+        )
+        self._sync_phase_g_config_shadow(
+            raw_config_map=self._manager.read_config_map(),
         )
 
     def _collect_issues(self, items: Sequence[Dict[str, str]], mask_token: str) -> List[Dict[str, Any]]:
@@ -756,6 +1056,23 @@ class SystemConfigService:
                     "severity": "error",
                     "expected": "non-empty TELEGRAM_CHAT_ID",
                     "actual": chat_id_value,
+                }
+            )
+
+        alpaca_key_id = (effective_map.get("ALPACA_API_KEY_ID") or "").strip()
+        alpaca_secret = (effective_map.get("ALPACA_API_SECRET_KEY") or "").strip()
+        if (alpaca_key_id or alpaca_secret) and not (alpaca_key_id and alpaca_secret) and (
+            {"ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY", "ALPACA_DATA_FEED"} & updated_keys
+        ):
+            missing_key = "ALPACA_API_SECRET_KEY" if alpaca_key_id and not alpaca_secret else "ALPACA_API_KEY_ID"
+            issues.append(
+                {
+                    "key": missing_key,
+                    "code": "missing_dependency",
+                    "message": "Alpaca credentials require both ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY",
+                    "severity": "error",
+                    "expected": "complete Alpaca key ID + secret key pair",
+                    "actual": "partial Alpaca credential set",
                 }
             )
 

@@ -9,12 +9,12 @@ API v1 Endpoints 模块初始化
 """
 
 from api.v1.endpoints import (
-    health,
     analysis,
     admin_logs,
     history,
     stocks,
     backtest,
+    scanner,
     system_config,
     auth,
     agent,
@@ -22,12 +22,12 @@ from api.v1.endpoints import (
     portfolio,
 )
 __all__ = [
-    "health",
     "analysis",
     "admin_logs",
     "history",
     "stocks",
     "backtest",
+    "scanner",
     "system_config",
     "auth",
     "agent",

@@ -80,6 +80,117 @@ docker-compose -f ./docker/docker-compose.yml exec stock-analyzer bash
 docker-compose -f ./docker/docker-compose.yml exec stock-analyzer python main.py --no-notify
 ```
 
+### 4.1 API 服务部署假设
+
+- 当前 `/api/v1/analysis/*` 任务队列与 SSE 状态保存在进程内存中。
+- 因此本阶段的默认安全部署方式是：**API 服务单进程运行**。
+- 不要把提供 `/api/v1/analysis/*` 和 `/api/v1/analysis/tasks/stream` 的 API 服务直接扩成多 worker / 多实例负载均衡，除非你已经自行提供 sticky routing 且能接受进程级任务可见性边界。
+- Docker Compose 当前 `server` 服务默认就是单容器单进程路径，符合这一前提。
+
+### 4.2 启动后检查
+
+```bash
+# 存活检查：仅确认进程能响应
+curl -fsS http://127.0.0.1:8000/api/health/live
+
+# 就绪检查：确认存储与任务队列部署前提都满足
+curl -fsS http://127.0.0.1:8000/api/health/ready
+```
+
+### 4.3 WS1 基线捕获（部署前）
+
+> 目标：只做基线采集与验证，不做任何性能优化或架构改造。
+
+```bash
+# 1) 单进程启动 API（保持 queue/SSE 的当前部署前提）
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+```
+
+另开一个终端执行：
+
+```bash
+# 2) 执行 WS1 基线采集（scanner / portfolio snapshot / analysis-search / backtest）
+python3 scripts/ws1_baseline_capture.py \
+  --base-url http://127.0.0.1:8000 \
+  --stock-code AAPL \
+  --scanner-market cn \
+  --scanner-profile cn_preopen_v1
+
+# 3) 基线结果默认输出到 reports/ws1_baseline/baseline_<UTC时间>.json
+```
+
+### 4.4 Canonical clean-checkout smoke（仅使用仓库已提交脚本）
+
+```bash
+# 干净 checkout 示例
+git clone <your-repo-url> /tmp/dsa-ws1-smoke
+cd /tmp/dsa-ws1-smoke
+cp .env.example .env
+pip install -r requirements.txt
+
+# Canonical smoke 路径（不依赖本地未跟踪 helper）
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
+### 4.5 目标主机 queue/SSE 单进程验证清单
+
+```bash
+# 1) 目标主机单进程启动
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+
+# 2) 健康检查
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
+
+# 3) 提交一个异步分析任务并拿到 task_id
+TASK_ID=$(python3 - <<'PY'
+import json, urllib.request
+req = urllib.request.Request(
+    "http://127.0.0.1:8000/api/v1/analysis/analyze",
+    data=json.dumps({"stock_code":"AAPL","async_mode":True,"report_type":"brief"}).encode("utf-8"),
+    headers={"Content-Type":"application/json","Accept":"application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(req, timeout=60) as resp:
+    body = json.loads(resp.read().decode("utf-8"))
+print(body.get("task_id",""))
+PY
+)
+echo "TASK_ID=${TASK_ID}"
+
+# 4) 观察 SSE 流（至少应看到 task_id 对应事件）
+curl -N "http://127.0.0.1:8000/api/v1/analysis/tasks/stream?task_id=${TASK_ID}" | sed -n '1,20p'
+
+# 5) 查询任务状态（确认非 404 且状态流转）
+curl -fsS "http://127.0.0.1:8000/api/v1/analysis/status/${TASK_ID}"
+```
+
+### 4.6 回滚检查清单（WS1 部署验证专用）
+
+```bash
+# A. 停止新版本
+docker-compose -f ./docker/docker-compose.yml down
+# 或 systemd
+# sudo systemctl stop stock-analyzer
+
+# B. 切回已验证提交（示例：<last-good-commit>）
+git fetch --all --tags
+git checkout <last-good-commit>
+
+# C. 重建并启动
+docker-compose -f ./docker/docker-compose.yml build --no-cache
+docker-compose -f ./docker/docker-compose.yml up -d
+# 或 systemd
+# sudo systemctl start stock-analyzer
+
+# D. 回滚后验证
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
 ### 5. 数据持久化
 
 数据自动保存在宿主机目录：
@@ -129,11 +240,15 @@ python main.py --schedule
 # 后台运行（使用 nohup）
 nohup python main.py --schedule > /dev/null 2>&1 &
 
-# 启动 Web 管理界面（云服务器需先在 .env 中设置 WEBUI_HOST=0.0.0.0）
-python main.py --webui-only
+# 启动 API / Web 管理界面（当前部署建议保持单进程）
+python main.py --serve-only --host 0.0.0.0 --port 8000
 
-# 启动 Web 界面（启动时执行一次分析；需每日定时请加 --schedule 或设 SCHEDULE_ENABLED=true）
-python main.py --webui
+# 启动 API / Web 管理界面，并在启动时执行一次分析
+python main.py --serve --host 0.0.0.0 --port 8000
+
+# 存活 / 就绪检查
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
 > 不知道怎么访问？→ [云服务器 Web 界面访问指南](deploy-webui-cloud.md)
@@ -161,7 +276,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/stock-analyzer
 Environment="PATH=/opt/stock-analyzer/venv/bin"
-ExecStart=/opt/stock-analyzer/venv/bin/python main.py --schedule
+ExecStart=/opt/stock-analyzer/venv/bin/python main.py --serve-only --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=30
 
@@ -187,6 +302,8 @@ sudo systemctl status stock-analyzer
 # 查看日志
 journalctl -u stock-analyzer -f
 ```
+
+如果你还需要定时分析，建议把 `--schedule` 单独放到另一个 systemd 服务，而不是和 API 服务混在同一个长期运行进程里。
 
 ---
 

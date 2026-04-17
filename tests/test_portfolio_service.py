@@ -355,6 +355,93 @@ class PortfolioServiceTestCase(unittest.TestCase):
 
         self.assertIn("Duplicate trade_uid", str(ctx.exception))
 
+    def test_broker_connection_crud_roundtrip(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+
+        created = self.service.create_broker_connection(
+            portfolio_account_id=aid,
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Primary IBKR",
+            broker_account_ref="U1234567",
+            import_mode="file",
+            sync_metadata={"source": "flex"},
+        )
+
+        self.assertEqual(created["owner_id"], account["owner_id"])
+        self.assertEqual(created["portfolio_account_id"], aid)
+        self.assertEqual(created["broker_type"], "ibkr")
+        self.assertEqual(created["connection_name"], "Primary IBKR")
+        self.assertEqual(created["sync_metadata"], {"source": "flex"})
+
+        listed = self.service.list_broker_connections(portfolio_account_id=aid)
+        self.assertEqual(len(listed), 1)
+        self.assertEqual(listed[0]["portfolio_account_name"], "Main")
+
+        updated = self.service.update_broker_connection(
+            created["id"],
+            connection_name="IBKR Flex",
+            status="disabled",
+            sync_metadata={"source": "flex", "region": "global"},
+        )
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated["connection_name"], "IBKR Flex")
+        self.assertEqual(updated["status"], "disabled")
+        self.assertEqual(updated["sync_metadata"]["region"], "global")
+
+        with self.assertRaises(PortfolioConflictError):
+            self.service.create_broker_connection(
+                portfolio_account_id=aid,
+                broker_type="ibkr",
+                connection_name="Duplicate Ref",
+                broker_account_ref="U1234567",
+            )
+
+    def test_event_delete_respects_owner_scope(self) -> None:
+        self.db.create_or_update_app_user(user_id="user-a", username="alice")
+        self.db.create_or_update_app_user(user_id="user-b", username="bob")
+        service_a = PortfolioService(owner_id="user-a")
+        service_b = PortfolioService(owner_id="user-b")
+
+        account = service_a.create_account(name="Alice Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+
+        trade_id = service_a.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )["id"]
+        cash_id = service_a.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 2),
+            direction="in",
+            amount=1000,
+            currency="CNY",
+        )["id"]
+        action_id = service_a.record_corporate_action(
+            account_id=aid,
+            symbol="600519",
+            effective_date=date(2026, 1, 3),
+            action_type="cash_dividend",
+            market="cn",
+            currency="CNY",
+            cash_dividend_per_share=1.0,
+        )["id"]
+
+        self.assertFalse(service_b.delete_trade_event(trade_id))
+        self.assertFalse(service_b.delete_cash_ledger_event(cash_id))
+        self.assertFalse(service_b.delete_corporate_action_event(action_id))
+
+        self.assertTrue(service_a.delete_trade_event(trade_id))
+        self.assertTrue(service_a.delete_cash_ledger_event(cash_id))
+        self.assertTrue(service_a.delete_corporate_action_event(action_id))
+
     def test_backdated_trade_write_invalidates_future_cache(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]
@@ -561,6 +648,164 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIsInstance(errors[0], PortfolioConflictError)
         self.assertIn("Duplicate trade_uid", str(errors[0]))
+
+    def test_snapshot_uses_batched_latest_close_lookup(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="000001",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=5,
+            price=20,
+            market="cn",
+            currency="CNY",
+        )
+
+        with patch.object(
+            self.service.repo,
+            "get_latest_close",
+            side_effect=AssertionError("snapshot read should batch latest-close lookups"),
+        ), patch.object(
+            self.service.repo,
+            "get_latest_closes",
+            create=True,
+            return_value={"600519": 100.0, "000001": 20.0},
+        ) as batch_lookup:
+            snapshot = self.service.get_portfolio_snapshot(
+                account_id=aid,
+                as_of=date(2026, 1, 1),
+                cost_method="fifo",
+            )
+
+        self.assertEqual(
+            {item["symbol"] for item in snapshot["accounts"][0]["positions"]},
+            {"600519", "000001"},
+        )
+        batch_lookup.assert_called_once()
+        self.assertEqual(set(batch_lookup.call_args.kwargs["symbols"]), {"600519", "000001"})
+        self.assertEqual(batch_lookup.call_args.kwargs["as_of"], date(2026, 1, 1))
+
+    def test_repeated_snapshot_read_reuses_cached_snapshot_without_replay_or_writeback(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 2), 100.0)
+
+        first = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            position_ids_before = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioPosition).where(PortfolioPosition.account_id == aid)
+                ).scalars().all()
+            ]
+            lot_ids_before = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioPositionLot).where(PortfolioPositionLot.account_id == aid)
+                ).scalars().all()
+            ]
+            snapshot_updated_at_before = snapshot_row.updated_at
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("warm snapshot read should reuse cached snapshot"),
+        ):
+            second = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        self.assertEqual(second, first)
+
+        with self.db.get_session() as session:
+            snapshot_row_after = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            position_ids_after = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioPosition).where(PortfolioPosition.account_id == aid)
+                ).scalars().all()
+            ]
+            lot_ids_after = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioPositionLot).where(PortfolioPositionLot.account_id == aid)
+                ).scalars().all()
+            ]
+
+        self.assertEqual(snapshot_row_after.updated_at, snapshot_updated_at_before)
+        self.assertEqual(position_ids_after, position_ids_before)
+        self.assertEqual(lot_ids_after, lot_ids_before)
+
+    def test_snapshot_cache_refreshes_after_market_data_update(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 2), 100.0)
+        self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        self._save_close("600519", date(2026, 1, 2), 120.0)
+        refreshed = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        position = refreshed["accounts"][0]["positions"][0]
+        self.assertAlmostEqual(position["last_price"], 120.0, places=6)
+        self.assertAlmostEqual(position["market_value_base"], 1200.0, places=6)
+        self.assertAlmostEqual(refreshed["accounts"][0]["total_equity"], 10200.0, places=6)
 
     def test_portfolio_write_session_maps_sqlite_locked_error(self) -> None:
         repo = PortfolioRepository(db_manager=self.db)

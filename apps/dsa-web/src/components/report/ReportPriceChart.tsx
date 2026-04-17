@@ -444,7 +444,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       try {
         const viewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
         if (!viewConfig) {
-          throw new Error('Unknown chart view');
+          throw new Error(t('chart.noData'));
         }
 
         const fixture = fixtures?.[activeView];
@@ -824,9 +824,9 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     const items = [
       { label: t('chart.candles'), color: 'var(--theme-chart-bull)', key: 'candles' as IndicatorKey },
       { label: t('chart.volumeBars'), color: 'var(--theme-chart-volume)', key: 'volume' as IndicatorKey },
-      { label: 'MA5', color: 'var(--theme-chart-ma5)', key: 'ma5' as IndicatorKey },
-      { label: 'MA10', color: 'var(--theme-chart-ma10)', key: 'ma10' as IndicatorKey },
-      { label: 'MA20', color: 'var(--theme-chart-ma20)', key: 'ma20' as IndicatorKey },
+      { label: t('chart.ma5'), color: 'var(--theme-chart-ma5)', key: 'ma5' as IndicatorKey },
+      { label: t('chart.ma10'), color: 'var(--theme-chart-ma10)', key: 'ma10' as IndicatorKey },
+      { label: t('chart.ma20'), color: 'var(--theme-chart-ma20)', key: 'ma20' as IndicatorKey },
       { label: t('chart.support'), color: 'var(--theme-chart-support)', key: 'support' as IndicatorKey },
       { label: t('chart.resistance'), color: 'var(--theme-chart-resistance)', key: 'resistance' as IndicatorKey },
       { label: t('chart.entry'), color: 'var(--theme-chart-entry)', key: 'entry' as IndicatorKey },
@@ -856,7 +856,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       { label: t('chart.close'), value: formatAxisPrice(activeBar.close) },
       { label: t('chart.volume'), value: formatVolume(activeBar.volume) },
       {
-        label: 'MA5 / MA10 / MA20',
+        label: t('chart.movingAverages'),
         value: [
           isFiniteNumber(activeBar.ma5) ? formatAxisPrice(activeBar.ma5) : '--',
           isFiniteNumber(activeBar.ma10) ? formatAxisPrice(activeBar.ma10) : '--',
@@ -888,12 +888,12 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       { label: t('chart.prevClose'), value: formatAxisPrice(prevClose ?? NaN) },
       { label: t('chart.volume'), value: formatVolume(volume) },
       { label: t('chart.turnover'), value: formatVolume(turnover) },
-      ...(isFiniteNumber(vwap) ? [{ label: 'VWAP', value: formatAxisPrice(vwap) }] : []),
+      ...(isFiniteNumber(vwap) ? [{ label: t('chart.vwap'), value: formatAxisPrice(vwap) }] : []),
     ];
   }, [market?.regularMetrics, summary?.changeAmount, summary?.changePct, summary?.currentPrice, t]);
 
   return (
-    <div className={chartShellClass} data-testid="report-price-chart">
+    <div className={chartShellClass} data-testid="report-price-chart" data-language={language}>
       <div className={cn('theme-chart-frame flex flex-col gap-3', integrated ? 'pt-1' : 'py-4 md:py-5')}>
         <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
@@ -908,7 +908,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
             <p className="mt-2 hidden text-xs leading-5 text-muted-text md:block">{t('chart.dragHint')}</p>
           </div>
 
-          <div className="theme-chart-toolbar w-full lg:ml-auto lg:w-auto lg:max-w-full">
+          <div className="theme-chart-toolbar w-full lg:ml-auto lg:w-auto lg:max-w-full" data-language={language}>
             <div className="theme-chart-toolbar-track">
               <div className="theme-chart-toolbar-tabs">
                 {VIEW_CONFIGS.map((view) => (
@@ -918,8 +918,8 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                     onClick={() => setActiveView(view.key)}
                     className={cn('theme-chart-tab', activeView === view.key ? 'is-active' : '')}
                   >
-                    <span className="font-medium">{t(view.labelKey)}</span>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-text">{t(view.descriptionKey)}</span>
+                    <span className="theme-chart-tab__primary">{t(view.labelKey)}</span>
+                    <span className="theme-chart-tab__secondary">{t(view.descriptionKey)}</span>
                   </button>
                 ))}
               </div>
@@ -1011,7 +1011,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
               <div className="flex h-full items-center justify-center text-sm text-secondary-text">{t('chart.noData')}</div>
             ) : (
               <>
-                <svg width={chartGeometry.width} height={chartGeometry.height} role="img" aria-label={`${stockCode} market chart`}>
+                <svg width={chartGeometry.width} height={chartGeometry.height} role="img" aria-label={t('chart.ariaLabel', { code: stockCode })}>
                   <defs>
                     <linearGradient id="chartVolumeFill" x1="0" x2="0" y1="0" y2="1">
                       <stop offset="0%" stopColor="var(--theme-chart-volume)" stopOpacity="0.52" />

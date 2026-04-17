@@ -11,12 +11,16 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import and_, delete, desc, func, select
+from sqlalchemy import and_, delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from src.storage import (
     DatabaseManager,
     PortfolioAccount,
+    PortfolioBrokerConnection,
+    PortfolioBrokerSyncCashBalance,
+    PortfolioBrokerSyncPosition,
+    PortfolioBrokerSyncState,
     PortfolioCashLedger,
     PortfolioCorporateAction,
     PortfolioDailySnapshot,
@@ -42,11 +46,61 @@ class PortfolioBusyError(Exception):
     """Raised when SQLite write serialization cannot acquire the ledger lock."""
 
 
+class DuplicateBrokerConnectionRefError(Exception):
+    """Raised when broker account reference conflicts within one owner/broker scope."""
+
+
 class PortfolioRepository:
     """DB access layer for portfolio P0 domain."""
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db = db_manager or DatabaseManager.get_instance()
+
+    @staticmethod
+    def _mark_phase_f_account_sync_in_session(*, session: Any, account_id: Optional[int]) -> None:
+        if account_id is None:
+            return
+        session.info.setdefault("phase_f_sync_account_ids", set()).add(int(account_id))
+
+    def _account_conditions(
+        self,
+        *,
+        account_id: Optional[int] = None,
+        include_inactive: bool = False,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[Any]:
+        conditions = []
+        if account_id is not None:
+            conditions.append(PortfolioAccount.id == account_id)
+        if not include_inactive:
+            conditions.append(PortfolioAccount.is_active.is_(True))
+        if not include_all_owners:
+            conditions.append(PortfolioAccount.owner_id == self.db.require_user_id(owner_id))
+        return conditions
+
+    def _broker_connection_conditions(
+        self,
+        *,
+        connection_id: Optional[int] = None,
+        portfolio_account_id: Optional[int] = None,
+        broker_type: Optional[str] = None,
+        status: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[Any]:
+        conditions = []
+        if connection_id is not None:
+            conditions.append(PortfolioBrokerConnection.id == connection_id)
+        if portfolio_account_id is not None:
+            conditions.append(PortfolioBrokerConnection.portfolio_account_id == portfolio_account_id)
+        if broker_type is not None:
+            conditions.append(PortfolioBrokerConnection.broker_type == broker_type)
+        if status is not None:
+            conditions.append(PortfolioBrokerConnection.status == status)
+        if not include_all_owners:
+            conditions.append(PortfolioBrokerConnection.owner_id == self.db.require_user_id(owner_id))
+        return conditions
 
     # ------------------------------------------------------------------
     # Account CRUD
@@ -60,9 +114,10 @@ class PortfolioRepository:
         base_currency: str,
         owner_id: Optional[str] = None,
     ) -> PortfolioAccount:
+        resolved_owner_id = self.db.require_user_id(owner_id)
         with self.db.get_session() as session:
             row = PortfolioAccount(
-                owner_id=owner_id,
+                owner_id=resolved_owner_id,
                 name=name,
                 broker=broker,
                 market=market,
@@ -70,23 +125,48 @@ class PortfolioRepository:
                 is_active=True,
             )
             session.add(row)
+            session.flush()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(row.id),
+            )
             session.commit()
             session.refresh(row)
             return row
 
-    def get_account(self, account_id: int, include_inactive: bool = False) -> Optional[PortfolioAccount]:
+    def get_account(
+        self,
+        account_id: int,
+        include_inactive: bool = False,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioAccount]:
         with self.db.get_session() as session:
             return self.get_account_in_session(
                 session=session,
                 account_id=account_id,
                 include_inactive=include_inactive,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
             )
 
-    def list_accounts(self, include_inactive: bool = False) -> List[PortfolioAccount]:
+    def list_accounts(
+        self,
+        include_inactive: bool = False,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[PortfolioAccount]:
         with self.db.get_session() as session:
+            conditions = self._account_conditions(
+                include_inactive=include_inactive,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
             query = select(PortfolioAccount)
-            if not include_inactive:
-                query = query.where(PortfolioAccount.is_active.is_(True))
+            if conditions:
+                query = query.where(and_(*conditions))
             rows = session.execute(query.order_by(PortfolioAccount.id.asc())).scalars().all()
             return list(rows)
 
@@ -96,39 +176,439 @@ class PortfolioRepository:
         session: Any,
         account_id: int,
         include_inactive: bool = False,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Optional[PortfolioAccount]:
-        conditions = [PortfolioAccount.id == account_id]
-        if not include_inactive:
-            conditions.append(PortfolioAccount.is_active.is_(True))
+        conditions = self._account_conditions(
+            account_id=account_id,
+            include_inactive=include_inactive,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
         return session.execute(
             select(PortfolioAccount).where(and_(*conditions)).limit(1)
         ).scalar_one_or_none()
 
-    def update_account(self, account_id: int, fields: Dict[str, Any]) -> Optional[PortfolioAccount]:
+    def update_account(
+        self,
+        account_id: int,
+        fields: Dict[str, Any],
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioAccount]:
         with self.db.get_session() as session:
-            row = session.execute(
-                select(PortfolioAccount).where(PortfolioAccount.id == account_id).limit(1)
-            ).scalar_one_or_none()
+            row = self.get_account_in_session(
+                session=session,
+                account_id=account_id,
+                include_inactive=True,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
             if row is None:
                 return None
+            if "owner_id" in fields:
+                fields["owner_id"] = self.db.require_user_id(fields.get("owner_id"))
             for key, value in fields.items():
                 setattr(row, key, value)
+            if "base_currency" in fields:
+                self._invalidate_account_cache_in_session(
+                    session=session,
+                    account_id=int(row.id),
+                    from_date=date.min,
+                )
             row.updated_at = datetime.now()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(row.id),
+            )
             session.commit()
             session.refresh(row)
             return row
 
-    def deactivate_account(self, account_id: int) -> bool:
+    def deactivate_account(
+        self,
+        account_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> bool:
         with self.db.get_session() as session:
-            row = session.execute(
-                select(PortfolioAccount).where(PortfolioAccount.id == account_id).limit(1)
-            ).scalar_one_or_none()
+            row = self.get_account_in_session(
+                session=session,
+                account_id=account_id,
+                include_inactive=True,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
             if row is None:
                 return False
             row.is_active = False
             row.updated_at = datetime.now()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(row.id),
+            )
             session.commit()
             return True
+
+    # ------------------------------------------------------------------
+    # Broker connection CRUD
+    # ------------------------------------------------------------------
+    def create_broker_connection(
+        self,
+        *,
+        portfolio_account_id: int,
+        broker_type: str,
+        broker_name: Optional[str],
+        connection_name: str,
+        broker_account_ref: Optional[str],
+        import_mode: str,
+        status: str,
+        sync_metadata_json: Optional[str],
+        owner_id: Optional[str] = None,
+    ) -> PortfolioBrokerConnection:
+        resolved_owner_id = self.db.require_user_id(owner_id)
+        with self.db.get_session() as session:
+            row = PortfolioBrokerConnection(
+                owner_id=resolved_owner_id,
+                portfolio_account_id=portfolio_account_id,
+                broker_type=broker_type,
+                broker_name=broker_name,
+                connection_name=connection_name,
+                broker_account_ref=broker_account_ref,
+                import_mode=import_mode,
+                status=status,
+                sync_metadata_json=sync_metadata_json,
+            )
+            session.add(row)
+            try:
+                session.flush()
+                self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=int(portfolio_account_id),
+                )
+                session.commit()
+            except IntegrityError as exc:
+                session.rollback()
+                raise DuplicateBrokerConnectionRefError(
+                    "Duplicate broker_account_ref for this broker connection owner scope"
+                ) from exc
+            session.refresh(row)
+            return row
+
+    def get_broker_connection(
+        self,
+        connection_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioBrokerConnection]:
+        with self.db.get_session() as session:
+            return self.get_broker_connection_in_session(
+                session=session,
+                connection_id=connection_id,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
+
+    def get_broker_connection_by_ref(
+        self,
+        *,
+        broker_type: str,
+        broker_account_ref: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioBrokerConnection]:
+        with self.db.get_session() as session:
+            conditions = self._broker_connection_conditions(
+                broker_type=broker_type,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
+            conditions.append(PortfolioBrokerConnection.broker_account_ref == broker_account_ref)
+            return session.execute(
+                select(PortfolioBrokerConnection).where(and_(*conditions)).limit(1)
+            ).scalar_one_or_none()
+
+    def list_broker_connections(
+        self,
+        *,
+        portfolio_account_id: Optional[int] = None,
+        broker_type: Optional[str] = None,
+        status: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[PortfolioBrokerConnection]:
+        with self.db.get_session() as session:
+            conditions = self._broker_connection_conditions(
+                portfolio_account_id=portfolio_account_id,
+                broker_type=broker_type,
+                status=status,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
+            query = select(PortfolioBrokerConnection)
+            if conditions:
+                query = query.where(and_(*conditions))
+            rows = session.execute(
+                query.order_by(PortfolioBrokerConnection.id.asc())
+            ).scalars().all()
+            return list(rows)
+
+    def replace_broker_sync_state(
+        self,
+        *,
+        broker_connection_id: int,
+        portfolio_account_id: int,
+        broker_type: str,
+        broker_account_ref: Optional[str],
+        sync_source: str,
+        sync_status: str,
+        snapshot_date: date,
+        synced_at: datetime,
+        base_currency: str,
+        total_cash: float,
+        total_market_value: float,
+        total_equity: float,
+        realized_pnl: float,
+        unrealized_pnl: float,
+        fx_stale: bool,
+        payload_json: Optional[str],
+        positions: Iterable[Dict[str, Any]],
+        cash_balances: Iterable[Dict[str, Any]],
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> PortfolioBrokerSyncState:
+        resolved_owner_id = self.db.require_user_id(owner_id)
+        with self.db.get_session() as session:
+            connection = self.get_broker_connection_in_session(
+                session=session,
+                connection_id=broker_connection_id,
+                owner_id=resolved_owner_id,
+                include_all_owners=include_all_owners,
+            )
+            if connection is None:
+                raise ValueError(f"Broker connection not found: {broker_connection_id}")
+            account = self.get_account_in_session(
+                session=session,
+                account_id=portfolio_account_id,
+                include_inactive=False,
+                owner_id=resolved_owner_id,
+                include_all_owners=include_all_owners,
+            )
+            if account is None:
+                raise ValueError(f"Active account not found: {portfolio_account_id}")
+            self._invalidate_account_cache_in_session(
+                session=session,
+                account_id=portfolio_account_id,
+                from_date=snapshot_date,
+            )
+
+            row = session.execute(
+                select(PortfolioBrokerSyncState)
+                .where(PortfolioBrokerSyncState.broker_connection_id == broker_connection_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = PortfolioBrokerSyncState(
+                    owner_id=resolved_owner_id,
+                    broker_connection_id=broker_connection_id,
+                    portfolio_account_id=portfolio_account_id,
+                )
+                session.add(row)
+
+            row.owner_id = resolved_owner_id
+            row.broker_connection_id = broker_connection_id
+            row.portfolio_account_id = portfolio_account_id
+            row.broker_type = broker_type
+            row.broker_account_ref = broker_account_ref
+            row.sync_source = sync_source
+            row.sync_status = sync_status
+            row.snapshot_date = snapshot_date
+            row.synced_at = synced_at
+            row.base_currency = base_currency
+            row.total_cash = total_cash
+            row.total_market_value = total_market_value
+            row.total_equity = total_equity
+            row.realized_pnl = realized_pnl
+            row.unrealized_pnl = unrealized_pnl
+            row.fx_stale = bool(fx_stale)
+            row.payload_json = payload_json
+            row.updated_at = datetime.now()
+
+            session.execute(
+                delete(PortfolioBrokerSyncPosition).where(
+                    PortfolioBrokerSyncPosition.broker_connection_id == broker_connection_id
+                )
+            )
+            session.execute(
+                delete(PortfolioBrokerSyncCashBalance).where(
+                    PortfolioBrokerSyncCashBalance.broker_connection_id == broker_connection_id
+                )
+            )
+
+            for item in positions:
+                session.add(
+                    PortfolioBrokerSyncPosition(
+                        owner_id=resolved_owner_id,
+                        broker_connection_id=broker_connection_id,
+                        portfolio_account_id=portfolio_account_id,
+                        broker_position_ref=item.get("broker_position_ref"),
+                        symbol=item["symbol"],
+                        market=item["market"],
+                        currency=item["currency"],
+                        quantity=float(item["quantity"]),
+                        avg_cost=float(item["avg_cost"]),
+                        last_price=float(item["last_price"]),
+                        market_value_base=float(item["market_value_base"]),
+                        unrealized_pnl_base=float(item["unrealized_pnl_base"]),
+                        valuation_currency=item["valuation_currency"],
+                        payload_json=item.get("payload_json"),
+                    )
+                )
+
+            for item in cash_balances:
+                session.add(
+                    PortfolioBrokerSyncCashBalance(
+                        owner_id=resolved_owner_id,
+                        broker_connection_id=broker_connection_id,
+                        portfolio_account_id=portfolio_account_id,
+                        currency=item["currency"],
+                        amount=float(item["amount"]),
+                        amount_base=float(item["amount_base"]),
+                    )
+                )
+
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(portfolio_account_id),
+            )
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_latest_broker_sync_state_for_account(
+        self,
+        *,
+        portfolio_account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioBrokerSyncState]:
+        with self.db.get_session() as session:
+            query = select(PortfolioBrokerSyncState).where(
+                PortfolioBrokerSyncState.portfolio_account_id == portfolio_account_id
+            )
+            if not include_all_owners:
+                query = query.where(
+                    PortfolioBrokerSyncState.owner_id == self.db.require_user_id(owner_id)
+                )
+            return session.execute(
+                query.order_by(
+                    PortfolioBrokerSyncState.synced_at.desc(),
+                    PortfolioBrokerSyncState.id.desc(),
+                ).limit(1)
+            ).scalar_one_or_none()
+
+    def list_broker_sync_positions(
+        self,
+        *,
+        broker_connection_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[PortfolioBrokerSyncPosition]:
+        with self.db.get_session() as session:
+            query = select(PortfolioBrokerSyncPosition).where(
+                PortfolioBrokerSyncPosition.broker_connection_id == broker_connection_id
+            )
+            if not include_all_owners:
+                query = query.where(
+                    PortfolioBrokerSyncPosition.owner_id == self.db.require_user_id(owner_id)
+                )
+            rows = session.execute(
+                query.order_by(
+                    PortfolioBrokerSyncPosition.symbol.asc(),
+                    PortfolioBrokerSyncPosition.market.asc(),
+                    PortfolioBrokerSyncPosition.currency.asc(),
+                )
+            ).scalars().all()
+            return list(rows)
+
+    def list_broker_sync_cash_balances(
+        self,
+        *,
+        broker_connection_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[PortfolioBrokerSyncCashBalance]:
+        with self.db.get_session() as session:
+            query = select(PortfolioBrokerSyncCashBalance).where(
+                PortfolioBrokerSyncCashBalance.broker_connection_id == broker_connection_id
+            )
+            if not include_all_owners:
+                query = query.where(
+                    PortfolioBrokerSyncCashBalance.owner_id == self.db.require_user_id(owner_id)
+                )
+            rows = session.execute(
+                query.order_by(PortfolioBrokerSyncCashBalance.currency.asc())
+            ).scalars().all()
+            return list(rows)
+
+    def get_broker_connection_in_session(
+        self,
+        *,
+        session: Any,
+        connection_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioBrokerConnection]:
+        conditions = self._broker_connection_conditions(
+            connection_id=connection_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        return session.execute(
+            select(PortfolioBrokerConnection).where(and_(*conditions)).limit(1)
+        ).scalar_one_or_none()
+
+    def update_broker_connection(
+        self,
+        connection_id: int,
+        fields: Dict[str, Any],
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[PortfolioBrokerConnection]:
+        with self.db.get_session() as session:
+            row = self.get_broker_connection_in_session(
+                session=session,
+                connection_id=connection_id,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
+            if row is None:
+                return None
+            original_account_id = int(row.portfolio_account_id)
+            if "owner_id" in fields:
+                fields["owner_id"] = self.db.require_user_id(fields.get("owner_id"))
+            for key, value in fields.items():
+                setattr(row, key, value)
+            row.updated_at = datetime.now()
+            try:
+                session.flush()
+                for account_id in sorted({original_account_id, int(row.portfolio_account_id)}):
+                    self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                        session=session,
+                        account_id=account_id,
+                    )
+                session.commit()
+            except IntegrityError as exc:
+                session.rollback()
+                raise DuplicateBrokerConnectionRefError(
+                    "Duplicate broker_account_ref for this broker connection owner scope"
+                ) from exc
+            session.refresh(row)
+            return row
 
     # ------------------------------------------------------------------
     # Event writes
@@ -146,6 +626,11 @@ class PortfolioRepository:
 
         try:
             yield session
+            for account_id in sorted(session.info.get("phase_f_sync_account_ids", set())):
+                self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=account_id,
+                )
             session.commit()
         except OperationalError as exc:
             session.rollback()
@@ -247,17 +732,50 @@ class PortfolioRepository:
             session.expunge(row)
             return row
 
-    def delete_trade(self, trade_id: int) -> bool:
+    def delete_trade(
+        self,
+        trade_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> bool:
         with self.portfolio_write_session() as session:
-            return self.delete_trade_in_session(session=session, trade_id=trade_id)
+            return self.delete_trade_in_session(
+                session=session,
+                trade_id=trade_id,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
 
-    def delete_cash_ledger(self, entry_id: int) -> bool:
+    def delete_cash_ledger(
+        self,
+        entry_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> bool:
         with self.portfolio_write_session() as session:
-            return self.delete_cash_ledger_in_session(session=session, entry_id=entry_id)
+            return self.delete_cash_ledger_in_session(
+                session=session,
+                entry_id=entry_id,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
 
-    def delete_corporate_action(self, action_id: int) -> bool:
+    def delete_corporate_action(
+        self,
+        action_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> bool:
         with self.portfolio_write_session() as session:
-            return self.delete_corporate_action_in_session(session=session, action_id=action_id)
+            return self.delete_corporate_action_in_session(
+                session=session,
+                action_id=action_id,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
 
     def has_trade_uid(self, account_id: int, trade_uid: Optional[str]) -> bool:
         """Return True when trade_uid already exists in the account."""
@@ -335,6 +853,7 @@ class PortfolioRepository:
             dedup_hash=dedup_hash,
         )
         session.add(row)
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=account_id)
         self._invalidate_account_cache_in_session(
             session=session,
             account_id=account_id,
@@ -372,6 +891,7 @@ class PortfolioRepository:
             note=note,
         )
         session.add(row)
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=account_id)
         self._invalidate_account_cache_in_session(
             session=session,
             account_id=account_id,
@@ -407,6 +927,7 @@ class PortfolioRepository:
             note=note,
         )
         session.add(row)
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=account_id)
         self._invalidate_account_cache_in_session(
             session=session,
             account_id=account_id,
@@ -416,10 +937,22 @@ class PortfolioRepository:
         session.refresh(row)
         return row
 
-    def delete_trade_in_session(self, *, session: Any, trade_id: int) -> bool:
-        row = session.execute(
-            select(PortfolioTrade).where(PortfolioTrade.id == trade_id).limit(1)
-        ).scalar_one_or_none()
+    def delete_trade_in_session(
+        self,
+        *,
+        session: Any,
+        trade_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> bool:
+        query = (
+            select(PortfolioTrade)
+            .join(PortfolioAccount, PortfolioAccount.id == PortfolioTrade.account_id)
+            .where(PortfolioTrade.id == trade_id)
+        )
+        if not include_all_owners:
+            query = query.where(PortfolioAccount.owner_id == self.db.require_user_id(owner_id))
+        row = session.execute(query.limit(1)).scalar_one_or_none()
         if row is None:
             return False
         self._invalidate_account_cache_in_session(
@@ -427,14 +960,27 @@ class PortfolioRepository:
             account_id=int(row.account_id),
             from_date=row.trade_date,
         )
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=int(row.account_id))
         session.delete(row)
         session.flush()
         return True
 
-    def delete_cash_ledger_in_session(self, *, session: Any, entry_id: int) -> bool:
-        row = session.execute(
-            select(PortfolioCashLedger).where(PortfolioCashLedger.id == entry_id).limit(1)
-        ).scalar_one_or_none()
+    def delete_cash_ledger_in_session(
+        self,
+        *,
+        session: Any,
+        entry_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> bool:
+        query = (
+            select(PortfolioCashLedger)
+            .join(PortfolioAccount, PortfolioAccount.id == PortfolioCashLedger.account_id)
+            .where(PortfolioCashLedger.id == entry_id)
+        )
+        if not include_all_owners:
+            query = query.where(PortfolioAccount.owner_id == self.db.require_user_id(owner_id))
+        row = session.execute(query.limit(1)).scalar_one_or_none()
         if row is None:
             return False
         self._invalidate_account_cache_in_session(
@@ -442,14 +988,27 @@ class PortfolioRepository:
             account_id=int(row.account_id),
             from_date=row.event_date,
         )
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=int(row.account_id))
         session.delete(row)
         session.flush()
         return True
 
-    def delete_corporate_action_in_session(self, *, session: Any, action_id: int) -> bool:
-        row = session.execute(
-            select(PortfolioCorporateAction).where(PortfolioCorporateAction.id == action_id).limit(1)
-        ).scalar_one_or_none()
+    def delete_corporate_action_in_session(
+        self,
+        *,
+        session: Any,
+        action_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> bool:
+        query = (
+            select(PortfolioCorporateAction)
+            .join(PortfolioAccount, PortfolioAccount.id == PortfolioCorporateAction.account_id)
+            .where(PortfolioCorporateAction.id == action_id)
+        )
+        if not include_all_owners:
+            query = query.where(PortfolioAccount.owner_id == self.db.require_user_id(owner_id))
+        row = session.execute(query.limit(1)).scalar_one_or_none()
         if row is None:
             return False
         self._invalidate_account_cache_in_session(
@@ -457,6 +1016,7 @@ class PortfolioRepository:
             account_id=int(row.account_id),
             from_date=row.effective_date,
         )
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=int(row.account_id))
         session.delete(row)
         session.flush()
         return True
@@ -576,6 +1136,8 @@ class PortfolioRepository:
         side: Optional[str],
         page: int,
         page_size: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[PortfolioTrade], int]:
         with self.db.get_session() as session:
             conditions = []
@@ -592,6 +1154,11 @@ class PortfolioRepository:
 
             data_query = select(PortfolioTrade)
             count_query = select(func.count()).select_from(PortfolioTrade)
+            if not include_all_owners:
+                owner_filter = PortfolioAccount.owner_id == self.db.require_user_id(owner_id)
+                data_query = data_query.join(PortfolioAccount, PortfolioAccount.id == PortfolioTrade.account_id)
+                count_query = count_query.join(PortfolioAccount, PortfolioAccount.id == PortfolioTrade.account_id)
+                conditions.append(owner_filter)
             if conditions:
                 where_clause = and_(*conditions)
                 data_query = data_query.where(where_clause)
@@ -615,6 +1182,8 @@ class PortfolioRepository:
         direction: Optional[str],
         page: int,
         page_size: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[PortfolioCashLedger], int]:
         with self.db.get_session() as session:
             conditions = []
@@ -629,6 +1198,11 @@ class PortfolioRepository:
 
             data_query = select(PortfolioCashLedger)
             count_query = select(func.count()).select_from(PortfolioCashLedger)
+            if not include_all_owners:
+                owner_filter = PortfolioAccount.owner_id == self.db.require_user_id(owner_id)
+                data_query = data_query.join(PortfolioAccount, PortfolioAccount.id == PortfolioCashLedger.account_id)
+                count_query = count_query.join(PortfolioAccount, PortfolioAccount.id == PortfolioCashLedger.account_id)
+                conditions.append(owner_filter)
             if conditions:
                 where_clause = and_(*conditions)
                 data_query = data_query.where(where_clause)
@@ -653,6 +1227,8 @@ class PortfolioRepository:
         action_type: Optional[str],
         page: int,
         page_size: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[PortfolioCorporateAction], int]:
         with self.db.get_session() as session:
             conditions = []
@@ -669,6 +1245,11 @@ class PortfolioRepository:
 
             data_query = select(PortfolioCorporateAction)
             count_query = select(func.count()).select_from(PortfolioCorporateAction)
+            if not include_all_owners:
+                owner_filter = PortfolioAccount.owner_id == self.db.require_user_id(owner_id)
+                data_query = data_query.join(PortfolioAccount, PortfolioAccount.id == PortfolioCorporateAction.account_id)
+                count_query = count_query.join(PortfolioAccount, PortfolioAccount.id == PortfolioCorporateAction.account_id)
+                conditions.append(owner_filter)
             if conditions:
                 where_clause = and_(*conditions)
                 data_query = data_query.where(where_clause)
@@ -702,6 +1283,61 @@ class PortfolioRepository:
             if row is None or row.close is None:
                 return None
             return float(row.close)
+
+    def get_latest_closes(self, *, symbols: Iterable[str], as_of: date) -> Dict[str, float]:
+        normalized = sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return {}
+
+        latest_dates = (
+            select(
+                StockDaily.code.label("code"),
+                func.max(StockDaily.date).label("latest_date"),
+            )
+            .where(
+                and_(
+                    StockDaily.code.in_(normalized),
+                    StockDaily.date <= as_of,
+                )
+            )
+            .group_by(StockDaily.code)
+            .subquery()
+        )
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(StockDaily.code, StockDaily.close)
+                .join(
+                    latest_dates,
+                    and_(
+                        StockDaily.code == latest_dates.c.code,
+                        StockDaily.date == latest_dates.c.latest_date,
+                    ),
+                )
+            ).all()
+        return {
+            str(code).upper(): float(close)
+            for code, close in rows
+            if code is not None and close is not None
+        }
+
+    def get_latest_market_data_update(
+        self,
+        *,
+        symbols: Iterable[str],
+        as_of: date,
+    ) -> Optional[datetime]:
+        normalized = sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return None
+        with self.db.get_session() as session:
+            return session.execute(
+                select(func.max(StockDaily.updated_at)).where(
+                    and_(
+                        StockDaily.code.in_(normalized),
+                        StockDaily.date <= as_of,
+                    )
+                )
+            ).scalar_one()
 
     def save_fx_rate(
         self,
@@ -763,6 +1399,40 @@ class PortfolioRepository:
             ).scalar_one_or_none()
             return row
 
+    def get_latest_fx_rate_update(
+        self,
+        *,
+        as_of: date,
+        base_currency: Optional[str] = None,
+        currencies: Optional[Iterable[str]] = None,
+    ) -> Optional[datetime]:
+        normalized_base = str(base_currency or "").strip().upper() or None
+        normalized_currencies = sorted(
+            {
+                str(currency or "").strip().upper()
+                for currency in (currencies or [])
+                if str(currency or "").strip()
+            }
+        )
+        if normalized_base is not None and not normalized_currencies:
+            return None
+        with self.db.get_session() as session:
+            query = select(func.max(PortfolioFxRate.updated_at)).where(PortfolioFxRate.rate_date <= as_of)
+            if normalized_base is not None:
+                query = query.where(
+                    or_(
+                        and_(
+                            PortfolioFxRate.from_currency == normalized_base,
+                            PortfolioFxRate.to_currency.in_(normalized_currencies),
+                        ),
+                        and_(
+                            PortfolioFxRate.to_currency == normalized_base,
+                            PortfolioFxRate.from_currency.in_(normalized_currencies),
+                        ),
+                    )
+                )
+            return session.execute(query).scalar_one()
+
     def list_daily_snapshots_for_risk(
         self,
         *,
@@ -770,6 +1440,8 @@ class PortfolioRepository:
         cost_method: str,
         account_id: Optional[int] = None,
         lookback_days: int = 180,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> List[PortfolioDailySnapshot]:
         """Load snapshot rows in ascending date order for risk monitoring."""
         with self.db.get_session() as session:
@@ -781,6 +1453,10 @@ class PortfolioRepository:
             )
             if account_id is not None:
                 query = query.where(PortfolioDailySnapshot.account_id == account_id)
+            if not include_all_owners:
+                query = query.join(PortfolioAccount, PortfolioAccount.id == PortfolioDailySnapshot.account_id).where(
+                    PortfolioAccount.owner_id == self.db.require_user_id(owner_id)
+                )
             rows = session.execute(
                 query.order_by(
                     PortfolioDailySnapshot.snapshot_date.asc(),
@@ -792,6 +1468,62 @@ class PortfolioRepository:
             # Keep only the latest N calendar days window for risk calculations.
             cutoff_ordinal = as_of.toordinal() - lookback_days
             return [row for row in rows if row.snapshot_date.toordinal() >= cutoff_ordinal]
+
+    def get_cached_snapshot_bundle(
+        self,
+        *,
+        account_id: int,
+        snapshot_date: date,
+        cost_method: str,
+    ) -> Optional[Dict[str, Any]]:
+        with self.db.get_session() as session:
+            snapshot = session.execute(
+                select(PortfolioDailySnapshot).where(
+                    and_(
+                        PortfolioDailySnapshot.account_id == account_id,
+                        PortfolioDailySnapshot.snapshot_date == snapshot_date,
+                        PortfolioDailySnapshot.cost_method == cost_method,
+                    )
+                ).limit(1)
+            ).scalar_one_or_none()
+            if snapshot is None:
+                return None
+            positions = session.execute(
+                select(PortfolioPosition)
+                .where(
+                    and_(
+                        PortfolioPosition.account_id == account_id,
+                        PortfolioPosition.cost_method == cost_method,
+                    )
+                )
+                .order_by(
+                    PortfolioPosition.symbol.asc(),
+                    PortfolioPosition.market.asc(),
+                    PortfolioPosition.currency.asc(),
+                    PortfolioPosition.id.asc(),
+                )
+            ).scalars().all()
+            lots = session.execute(
+                select(PortfolioPositionLot)
+                .where(
+                    and_(
+                        PortfolioPositionLot.account_id == account_id,
+                        PortfolioPositionLot.cost_method == cost_method,
+                    )
+                )
+                .order_by(
+                    PortfolioPositionLot.symbol.asc(),
+                    PortfolioPositionLot.market.asc(),
+                    PortfolioPositionLot.currency.asc(),
+                    PortfolioPositionLot.open_date.asc(),
+                    PortfolioPositionLot.id.asc(),
+                )
+            ).scalars().all()
+            return {
+                "snapshot": snapshot,
+                "positions": list(positions),
+                "lots": list(lots),
+            }
 
     # ------------------------------------------------------------------
     # Snapshot / position cache
@@ -856,6 +1588,10 @@ class PortfolioRepository:
                     )
                 )
 
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(account_id),
+            )
             session.commit()
 
     def _invalidate_account_cache_in_session(self, *, session: Any, account_id: int, from_date: date) -> None:
@@ -967,6 +1703,10 @@ class PortfolioRepository:
                 existing.fx_stale = fx_stale
                 existing.payload = payload
                 existing.updated_at = datetime.now()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(account_id),
+            )
             session.commit()
 
     def replace_positions_lots_and_snapshot(
@@ -1082,4 +1822,8 @@ class PortfolioRepository:
                 existing.payload = payload
                 existing.updated_at = datetime.now()
 
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(account_id),
+            )
             session.commit()

@@ -9,10 +9,11 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from api.deps import CurrentUser, get_current_user, require_admin_user
 from src.config import get_config
 from src.services.agent_model_service import list_agent_model_deployments
 
@@ -40,6 +41,28 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+DEPRECATED_STRATEGIES_ENDPOINT_MESSAGE = "Legacy strategy compatibility endpoint; use /api/v1/agent/skills."
+
+
+def _conversation_access_http_error(exc: ValueError) -> HTTPException:
+    """Normalize conversation ownership errors into stable HTTP responses."""
+    message = str(exc)
+    if "Conversation session" in message or "Conversation session not found for owner" in message:
+        return HTTPException(
+            status_code=404,
+            detail={
+                "error": "not_found",
+                "message": "Conversation session not found for the current user",
+            },
+        )
+    return HTTPException(
+        status_code=400,
+        detail={
+            "error": "validation_error",
+            "message": message,
+        },
+    )
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -48,12 +71,13 @@ class ChatRequest(BaseModel):
     skills: Optional[List[str]] = Field(
         default=None,
         validation_alias=AliasChoices("skills", "strategies"),
+        description="Canonical skill ids. Legacy `strategies` request alias is deprecated but still supported.",
     )
     context: Optional[Dict[str, Any]] = None  # Previous analysis context for data reuse
 
     @property
     def effective_skills(self) -> Optional[List[str]]:
-        """Return skill ids from the unified request shape."""
+        """Return canonical skill ids from the unified request shape."""
         return self.skills
 
 class ChatResponse(BaseModel):
@@ -61,6 +85,10 @@ class ChatResponse(BaseModel):
     content: str
     session_id: str
     error: Optional[str] = None
+
+
+class AgentStatusResponse(BaseModel):
+    enabled: bool
 
 class SkillInfo(BaseModel):
     id: str
@@ -90,6 +118,12 @@ class AgentModelDeployment(BaseModel):
 
 class AgentModelsResponse(BaseModel):
     models: List[AgentModelDeployment]
+
+
+@router.get("/status", response_model=AgentStatusResponse)
+async def get_agent_status():
+    """Return whether the Ask Stock experience should be exposed."""
+    return AgentStatusResponse(enabled=get_config().is_agent_available())
 
 
 @router.get("/models", response_model=AgentModelsResponse)
@@ -131,14 +165,18 @@ def _build_skills_response(config) -> SkillsResponse:
 @router.get("/skills", response_model=SkillsResponse)
 async def get_skills():
     """
-    Get available agent strategy skills.
+    Get available agent skills.
     """
     return _build_skills_response(get_config())
 
 
 @router.get("/strategies", response_model=StrategiesResponse, include_in_schema=False)
-async def get_strategies():
-    """Compatibility alias for legacy clients."""
+async def get_strategies(response: Response = None):
+    """Deprecated compatibility alias for legacy clients. Prefer `/skills`."""
+    if response is not None:
+        response.headers["Deprecation"] = "true"
+        response.headers["Link"] = '</api/v1/agent/skills>; rel="successor-version"'
+        response.headers["X-DSA-Deprecated-Reason"] = DEPRECATED_STRATEGIES_ENDPOINT_MESSAGE
     payload = _build_skills_response(get_config())
     return StrategiesResponse(
         strategies=payload.skills,
@@ -146,7 +184,10 @@ async def get_strategies():
     )
 
 @router.post("/chat", response_model=ChatResponse)
-async def agent_chat(request: ChatRequest):
+async def agent_chat(
+    request: ChatRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """
     Chat with the AI Agent.
     """
@@ -165,6 +206,7 @@ async def agent_chat(request: ChatRequest):
         # Direct assignment so caller-provided skills always take precedence
         # over any stale value carried in the context dict.
         ctx = dict(request.context or {})
+        ctx["owner_id"] = current_user.user_id
         if skills is not None:
             ctx["skills"] = skills
 
@@ -173,7 +215,7 @@ async def agent_chat(request: ChatRequest):
         result = await loop.run_in_executor(
             None,
             lambda: executor.chat(message=request.message, session_id=session_id,
-                                  context=ctx),
+                                  context=ctx, owner_id=current_user.user_id),
         )
 
         return ChatResponse(
@@ -183,6 +225,8 @@ async def agent_chat(request: ChatRequest):
             error=result.error
         )
             
+    except ValueError as exc:
+        raise _conversation_access_http_error(exc) from exc
     except Exception as e:
         logger.error(f"Agent chat API failed: {e}")
         logger.exception("Agent chat error details:")
@@ -205,7 +249,11 @@ class SessionMessagesResponse(BaseModel):
 
 
 @router.get("/chat/sessions", response_model=SessionsResponse)
-async def list_chat_sessions(limit: int = 50, user_id: Optional[str] = None):
+async def list_chat_sessions(
+    limit: int = 50,
+    user_id: Optional[str] = None,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """获取聊天会话列表
 
     Args:
@@ -221,23 +269,37 @@ async def list_chat_sessions(limit: int = 50, user_id: Optional[str] = None):
         limit=limit,
         session_prefix=user_id,
         extra_session_ids=[user_id] if user_id else None,
+        owner_id=current_user.user_id,
     )
     return SessionsResponse(sessions=sessions)
 
 
 @router.get("/chat/sessions/{session_id}", response_model=SessionMessagesResponse)
-async def get_chat_session_messages(session_id: str, limit: int = 100):
+async def get_chat_session_messages(
+    session_id: str,
+    limit: int = 100,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """获取单个会话的完整消息"""
     from src.storage import get_db
-    messages = get_db().get_conversation_messages(session_id, limit=limit)
+    try:
+        messages = get_db().get_conversation_messages(session_id, limit=limit, owner_id=current_user.user_id)
+    except ValueError as exc:
+        raise _conversation_access_http_error(exc) from exc
     return SessionMessagesResponse(session_id=session_id, messages=messages)
 
 
 @router.delete("/chat/sessions/{session_id}")
-async def delete_chat_session(session_id: str):
+async def delete_chat_session(
+    session_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """删除指定会话"""
     from src.storage import get_db
-    count = get_db().delete_conversation_session(session_id)
+    try:
+        count = get_db().delete_conversation_session(session_id, owner_id=current_user.user_id)
+    except ValueError as exc:
+        raise _conversation_access_http_error(exc) from exc
     return {"deleted": count}
 
 
@@ -249,7 +311,10 @@ class SendChatRequest(BaseModel):
 
 
 @router.post("/chat/send")
-async def send_chat_to_notification(request: SendChatRequest):
+async def send_chat_to_notification(
+    request: SendChatRequest,
+    _: CurrentUser = Depends(require_admin_user),
+):
     """
     Send chat session content to configured notification channels.
     Uses run_in_executor to avoid blocking the event loop.
@@ -277,7 +342,10 @@ def _build_executor(config, skills: Optional[List[str]] = None):
 
 
 @router.post("/chat/stream")
-async def agent_chat_stream(request: ChatRequest):
+async def agent_chat_stream(
+    request: ChatRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """
     Chat with the AI Agent, streaming progress via SSE.
     Each SSE event is a JSON object with a 'type' field:
@@ -300,6 +368,7 @@ async def agent_chat_stream(request: ChatRequest):
     # Direct assignment so caller-provided skills always take precedence.
     skills = request.effective_skills
     stream_ctx = dict(request.context or {})
+    stream_ctx["owner_id"] = current_user.user_id
     if skills is not None:
         stream_ctx["skills"] = skills
 
@@ -318,6 +387,7 @@ async def agent_chat_stream(request: ChatRequest):
                 session_id=session_id,
                 progress_callback=progress_callback,
                 context=stream_ctx,
+                owner_id=current_user.user_id,
             )
             asyncio.run_coroutine_threadsafe(
                 queue.put({
@@ -331,9 +401,20 @@ async def agent_chat_stream(request: ChatRequest):
                 loop,
             )
         except Exception as exc:
+            if isinstance(exc, ValueError):
+                exc = _conversation_access_http_error(exc)
             logger.error(f"Agent stream error: {exc}")
             asyncio.run_coroutine_threadsafe(
-                queue.put({"type": "error", "message": str(exc)}),
+                queue.put(
+                    {
+                        "type": "error",
+                        "message": (
+                            exc.detail["message"]
+                            if isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
+                            else str(exc)
+                        ),
+                    }
+                ),
                 loop,
             )
 

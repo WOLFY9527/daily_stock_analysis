@@ -456,6 +456,27 @@ def setup_env(override: bool = False):
     else:
         env_path = Path(__file__).parent.parent / '.env'
     load_dotenv_file(env_path, override=override)
+    _apply_legacy_proxy_env()
+
+
+def _apply_legacy_proxy_env() -> None:
+    """Normalize legacy local proxy hints into standard HTTP(S)_PROXY vars."""
+    http_proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+    https_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
+
+    if not http_proxy and os.getenv("GITHUB_ACTIONS") != "true" and parse_env_bool(os.getenv("USE_PROXY"), False):
+        proxy_host = (os.getenv("PROXY_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+        proxy_port = (os.getenv("PROXY_PORT") or "10809").strip() or "10809"
+        http_proxy = f"http://{proxy_host}:{proxy_port}"
+        if not https_proxy:
+            https_proxy = http_proxy
+
+    if http_proxy:
+        os.environ["HTTP_PROXY"] = http_proxy
+        os.environ["http_proxy"] = http_proxy
+    if https_proxy:
+        os.environ["HTTPS_PROXY"] = https_proxy
+        os.environ["https_proxy"] = https_proxy
 
 
 @dataclass
@@ -480,6 +501,11 @@ class Config:
     # === 数据源 API Token ===
     tushare_token: Optional[str] = None
     tickflow_api_key: Optional[str] = None
+    twelve_data_api_keys: List[str] = field(default_factory=list)
+    twelve_data_api_key: Optional[str] = None
+    alpaca_api_key_id: Optional[str] = None
+    alpaca_api_secret_key: Optional[str] = None
+    alpaca_data_feed: str = "iex"
 
     # === AI 分析配置 ===
     # LiteLLM unified model config (provider/model format, e.g. gemini/gemini-2.5-flash)
@@ -671,6 +697,8 @@ class Config:
 
     # === 数据库配置 ===
     database_path: str = "./data/stock_analysis.db"
+    postgres_phase_a_url: Optional[str] = None
+    postgres_phase_a_apply_schema: bool = True
 
     # 是否保存分析上下文快照（用于历史回溯）
     save_context_snapshot: bool = True
@@ -696,6 +724,14 @@ class Config:
     schedule_enabled: bool = False            # 是否启用定时任务
     schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式）
     schedule_run_immediately: bool = True     # 启动时是否立即执行一次
+    scanner_profile: str = "cn_preopen_v1"    # 市场扫描默认 profile
+    scanner_local_universe_path: str = "./data/scanner_cn_universe_cache.csv"  # Scanner 本地 universe 缓存路径
+    scanner_ai_enabled: bool = False    # 是否启用 Scanner AI 二次解释层
+    scanner_ai_top_n: int = 3           # 仅对前 N 名候选生成 AI 解读，控制延迟与成本
+    scanner_schedule_enabled: bool = False    # 是否启用 Scanner 定时任务
+    scanner_schedule_time: str = "08:40"      # Scanner 盘前执行时间（HH:MM）
+    scanner_schedule_run_immediately: bool = False  # 启动时是否立即执行一次 Scanner
+    scanner_notification_enabled: bool = True  # Scanner 定时运行后是否发送通知
     run_immediately: bool = True              # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
     # 大盘复盘市场区域：cn(A股)、us(美股)、both(两者)，us 适合仅关注美股的用户
@@ -1097,6 +1133,15 @@ class Config:
             if single_gnews:
                 gnews_api_keys = [single_gnews]
 
+        twelve_data_keys_str = os.getenv('TWELVE_DATA_API_KEYS', '') or os.getenv('TWELVEDATA_API_KEYS', '')
+        twelve_data_api_keys = [k.strip() for k in twelve_data_keys_str.split(',') if k.strip()]
+        single_twelve_data = (
+            os.getenv('TWELVE_DATA_API_KEY', '').strip()
+            or os.getenv('TWELVEDATA_API_KEY', '').strip()
+        )
+        if not twelve_data_api_keys and single_twelve_data:
+            twelve_data_api_keys = [single_twelve_data]
+
         finnhub_keys_str = os.getenv('FINNHUB_API_KEYS', '')
         finnhub_api_keys = [k.strip() for k in finnhub_keys_str.split(',') if k.strip()]
         if not finnhub_api_keys:
@@ -1172,6 +1217,11 @@ class Config:
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
             tickflow_api_key=os.getenv('TICKFLOW_API_KEY'),
+            twelve_data_api_keys=twelve_data_api_keys,
+            twelve_data_api_key=single_twelve_data or (twelve_data_api_keys[0] if twelve_data_api_keys else None),
+            alpaca_api_key_id=os.getenv('ALPACA_API_KEY_ID') or None,
+            alpaca_api_secret_key=os.getenv('ALPACA_API_SECRET_KEY') or None,
+            alpaca_data_feed=(os.getenv('ALPACA_DATA_FEED', 'iex').strip().lower() or 'iex'),
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),
@@ -1334,10 +1384,12 @@ class Config:
             md2img_engine=cls._parse_md2img_engine(os.getenv('MD2IMG_ENGINE', 'wkhtmltoimage')),
             prefetch_realtime_quotes=os.getenv('PREFETCH_REALTIME_QUOTES', 'true').lower() == 'true',
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
+            postgres_phase_a_url=(os.getenv('POSTGRES_PHASE_A_URL') or '').strip() or None,
+            postgres_phase_a_apply_schema=os.getenv('POSTGRES_PHASE_A_APPLY_SCHEMA', 'true').lower() == 'true',
             save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
             backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',
             backtest_eval_window_days=parse_env_int(os.getenv('BACKTEST_EVAL_WINDOW_DAYS'), 10, field_name='BACKTEST_EVAL_WINDOW_DAYS', minimum=1),
-            backtest_min_age_days=parse_env_int(os.getenv('BACKTEST_MIN_AGE_DAYS'), 14, field_name='BACKTEST_MIN_AGE_DAYS', minimum=1),
+            backtest_min_age_days=parse_env_int(os.getenv('BACKTEST_MIN_AGE_DAYS'), 14, field_name='BACKTEST_MIN_AGE_DAYS', minimum=0),
             backtest_engine_version=os.getenv('BACKTEST_ENGINE_VERSION', 'v1'),
             backtest_neutral_band_pct=parse_env_float(
                 os.getenv('BACKTEST_NEUTRAL_BAND_PCT'),
@@ -1355,6 +1407,20 @@ class Config:
             schedule_enabled=os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
             schedule_time=os.getenv('SCHEDULE_TIME', '18:00'),
             schedule_run_immediately=schedule_run_immediately,
+            scanner_profile=os.getenv('SCANNER_PROFILE', 'cn_preopen_v1'),
+            scanner_local_universe_path=os.getenv('SCANNER_LOCAL_UNIVERSE_PATH', './data/scanner_cn_universe_cache.csv'),
+            scanner_ai_enabled=os.getenv('SCANNER_AI_ENABLED', 'false').lower() == 'true',
+            scanner_ai_top_n=parse_env_int(
+                os.getenv('SCANNER_AI_TOP_N'),
+                3,
+                field_name='SCANNER_AI_TOP_N',
+                minimum=1,
+                maximum=10,
+            ),
+            scanner_schedule_enabled=os.getenv('SCANNER_SCHEDULE_ENABLED', 'false').lower() == 'true',
+            scanner_schedule_time=os.getenv('SCANNER_SCHEDULE_TIME', '08:40'),
+            scanner_schedule_run_immediately=os.getenv('SCANNER_SCHEDULE_RUN_IMMEDIATELY', 'false').lower() == 'true',
+            scanner_notification_enabled=os.getenv('SCANNER_NOTIFICATION_ENABLED', 'true').lower() == 'true',
             run_immediately=legacy_run_immediately,
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
             market_review_region=cls._parse_market_review_region(

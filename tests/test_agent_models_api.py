@@ -7,6 +7,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from fastapi import Response
+
 from api.v1.endpoints import agent
 from src.config import Config
 from src.services.agent_model_service import list_agent_model_deployments
@@ -205,6 +207,14 @@ class AgentModelsApiTestCase(unittest.TestCase):
 
 
 class AgentModelsEndpointTestCase(unittest.TestCase):
+    def test_agent_status_endpoint_reflects_runtime_availability(self) -> None:
+        config = _build_config(agent_mode=False, _agent_mode_explicit=True)
+
+        with patch("api.v1.endpoints.agent.get_config", return_value=config):
+            payload = asyncio.run(agent.get_agent_status()).model_dump()
+
+        self.assertFalse(payload["enabled"])
+
     def test_endpoint_returns_sorted_models_without_secrets(self) -> None:
         config = _build_config(
             llm_channels=[{"name": "primary"}, {"name": "secondary"}],
@@ -290,10 +300,16 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
             "src.agent.factory.get_skill_manager",
             return_value=skill_manager,
         ):
-            payload = asyncio.run(agent.get_strategies()).model_dump()
+            response = Response()
+            payload = asyncio.run(agent.get_strategies(response)).model_dump()
 
         self.assertNotIn("skills", payload)
         self.assertEqual(payload["default_strategy_id"], "bull_trend")
+        self.assertEqual(response.headers["Deprecation"], "true")
+        self.assertEqual(
+            response.headers["X-DSA-Deprecated-Reason"],
+            "Legacy strategy compatibility endpoint; use /api/v1/agent/skills.",
+        )
         self.assertEqual(
             payload["strategies"],
             [
@@ -328,7 +344,12 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
             "api.v1.endpoints.agent.asyncio.get_running_loop",
             side_effect=lambda: _ImmediateLoop(real_get_running_loop()),
         ):
-            payload = asyncio.run(agent.agent_chat(request)).model_dump()
+            payload = asyncio.run(
+                agent.agent_chat(
+                    request,
+                    current_user=SimpleNamespace(user_id="test-user"),
+                )
+            ).model_dump()
 
         mock_build_executor.assert_called_once_with(config, None)
         executor.chat.assert_called_once()

@@ -1,63 +1,130 @@
 import type React from 'react';
-import { useState, useEffect } from 'react';
-import { motion, useMotionValue, useTransform, useSpring } from "motion/react";
-import { Lock, Loader2, Cpu, TrendingUp, Network, ShieldCheck } from "lucide-react";
-import { Button, Input, ParticleBackground } from '../components/common';
+import { useEffect, useState } from 'react';
+import { Button, Input } from '../components/common';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
 import { useAuth } from '../hooks';
 import { SettingsAlert } from '../components/settings';
+import { normalizeRedirectPath } from '../hooks/useProductSurface';
+import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../utils/localeRouting';
+
+const AUTH_FACTS = [
+  '统一研究工作台',
+  '用户身份感知的受保护会话',
+  '分析、问股、持仓、回测共用同一套产品壳层',
+];
+
+function describeRedirectTarget(pathname: string): {
+  label: string;
+  requiresAdmin: boolean;
+} {
+  if (pathname.startsWith('/settings/system')) {
+    return { label: '系统设置', requiresAdmin: true };
+  }
+  if (pathname.startsWith('/admin/logs')) {
+    return { label: '管理员日志中心', requiresAdmin: true };
+  }
+  if (pathname.startsWith('/chat')) {
+    return { label: '问股工作台', requiresAdmin: false };
+  }
+  if (pathname.startsWith('/portfolio')) {
+    return { label: '个人持仓工作区', requiresAdmin: false };
+  }
+  if (pathname.startsWith('/backtest/results/')) {
+    return { label: '已保存的回测结果', requiresAdmin: false };
+  }
+  if (pathname.startsWith('/backtest')) {
+    return { label: '回测工作区', requiresAdmin: false };
+  }
+  if (pathname.startsWith('/scanner')) {
+    return { label: '扫描器工作区', requiresAdmin: false };
+  }
+  if (pathname.startsWith('/settings')) {
+    return { label: '个人设置', requiresAdmin: false };
+  }
+  return { label: '首页研究工作台', requiresAdmin: false };
+}
+
+function describeExitTarget(
+  pathname: string,
+  routeLanguage: ReturnType<typeof parseLocaleFromPathname>,
+): {
+  label: string;
+  destination: string;
+  description: string;
+} {
+  const localize = (path: string) => (routeLanguage ? buildLocalizedPath(path, routeLanguage) : path);
+  if (pathname.startsWith('/scanner')) {
+    return {
+      label: '返回扫描器预览',
+      destination: localize('/scanner'),
+      description: '先回到公开可见的扫描器预览，再决定是否登录进入个人或管理员工作区。',
+    };
+  }
+  return {
+    label: '返回首页',
+    destination: localize('/'),
+    description: '回到公开产品首页，不会影响后续再次登录或注册。',
+  };
+}
 
 const LoginPage: React.FC = () => {
   const { login, passwordSet, setupState } = useAuth();
   const navigate = useNavigate();
 
-  // Set page title
   useEffect(() => {
     document.title = '登录 - WolfyStock';
   }, []);
-  const [searchParams] = useSearchParams();
-  const rawRedirect = searchParams.get('redirect') ?? '';
-  const redirect =
-    rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/';
 
+  const [searchParams] = useSearchParams();
+  const redirect = normalizeRedirectPath(searchParams.get('redirect'), '/');
+  const createModeRequested = searchParams.get('mode') === 'create';
+  const routeLanguage = parseLocaleFromPathname(redirect) || parseLocaleFromPathname(window.location.pathname);
+  const normalizedRedirect = stripLocalePrefix(redirect);
+  const redirectTarget = describeRedirectTarget(normalizedRedirect);
+  const exitTarget = describeExitTarget(normalizedRedirect, routeLanguage);
+
+  const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [createUser, setCreateUser] = useState(createModeRequested);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
 
-  const isFirstTime = setupState === 'no_password' || !passwordSet;
-
-  // 3D Tilt effect values
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-
-  // Smooth out the mouse movement
-  const smoothX = useSpring(mouseX, { damping: 30, stiffness: 200 });
-  const smoothY = useSpring(mouseY, { damping: 30, stiffness: 200 });
+  const isAdminBootstrap = setupState === 'no_password' || !passwordSet;
+  const isCreateUserMode = !isAdminBootstrap && createUser;
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const x = e.clientX / window.innerWidth - 0.5;
-      const y = e.clientY / window.innerHeight - 0.5;
-      mouseX.set(x);
-      mouseY.set(y);
-    };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, [mouseX, mouseY]);
+    if (!isAdminBootstrap) {
+      setCreateUser(createModeRequested);
+    }
+  }, [createModeRequested, isAdminBootstrap]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (isFirstTime && password !== passwordConfirm) {
+
+    if (!isAdminBootstrap && isCreateUserMode && !username.trim()) {
+      setError('请输入用户名');
+      return;
+    }
+
+    if ((isAdminBootstrap || isCreateUserMode) && password !== passwordConfirm) {
       setError('两次输入的密码不一致');
       return;
     }
+
     setIsSubmitting(true);
     try {
-      const result = await login(password, isFirstTime ? passwordConfirm : undefined);
+      const result = await login({
+        username: isAdminBootstrap ? 'admin' : (username.trim() || 'admin'),
+        displayName: isCreateUserMode ? displayName.trim() : undefined,
+        password,
+        passwordConfirm: isAdminBootstrap || isCreateUserMode ? passwordConfirm : undefined,
+        createUser: isCreateUserMode,
+      });
       if (result.success) {
         navigate(redirect, { replace: true });
       } else {
@@ -69,225 +136,179 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div 
-      style={{
-        '--login-bg-main': 'hsl(222 84% 5%)',
-        '--login-bg-card': 'hsl(222 34% 8%)',
-        '--login-border-card': 'hsl(0 0% 100% / 0.05)',
-        '--login-border-input': 'hsl(0 0% 100% / 0.1)',
-        '--login-border-focus': 'hsl(var(--primary) / 0.5)',
-        '--login-error-text': 'hsl(var(--destructive))',
-        '--login-error-bg': 'hsl(var(--destructive) / 0.1)',
-        '--login-error-border': 'hsl(var(--destructive) / 0.2)',
-        '--login-text-primary': 'hsl(0 0% 100%)',
-        '--login-text-secondary': 'hsl(215 20% 65%)',
-        '--login-text-muted': 'hsl(215 16% 45%)',
-        '--login-accent-soft': 'hsl(var(--primary) / 0.08)',
-        '--login-accent-border': 'hsl(var(--primary) / 0.28)',
-        '--login-accent-text': 'hsl(var(--primary) / 0.92)',
-        '--login-accent-glow': 'hsl(var(--primary) / 0.2)',
-        '--login-brand-start': 'hsl(var(--primary))',
-        '--login-brand-end': 'hsl(214 100% 62%)',
-        '--login-brand-button-start': 'hsl(194 96% 45%)',
-        '--login-brand-button-end': 'hsl(214 100% 56%)',
-        '--login-brand-button-start-hover': 'hsl(194 96% 50%)',
-        '--login-brand-button-end-hover': 'hsl(214 100% 62%)',
-        '--login-grid-line': 'hsl(0 0% 50% / 0.04)',
-        '--login-grid-mask': 'radial-gradient(ellipse 80% 50% at 50% 50%, #000 70%, transparent 100%)',
-      } as React.CSSProperties}
-      className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-[var(--login-bg-main)] py-12 font-sans selection:bg-[var(--login-accent-soft)] sm:px-6 lg:px-8 [perspective:1500px]"
-    >
-      {/* Dynamic Background */}
-      <ParticleBackground />
+    <main className="auth-screen">
+      <div className="auth-screen__backdrop" aria-hidden="true" />
+      <div className="auth-screen__grid" aria-hidden="true" />
 
-      {/* Cyber Grid */}
-      <div className="absolute inset-0 z-0 bg-[linear-gradient(to_right,var(--login-grid-line)_1px,transparent_1px),linear-gradient(to_bottom,var(--login-grid-line)_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:var(--login-grid-mask)]" />
+      <div className="auth-shell">
+        <section className="auth-hero">
+          <p className="auth-hero__eyebrow">Stock Analysis Workspace</p>
+          <h1 className="auth-hero__title">
+            {isAdminBootstrap ? '设置管理员访问口令' : isCreateUserMode ? '创建研究账户' : '登录进入研究工作台'}
+          </h1>
+          <p className="auth-hero__body">
+            {isAdminBootstrap
+              ? '首次启用认证时，先为统一研究环境创建管理员密码。完成后即可进入分析、问股、持仓与回测工作区。'
+              : isCreateUserMode
+                ? '创建一个最小账户后即可进入当前工作台。该阶段仅提供基础登录与个人数据归属能力。'
+                : '登录后即可继续使用统一的研究壳层、任务状态、报告流和回测工作区。'}
+          </p>
 
-      {/* Parallax Glowing Orbs */}
-      <motion.div
-        style={{
-          x: useTransform(smoothX, [-0.5, 0.5], [-50, 50]),
-          y: useTransform(smoothY, [-0.5, 0.5], [-50, 50]),
-        }}
-        className="absolute left-[20%] top-[20%] -z-10 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--login-accent-glow)] blur-[100px]"
-      />
-      <motion.div
-        style={{
-          x: useTransform(smoothX, [-0.5, 0.5], [60, -60]),
-          y: useTransform(smoothY, [-0.5, 0.5], [60, -60]),
-        }}
-        className="absolute right-[20%] bottom-[10%] -z-10 h-[400px] w-[400px] translate-x-1/2 translate-y-1/2 rounded-full bg-[var(--login-accent-soft)] blur-[120px]"
-      />
+          <div className="auth-hero__facts" role="list" aria-label="认证说明">
+            {AUTH_FACTS.map((item) => (
+              <div key={item} className="auth-fact" role="listitem">
+                <span className="auth-fact__line" aria-hidden="true" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="flex flex-col items-center justify-center mb-10 relative"
-        >
-          {/* Immersive Full-Height Background Logo */}
-          <motion.div
-            style={{
-              x: useTransform(smoothX, [-0.5, 0.5], [-8, 8]),
-              y: useTransform(smoothY, [-0.5, 0.5], [-8, 8]),
-              rotate: useTransform(smoothX, [-0.5, 0.5], [-0.5, 0.5]),
-            }}
-            className="pointer-events-none absolute -top-[20vh] -z-10 opacity-80"
-          >
-            <div className="relative flex h-[120vh] w-[120vh] items-center justify-center rounded-full border border-[var(--login-accent-soft)] bg-gradient-to-br from-[var(--login-accent-soft)] to-[hsl(214_100%_20%_/_0.18)] shadow-[inset_0_0_200px_var(--login-accent-glow)] blur-[4px]">
-              <Cpu className="h-[70vh] w-[70vh] text-[hsl(200_80%_22%_/_0.4)] brightness-50" />
-              <TrendingUp className="absolute h-[25vh] w-[25vh] translate-x-[15vh] translate-y-[15vh] text-[var(--login-accent-soft)] brightness-50" />
-            </div>
-          </motion.div>
-
-          <div className="mt-8 flex flex-col items-center">
-            <h2 className="text-4xl font-extrabold tracking-tighter text-[var(--login-text-primary)] sm:text-6xl">
-              <span className="bg-gradient-to-r from-[var(--login-text-primary)] via-[var(--login-text-primary)] to-[var(--login-text-secondary)] bg-clip-text text-transparent">DAILY </span>
-              <span className="bg-gradient-to-r from-[var(--login-brand-start)] to-[var(--login-brand-end)] bg-clip-text text-transparent drop-shadow-[0_0_20px_var(--login-accent-glow)]">STOCK</span>
+        <section className="auth-panel theme-panel-glass">
+          <div className="auth-panel__header">
+            <p className="label-uppercase text-secondary-text">
+              {isAdminBootstrap ? 'Initial Access' : isCreateUserMode ? 'Create Account' : 'Secure Login'}
+            </p>
+            <h2 className="auth-panel__title">
+              <span>{isAdminBootstrap ? '设置初始密码' : isCreateUserMode ? '创建账户并登录' : '账户登录'}</span>
             </h2>
-            <h3 className="mt-1 text-xl font-bold uppercase tracking-[0.5em] text-[var(--login-text-muted)]">
-              Analysis Engine
-            </h3>
+            <p className="auth-panel__body">
+              {isAdminBootstrap
+                ? '创建后续登录使用的管理员密码。'
+                : isCreateUserMode
+                  ? '输入用户名与密码，立即创建普通用户账户。'
+                  : '输入用户名和密码以继续进入当前工作台。'}
+            </p>
           </div>
 
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="mt-6 flex items-center gap-2 rounded-full border border-[var(--login-accent-border)] bg-[var(--login-accent-soft)] px-3 py-1 text-[10px] font-medium text-[var(--login-accent-text)] backdrop-blur-sm"
-          >
-            <Network className="h-3 w-3" />
-            <span>V3.X QUANTITATIVE SYSTEM</span>
-          </motion.div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="relative group z-20 pointer-events-auto"
-        >
-          {/* Card Border Glow */}
-          <div className="pointer-events-none absolute -inset-0.5 rounded-3xl bg-gradient-to-b from-[var(--login-accent-glow)] to-[hsl(214_100%_56%_/_0.18)] opacity-50 blur-sm transition duration-1000 group-hover:opacity-100 group-hover:duration-200" />
-
-          <div className="pointer-events-auto relative flex flex-col overflow-hidden rounded-3xl border border-[var(--login-border-card)] bg-[var(--login-bg-card)]/80 p-8 shadow-2xl backdrop-blur-xl">
-            {/* Inner corner glow */}
-            <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[var(--login-accent-soft)] blur-[50px]" />
-            <div className="absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-[var(--login-accent-soft)] blur-[50px]" />
-
-            <div className="mb-8">
-              <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-[var(--login-text-primary)]">
-                {isFirstTime ? (
-                  <>
-                    <ShieldCheck className="h-6 w-6 text-[var(--login-accent-text)]" />
-                    <span>设置初始密码</span>
-                  </>
-                ) : (
-                  <>
-                    <Lock className="h-5 w-5 text-[var(--login-accent-text)]" />
-                    <span>管理员登录</span>
-                  </>
-                )}
-              </h1>
-              <p className="mt-2 text-sm text-[var(--login-text-secondary)]">
-                {isFirstTime
-                  ? '首次启用认证，请为系统工作台设置管理员密码。'
-                  : '访问 WolfyStock 量化系统需要有效的身份凭证。'}
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-4">
-                <Input
-                  id="password"
-                  type="password"
-                  allowTogglePassword
-                  iconType="password"
-                  label={isFirstTime ? '管理员密码' : '登录密码'}
-                  placeholder={isFirstTime ? '请设置 6 位以上密码' : '请输入密码'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isSubmitting}
-                  autoFocus
-                  autoComplete={isFirstTime ? 'new-password' : 'current-password'}
-                  className="!bg-[var(--login-border-card)] !border-[var(--login-border-input)] focus:!border-[var(--login-border-focus)]"
-                />
-
-                {isFirstTime && (
-                  <Input
-                    id="passwordConfirm"
-                    type="password"
-                    allowTogglePassword
-                    iconType="password"
-                    label="确认密码"
-                    placeholder="再次确认管理员密码"
-                    value={passwordConfirm}
-                    onChange={(e) => setPasswordConfirm(e.target.value)}
-                    disabled={isSubmitting}
-                    autoComplete="new-password"
-                    className="!bg-[var(--login-border-card)] !border-[var(--login-border-input)] focus:!border-[var(--login-border-focus)]"
-                  />
-                )}
+          <form onSubmit={handleSubmit} className="auth-form">
+            {redirect !== '/' ? (
+              <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Continue After Sign-in</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">
+                  登录后将继续进入：{redirectTarget.label}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-secondary-text">
+                  {redirectTarget.requiresAdmin
+                    ? '如果目标页面仍然要求管理员身份，登录后系统会继续提示你使用正确账户。'
+                    : '建立会话成功后，系统会自动把你带回刚才尝试访问的工作区。'}
+                </p>
               </div>
+            ) : null}
 
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="overflow-hidden"
-                >
-                  <SettingsAlert
-                    title={isFirstTime ? '配置失败' : '验证未通过'}
-                    message={isParsedApiError(error) ? error.message : error}
-                    variant="error"
-                    className="!border-[var(--login-error-border)] !bg-[var(--login-error-bg)] !text-[var(--login-error-text)]"
-                  />
-                </motion.div>
-              )}
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                className="group/btn relative h-12 w-full overflow-hidden rounded-xl border-0 bg-gradient-to-r from-[var(--login-brand-button-start)] to-[var(--login-brand-button-end)] font-medium text-foreground shadow-lg shadow-[0_18px_36px_hsl(214_100%_8%_/_0.24)] hover:from-[var(--login-brand-button-start-hover)] hover:to-[var(--login-brand-button-end-hover)]"
+            <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/35 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Leave Auth Page</p>
+              <p className="mt-2 text-sm font-semibold text-foreground">{exitTarget.label}</p>
+              <p className="mt-1 text-xs leading-5 text-secondary-text">{exitTarget.description}</p>
+              <button
+                type="button"
+                className="btn-ghost mt-3 w-full justify-center"
+                onClick={() => navigate(exitTarget.destination, { replace: true })}
                 disabled={isSubmitting}
               >
-                <div className="relative z-10 flex items-center justify-center gap-2">
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{isFirstTime ? '初始化中...' : '正在建立连接...'}</span>
-                    </>
-                  ) : (
-                    <span>{isFirstTime ? '完成设置并登录' : '授权进入工作台'}</span>
-                  )}
-                </div>
-                <div className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] pointer-events-none" />
-              </Button>
-            </form>
+                {exitTarget.label}
+              </button>
+            </div>
+
+            {!isAdminBootstrap ? (
+              <Input
+                id="username"
+                type="text"
+                label="用户名"
+                placeholder={isCreateUserMode ? '请输入用户名' : '留空则登录 admin'}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={isSubmitting}
+                autoFocus
+                autoComplete="username"
+              />
+            ) : null}
+
+            {isCreateUserMode ? (
+              <Input
+                id="displayName"
+                type="text"
+                label="显示名称"
+                placeholder="可选，用于界面显示"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={isSubmitting}
+                autoComplete="nickname"
+              />
+            ) : null}
+
+            <Input
+              id="password"
+              type="password"
+              allowTogglePassword
+              iconType="password"
+              label={isAdminBootstrap ? '管理员密码' : '登录密码'}
+              placeholder={isAdminBootstrap ? '请设置 6 位以上密码' : '请输入密码'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isSubmitting}
+              autoComplete={isAdminBootstrap || isCreateUserMode ? 'new-password' : 'current-password'}
+            />
+
+            {isAdminBootstrap || isCreateUserMode ? (
+              <Input
+                id="passwordConfirm"
+                type="password"
+                allowTogglePassword
+                iconType="password"
+                label="确认密码"
+                placeholder={isAdminBootstrap ? '再次确认管理员密码' : '再次确认登录密码'}
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                disabled={isSubmitting}
+                autoComplete="new-password"
+              />
+            ) : null}
+
+            {error ? (
+              <SettingsAlert
+                title={isAdminBootstrap ? '配置失败' : '验证未通过'}
+                message={isParsedApiError(error) ? error.message : error}
+                variant="error"
+              />
+            ) : null}
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="xl"
+              className="w-full justify-center"
+              disabled={isSubmitting}
+              isLoading={isSubmitting}
+              loadingText={isAdminBootstrap ? '初始化安全凭据' : isCreateUserMode ? '创建账户并建立会话' : '建立授权会话'}
+            >
+              {isAdminBootstrap ? '完成设置并登录' : isCreateUserMode ? '创建账户并登录' : '授权进入工作台'}
+            </Button>
+
+            {!isAdminBootstrap ? (
+              <button
+                type="button"
+                className="btn-ghost w-full justify-center"
+                onClick={() => {
+                  setCreateUser((value) => !value);
+                  setPasswordConfirm('');
+                  setError(null);
+                }}
+                disabled={isSubmitting}
+              >
+                {isCreateUserMode ? '已有账户，返回登录' : '没有账户？立即创建'}
+              </button>
+            ) : null}
+          </form>
+
+          <div className="auth-panel__foot">
+            <span>Protected session</span>
+            <span>Research workspace</span>
+            <span>Calm interaction</span>
           </div>
-        </motion.div>
-
-        {/* Footer info */}
-        <motion.p 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          className="mt-8 text-center font-mono text-xs uppercase tracking-wider text-[var(--login-text-muted)]"
-        >
-          Secure Connection Established via WolfyStock-V3-TLS
-        </motion.p>
+        </section>
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes shimmer {
-          100% {
-            transform: translateX(100%);
-          }
-        }
-      `}} />
-    </div>
+    </main>
   );
 };
 

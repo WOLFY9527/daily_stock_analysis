@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, ClassVar, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -126,6 +126,8 @@ class ValidateSystemConfigResponse(BaseModel):
 class TestLLMChannelRequest(BaseModel):
     """Request payload for testing one LLM channel."""
 
+    __test__: ClassVar[bool] = False
+
     name: str = "channel"
     protocol: str = "openai"
     base_url: str = ""
@@ -144,6 +146,45 @@ class TestLLMChannelResponse(BaseModel):
     resolved_protocol: Optional[str] = None
     resolved_model: Optional[str] = None
     latency_ms: Optional[int] = None
+
+
+class TestCustomDataSourceRequest(BaseModel):
+    """Request payload for testing one custom data source endpoint."""
+
+    name: str = "custom_data_source"
+    base_url: str
+    credential_schema: Literal["single_key", "key_secret"] = "single_key"
+    credential: str = ""
+    secret: str = ""
+    timeout_seconds: float = 5.0
+
+
+class TestCustomDataSourceResponse(BaseModel):
+    """Response payload for one custom data source connectivity test."""
+
+    success: bool
+    message: str
+    error: Optional[str] = None
+    status_code: Optional[int] = None
+    checked_url: Optional[str] = None
+    latency_ms: Optional[int] = None
+
+
+class SystemAdminActionResponse(BaseModel):
+    """Response payload for bounded admin maintenance actions."""
+
+    success: bool
+    action: str
+    message: str
+    cleared: List[str] = Field(default_factory=list)
+    preserved: List[str] = Field(default_factory=list)
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+
+class FactoryResetSystemRequest(BaseModel):
+    """Confirmation payload for destructive factory reset."""
+
+    confirmation_phrase: str = Field(..., min_length=1)
 
 
 class SystemConfigValidationErrorResponse(BaseModel):

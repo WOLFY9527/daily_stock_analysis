@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import List, Dict, Any, Optional, Tuple
 from itertools import cycle
+from urllib.parse import urlsplit, urlunsplit
 import requests
 from newspaper import Article, Config
 from tenacity import (
@@ -74,10 +75,98 @@ def _get_with_retry(
     return requests.get(url, headers=headers, params=params, timeout=timeout)
 
 
+_URL_CONTENT_CACHE_TTL_SECONDS = 600
+_URL_CONTENT_FAILURE_TTL_SECONDS = 60
+_URL_CONTENT_CACHE_MAX_SIZE = 1000
+_url_content_cache: Dict[str, Tuple[float, str, bool]] = {}
+_url_content_cache_lock = threading.Lock()
+
+
+def _normalize_url_content_cache_key(url: str) -> str:
+    raw_url = str(url or "").strip()
+    if not raw_url:
+        return ""
+    try:
+        parsed = urlsplit(raw_url)
+        if not parsed.scheme and not parsed.netloc:
+            return raw_url
+        return urlunsplit(
+            (
+                (parsed.scheme or "https").lower(),
+                parsed.netloc.lower(),
+                parsed.path or "/",
+                parsed.query,
+                "",  # strip fragment
+            )
+        )
+    except Exception:
+        return raw_url
+
+
+def _get_cached_url_content(cache_key: str) -> Optional[str]:
+    if not cache_key:
+        return None
+
+    now = time.time()
+    with _url_content_cache_lock:
+        cached = _url_content_cache.get(cache_key)
+        if cached is None:
+            return None
+        ts, content, success = cached
+        ttl = _URL_CONTENT_CACHE_TTL_SECONDS if success else _URL_CONTENT_FAILURE_TTL_SECONDS
+        if now - ts > ttl:
+            _url_content_cache.pop(cache_key, None)
+            return None
+        return content
+
+
+def _put_cached_url_content(cache_key: str, content: str, *, success: bool) -> None:
+    if not cache_key:
+        return
+
+    now = time.time()
+    with _url_content_cache_lock:
+        if len(_url_content_cache) >= _URL_CONTENT_CACHE_MAX_SIZE:
+            expired_keys = []
+            for key, (ts, _, cached_success) in _url_content_cache.items():
+                ttl = _URL_CONTENT_CACHE_TTL_SECONDS if cached_success else _URL_CONTENT_FAILURE_TTL_SECONDS
+                if now - ts > ttl:
+                    expired_keys.append(key)
+            for key in expired_keys:
+                _url_content_cache.pop(key, None)
+
+            if len(_url_content_cache) >= _URL_CONTENT_CACHE_MAX_SIZE:
+                overflow = len(_url_content_cache) - _URL_CONTENT_CACHE_MAX_SIZE + 1
+                oldest_keys = sorted(
+                    _url_content_cache.keys(),
+                    key=lambda item: _url_content_cache[item][0],
+                )[:overflow]
+                for key in oldest_keys:
+                    _url_content_cache.pop(key, None)
+
+        _url_content_cache[cache_key] = (now, content, success)
+
+
+def reset_url_content_cache() -> None:
+    """Clear URL content cache (test helper)."""
+    with _url_content_cache_lock:
+        _url_content_cache.clear()
+
+
 def fetch_url_content(url: str, timeout: int = 5) -> str:
     """
     获取 URL 网页正文内容 (使用 newspaper3k)
     """
+    normalized_url = str(url or "").strip()
+    if not normalized_url:
+        return ""
+
+    cache_key = _normalize_url_content_cache_key(normalized_url)
+    cached_content = _get_cached_url_content(cache_key)
+    if cached_content is not None:
+        logger.debug("URL content cache hit: %s", normalized_url)
+        return cached_content
+
     try:
         # 配置 newspaper3k
         config = Config()
@@ -86,7 +175,7 @@ def fetch_url_content(url: str, timeout: int = 5) -> str:
         config.fetch_images = False  # 不下载图片
         config.memoize_articles = False # 不缓存
 
-        article = Article(url, config=config, language='zh') # 默认中文，但也支持其他
+        article = Article(normalized_url, config=config, language='zh') # 默认中文，但也支持其他
         article.download()
         article.parse()
 
@@ -97,10 +186,13 @@ def fetch_url_content(url: str, timeout: int = 5) -> str:
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         text = '\n'.join(lines)
 
-        return text[:1500]  # 限制返回长度（比 bs4 稍微多一点，因为 newspaper 解析更干净）
+        final_text = text[:1500]  # 限制返回长度（比 bs4 稍微多一点，因为 newspaper 解析更干净）
+        _put_cached_url_content(cache_key, final_text, success=bool(final_text))
+        return final_text
     except Exception as e:
-        logger.debug(f"Fetch content failed for {url}: {e}")
+        logger.debug(f"Fetch content failed for {normalized_url}: {e}")
 
+    _put_cached_url_content(cache_key, "", success=False)
     return ""
 
 
@@ -2001,9 +2093,18 @@ class SearchService:
         """检查是否有可用的搜索引擎"""
         return any(p.is_available for p in self._providers)
 
-    def _cache_key(self, query: str, max_results: int, days: int) -> str:
+    def _cache_key(
+        self,
+        query: str,
+        max_results: int,
+        days: int,
+        *,
+        scope: str = "default",
+    ) -> str:
         """Build a cache key from query parameters."""
-        return f"{query}|{max_results}|{days}"
+        normalized_query = " ".join(str(query or "").split()).lower()
+        normalized_scope = str(scope or "default").strip().lower()
+        return f"{normalized_scope}|{normalized_query}|{max_results}|{days}"
 
     def _get_cached(self, key: str) -> Optional['SearchResponse']:
         """Return cached SearchResponse if still valid, else None."""
@@ -2343,7 +2444,7 @@ class SearchService:
         )
 
         # Check cache first
-        cache_key = self._cache_key(query, max_results, search_days)
+        cache_key = self._cache_key(query, max_results, search_days, scope="stock_news")
         cached = self._get_cached(cache_key)
         if cached is not None:
             logger.info(f"使用缓存搜索结果: {stock_name}({stock_code})")
@@ -2625,6 +2726,20 @@ class SearchService:
             if not available_providers:
                 break
 
+            cache_key = self._cache_key(
+                dim["query"],
+                target_per_dimension,
+                search_days,
+                scope=f"intel:{dim['name']}:{'strict' if dim['strict_freshness'] else 'soft'}",
+            )
+            cached = self._get_cached(cache_key)
+            if cached is not None:
+                results[dim["name"]] = cached
+                search_count += 1
+                logger.info("[情报搜索] %s: 命中缓存，跳过重复 provider 请求", dim["desc"])
+                time.sleep(0.5)
+                continue
+
             last_response = SearchResponse(
                 query=dim["query"],
                 results=[],
@@ -2738,6 +2853,8 @@ class SearchService:
                 final_response = filtered_response
 
             final_response.attempts = attempt_trace
+            if final_response.success:
+                self._put_cache(cache_key, final_response)
 
             results[dim['name']] = final_response
             search_count += 1

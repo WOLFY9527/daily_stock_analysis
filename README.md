@@ -16,7 +16,7 @@
 
 > 🤖 基于 AI 大模型的 A股/港股/美股自选股智能分析系统，每日自动分析并推送「决策仪表盘」到企业微信/飞书/Telegram/Discord/Slack/邮箱
 
-[**功能特性**](#-功能特性) · [**快速开始**](#-快速开始) · [**推送效果**](#-推送效果) · [**完整指南**](docs/full-guide.md) · [**常见问题**](docs/FAQ.md) · [**更新日志**](docs/CHANGELOG.md)
+[**功能特性**](#-功能特性) · [**快速开始**](#-快速开始) · [**推送效果**](#-推送效果) · [**市场扫描器**](docs/market-scanner.md) · [**完整指南**](docs/full-guide.md) · [**常见问题**](docs/FAQ.md) · [**更新日志**](docs/CHANGELOG.md)
 
 简体中文 | [English](docs/README_EN.md) | [繁體中文](docs/README_CHT.md)
 
@@ -38,9 +38,11 @@
 | AI | 决策仪表盘 | 一句话核心结论 + 精确买卖点位 + 操作检查清单 |
 | 分析 | 多维度分析 | 技术面（盘中实时 MA/多头排列）+ 筹码分布 + 舆情情报 + 实时行情 |
 | 市场 | 全球市场 | 支持 A股、港股、美股及美股指数（SPX、DJI、IXIC 等） |
+| 持仓 | Portfolio 持仓台账 | 支持用户自有 broker connection、A 股券商 CSV / IBKR Flex XML 导入，以及手动触发的 IBKR 只读同步（仅账户状态/持仓，不含交易执行） |
 | 基本面 | 结构化聚合 | 新增 `fundamental_context`（valuation/growth/earnings/institution/capital_flow/dragon_tiger/boards，其中 `earnings.data` 新增 `financial_report` 与 `dividend`，`boards` 表示板块涨跌榜），主链路 fail-open 降级 |
 | 策略 | 市场策略系统 | 内置 A股「三段式复盘策略」与美股「Regime Strategy」，输出进攻/均衡/防守或 risk-on/neutral/risk-off 计划，并附“仅供参考，不构成投资建议”提示 |
 | 复盘 | 大盘复盘 | 每日市场概览、板块涨跌；支持 cn(A股)/us(美股)/both(两者) 切换 |
+| 扫描 | Market Scanner | 独立盘前发现层，面向 A 股生成盘前 shortlist，并支持每日 watchlist 留痕、定时运行与通知推送 |
 | 补全 | 智能补全 (MVP) | **[测试阶段]** 首页搜索框支持代码/名称/拼音/别名联想；**第一阶段仅限 A 股**，其他市场自动降级为手动输入 |
 | 智能导入 | 多源导入 | 支持图片、CSV/Excel 文件、剪贴板粘贴；Vision LLM 提取代码+名称；置信度分层确认；名称→代码解析（本地+拼音+AkShare） |
 | 历史记录 | 批量管理 | 支持多选、全选及批量删除历史分析记录，优化管理效率与 UI/UX 体验 |
@@ -58,16 +60,28 @@
 
 > 持仓管理补充说明：卖出录入现在会在写入前校验可用持仓，超售会直接拒绝；如果历史里误录了交易 / 资金流水 / 公司行为，可在 Web `/portfolio` 页的事件列表中直接删除后恢复快照。高并发写入场景下，直接持仓写接口可能返回 `409 portfolio_busy`，提示账本正在处理另一笔变更；CSV 导入仍保持逐条提交与部分成功语义。
 
+## 🔎 Market Scanner（A 股 / 美股 / 港股盘前扫描）
+
+Web 端新增独立 `/scanner` 页面，用于在盘前对 A 股、美股、港股候选池做规则型扫描，输出一个小而可执行的观察名单，而不是把这层能力混进回测页。Scanner 的职责是回答“今天开盘前该重点看什么”；Backtest 继续回答“策略历史上是否有效”。
+
+当前 Scanner 已形成三个明确分离的 market profile：`cn_preopen_v1`、`us_preopen_v1`、`hk_preopen_v1`。A 股继续使用受控 universe + 本地优先历史特征计算；美股使用 local-first 历史样本 + bounded liquid seed supplement，并可选使用 Alpaca（`ALPACA_API_KEY_ID` + `ALPACA_API_SECRET_KEY`）补强 quote/daily 路径；港股新增独立 HK universe，并优先使用 Twelve Data（`TWELVE_DATA_API_KEY` / `TWELVE_DATA_API_KEYS`）补强 quote/history。所有 profile 都继续输出 `rank / scanner score / reasons / risk notes / watch context / run metadata`，并允许从 shortlist 继续进入首页深度分析、问股和回测流程。详细说明见 [Market Scanner 文档](docs/market-scanner.md)。
+
+P9 之后，Scanner 已具备第一层运营能力：支持独立的盘前定时任务、按交易日持久化 `today / recent watchlists`、复用现有通知通道推送简洁的盘前 shortlist，并在 `/scanner` 页面展示最近 watchlist、最近定时运行状态、通知结果与失败原因。
+
+当前 Route A 继续把它补成一个更像“每日工作流”的产品：除了晨会 shortlist，本地 `/scanner` 现在还能做跨日 watchlist 对比、候选后续表现跟踪、轻量 hit rate / quality summary，以及紧凑 Markdown 日评导出。它仍然是“今天该看什么”的发现层和复盘层，不替代 Backtest 的历史验证职责，也不进入自动执行。
+
+运行时现在还补齐了 A 股数据韧性：`Tushare stock_basic` 权限不足不再阻断 Scanner，系统会优先尝试本地 universe cache（`SCANNER_LOCAL_UNIVERSE_PATH`）、再回退到本地数据库/内置股票映射，并在免费 realtime 快照不可用时明确展示 AkShare / efinance 尝试链路或进入标记清晰的本地历史降级模式。
+
 ### 技术栈与数据来源
 
 | 类型 | 支持 |
 |------|------|
 | AI 模型 | [AIHubMix](https://aihubmix.com/?aff=CfMq)、Gemini、OpenAI 兼容、DeepSeek、通义千问、Claude、Ollama 本地模型 等（统一通过 [LiteLLM](https://github.com/BerriAI/litellm) 调用，支持多 Key 负载均衡）|
-| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance |
+| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance、Alpaca、Twelve Data |
 | 新闻搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 | 社交舆情 | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit / X / Polymarket，仅美股，可选） |
 
-> 注：美股历史数据与实时行情统一使用 YFinance，确保复权一致性
+> 注：单股分析主链路仍保持现有 data-provider fallback；Scanner 美股路径可选使用 Alpaca（key + secret）补强 realtime/daily，未配置时继续回退 YFinance；港股 Scanner 可选使用 Twelve Data（single key 或多 key）补强 quote/history，未配置时继续回退现有免费源。
 
 ### 内置交易纪律
 
@@ -182,6 +196,11 @@
 | `SOCIAL_SENTIMENT_API_URL` | 自定义社交舆情 API 地址（默认 `https://api.adanos.org`） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API Key（增强 A 股大盘复盘指数；若套餐支持标的池查询，也可增强市场统计） | 可选 |
+| `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote/history 补强 | 可选 |
+| `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | 可选 |
+| `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner market-data 补强 | 可选 |
+| `ALPACA_API_SECRET_KEY` | Alpaca Secret Key；需与 `ALPACA_API_KEY_ID` 成对配置 | 可选 |
+| `ALPACA_DATA_FEED` | Alpaca 数据 feed（`iex` / `sip`，默认 `iex`） | 可选 |
 | `PREFETCH_REALTIME_QUOTES` | 实时行情预取开关：设为 `false` 可禁用全市场预取（默认 `true`） | 可选 |
 | `WECHAT_MSG_TYPE` | 企微消息类型，默认 markdown，支持配置 text 类型，发送纯 markdown 文本 | 可选 |
 | `NEWS_STRATEGY_PROFILE` | 新闻策略窗口档位：`ultra_short`(1天) / `short`(3天) / `medium`(7天) / `long`(30天)，默认 `short` | 可选 |
@@ -395,8 +414,8 @@ LITELLM_MODEL=openai/deepseek-chat
 
 1. **启动服务**（默认会自动编译前端）
    ```bash
-   python main.py --webui       # 启动 Web 界面 + 执行定时分析
-   python main.py --webui-only  # 仅启动 Web 界面
+   python main.py --serve       # 启动 API / Web 界面 + 执行一次分析
+   python main.py --serve-only  # 仅启动 API / Web 界面
    ```
    启动时会在 `apps/dsa-web` 自动执行 `npm install && npm run build`。
    如需关闭自动构建，设置 `WEBUI_AUTO_BUILD=false`，并改为手动执行：

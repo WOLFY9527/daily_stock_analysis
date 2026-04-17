@@ -31,6 +31,14 @@ export interface ExecutionLogSessionSummary {
   endedAt?: string | null;
   summary?: Record<string, unknown>;
   readableSummary?: {
+    actorUserId?: string | null;
+    actorUsername?: string | null;
+    actorDisplay?: string | null;
+    actorRole?: string | null;
+    sessionKind?: string | null;
+    subsystem?: string | null;
+    actionName?: string | null;
+    destructive?: boolean;
     finalAiModel?: string | null;
     aiAttemptsCount?: number;
     aiFallbackUsed?: boolean;
@@ -41,6 +49,15 @@ export interface ExecutionLogSessionSummary {
     dataFallbackUsed?: boolean;
     notificationClassification?: string | null;
     topFailureReason?: string | null;
+    scannerRunId?: number | null;
+    scannerMarket?: string | null;
+    scannerProfile?: string | null;
+    scannerProfileLabel?: string | null;
+    scannerShortlistCount?: number | null;
+    scannerFallbackCount?: number | null;
+    scannerProviderFailureCount?: number | null;
+    scannerProvidersUsed?: string[];
+    scannerCoverageSummary?: string | null;
     summaryParagraph?: string | null;
     status?: string;
   };
@@ -55,15 +72,24 @@ export interface ExecutionLogSessionListResponse {
   items: ExecutionLogSessionSummary[];
 }
 
-function withAdminUnlockHeader(adminUnlockToken?: string | null) {
-  const normalizedToken = adminUnlockToken?.trim();
-  if (!normalizedToken) {
-    return {};
-  }
+function normalizeSessionSummary(payload: Record<string, unknown>): ExecutionLogSessionSummary {
+  const normalized = toCamelCase<ExecutionLogSessionSummary>(payload);
   return {
-    headers: {
-      'X-Admin-Unlock-Token': normalizedToken,
-    },
+    ...normalized,
+    readableSummary: normalized.readableSummary && typeof normalized.readableSummary === 'object'
+      ? normalized.readableSummary
+      : {},
+  };
+}
+
+function normalizeSessionDetail(payload: Record<string, unknown>): ExecutionLogSessionDetail {
+  const normalized = toCamelCase<ExecutionLogSessionDetail>(payload);
+  return {
+    ...normalized,
+    readableSummary: normalized.readableSummary && typeof normalized.readableSummary === 'object'
+      ? normalized.readableSummary
+      : {},
+    events: Array.isArray(normalized.events) ? normalized.events : [],
   };
 }
 
@@ -79,23 +105,26 @@ export const adminLogsApi = {
       limit?: number;
       offset?: number;
     },
-    adminUnlockToken?: string | null,
   ): Promise<ExecutionLogSessionListResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(
       '/api/v1/admin/logs/sessions',
       {
         params,
-        ...withAdminUnlockHeader(adminUnlockToken),
       },
     );
-    return toCamelCase<ExecutionLogSessionListResponse>(response.data);
+    const normalized = toCamelCase<ExecutionLogSessionListResponse>(response.data);
+    return {
+      total: Number(normalized.total || 0),
+      items: Array.isArray(normalized.items)
+        ? normalized.items.map((item) => normalizeSessionSummary(item as unknown as Record<string, unknown>))
+        : [],
+    };
   },
 
-  getSessionDetail: async (sessionId: string, adminUnlockToken?: string | null): Promise<ExecutionLogSessionDetail> => {
+  getSessionDetail: async (sessionId: string): Promise<ExecutionLogSessionDetail> => {
     const response = await apiClient.get<Record<string, unknown>>(
       `/api/v1/admin/logs/sessions/${encodeURIComponent(sessionId)}`,
-      withAdminUnlockHeader(adminUnlockToken),
     );
-    return toCamelCase<ExecutionLogSessionDetail>(response.data);
+    return normalizeSessionDetail(response.data);
   },
 };

@@ -20,16 +20,19 @@ import asyncio
 import json
 import logging
 import re
+import secrets
 from datetime import datetime
 from typing import Optional, Union, Dict, Any
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.deps import get_config_dep
+from api.deps import CurrentUser, get_config_dep, get_current_user, get_current_user_id
 from api.v1.schemas.analysis import (
     AnalyzeRequest,
+    AnalysisPreviewRequest,
+    AnalysisPreviewResponse,
     AnalysisResultResponse,
     TaskAccepted,
     BatchTaskAcceptedResponse,
@@ -50,6 +53,7 @@ from api.v1.schemas.history import (
 )
 from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.config import Config
+from src.repositories.analysis_repo import AnalysisRepository
 from src.report_language import get_localized_stock_name, normalize_report_language
 from src.services.name_to_code_resolver import resolve_name_to_code
 from src.services.stock_code_utils import is_code_like
@@ -69,6 +73,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _SUPPORTED_FREE_TEXT_RE = re.compile(r"^[A-Za-z0-9.*\-+\u3400-\u9fff\s]+$")
+_GUEST_SESSION_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+GUEST_SESSION_COOKIE_NAME = "wolfystock_guest_session"
+GUEST_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24
 
 
 def _invalid_analysis_input_error() -> HTTPException:
@@ -119,9 +126,112 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
     raise _invalid_analysis_input_error()
 
 
+def _resolve_guest_session_id(request: Request) -> tuple[str, bool]:
+    raw_value = str(request.cookies.get(GUEST_SESSION_COOKIE_NAME) or "").strip().lower()
+    if _GUEST_SESSION_ID_RE.fullmatch(raw_value):
+        return raw_value, False
+    return secrets.token_hex(16), True
+
+
+def _set_guest_session_cookie(response: Response, request: Request, guest_session_id: str) -> None:
+    secure = False
+    if request.headers.get("X-Forwarded-Proto", "").lower() == "https":
+        secure = True
+    elif request.url.scheme == "https":
+        secure = True
+    response.set_cookie(
+        key=GUEST_SESSION_COOKIE_NAME,
+        value=guest_session_id,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        path="/",
+        max_age=GUEST_SESSION_MAX_AGE_SECONDS,
+    )
+
+
 # ============================================================
 # POST /analyze - 触发股票分析
 # ============================================================
+
+@router.post(
+    "/preview",
+    response_model=AnalysisPreviewResponse,
+    responses={
+        200: {"description": "Guest preview generated"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        500: {"description": "分析失败", "model": ErrorResponse},
+    },
+    summary="生成公开分析预览",
+    description="为 guest 模式返回不落库的受限分析预览，仅暴露 meta/summary/strategy。",
+)
+def preview_analysis(
+        request: AnalysisPreviewRequest,
+        http_request: Request,
+        config: Config = Depends(get_config_dep),
+) -> AnalysisPreviewResponse:
+    del config
+    stock_code = _resolve_and_normalize_input(request.stock_code)
+    guest_session_id, is_new_guest_session = _resolve_guest_session_id(http_request)
+    query_id = f"guest:{guest_session_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+
+    try:
+        from src.services.analysis_service import AnalysisService
+
+        service = AnalysisService()
+        result = service.analyze_stock(
+            stock_code=stock_code,
+            report_type=request.report_type,
+            force_refresh=request.force_refresh,
+            query_id=query_id,
+            send_notification=False,
+            persist_history=False,
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "analysis_failed",
+                    "message": f"分析股票 {stock_code} 失败",
+                },
+            )
+
+        resolved_query_id = str(result.get("query_id") or query_id)
+        report = _build_analysis_report(
+            result.get("report", {}) or {},
+            resolved_query_id,
+            result.get("stock_code", stock_code),
+            result.get("stock_name") or request.stock_name,
+            context_snapshot=None,
+            fallback_fundamental_payload=None,
+        )
+        report.details = None
+
+        preview_response = AnalysisPreviewResponse(
+            query_id=resolved_query_id,
+            stock_code=result.get("stock_code", stock_code),
+            stock_name=result.get("stock_name") or request.stock_name,
+            report=report,
+            preview_scope="guest",
+        )
+        json_response = JSONResponse(
+            content=jsonable_encoder(preview_response.model_dump(by_alias=True)),
+        )
+        if is_new_guest_session:
+            _set_guest_session_cookie(json_response, http_request, guest_session_id)
+        return json_response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("生成公开分析预览失败: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"分析过程发生错误: {str(e)}",
+            },
+        ) from e
+
 
 @router.post(
     "/analyze",
@@ -141,7 +251,8 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
 )
 def trigger_analysis(
         request: AnalyzeRequest,
-        config: Config = Depends(get_config_dep)
+        config: Config = Depends(get_config_dep),
+        current_user: CurrentUser = Depends(get_current_user),
 ) -> Union[AnalysisResultResponse, JSONResponse]:
     """
     触发股票分析
@@ -228,15 +339,16 @@ def trigger_analysis(
                     "message": "同步模式仅支持单只股票分析，请使用 async_mode=true 进行批量分析"
                 }
             )
-        return _handle_sync_analysis(stock_codes[0], request)
+        return _handle_sync_analysis(stock_codes[0], request, current_user)
 
     # Async mode submits one task per stock.
-    return _handle_async_analysis_batch(stock_codes, request)
+    return _handle_async_analysis_batch(stock_codes, request, current_user)
 
 
 def _handle_async_analysis_batch(
     stock_codes: list,
-    request: AnalyzeRequest
+    request: AnalyzeRequest,
+    current_user: CurrentUser | object | None = None,
 ) -> JSONResponse:
     """
     Handle asynchronous analysis requests, including batch submission.
@@ -252,15 +364,19 @@ def _handle_async_analysis_batch(
     stock_name = request.stock_name if is_single else None
     original_query = request.original_query if (is_single or preserve_batch_metadata) else None
     selection_source = request.selection_source if (is_single or preserve_batch_metadata) else None
+    owner_id = get_current_user_id(current_user)
+    submit_kwargs = {
+        "stock_codes": stock_codes,
+        "stock_name": stock_name,
+        "original_query": original_query,
+        "selection_source": selection_source,
+        "report_type": request.report_type,
+        "force_refresh": request.force_refresh,
+    }
+    if owner_id:
+        submit_kwargs["owner_id"] = owner_id
 
-    accepted_tasks, duplicate_errors = task_queue.submit_tasks_batch(
-        stock_codes=stock_codes,
-        stock_name=stock_name,
-        original_query=original_query,
-        selection_source=selection_source,
-        report_type=request.report_type,
-        force_refresh=request.force_refresh,
-    )
+    accepted_tasks, duplicate_errors = task_queue.submit_tasks_batch(**submit_kwargs)
 
     accepted = [
         BatchTaskAcceptedItem(
@@ -320,7 +436,8 @@ def _handle_async_analysis_batch(
 
 def _handle_sync_analysis(
     stock_code: str,
-    request: AnalyzeRequest
+    request: AnalyzeRequest,
+    current_user: CurrentUser | object | None = None,
 ) -> AnalysisResultResponse:
     """
     处理同步分析请求
@@ -331,15 +448,19 @@ def _handle_sync_analysis(
     from src.services.analysis_service import AnalysisService
     
     query_id = uuid.uuid4().hex
+    owner_id = get_current_user_id(current_user)
+    analyze_kwargs = {
+        "stock_code": stock_code,
+        "report_type": request.report_type,
+        "force_refresh": request.force_refresh,
+        "query_id": query_id,
+    }
+    if owner_id:
+        analyze_kwargs["owner_id"] = owner_id
     
     try:
         service = AnalysisService()
-        result = service.analyze_stock(
-            stock_code=stock_code,
-            report_type=request.report_type,
-            force_refresh=request.force_refresh,
-            query_id=query_id
-        )
+        result = service.analyze_stock(**analyze_kwargs)
 
         if result is None:
             raise HTTPException(
@@ -350,15 +471,20 @@ def _handle_sync_analysis(
                 }
             )
 
+        resolved_query_id = str(result.get("query_id") or query_id)
+
         # 构建报告结构
         report_data = result.get("report", {})
-        context_snapshot, fundamental_snapshot = _load_sync_fundamental_sources(
-            query_id=query_id,
-            stock_code=result.get("stock_code", stock_code),
-        )
+        load_kwargs = {
+            "query_id": resolved_query_id,
+            "stock_code": result.get("stock_code", stock_code),
+        }
+        if owner_id:
+            load_kwargs["owner_id"] = owner_id
+        context_snapshot, fundamental_snapshot = _load_sync_fundamental_sources(**load_kwargs)
         report = _build_analysis_report(
             report_data,
-            query_id,
+            resolved_query_id,
             stock_code,
             result.get("stock_name"),
             context_snapshot=context_snapshot,
@@ -375,7 +501,7 @@ def _handle_sync_analysis(
             }
 
         return AnalysisResultResponse(
-            query_id=query_id,
+            query_id=resolved_query_id,
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
             report=report.model_dump() if report else None,
@@ -418,6 +544,7 @@ def get_task_list(
         description="筛选状态：pending, processing, completed, failed（支持逗号分隔多个）"
     ),
     limit: int = Query(20, description="返回数量限制", ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> TaskListResponse:
     """
     获取分析任务列表
@@ -430,9 +557,10 @@ def get_task_list(
         TaskListResponse: 任务列表响应
     """
     task_queue = get_task_queue()
+    owner_id = get_current_user_id(current_user)
     
     # 获取所有任务
-    all_tasks = task_queue.list_all_tasks(limit=limit)
+    all_tasks = task_queue.list_all_tasks(limit=limit, owner_id=owner_id)
     
     # 状态筛选
     if status:
@@ -440,7 +568,7 @@ def get_task_list(
         all_tasks = [t for t in all_tasks if t.status.value in status_list]
     
     # 统计信息
-    stats = task_queue.get_task_stats()
+    stats = task_queue.get_task_stats(owner_id=owner_id)
     
     # 转换为 Schema
     task_infos = [
@@ -451,6 +579,7 @@ def get_task_list(
             status=t.status.value,
             progress=t.progress,
             message=t.message,
+            result=t.result,
             report_type=t.report_type,
             created_at=t.created_at.isoformat(),
             started_at=t.started_at.isoformat() if t.started_at else None,
@@ -483,7 +612,7 @@ def get_task_list(
     summary="任务状态 SSE 流",
     description="通过 Server-Sent Events 实时推送任务状态变化"
 )
-async def task_stream():
+async def task_stream(current_user: CurrentUser = Depends(get_current_user)):
     """
     SSE 任务状态流
     
@@ -491,6 +620,7 @@ async def task_stream():
     - connected: 连接成功
     - task_created: 新任务创建
     - task_started: 任务开始执行
+    - task_updated: 任务阶段更新
     - task_completed: 任务完成
     - task_failed: 任务失败
     - heartbeat: 心跳（每 30 秒）
@@ -501,12 +631,13 @@ async def task_stream():
     async def event_generator():
         task_queue = get_task_queue()
         event_queue: asyncio.Queue = asyncio.Queue()
+        owner_id = get_current_user_id(current_user)
         
         # 发送连接成功事件
         yield _format_sse_event("connected", {"message": "Connected to task stream"})
         
         # 发送当前进行中的任务
-        pending_tasks = task_queue.list_pending_tasks()
+        pending_tasks = task_queue.list_pending_tasks(owner_id=owner_id)
         for task in pending_tasks:
             yield _format_sse_event("task_created", task.to_dict())
         
@@ -518,6 +649,10 @@ async def task_stream():
                 try:
                     # 等待事件，超时发送心跳
                     event = await asyncio.wait_for(event_queue.get(), timeout=30)
+                    payload = event.get("data") or {}
+                    event_owner_id = str(payload.get("owner_id") or "").strip()
+                    if owner_id and event_owner_id != owner_id:
+                        continue
                     yield _format_sse_event(event["type"], event["data"])
                 except asyncio.TimeoutError:
                     # 心跳
@@ -569,7 +704,10 @@ def _format_sse_event(event_type: str, data: Dict[str, Any]) -> str:
     summary="查询分析任务状态",
     description="根据 task_id 查询单个任务的状态"
 )
-def get_analysis_status(task_id: str) -> TaskStatus:
+def get_analysis_status(
+    task_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TaskStatus:
     """
     查询分析任务状态
     
@@ -586,7 +724,8 @@ def get_analysis_status(task_id: str) -> TaskStatus:
     """
     # 1. 先从任务队列查询
     task_queue = get_task_queue()
-    task = task_queue.get_task(task_id)
+    owner_id = get_current_user_id(current_user)
+    task = task_queue.get_task(task_id, owner_id=owner_id)
     
     if task:
         return TaskStatus(
@@ -602,12 +741,10 @@ def get_analysis_status(task_id: str) -> TaskStatus:
     
     # 2. 从数据库查询已完成的记录
     try:
-        from src.storage import DatabaseManager
-        db = DatabaseManager.get_instance()
-        records = db.get_analysis_history(query_id=task_id, limit=1)
+        repo = AnalysisRepository(owner_id=owner_id)
+        record = repo.get_latest_record(query_id=task_id)
 
-        if records:
-            record = records[0]
+        if record:
             raw_result = parse_json_field(record.raw_result)
             model_used = normalize_model_used(
                 (raw_result or {}).get("model_used") if isinstance(raw_result, dict) else None
@@ -682,20 +819,19 @@ def get_analysis_status(task_id: str) -> TaskStatus:
 def _load_sync_fundamental_sources(
     query_id: str,
     stock_code: str,
+    owner_id: Optional[str] = None,
 ) -> tuple[Optional[Any], Optional[Dict[str, Any]]]:
     """
     Load context_snapshot and fallback fundamental snapshot for sync analyze response.
     """
     try:
-        from src.storage import DatabaseManager
-
-        db = DatabaseManager.get_instance()
-        records = db.get_analysis_history(query_id=query_id, code=stock_code, limit=1)
+        repo = AnalysisRepository(owner_id=owner_id)
         context_snapshot = None
-        if records:
-            context_snapshot = parse_json_field(getattr(records[0], "context_snapshot", None))
+        record = repo.get_latest_record(query_id=query_id, code=stock_code)
+        if record:
+            context_snapshot = parse_json_field(getattr(record, "context_snapshot", None))
 
-        fallback_fundamental = db.get_latest_fundamental_snapshot(
+        fallback_fundamental = repo.get_latest_fundamental_snapshot(
             query_id=query_id,
             code=stock_code,
         )

@@ -237,6 +237,7 @@ class AgentOrchestrator:
         session_id: str,
         progress_callback: Optional[Callable] = None,
         context: Optional[Dict[str, Any]] = None,
+        owner_id: Optional[str] = None,
     ) -> "AgentResult":
         """Run the pipeline in chat mode (free-form answer, no dashboard parse).
 
@@ -251,13 +252,16 @@ class AgentOrchestrator:
         ctx.session_id = session_id
         ctx.meta["response_mode"] = "chat"
 
-        session = conversation_manager.get_or_create(session_id)
+        session = conversation_manager.get_or_create(session_id, owner_id=owner_id)
         history = session.get_history()
         if history:
             ctx.meta["conversation_history"] = history
 
         # Persist user turn
-        conversation_manager.add_message(session_id, "user", message)
+        if owner_id is None:
+            conversation_manager.add_message(session_id, "user", message)
+        else:
+            conversation_manager.add_message(session_id, "user", message, owner_id=owner_id)
 
         orch_result = self._execute_pipeline(
             ctx,
@@ -267,12 +271,21 @@ class AgentOrchestrator:
 
         # Persist assistant response
         if orch_result.success:
-            conversation_manager.add_message(session_id, "assistant", orch_result.content)
+            if owner_id is None:
+                conversation_manager.add_message(session_id, "assistant", orch_result.content)
+            else:
+                conversation_manager.add_message(session_id, "assistant", orch_result.content, owner_id=owner_id)
         else:
-            conversation_manager.add_message(
-                session_id, "assistant",
-                f"[分析失败] {orch_result.error or '未知错误'}",
-            )
+            failure_message = f"[分析失败] {orch_result.error or '未知错误'}"
+            if owner_id is None:
+                conversation_manager.add_message(session_id, "assistant", failure_message)
+            else:
+                conversation_manager.add_message(
+                    session_id,
+                    "assistant",
+                    failure_message,
+                    owner_id=owner_id,
+                )
 
         return AgentResult(
             success=orch_result.success,
@@ -580,6 +593,9 @@ class AgentOrchestrator:
         if context:
             ctx.stock_code = context.get("stock_code", "")
             ctx.stock_name = context.get("stock_name", "")
+            owner_id = str(context.get("owner_id") or "").strip()
+            if owner_id:
+                ctx.meta["owner_id"] = owner_id
             requested_skills = context.get("skills")
             if requested_skills is None:
                 requested_skills = context.get("strategies", [])

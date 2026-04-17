@@ -25,16 +25,6 @@ import os
 from src.config import setup_env
 setup_env()
 
-# 代理配置 - 通过 USE_PROXY 环境变量控制，默认关闭
-# GitHub Actions 环境自动跳过代理配置
-if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").lower() == "true":
-    # 本地开发环境，启用代理（可在 .env 中配置 PROXY_HOST 和 PROXY_PORT）
-    proxy_host = os.getenv("PROXY_HOST", "127.0.0.1")
-    proxy_port = os.getenv("PROXY_PORT", "10809")
-    proxy_url = f"http://{proxy_host}:{proxy_port}"
-    os.environ["http_proxy"] = proxy_url
-    os.environ["https_proxy"] = proxy_url
-
 import argparse
 import logging
 import sys
@@ -68,6 +58,8 @@ def parse_arguments() -> argparse.Namespace:
   python main.py --no-notify        # 不发送推送通知
   python main.py --single-notify    # 启用单股推送模式（每分析完一只立即推送）
   python main.py --schedule         # 启用定时任务模式
+  python main.py --scanner          # 运行一次 Market Scanner
+  python main.py --scanner-schedule # 启用 Scanner 定时任务模式
   python main.py --market-review    # 仅运行大盘复盘
         '''
     )
@@ -116,6 +108,18 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        '--scanner',
+        action='store_true',
+        help='运行一次 Market Scanner（A 股盘前观察名单）'
+    )
+
+    parser.add_argument(
+        '--scanner-schedule',
+        action='store_true',
+        help='启用 Market Scanner 定时任务模式'
+    )
+
+    parser.add_argument(
         '--no-run-immediately',
         action='store_true',
         help='定时任务启动时不立即执行一次'
@@ -142,13 +146,13 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         '--webui',
         action='store_true',
-        help='启动 Web 管理界面'
+        help='已弃用的兼容别名；请改用 --serve'
     )
 
     parser.add_argument(
         '--webui-only',
         action='store_true',
-        help='仅启动 Web 服务，不执行自动分析'
+        help='已弃用的兼容别名；请改用 --serve-only'
     )
 
     parser.add_argument(
@@ -541,8 +545,10 @@ def main() -> int:
 
     # === 处理 --webui / --webui-only 参数，映射到 --serve / --serve-only ===
     if args.webui:
+        logger.warning("命令行参数 --webui 已弃用；本次将按 --serve 处理。")
         args.serve = True
     if args.webui_only:
+        logger.warning("命令行参数 --webui-only 已弃用；本次将按 --serve-only 处理。")
         args.serve_only = True
 
     # 兼容旧版 WEBUI_ENABLED 环境变量
@@ -663,33 +669,83 @@ def main() -> int:
             )
             return 0
 
-        # 模式2: 定时任务模式
-        if args.schedule or config.schedule_enabled:
-            logger.info("模式: 定时任务")
-            logger.info(f"每日执行时间: {config.schedule_time}")
+        # 模式2: 单次运行 Scanner
+        if args.scanner:
+            logger.info("模式: Market Scanner")
+            from src.services.market_scanner_ops_service import MarketScannerOperationsService
 
-            # Determine whether to run immediately:
-            # Command line arg --no-run-immediately overrides config if present.
-            # Otherwise use config (defaults to True).
-            should_run_immediately = config.schedule_run_immediately
-            if getattr(args, 'no_run_immediately', False):
-                should_run_immediately = False
-
-            logger.info(f"启动时立即执行: {should_run_immediately}")
-
-            from src.scheduler import run_with_schedule
-
-            def scheduled_task():
-                run_full_analysis(config, args, stock_codes)
-
-            run_with_schedule(
-                task=scheduled_task,
-                schedule_time=config.schedule_time,
-                run_immediately=should_run_immediately
+            ops_service = MarketScannerOperationsService(config=config)
+            detail = ops_service.run_cli_scan(
+                market="cn",
+                profile=getattr(config, 'scanner_profile', 'cn_preopen_v1'),
+                notify=not args.no_notify,
+            )
+            logger.info(
+                "Scanner 执行完成: status=%s shortlist=%s watchlist_date=%s",
+                detail.get("status"),
+                detail.get("shortlist_size"),
+                detail.get("watchlist_date"),
             )
             return 0
 
-        # 模式3: 正常单次运行
+        # 模式3: 定时任务模式（分析 / Scanner 可并存）
+        analysis_schedule_enabled = args.schedule or config.schedule_enabled
+        scanner_schedule_enabled = args.scanner_schedule or getattr(config, 'scanner_schedule_enabled', False)
+        if analysis_schedule_enabled or scanner_schedule_enabled:
+            logger.info("模式: 定时任务")
+
+            from src.scheduler import Scheduler
+            from src.services.market_scanner_ops_service import MarketScannerOperationsService
+
+            scheduler = Scheduler(schedule_time=config.schedule_time)
+
+            if analysis_schedule_enabled:
+                logger.info("分析任务每日执行时间: %s", config.schedule_time)
+                analysis_run_immediately = config.schedule_run_immediately
+                if getattr(args, 'no_run_immediately', False):
+                    analysis_run_immediately = False
+                logger.info("分析任务启动时立即执行: %s", analysis_run_immediately)
+
+                def scheduled_analysis_task():
+                    run_full_analysis(config, args, stock_codes)
+
+                scheduler.add_daily_task(
+                    task=scheduled_analysis_task,
+                    schedule_time=config.schedule_time,
+                    run_immediately=analysis_run_immediately,
+                    label="analysis",
+                )
+
+            if scanner_schedule_enabled:
+                scanner_schedule_time = getattr(config, 'scanner_schedule_time', '08:40')
+                scanner_run_immediately = getattr(config, 'scanner_schedule_run_immediately', False)
+                if getattr(args, 'no_run_immediately', False):
+                    scanner_run_immediately = False
+                logger.info("Scanner 每日执行时间: %s", scanner_schedule_time)
+                logger.info("Scanner 启动时立即执行: %s", scanner_run_immediately)
+
+                scanner_ops = MarketScannerOperationsService(config=config)
+
+                def scheduled_scanner_task():
+                    result = scanner_ops.run_scheduled_scan(force_run=getattr(args, 'force_run', False))
+                    logger.info(
+                        "Scanner 定时任务完成: status=%s watchlist_date=%s shortlist=%s",
+                        result.get("status"),
+                        result.get("watchlist_date"),
+                        result.get("shortlist_size"),
+                    )
+
+                scheduler.add_daily_task(
+                    task=scheduled_scanner_task,
+                    schedule_time=scanner_schedule_time,
+                    run_immediately=scanner_run_immediately,
+                    label="market-scanner",
+                )
+
+            scheduler.run()
+            return 0
+
+        # 模式4: 正常单次运行
         if config.run_immediately:
             run_full_analysis(config, args, stock_codes)
         else:
@@ -698,7 +754,7 @@ def main() -> int:
         logger.info("\n程序执行完成")
 
         # 如果启用了服务且是非定时任务模式，保持程序运行
-        keep_running = start_serve and not (args.schedule or config.schedule_enabled)
+        keep_running = start_serve and not (analysis_schedule_enabled or scanner_schedule_enabled)
         if keep_running:
             logger.info("API 服务运行中 (按 Ctrl+C 退出)...")
             try:

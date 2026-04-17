@@ -2,9 +2,13 @@ import apiClient from './index';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from './error';
 import { toCamelCase } from './utils';
 import type {
+  FactoryResetSystemRequest,
   SystemConfigConflictResponse,
+  SystemAdminActionResponse,
   SystemConfigResponse,
   SystemConfigValidationErrorResponse,
+  TestCustomDataSourceRequest,
+  TestCustomDataSourceResponse,
   TestLLMChannelRequest,
   TestLLMChannelResponse,
   UpdateSystemConfigRequest,
@@ -98,6 +102,23 @@ function toSnakeTestChannelPayload(payload: TestLLMChannelRequest): Record<strin
   };
 }
 
+function toSnakeTestCustomDataSourcePayload(payload: TestCustomDataSourceRequest): Record<string, unknown> {
+  return {
+    name: payload.name,
+    base_url: payload.baseUrl,
+    credential_schema: payload.credentialSchema,
+    credential: payload.credential ?? '',
+    secret: payload.secret ?? '',
+    timeout_seconds: payload.timeoutSeconds ?? 5,
+  };
+}
+
+function toSnakeFactoryResetPayload(payload: FactoryResetSystemRequest): Record<string, unknown> {
+  return {
+    confirmation_phrase: payload.confirmationPhrase,
+  };
+}
+
 export const systemConfigApi = {
   async getConfig(includeSchema = true): Promise<SystemConfigResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/system/config', {
@@ -128,6 +149,18 @@ export const systemConfigApi = {
       withAdminUnlockHeader(options?.adminUnlockToken),
     );
     return toCamelCase<TestLLMChannelResponse>(response.data);
+  },
+
+  async testCustomDataSource(
+    payload: TestCustomDataSourceRequest,
+    options?: SystemConfigRequestOptions,
+  ): Promise<TestCustomDataSourceResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/system/config/data-source/test',
+      toSnakeTestCustomDataSourcePayload(payload),
+      withAdminUnlockHeader(options?.adminUnlockToken),
+    );
+    return toCamelCase<TestCustomDataSourceResponse>(response.data);
   },
 
   async update(
@@ -168,5 +201,21 @@ export const systemConfigApi = {
 
       throw error;
     }
+  },
+
+  async resetRuntimeCaches(): Promise<SystemAdminActionResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/system/actions/runtime-cache/reset',
+      {},
+    );
+    return toCamelCase<SystemAdminActionResponse>(response.data);
+  },
+
+  async factoryResetSystem(payload: FactoryResetSystemRequest): Promise<SystemAdminActionResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/system/actions/factory-reset',
+      toSnakeFactoryResetPayload(payload),
+    );
+    return toCamelCase<SystemAdminActionResponse>(response.data);
   },
 };

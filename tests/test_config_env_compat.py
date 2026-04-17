@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.config import Config
+from src.config import Config, setup_env
 
 
 class ConfigEnvCompatibilityTestCase(unittest.TestCase):
@@ -50,6 +50,32 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
             config.realtime_source_priority,
             "tencent,akshare_sina,efinance,akshare_em",
         )
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_load_from_env_reads_twelve_data_alias_and_alpaca_pair(
+        self,
+        _mock_parse_litellm_yaml,
+        _mock_setup_env,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "STOCK_LIST": "600519",
+                "TWELVEDATA_API_KEY": "td-legacy-key",
+                "ALPACA_API_KEY_ID": "alpaca-id",
+                "ALPACA_API_SECRET_KEY": "alpaca-secret",
+                "ALPACA_DATA_FEED": "sip",
+            },
+            clear=True,
+        ):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.twelve_data_api_keys, ["td-legacy-key"])
+        self.assertEqual(config.twelve_data_api_key, "td-legacy-key")
+        self.assertEqual(config.alpaca_api_key_id, "alpaca-id")
+        self.assertEqual(config.alpaca_api_secret_key, "alpaca-secret")
+        self.assertEqual(config.alpaca_data_feed, "sip")
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
@@ -193,6 +219,60 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.news_max_age_days, 3)
         self.assertEqual(config.max_workers, 3)
         self.assertEqual(config.webui_port, 8000)
+
+    def test_setup_env_maps_legacy_local_proxy_to_standard_proxy_variables(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "\n".join(
+                    [
+                        "USE_PROXY=true",
+                        "PROXY_HOST=127.0.0.1",
+                        "PROXY_PORT=18080",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ENV_FILE": str(env_path),
+                },
+                clear=True,
+            ):
+                setup_env(override=True)
+
+                self.assertEqual(os.environ.get("HTTP_PROXY"), "http://127.0.0.1:18080")
+                self.assertEqual(os.environ.get("HTTPS_PROXY"), "http://127.0.0.1:18080")
+
+    def test_setup_env_keeps_explicit_http_proxy_as_authoritative(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "\n".join(
+                    [
+                        "USE_PROXY=true",
+                        "PROXY_HOST=127.0.0.1",
+                        "PROXY_PORT=18080",
+                        "HTTP_PROXY=http://proxy.example:9000",
+                        "HTTPS_PROXY=http://secure-proxy.example:9443",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ENV_FILE": str(env_path),
+                },
+                clear=True,
+            ):
+                setup_env(override=True)
+
+                self.assertEqual(os.environ.get("HTTP_PROXY"), "http://proxy.example:9000")
+                self.assertEqual(os.environ.get("HTTPS_PROXY"), "http://secure-proxy.example:9443")
 
 
 if __name__ == "__main__":

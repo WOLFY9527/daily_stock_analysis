@@ -296,7 +296,7 @@ def _remaining_timeout_seconds(
     """Return remaining wall-clock budget in seconds, or None when disabled."""
     if max_wall_clock_seconds is None or max_wall_clock_seconds <= 0:
         return None
-    return max(0.0, float(max_wall_clock_seconds) - (time.time() - start_time))
+    return max(0.0, float(max_wall_clock_seconds) - (time.monotonic() - start_time))
 
 
 def _build_timeout_result(
@@ -310,7 +310,7 @@ def _build_timeout_result(
     models_used: List[str],
     messages: List[Dict[str, Any]],
 ) -> RunLoopResult:
-    elapsed = time.time() - start_time
+    elapsed = time.monotonic() - start_time
     return RunLoopResult(
         success=False,
         content="",
@@ -363,7 +363,7 @@ def run_agent_loop(
     labels = thinking_labels or _THINKING_TOOL_LABELS
     tool_decls = tool_registry.to_openai_tools()
 
-    start_time = time.time()
+    start_time = time.monotonic()
     tool_calls_log: List[Dict[str, Any]] = []
     non_retriable_tool_results: Dict[str, str] = {}
     total_tokens = 0
@@ -408,10 +408,6 @@ def run_agent_loop(
         m = getattr(response, "model", "") or response.provider
         if m and m != "error":
             models_used.append(m)
-        model_for_usage = m or response.provider
-        if model_for_usage and model_for_usage != "error" and response.usage:
-            _persist_usage(response.usage, model_for_usage, call_type="agent")
-
         remaining_timeout = _remaining_timeout_seconds(start_time, max_wall_clock_seconds)
         if remaining_timeout is not None and remaining_timeout <= 0:
             logger.warning("Agent timed out after LLM call at step %d", step + 1)
@@ -425,6 +421,10 @@ def run_agent_loop(
                 models_used=models_used,
                 messages=messages,
             )
+
+        model_for_usage = m or response.provider
+        if model_for_usage and model_for_usage != "error" and response.usage:
+            _persist_usage(response.usage, model_for_usage, call_type="agent")
 
         if response.tool_calls:
             # ---- tool execution branch ----
@@ -501,7 +501,7 @@ def run_agent_loop(
             logger.info(
                 "Agent completed in %d steps (%.1fs, %d tokens)",
                 step + 1,
-                time.time() - start_time,
+                time.monotonic() - start_time,
                 total_tokens,
             )
             if progress_callback:

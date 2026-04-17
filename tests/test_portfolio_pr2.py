@@ -116,6 +116,40 @@ class PortfolioPr2TestCase(unittest.TestCase):
             )
         return csv_text.encode("utf-8")
 
+    @staticmethod
+    def _ibkr_flex_xml_bytes() -> bytes:
+        xml_text = """<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U1234567" fromDate="2026-01-01" toDate="2026-01-31" currency="USD">
+    <Trades>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="10" tradePrice="150" ibCommission="1.25" taxes="0" ibExecID="AAPL-1" description="AAPL BUY"/>
+      <Trade assetCategory="STK" symbol="HK00700" exchange="SEHK" currency="HKD" tradeDate="2026-01-04" buySell="BUY" quantity="100" tradePrice="320" ibCommission="8.50" taxes="0" ibExecID="TENCENT-1" description="Tencent BUY"/>
+    </Trades>
+    <CashTransactions>
+      <CashTransaction reportDate="2026-01-02" currency="USD" amount="5000" description="Deposit"/>
+      <CashTransaction reportDate="2026-01-05" currency="HKD" amount="-25" description="Market data fee"/>
+    </CashTransactions>
+    <CorporateActions>
+      <CorporateAction assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" reportDate="2026-01-10" description="2 for 1 split" ratio="2:1"/>
+    </CorporateActions>
+  </FlexStatement>
+</FlexStatements>
+"""
+        return xml_text.encode("utf-8")
+
+    @staticmethod
+    def _ibkr_open_positions_xml_bytes() -> bytes:
+        xml_text = """<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U7654321" fromDate="2026-02-01" toDate="2026-02-28" currency="USD">
+    <OpenPositions>
+      <OpenPosition assetCategory="STK" symbol="MSFT" exchange="NASDAQ" currency="USD" reportDate="2026-02-28" position="12" costBasisPrice="250"/>
+    </OpenPositions>
+  </FlexStatement>
+</FlexStatements>
+"""
+        return xml_text.encode("utf-8")
+
     def test_import_dedup_trade_uid_and_hash(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]
@@ -169,8 +203,10 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertIn("huatai", broker_map)
         self.assertIn("citic", broker_map)
         self.assertIn("cmb", broker_map)
+        self.assertIn("ibkr", broker_map)
         self.assertIn("zhongxin", broker_map["citic"]["aliases"])
         self.assertIn("zhaoshang", broker_map["cmb"]["aliases"])
+        self.assertIn("xml", broker_map["ibkr"]["file_extensions"])
 
     def test_import_preserves_leading_zero_symbol(self) -> None:
         csv_text = (
@@ -309,6 +345,142 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertEqual(result["duplicate_count"], 0)
         self.assertEqual(result["failed_count"], 1)
         self.assertIn("portfolio_busy", result["errors"][0])
+
+    def test_ibkr_flex_parse_and_commit_with_repeat_import_protection(self) -> None:
+        account = self.service.create_account(name="Global", broker="IBKR", market="us", base_currency="USD")
+        aid = account["id"]
+
+        parsed = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=self._ibkr_flex_xml_bytes(),
+        )
+        self.assertEqual(parsed["broker"], "ibkr")
+        self.assertEqual(parsed["record_count"], 2)
+        self.assertEqual(parsed["cash_record_count"], 2)
+        self.assertEqual(parsed["corporate_action_count"], 1)
+        self.assertEqual(parsed["metadata"]["broker_account_ref"], "U1234567")
+
+        result = self.import_service.commit_import_records(
+            account_id=aid,
+            broker="ibkr",
+            parsed_payload=parsed,
+        )
+        self.assertEqual(result["inserted_count"], 2)
+        self.assertEqual(result["cash_inserted_count"], 2)
+        self.assertEqual(result["corporate_action_inserted_count"], 1)
+        self.assertFalse(result["duplicate_import"])
+        self.assertIsNotNone(result["broker_connection_id"])
+
+        trades = self.service.list_trade_events(account_id=aid, page=1, page_size=20)
+        self.assertEqual(len(trades["items"]), 2)
+        self.assertEqual({item["market"] for item in trades["items"]}, {"us", "hk"})
+
+        cash_entries = self.service.list_cash_ledger_events(account_id=aid, page=1, page_size=20)
+        self.assertEqual(len(cash_entries["items"]), 2)
+        self.assertEqual({item["currency"] for item in cash_entries["items"]}, {"USD", "HKD"})
+
+        actions = self.service.list_corporate_action_events(account_id=aid, page=1, page_size=20)
+        self.assertEqual(len(actions["items"]), 1)
+        self.assertEqual(actions["items"][0]["action_type"], "split_adjustment")
+
+        account_after_import = self.service.get_account(aid, include_inactive=True)
+        self.assertIsNotNone(account_after_import)
+        self.assertEqual(account_after_import["market"], "global")
+
+        connections = self.service.list_broker_connections(portfolio_account_id=aid)
+        self.assertEqual(len(connections), 1)
+        self.assertEqual(connections[0]["broker_account_ref"], "U1234567")
+        self.assertEqual(
+            connections[0]["last_import_fingerprint"],
+            parsed["metadata"]["file_fingerprint"],
+        )
+
+        repeat = self.import_service.commit_import_records(
+            account_id=aid,
+            broker="ibkr",
+            parsed_payload=parsed,
+        )
+        self.assertTrue(repeat["duplicate_import"])
+        self.assertEqual(repeat["inserted_count"], 0)
+        self.assertEqual(repeat["cash_inserted_count"], 0)
+
+    def test_ibkr_open_positions_seed_when_trades_absent(self) -> None:
+        account = self.service.create_account(name="Global", broker="IBKR", market="us", base_currency="USD")
+        aid = account["id"]
+
+        parsed = self.import_service.parse_import_file(
+            broker="ibkr",
+            content=self._ibkr_open_positions_xml_bytes(),
+        )
+        self.assertEqual(parsed["record_count"], 1)
+        self.assertTrue(parsed["metadata"]["open_position_seeded"])
+
+        result = self.import_service.commit_import_records(
+            account_id=aid,
+            broker="ibkr",
+            parsed_payload=parsed,
+        )
+        self.assertEqual(result["inserted_count"], 1)
+        trades = self.service.list_trade_events(account_id=aid, page=1, page_size=20)
+        self.assertEqual(trades["items"][0]["symbol"], "MSFT")
+        self.assertIn("open_position_seed", trades["items"][0]["note"] or "")
+
+    def test_ibkr_import_rejects_malformed_xml(self) -> None:
+        with self.assertRaises(ValueError):
+            self.import_service.parse_import_file(
+                broker="ibkr",
+                content=b"<broken-xml",
+            )
+
+    def test_global_account_snapshot_and_risk_use_account_base_currency(self) -> None:
+        account = self.service.create_account(name="Global", broker="IBKR", market="global", base_currency="USD")
+        aid = account["id"]
+
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 2, 1),
+            direction="in",
+            amount=10000.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 2, 1),
+            side="buy",
+            quantity=1,
+            price=150.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="HK00700",
+            trade_date=date(2026, 2, 1),
+            side="buy",
+            quantity=10,
+            price=320.0,
+            currency="HKD",
+        )
+        self._save_close("AAPL", date(2026, 2, 1), 150.0)
+        self._save_close("HK00700", date(2026, 2, 1), 320.0)
+        self.service.repo.save_fx_rate(
+            from_currency="HKD",
+            to_currency="USD",
+            rate_date=date(2026, 2, 1),
+            rate=0.128,
+            source="manual",
+            is_stale=False,
+        )
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 2, 1), cost_method="fifo")
+        self.assertEqual(snapshot["currency"], "USD")
+        self.assertEqual(snapshot["accounts"][0]["market"], "global")
+        self.assertEqual({item["market"] for item in snapshot["accounts"][0]["positions"]}, {"us", "hk"})
+
+        report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 2, 1), cost_method="fifo")
+        self.assertEqual(report["currency"], "USD")
+        positions = {item["symbol"]: item for item in report["concentration"]["top_positions"]}
+        self.assertAlmostEqual(positions["HK00700"]["market_value_base"], 409.6, places=4)
 
     def test_risk_threshold_boundary(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -527,6 +699,101 @@ class PortfolioPr2TestCase(unittest.TestCase):
 
         with patch.object(PortfolioService, "_fetch_fx_rate_from_yfinance", side_effect=AssertionError("should not call")):
             self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+
+    def test_snapshot_cache_refreshes_after_fx_rate_update(self) -> None:
+        account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+
+        first = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=8.0,
+            source="manual",
+            is_stale=False,
+        )
+        second = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+
+        self.assertAlmostEqual(first["accounts"][0]["total_market_value"], 700.0, places=6)
+        self.assertAlmostEqual(second["accounts"][0]["total_market_value"], 800.0, places=6)
+        self.assertAlmostEqual(first["accounts"][0]["total_cash"], 6300.0, places=6)
+        self.assertAlmostEqual(second["accounts"][0]["total_cash"], 7200.0, places=6)
+
+    def test_irrelevant_fx_rate_update_does_not_invalidate_warm_snapshot_cache(self) -> None:
+        account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+        self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+        self.service.repo.save_fx_rate(
+            from_currency="EUR",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=8.1,
+            source="manual",
+            is_stale=False,
+        )
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("irrelevant FX update should not invalidate warm cache"),
+        ):
+            second = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+
+        self.assertAlmostEqual(second["accounts"][0]["total_market_value"], 700.0, places=6)
+        self.assertAlmostEqual(second["accounts"][0]["total_cash"], 6300.0, places=6)
 
     def test_fx_refresh_fallback_marks_stale(self) -> None:
         account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="CNY")
