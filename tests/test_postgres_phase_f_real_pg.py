@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from datetime import date, datetime
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from sqlalchemy import create_engine, text
 
@@ -189,6 +189,22 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             ],
             cash_balances=[{"currency": "USD", "amount": 1000.0, "amount_base": 1000.0}],
         )
+        shadow = db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"])
+        authority = db.get_phase_f_portfolio_shadow_authority_state(account_id=account["id"])
+        ledger_authority_state = db.get_phase_f_ledger_event_payload_authority_state(account_id=account["id"])
+        event_history_state = db.get_phase_f_event_history_authority_state(account_id=account["id"])
+        replay_input_state = db.get_phase_f_replay_input_authority_state(account_id=account["id"])
+        snapshot_cache_state = db.get_phase_f_snapshot_cache_authority_state(account_id=account["id"])
+        effective_authority_summary = db.get_phase_f_effective_authority_summary(account_id=account["id"])
+        event_history_gate = db.get_phase_f_domain_readiness_gate(
+            account_id=account["id"],
+            target_domain="event_history_authority",
+        )
+        replay_input_gate = db.get_phase_f_domain_readiness_gate(
+            account_id=account["id"],
+            target_domain="replay_input_authority",
+        )
+        prerequisite_state = db.get_phase_f_portfolio_prerequisite_state(account_id=account["id"])
 
         self.assertEqual(self._pg_scalar("select count(*) from portfolio_accounts"), 1)
         self.assertEqual(self._pg_scalar("select count(*) from broker_connections"), 1)
@@ -197,6 +213,108 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
         self.assertEqual(self._pg_scalar("select count(*) from portfolio_sync_states"), 1)
         self.assertEqual(self._pg_scalar("select count(*) from portfolio_sync_positions"), 1)
         self.assertEqual(self._pg_scalar("select count(*) from portfolio_sync_cash_balances"), 1)
+        self.assertEqual([item["broker_account_ref"] for item in shadow["broker_connections"]], ["U8888888"])
+        self.assertTrue(authority["effective_readiness"]["broker_connection_list"])
+        self.assertTrue(authority["effective_readiness"]["latest_sync_overlay"])
+        with patch.object(service.repo, "list_accounts", side_effect=AssertionError("legacy repo list_accounts should not be used")):
+            listed_accounts = service.list_accounts(include_inactive=True)
+        self.assertEqual([item["name"] for item in listed_accounts], ["Real PG"])
+        with patch.object(service.repo, "get_account", side_effect=AssertionError("legacy repo get_account should not be used")), patch.object(
+            service.repo,
+            "list_broker_connections",
+            side_effect=AssertionError("legacy repo list_broker_connections should not be used"),
+        ), patch.object(
+            service.repo,
+            "list_accounts",
+            side_effect=AssertionError("legacy repo list_accounts should not be used"),
+        ):
+            listed_connections = service.list_broker_connections(portfolio_account_id=account["id"], broker_type="ibkr")
+        self.assertEqual([item["portfolio_account_name"] for item in listed_connections], ["Real PG"])
+        self.assertEqual([item["broker_account_ref"] for item in listed_connections], ["U8888888"])
+        with patch.object(
+            service.repo,
+            "get_latest_broker_sync_state_for_account",
+            side_effect=AssertionError("legacy repo latest sync state should not be used"),
+        ), patch.object(
+            service.repo,
+            "list_broker_sync_positions",
+            side_effect=AssertionError("legacy repo sync positions should not be used"),
+        ), patch.object(
+            service.repo,
+            "list_broker_sync_cash_balances",
+            side_effect=AssertionError("legacy repo sync cash balances should not be used"),
+        ):
+            latest_sync = service.get_latest_broker_sync_state(portfolio_account_id=account["id"])
+        self.assertIsNotNone(latest_sync)
+        self.assertEqual(latest_sync["broker_connection_id"], connection["id"])
+        self.assertEqual([item["symbol"] for item in latest_sync["positions"]], ["AAPL"])
+        self.assertEqual([item["currency"] for item in latest_sync["cash_balances"]], ["USD"])
+        self.assertIsNotNone(ledger_authority_state)
+        self.assertEqual(ledger_authority_state["current_signal"], "payload_parity_observed")
+        self.assertEqual(ledger_authority_state["authority_prerequisite_state"], "authority_ready")
+        self.assertTrue(ledger_authority_state["authority_ready"])
+        self.assertFalse(ledger_authority_state["runtime_cutover_ready"])
+        self.assertIn("event_history_domain_authority_layer_required", ledger_authority_state["downstream_blockers"])
+        self.assertIsNotNone(event_history_state)
+        self.assertEqual(event_history_state["current_signal"], "prerequisite_ready")
+        self.assertEqual(event_history_state["authority_prerequisite_state"], "authority_ready")
+        self.assertTrue(event_history_state["authority_ready"])
+        self.assertFalse(event_history_state["runtime_cutover_ready"])
+        self.assertIn("runtime_pg_event_history_read_cutover_not_enabled", event_history_state["downstream_blockers"])
+        self.assertIsNotNone(replay_input_state)
+        self.assertEqual(replay_input_state["current_signal"], "replay_specific_gaps_observed")
+        self.assertEqual(replay_input_state["authority_prerequisite_state"], "observed_only")
+        self.assertFalse(replay_input_state["authority_ready"])
+        self.assertFalse(replay_input_state["runtime_cutover_ready"])
+        self.assertIn("cost_method_specific_authority_missing", replay_input_state["blocked_reasons"])
+        self.assertIn("lot_authority_missing", replay_input_state["blocked_reasons"])
+        self.assertIn("as_of_replay_boundary_missing", replay_input_state["blocked_reasons"])
+        self.assertIn("runtime_pg_replay_input_cutover_not_enabled", replay_input_state["downstream_blockers"])
+        self.assertIsNotNone(snapshot_cache_state)
+        self.assertEqual(snapshot_cache_state["current_signal"], "snapshot_specific_gaps_observed")
+        self.assertEqual(snapshot_cache_state["authority_prerequisite_state"], "observed_only")
+        self.assertFalse(snapshot_cache_state["authority_ready"])
+        self.assertFalse(snapshot_cache_state["runtime_cutover_ready"])
+        self.assertIn("snapshot_projection_authority_missing", snapshot_cache_state["blocked_reasons"])
+        self.assertIn("lot_projection_authority_missing", snapshot_cache_state["blocked_reasons"])
+        self.assertIn("snapshot_freshness_invalidation_authority_missing", snapshot_cache_state["blocked_reasons"])
+        self.assertIn("valuation_semantic_authority_missing", snapshot_cache_state["blocked_reasons"])
+        self.assertIn("runtime_pg_snapshot_cache_cutover_not_enabled", snapshot_cache_state["downstream_blockers"])
+        self.assertIsNotNone(effective_authority_summary)
+        self.assertEqual(effective_authority_summary["authority_model"], "phase_f_effective_authority_summary_v1")
+        self.assertEqual(effective_authority_summary["highest_roi_category"], "ledger_event_payload_parity")
+        self.assertEqual(effective_authority_summary["foundational_boundary"]["domain"], "ledger_event_payload_parity")
+        self.assertEqual(effective_authority_summary["next_unmet_boundary"]["domain"], "replay_input_authority")
+        self.assertFalse(effective_authority_summary["effective_readiness"]["runtime_cutover_ready"])
+        self.assertIsNotNone(event_history_gate)
+        self.assertEqual(event_history_gate["gate_model"], "phase_f_domain_readiness_gate_v1")
+        self.assertEqual(event_history_gate["gate_status"], "design_prerequisite_ready")
+        self.assertTrue(event_history_gate["design_prerequisite_ready"])
+        self.assertEqual(event_history_gate["next_unmet_boundary"], None)
+        self.assertFalse(event_history_gate["runtime_cutover_ready"])
+        self.assertIsNotNone(replay_input_gate)
+        self.assertEqual(replay_input_gate["gate_status"], "domain_specific_blocked")
+        self.assertFalse(replay_input_gate["design_prerequisite_ready"])
+        self.assertFalse(replay_input_gate["upstream_blocked"])
+        self.assertTrue(replay_input_gate["has_domain_specific_blockers"])
+        self.assertEqual(replay_input_gate["next_unmet_boundary"]["domain"], "replay_input_authority")
+        self.assertFalse(replay_input_gate["runtime_cutover_ready"])
+        self.assertIsNotNone(prerequisite_state)
+        self.assertEqual(prerequisite_state["highest_roi_category"], "ledger_event_payload_parity")
+        self.assertEqual(
+            prerequisite_state["effective_authority_summary"]["authority_model"],
+            "phase_f_effective_authority_summary_v1",
+        )
+        self.assertEqual(
+            prerequisite_state["categories"]["ledger_event_payload_parity"]["current_signal"],
+            "payload_parity_observed",
+        )
+        self.assertTrue(prerequisite_state["categories"]["ledger_event_payload_parity"]["authority_ready"])
+        self.assertTrue(prerequisite_state["event_history_authority"]["authority_ready"])
+        self.assertFalse(prerequisite_state["replay_input_authority"]["authority_ready"])
+        self.assertFalse(prerequisite_state["snapshot_cache_authority"]["authority_ready"])
+        self.assertFalse(prerequisite_state["categories"]["snapshot_cache_freshness_parity"]["authority_ready"])
+        self.assertFalse(prerequisite_state["categories"]["replay_input_parity"]["authority_ready"])
 
         with db._phase_f_store.session_scope() as session:
             self.assertEqual(session.query(PhaseFPortfolioAccount).count(), 1)

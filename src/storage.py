@@ -18,6 +18,7 @@ import json
 import logging
 import re
 from datetime import datetime, date, timedelta
+from types import SimpleNamespace
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Iterable
 from zoneinfo import ZoneInfo
 
@@ -68,10 +69,11 @@ from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
 from src.postgres_phase_a import PostgresPhaseAStore
 from src.postgres_phase_b import PostgresPhaseBStore
 from src.postgres_phase_c import PostgresPhaseCStore
-from src.postgres_phase_d import PostgresPhaseDStore
+from src.postgres_phase_d import PostgresPhaseDStore, extract_phase_d_shadow_static_detail_metadata
 from src.postgres_phase_e import PostgresPhaseEStore
-from src.postgres_phase_f import PostgresPhaseFStore
+from src.postgres_phase_f import PostgresPhaseFStore, phase_f_ledger_shadow_id
 from src.postgres_phase_g import PostgresPhaseGStore
+from src.postgres_schema_bootstrap import list_bootstrap_records
 
 logger = logging.getLogger(__name__)
 
@@ -2490,6 +2492,512 @@ class DatabaseManager:
             source_name=source_name,
         )
 
+    @staticmethod
+    def _serialize_market_data_asset_row(row: Any) -> Dict[str, Any]:
+        return {
+            "id": int(getattr(row, "id")),
+            "manifest_id": int(getattr(row, "manifest_id")),
+            "dataset_version_id": int(getattr(row, "dataset_version_id")) if getattr(row, "dataset_version_id", None) is not None else None,
+            "canonical_symbol": getattr(row, "canonical_symbol", None),
+            "market": getattr(row, "market", None),
+            "timeframe": getattr(row, "timeframe", None),
+            "asset_uri": getattr(row, "asset_uri", None),
+            "source": getattr(row, "source", None),
+            "file_format": getattr(row, "file_format", None),
+            "version_hash": getattr(row, "version_hash", None),
+            "content_checksum": getattr(row, "content_checksum", None),
+            "coverage_start": getattr(row, "coverage_start", None).isoformat() if getattr(row, "coverage_start", None) is not None else None,
+            "coverage_end": getattr(row, "coverage_end", None).isoformat() if getattr(row, "coverage_end", None) is not None else None,
+            "row_count": int(getattr(row, "row_count")) if getattr(row, "row_count", None) is not None else None,
+            "file_size_bytes": int(getattr(row, "file_size_bytes")) if getattr(row, "file_size_bytes", None) is not None else None,
+            "last_modified_at": getattr(row, "last_modified_at", None).isoformat() if getattr(row, "last_modified_at", None) is not None else None,
+            "last_sync_at": getattr(row, "last_sync_at", None).isoformat() if getattr(row, "last_sync_at", None) is not None else None,
+            "sync_status": getattr(row, "sync_status", None),
+            "freshness_status": getattr(row, "freshness_status", None),
+            "retry_count": int(getattr(row, "retry_count") or 0),
+            "failure_count": int(getattr(row, "failure_count") or 0),
+            "last_error": getattr(row, "last_error", None),
+            "last_error_at": getattr(row, "last_error_at", None).isoformat() if getattr(row, "last_error_at", None) is not None else None,
+            "asset_metadata": dict(getattr(row, "asset_metadata_json", None) or {}),
+            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) is not None else None,
+            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) is not None else None,
+        }
+
+    def list_market_data_assets(
+        self,
+        *,
+        manifest_key: Optional[str] = None,
+        canonical_symbol: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return []
+        return [
+            self._serialize_market_data_asset_row(row)
+            for row in self._phase_c_store.list_market_data_assets(
+                manifest_key=manifest_key,
+                canonical_symbol=canonical_symbol,
+            )
+        ]
+
+    def sync_local_us_parquet_asset_metadata(
+        self,
+        *,
+        root_path: Optional[Any] = None,
+        actor_user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            raise RuntimeError("Phase C PostgreSQL metadata store is not enabled")
+
+        request_payload = {
+            "manifest_key": "us.local_parquet.daily",
+            "root_path": str(root_path) if root_path is not None else None,
+        }
+        try:
+            result = self._phase_c_store.sync_local_us_parquet_asset_metadata(root_path=root_path)
+        except Exception as exc:
+            self.record_phase_g_admin_action(
+                action_key="sync_market_data_assets",
+                actor_user_id=actor_user_id,
+                actor_role=ROLE_ADMIN if actor_user_id else None,
+                subsystem="market_data",
+                category="sync",
+                message=f"Market data asset sync failed: {exc}",
+                detail_json={
+                    "manifest_key": "us.local_parquet.daily",
+                    "error": str(exc),
+                },
+                related_session_key=None,
+                destructive=False,
+                status="failed",
+                severity="error",
+                outcome="failure",
+                request_json=request_payload,
+                result_json={"error": str(exc)},
+            )
+            raise
+
+        self.record_phase_g_admin_action(
+            action_key="sync_market_data_assets",
+            actor_user_id=actor_user_id,
+            actor_role=ROLE_ADMIN if actor_user_id else None,
+            subsystem="market_data",
+            category="sync",
+            message=(
+                f"Synchronized {int(result.get('asset_count') or 0)} market data assets for "
+                f"{result.get('manifest_key') or 'market_data'}."
+            ),
+            detail_json={
+                "manifest_key": result.get("manifest_key"),
+                "dataset_version_id": result.get("dataset_version_id"),
+                "asset_count": result.get("asset_count"),
+                "root_uri": result.get("root_uri"),
+            },
+            related_session_key=None,
+            destructive=False,
+            status="completed",
+            severity="info",
+            outcome="success",
+            request_json=request_payload,
+            result_json=result,
+        )
+        return result
+
+    def list_postgres_schema_bootstrap_records(self) -> List[Dict[str, Any]]:
+        if not self._phase_a_enabled or self._phase_a_store is None:
+            return []
+        return list_bootstrap_records(self._phase_a_store._engine)
+
+    def get_phase_d_scanner_shadow_bundle(self, *, run_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_d_enabled or self._phase_d_store is None:
+            return None
+        return self._phase_d_store.get_scanner_run_shadow_bundle(run_id=int(run_id))
+
+    def get_phase_d_scanner_shadow_authority_state(self, *, run_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_d_enabled or self._phase_d_store is None:
+            return None
+        return self._phase_d_store.get_scanner_run_shadow_authority_state(run_id=int(run_id))
+
+    def get_phase_d_scanner_shadow_readiness_state(self, *, run_id: int) -> Optional[Dict[str, Any]]:
+        return self.get_phase_d_scanner_shadow_authority_state(run_id=int(run_id))
+
+    def list_phase_d_scanner_shadow_bundles(
+        self,
+        *,
+        market: Optional[str] = None,
+        profile: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        if not self._phase_d_enabled or self._phase_d_store is None:
+            return [], 0
+        resolved_owner_id = None if include_all_owners else (
+            self.require_user_id(owner_id) if str(owner_id or "").strip() else None
+        )
+        return self._phase_d_store.list_scanner_run_shadow_bundles(
+            market=market,
+            profile_key=profile,
+            offset=offset,
+            limit=limit,
+            scope=scope,
+            owner_user_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+
+    def list_phase_d_watchlist_shadow_authority_states(
+        self,
+        *,
+        market: Optional[str] = None,
+        profile: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        if not self._phase_d_enabled or self._phase_d_store is None:
+            return [], 0
+        return self._phase_d_store.list_watchlist_shadow_authority_states(
+            market=market,
+            profile_key=profile,
+            offset=offset,
+            limit=limit,
+        )
+
+    @staticmethod
+    def _build_phase_d_scanner_detail_readiness_state(
+        bundle: Dict[str, Any],
+        *,
+        sqlite_run_row_present: bool,
+        sqlite_candidate_row_count: int,
+    ) -> Dict[str, Any]:
+        run = dict((bundle or {}).get("run") or {})
+        authority = dict((bundle or {}).get("authority") or (bundle or {}).get("readiness") or {})
+        effective_readiness = dict(authority.get("effective_readiness") or {})
+        observed_readiness = dict(authority.get("observed_readiness") or {})
+        freshness = dict(authority.get("freshness") or {})
+        surface_trust = dict(authority.get("surface_trust") or {})
+        candidates = list((bundle or {}).get("candidates") or [])
+        shadow_static_detail_metadata = extract_phase_d_shadow_static_detail_metadata(run)
+        shadow_candidate_row_count = len(candidates)
+        sqlite_candidate_rows_match_shadow = int(sqlite_candidate_row_count) == int(shadow_candidate_row_count)
+        shadow_detail_core_ready = bool(effective_readiness.get("detail"))
+
+        missing_shadow_components = sorted(
+            [key for key, value in effective_readiness.items() if not value]
+        )
+        legacy_missing_components = []
+        if not sqlite_run_row_present:
+            legacy_missing_components.append("sqlite_run_row")
+        if not sqlite_candidate_rows_match_shadow:
+            legacy_missing_components.append("sqlite_candidate_rows")
+
+        legacy_only_dependencies = []
+        if not shadow_static_detail_metadata.get("universe_notes_shadow_projected"):
+            legacy_only_dependencies.append("universe_notes_not_shadow_projected")
+        if not shadow_static_detail_metadata.get("scoring_notes_shadow_projected"):
+            legacy_only_dependencies.append("scoring_notes_not_shadow_projected")
+        legacy_only_dependencies.extend(
+            [
+                "previous_watchlist_context_legacy_only",
+                "recent_symbol_mentions_legacy_only",
+                "ai_commentary_writeback_legacy_only",
+            ]
+        )
+        external_enrichment_dependencies = [
+            "review_bundle_external_enrichment",
+            "realized_outcomes_market_data_dependent",
+        ]
+
+        blocking_dependencies: List[str] = []
+        if not shadow_detail_core_ready:
+            blocking_dependencies.append("shadow_detail_core_incomplete")
+        if not sqlite_run_row_present:
+            blocking_dependencies.append("sqlite_run_row_missing")
+        if not sqlite_candidate_rows_match_shadow:
+            blocking_dependencies.append("sqlite_candidate_rows_incomplete")
+        blocking_dependencies.extend(external_enrichment_dependencies)
+
+        if not shadow_detail_core_ready:
+            readiness_stage = "shadow_core_incomplete"
+        elif not sqlite_run_row_present or not sqlite_candidate_rows_match_shadow:
+            readiness_stage = "shadow_core_ready_but_legacy_detail_rows_missing"
+        else:
+            readiness_stage = "shadow_core_ready_but_enrichment_blocked"
+
+        summary_json = dict(run.get("summary_json") or {})
+        diagnostics_json = dict(run.get("diagnostics_json") or {})
+        operation_payload = dict(diagnostics_json.get("operation") or {})
+        top_symbols = summary_json.get("shortlisted_codes")
+        if not isinstance(top_symbols, list) or not top_symbols:
+            top_symbols = [item.get("canonical_symbol") for item in candidates[:3]]
+
+        return {
+            "shadow_run_id": int(run.get("id") or 0),
+            "scope": run.get("scope"),
+            "owner_user_id": run.get("owner_user_id"),
+            "market": run.get("market"),
+            "profile": run.get("profile_key"),
+            "status": run.get("status"),
+            "headline": summary_json.get("headline") or run.get("headline"),
+            "watchlist_date": (
+                summary_json.get("watchlist_date")
+                or operation_payload.get("watchlist_date")
+            ),
+            "run_at": run.get("created_at"),
+            "completed_at": run.get("completed_at"),
+            "top_symbols": [str(item) for item in top_symbols[:3] if str(item or "").strip()],
+            "authority_model": authority.get("authority_model"),
+            "projection_source": authority.get("projection_source"),
+            "legacy_source_table": authority.get("legacy_source_table"),
+            "legacy_run_id": int(authority.get("legacy_run_id") or 0),
+            "marker_present": bool(authority.get("marker_present")),
+            "freshness": freshness,
+            "surface_trust": surface_trust,
+            "observed_readiness": observed_readiness,
+            "effective_readiness": effective_readiness,
+            "shadow_static_detail_metadata": shadow_static_detail_metadata,
+            "shadow_detail_core_ready": shadow_detail_core_ready,
+            "shadow_candidate_row_count": shadow_candidate_row_count,
+            "sqlite_run_row_present": bool(sqlite_run_row_present),
+            "sqlite_candidate_row_count": int(sqlite_candidate_row_count),
+            "sqlite_candidate_rows_match_shadow": bool(sqlite_candidate_rows_match_shadow),
+            "missing_shadow_components": missing_shadow_components,
+            "legacy_missing_components": legacy_missing_components,
+            "legacy_only_dependencies": legacy_only_dependencies,
+            "external_enrichment_dependencies": external_enrichment_dependencies,
+            "blocking_dependencies": blocking_dependencies,
+            "readiness_stage": readiness_stage,
+        }
+
+    @staticmethod
+    def _build_phase_d_scanner_detail_dependency_state(
+        readiness_state: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        effective_readiness = dict((readiness_state or {}).get("effective_readiness") or {})
+        shadow_static_detail_metadata = dict((readiness_state or {}).get("shadow_static_detail_metadata") or {})
+
+        shadow_run_coverage_ready = bool(
+            effective_readiness.get("run_row") and effective_readiness.get("operation_metadata")
+        )
+        shadow_candidate_coverage_ready = bool(
+            effective_readiness.get("candidates")
+        )
+        universe_notes_shadow_projected = bool(
+            shadow_static_detail_metadata.get("universe_notes_shadow_projected")
+        )
+        scoring_notes_shadow_projected = bool(
+            shadow_static_detail_metadata.get("scoring_notes_shadow_projected")
+        )
+
+        detail_dependency_classes: Dict[str, List[str]] = {
+            "shadow_covered": [],
+            "legacy_only": [],
+            "enrichment_dependent": [],
+            "writeback_dependent": [],
+        }
+        dependency_status: Dict[str, Dict[str, Any]] = {}
+
+        def _append_dependency(
+            dependency_key: str,
+            dependency_class: str,
+            *,
+            shadow_present: bool,
+            runtime_blocking: bool,
+            reason: str,
+        ) -> None:
+            detail_dependency_classes.setdefault(dependency_class, []).append(dependency_key)
+            dependency_status[dependency_key] = {
+                "dependency_class": dependency_class,
+                "shadow_present": bool(shadow_present),
+                "runtime_blocking": bool(runtime_blocking),
+                "reason": reason,
+            }
+
+        _append_dependency(
+            "legacy_run_row_access",
+            "shadow_covered" if shadow_run_coverage_ready else "legacy_only",
+            shadow_present=shadow_run_coverage_ready,
+            runtime_blocking=True,
+            reason=(
+                "Shadow run metadata is present, but get_run_detail() still enters through the legacy run row."
+                if shadow_run_coverage_ready
+                else "Shadow run metadata is not complete enough to cover the legacy run-row entry."
+            ),
+        )
+        _append_dependency(
+            "legacy_candidate_rows",
+            "shadow_covered" if shadow_candidate_coverage_ready else "legacy_only",
+            shadow_present=shadow_candidate_coverage_ready,
+            runtime_blocking=True,
+            reason=(
+                "Shadow candidate payload rows are present, but get_run_detail() still loads legacy candidate rows."
+                if shadow_candidate_coverage_ready
+                else "Shadow candidate payload rows are not complete enough to cover the legacy candidate-row read."
+            ),
+        )
+        _append_dependency(
+            "universe_notes_json",
+            "shadow_covered" if universe_notes_shadow_projected else "legacy_only",
+            shadow_present=universe_notes_shadow_projected,
+            runtime_blocking=False,
+            reason=(
+                "Static universe note metadata is projected into shadow detail metadata."
+                if universe_notes_shadow_projected
+                else "Universe note metadata still only exists on the legacy run row."
+            ),
+        )
+        _append_dependency(
+            "scoring_notes_json",
+            "shadow_covered" if scoring_notes_shadow_projected else "legacy_only",
+            shadow_present=scoring_notes_shadow_projected,
+            runtime_blocking=False,
+            reason=(
+                "Static scoring note metadata is projected into shadow detail metadata."
+                if scoring_notes_shadow_projected
+                else "Scoring note metadata still only exists on the legacy run row."
+            ),
+        )
+        _append_dependency(
+            "previous_watchlist_comparison",
+            "legacy_only",
+            shadow_present=False,
+            runtime_blocking=True,
+            reason="Previous-watchlist comparison still depends on legacy previous-run lookup and comparison assembly.",
+        )
+        _append_dependency(
+            "recent_symbol_mentions",
+            "legacy_only",
+            shadow_present=False,
+            runtime_blocking=True,
+            reason="Recent symbol mention counts still depend on legacy historical candidate queries.",
+        )
+        _append_dependency(
+            "review_bundle_construction",
+            "enrichment_dependent",
+            shadow_present=False,
+            runtime_blocking=True,
+            reason="Review bundle construction depends on enrichment/review logic outside current shadow coverage.",
+        )
+        _append_dependency(
+            "realized_outcomes",
+            "enrichment_dependent",
+            shadow_present=False,
+            runtime_blocking=True,
+            reason="Realized outcomes depend on market-data-derived review logic rather than Phase D shadow metadata.",
+        )
+        _append_dependency(
+            "ai_commentary_writeback",
+            "writeback_dependent",
+            shadow_present=False,
+            runtime_blocking=True,
+            reason="AI commentary still writes back through legacy candidate diagnostics mutation.",
+        )
+
+        remaining_non_shadow_dependencies = (
+            list(detail_dependency_classes.get("legacy_only") or [])
+            + list(detail_dependency_classes.get("enrichment_dependent") or [])
+            + list(detail_dependency_classes.get("writeback_dependent") or [])
+        )
+
+        return {
+            **dict(readiness_state or {}),
+            "detail_dependency_classes": detail_dependency_classes,
+            "detail_dependency_status": dependency_status,
+            "shadow_covered_dependencies": list(detail_dependency_classes.get("shadow_covered") or []),
+            "remaining_non_shadow_dependencies": remaining_non_shadow_dependencies,
+            "runtime_bridge_candidates": [
+                key
+                for key in ("legacy_run_row_access", "legacy_candidate_rows")
+                if dependency_status.get(key, {}).get("dependency_class") == "shadow_covered"
+            ],
+        }
+
+    def list_phase_d_scanner_detail_readiness_states(
+        self,
+        *,
+        market: Optional[str] = None,
+        profile: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        bundles, total = self.list_phase_d_scanner_shadow_bundles(
+            market=market,
+            profile=profile,
+            offset=offset,
+            limit=limit,
+            scope=scope,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if not bundles:
+            return [], total
+
+        run_ids = [
+            int(dict((bundle or {}).get("run") or {}).get("id") or 0)
+            for bundle in bundles
+            if int(dict((bundle or {}).get("run") or {}).get("id") or 0) > 0
+        ]
+        sqlite_run_ids: set[int] = set()
+        sqlite_candidate_counts: Dict[int, int] = {}
+        if run_ids:
+            with self.get_session() as session:
+                sqlite_run_ids = set(
+                    int(value)
+                    for value in session.execute(
+                        select(MarketScannerRun.id).where(MarketScannerRun.id.in_(run_ids))
+                    ).scalars().all()
+                )
+                sqlite_candidate_counts = {
+                    int(run_id): int(count or 0)
+                    for run_id, count in session.execute(
+                        select(MarketScannerCandidate.run_id, func.count(MarketScannerCandidate.id))
+                        .where(MarketScannerCandidate.run_id.in_(run_ids))
+                        .group_by(MarketScannerCandidate.run_id)
+                    ).all()
+                }
+
+        states = [
+            self._build_phase_d_scanner_detail_readiness_state(
+                bundle,
+                sqlite_run_row_present=int(dict((bundle or {}).get("run") or {}).get("id") or 0) in sqlite_run_ids,
+                sqlite_candidate_row_count=sqlite_candidate_counts.get(
+                    int(dict((bundle or {}).get("run") or {}).get("id") or 0),
+                    0,
+                ),
+            )
+            for bundle in bundles
+        ]
+        return states, total
+
+    def list_phase_d_scanner_detail_dependency_states(
+        self,
+        *,
+        market: Optional[str] = None,
+        profile: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        readiness_states, total = self.list_phase_d_scanner_detail_readiness_states(
+            market=market,
+            profile=profile,
+            offset=offset,
+            limit=limit,
+            scope=scope,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        states = [
+            self._build_phase_d_scanner_detail_dependency_state(state)
+            for state in readiness_states
+        ]
+        return states, total
+
     def sync_phase_e_analysis_backtest_shadow(self, run_id: int) -> Optional[Any]:
         if not self._phase_e_enabled or self._phase_e_store is None:
             return None
@@ -2538,6 +3046,86 @@ class DatabaseManager:
         )
         self._record_phase_e_analysis_usage_ref(run_row=run_row, shadow_row=shadow_row)
         return shadow_row
+
+    def get_phase_e_backtest_shadow_bundle(
+        self,
+        *,
+        run_type: str,
+        legacy_run_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return None
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        return self._phase_e_store.get_backtest_run_shadow_bundle(
+            run_type=run_type,
+            legacy_run_id=int(legacy_run_id),
+            owner_user_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+
+    def get_phase_e_backtest_shadow_authority_state(
+        self,
+        *,
+        run_type: str,
+        legacy_run_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return None
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        return self._phase_e_store.get_backtest_run_shadow_authority_state(
+            run_type=run_type,
+            legacy_run_id=int(legacy_run_id),
+            owner_user_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+
+    def list_phase_e_backtest_shadow_bundles(
+        self,
+        *,
+        run_type: str,
+        code: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return [], 0
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        return self._phase_e_store.list_backtest_run_shadow_bundles(
+            run_type=run_type,
+            owner_user_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+            canonical_symbol=code,
+            offset=offset,
+            limit=limit,
+        )
+
+    def list_phase_e_backtest_shadow_authority_states(
+        self,
+        *,
+        run_type: str,
+        code: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return [], 0
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        return self._phase_e_store.list_backtest_run_shadow_authority_states(
+            run_type=run_type,
+            owner_user_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+            canonical_symbol=code,
+            offset=offset,
+            limit=limit,
+        )
 
     def _record_phase_e_analysis_usage_ref(self, *, run_row: BacktestRun, shadow_row: Optional[Any]) -> None:
         if shadow_row is None:
@@ -2641,7 +3229,7 @@ class DatabaseManager:
         if account_row is None:
             return None
 
-        return {
+        projection = {
             "account_row": account_row,
             "broker_connection_rows": session.execute(
                 select(PortfolioBrokerConnection)
@@ -2709,6 +3297,87 @@ class DatabaseManager:
                 )
             ).scalars().all(),
         }
+        if not projection["position_rows"]:
+            projection["position_rows"] = self._rebuild_phase_f_positions_from_snapshot_rows(
+                account_row=account_row,
+                snapshot_rows=projection["snapshot_rows"],
+            )
+        return projection
+
+    def _rebuild_phase_f_positions_from_snapshot_rows(
+        self,
+        *,
+        account_row: Any,
+        snapshot_rows: Iterable[Any],
+    ) -> List[Any]:
+        latest_snapshot_by_method: Dict[str, Any] = {}
+        for row in list(snapshot_rows or []):
+            cost_method = str(getattr(row, "cost_method", "") or "").strip().lower() or "fifo"
+            current = latest_snapshot_by_method.get(cost_method)
+            row_date = getattr(row, "snapshot_date", None) or date.min
+            row_id = int(getattr(row, "id", 0) or 0)
+            if current is None:
+                latest_snapshot_by_method[cost_method] = row
+                continue
+            current_date = getattr(current, "snapshot_date", None) or date.min
+            current_id = int(getattr(current, "id", 0) or 0)
+            if (row_date, row_id) > (current_date, current_id):
+                latest_snapshot_by_method[cost_method] = row
+
+        rebuilt_rows: List[Any] = []
+        for cost_method, snapshot_row in sorted(latest_snapshot_by_method.items()):
+            payload = self._safe_json_loads(getattr(snapshot_row, "payload", None), {})
+            positions = payload.get("positions") if isinstance(payload, dict) else None
+            if not isinstance(positions, list):
+                continue
+            for index, item in enumerate(positions):
+                if not isinstance(item, dict):
+                    continue
+                symbol = str(item.get("symbol") or "").strip().upper()
+                market = str(item.get("market") or getattr(account_row, "market", "") or "").strip().lower()
+                currency = str(item.get("currency") or getattr(account_row, "base_currency", "") or "").strip().upper()
+                if not symbol or not market or not currency:
+                    continue
+                quantity = float(item.get("quantity") or 0.0)
+                if quantity <= 0:
+                    continue
+                avg_cost = float(item.get("avg_cost") or 0.0)
+                total_cost = float(item.get("total_cost") or (quantity * avg_cost))
+                rebuilt_rows.append(
+                    SimpleNamespace(
+                        id=-(int(getattr(snapshot_row, "id", 0) or 0) * 1000 + index + 1),
+                        owner_id=getattr(account_row, "owner_id", None),
+                        account_id=int(getattr(account_row, "id")),
+                        cost_method=cost_method,
+                        symbol=symbol,
+                        market=market,
+                        currency=currency,
+                        quantity=quantity,
+                        avg_cost=avg_cost,
+                        total_cost=total_cost,
+                        last_price=float(item.get("last_price")) if item.get("last_price") is not None else None,
+                        market_value_base=(
+                            float(item.get("market_value_base"))
+                            if item.get("market_value_base") is not None
+                            else None
+                        ),
+                        unrealized_pnl_base=(
+                            float(item.get("unrealized_pnl_base"))
+                            if item.get("unrealized_pnl_base") is not None
+                            else None
+                        ),
+                        valuation_currency=(
+                            str(item.get("valuation_currency") or getattr(account_row, "base_currency", "") or "").strip().upper()
+                            or None
+                        ),
+                        updated_at=(
+                            getattr(snapshot_row, "updated_at", None)
+                            or getattr(snapshot_row, "created_at", None)
+                            or datetime.now()
+                        ),
+                    )
+                )
+        return rebuilt_rows
 
     def sync_phase_f_portfolio_account_shadow_from_session(
         self,
@@ -2753,6 +3422,2173 @@ class DatabaseManager:
                 ):
                     synced += 1
         return synced
+
+    def get_phase_f_portfolio_shadow_bundle(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+        return self._phase_f_store.get_account_shadow_bundle(account_id=int(account_id))
+
+    def list_phase_f_portfolio_account_metadata_rows(
+        self,
+        *,
+        include_inactive: bool = False,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[List[Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        shadow_rows = self._phase_f_store.list_account_rows(
+            owner_user_id=resolved_owner_id,
+            include_inactive=include_inactive,
+        )
+
+        with self.get_session() as session:
+            legacy_query = select(PortfolioAccount)
+            if not include_inactive:
+                legacy_query = legacy_query.where(PortfolioAccount.is_active.is_(True))
+            if not include_all_owners:
+                legacy_query = legacy_query.where(PortfolioAccount.owner_id == resolved_owner_id)
+            legacy_rows = session.execute(
+                legacy_query.order_by(PortfolioAccount.id.asc())
+            ).scalars().all()
+
+        shadow_ids = [int(getattr(row, "id", 0) or 0) for row in shadow_rows]
+        legacy_ids = [int(getattr(row, "id", 0) or 0) for row in legacy_rows]
+        if shadow_ids != legacy_ids:
+            return None
+
+        bridged_rows: List[Any] = []
+        for row in shadow_rows:
+            authority = self.get_phase_f_portfolio_shadow_authority_state(
+                account_id=int(row.id),
+                owner_id=resolved_owner_id,
+                include_all_owners=include_all_owners,
+            )
+            effective_readiness = dict((authority or {}).get("effective_readiness") or {})
+            if not bool(effective_readiness.get("account_metadata")):
+                return None
+            bridged_rows.append(
+                SimpleNamespace(
+                    id=int(row.id),
+                    owner_id=str(getattr(row, "owner_user_id", "") or ""),
+                    name=str(getattr(row, "name", "") or ""),
+                    broker=getattr(row, "broker_label", None),
+                    market=str(getattr(row, "market", "") or ""),
+                    base_currency=str(getattr(row, "base_currency", "") or ""),
+                    is_active=bool(getattr(row, "is_active", False)),
+                    created_at=getattr(row, "created_at", None),
+                    updated_at=getattr(row, "updated_at", None),
+                )
+            )
+
+        return bridged_rows
+
+    def list_phase_f_portfolio_broker_connection_metadata_rows(
+        self,
+        *,
+        portfolio_account_id: Optional[int] = None,
+        broker_type: Optional[str] = None,
+        status: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[List[Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        normalized_broker_type = str(broker_type).strip().lower() if broker_type is not None else None
+        normalized_status = str(status).strip().lower() if status is not None else None
+        resolved_account_id = int(portfolio_account_id) if portfolio_account_id is not None else None
+
+        trusted_account_rows = self.list_phase_f_portfolio_account_metadata_rows(
+            include_inactive=True,
+            owner_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if trusted_account_rows is None:
+            return None
+        account_lookup = {
+            int(getattr(row, "id", 0) or 0): str(getattr(row, "name", "") or "")
+            for row in trusted_account_rows
+        }
+        if resolved_account_id is not None and resolved_account_id not in account_lookup:
+            return None
+
+        shadow_rows = self._phase_f_store.list_broker_connection_rows(
+            owner_user_id=resolved_owner_id,
+            portfolio_account_id=resolved_account_id,
+            broker_type=normalized_broker_type,
+            status=normalized_status,
+        )
+
+        with self.get_session() as session:
+            legacy_query = select(PortfolioBrokerConnection)
+            if resolved_account_id is not None:
+                legacy_query = legacy_query.where(PortfolioBrokerConnection.portfolio_account_id == resolved_account_id)
+            if normalized_broker_type is not None:
+                legacy_query = legacy_query.where(PortfolioBrokerConnection.broker_type == normalized_broker_type)
+            if normalized_status is not None:
+                legacy_query = legacy_query.where(PortfolioBrokerConnection.status == normalized_status)
+            if not include_all_owners:
+                legacy_query = legacy_query.where(PortfolioBrokerConnection.owner_id == resolved_owner_id)
+            legacy_rows = session.execute(
+                legacy_query.order_by(PortfolioBrokerConnection.id.asc())
+            ).scalars().all()
+
+        shadow_ids = [int(getattr(row, "id", 0) or 0) for row in shadow_rows]
+        legacy_ids = [int(getattr(row, "id", 0) or 0) for row in legacy_rows]
+        if shadow_ids != legacy_ids:
+            return None
+
+        participating_account_ids = sorted(
+            {int(getattr(row, "portfolio_account_id", 0) or 0) for row in shadow_rows}
+            | ({resolved_account_id} if resolved_account_id is not None else set())
+        )
+        for account_id in participating_account_ids:
+            if account_id not in account_lookup:
+                return None
+            authority = self.get_phase_f_portfolio_shadow_authority_state(
+                account_id=account_id,
+                owner_id=resolved_owner_id,
+                include_all_owners=include_all_owners,
+            )
+            effective_readiness = dict((authority or {}).get("effective_readiness") or {})
+            if not bool(effective_readiness.get("account_metadata")):
+                return None
+            if not bool(effective_readiness.get("broker_connection_list")):
+                return None
+
+        bridged_rows: List[Any] = []
+        for row in shadow_rows:
+            bridged_rows.append(
+                SimpleNamespace(
+                    id=int(getattr(row, "id", 0) or 0),
+                    owner_id=str(getattr(row, "owner_user_id", "") or ""),
+                    portfolio_account_id=int(getattr(row, "portfolio_account_id", 0) or 0),
+                    portfolio_account_name=account_lookup.get(int(getattr(row, "portfolio_account_id", 0) or 0)),
+                    broker_type=str(getattr(row, "broker_type", "") or ""),
+                    broker_name=getattr(row, "broker_name", None),
+                    connection_name=str(getattr(row, "connection_name", "") or ""),
+                    broker_account_ref=getattr(row, "broker_account_ref", None),
+                    import_mode=str(getattr(row, "import_mode", "") or ""),
+                    status=str(getattr(row, "status", "") or ""),
+                    last_imported_at=getattr(row, "last_imported_at", None),
+                    last_import_source=getattr(row, "last_import_source", None),
+                    last_import_fingerprint=getattr(row, "last_import_fingerprint", None),
+                    sync_metadata_json=json.dumps(
+                        self._normalize_jsonish(getattr(row, "sync_metadata", None) or {}),
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                    created_at=getattr(row, "created_at", None),
+                    updated_at=getattr(row, "updated_at", None),
+                )
+            )
+
+        return bridged_rows
+
+    def get_phase_f_latest_broker_sync_state_bundle(
+        self,
+        *,
+        portfolio_account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(portfolio_account_id)
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        shadow_bundle = self.get_phase_f_portfolio_shadow_bundle(account_id=resolved_account_id)
+        if shadow_bundle is None:
+            return None
+
+        authority = self.get_phase_f_portfolio_shadow_authority_state(
+            account_id=resolved_account_id,
+            owner_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+        effective_readiness = dict((authority or {}).get("effective_readiness") or {})
+        if not bool(effective_readiness.get("latest_sync_overlay")):
+            return None
+
+        shadow_sync_state = dict((shadow_bundle or {}).get("sync_state") or {}) or None
+        shadow_sync_positions = list((shadow_bundle or {}).get("sync_positions") or [])
+        shadow_sync_cash_balances = list((shadow_bundle or {}).get("sync_cash_balances") or [])
+
+        if shadow_sync_state is None:
+            if shadow_sync_positions or shadow_sync_cash_balances:
+                return None
+            return {
+                "state_row": None,
+                "positions": [],
+                "cash_balances": [],
+            }
+
+        state_id = int(shadow_sync_state.get("id") or 0)
+        broker_connection_id = int(shadow_sync_state.get("broker_connection_id") or 0)
+        state_account_id = int(shadow_sync_state.get("portfolio_account_id") or 0)
+        owner_user_id = str(shadow_sync_state.get("owner_user_id") or "").strip()
+        broker_type = str(shadow_sync_state.get("broker_type") or "").strip().lower()
+        sync_source = str(shadow_sync_state.get("sync_source") or "").strip().lower()
+        sync_status = str(shadow_sync_state.get("sync_status") or "").strip().lower()
+        base_currency = str(shadow_sync_state.get("base_currency") or "").strip().upper()
+        snapshot_date = self._deserialize_phase_shadow_date(shadow_sync_state.get("snapshot_date"))
+        synced_at = self._deserialize_phase_shadow_datetime(shadow_sync_state.get("synced_at"))
+
+        if (
+            state_id <= 0
+            or broker_connection_id <= 0
+            or state_account_id != resolved_account_id
+            or not owner_user_id
+            or (resolved_owner_id is not None and owner_user_id != resolved_owner_id)
+            or not broker_type
+            or not sync_source
+            or not sync_status
+            or not base_currency
+            or snapshot_date is None
+            or synced_at is None
+        ):
+            return None
+
+        state_row = SimpleNamespace(
+            id=state_id,
+            owner_id=owner_user_id,
+            broker_connection_id=broker_connection_id,
+            portfolio_account_id=state_account_id,
+            broker_type=broker_type,
+            broker_account_ref=shadow_sync_state.get("broker_account_ref"),
+            sync_source=sync_source,
+            sync_status=sync_status,
+            snapshot_date=snapshot_date,
+            synced_at=synced_at,
+            base_currency=base_currency,
+            total_cash=float(shadow_sync_state.get("total_cash") or 0.0),
+            total_market_value=float(shadow_sync_state.get("total_market_value") or 0.0),
+            total_equity=float(shadow_sync_state.get("total_equity") or 0.0),
+            realized_pnl=float(shadow_sync_state.get("realized_pnl") or 0.0),
+            unrealized_pnl=float(shadow_sync_state.get("unrealized_pnl") or 0.0),
+            fx_stale=bool(shadow_sync_state.get("fx_stale")),
+            payload_json=json.dumps(
+                self._normalize_jsonish(shadow_sync_state.get("payload_json") or {}),
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        )
+
+        bridged_positions: List[Any] = []
+        for row in shadow_sync_positions:
+            if int(row.get("portfolio_sync_state_id") or 0) != state_id:
+                return None
+            if int(row.get("portfolio_account_id") or 0) != resolved_account_id:
+                return None
+            bridged_positions.append(
+                SimpleNamespace(
+                    broker_position_ref=row.get("broker_position_ref"),
+                    symbol=str(row.get("canonical_symbol") or ""),
+                    market=str(row.get("market") or ""),
+                    currency=str(row.get("currency") or ""),
+                    quantity=float(row.get("quantity") or 0.0),
+                    avg_cost=float(row.get("avg_cost") or 0.0),
+                    last_price=float(row.get("last_price") or 0.0),
+                    market_value_base=float(row.get("market_value_base") or 0.0),
+                    unrealized_pnl_base=float(row.get("unrealized_pnl_base") or 0.0),
+                    valuation_currency=row.get("valuation_currency"),
+                )
+            )
+
+        bridged_cash_balances: List[Any] = []
+        for row in shadow_sync_cash_balances:
+            if int(row.get("portfolio_sync_state_id") or 0) != state_id:
+                return None
+            if int(row.get("portfolio_account_id") or 0) != resolved_account_id:
+                return None
+            bridged_cash_balances.append(
+                SimpleNamespace(
+                    currency=str(row.get("currency") or ""),
+                    amount=float(row.get("amount") or 0.0),
+                    amount_base=float(row.get("amount_base") or 0.0),
+                )
+            )
+
+        return {
+            "state_row": state_row,
+            "positions": bridged_positions,
+            "cash_balances": bridged_cash_balances,
+        }
+
+    def get_phase_f_portfolio_prerequisite_state(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        if shadow_bundle is None:
+            return None
+
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+            lot_rows = session.execute(
+                select(PortfolioPositionLot)
+                .where(PortfolioPositionLot.account_id == resolved_account_id)
+                .order_by(
+                    PortfolioPositionLot.cost_method.asc(),
+                    PortfolioPositionLot.symbol.asc(),
+                    PortfolioPositionLot.market.asc(),
+                    PortfolioPositionLot.currency.asc(),
+                    PortfolioPositionLot.open_date.asc(),
+                    PortfolioPositionLot.id.asc(),
+                )
+            ).scalars().all()
+
+        resolved_owner_id = None
+        if not include_all_owners and owner_id is not None:
+            resolved_owner_id = self.require_user_id(owner_id)
+        if not include_all_owners and resolved_owner_id is not None:
+            shadow_owner_id = str(((shadow_bundle or {}).get("account") or {}).get("owner_user_id") or "").strip()
+            legacy_owner_id = str(getattr((projection or {}).get("account_row"), "owner_id", "") or "").strip()
+            if shadow_owner_id and shadow_owner_id != resolved_owner_id:
+                return None
+            if legacy_owner_id and legacy_owner_id != resolved_owner_id:
+                return None
+
+        authority = self._build_phase_f_portfolio_shadow_authority_state(
+            account_id=resolved_account_id,
+            shadow_bundle=shadow_bundle,
+            projection=projection,
+        )
+        effective_readiness = dict((authority or {}).get("effective_readiness") or {})
+
+        shadow_ledger_rows = list((shadow_bundle or {}).get("ledger") or [])
+        shadow_position_rows = list((shadow_bundle or {}).get("positions") or [])
+        shadow_sync_state = dict((shadow_bundle or {}).get("sync_state") or {}) or None
+        shadow_sync_positions = list((shadow_bundle or {}).get("sync_positions") or [])
+        shadow_sync_cash_balances = list((shadow_bundle or {}).get("sync_cash_balances") or [])
+
+        projection = projection or {}
+        legacy_trade_rows = list(projection.get("trade_rows") or [])
+        legacy_cash_rows = list(projection.get("cash_rows") or [])
+        legacy_corporate_action_rows = list(projection.get("corporate_action_rows") or [])
+        legacy_snapshot_rows = list(projection.get("snapshot_rows") or [])
+        legacy_position_rows = list(projection.get("position_rows") or [])
+        legacy_sync_state_rows = list(projection.get("sync_state_rows") or [])
+        legacy_sync_position_rows = list(projection.get("sync_position_rows") or [])
+        legacy_sync_cash_balance_rows = list(projection.get("sync_cash_balance_rows") or [])
+
+        ledger_authority_state = self._build_phase_f_ledger_event_payload_authority_state(
+            account_id=resolved_account_id,
+            authority=authority,
+            shadow_bundle=shadow_bundle,
+            projection=projection,
+        )
+        legacy_ledger_count = int(
+            ((ledger_authority_state or {}).get("legacy_row_counts") or {}).get("total_event_rows") or 0
+        )
+        shadow_ledger_count = int(
+            ((ledger_authority_state or {}).get("shadow_row_counts") or {}).get("ledger_rows") or 0
+        )
+        ledger_payload_parity_observed = bool((ledger_authority_state or {}).get("payload_parity_observed"))
+        ledger_signal = str((ledger_authority_state or {}).get("current_signal") or "").strip()
+        ledger_missing_signals = sorted(set((ledger_authority_state or {}).get("blocked_reasons") or []))
+        ledger_downstream_blockers = sorted(set((ledger_authority_state or {}).get("downstream_blockers") or []))
+        event_history_authority_state = self._build_phase_f_event_history_authority_state(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+        )
+
+        if not legacy_sync_state_rows and shadow_sync_state is None:
+            sync_overlay_signal = "no_sync_overlay_present"
+        elif len(legacy_sync_state_rows) > 1:
+            sync_overlay_signal = "multi_connection_overlay_scope_unmodeled"
+        elif bool(effective_readiness.get("latest_sync_overlay")):
+            sync_overlay_signal = "latest_overlay_only"
+        else:
+            sync_overlay_signal = "latest_overlay_drift"
+
+        sync_overlay_missing_signals: List[str] = []
+        if legacy_sync_state_rows:
+            sync_overlay_missing_signals.append("overlay_set_authority_missing")
+        if len(legacy_sync_state_rows) > 1:
+            sync_overlay_missing_signals.append("shadow_latest_only")
+        if legacy_sync_state_rows and not bool(effective_readiness.get("latest_sync_overlay")):
+            sync_overlay_missing_signals.append("latest_overlay_parity_not_observed")
+
+        snapshot_cost_methods = sorted(
+            {
+                str(getattr(row, "cost_method", "") or "").strip().lower()
+                for row in list(legacy_snapshot_rows) + list(legacy_position_rows) + list(lot_rows)
+                if str(getattr(row, "cost_method", "") or "").strip()
+            }
+        )
+        snapshot_cache_authority_state = self._build_phase_f_snapshot_cache_authority_state(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            snapshot_cost_methods=snapshot_cost_methods,
+            legacy_snapshot_row_count=len(legacy_snapshot_rows),
+            legacy_position_row_count=len(legacy_position_rows),
+            legacy_lot_row_count=len(lot_rows),
+            shadow_position_row_count=len(shadow_position_rows),
+        )
+        snapshot_signal = str((snapshot_cache_authority_state or {}).get("current_signal") or "").strip()
+        snapshot_missing_signals = sorted(
+            set((snapshot_cache_authority_state or {}).get("blocked_reasons") or [])
+        )
+        snapshot_downstream_blockers = sorted(
+            set((snapshot_cache_authority_state or {}).get("downstream_blockers") or [])
+        )
+
+        replay_input_authority_state = self._build_phase_f_replay_input_authority_state(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            snapshot_cost_methods=snapshot_cost_methods,
+            legacy_snapshot_row_count=len(legacy_snapshot_rows),
+            legacy_lot_row_count=len(lot_rows),
+            shadow_position_row_count=len(shadow_position_rows),
+        )
+        replay_signal = str((replay_input_authority_state or {}).get("current_signal") or "").strip()
+        replay_missing_signals = sorted(set((replay_input_authority_state or {}).get("blocked_reasons") or []))
+        replay_downstream_blockers = sorted(
+            set((replay_input_authority_state or {}).get("downstream_blockers") or [])
+        )
+
+        categories = {
+            "ledger_event_payload_parity": {
+                "legacy_runtime_sources": [
+                    "sqlite.portfolio_trades",
+                    "sqlite.portfolio_cash_ledger",
+                    "sqlite.portfolio_corporate_actions",
+                ],
+                "shadow_components": ["phase_f.shadow_bundle.ledger"],
+                "legacy_row_counts": {
+                    "trade_rows": len(legacy_trade_rows),
+                    "cash_rows": len(legacy_cash_rows),
+                    "corporate_action_rows": len(legacy_corporate_action_rows),
+                    "total_event_rows": legacy_ledger_count,
+                },
+                "shadow_row_counts": {
+                    "ledger_rows": shadow_ledger_count,
+                },
+                "current_signal": ledger_signal,
+                "payload_parity_observed": ledger_payload_parity_observed,
+                "account_metadata_authority_ready": bool(
+                    (ledger_authority_state or {}).get("account_metadata_authority_ready")
+                ),
+                "authority_prerequisite_state": (ledger_authority_state or {}).get("authority_prerequisite_state"),
+                "authority_ready": bool((ledger_authority_state or {}).get("authority_ready")),
+                "future_authority_scope": (ledger_authority_state or {}).get("future_authority_scope"),
+                "runtime_cutover_ready": bool((ledger_authority_state or {}).get("runtime_cutover_ready")),
+                "missing_signals": ledger_missing_signals,
+                "downstream_blockers": ledger_downstream_blockers,
+                "recommended_next_helper": "get_phase_f_ledger_event_payload_authority_state",
+            },
+            "sync_overlay_scope_parity": {
+                "legacy_runtime_sources": [
+                    "sqlite.portfolio_broker_sync_states",
+                    "sqlite.portfolio_broker_sync_positions",
+                    "sqlite.portfolio_broker_sync_cash_balances",
+                ],
+                "shadow_components": [
+                    "phase_f.shadow_bundle.sync_state",
+                    "phase_f.shadow_bundle.sync_positions",
+                    "phase_f.shadow_bundle.sync_cash_balances",
+                ],
+                "legacy_row_counts": {
+                    "sync_state_rows": len(legacy_sync_state_rows),
+                    "sync_position_rows": len(legacy_sync_position_rows),
+                    "sync_cash_balance_rows": len(legacy_sync_cash_balance_rows),
+                },
+                "shadow_row_counts": {
+                    "sync_state_rows": 1 if shadow_sync_state is not None else 0,
+                    "sync_position_rows": len(shadow_sync_positions),
+                    "sync_cash_balance_rows": len(shadow_sync_cash_balances),
+                },
+                "current_signal": sync_overlay_signal,
+                "latest_overlay_authority_ready": bool(effective_readiness.get("latest_sync_overlay")),
+                "authority_ready": False,
+                "missing_signals": sorted(set(sync_overlay_missing_signals)),
+                "recommended_next_helper": "phase_f_sync_overlay_scope_authority_inspection",
+            },
+            "snapshot_cache_freshness_parity": {
+                "legacy_runtime_sources": [
+                    "sqlite.portfolio_daily_snapshots",
+                    "sqlite.portfolio_positions",
+                    "sqlite.portfolio_position_lots",
+                    "runtime.market_fx_freshness_checks",
+                ],
+                "shadow_components": ["phase_f.shadow_bundle.positions"],
+                "legacy_row_counts": {
+                    "snapshot_rows": len(legacy_snapshot_rows),
+                    "position_rows": len(legacy_position_rows),
+                    "lot_rows": len(lot_rows),
+                },
+                "shadow_row_counts": {
+                    "position_rows": len(shadow_position_rows),
+                },
+                "cost_methods": snapshot_cost_methods,
+                "current_signal": snapshot_signal,
+                "authority_prerequisite_state": (snapshot_cache_authority_state or {}).get(
+                    "authority_prerequisite_state"
+                ),
+                "authority_ready": bool((snapshot_cache_authority_state or {}).get("authority_ready")),
+                "runtime_cutover_ready": bool((snapshot_cache_authority_state or {}).get("runtime_cutover_ready")),
+                "snapshot_specific_readiness": dict(
+                    (snapshot_cache_authority_state or {}).get("snapshot_specific_readiness") or {}
+                ),
+                "missing_signals": snapshot_missing_signals,
+                "downstream_blockers": snapshot_downstream_blockers,
+                "recommended_next_helper": "get_phase_f_snapshot_cache_authority_state",
+            },
+            "replay_input_parity": {
+                "legacy_runtime_sources": [
+                    "sqlite.portfolio_trades",
+                    "sqlite.portfolio_cash_ledger",
+                    "sqlite.portfolio_corporate_actions",
+                    "sqlite.portfolio_position_lots",
+                    "sqlite.portfolio_daily_snapshots",
+                ],
+                "shadow_components": [
+                    "phase_f.shadow_bundle.ledger",
+                    "phase_f.shadow_bundle.positions",
+                ],
+                "legacy_row_counts": {
+                    "event_rows": legacy_ledger_count,
+                    "snapshot_rows": len(legacy_snapshot_rows),
+                    "lot_rows": len(lot_rows),
+                },
+                "shadow_row_counts": {
+                    "ledger_rows": shadow_ledger_count,
+                    "position_rows": len(shadow_position_rows),
+                },
+                "cost_methods": snapshot_cost_methods,
+                "current_signal": replay_signal,
+                "authority_prerequisite_state": (replay_input_authority_state or {}).get(
+                    "authority_prerequisite_state"
+                ),
+                "authority_ready": bool((replay_input_authority_state or {}).get("authority_ready")),
+                "runtime_cutover_ready": bool((replay_input_authority_state or {}).get("runtime_cutover_ready")),
+                "replay_specific_readiness": dict(
+                    (replay_input_authority_state or {}).get("replay_specific_readiness") or {}
+                ),
+                "missing_signals": replay_missing_signals,
+                "downstream_blockers": replay_downstream_blockers,
+                "recommended_next_helper": "get_phase_f_replay_input_authority_state",
+            },
+        }
+        effective_authority_summary = self._build_phase_f_effective_authority_summary(
+            account_id=resolved_account_id,
+            highest_roi_category="ledger_event_payload_parity",
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            replay_input_authority_state=replay_input_authority_state,
+            snapshot_cache_authority_state=snapshot_cache_authority_state,
+        )
+
+        return {
+            "shadow_account_id": resolved_account_id,
+            "owner_user_id": (authority or {}).get("owner_user_id"),
+            "account_name": (authority or {}).get("account_name"),
+            "authority_model": "phase_f_prerequisite_audit_v1",
+            "projection_source": "sqlite_portfolio_projection",
+            "phase_f_authority_model": (authority or {}).get("authority_model"),
+            "event_history_authority": event_history_authority_state,
+            "replay_input_authority": replay_input_authority_state,
+            "snapshot_cache_authority": snapshot_cache_authority_state,
+            "effective_authority_summary": effective_authority_summary,
+            "categories": categories,
+            "highest_roi_category": "ledger_event_payload_parity",
+        }
+
+    def _build_phase_f_ledger_event_payload_authority_state(
+        self,
+        *,
+        account_id: int,
+        authority: Optional[Dict[str, Any]],
+        shadow_bundle: Dict[str, Any],
+        projection: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        shadow_ledger_rows = list((shadow_bundle or {}).get("ledger") or [])
+        projection = projection or {}
+        legacy_trade_rows = list(projection.get("trade_rows") or [])
+        legacy_cash_rows = list(projection.get("cash_rows") or [])
+        legacy_corporate_action_rows = list(projection.get("corporate_action_rows") or [])
+
+        shadow_ledger_signatures = [
+            self._phase_f_ledger_entry_signature(dict(row))
+            for row in shadow_ledger_rows
+        ]
+        legacy_ledger_signatures = [
+            self._phase_f_ledger_entry_signature(row)
+            for row in self._phase_f_projection_ledger_rows(
+                trade_rows=legacy_trade_rows,
+                cash_rows=legacy_cash_rows,
+                corporate_action_rows=legacy_corporate_action_rows,
+            )
+        ]
+        legacy_ledger_count = len(legacy_ledger_signatures)
+        shadow_ledger_count = len(shadow_ledger_signatures)
+        ledger_payload_match = shadow_ledger_signatures == legacy_ledger_signatures
+
+        if legacy_ledger_count <= 0 and shadow_ledger_count <= 0:
+            current_signal = "no_events_present"
+        elif shadow_ledger_count <= 0 and legacy_ledger_count > 0:
+            current_signal = "shadow_missing"
+        elif shadow_ledger_count != legacy_ledger_count:
+            current_signal = "count_mismatch"
+        elif ledger_payload_match:
+            current_signal = "payload_parity_observed"
+        else:
+            current_signal = "payload_drift"
+
+        payload_parity_observed = current_signal == "payload_parity_observed"
+        account_metadata_authority_ready = bool(
+            dict((authority or {}).get("effective_readiness") or {}).get("account_metadata")
+        )
+
+        blocked_reasons: List[str] = []
+        if current_signal == "payload_parity_observed":
+            if account_metadata_authority_ready:
+                authority_prerequisite_state = "authority_ready"
+            else:
+                authority_prerequisite_state = "observed_only"
+                blocked_reasons.append("account_metadata_authority_missing")
+        else:
+            authority_prerequisite_state = "blocked"
+            if current_signal == "payload_drift":
+                blocked_reasons.append("event_payload_parity_not_observed")
+            elif current_signal == "count_mismatch":
+                blocked_reasons.append("ledger_event_count_mismatch")
+            elif current_signal == "shadow_missing":
+                blocked_reasons.append("shadow_ledger_missing")
+            elif current_signal == "no_events_present":
+                blocked_reasons.append("legacy_event_history_missing")
+
+        downstream_blockers: List[str] = []
+        if legacy_ledger_count > 0:
+            downstream_blockers.extend(
+                [
+                    "event_history_domain_authority_layer_required",
+                    "replay_as_of_subset_authority_missing",
+                ]
+            )
+
+        return {
+            "shadow_account_id": int(account_id),
+            "owner_user_id": (authority or {}).get("owner_user_id"),
+            "account_name": (authority or {}).get("account_name"),
+            "authority_model": "phase_f_ledger_event_payload_authority_v1",
+            "projection_source": "sqlite_portfolio_projection",
+            "phase_f_authority_model": (authority or {}).get("authority_model"),
+            "future_authority_scope": "event_history_and_replay_input_design",
+            "runtime_cutover_ready": False,
+            "legacy_row_counts": {
+                "trade_rows": len(legacy_trade_rows),
+                "cash_rows": len(legacy_cash_rows),
+                "corporate_action_rows": len(legacy_corporate_action_rows),
+                "total_event_rows": legacy_ledger_count,
+            },
+            "shadow_row_counts": {
+                "ledger_rows": shadow_ledger_count,
+            },
+            "current_signal": current_signal,
+            "payload_parity_observed": payload_parity_observed,
+            "account_metadata_authority_ready": account_metadata_authority_ready,
+            "authority_prerequisite_state": authority_prerequisite_state,
+            "authority_ready": authority_prerequisite_state == "authority_ready",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+            "downstream_blockers": sorted(set(downstream_blockers)),
+        }
+
+    def _build_phase_f_event_history_authority_state(
+        self,
+        *,
+        account_id: int,
+        ledger_authority_state: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        ledger_authority_state = dict(ledger_authority_state or {})
+        prerequisite_state = str(ledger_authority_state.get("authority_prerequisite_state") or "").strip()
+        blocked_reasons = sorted(set(ledger_authority_state.get("blocked_reasons") or []))
+
+        if prerequisite_state == "authority_ready":
+            current_signal = "prerequisite_ready"
+            authority_prerequisite_state = "authority_ready"
+        elif prerequisite_state == "observed_only":
+            current_signal = "ledger_payload_observed_only"
+            authority_prerequisite_state = "observed_only"
+        else:
+            current_signal = "ledger_payload_blocked"
+            authority_prerequisite_state = "blocked"
+
+        downstream_blockers = sorted(
+            {
+                "replay_input_cost_method_specific_authority_missing",
+                "replay_input_lot_authority_missing",
+                "replay_input_as_of_boundary_missing",
+                "snapshot_cache_freshness_authority_missing",
+                "runtime_pg_event_history_read_cutover_not_enabled",
+            }
+        )
+
+        return {
+            "shadow_account_id": int(account_id),
+            "owner_user_id": ledger_authority_state.get("owner_user_id"),
+            "account_name": ledger_authority_state.get("account_name"),
+            "authority_model": "phase_f_event_history_authority_v1",
+            "projection_source": "sqlite_portfolio_projection",
+            "phase_f_authority_model": ledger_authority_state.get("phase_f_authority_model"),
+            "prerequisite_helper": "get_phase_f_ledger_event_payload_authority_state",
+            "prerequisite_authority_model": ledger_authority_state.get("authority_model"),
+            "prerequisite_current_signal": ledger_authority_state.get("current_signal"),
+            "prerequisite_authority_prerequisite_state": prerequisite_state,
+            "payload_parity_observed": bool(ledger_authority_state.get("payload_parity_observed")),
+            "account_metadata_authority_ready": bool(
+                ledger_authority_state.get("account_metadata_authority_ready")
+            ),
+            "future_authority_scope": "event_history_domain_design",
+            "runtime_cutover_ready": False,
+            "legacy_row_counts": dict(ledger_authority_state.get("legacy_row_counts") or {}),
+            "shadow_row_counts": dict(ledger_authority_state.get("shadow_row_counts") or {}),
+            "current_signal": current_signal,
+            "authority_prerequisite_state": authority_prerequisite_state,
+            "authority_ready": authority_prerequisite_state == "authority_ready",
+            "blocked_reasons": blocked_reasons,
+            "downstream_blockers": downstream_blockers,
+        }
+
+    def _build_phase_f_replay_input_authority_state(
+        self,
+        *,
+        account_id: int,
+        ledger_authority_state: Optional[Dict[str, Any]],
+        event_history_authority_state: Optional[Dict[str, Any]],
+        snapshot_cost_methods: List[str],
+        legacy_snapshot_row_count: int,
+        legacy_lot_row_count: int,
+        shadow_position_row_count: int,
+        replay_capabilities: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        ledger_authority_state = dict(ledger_authority_state or {})
+        event_history_authority_state = dict(event_history_authority_state or {})
+        replay_capabilities = dict(replay_capabilities or {})
+
+        cost_method_specific_authority_ready = bool(
+            replay_capabilities.get("cost_method_specific_authority", False)
+        )
+        lot_authority_ready = bool(replay_capabilities.get("lot_authority", False))
+        as_of_replay_boundary_ready = bool(replay_capabilities.get("as_of_replay_boundary", False))
+
+        event_history_prerequisite_state = str(
+            event_history_authority_state.get("authority_prerequisite_state") or ""
+        ).strip()
+        blocked_reasons = sorted(set(event_history_authority_state.get("blocked_reasons") or []))
+
+        if event_history_prerequisite_state == "blocked":
+            current_signal = "event_history_blocked"
+            authority_prerequisite_state = "blocked"
+        elif event_history_prerequisite_state == "observed_only":
+            current_signal = "event_history_observed_only"
+            authority_prerequisite_state = "observed_only"
+        else:
+            replay_specific_blockers: List[str] = []
+            if not cost_method_specific_authority_ready:
+                replay_specific_blockers.append("cost_method_specific_authority_missing")
+            if not lot_authority_ready:
+                replay_specific_blockers.append("lot_authority_missing")
+            if not as_of_replay_boundary_ready:
+                replay_specific_blockers.append("as_of_replay_boundary_missing")
+            if replay_specific_blockers:
+                current_signal = "replay_specific_gaps_observed"
+                authority_prerequisite_state = "observed_only"
+                blocked_reasons.extend(replay_specific_blockers)
+            else:
+                current_signal = "prerequisite_ready"
+                authority_prerequisite_state = "authority_ready"
+
+        downstream_blockers = sorted(
+            {
+                "snapshot_cache_freshness_authority_missing",
+                "runtime_pg_replay_input_cutover_not_enabled",
+            }
+        )
+
+        return {
+            "shadow_account_id": int(account_id),
+            "owner_user_id": event_history_authority_state.get("owner_user_id")
+            or ledger_authority_state.get("owner_user_id"),
+            "account_name": event_history_authority_state.get("account_name")
+            or ledger_authority_state.get("account_name"),
+            "authority_model": "phase_f_replay_input_authority_v1",
+            "projection_source": "sqlite_portfolio_projection",
+            "phase_f_authority_model": event_history_authority_state.get("phase_f_authority_model")
+            or ledger_authority_state.get("phase_f_authority_model"),
+            "prerequisite_helper": "get_phase_f_event_history_authority_state",
+            "prerequisite_authority_model": event_history_authority_state.get("authority_model"),
+            "prerequisite_current_signal": event_history_authority_state.get("current_signal"),
+            "prerequisite_authority_prerequisite_state": event_history_prerequisite_state,
+            "payload_parity_observed": bool(ledger_authority_state.get("payload_parity_observed")),
+            "event_history_authority_ready": bool(event_history_authority_state.get("authority_ready")),
+            "future_authority_scope": "replay_input_domain_design",
+            "runtime_cutover_ready": False,
+            "legacy_row_counts": {
+                **dict(ledger_authority_state.get("legacy_row_counts") or {}),
+                "snapshot_rows": int(legacy_snapshot_row_count),
+                "lot_rows": int(legacy_lot_row_count),
+            },
+            "shadow_row_counts": {
+                **dict(ledger_authority_state.get("shadow_row_counts") or {}),
+                "position_rows": int(shadow_position_row_count),
+            },
+            "cost_methods": list(snapshot_cost_methods or []),
+            "replay_specific_readiness": {
+                "cost_method_specific_authority": cost_method_specific_authority_ready,
+                "lot_authority": lot_authority_ready,
+                "as_of_replay_boundary": as_of_replay_boundary_ready,
+            },
+            "current_signal": current_signal,
+            "authority_prerequisite_state": authority_prerequisite_state,
+            "authority_ready": authority_prerequisite_state == "authority_ready",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+            "downstream_blockers": downstream_blockers,
+        }
+
+    def _build_phase_f_snapshot_cache_authority_state(
+        self,
+        *,
+        account_id: int,
+        ledger_authority_state: Optional[Dict[str, Any]],
+        event_history_authority_state: Optional[Dict[str, Any]],
+        snapshot_cost_methods: List[str],
+        legacy_snapshot_row_count: int,
+        legacy_position_row_count: int,
+        legacy_lot_row_count: int,
+        shadow_position_row_count: int,
+        snapshot_capabilities: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        ledger_authority_state = dict(ledger_authority_state or {})
+        event_history_authority_state = dict(event_history_authority_state or {})
+        snapshot_capabilities = dict(snapshot_capabilities or {})
+
+        snapshot_projection_authority_ready = bool(
+            snapshot_capabilities.get("snapshot_projection_authority", False)
+        )
+        lot_projection_authority_ready = bool(snapshot_capabilities.get("lot_projection_authority", False))
+        freshness_invalidation_authority_ready = bool(
+            snapshot_capabilities.get("freshness_invalidation_authority", False)
+        )
+        valuation_semantic_authority_ready = bool(
+            snapshot_capabilities.get("valuation_semantic_authority", False)
+        )
+
+        event_history_prerequisite_state = str(
+            event_history_authority_state.get("authority_prerequisite_state") or ""
+        ).strip()
+        blocked_reasons = sorted(set(event_history_authority_state.get("blocked_reasons") or []))
+
+        if event_history_prerequisite_state == "blocked":
+            current_signal = "event_history_blocked"
+            authority_prerequisite_state = "blocked"
+        elif event_history_prerequisite_state == "observed_only":
+            current_signal = "event_history_observed_only"
+            authority_prerequisite_state = "observed_only"
+        else:
+            snapshot_specific_blockers: List[str] = []
+            if not snapshot_projection_authority_ready:
+                snapshot_specific_blockers.append("snapshot_projection_authority_missing")
+            if not lot_projection_authority_ready:
+                snapshot_specific_blockers.append("lot_projection_authority_missing")
+            if not freshness_invalidation_authority_ready:
+                snapshot_specific_blockers.append("snapshot_freshness_invalidation_authority_missing")
+            if not valuation_semantic_authority_ready:
+                snapshot_specific_blockers.append("valuation_semantic_authority_missing")
+            if snapshot_specific_blockers:
+                current_signal = "snapshot_specific_gaps_observed"
+                authority_prerequisite_state = "observed_only"
+                blocked_reasons.extend(snapshot_specific_blockers)
+            else:
+                current_signal = "prerequisite_ready"
+                authority_prerequisite_state = "authority_ready"
+
+        downstream_blockers = sorted(
+            {
+                "runtime_pg_snapshot_cache_cutover_not_enabled",
+            }
+        )
+
+        return {
+            "shadow_account_id": int(account_id),
+            "owner_user_id": event_history_authority_state.get("owner_user_id")
+            or ledger_authority_state.get("owner_user_id"),
+            "account_name": event_history_authority_state.get("account_name")
+            or ledger_authority_state.get("account_name"),
+            "authority_model": "phase_f_snapshot_cache_authority_v1",
+            "projection_source": "sqlite_portfolio_projection",
+            "phase_f_authority_model": event_history_authority_state.get("phase_f_authority_model")
+            or ledger_authority_state.get("phase_f_authority_model"),
+            "prerequisite_helper": "get_phase_f_event_history_authority_state",
+            "prerequisite_authority_model": event_history_authority_state.get("authority_model"),
+            "prerequisite_current_signal": event_history_authority_state.get("current_signal"),
+            "prerequisite_authority_prerequisite_state": event_history_prerequisite_state,
+            "payload_parity_observed": bool(ledger_authority_state.get("payload_parity_observed")),
+            "event_history_authority_ready": bool(event_history_authority_state.get("authority_ready")),
+            "future_authority_scope": "snapshot_cache_domain_design",
+            "runtime_cutover_ready": False,
+            "legacy_row_counts": {
+                **dict(ledger_authority_state.get("legacy_row_counts") or {}),
+                "snapshot_rows": int(legacy_snapshot_row_count),
+                "position_rows": int(legacy_position_row_count),
+                "lot_rows": int(legacy_lot_row_count),
+            },
+            "shadow_row_counts": {
+                **dict(ledger_authority_state.get("shadow_row_counts") or {}),
+                "position_rows": int(shadow_position_row_count),
+            },
+            "cost_methods": list(snapshot_cost_methods or []),
+            "snapshot_specific_readiness": {
+                "snapshot_projection_authority": snapshot_projection_authority_ready,
+                "lot_projection_authority": lot_projection_authority_ready,
+                "freshness_invalidation_authority": freshness_invalidation_authority_ready,
+                "valuation_semantic_authority": valuation_semantic_authority_ready,
+            },
+            "current_signal": current_signal,
+            "authority_prerequisite_state": authority_prerequisite_state,
+            "authority_ready": authority_prerequisite_state == "authority_ready",
+            "blocked_reasons": sorted(set(blocked_reasons)),
+            "downstream_blockers": downstream_blockers,
+        }
+
+    def _build_phase_f_effective_authority_summary(
+        self,
+        *,
+        account_id: int,
+        highest_roi_category: str,
+        ledger_authority_state: Optional[Dict[str, Any]],
+        event_history_authority_state: Optional[Dict[str, Any]],
+        replay_input_authority_state: Optional[Dict[str, Any]],
+        snapshot_cache_authority_state: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        domain_order = [
+            "ledger_event_payload_parity",
+            "event_history_authority",
+            "replay_input_authority",
+            "snapshot_cache_authority",
+        ]
+        surface_configs = {
+            "ledger_event_payload_parity": {
+                "state": dict(ledger_authority_state or {}),
+                "surface_type": "foundational",
+                "prerequisite_domain": None,
+                "helper": "get_phase_f_ledger_event_payload_authority_state",
+            },
+            "event_history_authority": {
+                "state": dict(event_history_authority_state or {}),
+                "surface_type": "domain",
+                "prerequisite_domain": "ledger_event_payload_parity",
+                "helper": "get_phase_f_event_history_authority_state",
+            },
+            "replay_input_authority": {
+                "state": dict(replay_input_authority_state or {}),
+                "surface_type": "domain",
+                "prerequisite_domain": "event_history_authority",
+                "helper": "get_phase_f_replay_input_authority_state",
+            },
+            "snapshot_cache_authority": {
+                "state": dict(snapshot_cache_authority_state or {}),
+                "surface_type": "domain",
+                "prerequisite_domain": "event_history_authority",
+                "helper": "get_phase_f_snapshot_cache_authority_state",
+            },
+        }
+
+        owner_user_id = None
+        account_name = None
+        phase_f_authority_model = None
+        for domain_key in domain_order:
+            state = dict((surface_configs.get(domain_key) or {}).get("state") or {})
+            if owner_user_id is None and state.get("owner_user_id") is not None:
+                owner_user_id = state.get("owner_user_id")
+            if account_name is None and state.get("account_name") is not None:
+                account_name = state.get("account_name")
+            if phase_f_authority_model is None and state.get("phase_f_authority_model") is not None:
+                phase_f_authority_model = state.get("phase_f_authority_model")
+
+        domains: Dict[str, Any] = {}
+        for domain_key in domain_order:
+            config = dict(surface_configs.get(domain_key) or {})
+            state = dict(config.get("state") or {})
+            current_signal = str(state.get("current_signal") or "").strip()
+            authority_prerequisite_state = str(state.get("authority_prerequisite_state") or "").strip()
+            blocked_reasons = sorted(set(state.get("blocked_reasons") or []))
+            downstream_blockers = sorted(set(state.get("downstream_blockers") or []))
+            authority_ready = bool(state.get("authority_ready"))
+            runtime_cutover_ready = bool(state.get("runtime_cutover_ready"))
+
+            inherited_upstream_blockers: List[str] = []
+            domain_specific_blockers: List[str] = []
+            if domain_key == "ledger_event_payload_parity":
+                domain_specific_blockers = list(blocked_reasons)
+            elif domain_key == "event_history_authority":
+                inherited_upstream_blockers = list(blocked_reasons)
+            elif domain_key == "replay_input_authority":
+                if current_signal == "replay_specific_gaps_observed":
+                    domain_specific_blockers = list(blocked_reasons)
+                else:
+                    inherited_upstream_blockers = list(blocked_reasons)
+            elif domain_key == "snapshot_cache_authority":
+                if current_signal == "snapshot_specific_gaps_observed":
+                    domain_specific_blockers = list(blocked_reasons)
+                else:
+                    inherited_upstream_blockers = list(blocked_reasons)
+
+            has_domain_specific_blockers = bool(domain_specific_blockers)
+            blocked_only_by_upstream = bool(
+                not authority_ready and inherited_upstream_blockers and not has_domain_specific_blockers
+            )
+
+            domains[domain_key] = {
+                "domain": domain_key,
+                "surface_type": config.get("surface_type"),
+                "helper": config.get("helper"),
+                "prerequisite_domain": config.get("prerequisite_domain"),
+                "authority_model": state.get("authority_model"),
+                "current_signal": current_signal,
+                "authority_prerequisite_state": authority_prerequisite_state,
+                "authority_ready": authority_ready,
+                "runtime_cutover_ready": runtime_cutover_ready,
+                "blocked_reasons": blocked_reasons,
+                "inherited_upstream_blockers": inherited_upstream_blockers,
+                "domain_specific_blockers": domain_specific_blockers,
+                "blocked_only_by_upstream": blocked_only_by_upstream,
+                "has_domain_specific_blockers": has_domain_specific_blockers,
+                "downstream_blockers": downstream_blockers,
+                "is_foundational_boundary": domain_key == highest_roi_category,
+            }
+
+        ready_domains = sorted(
+            domain_key for domain_key, state in domains.items() if state.get("authority_prerequisite_state") == "authority_ready"
+        )
+        observed_only_domains = sorted(
+            domain_key for domain_key, state in domains.items() if state.get("authority_prerequisite_state") == "observed_only"
+        )
+        blocked_domains = sorted(
+            domain_key for domain_key, state in domains.items() if state.get("authority_prerequisite_state") == "blocked"
+        )
+        domains_blocked_only_by_upstream = sorted(
+            domain_key for domain_key, state in domains.items() if state.get("blocked_only_by_upstream")
+        )
+        domains_with_domain_specific_blockers = sorted(
+            domain_key for domain_key, state in domains.items() if state.get("has_domain_specific_blockers")
+        )
+        domains_with_runtime_cutover_disabled = sorted(
+            domain_key for domain_key, state in domains.items() if not bool(state.get("runtime_cutover_ready"))
+        )
+
+        foundational_domain_key = str(highest_roi_category or "").strip() or "ledger_event_payload_parity"
+        foundational_boundary_state = dict(domains.get(foundational_domain_key) or {})
+
+        next_unmet_boundary = None
+        next_unmet_domain_key = next(
+            (domain_key for domain_key in domain_order if not bool((domains.get(domain_key) or {}).get("authority_ready"))),
+            None,
+        )
+        if next_unmet_domain_key is not None:
+            next_unmet_state = dict(domains.get(next_unmet_domain_key) or {})
+            if next_unmet_domain_key == foundational_domain_key:
+                next_reason = "foundational_boundary_not_ready"
+            elif bool(next_unmet_state.get("blocked_only_by_upstream")):
+                next_reason = "waiting_on_upstream_authority"
+            elif bool(next_unmet_state.get("has_domain_specific_blockers")):
+                next_reason = "domain_specific_blockers_remaining"
+            else:
+                next_reason = "authority_not_ready"
+            next_unmet_boundary = {
+                "domain": next_unmet_domain_key,
+                "helper": next_unmet_state.get("helper"),
+                "current_signal": next_unmet_state.get("current_signal"),
+                "authority_prerequisite_state": next_unmet_state.get("authority_prerequisite_state"),
+                "authority_ready": bool(next_unmet_state.get("authority_ready")),
+                "blocked_reasons": list(next_unmet_state.get("blocked_reasons") or []),
+                "blocked_only_by_upstream": bool(next_unmet_state.get("blocked_only_by_upstream")),
+                "has_domain_specific_blockers": bool(next_unmet_state.get("has_domain_specific_blockers")),
+                "runtime_cutover_ready": bool(next_unmet_state.get("runtime_cutover_ready")),
+                "reason": next_reason,
+            }
+
+        return {
+            "shadow_account_id": int(account_id),
+            "owner_user_id": owner_user_id,
+            "account_name": account_name,
+            "authority_model": "phase_f_effective_authority_summary_v1",
+            "projection_source": "sqlite_portfolio_projection",
+            "phase_f_authority_model": phase_f_authority_model,
+            "highest_roi_category": foundational_domain_key,
+            "foundational_boundary": {
+                "domain": foundational_domain_key,
+                "helper": foundational_boundary_state.get("helper"),
+                "current_signal": foundational_boundary_state.get("current_signal"),
+                "authority_prerequisite_state": foundational_boundary_state.get(
+                    "authority_prerequisite_state"
+                ),
+                "authority_ready": bool(foundational_boundary_state.get("authority_ready")),
+                "blocked_reasons": list(foundational_boundary_state.get("blocked_reasons") or []),
+                "domain_specific_blockers": list(
+                    foundational_boundary_state.get("domain_specific_blockers") or []
+                ),
+                "downstream_blockers": list(foundational_boundary_state.get("downstream_blockers") or []),
+                "runtime_cutover_ready": bool(foundational_boundary_state.get("runtime_cutover_ready")),
+            },
+            "domains": domains,
+            "effective_readiness": {
+                "authority_ready_domains": ready_domains,
+                "observed_only_domains": observed_only_domains,
+                "blocked_domains": blocked_domains,
+                "domains_blocked_only_by_upstream": domains_blocked_only_by_upstream,
+                "domains_with_domain_specific_blockers": domains_with_domain_specific_blockers,
+                "all_modeled_domains_authority_ready": len(ready_domains) == len(domain_order),
+                "runtime_cutover_ready": all(
+                    bool((domains.get(domain_key) or {}).get("runtime_cutover_ready"))
+                    for domain_key in domain_order
+                ),
+                "domains_with_runtime_cutover_disabled": domains_with_runtime_cutover_disabled,
+            },
+            "next_unmet_boundary": next_unmet_boundary,
+        }
+
+    def _build_phase_f_domain_readiness_gate(
+        self,
+        *,
+        authority_summary: Dict[str, Any],
+        target_domain: str,
+    ) -> Dict[str, Any]:
+        authority_summary = dict(authority_summary or {})
+        supported_domains = [
+            "ledger_event_payload_parity",
+            "event_history_authority",
+            "replay_input_authority",
+            "snapshot_cache_authority",
+        ]
+        normalized_target_domain = str(target_domain or "").strip()
+        if normalized_target_domain not in supported_domains:
+            raise ValueError(
+                f"unsupported Phase F target_domain '{normalized_target_domain}'"
+            )
+
+        domains = dict(authority_summary.get("domains") or {})
+        target_state = dict(domains.get(normalized_target_domain) or {})
+        highest_roi_category = str(authority_summary.get("highest_roi_category") or "").strip()
+        foundational_boundary = dict(authority_summary.get("foundational_boundary") or {})
+
+        design_prerequisite_ready = bool(target_state.get("authority_ready"))
+        upstream_blocked = bool(target_state.get("blocked_only_by_upstream"))
+        has_domain_specific_blockers = bool(target_state.get("has_domain_specific_blockers"))
+        inherited_upstream_blockers = list(target_state.get("inherited_upstream_blockers") or [])
+        domain_specific_blockers = list(target_state.get("domain_specific_blockers") or [])
+        runtime_cutover_ready = bool(target_state.get("runtime_cutover_ready"))
+
+        if design_prerequisite_ready:
+            gate_status = "design_prerequisite_ready"
+            next_unmet_boundary = None
+        elif upstream_blocked:
+            gate_status = "upstream_blocked"
+            next_unmet_boundary = None
+            target_index = supported_domains.index(normalized_target_domain)
+            for domain_key in supported_domains[: target_index + 1]:
+                candidate_state = dict(domains.get(domain_key) or {})
+                if bool(candidate_state.get("authority_ready")):
+                    continue
+                if domain_key == highest_roi_category:
+                    next_reason = "foundational_boundary_not_ready"
+                elif bool(candidate_state.get("blocked_only_by_upstream")):
+                    next_reason = "waiting_on_upstream_authority"
+                elif bool(candidate_state.get("has_domain_specific_blockers")):
+                    next_reason = "domain_specific_blockers_remaining"
+                else:
+                    next_reason = "authority_not_ready"
+                next_unmet_boundary = {
+                    "domain": domain_key,
+                    "helper": candidate_state.get("helper"),
+                    "current_signal": candidate_state.get("current_signal"),
+                    "authority_prerequisite_state": candidate_state.get(
+                        "authority_prerequisite_state"
+                    ),
+                    "authority_ready": bool(candidate_state.get("authority_ready")),
+                    "blocked_reasons": list(candidate_state.get("blocked_reasons") or []),
+                    "blocked_only_by_upstream": bool(candidate_state.get("blocked_only_by_upstream")),
+                    "has_domain_specific_blockers": bool(
+                        candidate_state.get("has_domain_specific_blockers")
+                    ),
+                    "runtime_cutover_ready": bool(candidate_state.get("runtime_cutover_ready")),
+                    "reason": next_reason,
+                }
+                break
+        elif has_domain_specific_blockers:
+            gate_status = "domain_specific_blocked"
+            next_unmet_boundary = {
+                "domain": normalized_target_domain,
+                "helper": target_state.get("helper"),
+                "current_signal": target_state.get("current_signal"),
+                "authority_prerequisite_state": target_state.get("authority_prerequisite_state"),
+                "authority_ready": bool(target_state.get("authority_ready")),
+                "blocked_reasons": list(target_state.get("blocked_reasons") or []),
+                "blocked_only_by_upstream": bool(target_state.get("blocked_only_by_upstream")),
+                "has_domain_specific_blockers": bool(target_state.get("has_domain_specific_blockers")),
+                "runtime_cutover_ready": bool(target_state.get("runtime_cutover_ready")),
+                "reason": (
+                    "foundational_boundary_not_ready"
+                    if normalized_target_domain == highest_roi_category
+                    else "domain_specific_blockers_remaining"
+                ),
+            }
+        else:
+            gate_status = "not_ready"
+            next_unmet_boundary = {
+                "domain": normalized_target_domain,
+                "helper": target_state.get("helper"),
+                "current_signal": target_state.get("current_signal"),
+                "authority_prerequisite_state": target_state.get("authority_prerequisite_state"),
+                "authority_ready": bool(target_state.get("authority_ready")),
+                "blocked_reasons": list(target_state.get("blocked_reasons") or []),
+                "blocked_only_by_upstream": bool(target_state.get("blocked_only_by_upstream")),
+                "has_domain_specific_blockers": bool(target_state.get("has_domain_specific_blockers")),
+                "runtime_cutover_ready": bool(target_state.get("runtime_cutover_ready")),
+                "reason": "authority_not_ready",
+            }
+
+        return {
+            "shadow_account_id": authority_summary.get("shadow_account_id"),
+            "owner_user_id": authority_summary.get("owner_user_id"),
+            "account_name": authority_summary.get("account_name"),
+            "gate_model": "phase_f_domain_readiness_gate_v1",
+            "projection_source": authority_summary.get("projection_source"),
+            "phase_f_authority_model": authority_summary.get("phase_f_authority_model"),
+            "summary_authority_model": authority_summary.get("authority_model"),
+            "target_domain": normalized_target_domain,
+            "highest_roi_category": highest_roi_category,
+            "foundational_boundary": foundational_boundary,
+            "target_domain_state": target_state,
+            "design_prerequisite_ready": design_prerequisite_ready,
+            "upstream_blocked": upstream_blocked,
+            "has_domain_specific_blockers": has_domain_specific_blockers,
+            "inherited_upstream_blockers": inherited_upstream_blockers,
+            "domain_specific_blockers": domain_specific_blockers,
+            "runtime_cutover_ready": runtime_cutover_ready,
+            "gate_status": gate_status,
+            "next_unmet_boundary": next_unmet_boundary,
+        }
+
+    def get_phase_f_ledger_event_payload_authority_state(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        if shadow_bundle is None:
+            return None
+
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+
+        resolved_owner_id = None
+        if not include_all_owners and owner_id is not None:
+            resolved_owner_id = self.require_user_id(owner_id)
+        if not include_all_owners and resolved_owner_id is not None:
+            shadow_owner_id = str(((shadow_bundle or {}).get("account") or {}).get("owner_user_id") or "").strip()
+            legacy_owner_id = str(getattr((projection or {}).get("account_row"), "owner_id", "") or "").strip()
+            if shadow_owner_id and shadow_owner_id != resolved_owner_id:
+                return None
+            if legacy_owner_id and legacy_owner_id != resolved_owner_id:
+                return None
+
+        authority = self._build_phase_f_portfolio_shadow_authority_state(
+            account_id=resolved_account_id,
+            shadow_bundle=shadow_bundle,
+            projection=projection,
+        )
+        return self._build_phase_f_ledger_event_payload_authority_state(
+            account_id=resolved_account_id,
+            authority=authority,
+            shadow_bundle=shadow_bundle,
+            projection=projection,
+        )
+
+    def get_phase_f_event_history_authority_state(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if ledger_authority_state is None:
+            return None
+        return self._build_phase_f_event_history_authority_state(
+            account_id=int(account_id),
+            ledger_authority_state=ledger_authority_state,
+        )
+
+    def get_phase_f_replay_input_authority_state(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        event_history_authority_state = self.get_phase_f_event_history_authority_state(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if event_history_authority_state is None:
+            return None
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if ledger_authority_state is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+            lot_rows = session.execute(
+                select(PortfolioPositionLot)
+                .where(PortfolioPositionLot.account_id == resolved_account_id)
+                .order_by(
+                    PortfolioPositionLot.cost_method.asc(),
+                    PortfolioPositionLot.symbol.asc(),
+                    PortfolioPositionLot.market.asc(),
+                    PortfolioPositionLot.currency.asc(),
+                    PortfolioPositionLot.open_date.asc(),
+                    PortfolioPositionLot.id.asc(),
+                )
+            ).scalars().all()
+
+        projection = projection or {}
+        legacy_snapshot_rows = list(projection.get("snapshot_rows") or [])
+        legacy_position_rows = list(projection.get("position_rows") or [])
+        snapshot_cost_methods = sorted(
+            {
+                str(getattr(row, "cost_method", "") or "").strip().lower()
+                for row in list(legacy_snapshot_rows) + list(legacy_position_rows) + list(lot_rows)
+                if str(getattr(row, "cost_method", "") or "").strip()
+            }
+        )
+
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        shadow_position_rows = list(((shadow_bundle or {}).get("positions") or [])) if shadow_bundle else []
+
+        return self._build_phase_f_replay_input_authority_state(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            snapshot_cost_methods=snapshot_cost_methods,
+            legacy_snapshot_row_count=len(legacy_snapshot_rows),
+            legacy_lot_row_count=len(lot_rows),
+            shadow_position_row_count=len(shadow_position_rows),
+        )
+
+    def get_phase_f_snapshot_cache_authority_state(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        event_history_authority_state = self.get_phase_f_event_history_authority_state(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if event_history_authority_state is None:
+            return None
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if ledger_authority_state is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+            lot_rows = session.execute(
+                select(PortfolioPositionLot)
+                .where(PortfolioPositionLot.account_id == resolved_account_id)
+                .order_by(
+                    PortfolioPositionLot.cost_method.asc(),
+                    PortfolioPositionLot.symbol.asc(),
+                    PortfolioPositionLot.market.asc(),
+                    PortfolioPositionLot.currency.asc(),
+                    PortfolioPositionLot.open_date.asc(),
+                    PortfolioPositionLot.id.asc(),
+                )
+            ).scalars().all()
+
+        projection = projection or {}
+        legacy_snapshot_rows = list(projection.get("snapshot_rows") or [])
+        legacy_position_rows = list(projection.get("position_rows") or [])
+        snapshot_cost_methods = sorted(
+            {
+                str(getattr(row, "cost_method", "") or "").strip().lower()
+                for row in list(legacy_snapshot_rows) + list(legacy_position_rows) + list(lot_rows)
+                if str(getattr(row, "cost_method", "") or "").strip()
+            }
+        )
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        shadow_position_rows = list(((shadow_bundle or {}).get("positions") or [])) if shadow_bundle else []
+
+        return self._build_phase_f_snapshot_cache_authority_state(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            snapshot_cost_methods=snapshot_cost_methods,
+            legacy_snapshot_row_count=len(legacy_snapshot_rows),
+            legacy_position_row_count=len(legacy_position_rows),
+            legacy_lot_row_count=len(lot_rows),
+            shadow_position_row_count=len(shadow_position_rows),
+        )
+
+    def get_phase_f_effective_authority_summary(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        prerequisite_state = self.get_phase_f_portfolio_prerequisite_state(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if prerequisite_state is None:
+            return None
+        summary = dict((prerequisite_state or {}).get("effective_authority_summary") or {})
+        return summary or None
+
+    def get_phase_f_domain_readiness_gate(
+        self,
+        *,
+        account_id: int,
+        target_domain: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        authority_summary = self.get_phase_f_effective_authority_summary(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+        if authority_summary is None:
+            return None
+        return self._build_phase_f_domain_readiness_gate(
+            authority_summary=authority_summary,
+            target_domain=target_domain,
+        )
+
+    @staticmethod
+    def _normalize_jsonish(value: Any) -> Any:
+        if isinstance(value, dict):
+            return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True))
+        if isinstance(value, list):
+            return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True))
+        return value
+
+    @staticmethod
+    def _serialize_time_value(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return str(value)
+
+    @staticmethod
+    def _deserialize_phase_shadow_date(value: Any) -> Optional[date]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        raw_value = str(value).strip()
+        if not raw_value:
+            return None
+        try:
+            return date.fromisoformat(raw_value)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _deserialize_phase_shadow_datetime(value: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            raw_value = str(value).strip()
+            if not raw_value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(raw_value)
+            except ValueError:
+                return None
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed
+
+    @staticmethod
+    def _normalize_phase_shadow_timestamp(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            raw_value = str(value).strip()
+            if not raw_value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(raw_value)
+            except ValueError:
+                return raw_value
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed.isoformat()
+
+    @staticmethod
+    def _phase_f_account_signature(account: Optional[Dict[str, Any]]) -> Optional[Tuple[Any, ...]]:
+        if not account:
+            return None
+        return (
+            int(account.get("id") or 0),
+            str(account.get("owner_user_id") or "").strip(),
+            str(account.get("name") or "").strip(),
+            account.get("broker_label"),
+            str(account.get("market") or "").strip().lower(),
+            str(account.get("base_currency") or "").strip().upper(),
+            bool(account.get("is_active")),
+        )
+
+    @staticmethod
+    def _phase_f_broker_connection_signature(row: Dict[str, Any]) -> Tuple[Any, ...]:
+        return (
+            int(row.get("id") or 0),
+            str(row.get("owner_user_id") or "").strip(),
+            int(row.get("portfolio_account_id") or 0),
+            str(row.get("broker_type") or "").strip().lower(),
+            row.get("broker_name"),
+            str(row.get("connection_name") or "").strip(),
+            row.get("broker_account_ref"),
+            str(row.get("import_mode") or "").strip().lower(),
+            str(row.get("status") or "").strip().lower(),
+            DatabaseManager._normalize_phase_shadow_timestamp(row.get("last_imported_at")),
+            row.get("last_import_source"),
+            row.get("last_import_fingerprint"),
+            DatabaseManager._normalize_jsonish(row.get("sync_metadata")),
+        )
+
+    @staticmethod
+    def _phase_f_sync_state_signature(row: Optional[Dict[str, Any]]) -> Optional[Tuple[Any, ...]]:
+        if not row:
+            return None
+        return (
+            int(row.get("id") or 0),
+            str(row.get("owner_user_id") or "").strip(),
+            int(row.get("broker_connection_id") or 0),
+            int(row.get("portfolio_account_id") or 0),
+            str(row.get("broker_type") or "").strip().lower(),
+            row.get("broker_account_ref"),
+            str(row.get("sync_source") or "").strip().lower(),
+            str(row.get("sync_status") or "").strip().lower(),
+            row.get("snapshot_date"),
+            DatabaseManager._normalize_phase_shadow_timestamp(row.get("synced_at")),
+            str(row.get("base_currency") or "").strip().upper(),
+            round(float(row.get("total_cash") or 0.0), 8),
+            round(float(row.get("total_market_value") or 0.0), 8),
+            round(float(row.get("total_equity") or 0.0), 8),
+            round(float(row.get("realized_pnl") or 0.0), 8),
+            round(float(row.get("unrealized_pnl") or 0.0), 8),
+            bool(row.get("fx_stale")),
+            DatabaseManager._normalize_jsonish(row.get("payload_json")),
+        )
+
+    @staticmethod
+    def _phase_f_sync_position_signature(row: Dict[str, Any]) -> Tuple[Any, ...]:
+        return (
+            int(row.get("id") or 0),
+            int(row.get("portfolio_sync_state_id") or 0),
+            str(row.get("owner_user_id") or "").strip(),
+            int(row.get("portfolio_account_id") or 0),
+            row.get("broker_position_ref"),
+            str(row.get("canonical_symbol") or "").strip().upper(),
+            str(row.get("market") or "").strip().lower(),
+            str(row.get("currency") or "").strip().upper(),
+            round(float(row.get("quantity") or 0.0), 8),
+            round(float(row.get("avg_cost") or 0.0), 8),
+            round(float(row.get("last_price") or 0.0), 8),
+            round(float(row.get("market_value_base") or 0.0), 8),
+            round(float(row.get("unrealized_pnl_base") or 0.0), 8),
+            row.get("valuation_currency"),
+            DatabaseManager._normalize_jsonish(row.get("payload_json")),
+        )
+
+    @staticmethod
+    def _phase_f_sync_cash_balance_signature(row: Dict[str, Any]) -> Tuple[Any, ...]:
+        return (
+            int(row.get("id") or 0),
+            int(row.get("portfolio_sync_state_id") or 0),
+            str(row.get("owner_user_id") or "").strip(),
+            int(row.get("portfolio_account_id") or 0),
+            str(row.get("currency") or "").strip().upper(),
+            round(float(row.get("amount") or 0.0), 8),
+            round(float(row.get("amount_base") or 0.0), 8),
+        )
+
+    @staticmethod
+    def _phase_f_projection_event_time(value: Any, *, entry_type: str) -> Optional[str]:
+        priority_seconds = {
+            "cash": 0,
+            "corporate_action": 1,
+            "trade": 2,
+            "adjustment": 3,
+        }
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, date):
+            parsed = datetime.combine(value, datetime.min.time()).replace(
+                second=priority_seconds.get(str(entry_type or "").strip().lower(), 0)
+            )
+        else:
+            raw_value = str(value).strip()
+            if not raw_value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(raw_value)
+            except ValueError:
+                try:
+                    parsed_date = date.fromisoformat(raw_value)
+                except ValueError:
+                    return raw_value
+                parsed = datetime.combine(parsed_date, datetime.min.time()).replace(
+                    second=priority_seconds.get(str(entry_type or "").strip().lower(), 0)
+                )
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed.isoformat()
+
+    @staticmethod
+    def _phase_f_ledger_entry_signature(row: Dict[str, Any]) -> Tuple[Any, ...]:
+        return (
+            int(row.get("id") or 0),
+            str(row.get("entry_type") or "").strip().lower(),
+            DatabaseManager._normalize_phase_shadow_timestamp(row.get("event_time")),
+            str(row.get("canonical_symbol") or "").strip().upper(),
+            str(row.get("market") or "").strip().lower(),
+            str(row.get("currency") or "").strip().upper(),
+            str(row.get("direction") or "").strip().lower(),
+            round(float(row.get("quantity") or 0.0), 8) if row.get("quantity") is not None else None,
+            round(float(row.get("price") or 0.0), 8) if row.get("price") is not None else None,
+            round(float(row.get("amount") or 0.0), 8) if row.get("amount") is not None else None,
+            round(float(row.get("fee") or 0.0), 8) if row.get("fee") is not None else None,
+            round(float(row.get("tax") or 0.0), 8) if row.get("tax") is not None else None,
+            str(row.get("corporate_action_type") or "").strip().lower(),
+            row.get("external_ref"),
+            row.get("dedup_hash"),
+            row.get("note"),
+            DatabaseManager._normalize_jsonish(row.get("payload_json")),
+        )
+
+    @staticmethod
+    def _phase_f_projection_trade_ledger_row(row: Any) -> Dict[str, Any]:
+        return {
+            "id": phase_f_ledger_shadow_id("trade", int(getattr(row, "id", 0) or 0)),
+            "entry_type": "trade",
+            "event_time": DatabaseManager._phase_f_projection_event_time(
+                getattr(row, "trade_date", None),
+                entry_type="trade",
+            ),
+            "canonical_symbol": str(getattr(row, "symbol", "") or ""),
+            "market": getattr(row, "market", None),
+            "currency": getattr(row, "currency", None),
+            "direction": getattr(row, "side", None),
+            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
+            "price": float(getattr(row, "price", 0.0) or 0.0),
+            "amount": None,
+            "fee": float(getattr(row, "fee", 0.0) or 0.0),
+            "tax": float(getattr(row, "tax", 0.0) or 0.0),
+            "corporate_action_type": None,
+            "external_ref": getattr(row, "trade_uid", None),
+            "dedup_hash": getattr(row, "dedup_hash", None),
+            "note": getattr(row, "note", None),
+            "payload_json": {
+                "legacy_table": "portfolio_trades",
+                "legacy_row_id": int(getattr(row, "id", 0) or 0),
+                "trade_uid": getattr(row, "trade_uid", None),
+                "side": getattr(row, "side", None),
+                "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
+                "price": float(getattr(row, "price", 0.0) or 0.0),
+                "fee": float(getattr(row, "fee", 0.0) or 0.0),
+                "tax": float(getattr(row, "tax", 0.0) or 0.0),
+                "note": getattr(row, "note", None),
+            },
+        }
+
+    @staticmethod
+    def _phase_f_projection_cash_ledger_row(row: Any) -> Dict[str, Any]:
+        return {
+            "id": phase_f_ledger_shadow_id("cash", int(getattr(row, "id", 0) or 0)),
+            "entry_type": "cash",
+            "event_time": DatabaseManager._phase_f_projection_event_time(
+                getattr(row, "event_date", None),
+                entry_type="cash",
+            ),
+            "canonical_symbol": None,
+            "market": None,
+            "currency": getattr(row, "currency", None),
+            "direction": getattr(row, "direction", None),
+            "quantity": None,
+            "price": None,
+            "amount": float(getattr(row, "amount", 0.0) or 0.0),
+            "fee": None,
+            "tax": None,
+            "corporate_action_type": None,
+            "external_ref": None,
+            "dedup_hash": None,
+            "note": getattr(row, "note", None),
+            "payload_json": {
+                "legacy_table": "portfolio_cash_ledger",
+                "legacy_row_id": int(getattr(row, "id", 0) or 0),
+                "direction": getattr(row, "direction", None),
+                "amount": float(getattr(row, "amount", 0.0) or 0.0),
+                "currency": getattr(row, "currency", None),
+                "note": getattr(row, "note", None),
+            },
+        }
+
+    @staticmethod
+    def _phase_f_projection_corporate_action_ledger_row(row: Any) -> Dict[str, Any]:
+        return {
+            "id": phase_f_ledger_shadow_id("corporate_action", int(getattr(row, "id", 0) or 0)),
+            "entry_type": "corporate_action",
+            "event_time": DatabaseManager._phase_f_projection_event_time(
+                getattr(row, "effective_date", None),
+                entry_type="corporate_action",
+            ),
+            "canonical_symbol": str(getattr(row, "symbol", "") or ""),
+            "market": getattr(row, "market", None),
+            "currency": getattr(row, "currency", None),
+            "direction": None,
+            "quantity": None,
+            "price": None,
+            "amount": None,
+            "fee": None,
+            "tax": None,
+            "corporate_action_type": getattr(row, "action_type", None),
+            "external_ref": None,
+            "dedup_hash": None,
+            "note": getattr(row, "note", None),
+            "payload_json": {
+                "legacy_table": "portfolio_corporate_actions",
+                "legacy_row_id": int(getattr(row, "id", 0) or 0),
+                "action_type": getattr(row, "action_type", None),
+                "cash_dividend_per_share": getattr(row, "cash_dividend_per_share", None),
+                "split_ratio": getattr(row, "split_ratio", None),
+                "note": getattr(row, "note", None),
+            },
+        }
+
+    @staticmethod
+    def _phase_f_projection_ledger_rows(
+        *,
+        trade_rows: Iterable[Any],
+        cash_rows: Iterable[Any],
+        corporate_action_rows: Iterable[Any],
+    ) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        rows.extend(DatabaseManager._phase_f_projection_trade_ledger_row(row) for row in list(trade_rows or []))
+        rows.extend(DatabaseManager._phase_f_projection_cash_ledger_row(row) for row in list(cash_rows or []))
+        rows.extend(
+            DatabaseManager._phase_f_projection_corporate_action_ledger_row(row)
+            for row in list(corporate_action_rows or [])
+        )
+        return sorted(
+            rows,
+            key=lambda row: (
+                str(row.get("event_time") or ""),
+                int(row.get("id") or 0),
+            ),
+        )
+
+    def _build_phase_f_portfolio_shadow_authority_state(
+        self,
+        *,
+        account_id: int,
+        shadow_bundle: Dict[str, Any],
+        projection: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        shadow_account = dict((shadow_bundle or {}).get("account") or {})
+        shadow_broker_connections = list((shadow_bundle or {}).get("broker_connections") or [])
+        shadow_ledger_rows = list((shadow_bundle or {}).get("ledger") or [])
+        shadow_position_rows = list((shadow_bundle or {}).get("positions") or [])
+        shadow_sync_state = dict((shadow_bundle or {}).get("sync_state") or {}) or None
+        shadow_sync_positions = list((shadow_bundle or {}).get("sync_positions") or [])
+        shadow_sync_cash_balances = list((shadow_bundle or {}).get("sync_cash_balances") or [])
+
+        legacy_account = None
+        legacy_broker_connections: List[Dict[str, Any]] = []
+        legacy_ledger_count = 0
+        legacy_positions_count = 0
+        legacy_sync_state = None
+        legacy_sync_positions: List[Dict[str, Any]] = []
+        legacy_sync_cash_balances: List[Dict[str, Any]] = []
+        if projection is not None:
+            account_row = projection.get("account_row")
+            if account_row is not None:
+                legacy_account = {
+                    "id": int(getattr(account_row, "id", 0) or 0),
+                    "owner_user_id": str(getattr(account_row, "owner_id", "") or "").strip(),
+                    "name": str(getattr(account_row, "name", "") or "").strip(),
+                    "broker_label": getattr(account_row, "broker", None),
+                    "market": str(getattr(account_row, "market", "") or "").strip().lower(),
+                    "base_currency": str(getattr(account_row, "base_currency", "") or "").strip().upper(),
+                    "is_active": bool(getattr(account_row, "is_active", False)),
+                }
+            legacy_broker_connections = [
+                {
+                    "id": int(getattr(row, "id", 0) or 0),
+                    "owner_user_id": str(getattr(row, "owner_id", "") or "").strip(),
+                    "portfolio_account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
+                    "broker_type": str(getattr(row, "broker_type", "") or "").strip().lower(),
+                    "broker_name": getattr(row, "broker_name", None),
+                    "connection_name": str(getattr(row, "connection_name", "") or "").strip(),
+                    "broker_account_ref": getattr(row, "broker_account_ref", None),
+                    "import_mode": str(getattr(row, "import_mode", "") or "").strip().lower(),
+                    "status": str(getattr(row, "status", "") or "").strip().lower(),
+                    "last_imported_at": self._serialize_time_value(getattr(row, "last_imported_at", None)),
+                    "last_import_source": getattr(row, "last_import_source", None),
+                    "last_import_fingerprint": getattr(row, "last_import_fingerprint", None),
+                    "sync_metadata": self._safe_json_loads(getattr(row, "sync_metadata_json", None), {}),
+                }
+                for row in list(projection.get("broker_connection_rows") or [])
+            ]
+            legacy_ledger_count = (
+                len(list(projection.get("trade_rows") or []))
+                + len(list(projection.get("cash_rows") or []))
+                + len(list(projection.get("corporate_action_rows") or []))
+            )
+            legacy_positions_count = len(list(projection.get("position_rows") or []))
+            sync_state_rows = list(projection.get("sync_state_rows") or [])
+            latest_sync_state_row = None
+            for row in sync_state_rows:
+                if latest_sync_state_row is None:
+                    latest_sync_state_row = row
+                    continue
+                latest_key = (
+                    getattr(latest_sync_state_row, "synced_at", None) or datetime.min,
+                    int(getattr(latest_sync_state_row, "id", 0) or 0),
+                )
+                row_key = (
+                    getattr(row, "synced_at", None) or datetime.min,
+                    int(getattr(row, "id", 0) or 0),
+                )
+                if row_key > latest_key:
+                    latest_sync_state_row = row
+            if latest_sync_state_row is not None:
+                legacy_sync_state = {
+                    "id": int(getattr(latest_sync_state_row, "id", 0) or 0),
+                    "owner_user_id": str(getattr(latest_sync_state_row, "owner_id", "") or "").strip(),
+                    "broker_connection_id": int(getattr(latest_sync_state_row, "broker_connection_id", 0) or 0),
+                    "portfolio_account_id": int(getattr(latest_sync_state_row, "portfolio_account_id", 0) or 0),
+                    "broker_type": str(getattr(latest_sync_state_row, "broker_type", "") or "").strip().lower(),
+                    "broker_account_ref": getattr(latest_sync_state_row, "broker_account_ref", None),
+                    "sync_source": str(getattr(latest_sync_state_row, "sync_source", "") or "").strip().lower(),
+                    "sync_status": str(getattr(latest_sync_state_row, "sync_status", "") or "").strip().lower(),
+                    "snapshot_date": self._serialize_time_value(getattr(latest_sync_state_row, "snapshot_date", None)),
+                    "synced_at": self._serialize_time_value(getattr(latest_sync_state_row, "synced_at", None)),
+                    "base_currency": str(getattr(latest_sync_state_row, "base_currency", "") or "").strip().upper(),
+                    "total_cash": float(getattr(latest_sync_state_row, "total_cash", 0.0) or 0.0),
+                    "total_market_value": float(getattr(latest_sync_state_row, "total_market_value", 0.0) or 0.0),
+                    "total_equity": float(getattr(latest_sync_state_row, "total_equity", 0.0) or 0.0),
+                    "realized_pnl": float(getattr(latest_sync_state_row, "realized_pnl", 0.0) or 0.0),
+                    "unrealized_pnl": float(getattr(latest_sync_state_row, "unrealized_pnl", 0.0) or 0.0),
+                    "fx_stale": bool(getattr(latest_sync_state_row, "fx_stale", False)),
+                    "payload_json": self._safe_json_loads(getattr(latest_sync_state_row, "payload_json", None), {}),
+                }
+                latest_sync_state_id = int(getattr(latest_sync_state_row, "id", 0) or 0)
+                latest_connection_id = int(getattr(latest_sync_state_row, "broker_connection_id", 0) or 0)
+                legacy_sync_positions = [
+                    {
+                        "id": int(getattr(row, "id", 0) or 0),
+                        "portfolio_sync_state_id": latest_sync_state_id,
+                        "owner_user_id": str(getattr(row, "owner_id", "") or "").strip(),
+                        "portfolio_account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
+                        "broker_position_ref": getattr(row, "broker_position_ref", None),
+                        "canonical_symbol": str(getattr(row, "symbol", "") or "").strip().upper(),
+                        "market": str(getattr(row, "market", "") or "").strip().lower(),
+                        "currency": str(getattr(row, "currency", "") or "").strip().upper(),
+                        "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
+                        "avg_cost": float(getattr(row, "avg_cost", 0.0) or 0.0),
+                        "last_price": float(getattr(row, "last_price", 0.0) or 0.0),
+                        "market_value_base": float(getattr(row, "market_value_base", 0.0) or 0.0),
+                        "unrealized_pnl_base": float(getattr(row, "unrealized_pnl_base", 0.0) or 0.0),
+                        "valuation_currency": getattr(row, "valuation_currency", None),
+                        "payload_json": self._safe_json_loads(getattr(row, "payload_json", None), {}),
+                    }
+                    for row in list(projection.get("sync_position_rows") or [])
+                    if int(getattr(row, "broker_connection_id", 0) or 0) == latest_connection_id
+                ]
+                legacy_sync_cash_balances = [
+                    {
+                        "id": int(getattr(row, "id", 0) or 0),
+                        "portfolio_sync_state_id": latest_sync_state_id,
+                        "owner_user_id": str(getattr(row, "owner_id", "") or "").strip(),
+                        "portfolio_account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
+                        "currency": str(getattr(row, "currency", "") or "").strip().upper(),
+                        "amount": float(getattr(row, "amount", 0.0) or 0.0),
+                        "amount_base": float(getattr(row, "amount_base", 0.0) or 0.0),
+                    }
+                    for row in list(projection.get("sync_cash_balance_rows") or [])
+                    if int(getattr(row, "broker_connection_id", 0) or 0) == latest_connection_id
+                ]
+
+        shadow_row_counts = {
+            "account_row": 1 if shadow_account else 0,
+            "broker_connections": len(shadow_broker_connections),
+            "portfolio_ledger": len(shadow_ledger_rows),
+            "portfolio_positions": len(shadow_position_rows),
+            "portfolio_sync_states": 1 if shadow_sync_state is not None else 0,
+            "portfolio_sync_positions": len(shadow_sync_positions),
+            "portfolio_sync_cash_balances": len(shadow_sync_cash_balances),
+        }
+        legacy_row_counts = {
+            "account_row": 1 if legacy_account else 0,
+            "broker_connections": len(legacy_broker_connections),
+            "portfolio_ledger": int(legacy_ledger_count),
+            "portfolio_positions": int(legacy_positions_count),
+            "portfolio_sync_states": 1 if legacy_sync_state is not None else 0,
+            "portfolio_sync_positions": len(legacy_sync_positions),
+            "portfolio_sync_cash_balances": len(legacy_sync_cash_balances),
+        }
+
+        drift_reasons: List[str] = []
+        account_matches = self._phase_f_account_signature(shadow_account) == self._phase_f_account_signature(legacy_account)
+        if not account_matches:
+            if shadow_row_counts["account_row"] != legacy_row_counts["account_row"]:
+                drift_reasons.append("account_row_count_mismatch")
+            else:
+                drift_reasons.append("account_row_payload_mismatch")
+
+        shadow_connection_signatures = sorted(
+            self._phase_f_broker_connection_signature(row) for row in shadow_broker_connections
+        )
+        legacy_connection_signatures = sorted(
+            self._phase_f_broker_connection_signature(row) for row in legacy_broker_connections
+        )
+        broker_connections_match = shadow_connection_signatures == legacy_connection_signatures
+        if not broker_connections_match:
+            if shadow_row_counts["broker_connections"] != legacy_row_counts["broker_connections"]:
+                drift_reasons.append("broker_connections_count_mismatch")
+            else:
+                drift_reasons.append("broker_connections_payload_mismatch")
+
+        shadow_sync_state_signature = self._phase_f_sync_state_signature(shadow_sync_state)
+        legacy_sync_state_signature = self._phase_f_sync_state_signature(legacy_sync_state)
+        sync_state_match = shadow_sync_state_signature == legacy_sync_state_signature
+        if not sync_state_match:
+            if shadow_row_counts["portfolio_sync_states"] != legacy_row_counts["portfolio_sync_states"]:
+                drift_reasons.append("sync_state_count_mismatch")
+            else:
+                drift_reasons.append("sync_state_payload_mismatch")
+
+        shadow_sync_position_signatures = sorted(
+            self._phase_f_sync_position_signature(row) for row in shadow_sync_positions
+        )
+        legacy_sync_position_signatures = sorted(
+            self._phase_f_sync_position_signature(row) for row in legacy_sync_positions
+        )
+        sync_positions_match = shadow_sync_position_signatures == legacy_sync_position_signatures
+        if not sync_positions_match:
+            if shadow_row_counts["portfolio_sync_positions"] != legacy_row_counts["portfolio_sync_positions"]:
+                drift_reasons.append("sync_positions_count_mismatch")
+            else:
+                drift_reasons.append("sync_positions_payload_mismatch")
+
+        shadow_sync_cash_signatures = sorted(
+            self._phase_f_sync_cash_balance_signature(row) for row in shadow_sync_cash_balances
+        )
+        legacy_sync_cash_signatures = sorted(
+            self._phase_f_sync_cash_balance_signature(row) for row in legacy_sync_cash_balances
+        )
+        sync_cash_balances_match = shadow_sync_cash_signatures == legacy_sync_cash_signatures
+        if not sync_cash_balances_match:
+            if shadow_row_counts["portfolio_sync_cash_balances"] != legacy_row_counts["portfolio_sync_cash_balances"]:
+                drift_reasons.append("sync_cash_balances_count_mismatch")
+            else:
+                drift_reasons.append("sync_cash_balances_payload_mismatch")
+
+        ledger_match = shadow_row_counts["portfolio_ledger"] == legacy_row_counts["portfolio_ledger"]
+        if not ledger_match:
+            drift_reasons.append("portfolio_ledger_count_mismatch")
+
+        positions_match = shadow_row_counts["portfolio_positions"] == legacy_row_counts["portfolio_positions"]
+        if not positions_match:
+            drift_reasons.append("portfolio_positions_count_mismatch")
+
+        observed_readiness = {
+            "account_row": bool(account_matches),
+            "broker_connections": bool(broker_connections_match),
+            "sync_state": bool(sync_state_match),
+            "sync_positions": bool(sync_positions_match),
+            "sync_cash_balances": bool(sync_cash_balances_match),
+            "portfolio_ledger": bool(ledger_match),
+            "portfolio_positions": bool(positions_match),
+        }
+        effective_readiness = {
+            "account_metadata": bool(account_matches),
+            "broker_connection_list": bool(account_matches and broker_connections_match),
+            "latest_sync_overlay": bool(
+                account_matches
+                and broker_connections_match
+                and sync_state_match
+                and sync_positions_match
+                and sync_cash_balances_match
+            ),
+        }
+
+        def _surface_trust(ready: bool, component_present: bool, legacy_present: bool) -> str:
+            if ready:
+                return "shadow_matches_legacy"
+            if not component_present:
+                return "shadow_missing"
+            if not legacy_present:
+                return "legacy_missing"
+            return "shadow_drift"
+
+        return {
+            "shadow_account_id": int(account_id),
+            "owner_user_id": shadow_account.get("owner_user_id") or (legacy_account or {}).get("owner_user_id"),
+            "account_name": shadow_account.get("name") or (legacy_account or {}).get("name"),
+            "market": shadow_account.get("market") or (legacy_account or {}).get("market"),
+            "base_currency": shadow_account.get("base_currency") or (legacy_account or {}).get("base_currency"),
+            "is_active": bool(shadow_account.get("is_active")) if shadow_account else bool((legacy_account or {}).get("is_active")),
+            "authority_model": "phase_f_projection_compare",
+            "projection_source": "sqlite_portfolio_projection",
+            "shadow_bundle_present": True,
+            "freshness": {
+                "mode": "sqlite_projection_compare",
+                "legacy_account_present": bool(legacy_account),
+                "drift_detected": bool(drift_reasons),
+            },
+            "shadow_row_counts": shadow_row_counts,
+            "legacy_row_counts": legacy_row_counts,
+            "observed_readiness": observed_readiness,
+            "effective_readiness": effective_readiness,
+            "surface_trust": {
+                "account_metadata": _surface_trust(
+                    effective_readiness["account_metadata"],
+                    shadow_row_counts["account_row"] > 0,
+                    legacy_row_counts["account_row"] > 0,
+                ),
+                "broker_connection_list": _surface_trust(
+                    effective_readiness["broker_connection_list"],
+                    True,
+                    True,
+                ),
+                "latest_sync_overlay": _surface_trust(
+                    effective_readiness["latest_sync_overlay"],
+                    shadow_row_counts["portfolio_sync_states"] > 0
+                    or shadow_row_counts["portfolio_sync_positions"] > 0
+                    or shadow_row_counts["portfolio_sync_cash_balances"] > 0,
+                    legacy_row_counts["portfolio_sync_states"] > 0
+                    or legacy_row_counts["portfolio_sync_positions"] > 0
+                    or legacy_row_counts["portfolio_sync_cash_balances"] > 0,
+                ),
+            },
+            "drift_reasons": sorted(set(drift_reasons)),
+        }
+
+    def get_phase_f_portfolio_shadow_authority_state(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        if shadow_bundle is None:
+            return None
+
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+
+        resolved_owner_id = None
+        if not include_all_owners and owner_id is not None:
+            resolved_owner_id = self.require_user_id(owner_id)
+        if not include_all_owners and resolved_owner_id is not None:
+            shadow_owner_id = str(((shadow_bundle or {}).get("account") or {}).get("owner_user_id") or "").strip()
+            legacy_owner_id = str(getattr((projection or {}).get("account_row"), "owner_id", "") or "").strip()
+            if shadow_owner_id and shadow_owner_id != resolved_owner_id:
+                return None
+            if legacy_owner_id and legacy_owner_id != resolved_owner_id:
+                return None
+
+        return self._build_phase_f_portfolio_shadow_authority_state(
+            account_id=resolved_account_id,
+            shadow_bundle=shadow_bundle,
+            projection=projection,
+        )
+
+    def get_phase_f_portfolio_shadow_readiness_state(
+        self,
+        *,
+        account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        return self.get_phase_f_portfolio_shadow_authority_state(
+            account_id=account_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
 
     def sync_phase_g_runtime_config_shadow(
         self,
