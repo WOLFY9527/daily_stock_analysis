@@ -451,4 +451,19 @@ describe('ChatPage', () => {
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(document.title).toBe('Ask Stock - WolfyStock');
   });
+
+  it('updates hero and input copy immediately when language switches to english', async () => {
+    currentLanguage = 'en';
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
+    expect(screen.getByText('Start with a high-value question')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Example: Is 600519 / Kweichow Moutai a buy right now? (Enter to send, Shift+Enter for newline)')).toBeInTheDocument();
+  });
 });

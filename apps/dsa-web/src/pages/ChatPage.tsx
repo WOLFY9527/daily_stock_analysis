@@ -19,36 +19,79 @@ import { useShellRail } from '../components/layout/ShellRailContext';
 import { useShellRailSlot } from '../components/layout/useShellRailSlot';
 import { useI18n } from '../contexts/UiLanguageContext';
 
-// Quick question examples shown on empty state
-const QUICK_QUESTIONS = [
-  { label: '用缠论分析茅台', skill: 'chan_theory' },
-  { label: '波浪理论看宁德时代', skill: 'wave_theory' },
-  { label: '分析比亚迪趋势', skill: 'bull_trend' },
-  { label: '箱体震荡技能看中芯国际', skill: 'box_oscillation' },
-  { label: '分析腾讯 hk00700', skill: 'bull_trend' },
-  { label: '用情绪周期分析东方财富', skill: 'emotion_cycle' },
-];
+type QuickQuestion = {
+  label: string;
+  skill: string;
+};
 
-const STARTER_PROMPT_CARDS = [
-  {
-    title: '开仓执行判断',
-    description: '快速判断现在能不能介入，并直接给出买点、止损和目标位。',
-    prompt: '请判断 NVDA 现在是否适合介入，并给出买点、止损和目标位',
-    skill: 'bull_trend',
-  },
-  {
-    title: '持仓风控复盘',
-    description: '适合已有仓位时判断继续持有、减仓还是等待反弹。',
-    prompt: '我持有 TSLA，接下来该持有、减仓还是等待回踩确认？请给出风控建议',
-    skill: 'bull_trend',
-  },
-  {
-    title: '事件驱动跟踪',
-    description: '聚焦财报、催化、风险与情绪，不只停留在泛泛聊天。',
-    prompt: 'ORCL 财报后还值得继续跟踪吗？请列出催化、风险和执行计划',
-    skill: 'bull_trend',
-  },
-];
+type StarterPromptCard = {
+  title: string;
+  description: string;
+  prompt: string;
+  skill: string;
+};
+
+const QUICK_QUESTIONS_BY_LANGUAGE: Record<'zh' | 'en', QuickQuestion[]> = {
+  zh: [
+    { label: '用缠论分析茅台', skill: 'chan_theory' },
+    { label: '波浪理论看宁德时代', skill: 'wave_theory' },
+    { label: '分析比亚迪趋势', skill: 'bull_trend' },
+    { label: '箱体震荡技能看中芯国际', skill: 'box_oscillation' },
+    { label: '分析腾讯 hk00700', skill: 'bull_trend' },
+    { label: '用情绪周期分析东方财富', skill: 'emotion_cycle' },
+  ],
+  en: [
+    { label: 'Analyze Moutai with Chan theory', skill: 'chan_theory' },
+    { label: 'Use wave theory for CATL', skill: 'wave_theory' },
+    { label: 'Analyze BYD trend', skill: 'bull_trend' },
+    { label: 'Use box oscillation on SMIC', skill: 'box_oscillation' },
+    { label: 'Analyze Tencent hk00700', skill: 'bull_trend' },
+    { label: 'Use emotion cycle for East Money', skill: 'emotion_cycle' },
+  ],
+};
+
+const STARTER_PROMPT_CARDS_BY_LANGUAGE: Record<'zh' | 'en', StarterPromptCard[]> = {
+  zh: [
+    {
+      title: '开仓执行判断',
+      description: '快速判断现在能不能介入，并直接给出买点、止损和目标位。',
+      prompt: '请判断 NVDA 现在是否适合介入，并给出买点、止损和目标位',
+      skill: 'bull_trend',
+    },
+    {
+      title: '持仓风控复盘',
+      description: '适合已有仓位时判断继续持有、减仓还是等待反弹。',
+      prompt: '我持有 TSLA，接下来该持有、减仓还是等待回踩确认？请给出风控建议',
+      skill: 'bull_trend',
+    },
+    {
+      title: '事件驱动跟踪',
+      description: '聚焦财报、催化、风险与情绪，不只停留在泛泛聊天。',
+      prompt: 'ORCL 财报后还值得继续跟踪吗？请列出催化、风险和执行计划',
+      skill: 'bull_trend',
+    },
+  ],
+  en: [
+    {
+      title: 'Entry execution decision',
+      description: 'Decide whether to enter now, with direct entry, stop-loss, and target levels.',
+      prompt: 'Evaluate NVDA for entry now and provide entry, stop-loss, and target levels.',
+      skill: 'bull_trend',
+    },
+    {
+      title: 'Position risk review',
+      description: 'For existing positions, decide hold, trim, or wait for a healthier pullback.',
+      prompt: 'I hold TSLA. Should I hold, trim, or wait for a pullback confirmation? Include risk controls.',
+      skill: 'bull_trend',
+    },
+    {
+      title: 'Event-driven follow-up',
+      description: 'Focus on catalysts, risks, and execution instead of generic chat.',
+      prompt: 'After ORCL earnings, is it still worth tracking? List catalysts, risks, and an execution plan.',
+      skill: 'bull_trend',
+    },
+  ],
+};
 
 const ChatPage: React.FC = () => {
   const { language } = useI18n();
@@ -176,8 +219,10 @@ const ChatPage: React.FC = () => {
   }, [loadSkills]);
 
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
-  const quickQuestions = QUICK_QUESTIONS.filter((question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill));
-  const starterPromptCards = STARTER_PROMPT_CARDS.filter(
+  const quickQuestions = QUICK_QUESTIONS_BY_LANGUAGE[language].filter(
+    (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
+  );
+  const starterPromptCards = STARTER_PROMPT_CARDS_BY_LANGUAGE[language].filter(
     (card) => availableSkillIds.size === 0 || availableSkillIds.has(card.skill),
   );
 
@@ -245,9 +290,9 @@ const ChatPage: React.FC = () => {
       const msgText = overrideMessage || input.trim();
       if (!msgText || loading) return;
       const usedSkill = overrideSkill || selectedSkill;
-      const usedSkillName =
+        const usedSkillName =
         skills.find((s) => s.id === usedSkill)?.name ||
-        (usedSkill ? usedSkill : '通用');
+        (usedSkill ? usedSkill : (language === 'en' ? 'general' : '通用'));
 
       const payload = {
         message: msgText,
@@ -263,7 +308,7 @@ const ChatPage: React.FC = () => {
       requestScrollToBottom('smooth');
       await startStream(payload, { skillName: usedSkillName });
     },
-    [input, loading, requestScrollToBottom, selectedSkill, skills, sessionId, startStream],
+    [input, language, loading, requestScrollToBottom, selectedSkill, skills, sessionId, startStream],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -273,7 +318,7 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  const handleQuickQuestion = (q: (typeof QUICK_QUESTIONS)[0]) => {
+  const handleQuickQuestion = (q: QuickQuestion) => {
     setSelectedSkill(q.skill);
     handleSend(q.label, q.skill);
   };
@@ -288,16 +333,16 @@ const ChatPage: React.FC = () => {
   };
 
   const getCurrentStage = (steps: ProgressStep[]): string => {
-    if (steps.length === 0) return '正在连接...';
+    if (steps.length === 0) return language === 'en' ? 'Connecting...' : '正在连接...';
     const last = steps[steps.length - 1];
-    if (last.type === 'thinking') return last.message || 'AI 正在思考...';
+    if (last.type === 'thinking') return last.message || (language === 'en' ? 'AI is thinking...' : 'AI 正在思考...');
     if (last.type === 'tool_start')
       return `${last.display_name || last.tool}...`;
     if (last.type === 'tool_done')
-      return `${last.display_name || last.tool} 完成`;
+      return `${last.display_name || last.tool}${language === 'en' ? ' done' : ' 完成'}`;
     if (last.type === 'generating')
-      return last.message || '正在生成最终分析...';
-    return '处理中...';
+      return last.message || (language === 'en' ? 'Generating final analysis...' : '正在生成最终分析...');
+    return language === 'en' ? 'Processing...' : '处理中...';
   };
 
   const renderThinkingBlock = (msg: Message) => {
@@ -380,12 +425,12 @@ const ChatPage: React.FC = () => {
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          历史对话
+          {language === 'en' ? 'Conversation history' : '历史对话'}
         </h2>
         <button
           onClick={handleStartNewChat}
           className="theme-panel-subtle rounded-lg p-1.5 text-muted-text transition-all duration-200 ease-out hover:text-foreground"
-          title="开启新对话"
+          title={language === 'en' ? 'Start new chat' : '开启新对话'}
         >
           <svg
             className="w-4 h-4"
@@ -414,9 +459,9 @@ const ChatPage: React.FC = () => {
       ) : null}
       <ScrollArea testId="chat-session-list-scroll" viewportClassName="p-3">
         {sessionsLoading ? (
-          <div className="p-4 text-center text-xs text-muted-text">加载中...</div>
+          <div className="p-4 text-center text-xs text-muted-text">{language === 'en' ? 'Loading...' : '加载中...'}</div>
         ) : sessions.length === 0 ? (
-          <div className="p-4 text-center text-xs text-muted-text">暂无历史对话</div>
+          <div className="p-4 text-center text-xs text-muted-text">{language === 'en' ? 'No history yet' : '暂无历史对话'}</div>
         ) : (
           <div className="space-y-2">
             {sessions.map((s) => (
@@ -477,7 +522,7 @@ const ChatPage: React.FC = () => {
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="text-[11px] text-muted-text">
-                      {s.message_count} 条对话
+                      {language === 'en' ? `${s.message_count} messages` : `${s.message_count} 条对话`}
                     </span>
                     {s.last_active && (
                       <>
@@ -507,10 +552,10 @@ const ChatPage: React.FC = () => {
       <div className="workspace-chat-layout">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
-          title="删除对话"
-          message="删除后，该对话将不可恢复，确认删除吗？"
-          confirmText="删除"
-          cancelText="取消"
+          title={language === 'en' ? 'Delete conversation' : '删除对话'}
+          message={language === 'en' ? 'This conversation cannot be recovered after deletion. Continue?' : '删除后，该对话将不可恢复，确认删除吗？'}
+          confirmText={language === 'en' ? 'Delete' : '删除'}
+          cancelText={language === 'en' ? 'Cancel' : '取消'}
           isDanger
           onConfirm={confirmDelete}
           onCancel={() => setDeleteConfirmId(null)}
@@ -539,14 +584,16 @@ const ChatPage: React.FC = () => {
               </span>
             )}
             titleClassName="text-2xl font-bold"
-            description="把这里当成股票研究助手工作台来用：先问结论，再追问风险、催化、仓位和执行计划。"
+            description={language === 'en'
+              ? 'Use this as a stock research workspace: ask for the conclusion first, then drill into risk, catalysts, position sizing, and execution.'
+              : '把这里当成股票研究助手工作台来用：先问结论，再追问风险、催化、仓位和执行计划。'}
             actions={messages.length > 0 ? (
               <>
                 <button
                   type="button"
                   onClick={() => downloadSession(messages)}
                   className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
-                  title="导出会话为 Markdown 文件"
+                  title={language === 'en' ? 'Export conversation as Markdown' : '导出会话为 Markdown 文件'}
                 >
                   <svg
                     className="h-4 w-4"
@@ -561,7 +608,7 @@ const ChatPage: React.FC = () => {
                       d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     />
                   </svg>
-                  导出会话
+                  {language === 'en' ? 'Export' : '导出会话'}
                 </button>
                 <button
                   type="button"
@@ -572,13 +619,13 @@ const ChatPage: React.FC = () => {
                     try {
                       const content = formatSessionAsMarkdown(messages);
                       await agentApi.sendChat(content);
-                      setSendToast({ type: 'success', message: '已发送到通知渠道' });
+                      setSendToast({ type: 'success', message: language === 'en' ? 'Sent to notification channel' : '已发送到通知渠道' });
                       setTimeout(() => setSendToast(null), 3000);
                     } catch (err) {
                       const parsed = getParsedApiError(err);
                       setSendToast({
                         type: 'error',
-                        message: parsed.message || '发送失败',
+                         message: parsed.message || (language === 'en' ? 'Send failed' : '发送失败'),
                       });
                       setTimeout(() => setSendToast(null), 5000);
                     } finally {
@@ -587,7 +634,7 @@ const ChatPage: React.FC = () => {
                   }}
                   disabled={sending}
                   className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  title="发送到已配置的通知机器人/邮箱"
+                  title={language === 'en' ? 'Send to configured notification channels' : '发送到已配置的通知机器人/邮箱'}
                 >
                   {sending ? (
                     <svg
@@ -624,7 +671,7 @@ const ChatPage: React.FC = () => {
                       />
                     </svg>
                   )}
-                  发送
+                  {language === 'en' ? 'Send' : '发送'}
                 </button>
                 {sendToast ? (
                   <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
@@ -641,7 +688,7 @@ const ChatPage: React.FC = () => {
             <div className="px-4 pb-0 pt-4 md:px-6 md:pt-6">
               <ApiErrorAlert
                 error={skillsLoadError}
-                actionLabel="重试加载策略"
+                actionLabel={language === 'en' ? 'Retry loading skills' : '重试加载策略'}
                 onAction={() => {
                   void loadSkills();
                 }}
@@ -676,9 +723,11 @@ const ChatPage: React.FC = () => {
                       </svg>
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-lg font-medium text-foreground">从一个高价值问题开始</h3>
+                      <h3 className="text-lg font-medium text-foreground">{language === 'en' ? 'Start with a high-value question' : '从一个高价值问题开始'}</h3>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary-text">
-                        问股页现在更偏向“研究助手工作台”：优先帮你形成交易结论、风险提示、催化判断和执行计划，而不是泛泛聊天。
+                        {language === 'en'
+                          ? 'Ask Stock now behaves more like a research workstation: prioritize actionable conclusions, risk framing, catalysts, and execution instead of generic chat.'
+                          : '问股页现在更偏向“研究助手工作台”：优先帮你形成交易结论、风险提示、催化判断和执行计划，而不是泛泛聊天。'}
                       </p>
                     </div>
                   </div>
@@ -843,8 +892,8 @@ const ChatPage: React.FC = () => {
               <div className="theme-panel-subtle mb-3 rounded-[1rem] p-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">研究模式</p>
-                    <p className="mt-1 text-sm text-secondary-text">选择一个策略视角，让回答更贴近你的分析框架。</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Research mode' : '研究模式'}</p>
+                    <p className="mt-1 text-sm text-secondary-text">{language === 'en' ? 'Choose a strategy lens to align responses with your analysis style.' : '选择一个策略视角，让回答更贴近你的分析框架。'}</p>
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -857,7 +906,7 @@ const ChatPage: React.FC = () => {
                         : 'theme-inline-chip text-secondary-text hover:text-foreground'
                     }`}
                   >
-                    通用分析
+                    {language === 'en' ? 'General analysis' : '通用分析'}
                   </button>
                   {skills.map((s) => (
                     <div
@@ -895,7 +944,9 @@ const ChatPage: React.FC = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="例如：分析 600519 / 茅台现在适合买入吗？（回车发送，Shift+回车换行）"
+                  placeholder={language === 'en'
+                    ? 'Example: Is 600519 / Kweichow Moutai a buy right now? (Enter to send, Shift+Enter for newline)'
+                    : '例如：分析 600519 / 茅台现在适合买入吗？（回车发送，Shift+回车换行）'}
                   disabled={loading}
                   rows={1}
                   className="input-terminal flex-1 min-h-[46px] max-h-[200px] resize-none py-2.5"
@@ -913,19 +964,24 @@ const ChatPage: React.FC = () => {
                   isLoading={loading}
                   className="h-[46px] flex-shrink-0 px-6"
                 >
-                  发送
+                  {language === 'en' ? 'Send' : '发送'}
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-text">优先提问：买点、止损、目标位、风险和催化。</p>
+                <p className="text-xs text-muted-text">{language === 'en' ? 'Suggested focus: entry, stop-loss, target, risk, and catalysts.' : '优先提问：买点、止损、目标位、风险和催化。'}</p>
                 <span className="text-xs text-secondary-text">
-                  当前策略：{selectedSkill ? (skills.find((item) => item.id === selectedSkill)?.name || selectedSkill) : '通用分析'}
+                  {language === 'en' ? 'Current strategy: ' : '当前策略：'}
+                  {selectedSkill
+                    ? (skills.find((item) => item.id === selectedSkill)?.name || selectedSkill)
+                    : (language === 'en' ? 'General analysis' : '通用分析')}
                 </span>
               </div>
             </div>
             {isFollowUpContextLoading && (
               <p className="mt-2 text-xs text-secondary-text">
-                正在加载历史分析上下文；现在可直接发送追问。
+                {language === 'en'
+                  ? 'Loading previous analysis context. You can send follow-up questions now.'
+                  : '正在加载历史分析上下文；现在可直接发送追问。'}
               </p>
             )}
           </div>

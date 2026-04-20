@@ -46,11 +46,11 @@ const PROFILE_DEFAULTS = {
   },
 } as const;
 
-function formatTimestamp(value?: string | null): string {
+function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -211,11 +211,11 @@ const ScannerPage: React.FC = () => {
           { value: '180', label: '180' },
         ]
       : [
-        { value: '200', label: '200 只' },
-        { value: '300', label: '300 只' },
-        { value: '500', label: '500 只' },
+        { value: '200', label: language === 'en' ? '200' : '200 只' },
+        { value: '300', label: language === 'en' ? '300' : '300 只' },
+        { value: '500', label: language === 'en' ? '500' : '500 只' },
       ]
-  ), [market]);
+  ), [language, market]);
 
   const detailOptions = useMemo(() => (
     market === 'us'
@@ -231,11 +231,11 @@ const ScannerPage: React.FC = () => {
           { value: '40', label: '40' },
         ]
       : [
-        { value: '40', label: '40 只' },
-        { value: '60', label: '60 只' },
-        { value: '80', label: '80 只' },
+        { value: '40', label: language === 'en' ? '40' : '40 只' },
+        { value: '60', label: language === 'en' ? '60' : '60 只' },
+        { value: '80', label: language === 'en' ? '80' : '80 只' },
       ]
-  ), [market]);
+  ), [language, market]);
 
   const selectedMarketCopy = useMemo(() => (
     market === 'us'
@@ -640,7 +640,7 @@ const ScannerPage: React.FC = () => {
                       {runDetail.watchlistDate ? (
                         <Badge variant="history">{runDetail.watchlistDate}</Badge>
                       ) : null}
-                      <Badge variant="history">{formatTimestamp(runDetail.runAt)}</Badge>
+                      <Badge variant="history">{formatTimestamp(runDetail.runAt, language)}</Badge>
                       <Badge variant={notificationVariant(runNotificationStatus)}>{`${t('scanner.notificationLabel')} ${t(`scanner.notificationStatus.${runNotificationStatus}`)}`}</Badge>
                     </div>
                     <h2 className="text-[1.05rem] text-foreground md:text-[1.15rem]">
@@ -664,7 +664,7 @@ const ScannerPage: React.FC = () => {
                     <MetricPair label={t('scanner.metricWatchlistDate')} value={runDetail.watchlistDate || '--'} />
                     <MetricPair label={t('scanner.metricNotification')} value={t(`scanner.notificationStatus.${runNotificationStatus}`)} />
                     <MetricPair label={t('scanner.metricSchedule')} value={statusSummary?.scheduleEnabled ? (statusSummary.scheduleTime || '--') : t('scanner.scheduleDisabled')} />
-                    <MetricPair label={t('scanner.metricLastScheduled')} value={lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt) : '--'} />
+                    <MetricPair label={t('scanner.metricLastScheduled')} value={lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt, language) : '--'} />
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -1132,7 +1132,7 @@ const ScannerPage: React.FC = () => {
                                   {t(`scanner.notificationStatus.${item.notificationStatus}`)}
                                 </Badge>
                               ) : null}
-                              <Badge variant="history">{formatTimestamp(item.runAt)}</Badge>
+                              <Badge variant="history">{formatTimestamp(item.runAt, language)}</Badge>
                             </div>
                             <p className="text-sm leading-6 text-foreground">
                               {item.headline || (item.market === 'us'
@@ -1224,7 +1224,7 @@ const ScannerPage: React.FC = () => {
                               </Badge>
                             ) : null}
                             <Badge variant={runStatusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
-                            <Badge variant="history">{formatTimestamp(item.runAt)}</Badge>
+                            <Badge variant="history">{formatTimestamp(item.runAt, language)}</Badge>
                           </div>
                           <p className="text-sm leading-6 text-foreground">{item.headline || '--'}</p>
                           <p className="text-xs leading-5 text-secondary-text">
@@ -1263,7 +1263,7 @@ const ScannerPage: React.FC = () => {
                         {`${t('scanner.scheduleLabel')} ${statusSummary.scheduleEnabled ? (statusSummary.scheduleTime || '--') : t('scanner.scheduleDisabled')}`}
                       </div>
                       <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
-                        {`${t('scanner.lastScheduledLabel')} ${lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt) : '--'} · ${lastScheduledRun ? t(`scanner.status.${lastScheduledRun.status}`) : '--'}`}
+                        {`${t('scanner.lastScheduledLabel')} ${lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt, language) : '--'} · ${lastScheduledRun ? t(`scanner.status.${lastScheduledRun.status}`) : '--'}`}
                       </div>
                       <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
                         {`${t('scanner.notificationLabel')} ${lastScheduledRun?.notificationStatus ? t(`scanner.notificationStatus.${lastScheduledRun.notificationStatus}`) : '--'}`}
@@ -1377,7 +1377,7 @@ const ScannerPage: React.FC = () => {
             <div className="space-y-2">
               <p className="text-sm leading-6 text-secondary-text">{selectedCandidate.reasonSummary}</p>
               <p className="text-xs leading-5 text-secondary-text">
-                {`${t('scanner.lastTradeDate')} ${selectedCandidate.lastTradeDate || '--'} · ${t('scanner.scanTime')} ${formatTimestamp(selectedCandidate.scanTimestamp)}`}
+                {`${t('scanner.lastTradeDate')} ${selectedCandidate.lastTradeDate || '--'} · ${t('scanner.scanTime')} ${formatTimestamp(selectedCandidate.scanTimestamp, language)}`}
               </p>
             </div>
 

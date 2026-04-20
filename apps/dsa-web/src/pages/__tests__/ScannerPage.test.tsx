@@ -8,6 +8,7 @@ import type {
   ScannerRunDetail,
   ScannerRunHistoryResponse,
 } from '../../types/scanner';
+import { useI18n } from '../../contexts/UiLanguageContext';
 
 const {
   getRecentWatchlists,
@@ -777,6 +778,30 @@ function renderScannerPage() {
   );
 }
 
+function LanguageSwitch() {
+  const { setLanguage } = useI18n();
+  return (
+    <button type="button" onClick={() => setLanguage('en')}>
+      switch-language-en
+    </button>
+  );
+}
+
+function renderScannerPageWithLanguageSwitch() {
+  return render(
+    <UiLanguageProvider>
+      <MemoryRouter initialEntries={['/scanner']}>
+        <LanguageSwitch />
+        <Routes>
+          <Route path="/scanner" element={<ScannerPage />} />
+          <Route path="/" element={<div>Home Landing</div>} />
+          <Route path="/backtest" element={<div>Backtest Landing</div>} />
+        </Routes>
+      </MemoryRouter>
+    </UiLanguageProvider>,
+  );
+}
+
 describe('ScannerPage', () => {
   beforeEach(() => {
     getRecentWatchlists.mockReset();
@@ -872,7 +897,7 @@ describe('ScannerPage', () => {
     expect(await screen.findByText('本次扫描诊断')).toBeInTheDocument();
     expect(screen.getByText('输入池')).toBeInTheDocument();
     expect(screen.getByText('通过流动性/约束')).toBeInTheDocument();
-    expect(screen.getByText('进入最终 shortlist')).toBeInTheDocument();
+    expect(screen.getAllByText(/候选名单/).length).toBeGreaterThan(0);
     expect(screen.getByText('多数标的在 profile / liquidity 过滤阶段被淘汰')).toBeInTheDocument();
     expect(screen.getByText(/过滤 260 只/)).toBeInTheDocument();
     expect(screen.getAllByText(/AkshareFetcher/).length).toBeGreaterThan(0);
@@ -883,7 +908,7 @@ describe('ScannerPage', () => {
   it('keeps personal scanner history visible in admin mode as an additive section', async () => {
     renderScannerPage();
 
-    expect(await screen.findByText('我的近期 runs')).toBeInTheDocument();
+    expect(await screen.findByText('我的近期运行')).toBeInTheDocument();
     expect(screen.getByText('我的手动扫描：600001 算力龙头')).toBeInTheDocument();
     expect(getRuns).toHaveBeenCalledWith({
       market: 'cn',
@@ -1043,5 +1068,18 @@ describe('ScannerPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '去回测' }));
 
     expect(await screen.findByText('Backtest Landing')).toBeInTheDocument();
+  });
+
+  it('updates cn option unit labels when language switches to english', async () => {
+    renderScannerPageWithLanguageSwitch();
+
+    expect(await screen.findAllByRole('option', { name: '300 只' })).not.toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'switch-language-en' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('option', { name: '300 只' })).not.toBeInTheDocument();
+    });
+    expect(screen.getAllByRole('option', { name: '300' }).length).toBeGreaterThan(0);
   });
 });

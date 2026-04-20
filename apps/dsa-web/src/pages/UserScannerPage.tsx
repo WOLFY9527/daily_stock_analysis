@@ -30,11 +30,11 @@ const PROFILE_DEFAULTS = {
   },
 } as const;
 
-function formatTimestamp(value?: string | null): string {
+function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -141,11 +141,11 @@ const UserScannerPage: React.FC = () => {
           { value: '180', label: '180' },
         ]
       : [
-        { value: '200', label: '200 只' },
-        { value: '300', label: '300 只' },
-        { value: '500', label: '500 只' },
+        { value: '200', label: language === 'en' ? '200' : '200 只' },
+        { value: '300', label: language === 'en' ? '300' : '300 只' },
+        { value: '500', label: language === 'en' ? '500' : '500 只' },
       ]
-  ), [market]);
+  ), [language, market]);
 
   const detailOptions = useMemo(() => (
     market === 'us'
@@ -161,11 +161,11 @@ const UserScannerPage: React.FC = () => {
           { value: '40', label: '40' },
         ]
       : [
-        { value: '40', label: '40 只' },
-        { value: '60', label: '60 只' },
-        { value: '80', label: '80 只' },
+        { value: '40', label: language === 'en' ? '40' : '40 只' },
+        { value: '60', label: language === 'en' ? '60' : '60 只' },
+        { value: '80', label: language === 'en' ? '80' : '80 只' },
       ]
-  ), [market]);
+  ), [language, market]);
 
   const selectedMarketCopy = useMemo(() => (
     market === 'us'
@@ -371,7 +371,7 @@ const UserScannerPage: React.FC = () => {
                   <Badge variant="info">{runDetail.profileLabel || runDetail.profile}</Badge>
                   <Badge variant={statusVariant(runDetail.status)}>{t(`scanner.status.${runDetail.status}`)}</Badge>
                   {runDetail.watchlistDate ? <Badge variant="history">{runDetail.watchlistDate}</Badge> : null}
-                  {runDetail.runAt ? <Badge variant="history">{formatTimestamp(runDetail.runAt)}</Badge> : null}
+                  {runDetail.runAt ? <Badge variant="history">{formatTimestamp(runDetail.runAt, language)}</Badge> : null}
                 </div>
                 <div>
                   <h2 className="text-[1.05rem] text-foreground md:text-[1.15rem]">
@@ -528,7 +528,7 @@ const UserScannerPage: React.FC = () => {
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
                       <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
                       <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
-                      <span>{formatTimestamp(item.runAt)}</span>
+                      <span>{formatTimestamp(item.runAt, language)}</span>
                     </div>
                   </button>
                 ))}
