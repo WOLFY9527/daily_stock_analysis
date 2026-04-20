@@ -994,24 +994,24 @@ const ScannerPage: React.FC = () => {
             {showRunDiagnosticsPanel ? (
               <Card
                 title="本次扫描诊断"
-                subtitle="Coverage / provider observability"
+                subtitle="覆盖率 / 数据源可观测性"
                 className="space-y-4"
               >
                 <div className="grid gap-3 sm:grid-cols-2">
                   <MetricPair label="输入池" value={String(coverageSummary.inputUniverseSize ?? '--')} />
-                  <MetricPair label="完成 universe 获取" value={String(coverageSummary.eligibleAfterUniverseFetch ?? '--')} />
+                  <MetricPair label="完成候选池获取" value={String(coverageSummary.eligibleAfterUniverseFetch ?? '--')} />
                   <MetricPair label="通过流动性/约束" value={String(coverageSummary.eligibleAfterLiquidityFilter ?? '--')} />
                   <MetricPair label="通过数据可用性" value={String(coverageSummary.eligibleAfterDataAvailabilityFilter ?? '--')} />
                   <MetricPair label="进入排名池" value={String(coverageSummary.rankedCandidateCount ?? '--')} />
-                  <MetricPair label="进入最终 shortlist" value={String(coverageSummary.shortlistedCount ?? '--')} />
+                  <MetricPair label="进入最终候选名单" value={String(coverageSummary.shortlistedCount ?? '--')} />
                 </div>
 
                 {coverageSummary.likelyBottleneckLabel ? (
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3 text-sm leading-6 text-secondary-text">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">为何 shortlist 偏小</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">为何候选名单偏少</p>
                     <p className="mt-1 text-foreground">{String(coverageSummary.likelyBottleneckLabel)}</p>
                     <p className="mt-1 text-xs text-secondary-text">
-                      {`过滤 ${coverageSummary.excludedTotal ?? 0} 只，缺数 ${missingDataSymbolCount} 只，最终 shortlist ${coverageSummary.shortlistedCount ?? 0} 只。`}
+                      {`过滤 ${coverageSummary.excludedTotal ?? 0} 只，缺数 ${missingDataSymbolCount} 只，最终候选名单 ${coverageSummary.shortlistedCount ?? 0} 只。`}
                     </p>
                   </div>
                 ) : null}
@@ -1190,8 +1190,8 @@ const ScannerPage: React.FC = () => {
             </Card>
 
             <Card
-              title={language === 'en' ? 'My recent runs' : '我的近期 runs'}
-              subtitle={language === 'en' ? 'Personal history remains visible in Admin Mode' : 'Admin Mode 下也保留个人历史可见'}
+              title={language === 'en' ? 'My recent runs' : '我的近期运行'}
+              subtitle={language === 'en' ? 'Personal history remains visible in Admin Mode' : '管理员模式下也保留个人历史可见'}
               className="space-y-4"
             >
               {personalHistoryError ? <ApiErrorAlert error={personalHistoryError} /> : null}
@@ -1244,7 +1244,7 @@ const ScannerPage: React.FC = () => {
 
               {!isLoadingPersonalHistory && !personalHistoryItems.length ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
-                  {language === 'en' ? 'No personal scanner history yet.' : '当前管理员账户下还没有个人 scanner 历史。'}
+                  {language === 'en' ? 'No personal scanner history yet.' : '当前管理员账户下还没有个人扫描历史。'}
                 </div>
               ) : null}
             </Card>
