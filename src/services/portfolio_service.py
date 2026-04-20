@@ -722,6 +722,26 @@ class PortfolioService:
     def _phase_f_trade_list_comparison_enabled(self) -> bool:
         return bool(getattr(get_config(), "enable_phase_f_trades_list_comparison", False))
 
+    def _phase_f_trade_list_comparison_account_ids(self) -> Set[int]:
+        raw_value = getattr(get_config(), "phase_f_trades_list_comparison_account_ids", [])
+        return {int(item) for item in list(raw_value or []) if item is not None}
+
+    def _phase_f_trade_list_comparison_rollout_decision(
+        self,
+        *,
+        request_context: Dict[str, Any],
+    ) -> Tuple[bool, Optional[str]]:
+        allowed_account_ids = self._phase_f_trade_list_comparison_account_ids()
+        if not allowed_account_ids:
+            return True, None
+
+        account_id = request_context.get("account_id")
+        if account_id is None:
+            return False, "account_not_allowlisted"
+        if int(account_id) not in allowed_account_ids:
+            return False, "account_not_allowlisted"
+        return True, None
+
     def _maybe_run_phase_f_trade_list_comparison(
         self,
         *,
@@ -739,12 +759,37 @@ class PortfolioService:
             "page_size": int((legacy_result or {}).get("page_size", legacy_context.get("page_size", 20)) or 20),
         }
         legacy_summary = self._summarize_phase_f_trade_list_result(legacy_view)
+        comparison_source = "phase_f_pg_trade_list_candidate"
+        can_compare, skip_reason = self._phase_f_trade_list_comparison_rollout_decision(
+            request_context=legacy_context,
+        )
+        if not can_compare:
+            self._emit_phase_f_trade_list_comparison_report(
+                self._build_phase_f_trade_list_comparison_report(
+                    comparison_status="skipped",
+                    comparison_attempted=False,
+                    comparison_decision="legacy_served_without_comparison",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=skip_reason,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_without_comparison",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                )
+            )
+            return None
 
         try:
             candidate = self._load_phase_f_trade_list_comparison_candidate(request_context=legacy_context)
         except Exception as exc:
             self._emit_phase_f_trade_list_comparison_report(
-                self._build_phase_f_trade_list_mismatch_report(
+                self._build_phase_f_trade_list_comparison_report(
+                    comparison_status="query_failure",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_due_to_query_failure",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
                     mismatch_class="query_failure",
                     blocking_level="hard_blocking",
                     fallback_decision="served_legacy_due_to_query_failure",
@@ -758,10 +803,30 @@ class PortfolioService:
         candidate_summary = self._summarize_phase_f_trade_list_result(candidate)
         mismatch = self._compare_phase_f_trade_list_results(legacy_view=legacy_view, candidate_view=candidate)
         if mismatch is None:
+            self._emit_phase_f_trade_list_comparison_report(
+                self._build_phase_f_trade_list_comparison_report(
+                    comparison_status="matched",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_after_match",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_after_match",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    pg_summary=candidate_summary,
+                )
+            )
             return None
 
         self._emit_phase_f_trade_list_comparison_report(
-            self._build_phase_f_trade_list_mismatch_report(
+            self._build_phase_f_trade_list_comparison_report(
+                comparison_status="mismatch",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_due_to_mismatch",
+                comparison_source=comparison_source,
+                comparison_skip_reason=None,
                 mismatch_class=mismatch["mismatch_class"],
                 blocking_level=mismatch["blocking_level"],
                 fallback_decision="served_legacy_due_to_mismatch",
@@ -909,10 +974,57 @@ class PortfolioService:
         }
 
     def _emit_phase_f_trade_list_comparison_report(self, report: Dict[str, Any]) -> None:
-        logger.warning(
-            "Phase F trades-list comparison mismatch: %s",
-            json.dumps(report, ensure_ascii=True, sort_keys=True, default=str),
-        )
+        comparison_status = str((report or {}).get("comparison_status") or "").strip().lower()
+        message = json.dumps(report, ensure_ascii=True, sort_keys=True, default=str)
+        if comparison_status in {"mismatch", "query_failure"}:
+            logger.warning("Phase F trades-list comparison diagnostic: %s", message)
+            return
+        logger.info("Phase F trades-list comparison diagnostic: %s", message)
+
+    def _build_phase_f_trade_list_comparison_report(
+        self,
+        *,
+        comparison_status: str,
+        comparison_attempted: bool,
+        comparison_decision: str,
+        comparison_source: str,
+        comparison_skip_reason: Optional[str],
+        mismatch_class: str,
+        blocking_level: str,
+        fallback_decision: str,
+        request_context: Dict[str, Any],
+        legacy_summary: Dict[str, Any],
+        pg_summary: Optional[Dict[str, Any]] = None,
+        first_mismatch_position: Optional[int] = None,
+        first_mismatch_field: Optional[str] = None,
+        first_legacy_value: Any = None,
+        first_pg_value: Any = None,
+        query_failure_detail: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "report_model": "phase_f_trades_list_comparison_diagnostic_v2",
+            "candidate": "portfolio_trades_list",
+            "comparison_status": str(comparison_status or "").strip(),
+            "comparison_attempted": bool(comparison_attempted),
+            "comparison_decision": str(comparison_decision or "").strip(),
+            "comparison_source": str(comparison_source or "").strip(),
+            "comparison_skip_reason": str(comparison_skip_reason or "").strip() or None,
+            "mismatch_class": str(mismatch_class or "").strip() or None,
+            "blocking_level": str(blocking_level or "").strip(),
+            "fallback_decision": str(fallback_decision or "").strip(),
+            "request_context": dict(request_context or {}),
+            "owner_context": {
+                "owner_user_id": self._resolve_owner_id(self.owner_id),
+                "include_all_owners": self.include_all_owners,
+            },
+            "legacy_summary": dict(legacy_summary or {}),
+            "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
+            "first_mismatch_position": first_mismatch_position,
+            "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
+            "first_legacy_value": first_legacy_value,
+            "first_pg_value": first_pg_value,
+            "query_failure_detail": str(query_failure_detail or "").strip() or None,
+        }
 
     def _build_phase_f_trade_list_mismatch_report(
         self,
@@ -929,25 +1041,31 @@ class PortfolioService:
         first_pg_value: Any = None,
         query_failure_detail: Optional[str] = None,
     ) -> Dict[str, Any]:
-        return {
-            "report_model": "phase_f_trades_list_comparison_mismatch_v1",
-            "candidate": "portfolio_trades_list",
-            "mismatch_class": str(mismatch_class or "").strip(),
-            "blocking_level": str(blocking_level or "").strip(),
-            "fallback_decision": str(fallback_decision or "").strip(),
-            "request_context": dict(request_context or {}),
-            "owner_context": {
-                "owner_user_id": self._resolve_owner_id(self.owner_id),
-                "include_all_owners": self.include_all_owners,
-            },
-            "legacy_summary": dict(legacy_summary or {}),
-            "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
-            "first_mismatch_position": first_mismatch_position,
-            "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
-            "first_legacy_value": first_legacy_value,
-            "first_pg_value": first_pg_value,
-            "query_failure_detail": str(query_failure_detail or "").strip() or None,
-        }
+        normalized_mismatch_class = str(mismatch_class or "").strip()
+        comparison_status = "query_failure" if normalized_mismatch_class == "query_failure" else "mismatch"
+        comparison_decision = (
+            "legacy_served_due_to_query_failure"
+            if comparison_status == "query_failure"
+            else "legacy_served_due_to_mismatch"
+        )
+        return self._build_phase_f_trade_list_comparison_report(
+            comparison_status=comparison_status,
+            comparison_attempted=True,
+            comparison_decision=comparison_decision,
+            comparison_source="phase_f_pg_trade_list_candidate",
+            comparison_skip_reason=None,
+            mismatch_class=normalized_mismatch_class,
+            blocking_level=blocking_level,
+            fallback_decision=fallback_decision,
+            request_context=request_context,
+            legacy_summary=legacy_summary,
+            pg_summary=pg_summary,
+            first_mismatch_position=first_mismatch_position,
+            first_mismatch_field=first_mismatch_field,
+            first_legacy_value=first_legacy_value,
+            first_pg_value=first_pg_value,
+            query_failure_detail=query_failure_detail,
+        )
 
     def list_cash_ledger_events(
         self,

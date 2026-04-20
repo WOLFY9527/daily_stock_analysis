@@ -158,6 +158,28 @@ def parse_env_float(
     return parsed
 
 
+def parse_env_int_list(value: Optional[str], *, field_name: str) -> List[int]:
+    """Parse a comma-separated integer list env value with warning + ignore semantics."""
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return []
+
+    parsed_values: List[int] = []
+    for token in raw_value.split(","):
+        raw_token = str(token or "").strip()
+        if not raw_token:
+            continue
+        try:
+            parsed_values.append(int(raw_token))
+        except (TypeError, ValueError):
+            logger.warning(
+                "%s token %r is not a valid integer; ignoring it",
+                field_name,
+                raw_token,
+            )
+    return parsed_values
+
+
 def normalize_news_strategy_profile(value: Optional[str]) -> str:
     """Normalize news strategy profile to known values."""
     candidate = (value or "short").strip().lower()
@@ -700,6 +722,7 @@ class Config:
     postgres_phase_a_url: Optional[str] = None
     postgres_phase_a_apply_schema: bool = True
     enable_phase_f_trades_list_comparison: bool = False
+    phase_f_trades_list_comparison_account_ids: List[int] = field(default_factory=list)
 
     # 是否保存分析上下文快照（用于历史回溯）
     save_context_snapshot: bool = True
@@ -1390,6 +1413,10 @@ class Config:
             enable_phase_f_trades_list_comparison=parse_env_bool(
                 os.getenv('ENABLE_PHASE_F_TRADES_LIST_COMPARISON'),
                 False,
+            ),
+            phase_f_trades_list_comparison_account_ids=parse_env_int_list(
+                os.getenv('PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS'),
+                field_name='PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS',
             ),
             save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
             backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',

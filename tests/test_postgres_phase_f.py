@@ -2681,7 +2681,13 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             currency="USD",
         )
 
+        match_report: Dict[str, Any] = {}
+
         with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
+            get_config(),
+            "phase_f_trades_list_comparison_account_ids",
+            [account["id"]],
+        ), patch.object(
             service.repo,
             "query_trades",
             wraps=service.repo.query_trades,
@@ -2696,14 +2702,21 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         ) as comparison_loader, patch.object(
             service,
             "_emit_phase_f_trade_list_comparison_report",
-            wraps=service._emit_phase_f_trade_list_comparison_report,
+            side_effect=lambda report: match_report.update(report),
         ) as report_emitter:
             result = service.list_trade_events(account_id=account["id"], page=1, page_size=20)
 
         self.assertEqual(legacy_query.call_count, 1)
         self.assertEqual(pg_candidate_loader.call_count, 1)
         self.assertEqual(comparison_loader.call_count, 1)
-        self.assertEqual(report_emitter.call_count, 0)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(match_report["comparison_status"], "matched")
+        self.assertTrue(match_report["comparison_attempted"])
+        self.assertEqual(match_report["comparison_decision"], "legacy_served_after_match")
+        self.assertEqual(match_report["comparison_source"], "phase_f_pg_trade_list_candidate")
+        self.assertIsNone(match_report["comparison_skip_reason"])
+        self.assertEqual(match_report["legacy_summary"]["ordered_ids"], [result["items"][0]["id"]])
+        self.assertEqual(match_report["pg_summary"]["ordered_ids"], [result["items"][0]["id"]])
         self.assertEqual(result, {
             "items": [result["items"][0]],
             "total": 1,
@@ -2781,6 +2794,9 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(mismatch_report["mismatch_class"], "payload_field_mismatch")
         self.assertEqual(mismatch_report["blocking_level"], "hard_blocking")
         self.assertEqual(mismatch_report["fallback_decision"], "served_legacy_due_to_mismatch")
+        self.assertEqual(mismatch_report["comparison_status"], "mismatch")
+        self.assertTrue(mismatch_report["comparison_attempted"])
+        self.assertEqual(mismatch_report["comparison_decision"], "legacy_served_due_to_mismatch")
         self.assertEqual(mismatch_report["request_context"]["account_id"], account["id"])
         self.assertEqual(mismatch_report["legacy_summary"]["total"], 1)
         self.assertEqual(mismatch_report["pg_summary"]["total"], 1)
@@ -2824,8 +2840,57 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(report_emitter.call_count, 1)
         self.assertEqual(failure_report["mismatch_class"], "query_failure")
         self.assertEqual(failure_report["fallback_decision"], "served_legacy_due_to_query_failure")
+        self.assertEqual(failure_report["comparison_status"], "query_failure")
+        self.assertTrue(failure_report["comparison_attempted"])
+        self.assertEqual(failure_report["comparison_decision"], "legacy_served_due_to_query_failure")
         self.assertEqual(failure_report["query_failure_detail"], "comparison source unavailable")
         self.assertIsNone(failure_report["pg_summary"])
+
+    def test_phase_f_trade_list_comparison_mode_skip_guard_is_account_scoped_and_legacy_only(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="trade-compare-skip-user", username="trade-compare-skip-user")
+        service = PortfolioService(owner_id="trade-compare-skip-user")
+
+        account = service.create_account(name="Compare Skip", broker="IBKR", market="us", base_currency="USD")
+        service.record_trade(
+            account_id=account["id"],
+            symbol="AMD",
+            trade_date=date(2026, 4, 17),
+            side="buy",
+            quantity=4.0,
+            price=120.0,
+            market="us",
+            currency="USD",
+        )
+
+        skip_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
+            get_config(),
+            "phase_f_trades_list_comparison_account_ids",
+            [account["id"] + 999],
+        ), patch.object(
+            service.repo.db,
+            "get_phase_f_trade_list_comparison_candidate",
+            side_effect=AssertionError("PG comparison candidate should be skipped outside allowlist"),
+        ) as pg_candidate_loader, patch.object(
+            service,
+            "_emit_phase_f_trade_list_comparison_report",
+            side_effect=lambda report: skip_report.update(report),
+        ) as report_emitter:
+            result = service.list_trade_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual([item["symbol"] for item in result["items"]], ["AMD"])
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(pg_candidate_loader.call_count, 0)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(skip_report["comparison_status"], "skipped")
+        self.assertFalse(skip_report["comparison_attempted"])
+        self.assertEqual(skip_report["comparison_decision"], "legacy_served_without_comparison")
+        self.assertEqual(skip_report["comparison_skip_reason"], "account_not_allowlisted")
+        self.assertEqual(skip_report["fallback_decision"], "legacy_served_without_comparison")
+        self.assertIsNone(skip_report["pg_summary"])
+        self.assertIsNone(skip_report["mismatch_class"])
 
     def test_phase_f_trade_list_comparison_mode_does_not_affect_other_event_history_endpoints(self) -> None:
         db = self._db()
@@ -2880,7 +2945,12 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         db.create_or_update_app_user(user_id="shape-user", username="shape-user")
         service = PortfolioService(owner_id="shape-user")
 
-        report = service._build_phase_f_trade_list_mismatch_report(
+        report = service._build_phase_f_trade_list_comparison_report(
+            comparison_status="query_failure",
+            comparison_attempted=True,
+            comparison_decision="legacy_served_due_to_query_failure",
+            comparison_source="phase_f_pg_trade_list_candidate",
+            comparison_skip_reason=None,
             mismatch_class="query_failure",
             blocking_level="hard_blocking",
             fallback_decision="served_legacy_due_to_query_failure",
@@ -2896,8 +2966,12 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             legacy_summary={"total": 1, "page_item_count": 1},
         )
 
-        self.assertEqual(report["report_model"], "phase_f_trades_list_comparison_mismatch_v1")
+        self.assertEqual(report["report_model"], "phase_f_trades_list_comparison_diagnostic_v2")
         self.assertEqual(report["candidate"], "portfolio_trades_list")
+        self.assertEqual(report["comparison_status"], "query_failure")
+        self.assertTrue(report["comparison_attempted"])
+        self.assertEqual(report["comparison_decision"], "legacy_served_due_to_query_failure")
+        self.assertEqual(report["comparison_source"], "phase_f_pg_trade_list_candidate")
         self.assertEqual(report["mismatch_class"], "query_failure")
         self.assertEqual(report["blocking_level"], "hard_blocking")
         self.assertEqual(report["fallback_decision"], "served_legacy_due_to_query_failure")
