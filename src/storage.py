@@ -12,6 +12,7 @@ A股自选股智能分析系统 - 存储层
 """
 
 import atexit
+from collections import Counter
 from contextlib import contextmanager
 import hashlib
 import json
@@ -4019,11 +4020,17 @@ class DatabaseManager:
         shadow_bundle: Dict[str, Any],
         projection: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
+        representative_entry_types = ("cash", "corporate_action", "trade")
         shadow_ledger_rows = list((shadow_bundle or {}).get("ledger") or [])
         projection = projection or {}
         legacy_trade_rows = list(projection.get("trade_rows") or [])
         legacy_cash_rows = list(projection.get("cash_rows") or [])
         legacy_corporate_action_rows = list(projection.get("corporate_action_rows") or [])
+        legacy_ledger_rows = self._phase_f_projection_ledger_rows(
+            trade_rows=legacy_trade_rows,
+            cash_rows=legacy_cash_rows,
+            corporate_action_rows=legacy_corporate_action_rows,
+        )
 
         shadow_ledger_signatures = [
             self._phase_f_ledger_entry_signature(dict(row))
@@ -4031,15 +4038,78 @@ class DatabaseManager:
         ]
         legacy_ledger_signatures = [
             self._phase_f_ledger_entry_signature(row)
-            for row in self._phase_f_projection_ledger_rows(
-                trade_rows=legacy_trade_rows,
-                cash_rows=legacy_cash_rows,
-                corporate_action_rows=legacy_corporate_action_rows,
-            )
+            for row in legacy_ledger_rows
         ]
         legacy_ledger_count = len(legacy_ledger_signatures)
         shadow_ledger_count = len(shadow_ledger_signatures)
         ledger_payload_match = shadow_ledger_signatures == legacy_ledger_signatures
+
+        legacy_event_type_counter = Counter(
+            str((row or {}).get("entry_type") or "").strip().lower()
+            for row in legacy_ledger_rows
+            if str((row or {}).get("entry_type") or "").strip()
+        )
+        shadow_event_type_counter = Counter(
+            str((row or {}).get("entry_type") or "").strip().lower()
+            for row in shadow_ledger_rows
+            if str((row or {}).get("entry_type") or "").strip()
+        )
+        legacy_event_type_counts = {
+            entry_type: int(legacy_event_type_counter.get(entry_type, 0))
+            for entry_type in representative_entry_types
+        }
+        shadow_event_type_counts = {
+            entry_type: int(shadow_event_type_counter.get(entry_type, 0))
+            for entry_type in representative_entry_types
+        }
+        legacy_event_types_present = [
+            entry_type for entry_type in representative_entry_types if legacy_event_type_counts.get(entry_type, 0) > 0
+        ]
+        shadow_event_types_present = [
+            entry_type for entry_type in representative_entry_types if shadow_event_type_counts.get(entry_type, 0) > 0
+        ]
+        representative_event_shapes_observed = [
+            entry_type
+            for entry_type in representative_entry_types
+            if legacy_event_type_counts.get(entry_type, 0) > 0 and shadow_event_type_counts.get(entry_type, 0) > 0
+        ]
+        representative_event_shape_count = len(representative_event_shapes_observed)
+        representative_event_shape_target = len(representative_entry_types)
+        missing_representative_event_shapes = [
+            entry_type
+            for entry_type in representative_entry_types
+            if entry_type not in representative_event_shapes_observed
+        ]
+        if representative_event_shape_count >= representative_event_shape_target:
+            evidence_coverage_state = "representative"
+        elif representative_event_shape_count > 0:
+            evidence_coverage_state = "narrow"
+        else:
+            evidence_coverage_state = "none"
+        event_type_count_parity_observed = legacy_event_type_counts == shadow_event_type_counts
+        legacy_event_types_missing_in_shadow = [
+            entry_type for entry_type in legacy_event_types_present if entry_type not in shadow_event_types_present
+        ]
+        shadow_event_types_missing_in_legacy = [
+            entry_type for entry_type in shadow_event_types_present if entry_type not in legacy_event_types_present
+        ]
+
+        first_mismatch_index: Optional[int] = None
+        legacy_entry_type_at_mismatch: Optional[str] = None
+        shadow_entry_type_at_mismatch: Optional[str] = None
+        if legacy_ledger_count == shadow_ledger_count:
+            for index, (legacy_signature, shadow_signature) in enumerate(
+                zip(legacy_ledger_signatures, shadow_ledger_signatures)
+            ):
+                if legacy_signature != shadow_signature:
+                    first_mismatch_index = index
+                    legacy_entry_type_at_mismatch = str(
+                        (legacy_ledger_rows[index] or {}).get("entry_type") or ""
+                    ).strip().lower() or None
+                    shadow_entry_type_at_mismatch = str(
+                        (shadow_ledger_rows[index] or {}).get("entry_type") or ""
+                    ).strip().lower() or None
+                    break
 
         if legacy_ledger_count <= 0 and shadow_ledger_count <= 0:
             current_signal = "no_events_present"
@@ -4051,6 +4121,32 @@ class DatabaseManager:
             current_signal = "payload_parity_observed"
         else:
             current_signal = "payload_drift"
+
+        if current_signal == "payload_parity_observed":
+            if evidence_coverage_state == "representative":
+                operational_audit_signal = "representative_parity_observed"
+                operational_confidence_state = "representative"
+                design_prerequisite_support = "stronger_operational_evidence"
+            else:
+                operational_audit_signal = "narrow_parity_observed"
+                operational_confidence_state = "narrow"
+                design_prerequisite_support = "limited_observation_only"
+        elif current_signal == "payload_drift":
+            operational_audit_signal = "payload_drift_visible"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
+        elif current_signal == "count_mismatch":
+            operational_audit_signal = "count_mismatch_visible"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
+        elif current_signal == "shadow_missing":
+            operational_audit_signal = "shadow_missing_visible"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
+        else:
+            operational_audit_signal = "no_events_present"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
 
         payload_parity_observed = current_signal == "payload_parity_observed"
         account_metadata_authority_ready = bool(
@@ -4107,6 +4203,32 @@ class DatabaseManager:
             "account_metadata_authority_ready": account_metadata_authority_ready,
             "authority_prerequisite_state": authority_prerequisite_state,
             "authority_ready": authority_prerequisite_state == "authority_ready",
+            "parity_evidence": {
+                "legacy_event_type_counts": legacy_event_type_counts,
+                "shadow_event_type_counts": shadow_event_type_counts,
+                "legacy_event_types_present": legacy_event_types_present,
+                "shadow_event_types_present": shadow_event_types_present,
+                "representative_event_shapes_observed": representative_event_shapes_observed,
+                "event_type_count_parity_observed": event_type_count_parity_observed,
+            },
+            "operational_audit": {
+                "audit_signal": operational_audit_signal,
+                "evidence_coverage_state": evidence_coverage_state,
+                "representative_event_shape_count": representative_event_shape_count,
+                "representative_event_shape_target": representative_event_shape_target,
+                "missing_representative_event_shapes": missing_representative_event_shapes,
+                "operational_confidence_state": operational_confidence_state,
+                "design_prerequisite_support": design_prerequisite_support,
+            },
+            "drift_details": {
+                "legacy_total_event_rows": legacy_ledger_count,
+                "shadow_total_event_rows": shadow_ledger_count,
+                "legacy_event_types_missing_in_shadow": legacy_event_types_missing_in_shadow,
+                "shadow_event_types_missing_in_legacy": shadow_event_types_missing_in_legacy,
+                "first_mismatch_index": first_mismatch_index,
+                "legacy_entry_type_at_mismatch": legacy_entry_type_at_mismatch,
+                "shadow_entry_type_at_mismatch": shadow_entry_type_at_mismatch,
+            },
             "blocked_reasons": sorted(set(blocked_reasons)),
             "downstream_blockers": sorted(set(downstream_blockers)),
         }

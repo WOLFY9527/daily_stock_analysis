@@ -1427,6 +1427,246 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertFalse(authority_state["authority_ready"])
         self.assertIn("account_metadata_authority_missing", authority_state["blocked_reasons"])
 
+    def test_phase_f_ledger_event_payload_authority_state_surfaces_operational_parity_evidence(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="prereq-evidence-user", username="prereq-evidence-user")
+        service = PortfolioService(owner_id="prereq-evidence-user")
+
+        account = service.create_account(name="Prereq Evidence", broker="IBKR", market="us", base_currency="USD")
+        service.record_cash_ledger(
+            account_id=account["id"],
+            event_date=date(2026, 4, 10),
+            direction="in",
+            amount=5000.0,
+            currency="USD",
+        )
+        service.record_trade(
+            account_id=account["id"],
+            symbol="AAPL",
+            trade_date=date(2026, 4, 11),
+            side="buy",
+            quantity=10.0,
+            price=150.0,
+            fee=1.0,
+            tax=0.0,
+            market="us",
+            currency="USD",
+            trade_uid="phase-f-prereq-evidence-trade-1",
+            dedup_hash="phase-f-prereq-evidence-trade-1",
+        )
+        service.record_corporate_action(
+            account_id=account["id"],
+            symbol="AAPL",
+            effective_date=date(2026, 4, 12),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.5,
+            split_ratio=None,
+            market="us",
+            currency="USD",
+            note="phase-f-ledger-evidence",
+        )
+
+        authority_state = db.get_phase_f_ledger_event_payload_authority_state(account_id=account["id"])
+
+        self.assertIsNotNone(authority_state)
+        evidence = dict(authority_state["parity_evidence"])
+        self.assertEqual(
+            evidence["legacy_event_type_counts"],
+            {"cash": 1, "corporate_action": 1, "trade": 1},
+        )
+        self.assertEqual(
+            evidence["shadow_event_type_counts"],
+            {"cash": 1, "corporate_action": 1, "trade": 1},
+        )
+        self.assertEqual(
+            evidence["legacy_event_types_present"],
+            ["cash", "corporate_action", "trade"],
+        )
+        self.assertEqual(
+            evidence["shadow_event_types_present"],
+            ["cash", "corporate_action", "trade"],
+        )
+        self.assertEqual(
+            evidence["representative_event_shapes_observed"],
+            ["cash", "corporate_action", "trade"],
+        )
+        self.assertTrue(evidence["event_type_count_parity_observed"])
+        operational_audit = dict(authority_state["operational_audit"])
+        self.assertEqual(operational_audit["audit_signal"], "representative_parity_observed")
+        self.assertEqual(operational_audit["evidence_coverage_state"], "representative")
+        self.assertEqual(operational_audit["representative_event_shape_count"], 3)
+        self.assertEqual(operational_audit["representative_event_shape_target"], 3)
+        self.assertEqual(operational_audit["missing_representative_event_shapes"], [])
+        self.assertEqual(operational_audit["operational_confidence_state"], "representative")
+        self.assertEqual(operational_audit["design_prerequisite_support"], "stronger_operational_evidence")
+
+        drift_details = dict(authority_state["drift_details"])
+        self.assertEqual(drift_details["legacy_total_event_rows"], 3)
+        self.assertEqual(drift_details["shadow_total_event_rows"], 3)
+        self.assertEqual(drift_details["legacy_event_types_missing_in_shadow"], [])
+        self.assertEqual(drift_details["shadow_event_types_missing_in_legacy"], [])
+        self.assertIsNone(drift_details["first_mismatch_index"])
+
+    def test_phase_f_ledger_event_payload_authority_state_marks_narrow_parity_as_limited_confidence(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="prereq-narrow-audit-user", username="prereq-narrow-audit-user")
+        service = PortfolioService(owner_id="prereq-narrow-audit-user")
+
+        account = service.create_account(name="Prereq Narrow Audit", broker="IBKR", market="us", base_currency="USD")
+        service.record_trade(
+            account_id=account["id"],
+            symbol="AAPL",
+            trade_date=date(2026, 4, 11),
+            side="buy",
+            quantity=10.0,
+            price=150.0,
+            fee=1.0,
+            tax=0.0,
+            market="us",
+            currency="USD",
+            trade_uid="phase-f-prereq-narrow-audit-trade-1",
+            dedup_hash="phase-f-prereq-narrow-audit-trade-1",
+        )
+
+        authority_state = db.get_phase_f_ledger_event_payload_authority_state(account_id=account["id"])
+
+        self.assertIsNotNone(authority_state)
+        self.assertEqual(authority_state["current_signal"], "payload_parity_observed")
+        self.assertEqual(authority_state["authority_prerequisite_state"], "authority_ready")
+        self.assertTrue(authority_state["authority_ready"])
+
+        operational_audit = dict(authority_state["operational_audit"])
+        self.assertEqual(operational_audit["audit_signal"], "narrow_parity_observed")
+        self.assertEqual(operational_audit["evidence_coverage_state"], "narrow")
+        self.assertEqual(operational_audit["representative_event_shape_count"], 1)
+        self.assertEqual(operational_audit["representative_event_shape_target"], 3)
+        self.assertEqual(
+            operational_audit["missing_representative_event_shapes"],
+            ["cash", "corporate_action"],
+        )
+        self.assertEqual(operational_audit["operational_confidence_state"], "narrow")
+        self.assertEqual(operational_audit["design_prerequisite_support"], "limited_observation_only")
+
+    def test_phase_f_ledger_event_payload_authority_state_surfaces_payload_drift_details(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="prereq-drift-detail-user", username="prereq-drift-detail-user")
+        service = PortfolioService(owner_id="prereq-drift-detail-user")
+
+        account = service.create_account(
+            name="Prereq Drift Detail",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        trade = service.record_trade(
+            account_id=account["id"],
+            symbol="AAPL",
+            trade_date=date(2026, 4, 11),
+            side="buy",
+            quantity=10.0,
+            price=150.0,
+            fee=1.0,
+            tax=0.0,
+            market="us",
+            currency="USD",
+            trade_uid="phase-f-prereq-drift-detail-trade-1",
+            dedup_hash="phase-f-prereq-drift-detail-trade-1",
+        )
+
+        with db.get_session() as session:
+            row = session.execute(
+                select(PortfolioTrade).where(PortfolioTrade.id == trade["id"]).limit(1)
+            ).scalar_one()
+            row.price = 151.0
+            session.commit()
+
+        authority_state = db.get_phase_f_ledger_event_payload_authority_state(account_id=account["id"])
+
+        self.assertIsNotNone(authority_state)
+        self.assertEqual(authority_state["current_signal"], "payload_drift")
+        drift_details = dict(authority_state["drift_details"])
+        self.assertEqual(drift_details["legacy_total_event_rows"], 1)
+        self.assertEqual(drift_details["shadow_total_event_rows"], 1)
+        self.assertEqual(drift_details["first_mismatch_index"], 0)
+        self.assertEqual(drift_details["legacy_entry_type_at_mismatch"], "trade")
+        self.assertEqual(drift_details["shadow_entry_type_at_mismatch"], "trade")
+        self.assertEqual(drift_details["legacy_event_types_missing_in_shadow"], [])
+        self.assertEqual(drift_details["shadow_event_types_missing_in_legacy"], [])
+        operational_audit = dict(authority_state["operational_audit"])
+        self.assertEqual(operational_audit["audit_signal"], "payload_drift_visible")
+        self.assertEqual(operational_audit["evidence_coverage_state"], "narrow")
+        self.assertEqual(operational_audit["operational_confidence_state"], "blocked")
+        self.assertEqual(operational_audit["design_prerequisite_support"], "blocked")
+
+    def test_phase_f_ledger_event_payload_authority_state_surfaces_count_mismatch_details(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="prereq-mismatch-detail-user", username="prereq-mismatch-detail-user")
+        service = PortfolioService(owner_id="prereq-mismatch-detail-user")
+
+        account = service.create_account(
+            name="Prereq Mismatch Detail",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        service.record_cash_ledger(
+            account_id=account["id"],
+            event_date=date(2026, 4, 10),
+            direction="in",
+            amount=5000.0,
+            currency="USD",
+        )
+        service.record_trade(
+            account_id=account["id"],
+            symbol="AAPL",
+            trade_date=date(2026, 4, 11),
+            side="buy",
+            quantity=10.0,
+            price=150.0,
+            fee=1.0,
+            tax=0.0,
+            market="us",
+            currency="USD",
+            trade_uid="phase-f-prereq-mismatch-detail-trade-1",
+            dedup_hash="phase-f-prereq-mismatch-detail-trade-1",
+        )
+
+        with db._phase_f_store.session_scope() as session:
+            session.execute(
+                delete(PhaseFPortfolioLedger).where(
+                    PhaseFPortfolioLedger.portfolio_account_id == account["id"],
+                    PhaseFPortfolioLedger.entry_type == "trade",
+                )
+            )
+            session.commit()
+
+        authority_state = db.get_phase_f_ledger_event_payload_authority_state(account_id=account["id"])
+
+        self.assertIsNotNone(authority_state)
+        self.assertEqual(authority_state["current_signal"], "count_mismatch")
+        evidence = dict(authority_state["parity_evidence"])
+        self.assertFalse(evidence["event_type_count_parity_observed"])
+        self.assertEqual(
+            evidence["legacy_event_type_counts"],
+            {"cash": 1, "corporate_action": 0, "trade": 1},
+        )
+        self.assertEqual(
+            evidence["shadow_event_type_counts"],
+            {"cash": 1, "corporate_action": 0, "trade": 0},
+        )
+
+        drift_details = dict(authority_state["drift_details"])
+        self.assertEqual(drift_details["legacy_total_event_rows"], 2)
+        self.assertEqual(drift_details["shadow_total_event_rows"], 1)
+        self.assertEqual(drift_details["legacy_event_types_missing_in_shadow"], ["trade"])
+        self.assertEqual(drift_details["shadow_event_types_missing_in_legacy"], [])
+        self.assertIsNone(drift_details["first_mismatch_index"])
+        operational_audit = dict(authority_state["operational_audit"])
+        self.assertEqual(operational_audit["audit_signal"], "count_mismatch_visible")
+        self.assertEqual(operational_audit["evidence_coverage_state"], "narrow")
+        self.assertEqual(operational_audit["operational_confidence_state"], "blocked")
+        self.assertEqual(operational_audit["design_prerequisite_support"], "blocked")
+
     def test_phase_f_event_history_authority_state_requires_root_account_authority(self) -> None:
         db = self._db()
         db.create_or_update_app_user(user_id="event-history-observed-user", username="event-history-observed-user")

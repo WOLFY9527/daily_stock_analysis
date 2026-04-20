@@ -254,6 +254,30 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
         self.assertEqual(ledger_authority_state["authority_prerequisite_state"], "authority_ready")
         self.assertTrue(ledger_authority_state["authority_ready"])
         self.assertFalse(ledger_authority_state["runtime_cutover_ready"])
+        self.assertEqual(
+            ledger_authority_state["parity_evidence"]["legacy_event_type_counts"],
+            {"cash": 1, "corporate_action": 0, "trade": 1},
+        )
+        self.assertEqual(
+            ledger_authority_state["parity_evidence"]["shadow_event_type_counts"],
+            {"cash": 1, "corporate_action": 0, "trade": 1},
+        )
+        self.assertTrue(ledger_authority_state["parity_evidence"]["event_type_count_parity_observed"])
+        self.assertEqual(ledger_authority_state["drift_details"]["legacy_total_event_rows"], 2)
+        self.assertEqual(ledger_authority_state["drift_details"]["shadow_total_event_rows"], 2)
+        self.assertIsNone(ledger_authority_state["drift_details"]["first_mismatch_index"])
+        self.assertEqual(ledger_authority_state["operational_audit"]["audit_signal"], "narrow_parity_observed")
+        self.assertEqual(ledger_authority_state["operational_audit"]["evidence_coverage_state"], "narrow")
+        self.assertEqual(ledger_authority_state["operational_audit"]["representative_event_shape_count"], 2)
+        self.assertEqual(
+            ledger_authority_state["operational_audit"]["missing_representative_event_shapes"],
+            ["corporate_action"],
+        )
+        self.assertEqual(ledger_authority_state["operational_audit"]["operational_confidence_state"], "narrow")
+        self.assertEqual(
+            ledger_authority_state["operational_audit"]["design_prerequisite_support"],
+            "limited_observation_only",
+        )
         self.assertIn("event_history_domain_authority_layer_required", ledger_authority_state["downstream_blockers"])
         self.assertIsNotNone(event_history_state)
         self.assertEqual(event_history_state["current_signal"], "prerequisite_ready")
