@@ -142,3 +142,6 @@ cache/
 # keep only intentional small fixtures/examples under version control
 !tests/fixtures/
 !docs/examples/
+
+.agents/
+skills-lock.json
