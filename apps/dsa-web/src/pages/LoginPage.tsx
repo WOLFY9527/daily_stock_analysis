@@ -142,7 +142,7 @@ const LoginPage: React.FC = () => {
 
       <div className="auth-shell">
         <section className="auth-hero">
-          <p className="auth-hero__eyebrow">Stock Analysis Workspace</p>
+          <p className="auth-hero__eyebrow">股票研究工作区</p>
           <h1 className="auth-hero__title">
             {isAdminBootstrap ? '设置管理员访问口令' : isCreateUserMode ? '创建研究账户' : '登录进入研究工作台'}
           </h1>
@@ -167,7 +167,7 @@ const LoginPage: React.FC = () => {
         <section className="auth-panel theme-panel-glass">
           <div className="auth-panel__header">
             <p className="label-uppercase text-secondary-text">
-              {isAdminBootstrap ? 'Initial Access' : isCreateUserMode ? 'Create Account' : 'Secure Login'}
+              {isAdminBootstrap ? '初始访问' : isCreateUserMode ? '创建账户' : '安全登录'}
             </p>
             <h2 className="auth-panel__title">
               <span>{isAdminBootstrap ? '设置初始密码' : isCreateUserMode ? '创建账户并登录' : '账户登录'}</span>
@@ -184,7 +184,7 @@ const LoginPage: React.FC = () => {
           <form onSubmit={handleSubmit} className="auth-form">
             {redirect !== '/' ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Continue After Sign-in</p>
+                <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">登录后继续</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">
                   登录后将继续进入：{redirectTarget.label}
                 </p>
@@ -197,7 +197,7 @@ const LoginPage: React.FC = () => {
             ) : null}
 
             <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/35 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Leave Auth Page</p>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">离开认证页</p>
               <p className="mt-2 text-sm font-semibold text-foreground">{exitTarget.label}</p>
               <p className="mt-1 text-xs leading-5 text-secondary-text">{exitTarget.description}</p>
               <button
@@ -215,7 +215,7 @@ const LoginPage: React.FC = () => {
                 id="username"
                 type="text"
                 label="用户名"
-                placeholder={isCreateUserMode ? '请输入用户名' : '留空则登录 admin'}
+                placeholder={isCreateUserMode ? '请输入用户名' : '留空则登录管理员账户'}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isSubmitting}
@@ -302,9 +302,9 @@ const LoginPage: React.FC = () => {
           </form>
 
           <div className="auth-panel__foot">
-            <span>Protected session</span>
-            <span>Research workspace</span>
-            <span>Calm interaction</span>
+            <span>受保护会话</span>
+            <span>研究工作区</span>
+            <span>稳定交互</span>
           </div>
         </section>
       </div>
