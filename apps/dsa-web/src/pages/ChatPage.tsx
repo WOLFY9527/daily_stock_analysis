@@ -17,6 +17,7 @@ import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFo
 import { isNearBottom } from '../utils/chatScroll';
 import { useShellRail } from '../components/layout/ShellRailContext';
 import { useShellRailSlot } from '../components/layout/useShellRailSlot';
+import { useI18n } from '../contexts/UiLanguageContext';
 
 // Quick question examples shown on empty state
 const QUICK_QUESTIONS = [
@@ -50,6 +51,7 @@ const STARTER_PROMPT_CARDS = [
 ];
 
 const ChatPage: React.FC = () => {
+  const { language } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState('');
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -75,8 +77,8 @@ const ChatPage: React.FC = () => {
 
   // Set page title
   useEffect(() => {
-    document.title = '问股 - WolfyStock';
-  }, []);
+    document.title = language === 'en' ? 'Ask Stock - WolfyStock' : '问股 - WolfyStock';
+  }, [language]);
 
   useEffect(() => () => {
     isMountedRef.current = false;
@@ -481,7 +483,10 @@ const ChatPage: React.FC = () => {
                       <>
                         <span className="h-1 w-1 rounded-full bg-white/10" />
                         <span className="text-[11px] text-muted-text">
-                          {new Date(s.last_active).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                          {new Date(s.last_active).toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
                         </span>
                       </>
                     )}
@@ -493,7 +498,7 @@ const ChatPage: React.FC = () => {
         )}
       </ScrollArea>
     </div>
-  ), [handleStartNewChat, handleSwitchSession, loadSessions, sessionId, sessionLoadError, sessions, sessionsLoading]);
+  ), [handleStartNewChat, handleSwitchSession, language, loadSessions, sessionId, sessionLoadError, sessions, sessionsLoading]);
 
   useShellRailSlot(sidebarContent);
 

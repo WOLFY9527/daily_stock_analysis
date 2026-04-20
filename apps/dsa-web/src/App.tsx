@@ -498,6 +498,10 @@ export const AppContent: React.FC = () => {
     } else {
       content = (
         <Routes>
+          <Route path="/guest/scanner" element={<Navigate to="/scanner" replace />} />
+          <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
+          <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
+          <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
           <Route element={<Shell />}>
             <Route path="/" element={<HomeSurfacePage />} />
             <Route path="/scanner" element={<ScannerSurfacePage />} />

@@ -213,4 +213,18 @@ describe('AppContent route flows', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to continue Ask Stock follow-up' })).toBeInTheDocument();
     expect(screen.getByText('Guest Preview Only')).toBeInTheDocument();
   });
+
+  it('redirects legacy locale guest scanner path to the scanner surface', async () => {
+    renderAt('/en/guest/scanner');
+
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+  });
+
+  it('redirects legacy locale user scanner path to the scanner surface', async () => {
+    renderAt('/zh/user/scanner');
+
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+  });
 });

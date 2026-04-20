@@ -21,6 +21,7 @@ const mockSwitchSession = vi.fn();
 const mockStartStream = vi.fn();
 const mockClearCompletionBadge = vi.fn();
 const mockStartNewChat = vi.fn();
+let currentLanguage: 'zh' | 'en' = 'zh';
 
 const mockStoreState = {
   messages: [],
@@ -77,6 +78,15 @@ vi.mock('../../stores/agentChatStore', () => {
   return { useAgentChatStore };
 });
 
+vi.mock('../../contexts/UiLanguageContext', () => ({
+  useI18n: () => ({
+    language: currentLanguage,
+    t: (key: string) => key,
+    setLanguage: vi.fn(),
+    toggleLanguage: vi.fn(),
+  }),
+}));
+
 beforeAll(() => {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -110,6 +120,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  currentLanguage = 'zh';
 });
 
 describe('ChatPage', () => {
@@ -425,5 +436,19 @@ describe('ChatPage', () => {
         }),
       );
     });
+  });
+
+  it('updates document title when language is english', async () => {
+    currentLanguage = 'en';
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
+    expect(document.title).toBe('Ask Stock - WolfyStock');
   });
 });
