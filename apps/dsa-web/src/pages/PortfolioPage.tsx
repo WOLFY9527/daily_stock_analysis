@@ -870,7 +870,7 @@ const PortfolioPage: React.FC = () => {
   return (
     <div className="workspace-page workspace-page--portfolio">
       <WorkspacePageHeader
-        eyebrow="WolfyStock Portfolio Desk"
+        eyebrow="WolfyStock 持仓工作区"
         title="持仓管理"
         description="组合快照与风险评估"
         actions={hasAccounts ? (
@@ -1019,20 +1019,20 @@ const PortfolioPage: React.FC = () => {
       <div className="space-y-3">
         <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总权益 / Total Equity</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总权益</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalEquity, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总市值 / Market Value</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总市值</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalMarketValue, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总现金 / Cash Balance</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总现金</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalCash, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
             <div className="flex items-start justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">汇率状态 / FX Status</p>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">汇率状态</p>
               <button
                 type="button"
                 className="btn-secondary !px-3 !py-1 !text-[11px] uppercase tracking-widest shrink-0"
@@ -1095,7 +1095,7 @@ const PortfolioPage: React.FC = () => {
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-3">
           <Card className="xl:col-span-2" padding="md">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">持仓明细 / Positions</h2>
+              <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">持仓明细</h2>
               <span className="text-[11px] uppercase tracking-widest text-secondary">共 {positionRows.length} 项</span>
             </div>
             {positionRows.length === 0 ? (
@@ -1140,7 +1140,7 @@ const PortfolioPage: React.FC = () => {
           </Card>
 
           <Card padding="md">
-            <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? '行业集中度 / Sectors' : '个股集中度 / Symbols (Fallback)'}</h2>
+            <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? '行业集中度' : '个股集中度（降级）'}</h2>
             {concentrationPieData.length > 0 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1174,8 +1174,8 @@ const PortfolioPage: React.FC = () => {
         <section>
           <Card padding="md" className="border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--glow-soft)]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[11px] uppercase tracking-[0.14em] text-foreground">数据同步 / Data Sync</h3>
-              <span className="text-[10px] uppercase tracking-widest text-muted-text hidden sm:inline">Broker Import</span>
+              <h3 className="text-[11px] uppercase tracking-[0.14em] text-foreground">数据同步</h3>
+              <span className="text-[10px] uppercase tracking-widest text-muted-text hidden sm:inline">券商导入</span>
             </div>
             
             <div className="space-y-4">
@@ -1371,7 +1371,7 @@ const PortfolioPage: React.FC = () => {
         </section>
 
         <section className="space-y-3">
-          <Disclosure summary="高级：手工录入与修正 / Manual Entry" defaultOpen={false}>
+          <Disclosure summary="高级：手工录入与修正" defaultOpen={false}>
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
               <Card padding="md">
                 <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：交易 / Trade</h3>
@@ -1452,7 +1452,7 @@ const PortfolioPage: React.FC = () => {
             </div>
           </Disclosure>
 
-          <Disclosure summary="流水与审计 / Audit & Ledger" defaultOpen={showEventAuditDisclosureByDefault}>
+          <Disclosure summary="流水与审计" defaultOpen={showEventAuditDisclosureByDefault}>
             <Card padding="md" className="border-0 bg-transparent">
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
