@@ -172,7 +172,7 @@ const UserScannerPage: React.FC = () => {
       ? {
         subtitle: language === 'en'
           ? 'Run manual scanner sessions under your own account. System watchlists and schedules stay in admin-only operator space.'
-          : '以你的个人账户执行手动扫描。系统 watchlist 与调度留在 admin-only operator 空间。',
+          : '以你的个人账户执行手动扫描。系统观察名单与调度留在仅管理员可见的运营空间。',
         runHint: t('scanner.runHintUs'),
         currentRunFallback: t('scanner.currentRunFallbackUs'),
       }
@@ -180,14 +180,14 @@ const UserScannerPage: React.FC = () => {
         ? {
           subtitle: language === 'en'
             ? 'Run personal Hong Kong scanner sessions under your own account. Operator watchlists and schedules remain admin-only.'
-            : '以你的个人账户执行港股手动扫描。系统 watchlist 与调度继续保留在 admin-only operator 空间。',
+            : '以你的个人账户执行港股手动扫描。系统观察名单与调度继续保留在仅管理员可见的运营空间。',
           runHint: t('scanner.runHintHk'),
           currentRunFallback: t('scanner.currentRunFallbackHk'),
         }
       : {
         subtitle: language === 'en'
           ? 'Generate personal scanner runs and keep shortlist history scoped to your own account.'
-          : '生成个人扫描结果，并将 shortlist 历史限制在你自己的账户范围内。',
+          : '生成个人扫描结果，并将候选名单历史限制在你自己的账户范围内。',
         runHint: t('scanner.runHintCn'),
         currentRunFallback: t('scanner.currentRunFallbackCn'),
       }
@@ -361,7 +361,7 @@ const UserScannerPage: React.FC = () => {
             </div>
           </Card>
 
-          <Card title={language === 'en' ? 'Current personal run' : '当前个人 run'} subtitle={language === 'en' ? 'Owner-scoped detail' : '个人范围详情'}>
+          <Card title={language === 'en' ? 'Current personal run' : '当前个人运行'} subtitle={language === 'en' ? 'Owner-scoped detail' : '个人范围详情'}>
             {runDetail ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -398,7 +398,7 @@ const UserScannerPage: React.FC = () => {
               <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
                 {language === 'en'
                   ? 'No personal scanner run yet. Run the scanner to create an owner-scoped shortlist.'
-                  : '你还没有个人扫描结果。运行扫描后即可生成 owner-scoped shortlist。'}
+                  : '你还没有个人扫描结果。运行扫描后即可生成仅属于你账户的候选名单。'}
               </div>
             )}
           </Card>
@@ -482,7 +482,7 @@ const UserScannerPage: React.FC = () => {
                 <p className="mt-2">
                   {language === 'en'
                     ? 'Run a manual scan to generate a shortlist that belongs to your own account.'
-                    : '运行一次手动扫描，生成只属于你自己账户的 shortlist。'}
+                    : '运行一次手动扫描，生成只属于你自己账户的候选名单。'}
                 </p>
               </div>
             ) : null}
@@ -490,7 +490,7 @@ const UserScannerPage: React.FC = () => {
         </section>
 
         <section className="space-y-4">
-          <Card title={language === 'en' ? 'My recent runs' : '我的近期 runs'} subtitle={language === 'en' ? 'Owner-scoped history' : '个人范围历史'}>
+          <Card title={language === 'en' ? 'My recent runs' : '我的近期运行'} subtitle={language === 'en' ? 'Owner-scoped history' : '个人范围历史'}>
             {historyError ? <ApiErrorAlert error={historyError} /> : null}
             {isLoadingHistory ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
@@ -554,17 +554,17 @@ const UserScannerPage: React.FC = () => {
             ) : null}
           </Card>
 
-          <Card title={language === 'en' ? 'Why the user surface is different' : '为什么用户界面与 admin 不同'} subtitle={language === 'en' ? 'Surface split' : '界面分层'}>
+          <Card title={language === 'en' ? 'Why the user surface is different' : '为什么用户界面与管理员不同'} subtitle={language === 'en' ? 'Surface split' : '界面分层'}>
             <div className="space-y-3 text-sm leading-6 text-secondary-text">
               <p>
                 {language === 'en'
                   ? 'This page keeps manual runs, shortlist detail, and cross-feature handoff inside the standard signed-in product.'
-                  : '这个页面只保留手动运行、shortlist 详情和跨功能联动，作为标准登录用户的产品面。'}
+                  : '这个页面只保留手动运行、候选名单详情和跨功能联动，作为标准登录用户的产品面。'}
               </p>
               <p>
                 {language === 'en'
                   ? 'Operational status, system watchlists, schedules, and channel internals remain in admin-only operator surfaces.'
-                  : '运营状态、系统 watchlist、调度和通道内部配置继续保留在 admin-only 的 operator 界面。'}
+                  : '运营状态、系统观察名单、调度和通道内部配置继续保留在仅管理员可见的运营界面。'}
               </p>
             </div>
           </Card>
