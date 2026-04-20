@@ -514,7 +514,7 @@ const ChatPage: React.FC = () => {
         <div className="workspace-chat-main">
           <WorkspacePageHeader
             className="mb-4 flex-shrink-0"
-            eyebrow="WolfyStock Quant Research"
+            eyebrow="WolfyStock 量化研究"
             title={(
               <span className="mb-2 mt-2 flex items-center gap-2">
                 <svg
@@ -890,7 +890,7 @@ const ChatPage: React.FC = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="例如：分析 600519 / 茅台现在适合买入吗？ (Enter 发送, Shift+Enter 换行)"
+                  placeholder="例如：分析 600519 / 茅台现在适合买入吗？（回车发送，Shift+回车换行）"
                   disabled={loading}
                   rows={1}
                   className="input-terminal flex-1 min-h-[46px] max-h-[200px] resize-none py-2.5"
