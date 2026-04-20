@@ -699,6 +699,7 @@ class Config:
     database_path: str = "./data/stock_analysis.db"
     postgres_phase_a_url: Optional[str] = None
     postgres_phase_a_apply_schema: bool = True
+    enable_phase_f_trades_list_comparison: bool = False
 
     # 是否保存分析上下文快照（用于历史回溯）
     save_context_snapshot: bool = True
@@ -1386,6 +1387,10 @@ class Config:
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
             postgres_phase_a_url=(os.getenv('POSTGRES_PHASE_A_URL') or '').strip() or None,
             postgres_phase_a_apply_schema=os.getenv('POSTGRES_PHASE_A_APPLY_SCHEMA', 'true').lower() == 'true',
+            enable_phase_f_trades_list_comparison=parse_env_bool(
+                os.getenv('ENABLE_PHASE_F_TRADES_LIST_COMPARISON'),
+                False,
+            ),
             save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
             backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',
             backtest_eval_window_days=parse_env_int(os.getenv('BACKTEST_EVAL_WINDOW_DAYS'), 10, field_name='BACKTEST_EVAL_WINDOW_DAYS', minimum=1),

@@ -125,6 +125,12 @@ class PortfolioService:
         return self._account_to_dict(row)
 
     def list_accounts(self, include_inactive: bool = False) -> List[Dict[str, Any]]:
+        phase_f_rows = self.repo.db.list_phase_f_portfolio_account_metadata_rows(
+            include_inactive=include_inactive,
+            **self._owner_kwargs(),
+        )
+        if phase_f_rows is not None:
+            return [self._account_to_dict(r) for r in phase_f_rows]
         rows = self.repo.list_accounts(include_inactive=include_inactive, **self._owner_kwargs())
         return [self._account_to_dict(r) for r in rows]
 
@@ -224,18 +230,32 @@ class PortfolioService:
         broker_type: Optional[str] = None,
         status: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        if portfolio_account_id is not None:
-            self.repo.get_account(
-                portfolio_account_id,
-                include_inactive=True,
-                **self._owner_kwargs(),
-            ) or self._raise_missing_account(portfolio_account_id)
         broker_type_norm = self._normalize_broker_type(broker_type) if broker_type is not None else None
         status_norm = (
             self._normalize_broker_connection_status(status)
             if status is not None and str(status).strip()
             else None
         )
+        phase_f_rows = self.repo.db.list_phase_f_portfolio_broker_connection_metadata_rows(
+            portfolio_account_id=portfolio_account_id,
+            broker_type=broker_type_norm,
+            status=status_norm,
+            **self._owner_kwargs(),
+        )
+        if phase_f_rows is not None:
+            return [
+                self._broker_connection_to_dict(
+                    row,
+                    portfolio_account_name=getattr(row, "portfolio_account_name", None),
+                )
+                for row in phase_f_rows
+            ]
+        if portfolio_account_id is not None:
+            self.repo.get_account(
+                portfolio_account_id,
+                include_inactive=True,
+                **self._owner_kwargs(),
+            ) or self._raise_missing_account(portfolio_account_id)
         rows = self.repo.list_broker_connections(
             portfolio_account_id=portfolio_account_id,
             broker_type=broker_type_norm,
@@ -431,6 +451,20 @@ class PortfolioService:
         return self._broker_sync_state_row_to_dict(row)
 
     def get_latest_broker_sync_state(self, *, portfolio_account_id: int) -> Optional[Dict[str, Any]]:
+        phase_f_bundle = self.repo.db.get_phase_f_latest_broker_sync_state_bundle(
+            portfolio_account_id=portfolio_account_id,
+            **self._owner_kwargs(),
+        )
+        if phase_f_bundle is not None:
+            row = phase_f_bundle.get("state_row")
+            if row is None:
+                return None
+            return self._broker_sync_bundle_to_dict(
+                row,
+                positions=list(phase_f_bundle.get("positions") or []),
+                cash_balances=list(phase_f_bundle.get("cash_balances") or []),
+            )
+
         row = self.repo.get_latest_broker_sync_state_for_account(
             portfolio_account_id=portfolio_account_id,
             **self._owner_kwargs(),
@@ -663,11 +697,71 @@ class PortfolioService:
             page_size=page_size,
             **self._owner_kwargs(),
         )
-        return {
+        result = {
             "items": [self._trade_row_to_dict(row) for row in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
+        }
+        if self._phase_f_trade_list_comparison_enabled():
+            self._maybe_run_phase_f_trade_list_comparison(
+                request_context={
+                    "account_id": int(account_id) if account_id is not None else None,
+                    "date_from": date_from.isoformat() if date_from is not None else None,
+                    "date_to": date_to.isoformat() if date_to is not None else None,
+                    "symbol": symbol_norm,
+                    "side": side_norm,
+                    "page": page,
+                    "page_size": page_size,
+                },
+                legacy_rows=rows,
+                legacy_result=result,
+            )
+        return result
+
+    def _phase_f_trade_list_comparison_enabled(self) -> bool:
+        return bool(getattr(get_config(), "enable_phase_f_trades_list_comparison", False))
+
+    def _maybe_run_phase_f_trade_list_comparison(
+        self,
+        *,
+        request_context: Dict[str, Any],
+        legacy_rows: List[Any],
+        legacy_result: Dict[str, Any],
+    ) -> None:
+        # Phase F slice 1 only freezes the service-owned insertion point.
+        # Legacy remains the only serving path until a later bounded slice adds a real comparison source.
+        _ = (
+            dict(request_context or {}),
+            list(legacy_rows or []),
+            dict(legacy_result or {}),
+        )
+        return None
+
+    def _build_phase_f_trade_list_mismatch_report(
+        self,
+        *,
+        mismatch_class: str,
+        blocking_level: str,
+        fallback_decision: str,
+        request_context: Dict[str, Any],
+        legacy_summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "report_model": "phase_f_trades_list_comparison_mismatch_v1",
+            "candidate": "portfolio_trades_list",
+            "mismatch_class": str(mismatch_class or "").strip(),
+            "blocking_level": str(blocking_level or "").strip(),
+            "fallback_decision": str(fallback_decision or "").strip(),
+            "request_context": dict(request_context or {}),
+            "owner_context": {
+                "owner_user_id": self._resolve_owner_id(self.owner_id),
+                "include_all_owners": self.include_all_owners,
+            },
+            "legacy_summary": dict(legacy_summary or {}),
+            "pg_summary": None,
+            "first_mismatch_position": None,
+            "first_mismatch_field": None,
         }
 
     def list_cash_ledger_events(

@@ -20,6 +20,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from src.config import Config
+from src.config import get_config
 from src.postgres_phase_f import (
     PhaseFBrokerConnection,
     PhaseFPortfolioAccount,
@@ -2633,6 +2634,168 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertIsNotNone(latest_sync)
         self.assertAlmostEqual(float(latest_sync["total_equity"]), 2100.0, places=6)
         self.assertEqual([item["symbol"] for item in latest_sync["positions"]], ["MSFT"])
+
+    def test_phase_f_trade_list_comparison_mode_defaults_disabled(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="trade-compare-off-user", username="trade-compare-off-user")
+        service = PortfolioService(owner_id="trade-compare-off-user")
+
+        account = service.create_account(name="Compare Off", broker="IBKR", market="us", base_currency="USD")
+        service.record_trade(
+            account_id=account["id"],
+            symbol="AAPL",
+            trade_date=date(2026, 4, 11),
+            side="buy",
+            quantity=10.0,
+            price=150.0,
+            market="us",
+            currency="USD",
+        )
+
+        with patch.object(
+            service,
+            "_maybe_run_phase_f_trade_list_comparison",
+            side_effect=AssertionError("comparison hook should not run while disabled"),
+        ):
+            result = service.list_trade_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual([item["symbol"] for item in result["items"]], ["AAPL"])
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["page"], 1)
+        self.assertEqual(result["page_size"], 20)
+
+    def test_phase_f_trade_list_comparison_mode_enabled_still_serves_legacy(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="trade-compare-on-user", username="trade-compare-on-user")
+        service = PortfolioService(owner_id="trade-compare-on-user")
+
+        account = service.create_account(name="Compare On", broker="IBKR", market="us", base_currency="USD")
+        service.record_trade(
+            account_id=account["id"],
+            symbol="MSFT",
+            trade_date=date(2026, 4, 12),
+            side="buy",
+            quantity=5.0,
+            price=300.0,
+            market="us",
+            currency="USD",
+        )
+
+        with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
+            service,
+            "_maybe_run_phase_f_trade_list_comparison",
+            wraps=service._maybe_run_phase_f_trade_list_comparison,
+        ) as comparison_hook:
+            result = service.list_trade_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual(comparison_hook.call_count, 1)
+        self.assertEqual(result, {
+            "items": [result["items"][0]],
+            "total": 1,
+            "page": 1,
+            "page_size": 20,
+        })
+        self.assertEqual(
+            result["items"][0],
+            {
+                "id": result["items"][0]["id"],
+                "account_id": account["id"],
+                "trade_uid": None,
+                "symbol": "MSFT",
+                "market": "us",
+                "currency": "USD",
+                "trade_date": "2026-04-12",
+                "side": "buy",
+                "quantity": 5.0,
+                "price": 300.0,
+                "fee": 0.0,
+                "tax": 0.0,
+                "note": None,
+                "created_at": result["items"][0]["created_at"],
+            },
+        )
+
+    def test_phase_f_trade_list_comparison_mode_does_not_affect_other_event_history_endpoints(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="trade-compare-scope-user", username="trade-compare-scope-user")
+        service = PortfolioService(owner_id="trade-compare-scope-user")
+
+        account = service.create_account(name="Compare Scope", broker="IBKR", market="us", base_currency="USD")
+        service.record_trade(
+            account_id=account["id"],
+            symbol="NVDA",
+            trade_date=date(2026, 4, 12),
+            side="buy",
+            quantity=2.0,
+            price=800.0,
+            market="us",
+            currency="USD",
+        )
+        service.record_cash_ledger(
+            account_id=account["id"],
+            event_date=date(2026, 4, 10),
+            direction="in",
+            amount=2000.0,
+            currency="USD",
+        )
+        service.record_corporate_action(
+            account_id=account["id"],
+            symbol="NVDA",
+            effective_date=date(2026, 4, 13),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.1,
+            split_ratio=None,
+            market="us",
+            currency="USD",
+        )
+
+        with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
+            service,
+            "_maybe_run_phase_f_trade_list_comparison",
+            wraps=service._maybe_run_phase_f_trade_list_comparison,
+        ) as comparison_hook:
+            cash_result = service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)
+            action_result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual(comparison_hook.call_count, 0)
+        self.assertEqual(cash_result["total"], 1)
+        self.assertEqual([item["currency"] for item in cash_result["items"]], ["USD"])
+        self.assertEqual(action_result["total"], 1)
+        self.assertEqual([item["symbol"] for item in action_result["items"]], ["NVDA"])
+
+    def test_phase_f_trade_list_comparison_report_shape_is_bounded(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="shape-user", username="shape-user")
+        service = PortfolioService(owner_id="shape-user")
+
+        report = service._build_phase_f_trade_list_mismatch_report(
+            mismatch_class="query_failure",
+            blocking_level="hard_blocking",
+            fallback_decision="served_legacy_due_to_query_failure",
+            request_context={
+                "account_id": 1,
+                "date_from": None,
+                "date_to": None,
+                "symbol": "AAPL",
+                "side": "buy",
+                "page": 1,
+                "page_size": 20,
+            },
+            legacy_summary={"total": 1, "page_item_count": 1},
+        )
+
+        self.assertEqual(report["report_model"], "phase_f_trades_list_comparison_mismatch_v1")
+        self.assertEqual(report["candidate"], "portfolio_trades_list")
+        self.assertEqual(report["mismatch_class"], "query_failure")
+        self.assertEqual(report["blocking_level"], "hard_blocking")
+        self.assertEqual(report["fallback_decision"], "served_legacy_due_to_query_failure")
+        self.assertEqual(report["request_context"]["symbol"], "AAPL")
+        self.assertEqual(report["legacy_summary"]["total"], 1)
+        self.assertEqual(report["owner_context"]["owner_user_id"], "shape-user")
+        self.assertFalse(report["owner_context"]["include_all_owners"])
+        self.assertIsNone(report["pg_summary"])
+        self.assertIsNone(report["first_mismatch_position"])
+        self.assertIsNone(report["first_mismatch_field"])
 
 
 if __name__ == "__main__":
