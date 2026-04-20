@@ -9,7 +9,7 @@ import re
 from contextlib import contextmanager
 from datetime import date, datetime, time
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
 from sqlalchemy import (
     JSON,
@@ -27,11 +27,13 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     delete,
+    func,
     select,
 )
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.postgres_phase_a import PhaseABase
+from src.postgres_schema_bootstrap import apply_schema_slice
 
 logger = logging.getLogger(__name__)
 
@@ -358,15 +360,13 @@ class PostgresPhaseFStore:
         self._engine.dispose()
 
     def apply_schema(self) -> None:
-        dialect = self._engine.dialect.name
-        if dialect == "postgresql":
-            statements = load_phase_f_sql_statements()
-            with self._engine.begin() as conn:
-                for statement in statements:
-                    conn.exec_driver_sql(statement)
-            return
-
-        PhaseFBase.metadata.create_all(self._engine)
+        apply_schema_slice(
+            self._engine,
+            schema_key="phase_f",
+            source_path=_phase_f_sql_doc_path(),
+            statements=load_phase_f_sql_statements(),
+            metadata=PhaseFBase.metadata,
+        )
 
     def get_session(self) -> Session:
         return self._SessionLocal()
@@ -382,6 +382,99 @@ class PostgresPhaseFStore:
             raise
         finally:
             session.close()
+
+    def list_account_rows(
+        self,
+        *,
+        owner_user_id: Optional[str] = None,
+        include_inactive: bool = False,
+    ) -> list[Any]:
+        with self.get_session() as session:
+            query = select(PhaseFPortfolioAccount)
+            if owner_user_id is not None:
+                query = query.where(PhaseFPortfolioAccount.owner_user_id == str(owner_user_id).strip())
+            if not include_inactive:
+                query = query.where(PhaseFPortfolioAccount.is_active.is_(True))
+            return list(
+                session.execute(
+                    query.order_by(PhaseFPortfolioAccount.id.asc())
+                ).scalars().all()
+            )
+
+    def list_broker_connection_rows(
+        self,
+        *,
+        owner_user_id: Optional[str] = None,
+        portfolio_account_id: Optional[int] = None,
+        broker_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> list[Any]:
+        with self.get_session() as session:
+            query = select(PhaseFBrokerConnection)
+            if owner_user_id is not None:
+                query = query.where(PhaseFBrokerConnection.owner_user_id == str(owner_user_id).strip())
+            if portfolio_account_id is not None:
+                query = query.where(PhaseFBrokerConnection.portfolio_account_id == int(portfolio_account_id))
+            if broker_type is not None:
+                query = query.where(PhaseFBrokerConnection.broker_type == str(broker_type).strip().lower())
+            if status is not None:
+                query = query.where(PhaseFBrokerConnection.status == str(status).strip().lower())
+            return list(
+                session.execute(
+                    query.order_by(PhaseFBrokerConnection.id.asc())
+                ).scalars().all()
+            )
+
+    def query_trade_list_comparison_candidate(
+        self,
+        *,
+        account_id: Optional[int],
+        date_from: Optional[date],
+        date_to: Optional[date],
+        symbol: Optional[str],
+        side: Optional[str],
+        page: int,
+        page_size: int,
+        owner_user_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        with self.get_session() as session:
+            conditions = [PhaseFPortfolioLedger.entry_type == "trade"]
+            if owner_user_id is not None:
+                conditions.append(PhaseFPortfolioLedger.owner_user_id == str(owner_user_id).strip())
+            if account_id is not None:
+                conditions.append(PhaseFPortfolioLedger.portfolio_account_id == int(account_id))
+            if date_from is not None:
+                conditions.append(
+                    PhaseFPortfolioLedger.event_time >= datetime.combine(date_from, time.min)
+                )
+            if date_to is not None:
+                conditions.append(
+                    PhaseFPortfolioLedger.event_time <= datetime.combine(date_to, time.max)
+                )
+            if symbol:
+                conditions.append(PhaseFPortfolioLedger.canonical_symbol == str(symbol).strip())
+            if side:
+                conditions.append(PhaseFPortfolioLedger.direction == str(side).strip().lower())
+
+            query = select(PhaseFPortfolioLedger)
+            count_query = select(func.count()).select_from(PhaseFPortfolioLedger)
+            for condition in conditions:
+                query = query.where(condition)
+                count_query = count_query.where(condition)
+
+            total = int(session.execute(count_query).scalar_one() or 0)
+            rows = session.execute(
+                query
+                .order_by(PhaseFPortfolioLedger.event_time.desc(), PhaseFPortfolioLedger.id.desc())
+                .offset((int(page) - 1) * int(page_size))
+                .limit(int(page_size))
+            ).scalars().all()
+            return {
+                "items": [self._serialize_trade_list_comparison_row(row) for row in rows],
+                "total": total,
+                "page": int(page),
+                "page_size": int(page_size),
+            }
 
     @staticmethod
     def _safe_json_load(value: Any) -> dict[str, Any]:
@@ -400,6 +493,177 @@ class PostgresPhaseFStore:
             if isinstance(parsed, dict):
                 return parsed
         return {}
+
+    @staticmethod
+    def _serialize_time_value(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return str(value)
+
+    def _serialize_account_row(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(row.owner_user_id or ""),
+            "name": str(row.name or ""),
+            "broker_label": row.broker_label,
+            "market": str(row.market or ""),
+            "base_currency": str(row.base_currency or ""),
+            "is_active": bool(row.is_active),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+            "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
+        }
+
+    def _serialize_broker_connection_row(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(row.owner_user_id or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "broker_type": str(row.broker_type or ""),
+            "broker_name": row.broker_name,
+            "connection_name": str(row.connection_name or ""),
+            "broker_account_ref": row.broker_account_ref,
+            "import_mode": str(row.import_mode or ""),
+            "status": str(row.status or ""),
+            "last_imported_at": self._serialize_time_value(getattr(row, "last_imported_at", None)),
+            "last_import_source": row.last_import_source,
+            "last_import_fingerprint": row.last_import_fingerprint,
+            "sync_metadata": self._safe_json_load(getattr(row, "sync_metadata", None)),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+            "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
+        }
+
+    def _serialize_ledger_row(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(row.owner_user_id or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "entry_type": str(row.entry_type or ""),
+            "event_time": self._serialize_time_value(getattr(row, "event_time", None)),
+            "canonical_symbol": row.canonical_symbol,
+            "market": row.market,
+            "currency": row.currency,
+            "direction": row.direction,
+            "quantity": float(row.quantity) if row.quantity is not None else None,
+            "price": float(row.price) if row.price is not None else None,
+            "amount": float(row.amount) if row.amount is not None else None,
+            "fee": float(row.fee) if row.fee is not None else None,
+            "tax": float(row.tax) if row.tax is not None else None,
+            "corporate_action_type": row.corporate_action_type,
+            "external_ref": row.external_ref,
+            "dedup_hash": row.dedup_hash,
+            "note": row.note,
+            "payload_json": self._safe_json_load(getattr(row, "payload_json", None)),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+        }
+
+    def _serialize_trade_list_comparison_row(self, row: Any) -> dict[str, Any]:
+        payload = self._safe_json_load(getattr(row, "payload_json", None))
+        legacy_row_id = int(payload.get("legacy_row_id") or 0)
+        event_time = getattr(row, "event_time", None)
+        trade_date = ""
+        if isinstance(event_time, datetime):
+            trade_date = event_time.date().isoformat()
+        elif isinstance(event_time, date):
+            trade_date = event_time.isoformat()
+
+        return {
+            "id": legacy_row_id,
+            "account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
+            "trade_uid": payload.get("trade_uid") if payload.get("trade_uid") is not None else getattr(row, "external_ref", None),
+            "symbol": str(getattr(row, "canonical_symbol", "") or ""),
+            "market": getattr(row, "market", None),
+            "currency": getattr(row, "currency", None),
+            "trade_date": trade_date,
+            "side": str(getattr(row, "direction", "") or ""),
+            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
+            "price": float(getattr(row, "price", 0.0) or 0.0),
+            "fee": float(getattr(row, "fee", 0.0) or 0.0),
+            "tax": float(getattr(row, "tax", 0.0) or 0.0),
+            "note": getattr(row, "note", None),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+        }
+
+    def _serialize_position_row(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(row.owner_user_id or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "source_kind": str(row.source_kind or ""),
+            "cost_method": str(row.cost_method or ""),
+            "canonical_symbol": str(row.canonical_symbol or ""),
+            "market": str(row.market or ""),
+            "currency": str(row.currency or ""),
+            "quantity": float(row.quantity) if row.quantity is not None else 0.0,
+            "avg_cost": float(row.avg_cost) if row.avg_cost is not None else 0.0,
+            "total_cost": float(row.total_cost) if row.total_cost is not None else 0.0,
+            "last_price": float(row.last_price) if row.last_price is not None else None,
+            "market_value_base": float(row.market_value_base) if row.market_value_base is not None else None,
+            "unrealized_pnl_base": float(row.unrealized_pnl_base) if row.unrealized_pnl_base is not None else None,
+            "valuation_currency": row.valuation_currency,
+            "as_of_time": self._serialize_time_value(getattr(row, "as_of_time", None)),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+            "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
+        }
+
+    def _serialize_sync_state_row(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(row.owner_user_id or ""),
+            "broker_connection_id": int(row.broker_connection_id),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "broker_type": str(row.broker_type or ""),
+            "broker_account_ref": row.broker_account_ref,
+            "sync_source": str(row.sync_source or ""),
+            "sync_status": str(row.sync_status or ""),
+            "snapshot_date": self._serialize_time_value(getattr(row, "snapshot_date", None)),
+            "synced_at": self._serialize_time_value(getattr(row, "synced_at", None)),
+            "base_currency": str(row.base_currency or ""),
+            "total_cash": float(row.total_cash) if row.total_cash is not None else 0.0,
+            "total_market_value": float(row.total_market_value) if row.total_market_value is not None else 0.0,
+            "total_equity": float(row.total_equity) if row.total_equity is not None else 0.0,
+            "realized_pnl": float(row.realized_pnl) if row.realized_pnl is not None else 0.0,
+            "unrealized_pnl": float(row.unrealized_pnl) if row.unrealized_pnl is not None else 0.0,
+            "fx_stale": bool(row.fx_stale),
+            "payload_json": self._safe_json_load(getattr(row, "payload_json", None)),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+            "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
+        }
+
+    def _serialize_sync_position_row(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "portfolio_sync_state_id": int(row.portfolio_sync_state_id),
+            "owner_user_id": str(row.owner_user_id or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "broker_position_ref": row.broker_position_ref,
+            "canonical_symbol": str(row.canonical_symbol or ""),
+            "market": str(row.market or ""),
+            "currency": str(row.currency or ""),
+            "quantity": float(row.quantity) if row.quantity is not None else 0.0,
+            "avg_cost": float(row.avg_cost) if row.avg_cost is not None else 0.0,
+            "last_price": float(row.last_price) if row.last_price is not None else 0.0,
+            "market_value_base": float(row.market_value_base) if row.market_value_base is not None else 0.0,
+            "unrealized_pnl_base": float(row.unrealized_pnl_base) if row.unrealized_pnl_base is not None else 0.0,
+            "valuation_currency": row.valuation_currency,
+            "payload_json": self._safe_json_load(getattr(row, "payload_json", None)),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+            "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
+        }
+
+    def _serialize_sync_cash_balance_row(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "portfolio_sync_state_id": int(row.portfolio_sync_state_id),
+            "owner_user_id": str(row.owner_user_id or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "currency": str(row.currency or ""),
+            "amount": float(row.amount) if row.amount is not None else 0.0,
+            "amount_base": float(row.amount_base) if row.amount_base is not None else 0.0,
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+            "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
+        }
 
     @staticmethod
     def _date_to_datetime(value: Any, *, entry_type: str) -> datetime:
@@ -785,6 +1049,71 @@ class PostgresPhaseFStore:
                         updated_at=getattr(row, "updated_at", None) or datetime.now(),
                     )
                 )
+
+    def get_account_shadow_bundle(self, *, account_id: int) -> Optional[dict[str, Any]]:
+        resolved_account_id = int(account_id)
+        with self.get_session() as session:
+            account_row = session.execute(
+                select(PhaseFPortfolioAccount)
+                .where(PhaseFPortfolioAccount.id == resolved_account_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if account_row is None:
+                return None
+
+            broker_connection_rows = session.execute(
+                select(PhaseFBrokerConnection)
+                .where(PhaseFBrokerConnection.portfolio_account_id == resolved_account_id)
+                .order_by(PhaseFBrokerConnection.id.asc())
+            ).scalars().all()
+            ledger_rows = session.execute(
+                select(PhaseFPortfolioLedger)
+                .where(PhaseFPortfolioLedger.portfolio_account_id == resolved_account_id)
+                .order_by(PhaseFPortfolioLedger.event_time.asc(), PhaseFPortfolioLedger.id.asc())
+            ).scalars().all()
+            position_rows = session.execute(
+                select(PhaseFPortfolioPosition)
+                .where(PhaseFPortfolioPosition.portfolio_account_id == resolved_account_id)
+                .order_by(
+                    PhaseFPortfolioPosition.source_kind.asc(),
+                    PhaseFPortfolioPosition.cost_method.asc(),
+                    PhaseFPortfolioPosition.canonical_symbol.asc(),
+                    PhaseFPortfolioPosition.id.asc(),
+                )
+            ).scalars().all()
+            sync_state_row = session.execute(
+                select(PhaseFPortfolioSyncState)
+                .where(PhaseFPortfolioSyncState.portfolio_account_id == resolved_account_id)
+                .order_by(PhaseFPortfolioSyncState.synced_at.desc(), PhaseFPortfolioSyncState.id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+
+            sync_position_rows: list[Any] = []
+            sync_cash_balance_rows: list[Any] = []
+            if sync_state_row is not None:
+                sync_position_rows = session.execute(
+                    select(PhaseFPortfolioSyncPosition)
+                    .where(PhaseFPortfolioSyncPosition.portfolio_sync_state_id == int(sync_state_row.id))
+                    .order_by(PhaseFPortfolioSyncPosition.canonical_symbol.asc(), PhaseFPortfolioSyncPosition.id.asc())
+                ).scalars().all()
+                sync_cash_balance_rows = session.execute(
+                    select(PhaseFPortfolioSyncCashBalance)
+                    .where(PhaseFPortfolioSyncCashBalance.portfolio_sync_state_id == int(sync_state_row.id))
+                    .order_by(PhaseFPortfolioSyncCashBalance.currency.asc(), PhaseFPortfolioSyncCashBalance.id.asc())
+                ).scalars().all()
+
+            return {
+                "account": self._serialize_account_row(account_row),
+                "broker_connections": [self._serialize_broker_connection_row(row) for row in broker_connection_rows],
+                "ledger": [self._serialize_ledger_row(row) for row in ledger_rows],
+                "positions": [self._serialize_position_row(row) for row in position_rows],
+                "sync_state": self._serialize_sync_state_row(sync_state_row) if sync_state_row is not None else None,
+                "sync_positions": [self._serialize_sync_position_row(row) for row in sync_position_rows],
+                "sync_cash_balances": [
+                    self._serialize_sync_cash_balance_row(row)
+                    for row in sync_cash_balance_rows
+                ],
+            }
 
     def clear_non_bootstrap_state(self, user_ids: Iterable[str]) -> dict[str, int]:
         normalized_user_ids = sorted({str(user_id or "").strip() for user_id in user_ids if str(user_id or "").strip()})

@@ -2682,13 +2682,28 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         )
 
         with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
+            service.repo,
+            "query_trades",
+            wraps=service.repo.query_trades,
+        ) as legacy_query, patch.object(
+            service.repo.db,
+            "get_phase_f_trade_list_comparison_candidate",
+            wraps=service.repo.db.get_phase_f_trade_list_comparison_candidate,
+        ) as pg_candidate_loader, patch.object(
             service,
-            "_maybe_run_phase_f_trade_list_comparison",
-            wraps=service._maybe_run_phase_f_trade_list_comparison,
-        ) as comparison_hook:
+            "_load_phase_f_trade_list_comparison_candidate",
+            wraps=service._load_phase_f_trade_list_comparison_candidate,
+        ) as comparison_loader, patch.object(
+            service,
+            "_emit_phase_f_trade_list_comparison_report",
+            wraps=service._emit_phase_f_trade_list_comparison_report,
+        ) as report_emitter:
             result = service.list_trade_events(account_id=account["id"], page=1, page_size=20)
 
-        self.assertEqual(comparison_hook.call_count, 1)
+        self.assertEqual(legacy_query.call_count, 1)
+        self.assertEqual(pg_candidate_loader.call_count, 1)
+        self.assertEqual(comparison_loader.call_count, 1)
+        self.assertEqual(report_emitter.call_count, 0)
         self.assertEqual(result, {
             "items": [result["items"][0]],
             "total": 1,
@@ -2714,6 +2729,103 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 "created_at": result["items"][0]["created_at"],
             },
         )
+
+    def test_phase_f_trade_list_comparison_mode_pg_payload_mismatch_emits_bounded_report_and_serves_legacy(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="trade-compare-mismatch-user", username="trade-compare-mismatch-user")
+        service = PortfolioService(owner_id="trade-compare-mismatch-user")
+
+        account = service.create_account(name="Compare Mismatch", broker="IBKR", market="us", base_currency="USD")
+        trade = service.record_trade(
+            account_id=account["id"],
+            symbol="AAPL",
+            trade_date=date(2026, 4, 15),
+            side="buy",
+            quantity=3.0,
+            price=175.0,
+            market="us",
+            currency="USD",
+        )
+
+        with db._phase_f_store.session_scope() as session:
+            row = session.execute(
+                select(PhaseFPortfolioLedger).where(
+                    PhaseFPortfolioLedger.portfolio_account_id == account["id"],
+                    PhaseFPortfolioLedger.entry_type == "trade",
+                )
+            ).scalar_one()
+            row.price = 176.0
+            payload = dict(row.payload_json or {})
+            payload["price"] = 176.0
+            row.payload_json = payload
+
+        mismatch_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
+            service.repo.db,
+            "get_phase_f_trade_list_comparison_candidate",
+            wraps=service.repo.db.get_phase_f_trade_list_comparison_candidate,
+        ) as pg_candidate_loader, patch.object(
+            service,
+            "_emit_phase_f_trade_list_comparison_report",
+            side_effect=lambda report: mismatch_report.update(report),
+        ) as report_emitter:
+            result = service.list_trade_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual([item["symbol"] for item in result["items"]], ["AAPL"])
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["id"], trade["id"])
+        self.assertEqual(result["items"][0]["price"], 175.0)
+        self.assertEqual(pg_candidate_loader.call_count, 1)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(mismatch_report["mismatch_class"], "payload_field_mismatch")
+        self.assertEqual(mismatch_report["blocking_level"], "hard_blocking")
+        self.assertEqual(mismatch_report["fallback_decision"], "served_legacy_due_to_mismatch")
+        self.assertEqual(mismatch_report["request_context"]["account_id"], account["id"])
+        self.assertEqual(mismatch_report["legacy_summary"]["total"], 1)
+        self.assertEqual(mismatch_report["pg_summary"]["total"], 1)
+        self.assertEqual(mismatch_report["first_mismatch_position"], 0)
+        self.assertEqual(mismatch_report["first_mismatch_field"], "price")
+        self.assertEqual(mismatch_report["first_legacy_value"], 175.0)
+        self.assertEqual(mismatch_report["first_pg_value"], 176.0)
+
+    def test_phase_f_trade_list_comparison_mode_query_failure_still_serves_legacy(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="trade-compare-failure-user", username="trade-compare-failure-user")
+        service = PortfolioService(owner_id="trade-compare-failure-user")
+
+        account = service.create_account(name="Compare Failure", broker="IBKR", market="us", base_currency="USD")
+        service.record_trade(
+            account_id=account["id"],
+            symbol="TSLA",
+            trade_date=date(2026, 4, 16),
+            side="buy",
+            quantity=1.0,
+            price=250.0,
+            market="us",
+            currency="USD",
+        )
+
+        failure_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_trades_list_comparison", True), patch.object(
+            service.repo.db,
+            "get_phase_f_trade_list_comparison_candidate",
+            side_effect=RuntimeError("comparison source unavailable"),
+        ), patch.object(
+            service,
+            "_emit_phase_f_trade_list_comparison_report",
+            side_effect=lambda report: failure_report.update(report),
+        ) as report_emitter:
+            result = service.list_trade_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual([item["symbol"] for item in result["items"]], ["TSLA"])
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(failure_report["mismatch_class"], "query_failure")
+        self.assertEqual(failure_report["fallback_decision"], "served_legacy_due_to_query_failure")
+        self.assertEqual(failure_report["query_failure_detail"], "comparison source unavailable")
+        self.assertIsNone(failure_report["pg_summary"])
 
     def test_phase_f_trade_list_comparison_mode_does_not_affect_other_event_history_endpoints(self) -> None:
         db = self._db()
