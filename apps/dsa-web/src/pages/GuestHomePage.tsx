@@ -246,7 +246,7 @@ const GuestHomePage: React.FC = () => {
                     <p className="mt-1 text-xs leading-5 text-muted-text">
                       {language === 'en'
                         ? 'Create a personal workspace with saved reports, account-aware chat, watchlists, backtests, and portfolio data.'
-                        : '创建个人工作区后，完整报告、问股、watchlist、回测与持仓都会按账户归属保存。'}
+                        : '创建个人工作区后，完整报告、问股、观察名单、回测与持仓都会按账户归属保存。'}
                     </p>
                   </div>
                 </div>
@@ -318,7 +318,7 @@ const GuestHomePage: React.FC = () => {
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
               ? 'Guest previews do not create a personal owner record and do not unlock cross-page stateful workflows.'
-              : '游客预览不会创建个人 owner 记录，也不会解锁跨页面的持久化工作流。'}
+              : '游客预览不会创建个人账户归属记录，也不会解锁跨页面的持久化工作流。'}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
@@ -328,7 +328,7 @@ const GuestHomePage: React.FC = () => {
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
               ? 'System configuration, schedules, notification channels, and operator logs remain outside the guest surface.'
-              : '系统配置、调度、通知通道与运营日志仍然留在 guest surface 之外。'}
+              : '系统配置、调度、通知通道与运营日志仍然保留在游客界面之外。'}
           </div>
         </div>
       </Card>
