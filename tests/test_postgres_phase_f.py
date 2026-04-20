@@ -7,7 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -50,6 +50,7 @@ def _reset_auth_globals() -> None:
 
 class PostgresPhaseFStorageTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        PortfolioService.clear_phase_f_trade_list_comparison_reports()
         _reset_auth_globals()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.temp_dir.name)
@@ -59,6 +60,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self._configure_environment(enable_phase_f=True)
 
     def tearDown(self) -> None:
+        PortfolioService.clear_phase_f_trade_list_comparison_reports()
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
@@ -2982,6 +2984,500 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertIsNone(report["pg_summary"])
         self.assertIsNone(report["first_mismatch_position"])
         self.assertIsNone(report["first_mismatch_field"])
+
+    def test_phase_f_trade_list_comparison_ignores_created_at_timezone_format_only_drift(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="created-at-tz-user", username="created-at-tz-user")
+        service = PortfolioService(owner_id="created-at-tz-user")
+
+        mismatch = service._compare_phase_f_trade_list_results(
+            legacy_view={
+                "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                "total": 1,
+                "items": [
+                    {
+                        "id": 11,
+                        "account_id": 1,
+                        "trade_uid": None,
+                        "symbol": "AAPL",
+                        "market": "us",
+                        "currency": "USD",
+                        "trade_date": "2026-04-21",
+                        "side": "buy",
+                        "quantity": 10.0,
+                        "price": 100.0,
+                        "fee": 0.0,
+                        "tax": 0.0,
+                        "note": "seed",
+                        "created_at": "2026-04-21T00:49:23.107279",
+                    }
+                ],
+            },
+            candidate_view={
+                "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                "total": 1,
+                "items": [
+                    {
+                        "id": 11,
+                        "account_id": 1,
+                        "trade_uid": None,
+                        "symbol": "AAPL",
+                        "market": "us",
+                        "currency": "USD",
+                        "trade_date": "2026-04-21",
+                        "side": "buy",
+                        "quantity": 10.0,
+                        "price": 100.0,
+                        "fee": 0.0,
+                        "tax": 0.0,
+                        "note": "seed",
+                        "created_at": datetime(
+                            2026,
+                            4,
+                            21,
+                            0,
+                            49,
+                            23,
+                            107279,
+                            tzinfo=timezone(timedelta(hours=8)),
+                        ).isoformat(),
+                    }
+                ],
+            },
+        )
+
+        self.assertIsNone(mismatch)
+
+    def test_phase_f_trade_list_comparison_still_detects_real_created_at_payload_mismatch(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="created-at-real-drift-user", username="created-at-real-drift-user")
+        service = PortfolioService(owner_id="created-at-real-drift-user")
+
+        mismatch = service._compare_phase_f_trade_list_results(
+            legacy_view={
+                "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                "total": 1,
+                "items": [
+                    {
+                        "id": 11,
+                        "account_id": 1,
+                        "trade_uid": None,
+                        "symbol": "AAPL",
+                        "market": "us",
+                        "currency": "USD",
+                        "trade_date": "2026-04-21",
+                        "side": "buy",
+                        "quantity": 10.0,
+                        "price": 100.0,
+                        "fee": 0.0,
+                        "tax": 0.0,
+                        "note": "seed",
+                        "created_at": "2026-04-21T00:49:23.107279",
+                    }
+                ],
+            },
+            candidate_view={
+                "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                "total": 1,
+                "items": [
+                    {
+                        "id": 11,
+                        "account_id": 1,
+                        "trade_uid": None,
+                        "symbol": "AAPL",
+                        "market": "us",
+                        "currency": "USD",
+                        "trade_date": "2026-04-21",
+                        "side": "buy",
+                        "quantity": 10.0,
+                        "price": 100.0,
+                        "fee": 0.0,
+                        "tax": 0.0,
+                        "note": "seed",
+                        "created_at": "2026-04-21T00:49:24.107279+08:00",
+                    }
+                ],
+            },
+        )
+
+        self.assertIsNotNone(mismatch)
+        self.assertEqual(mismatch["mismatch_class"], "payload_field_mismatch")
+        self.assertEqual(mismatch["first_mismatch_field"], "created_at")
+
+    def test_phase_f_trade_list_comparison_still_detects_ordering_mismatch_after_created_at_normalization(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="ordering-user", username="ordering-user")
+        service = PortfolioService(owner_id="ordering-user")
+
+        mismatch = service._compare_phase_f_trade_list_results(
+            legacy_view={
+                "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                "total": 2,
+                "items": [
+                    {"id": 21, "account_id": 1, "created_at": "2026-04-21T00:49:23.107279"},
+                    {"id": 20, "account_id": 1, "created_at": "2026-04-21T00:49:22.107279"},
+                ],
+            },
+            candidate_view={
+                "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                "total": 2,
+                "items": [
+                    {"id": 20, "account_id": 1, "created_at": "2026-04-21T00:49:22.107279+08:00"},
+                    {"id": 21, "account_id": 1, "created_at": "2026-04-21T00:49:23.107279+08:00"},
+                ],
+            },
+        )
+
+        self.assertIsNotNone(mismatch)
+        self.assertEqual(mismatch["mismatch_class"], "ordering_mismatch")
+        self.assertEqual(mismatch["first_mismatch_field"], "id")
+        self.assertEqual(mismatch["first_mismatch_position"], 0)
+
+    def test_phase_f_trade_list_comparison_evidence_summary_aggregates_statuses_classes_and_account_coverage(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="evidence-user", username="evidence-user")
+        service = PortfolioService(owner_id="evidence-user")
+
+        reports = [
+            service._build_phase_f_trade_list_comparison_report(
+                comparison_status="matched",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_after_match",
+                comparison_source="phase_f_pg_trade_list_candidate",
+                comparison_skip_reason=None,
+                mismatch_class=None,
+                blocking_level="not_applicable",
+                fallback_decision="legacy_served_after_match",
+                request_context={"account_id": 101, "page": 1, "page_size": 20},
+                legacy_summary={"total": 2, "page_item_count": 2, "ordered_ids": [11, 10]},
+                pg_summary={"total": 2, "page_item_count": 2, "ordered_ids": [11, 10]},
+            ),
+            service._build_phase_f_trade_list_comparison_report(
+                comparison_status="mismatch",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_due_to_mismatch",
+                comparison_source="phase_f_pg_trade_list_candidate",
+                comparison_skip_reason=None,
+                mismatch_class="payload_field_mismatch",
+                blocking_level="hard_blocking",
+                fallback_decision="served_legacy_due_to_mismatch",
+                request_context={"account_id": 102, "page": 1, "page_size": 20},
+                legacy_summary={"total": 1, "page_item_count": 1, "ordered_ids": [21]},
+                pg_summary={"total": 1, "page_item_count": 1, "ordered_ids": [21]},
+                first_mismatch_position=0,
+                first_mismatch_field="price",
+                first_legacy_value=10.0,
+                first_pg_value=11.0,
+            ),
+            service._build_phase_f_trade_list_comparison_report(
+                comparison_status="query_failure",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_due_to_query_failure",
+                comparison_source="phase_f_pg_trade_list_candidate",
+                comparison_skip_reason=None,
+                mismatch_class="query_failure",
+                blocking_level="hard_blocking",
+                fallback_decision="served_legacy_due_to_query_failure",
+                request_context={"account_id": 102, "page": 2, "page_size": 20},
+                legacy_summary={"total": 1, "page_item_count": 0, "ordered_ids": []},
+                query_failure_detail="comparison source unavailable",
+            ),
+            service._build_phase_f_trade_list_comparison_report(
+                comparison_status="skipped",
+                comparison_attempted=False,
+                comparison_decision="legacy_served_without_comparison",
+                comparison_source="phase_f_pg_trade_list_candidate",
+                comparison_skip_reason="account_not_allowlisted",
+                mismatch_class=None,
+                blocking_level="not_applicable",
+                fallback_decision="legacy_served_without_comparison",
+                request_context={"account_id": 999, "page": 1, "page_size": 20},
+                legacy_summary={"total": 0, "page_item_count": 0, "ordered_ids": []},
+            ),
+            service._build_phase_f_trade_list_comparison_report(
+                comparison_status="matched",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_after_match",
+                comparison_source="phase_f_pg_trade_list_candidate",
+                comparison_skip_reason=None,
+                mismatch_class=None,
+                blocking_level="not_applicable",
+                fallback_decision="legacy_served_after_match",
+                request_context={"account_id": 103, "page": 1, "page_size": 20},
+                legacy_summary={"total": 3, "page_item_count": 3, "ordered_ids": [33, 32, 31]},
+                pg_summary={"total": 3, "page_item_count": 3, "ordered_ids": [33, 32, 31]},
+            ),
+        ]
+
+        summary = service._build_phase_f_trade_list_comparison_evidence_summary(
+            reports=reports,
+            allowlisted_account_ids=[101, 102, 104],
+        )
+
+        self.assertEqual(summary["summary_model"], "phase_f_trades_list_comparison_evidence_summary_v1")
+        self.assertEqual(summary["candidate"], "portfolio_trades_list")
+        self.assertEqual(summary["total_reports"], 5)
+        self.assertEqual(summary["total_attempted"], 4)
+        self.assertEqual(summary["total_skipped"], 1)
+        self.assertEqual(summary["total_matched"], 2)
+        self.assertEqual(summary["total_mismatched"], 1)
+        self.assertEqual(summary["total_query_failures"], 1)
+        self.assertEqual(summary["mismatch_counts_by_class"], {"payload_field_mismatch": 1})
+        self.assertEqual(summary["query_failure_count"], 1)
+        self.assertEqual(summary["compared_account_ids"], [101, 102, 103])
+        self.assertEqual(summary["skipped_account_ids"], [999])
+        self.assertEqual(summary["allowlisted_account_ids"], [101, 102, 104])
+        self.assertEqual(summary["uncovered_allowlisted_account_ids"], [104])
+        self.assertTrue(summary["hard_blocking_mismatch_observed"])
+        self.assertEqual(summary["hard_blocking_mismatch_classes"], ["payload_field_mismatch"])
+        self.assertTrue(summary["evidence_is_thin"])
+
+    def test_phase_f_trade_list_comparison_evidence_summary_ignores_non_trades_list_reports(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="evidence-ignore-user", username="evidence-ignore-user")
+        service = PortfolioService(owner_id="evidence-ignore-user")
+
+        reports = [
+            service._build_phase_f_trade_list_comparison_report(
+                comparison_status="matched",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_after_match",
+                comparison_source="phase_f_pg_trade_list_candidate",
+                comparison_skip_reason=None,
+                mismatch_class=None,
+                blocking_level="not_applicable",
+                fallback_decision="legacy_served_after_match",
+                request_context={"account_id": 201, "page": 1, "page_size": 20},
+                legacy_summary={"total": 1, "page_item_count": 1, "ordered_ids": [1]},
+                pg_summary={"total": 1, "page_item_count": 1, "ordered_ids": [1]},
+            ),
+            {
+                "report_model": "phase_f_cash_ledger_comparison_diagnostic_v1",
+                "candidate": "portfolio_cash_ledger_list",
+                "comparison_status": "mismatch",
+                "comparison_attempted": True,
+                "mismatch_class": "count_mismatch",
+                "request_context": {"account_id": 999},
+            },
+        ]
+
+        summary = service._build_phase_f_trade_list_comparison_evidence_summary(reports=reports)
+
+        self.assertEqual(summary["total_reports"], 1)
+        self.assertEqual(summary["total_attempted"], 1)
+        self.assertEqual(summary["total_matched"], 1)
+        self.assertEqual(summary["total_mismatched"], 0)
+        self.assertEqual(summary["compared_account_ids"], [201])
+
+    def test_phase_f_trade_list_promotion_readiness_review_stays_blocked_when_evidence_is_thin(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="review-thin-user", username="review-thin-user")
+        service = PortfolioService(owner_id="review-thin-user")
+
+        review = service._build_phase_f_trade_list_promotion_readiness_review(
+            evidence_summary={
+                "summary_model": "phase_f_trades_list_comparison_evidence_summary_v1",
+                "candidate": "portfolio_trades_list",
+                "total_reports": 1,
+                "total_attempted": 1,
+                "total_skipped": 0,
+                "total_matched": 1,
+                "total_mismatched": 0,
+                "total_query_failures": 0,
+                "mismatch_counts_by_class": {},
+                "query_failure_count": 0,
+                "compared_account_ids": [101],
+                "skipped_account_ids": [],
+                "allowlisted_account_ids": [101, 102],
+                "uncovered_allowlisted_account_ids": [102],
+                "hard_blocking_mismatch_observed": False,
+                "hard_blocking_mismatch_classes": [],
+                "evidence_is_thin": True,
+            }
+        )
+
+        self.assertEqual(review["review_model"], "phase_f_trades_list_promotion_readiness_review_v1")
+        self.assertEqual(review["candidate"], "portfolio_trades_list")
+        self.assertEqual(review["review_status"], "blocked")
+        self.assertFalse(review["promotion_discussion_ready"])
+        self.assertTrue(review["evidence_is_thin"])
+        self.assertEqual(
+            review["blocking_reasons"],
+            ["evidence_still_thin", "allowlisted_account_coverage_incomplete"],
+        )
+
+    def test_phase_f_trade_list_promotion_readiness_review_surfaces_mismatch_and_query_failure_blockers(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="review-blocked-user", username="review-blocked-user")
+        service = PortfolioService(owner_id="review-blocked-user")
+
+        review = service._build_phase_f_trade_list_promotion_readiness_review(
+            evidence_summary={
+                "summary_model": "phase_f_trades_list_comparison_evidence_summary_v1",
+                "candidate": "portfolio_trades_list",
+                "total_reports": 5,
+                "total_attempted": 5,
+                "total_skipped": 0,
+                "total_matched": 3,
+                "total_mismatched": 1,
+                "total_query_failures": 1,
+                "mismatch_counts_by_class": {"payload_field_mismatch": 1},
+                "query_failure_count": 1,
+                "compared_account_ids": [101, 102],
+                "skipped_account_ids": [],
+                "allowlisted_account_ids": [101, 102],
+                "uncovered_allowlisted_account_ids": [],
+                "hard_blocking_mismatch_observed": True,
+                "hard_blocking_mismatch_classes": ["payload_field_mismatch"],
+                "evidence_is_thin": False,
+            }
+        )
+
+        self.assertEqual(review["review_status"], "blocked")
+        self.assertFalse(review["promotion_discussion_ready"])
+        self.assertFalse(review["evidence_is_thin"])
+        self.assertEqual(
+            review["blocking_reasons"],
+            ["hard_blocking_mismatches_observed", "query_failures_observed"],
+        )
+        self.assertEqual(review["hard_blocking_mismatch_classes"], ["payload_field_mismatch"])
+        self.assertTrue(review["query_failures_observed"])
+
+    def test_phase_f_trade_list_promotion_readiness_review_can_unblock_discussion_without_implying_pg_serving(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="review-clear-user", username="review-clear-user")
+        service = PortfolioService(owner_id="review-clear-user")
+
+        review = service._build_phase_f_trade_list_promotion_readiness_review(
+            evidence_summary={
+                "summary_model": "phase_f_trades_list_comparison_evidence_summary_v1",
+                "candidate": "portfolio_trades_list",
+                "total_reports": 6,
+                "total_attempted": 6,
+                "total_skipped": 0,
+                "total_matched": 6,
+                "total_mismatched": 0,
+                "total_query_failures": 0,
+                "mismatch_counts_by_class": {},
+                "query_failure_count": 0,
+                "compared_account_ids": [101, 102],
+                "skipped_account_ids": [],
+                "allowlisted_account_ids": [101, 102],
+                "uncovered_allowlisted_account_ids": [],
+                "hard_blocking_mismatch_observed": False,
+                "hard_blocking_mismatch_classes": [],
+                "evidence_is_thin": False,
+            }
+        )
+
+        self.assertEqual(review["review_status"], "reviewable_for_promotion_discussion")
+        self.assertTrue(review["promotion_discussion_ready"])
+        self.assertEqual(review["blocking_reasons"], [])
+        self.assertFalse(review["pg_serving_ready"])
+        self.assertEqual(review["serving_readiness"], "not_evaluated_by_this_review")
+
+    def test_phase_f_trade_list_comparison_collector_aggregates_emitted_reports_for_summary_and_review(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="collector-user", username="collector-user")
+        service = PortfolioService(owner_id="collector-user")
+
+        with patch("src.services.portfolio_service.logger") as logger_mock:
+            service._emit_phase_f_trade_list_comparison_report(
+                service._build_phase_f_trade_list_comparison_report(
+                    comparison_status="matched",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_after_match",
+                    comparison_source="phase_f_pg_trade_list_candidate",
+                    comparison_skip_reason=None,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_after_match",
+                    request_context={"account_id": 301, "page": 1, "page_size": 20},
+                    legacy_summary={"total": 1, "page_item_count": 1, "ordered_ids": [7]},
+                    pg_summary={"total": 1, "page_item_count": 1, "ordered_ids": [7]},
+                )
+            )
+            service._emit_phase_f_trade_list_comparison_report(
+                service._build_phase_f_trade_list_comparison_report(
+                    comparison_status="query_failure",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_due_to_query_failure",
+                    comparison_source="phase_f_pg_trade_list_candidate",
+                    comparison_skip_reason=None,
+                    mismatch_class="query_failure",
+                    blocking_level="hard_blocking",
+                    fallback_decision="served_legacy_due_to_query_failure",
+                    request_context={"account_id": 302, "page": 1, "page_size": 20},
+                    legacy_summary={"total": 0, "page_item_count": 0, "ordered_ids": []},
+                    query_failure_detail="comparison source unavailable",
+                )
+            )
+            service._emit_phase_f_trade_list_comparison_report(
+                {
+                    "report_model": "phase_f_cash_ledger_comparison_diagnostic_v1",
+                    "candidate": "portfolio_cash_ledger_list",
+                    "comparison_status": "mismatch",
+                    "comparison_attempted": True,
+                    "mismatch_class": "count_mismatch",
+                    "request_context": {"account_id": 999},
+                }
+            )
+
+        collected_reports = service.get_phase_f_trade_list_comparison_reports()
+        self.assertEqual(len(collected_reports), 2)
+        self.assertEqual([item["comparison_status"] for item in collected_reports], ["matched", "query_failure"])
+        self.assertEqual(logger_mock.info.call_count, 1)
+        self.assertEqual(logger_mock.warning.call_count, 2)
+
+        summary = service._build_phase_f_trade_list_comparison_evidence_summary_from_collected_reports(
+            allowlisted_account_ids=[301, 302, 303],
+        )
+        review = service._build_phase_f_trade_list_promotion_readiness_review_from_collected_reports(
+            allowlisted_account_ids=[301, 302, 303],
+        )
+
+        self.assertEqual(summary["total_reports"], 2)
+        self.assertEqual(summary["total_matched"], 1)
+        self.assertEqual(summary["total_query_failures"], 1)
+        self.assertEqual(summary["compared_account_ids"], [301, 302])
+        self.assertEqual(summary["uncovered_allowlisted_account_ids"], [303])
+        self.assertTrue(summary["evidence_is_thin"])
+        self.assertEqual(review["review_status"], "blocked")
+        self.assertIn("evidence_still_thin", review["blocking_reasons"])
+        self.assertIn("allowlisted_account_coverage_incomplete", review["blocking_reasons"])
+        self.assertIn("query_failures_observed", review["blocking_reasons"])
+
+    def test_phase_f_trade_list_comparison_collector_is_trades_only_and_clearable(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="collector-clear-user", username="collector-clear-user")
+        service = PortfolioService(owner_id="collector-clear-user")
+
+        service._collect_phase_f_trade_list_comparison_report(
+            service._build_phase_f_trade_list_comparison_report(
+                comparison_status="skipped",
+                comparison_attempted=False,
+                comparison_decision="legacy_served_without_comparison",
+                comparison_source="phase_f_pg_trade_list_candidate",
+                comparison_skip_reason="account_not_allowlisted",
+                mismatch_class=None,
+                blocking_level="not_applicable",
+                fallback_decision="legacy_served_without_comparison",
+                request_context={"account_id": 401, "page": 1, "page_size": 20},
+                legacy_summary={"total": 0, "page_item_count": 0, "ordered_ids": []},
+            )
+        )
+        service._collect_phase_f_trade_list_comparison_report(
+            {
+                "report_model": "phase_f_snapshot_cache_comparison_diagnostic_v1",
+                "candidate": "portfolio_snapshot_cache",
+                "comparison_status": "matched",
+            }
+        )
+
+        self.assertEqual(len(service.get_phase_f_trade_list_comparison_reports()), 1)
+
+        PortfolioService.clear_phase_f_trade_list_comparison_reports()
+        self.assertEqual(service.get_phase_f_trade_list_comparison_reports(), [])
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
@@ -78,6 +78,11 @@ class _AvgState:
 class PortfolioService:
     """Business logic for account CRUD, event writes, and snapshot replay."""
 
+    _phase_f_trade_list_comparison_report_limit = 200
+    _phase_f_trade_list_comparison_report_buffer: deque[Dict[str, Any]] = deque(
+        maxlen=_phase_f_trade_list_comparison_report_limit
+    )
+
     def __init__(
         self,
         repo: Optional[PortfolioRepository] = None,
@@ -88,6 +93,14 @@ class PortfolioService:
         self.repo = repo or PortfolioRepository()
         self.owner_id = owner_id
         self.include_all_owners = bool(include_all_owners)
+
+    @classmethod
+    def clear_phase_f_trade_list_comparison_reports(cls) -> None:
+        cls._phase_f_trade_list_comparison_report_buffer.clear()
+
+    @classmethod
+    def get_phase_f_trade_list_comparison_reports(cls) -> List[Dict[str, Any]]:
+        return [dict(report) for report in list(cls._phase_f_trade_list_comparison_report_buffer)]
 
     def _owner_kwargs(self) -> Dict[str, Any]:
         return {
@@ -950,7 +963,13 @@ class PortfolioService:
             for field_name in contract_fields:
                 legacy_value = legacy_item.get(field_name)
                 candidate_value = candidate_item.get(field_name)
-                if legacy_value == candidate_value:
+                if self._normalize_phase_f_trade_list_compare_value(
+                    field_name=field_name,
+                    value=legacy_value,
+                ) == self._normalize_phase_f_trade_list_compare_value(
+                    field_name=field_name,
+                    value=candidate_value,
+                ):
                     continue
                 mismatch_class = "owner_scope_mismatch" if field_name == "account_id" else "payload_field_mismatch"
                 return {
@@ -963,6 +982,38 @@ class PortfolioService:
                 }
         return None
 
+    @staticmethod
+    def _normalize_phase_f_trade_list_compare_value(
+        *,
+        field_name: str,
+        value: Any,
+    ) -> Any:
+        if field_name != "created_at":
+            return value
+        return PortfolioService._normalize_phase_f_trade_list_created_at_compare_value(value)
+
+    @staticmethod
+    def _normalize_phase_f_trade_list_created_at_compare_value(value: Any) -> Any:
+        if value is None:
+            return None
+        parsed: Optional[datetime] = None
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            raw_value = value.strip()
+            if not raw_value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(raw_value)
+            except ValueError:
+                return value
+        else:
+            return value
+
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed.isoformat()
+
     def _summarize_phase_f_trade_list_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
         items = list((result_view or {}).get("items", []) or [])
         return {
@@ -974,12 +1025,22 @@ class PortfolioService:
         }
 
     def _emit_phase_f_trade_list_comparison_report(self, report: Dict[str, Any]) -> None:
+        self._collect_phase_f_trade_list_comparison_report(report)
         comparison_status = str((report or {}).get("comparison_status") or "").strip().lower()
         message = json.dumps(report, ensure_ascii=True, sort_keys=True, default=str)
         if comparison_status in {"mismatch", "query_failure"}:
             logger.warning("Phase F trades-list comparison diagnostic: %s", message)
             return
         logger.info("Phase F trades-list comparison diagnostic: %s", message)
+
+    def _collect_phase_f_trade_list_comparison_report(self, report: Dict[str, Any]) -> None:
+        if not isinstance(report, dict):
+            return
+        if str(report.get("candidate") or "").strip() != "portfolio_trades_list":
+            return
+        if not str(report.get("report_model") or "").strip().startswith("phase_f_trades_list_comparison_"):
+            return
+        self.__class__._phase_f_trade_list_comparison_report_buffer.append(dict(report))
 
     def _build_phase_f_trade_list_comparison_report(
         self,
@@ -1065,6 +1126,175 @@ class PortfolioService:
             first_legacy_value=first_legacy_value,
             first_pg_value=first_pg_value,
             query_failure_detail=query_failure_detail,
+        )
+
+    def _build_phase_f_trade_list_comparison_evidence_summary(
+        self,
+        *,
+        reports: List[Dict[str, Any]],
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        relevant_reports: List[Dict[str, Any]] = []
+        for report in list(reports or []):
+            if not isinstance(report, dict):
+                continue
+            if str(report.get("candidate") or "").strip() != "portfolio_trades_list":
+                continue
+            if not str(report.get("report_model") or "").strip().startswith("phase_f_trades_list_comparison_"):
+                continue
+            relevant_reports.append(dict(report))
+
+        status_counts = {
+            "skipped": 0,
+            "matched": 0,
+            "mismatch": 0,
+            "query_failure": 0,
+        }
+        mismatch_counts_by_class: Dict[str, int] = {}
+        compared_account_ids: Set[int] = set()
+        skipped_account_ids: Set[int] = set()
+        hard_blocking_mismatch_classes: Set[str] = set()
+
+        for report in relevant_reports:
+            comparison_status = str(report.get("comparison_status") or "").strip().lower()
+            if comparison_status in status_counts:
+                status_counts[comparison_status] += 1
+
+            request_context = dict(report.get("request_context") or {})
+            account_id = request_context.get("account_id")
+            resolved_account_id: Optional[int] = None
+            if account_id is not None:
+                try:
+                    resolved_account_id = int(account_id)
+                except (TypeError, ValueError):
+                    resolved_account_id = None
+
+            if bool(report.get("comparison_attempted")) and resolved_account_id is not None:
+                compared_account_ids.add(resolved_account_id)
+            if comparison_status == "skipped" and resolved_account_id is not None:
+                skipped_account_ids.add(resolved_account_id)
+
+            mismatch_class = str(report.get("mismatch_class") or "").strip()
+            if comparison_status == "mismatch" and mismatch_class:
+                mismatch_counts_by_class[mismatch_class] = mismatch_counts_by_class.get(mismatch_class, 0) + 1
+                if str(report.get("blocking_level") or "").strip().lower() == "hard_blocking":
+                    hard_blocking_mismatch_classes.add(mismatch_class)
+
+        normalized_allowlisted_account_ids = sorted(
+            {int(item) for item in list(allowlisted_account_ids or []) if item is not None}
+        )
+        uncovered_allowlisted_account_ids = sorted(
+            set(normalized_allowlisted_account_ids) - set(compared_account_ids)
+        )
+        total_attempted = status_counts["matched"] + status_counts["mismatch"] + status_counts["query_failure"]
+        evidence_is_thin = total_attempted == 0 or (
+            bool(normalized_allowlisted_account_ids) and bool(uncovered_allowlisted_account_ids)
+        )
+
+        return {
+            "summary_model": "phase_f_trades_list_comparison_evidence_summary_v1",
+            "candidate": "portfolio_trades_list",
+            "total_reports": len(relevant_reports),
+            "total_attempted": total_attempted,
+            "total_skipped": status_counts["skipped"],
+            "total_matched": status_counts["matched"],
+            "total_mismatched": status_counts["mismatch"],
+            "total_query_failures": status_counts["query_failure"],
+            "mismatch_counts_by_class": dict(sorted(mismatch_counts_by_class.items())),
+            "query_failure_count": status_counts["query_failure"],
+            "compared_account_ids": sorted(compared_account_ids),
+            "skipped_account_ids": sorted(skipped_account_ids),
+            "allowlisted_account_ids": normalized_allowlisted_account_ids,
+            "uncovered_allowlisted_account_ids": uncovered_allowlisted_account_ids,
+            "hard_blocking_mismatch_observed": bool(hard_blocking_mismatch_classes),
+            "hard_blocking_mismatch_classes": sorted(hard_blocking_mismatch_classes),
+            "evidence_is_thin": evidence_is_thin,
+        }
+
+    def _build_phase_f_trade_list_comparison_evidence_summary_from_collected_reports(
+        self,
+        *,
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        return self._build_phase_f_trade_list_comparison_evidence_summary(
+            reports=self.get_phase_f_trade_list_comparison_reports(),
+            allowlisted_account_ids=allowlisted_account_ids,
+        )
+
+    def _build_phase_f_trade_list_promotion_readiness_review(
+        self,
+        *,
+        evidence_summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        summary = dict(evidence_summary or {})
+        blocking_reasons: List[str] = []
+
+        evidence_is_thin = bool(summary.get("evidence_is_thin"))
+        if evidence_is_thin:
+            blocking_reasons.append("evidence_still_thin")
+
+        uncovered_allowlisted_account_ids = sorted(
+            {int(item) for item in list(summary.get("uncovered_allowlisted_account_ids") or []) if item is not None}
+        )
+        if uncovered_allowlisted_account_ids:
+            blocking_reasons.append("allowlisted_account_coverage_incomplete")
+
+        hard_blocking_mismatch_observed = bool(summary.get("hard_blocking_mismatch_observed"))
+        hard_blocking_mismatch_classes = sorted(
+            {str(item).strip() for item in list(summary.get("hard_blocking_mismatch_classes") or []) if str(item).strip()}
+        )
+        if hard_blocking_mismatch_observed:
+            blocking_reasons.append("hard_blocking_mismatches_observed")
+
+        total_query_failures = int(summary.get("total_query_failures", 0) or 0)
+        query_failures_observed = total_query_failures > 0
+        if query_failures_observed:
+            blocking_reasons.append("query_failures_observed")
+
+        promotion_discussion_ready = not blocking_reasons
+        review_status = "reviewable_for_promotion_discussion" if promotion_discussion_ready else "blocked"
+
+        return {
+            "review_model": "phase_f_trades_list_promotion_readiness_review_v1",
+            "candidate": str(summary.get("candidate") or "portfolio_trades_list").strip() or "portfolio_trades_list",
+            "evidence_summary_model": str(summary.get("summary_model") or "").strip() or None,
+            "review_status": review_status,
+            "promotion_discussion_ready": promotion_discussion_ready,
+            "pg_serving_ready": False,
+            "serving_readiness": "not_evaluated_by_this_review",
+            "evidence_is_thin": evidence_is_thin,
+            "allowlisted_account_coverage_incomplete": bool(uncovered_allowlisted_account_ids),
+            "uncovered_allowlisted_account_ids": uncovered_allowlisted_account_ids,
+            "hard_blocking_mismatch_observed": hard_blocking_mismatch_observed,
+            "hard_blocking_mismatch_classes": hard_blocking_mismatch_classes,
+            "query_failures_observed": query_failures_observed,
+            "blocking_reasons": blocking_reasons,
+            "summary_snapshot": {
+                "total_reports": int(summary.get("total_reports", 0) or 0),
+                "total_attempted": int(summary.get("total_attempted", 0) or 0),
+                "total_skipped": int(summary.get("total_skipped", 0) or 0),
+                "total_matched": int(summary.get("total_matched", 0) or 0),
+                "total_mismatched": int(summary.get("total_mismatched", 0) or 0),
+                "total_query_failures": total_query_failures,
+                "mismatch_counts_by_class": dict(summary.get("mismatch_counts_by_class") or {}),
+                "compared_account_ids": sorted(
+                    {int(item) for item in list(summary.get("compared_account_ids") or []) if item is not None}
+                ),
+                "allowlisted_account_ids": sorted(
+                    {int(item) for item in list(summary.get("allowlisted_account_ids") or []) if item is not None}
+                ),
+            },
+        }
+
+    def _build_phase_f_trade_list_promotion_readiness_review_from_collected_reports(
+        self,
+        *,
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        return self._build_phase_f_trade_list_promotion_readiness_review(
+            evidence_summary=self._build_phase_f_trade_list_comparison_evidence_summary_from_collected_reports(
+                allowlisted_account_ids=allowlisted_account_ids,
+            )
         )
 
     def list_cash_ledger_events(
