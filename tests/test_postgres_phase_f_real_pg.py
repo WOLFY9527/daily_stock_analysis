@@ -19,7 +19,7 @@ except ModuleNotFoundError:
     sys.modules["litellm"] = MagicMock()
 
 import src.auth as auth
-from api.v1.schemas.portfolio import PortfolioCashLedgerListResponse
+from api.v1.schemas.portfolio import PortfolioCashLedgerListResponse, PortfolioCorporateActionListResponse
 from src.config import Config
 from src.config import get_config
 from src.postgres_phase_f import (
@@ -474,6 +474,159 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
         self.assertEqual(summary["hard_blocking_issue_classes"], [])
         self.assertEqual(summary["evidence_strength"], "non_empty_sampled")
         self.assertFalse(summary["evidence_is_thin"])
+
+    def test_real_postgres_phase_f_corporate_actions_comparison_collects_bounded_non_empty_evidence(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(
+            user_id="real-pg-phase-f-corp-actions-compare-user",
+            username="real-pg-phase-f-corp-actions-compare-user",
+        )
+        service = PortfolioService(owner_id="real-pg-phase-f-corp-actions-compare-user")
+
+        account = service.create_account(
+            name="Real PG Corp Actions Compare",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        PortfolioService.clear_phase_f_corporate_actions_comparison_reports()
+        first_action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="AAPL",
+            effective_date=date(2026, 4, 1),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.25,
+            market="us",
+            currency="USD",
+            note="phase_f_corp_actions_non_empty_seed_1",
+        )
+        second_action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="AAPL",
+            effective_date=date(2026, 4, 2),
+            action_type="split_adjustment",
+            split_ratio=2.0,
+            market="us",
+            currency="USD",
+            note="phase_f_corp_actions_non_empty_seed_2",
+        )
+        third_action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="MSFT",
+            effective_date=date(2026, 4, 3),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.4,
+            market="us",
+            currency="USD",
+            note="phase_f_corp_actions_non_empty_seed_3",
+        )
+
+        with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
+            get_config(),
+            "phase_f_corporate_actions_comparison_account_ids",
+            [account["id"]],
+        ):
+            default_result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+            first_page_result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=1)
+            second_page_result = service.list_corporate_action_events(account_id=account["id"], page=2, page_size=1)
+            action_type_result = service.list_corporate_action_events(
+                account_id=account["id"],
+                action_type="cash_dividend",
+                page=1,
+                page_size=20,
+            )
+
+        reports = service.get_phase_f_corporate_actions_comparison_reports()
+
+        self.assertEqual(default_result["total"], 3)
+        self.assertEqual(
+            [item["id"] for item in default_result["items"]],
+            [third_action["id"], second_action["id"], first_action["id"]],
+        )
+        self.assertEqual(first_page_result["total"], 3)
+        self.assertEqual([item["id"] for item in first_page_result["items"]], [third_action["id"]])
+        self.assertEqual(second_page_result["total"], 3)
+        self.assertEqual([item["id"] for item in second_page_result["items"]], [second_action["id"]])
+        self.assertEqual(action_type_result["total"], 2)
+        self.assertEqual(
+            [item["id"] for item in action_type_result["items"]],
+            [third_action["id"], first_action["id"]],
+        )
+
+        for result in (default_result, first_page_result, second_page_result, action_type_result):
+            validated = PortfolioCorporateActionListResponse(**result)
+            self.assertTrue(validated.items)
+            self.assertEqual(validated.items[0].account_id, account["id"])
+
+        self.assertEqual(len(reports), 4)
+        self.assertEqual([report["comparison_status"] for report in reports], ["matched", "matched", "matched", "matched"])
+        self.assertEqual(
+            [report["request_context"] for report in reports],
+            [
+                {
+                    "account_id": account["id"],
+                    "date_from": None,
+                    "date_to": None,
+                    "symbol": None,
+                    "action_type": None,
+                    "page": 1,
+                    "page_size": 20,
+                },
+                {
+                    "account_id": account["id"],
+                    "date_from": None,
+                    "date_to": None,
+                    "symbol": None,
+                    "action_type": None,
+                    "page": 1,
+                    "page_size": 1,
+                },
+                {
+                    "account_id": account["id"],
+                    "date_from": None,
+                    "date_to": None,
+                    "symbol": None,
+                    "action_type": None,
+                    "page": 2,
+                    "page_size": 1,
+                },
+                {
+                    "account_id": account["id"],
+                    "date_from": None,
+                    "date_to": None,
+                    "symbol": None,
+                    "action_type": "cash_dividend",
+                    "page": 1,
+                    "page_size": 20,
+                },
+            ],
+        )
+        self.assertEqual(
+            [report["legacy_summary"]["ordered_ids"] for report in reports],
+            [
+                [third_action["id"], second_action["id"], first_action["id"]],
+                [third_action["id"]],
+                [second_action["id"]],
+                [third_action["id"], first_action["id"]],
+            ],
+        )
+        self.assertEqual(
+            [report["pg_summary"]["ordered_ids"] for report in reports],
+            [
+                [third_action["id"], second_action["id"], first_action["id"]],
+                [third_action["id"]],
+                [second_action["id"]],
+                [third_action["id"], first_action["id"]],
+            ],
+        )
+        self.assertTrue(all(report["comparison_attempted"] for report in reports))
+        self.assertTrue(all(report["comparison_decision"] == "legacy_served_after_match" for report in reports))
+        self.assertTrue(all(report["fallback_decision"] == "legacy_served_after_match" for report in reports))
+        self.assertTrue(all(report["comparison_source"] == "phase_f_pg_corporate_actions_candidate" for report in reports))
+        self.assertTrue(all(report["pg_source_available"] for report in reports))
+        self.assertTrue(all(report["mismatch_class"] is None for report in reports))
+        self.assertTrue(all(report["legacy_summary"]["page_item_count"] > 0 for report in reports))
+        self.assertTrue(all(report["pg_summary"]["page_item_count"] > 0 for report in reports))
 
 
 if __name__ == "__main__":
