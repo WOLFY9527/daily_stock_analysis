@@ -655,6 +655,20 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["shortlist"][0]["symbol"], "600001")
         self.assertEqual(detail["shortlist"][0]["appeared_in_recent_runs"], 0)
 
+    def test_run_scan_tolerates_cn_snapshot_missing_amount_column(self) -> None:
+        self.data_manager.snapshot = self.data_manager.snapshot.drop(columns=["amount"])
+
+        result = self.service.run_scan(
+            market="cn",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        self.assertEqual(result["market"], "cn")
+        self.assertEqual(result["status"], "completed")
+        self.assertGreaterEqual(len(result["shortlist"]), 1)
+
     def test_finalize_completed_scan_reuses_common_persistence_and_response_flow(self) -> None:
         service = MarketScannerService(
             self.db,

@@ -3805,14 +3805,23 @@ class MarketScannerService:
             "st_flag",
             ~filtered["name"].map(is_st_stock),
         )
-        filtered["price"] = pd.to_numeric(filtered.get("price"), errors="coerce")
-        filtered["amount"] = pd.to_numeric(filtered.get("amount"), errors="coerce").fillna(0.0)
-        filtered["volume"] = pd.to_numeric(filtered.get("volume"), errors="coerce").fillna(0.0)
-        filtered["turnover_rate"] = pd.to_numeric(filtered.get("turnover_rate"), errors="coerce").fillna(0.0)
-        filtered["volume_ratio"] = pd.to_numeric(filtered.get("volume_ratio"), errors="coerce").fillna(0.0)
-        filtered["amplitude"] = pd.to_numeric(filtered.get("amplitude"), errors="coerce").fillna(0.0)
-        filtered["change_pct"] = pd.to_numeric(filtered.get("change_pct"), errors="coerce").fillna(0.0)
-        filtered["change_60d"] = pd.to_numeric(filtered.get("change_60d"), errors="coerce").fillna(filtered["change_pct"])
+
+        def numeric_series(column: str) -> pd.Series:
+            if column in filtered.columns:
+                values = filtered[column]
+            else:
+                values = pd.Series(np.nan, index=filtered.index)
+            return pd.to_numeric(values, errors="coerce")
+
+        filtered["price"] = numeric_series("price")
+        filtered["volume"] = numeric_series("volume").fillna(0.0)
+        filtered["amount"] = numeric_series("amount").fillna(filtered["price"] * filtered["volume"])
+        filtered["amount"] = filtered["amount"].fillna(0.0)
+        filtered["turnover_rate"] = numeric_series("turnover_rate").fillna(0.0)
+        filtered["volume_ratio"] = numeric_series("volume_ratio").fillna(0.0)
+        filtered["amplitude"] = numeric_series("amplitude").fillna(0.0)
+        filtered["change_pct"] = numeric_series("change_pct").fillna(0.0)
+        filtered["change_60d"] = numeric_series("change_60d").fillna(filtered["change_pct"])
         filtered = apply_filter(
             filtered,
             "low_price",
