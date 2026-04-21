@@ -1374,7 +1374,7 @@ const PortfolioPage: React.FC = () => {
           <Disclosure summary="高级：手工录入与修正" defaultOpen={false}>
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：交易 / Trade</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：交易</h3>
                 <form className="space-y-2" onSubmit={handleTradeSubmit}>
                   <input className="input-terminal w-full text-sm" placeholder="股票代码（例如 600519）" value={tradeForm.symbol}
                     onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
@@ -1404,7 +1404,7 @@ const PortfolioPage: React.FC = () => {
               </Card>
 
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：资金 / Cash</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：资金</h3>
                 <form className="space-y-2" onSubmit={handleCashSubmit}>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input className="input-terminal text-sm" type="date" value={cashForm.eventDate}
@@ -1424,7 +1424,7 @@ const PortfolioPage: React.FC = () => {
               </Card>
 
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：公司行为 / Corp</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：公司行为</h3>
                 <form className="space-y-2" onSubmit={handleCorporateSubmit}>
                   <input className="input-terminal w-full text-sm" placeholder="股票代码" value={corpForm.symbol}
                     onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
