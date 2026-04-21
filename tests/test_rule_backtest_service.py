@@ -1072,6 +1072,263 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(annualized_delta["deltas"][0]["run_id"], int(first["id"]))
         self.assertEqual(annualized_delta["deltas"][0]["delta_vs_baseline"], 0.0)
 
+    def test_compare_runs_adds_identical_period_comparison_summary(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_window = ("2024-01-01", "2024-01-24")
+        second_window = ("2024-01-01", "2024-01-24")
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first_parsed = service.parse_strategy(
+                "Buy when Close > MA3. Sell when Close < MA3.",
+                code="600519",
+                start_date=first_window[0],
+                end_date=first_window[1],
+                initial_capital=100000.0,
+            )
+            second_parsed = service.parse_strategy(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                start_date=second_window[0],
+                end_date=second_window[1],
+                initial_capital=100000.0,
+            )
+            first = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                parsed_strategy=first_parsed,
+                start_date=first_window[0],
+                end_date=first_window[1],
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+            second = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                parsed_strategy=second_parsed,
+                start_date=second_window[0],
+                end_date=second_window[1],
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        period_comparison = payload["period_comparison"]
+        self.assertEqual(period_comparison["baseline_run_id"], int(first["id"]))
+        self.assertEqual(
+            period_comparison["selection_rule"],
+            "first_comparable_run_by_request_order",
+        )
+        self.assertEqual(period_comparison["relationship"], "identical")
+        self.assertEqual(period_comparison["state"], "comparable")
+        self.assertTrue(period_comparison["meaningfully_comparable"])
+        self.assertEqual(
+            period_comparison["period_bounds"],
+            [
+                {
+                    "run_id": int(first["id"]),
+                    "period_start": first["period_start"],
+                    "period_end": first["period_end"],
+                    "availability": "complete",
+                },
+                {
+                    "run_id": int(second["id"]),
+                    "period_start": second["period_start"],
+                    "period_end": second["period_end"],
+                    "availability": "complete",
+                },
+            ],
+        )
+        self.assertEqual(len(period_comparison["pairs"]), 1)
+        self.assertEqual(period_comparison["pairs"][0]["run_id"], int(second["id"]))
+        self.assertEqual(period_comparison["pairs"][0]["relationship"], "identical")
+        self.assertEqual(period_comparison["pairs"][0]["state"], "comparable")
+        self.assertTrue(period_comparison["pairs"][0]["meaningfully_comparable"])
+        self.assertEqual(period_comparison["pairs"][0]["overlap_start"], first["period_start"])
+        self.assertEqual(period_comparison["pairs"][0]["overlap_end"], first["period_end"])
+        self.assertEqual(period_comparison["pairs"][0]["diagnostics"], ["identical_periods"])
+
+    def test_compare_runs_adds_overlapping_period_comparison_summary(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first_parsed = service.parse_strategy(
+                strategy_text,
+                code="600519",
+                start_date="2024-01-05",
+                end_date="2024-01-20",
+                initial_capital=100000.0,
+            )
+            first = service.run_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                parsed_strategy=first_parsed,
+                start_date="2024-01-05",
+                end_date="2024-01-20",
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+            second_parsed = service.parse_strategy(
+                strategy_text,
+                code="600519",
+                start_date="2024-01-10",
+                end_date="2024-01-24",
+                initial_capital=100000.0,
+            )
+            second = service.run_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                parsed_strategy=second_parsed,
+                start_date="2024-01-10",
+                end_date="2024-01-24",
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        period_comparison = payload["period_comparison"]
+        self.assertEqual(period_comparison["relationship"], "overlapping")
+        self.assertEqual(period_comparison["state"], "comparable")
+        self.assertTrue(period_comparison["meaningfully_comparable"])
+        self.assertEqual(period_comparison["pairs"][0]["relationship"], "overlapping")
+        self.assertEqual(period_comparison["pairs"][0]["overlap_start"], "2024-01-10")
+        self.assertEqual(period_comparison["pairs"][0]["overlap_end"], "2024-01-20")
+        self.assertEqual(period_comparison["pairs"][0]["overlap_days"], 11)
+        self.assertIsNone(period_comparison["pairs"][0]["gap_days"])
+        self.assertEqual(period_comparison["pairs"][0]["diagnostics"], ["overlapping_periods"])
+
+    def test_compare_runs_adds_disjoint_period_comparison_summary(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first_parsed = service.parse_strategy(
+                strategy_text,
+                code="600519",
+                start_date="2024-01-01",
+                end_date="2024-01-08",
+                initial_capital=100000.0,
+            )
+            first = service.run_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                parsed_strategy=first_parsed,
+                start_date="2024-01-01",
+                end_date="2024-01-08",
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+            second_parsed = service.parse_strategy(
+                strategy_text,
+                code="600519",
+                start_date="2024-01-15",
+                end_date="2024-01-20",
+                initial_capital=100000.0,
+            )
+            second = service.run_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                parsed_strategy=second_parsed,
+                start_date="2024-01-15",
+                end_date="2024-01-20",
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        period_comparison = payload["period_comparison"]
+        self.assertEqual(period_comparison["relationship"], "disjoint")
+        self.assertEqual(period_comparison["state"], "not_comparable")
+        self.assertFalse(period_comparison["meaningfully_comparable"])
+        self.assertEqual(period_comparison["pairs"][0]["relationship"], "disjoint")
+        self.assertIsNone(period_comparison["pairs"][0]["overlap_start"])
+        self.assertIsNone(period_comparison["pairs"][0]["overlap_end"])
+        self.assertIsNone(period_comparison["pairs"][0]["overlap_days"])
+        self.assertEqual(period_comparison["pairs"][0]["gap_days"], 6)
+        self.assertEqual(period_comparison["pairs"][0]["diagnostics"], ["disjoint_periods"])
+
+    def test_compare_runs_marks_partial_period_metadata_availability(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_window = ("2024-01-01", "2024-01-24")
+        second_window = ("2024-01-01", "2024-01-24")
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first_parsed = service.parse_strategy(
+                "Buy when Close > MA3. Sell when Close < MA3.",
+                code="600519",
+                start_date=first_window[0],
+                end_date=first_window[1],
+                initial_capital=100000.0,
+            )
+            second_parsed = service.parse_strategy(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                start_date=second_window[0],
+                end_date=second_window[1],
+                initial_capital=100000.0,
+            )
+            first = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                parsed_strategy=first_parsed,
+                start_date=first_window[0],
+                end_date=first_window[1],
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+            second = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                parsed_strategy=second_parsed,
+                start_date=second_window[0],
+                end_date=second_window[1],
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+
+        second_row = service.repo.get_run(int(second["id"]), **service._owner_kwargs())
+        self.assertIsNotNone(second_row)
+        second_summary = json.loads(second_row.summary_json)
+        second_summary.setdefault("metrics", {})
+        second_summary["metrics"]["period_start"] = second["period_start"]
+        second_summary["metrics"]["period_end"] = None
+        service.repo.update_run(
+            int(second["id"]),
+            **service._owner_kwargs(),
+            summary_json=service._serialize_json(second_summary),
+        )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        period_comparison = payload["period_comparison"]
+        self.assertEqual(period_comparison["relationship"], "partial")
+        self.assertEqual(period_comparison["state"], "limited")
+        self.assertFalse(period_comparison["meaningfully_comparable"])
+        self.assertEqual(
+            period_comparison["period_bounds"][1],
+            {
+                "run_id": int(second["id"]),
+                "period_start": second["period_start"],
+                "period_end": None,
+                "availability": "partial",
+            },
+        )
+        self.assertEqual(period_comparison["pairs"][0]["relationship"], "partial")
+        self.assertEqual(period_comparison["pairs"][0]["state"], "limited")
+        self.assertFalse(period_comparison["pairs"][0]["meaningfully_comparable"])
+        self.assertEqual(period_comparison["pairs"][0]["diagnostics"], ["missing_period_end"])
+
     def test_compare_runs_builds_same_family_parameter_comparison(self) -> None:
         service = RuleBacktestService(self.db)
 

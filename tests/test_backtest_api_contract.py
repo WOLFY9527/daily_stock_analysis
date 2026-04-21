@@ -557,6 +557,40 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "missing_run_ids": [999],
             "unavailable_runs": [],
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "period_comparison": {
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "overlapping",
+                "state": "comparable",
+                "meaningfully_comparable": True,
+                "period_bounds": [
+                    {
+                        "run_id": 101,
+                        "period_start": base_item["period_start"],
+                        "period_end": base_item["period_end"],
+                        "availability": "complete",
+                    },
+                    {
+                        "run_id": 202,
+                        "period_start": "2025-03-01",
+                        "period_end": "2025-12-31",
+                        "availability": "complete",
+                    },
+                ],
+                "pairs": [
+                    {
+                        "run_id": 202,
+                        "relationship": "overlapping",
+                        "state": "comparable",
+                        "meaningfully_comparable": True,
+                        "overlap_start": "2025-03-01",
+                        "overlap_end": "2025-12-31",
+                        "overlap_days": 306,
+                        "gap_days": None,
+                        "diagnostics": ["overlapping_periods"],
+                    }
+                ],
+            },
             "comparison_summary": {
                 "baseline": {
                     "run_id": 101,
@@ -750,6 +784,13 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["read_mode"], "stored_first")
         self.assertEqual(payload["missing_run_ids"], [999])
         self.assertEqual(payload["field_groups"], ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"])
+        self.assertEqual(payload["period_comparison"]["relationship"], "overlapping")
+        self.assertEqual(payload["period_comparison"]["state"], "comparable")
+        self.assertTrue(payload["period_comparison"]["meaningfully_comparable"])
+        self.assertEqual(
+            payload["period_comparison"]["pairs"][0]["diagnostics"],
+            ["overlapping_periods"],
+        )
         self.assertEqual(payload["comparison_summary"]["baseline"]["run_id"], 101)
         self.assertEqual(
             payload["comparison_summary"]["baseline"]["selection_rule"],

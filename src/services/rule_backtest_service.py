@@ -808,6 +808,7 @@ class RuleBacktestService:
             "missing_run_ids": missing_run_ids,
             "unavailable_runs": unavailable_runs,
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "period_comparison": self._build_compare_period_comparison(items=items),
             "comparison_summary": self._build_compare_summary(items=items),
             "parameter_comparison": self._build_compare_parameter_comparison(items=items),
             "items": items,
@@ -1858,6 +1859,45 @@ class RuleBacktestService:
         }
 
     @classmethod
+    def _build_compare_period_comparison(cls, *, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not items:
+            raise ValueError("period comparison requires at least one comparable run item")
+
+        baseline_bounds = cls._resolve_compare_period_bounds(items[0])
+        pairs = [
+            cls._build_compare_period_pair(
+                baseline_bounds=baseline_bounds,
+                candidate_bounds=cls._resolve_compare_period_bounds(item),
+            )
+            for item in items[1:]
+        ]
+
+        relationship = cls._summarize_compare_period_relationship(pairs)
+        state = cls._summarize_compare_period_state(relationship)
+        diagnostics = cls._dedupe_compare_period_diagnostics(
+            [diagnostic for pair in pairs for diagnostic in list(pair.get("diagnostics") or [])]
+        )
+        if not diagnostics:
+            diagnostics = [f"{relationship}_periods"]
+
+        return {
+            "baseline_run_id": int(baseline_bounds.get("run_id") or 0),
+            "selection_rule": "first_comparable_run_by_request_order",
+            "relationship": relationship,
+            "state": state,
+            "meaningfully_comparable": state == "comparable",
+            "period_bounds": [
+                cls._compare_period_bounds_response_payload(baseline_bounds),
+                *[
+                    cls._compare_period_bounds_response_payload(cls._resolve_compare_period_bounds(item))
+                    for item in items[1:]
+                ],
+            ],
+            "pairs": pairs,
+            "diagnostics": diagnostics,
+        }
+
+    @classmethod
     def _build_compare_parameter_comparison(cls, *, items: List[Dict[str, Any]]) -> Dict[str, Any]:
         strategy_family_values = sorted(
             {
@@ -1985,6 +2025,198 @@ class RuleBacktestService:
             "differing_parameters": differing_parameters,
             "missing_parameters": missing_parameters,
         }
+
+    @classmethod
+    def _resolve_compare_period_bounds(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = dict(item.get("metadata") or {})
+        run_id = int(metadata.get("id") or 0)
+        raw_start = cls._normalize_compare_period_date_text(metadata.get("period_start"))
+        raw_end = cls._normalize_compare_period_date_text(metadata.get("period_end"))
+        start_date = cls._safe_parse_compare_period_date(raw_start)
+        end_date = cls._safe_parse_compare_period_date(raw_end)
+        diagnostics: List[str] = []
+
+        if raw_start and start_date is None:
+            diagnostics.append("invalid_period_start")
+        if raw_end and end_date is None:
+            diagnostics.append("invalid_period_end")
+
+        if start_date is not None and end_date is not None and start_date > end_date:
+            diagnostics.append("inverted_period_bounds")
+            availability = "partial"
+        elif start_date is not None and end_date is not None:
+            availability = "complete"
+        elif raw_start or raw_end:
+            availability = "partial"
+            if raw_start is None:
+                diagnostics.append("missing_period_start")
+            if raw_end is None:
+                diagnostics.append("missing_period_end")
+        else:
+            availability = "unavailable"
+            diagnostics.extend(["missing_period_start", "missing_period_end"])
+
+        return {
+            "run_id": run_id,
+            "period_start": raw_start,
+            "period_end": raw_end,
+            "availability": availability,
+            "start_date": start_date,
+            "end_date": end_date,
+            "diagnostics": cls._dedupe_compare_period_diagnostics(diagnostics),
+        }
+
+    @staticmethod
+    def _compare_period_bounds_response_payload(bounds: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "run_id": int(bounds.get("run_id") or 0),
+            "period_start": bounds.get("period_start"),
+            "period_end": bounds.get("period_end"),
+            "availability": str(bounds.get("availability") or "unavailable"),
+        }
+
+    @classmethod
+    def _build_compare_period_pair(
+        cls,
+        *,
+        baseline_bounds: Dict[str, Any],
+        candidate_bounds: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        diagnostics = cls._dedupe_compare_period_diagnostics(
+            [
+                *list(baseline_bounds.get("diagnostics") or []),
+                *list(candidate_bounds.get("diagnostics") or []),
+            ]
+        )
+        baseline_start = baseline_bounds.get("start_date")
+        baseline_end = baseline_bounds.get("end_date")
+        candidate_start = candidate_bounds.get("start_date")
+        candidate_end = candidate_bounds.get("end_date")
+
+        if baseline_bounds.get("availability") == "unavailable" or candidate_bounds.get("availability") == "unavailable":
+            diagnostics = cls._dedupe_compare_period_diagnostics([*diagnostics, "period_metadata_unavailable"])
+            return {
+                "run_id": int(candidate_bounds.get("run_id") or 0),
+                "relationship": "unavailable",
+                "state": "limited",
+                "meaningfully_comparable": False,
+                "overlap_start": None,
+                "overlap_end": None,
+                "overlap_days": None,
+                "gap_days": None,
+                "diagnostics": diagnostics,
+            }
+
+        if (
+            baseline_bounds.get("availability") != "complete"
+            or candidate_bounds.get("availability") != "complete"
+            or baseline_start is None
+            or baseline_end is None
+            or candidate_start is None
+            or candidate_end is None
+        ):
+            return {
+                "run_id": int(candidate_bounds.get("run_id") or 0),
+                "relationship": "partial",
+                "state": "limited",
+                "meaningfully_comparable": False,
+                "overlap_start": None,
+                "overlap_end": None,
+                "overlap_days": None,
+                "gap_days": None,
+                "diagnostics": diagnostics or ["partial_period_metadata"],
+            }
+
+        overlap_start = max(baseline_start, candidate_start)
+        overlap_end = min(baseline_end, candidate_end)
+        if baseline_start == candidate_start and baseline_end == candidate_end:
+            return {
+                "run_id": int(candidate_bounds.get("run_id") or 0),
+                "relationship": "identical",
+                "state": "comparable",
+                "meaningfully_comparable": True,
+                "overlap_start": baseline_start.isoformat(),
+                "overlap_end": baseline_end.isoformat(),
+                "overlap_days": (baseline_end - baseline_start).days + 1,
+                "gap_days": None,
+                "diagnostics": ["identical_periods"],
+            }
+
+        if overlap_start <= overlap_end:
+            return {
+                "run_id": int(candidate_bounds.get("run_id") or 0),
+                "relationship": "overlapping",
+                "state": "comparable",
+                "meaningfully_comparable": True,
+                "overlap_start": overlap_start.isoformat(),
+                "overlap_end": overlap_end.isoformat(),
+                "overlap_days": (overlap_end - overlap_start).days + 1,
+                "gap_days": None,
+                "diagnostics": ["overlapping_periods"],
+            }
+
+        earlier_end = min(baseline_end, candidate_end)
+        later_start = max(baseline_start, candidate_start)
+        return {
+            "run_id": int(candidate_bounds.get("run_id") or 0),
+            "relationship": "disjoint",
+            "state": "not_comparable",
+            "meaningfully_comparable": False,
+            "overlap_start": None,
+            "overlap_end": None,
+            "overlap_days": None,
+            "gap_days": max((later_start - earlier_end).days - 1, 0),
+            "diagnostics": ["disjoint_periods"],
+        }
+
+    @staticmethod
+    def _normalize_compare_period_date_text(value: Any) -> Optional[str]:
+        normalized = str(value or "").strip()
+        return normalized or None
+
+    @staticmethod
+    def _safe_parse_compare_period_date(value: Optional[str]) -> Optional[date]:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value)).date()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _dedupe_compare_period_diagnostics(diagnostics: List[str]) -> List[str]:
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for raw_value in diagnostics:
+            normalized = str(raw_value or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    @classmethod
+    def _summarize_compare_period_relationship(cls, pairs: List[Dict[str, Any]]) -> str:
+        relationships = [str(pair.get("relationship") or "").strip() for pair in pairs if str(pair.get("relationship") or "").strip()]
+        if not relationships:
+            return "identical"
+        if "unavailable" in relationships:
+            return "unavailable"
+        if "partial" in relationships:
+            return "partial"
+        if "disjoint" in relationships:
+            return "disjoint"
+        if "overlapping" in relationships:
+            return "overlapping"
+        return "identical"
+
+    @staticmethod
+    def _summarize_compare_period_state(relationship: str) -> str:
+        if relationship in {"identical", "overlapping"}:
+            return "comparable"
+        if relationship == "disjoint":
+            return "not_comparable"
+        return "limited"
 
     @staticmethod
     def _extract_compare_strategy_family(item: Dict[str, Any]) -> Optional[str]:

@@ -911,7 +911,7 @@ FastAPI provides RESTful API service for configuration management and triggering
 | `/api/v1/backtest/performance/{code}` | GET | Get per-stock historical analysis evaluation performance |
 | `/api/v1/backtest/rule/parse` | POST | Parse rule strategy text |
 | `/api/v1/backtest/rule/run` | POST | Submit or synchronously run deterministic rule backtests |
-| `/api/v1/backtest/rule/compare` | POST | Compare 2-10 completed rule runs through a stored-first summary view with baseline/delta `comparison_summary` and parameter-set `parameter_comparison` |
+| `/api/v1/backtest/rule/compare` | POST | Compare 2-10 completed rule runs through a stored-first summary view with `period_comparison`, baseline/delta `comparison_summary`, and parameter-set `parameter_comparison` |
 | `/api/v1/backtest/rule/runs` | GET | Query rule backtest history |
 | `/api/v1/backtest/rule/runs/{run_id}` | GET | Query a rule backtest detail record |
 | `/api/v1/backtest/rule/runs/{run_id}/status` | GET | Query lightweight rule run status |

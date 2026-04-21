@@ -636,6 +636,36 @@ class RuleBacktestCompareSummary(BaseModel):
     metric_deltas: Dict[str, RuleBacktestCompareMetricDelta] = Field(default_factory=dict)
 
 
+class RuleBacktestComparePeriodBoundsItem(BaseModel):
+    run_id: int
+    period_start: Optional[str] = None
+    period_end: Optional[str] = None
+    availability: str
+
+
+class RuleBacktestComparePeriodPair(BaseModel):
+    run_id: int
+    relationship: str
+    state: str
+    meaningfully_comparable: bool = False
+    overlap_start: Optional[str] = None
+    overlap_end: Optional[str] = None
+    overlap_days: Optional[int] = None
+    gap_days: Optional[int] = None
+    diagnostics: List[str] = Field(default_factory=list)
+
+
+class RuleBacktestComparePeriodComparison(BaseModel):
+    baseline_run_id: int
+    selection_rule: str
+    relationship: str
+    state: str
+    meaningfully_comparable: bool = False
+    period_bounds: List[RuleBacktestComparePeriodBoundsItem] = Field(default_factory=list)
+    pairs: List[RuleBacktestComparePeriodPair] = Field(default_factory=list)
+    diagnostics: List[str] = Field(default_factory=list)
+
+
 class RuleBacktestCompareParameterValueItem(BaseModel):
     run_id: int
     value: Any = None
@@ -669,6 +699,7 @@ class RuleBacktestCompareResponse(BaseModel):
     missing_run_ids: List[int] = Field(default_factory=list)
     unavailable_runs: List[RuleBacktestCompareUnavailableRun] = Field(default_factory=list)
     field_groups: List[str] = Field(default_factory=list)
+    period_comparison: Optional[RuleBacktestComparePeriodComparison] = None
     comparison_summary: Optional[RuleBacktestCompareSummary] = None
     parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
