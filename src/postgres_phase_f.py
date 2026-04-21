@@ -476,6 +476,57 @@ class PostgresPhaseFStore:
                 "page_size": int(page_size),
             }
 
+    def query_corporate_actions_comparison_candidate(
+        self,
+        *,
+        account_id: Optional[int],
+        date_from: Optional[date],
+        date_to: Optional[date],
+        symbol: Optional[str],
+        action_type: Optional[str],
+        page: int,
+        page_size: int,
+        owner_user_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        with self.get_session() as session:
+            conditions = [PhaseFPortfolioLedger.entry_type == "corporate_action"]
+            if owner_user_id is not None:
+                conditions.append(PhaseFPortfolioLedger.owner_user_id == str(owner_user_id).strip())
+            if account_id is not None:
+                conditions.append(PhaseFPortfolioLedger.portfolio_account_id == int(account_id))
+            if date_from is not None:
+                conditions.append(
+                    PhaseFPortfolioLedger.event_time >= datetime.combine(date_from, time.min)
+                )
+            if date_to is not None:
+                conditions.append(
+                    PhaseFPortfolioLedger.event_time <= datetime.combine(date_to, time.max)
+                )
+            if symbol:
+                conditions.append(PhaseFPortfolioLedger.canonical_symbol == str(symbol).strip())
+            if action_type:
+                conditions.append(PhaseFPortfolioLedger.corporate_action_type == str(action_type).strip().lower())
+
+            query = select(PhaseFPortfolioLedger)
+            count_query = select(func.count()).select_from(PhaseFPortfolioLedger)
+            for condition in conditions:
+                query = query.where(condition)
+                count_query = count_query.where(condition)
+
+            total = int(session.execute(count_query).scalar_one() or 0)
+            rows = session.execute(
+                query
+                .order_by(PhaseFPortfolioLedger.event_time.desc(), PhaseFPortfolioLedger.id.desc())
+                .offset((int(page) - 1) * int(page_size))
+                .limit(int(page_size))
+            ).scalars().all()
+            return {
+                "items": [self._serialize_corporate_actions_comparison_row(row) for row in rows],
+                "total": total,
+                "page": int(page),
+                "page_size": int(page_size),
+            }
+
     @staticmethod
     def _safe_json_load(value: Any) -> dict[str, Any]:
         if value is None:
@@ -582,6 +633,36 @@ class PostgresPhaseFStore:
             "fee": float(getattr(row, "fee", 0.0) or 0.0),
             "tax": float(getattr(row, "tax", 0.0) or 0.0),
             "note": getattr(row, "note", None),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+        }
+
+    def _serialize_corporate_actions_comparison_row(self, row: Any) -> dict[str, Any]:
+        payload = self._safe_json_load(getattr(row, "payload_json", None))
+        legacy_row_id = int(payload.get("legacy_row_id") or 0)
+        event_time = getattr(row, "event_time", None)
+        effective_date = ""
+        if isinstance(event_time, datetime):
+            effective_date = event_time.date().isoformat()
+        elif isinstance(event_time, date):
+            effective_date = event_time.isoformat()
+
+        cash_dividend_per_share = payload.get("cash_dividend_per_share")
+        split_ratio = payload.get("split_ratio")
+        return {
+            "id": legacy_row_id,
+            "account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
+            "symbol": str(getattr(row, "canonical_symbol", "") or ""),
+            "market": getattr(row, "market", None),
+            "currency": getattr(row, "currency", None),
+            "effective_date": effective_date,
+            "action_type": payload.get("action_type")
+            if payload.get("action_type") is not None
+            else getattr(row, "corporate_action_type", None),
+            "cash_dividend_per_share": (
+                float(cash_dividend_per_share) if cash_dividend_per_share is not None else None
+            ),
+            "split_ratio": float(split_ratio) if split_ratio is not None else None,
+            "note": payload.get("note") if payload.get("note") is not None else getattr(row, "note", None),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
         }
 

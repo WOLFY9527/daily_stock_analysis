@@ -2997,6 +2997,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             "phase_f_corporate_actions_comparison_account_ids",
             [account["id"] + 999],
         ), patch.object(
+            service.repo.db,
+            "get_phase_f_corporate_actions_comparison_candidate",
+            side_effect=AssertionError("PG comparison candidate should be skipped outside allowlist"),
+        ), patch.object(
             service.repo,
             "query_corporate_actions",
             wraps=service.repo.query_corporate_actions,
@@ -3017,14 +3021,16 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(skip_report["comparison_decision"], "legacy_served_without_comparison")
         self.assertEqual(skip_report["fallback_decision"], "legacy_served_without_comparison")
         self.assertEqual(skip_report["legacy_summary"]["ordered_ids"], [result["items"][0]["id"]])
+        self.assertIsNone(skip_report["pg_summary"])
+        self.assertTrue(skip_report["pg_source_available"])
 
-    def test_phase_f_corporate_actions_comparison_mode_allowlisted_emits_noop_scaffold_and_preserves_contract(self) -> None:
+    def test_phase_f_corporate_actions_comparison_mode_source_unavailable_still_serves_legacy(self) -> None:
         db = self._db()
-        db.create_or_update_app_user(user_id="corp-compare-noop-user", username="corp-compare-noop-user")
-        service = PortfolioService(owner_id="corp-compare-noop-user")
+        db.create_or_update_app_user(user_id="corp-compare-source-user", username="corp-compare-source-user")
+        service = PortfolioService(owner_id="corp-compare-source-user")
 
-        account = service.create_account(name="Corp Compare Noop", broker="IBKR", market="us", base_currency="USD")
-        first_action = service.record_corporate_action(
+        account = service.create_account(name="Corp Compare Source", broker="IBKR", market="us", base_currency="USD")
+        action = service.record_corporate_action(
             account_id=account["id"],
             symbol="NVDA",
             effective_date=date(2026, 4, 23),
@@ -3033,36 +3039,193 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        second_action = service.record_corporate_action(
-            account_id=account["id"],
-            symbol="NVDA",
-            effective_date=date(2026, 4, 24),
-            action_type="split_adjustment",
-            split_ratio=4.0,
-            market="us",
-            currency="USD",
-        )
 
-        noop_report: Dict[str, Any] = {}
+        source_unavailable_report: Dict[str, Any] = {}
 
         with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
             get_config(),
             "phase_f_corporate_actions_comparison_account_ids",
             [account["id"]],
         ), patch.object(
-            service.repo,
-            "query_corporate_actions",
-            wraps=service.repo.query_corporate_actions,
-        ) as legacy_query, patch.object(
+            service.repo.db,
+            "get_phase_f_corporate_actions_comparison_candidate",
+            return_value=None,
+        ), patch.object(
             service,
             "_emit_phase_f_corporate_actions_comparison_report",
-            side_effect=lambda report: noop_report.update(report),
+            side_effect=lambda report: source_unavailable_report.update(report),
         ) as report_emitter:
             result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
 
         validated = PortfolioCorporateActionListResponse(**result)
 
-        self.assertEqual(legacy_query.call_count, 1)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual([item["id"] for item in result["items"]], [action["id"]])
+        self.assertEqual([item["effective_date"] for item in result["items"]], ["2026-04-23"])
+        self.assertEqual(validated.total, 1)
+        self.assertEqual(validated.page, 1)
+        self.assertEqual(validated.page_size, 20)
+        self.assertEqual([item.action_type for item in validated.items], ["cash_dividend"])
+        self.assertEqual(source_unavailable_report["comparison_status"], "source_unavailable")
+        self.assertTrue(source_unavailable_report["comparison_attempted"])
+        self.assertEqual(
+            source_unavailable_report["comparison_decision"],
+            "legacy_served_due_to_source_unavailable",
+        )
+        self.assertEqual(
+            source_unavailable_report["fallback_decision"],
+            "served_legacy_due_to_source_unavailable",
+        )
+        self.assertEqual(source_unavailable_report["comparison_source"], "phase_f_pg_corporate_actions_candidate")
+        self.assertEqual(source_unavailable_report["mismatch_class"], "query_failure")
+        self.assertFalse(source_unavailable_report["pg_source_available"])
+        self.assertEqual(
+            source_unavailable_report["source_unavailable_reason"],
+            "phase_f_corporate_actions_pg_source_unavailable",
+        )
+        self.assertEqual(source_unavailable_report["legacy_summary"]["ordered_ids"], [action["id"]])
+        self.assertIsNone(source_unavailable_report["pg_summary"])
+
+    def test_phase_f_corporate_actions_comparison_mode_empty_result_matches_cleanly(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-compare-empty-user", username="corp-compare-empty-user")
+        service = PortfolioService(owner_id="corp-compare-empty-user")
+
+        account = service.create_account(name="Corp Compare Empty", broker="IBKR", market="us", base_currency="USD")
+
+        match_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
+            get_config(),
+            "phase_f_corporate_actions_comparison_account_ids",
+            [account["id"]],
+        ), patch.object(
+            service.repo.db,
+            "get_phase_f_corporate_actions_comparison_candidate",
+            wraps=service.repo.db.get_phase_f_corporate_actions_comparison_candidate,
+        ) as pg_candidate_loader, patch.object(
+            service,
+            "_emit_phase_f_corporate_actions_comparison_report",
+            side_effect=lambda report: match_report.update(report),
+        ) as report_emitter:
+            result = service.list_corporate_action_events(
+                account_id=account["id"],
+                symbol="AAPL",
+                page=1,
+                page_size=20,
+            )
+
+        validated = PortfolioCorporateActionListResponse(**result)
+
+        self.assertEqual(pg_candidate_loader.call_count, 1)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(result, {"items": [], "total": 0, "page": 1, "page_size": 20})
+        self.assertEqual(validated.total, 0)
+        self.assertEqual(validated.items, [])
+        self.assertEqual(match_report["comparison_status"], "matched")
+        self.assertTrue(match_report["comparison_attempted"])
+        self.assertEqual(match_report["comparison_decision"], "legacy_served_after_match")
+        self.assertIsNone(match_report["comparison_skip_reason"])
+        self.assertIsNone(match_report["mismatch_class"])
+        self.assertTrue(match_report["pg_source_available"])
+        self.assertEqual(match_report["legacy_summary"]["ordered_ids"], [])
+        self.assertEqual(match_report["pg_summary"]["ordered_ids"], [])
+
+    def test_phase_f_corporate_actions_comparison_mode_query_failure_still_serves_legacy(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-compare-failure-user", username="corp-compare-failure-user")
+        service = PortfolioService(owner_id="corp-compare-failure-user")
+
+        account = service.create_account(name="Corp Compare Failure", broker="IBKR", market="us", base_currency="USD")
+        action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="TSLA",
+            effective_date=date(2026, 4, 24),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.05,
+            market="us",
+            currency="USD",
+        )
+
+        failure_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
+            get_config(),
+            "phase_f_corporate_actions_comparison_account_ids",
+            [account["id"]],
+        ), patch.object(
+            service.repo.db,
+            "get_phase_f_corporate_actions_comparison_candidate",
+            side_effect=RuntimeError("comparison query exploded"),
+        ), patch.object(
+            service,
+            "_emit_phase_f_corporate_actions_comparison_report",
+            side_effect=lambda report: failure_report.update(report),
+        ) as report_emitter:
+            result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["id"], action["id"])
+        self.assertEqual(result["items"][0]["symbol"], "TSLA")
+        self.assertEqual(failure_report["comparison_status"], "query_failure")
+        self.assertTrue(failure_report["comparison_attempted"])
+        self.assertEqual(failure_report["comparison_decision"], "legacy_served_due_to_query_failure")
+        self.assertEqual(failure_report["fallback_decision"], "served_legacy_due_to_query_failure")
+        self.assertEqual(failure_report["mismatch_class"], "query_failure")
+        self.assertEqual(failure_report["blocking_level"], "hard_blocking")
+        self.assertTrue(failure_report["pg_source_available"])
+        self.assertEqual(failure_report["query_failure_detail"], "comparison query exploded")
+        self.assertIsNone(failure_report["pg_summary"])
+
+    def test_phase_f_corporate_actions_comparison_mode_non_empty_match_preserves_contract(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-compare-match-user", username="corp-compare-match-user")
+        service = PortfolioService(owner_id="corp-compare-match-user")
+
+        account = service.create_account(name="Corp Compare Match", broker="IBKR", market="us", base_currency="USD")
+        first_action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="AAPL",
+            effective_date=date(2026, 4, 23),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.15,
+            market="us",
+            currency="USD",
+            note="dividend",
+        )
+        second_action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="AAPL",
+            effective_date=date(2026, 4, 24),
+            action_type="split_adjustment",
+            split_ratio=2.0,
+            market="us",
+            currency="USD",
+            note="split",
+        )
+
+        match_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
+            get_config(),
+            "phase_f_corporate_actions_comparison_account_ids",
+            [account["id"]],
+        ), patch.object(
+            service.repo.db,
+            "get_phase_f_corporate_actions_comparison_candidate",
+            wraps=service.repo.db.get_phase_f_corporate_actions_comparison_candidate,
+        ) as pg_candidate_loader, patch.object(
+            service,
+            "_emit_phase_f_corporate_actions_comparison_report",
+            side_effect=lambda report: match_report.update(report),
+        ) as report_emitter:
+            result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+
+        validated = PortfolioCorporateActionListResponse(**result)
+
+        self.assertEqual(pg_candidate_loader.call_count, 1)
         self.assertEqual(report_emitter.call_count, 1)
         self.assertEqual(result["total"], 2)
         self.assertEqual([item["id"] for item in result["items"]], [second_action["id"], first_action["id"]])
@@ -3071,14 +3234,71 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(validated.page, 1)
         self.assertEqual(validated.page_size, 20)
         self.assertEqual([item.action_type for item in validated.items], ["split_adjustment", "cash_dividend"])
-        self.assertEqual(noop_report["comparison_status"], "noop_scaffold")
-        self.assertFalse(noop_report["comparison_attempted"])
-        self.assertEqual(noop_report["comparison_skip_reason"], "scaffold_only")
-        self.assertEqual(noop_report["comparison_decision"], "legacy_served_without_comparison")
-        self.assertEqual(noop_report["fallback_decision"], "legacy_served_without_comparison")
-        self.assertEqual(noop_report["comparison_source"], "phase_f_pg_corporate_actions_candidate")
-        self.assertEqual(noop_report["legacy_summary"]["ordered_ids"], [second_action["id"], first_action["id"]])
-        self.assertIsNone(noop_report["pg_summary"])
+        self.assertEqual(match_report["comparison_status"], "matched")
+        self.assertTrue(match_report["comparison_attempted"])
+        self.assertEqual(match_report["comparison_decision"], "legacy_served_after_match")
+        self.assertEqual(match_report["fallback_decision"], "legacy_served_after_match")
+        self.assertEqual(match_report["legacy_summary"]["ordered_ids"], [second_action["id"], first_action["id"]])
+        self.assertEqual(match_report["pg_summary"]["ordered_ids"], [second_action["id"], first_action["id"]])
+        self.assertTrue(match_report["pg_source_available"])
+
+    def test_phase_f_corporate_actions_comparison_mode_payload_mismatch_emits_bounded_report_and_serves_legacy(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-compare-mismatch-user", username="corp-compare-mismatch-user")
+        service = PortfolioService(owner_id="corp-compare-mismatch-user")
+
+        account = service.create_account(name="Corp Compare Mismatch", broker="IBKR", market="us", base_currency="USD")
+        action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="MSFT",
+            effective_date=date(2026, 4, 25),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.3,
+            market="us",
+            currency="USD",
+            note="legacy-note",
+        )
+
+        with db._phase_f_store.session_scope() as session:
+            row = session.execute(
+                select(PhaseFPortfolioLedger).where(
+                    PhaseFPortfolioLedger.portfolio_account_id == account["id"],
+                    PhaseFPortfolioLedger.entry_type == "corporate_action",
+                )
+            ).scalar_one()
+            row.note = "pg-note"
+            payload = dict(row.payload_json or {})
+            payload["note"] = "pg-note"
+            row.payload_json = payload
+
+        mismatch_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
+            get_config(),
+            "phase_f_corporate_actions_comparison_account_ids",
+            [account["id"]],
+        ), patch.object(
+            service,
+            "_emit_phase_f_corporate_actions_comparison_report",
+            side_effect=lambda report: mismatch_report.update(report),
+        ) as report_emitter:
+            result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["id"], action["id"])
+        self.assertEqual(result["items"][0]["note"], "legacy-note")
+        self.assertEqual(mismatch_report["comparison_status"], "mismatch")
+        self.assertTrue(mismatch_report["comparison_attempted"])
+        self.assertEqual(mismatch_report["comparison_decision"], "legacy_served_due_to_mismatch")
+        self.assertEqual(mismatch_report["fallback_decision"], "served_legacy_due_to_mismatch")
+        self.assertEqual(mismatch_report["mismatch_class"], "payload_field_mismatch")
+        self.assertEqual(mismatch_report["blocking_level"], "hard_blocking")
+        self.assertEqual(mismatch_report["first_mismatch_position"], 0)
+        self.assertEqual(mismatch_report["first_mismatch_field"], "note")
+        self.assertEqual(mismatch_report["first_legacy_value"], "legacy-note")
+        self.assertEqual(mismatch_report["first_pg_value"], "pg-note")
+        self.assertTrue(mismatch_report["pg_source_available"])
 
     def test_phase_f_corporate_actions_comparison_report_shape_is_bounded(self) -> None:
         db = self._db()
@@ -3086,11 +3306,13 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         service = PortfolioService(owner_id="corp-shape-user")
 
         report = service._build_phase_f_corporate_actions_comparison_report(
-            comparison_status="disabled",
+            comparison_status="query_failure",
             comparison_attempted=False,
             comparison_decision="legacy_served_without_comparison",
             comparison_source="phase_f_pg_corporate_actions_candidate",
             comparison_skip_reason="comparison_disabled",
+            mismatch_class="query_failure",
+            blocking_level="hard_blocking",
             fallback_decision="legacy_served_without_comparison",
             request_context={
                 "account_id": 1,
@@ -3102,18 +3324,34 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 "page_size": 20,
             },
             legacy_summary={"total": 1, "page_item_count": 1, "ordered_ids": [5]},
+            pg_source_available=False,
+            source_unavailable_reason="phase_f_corporate_actions_pg_source_unavailable",
+            query_failure_detail="comparison source unavailable",
+            first_mismatch_position=0,
+            first_mismatch_field="note",
+            first_legacy_value="legacy-note",
+            first_pg_value="pg-note",
         )
 
-        self.assertEqual(report["report_model"], "phase_f_corporate_actions_comparison_diagnostic_v1")
+        self.assertEqual(report["report_model"], "phase_f_corporate_actions_comparison_diagnostic_v2")
         self.assertEqual(report["candidate"], "portfolio_corporate_actions")
-        self.assertEqual(report["comparison_status"], "disabled")
+        self.assertEqual(report["comparison_status"], "query_failure")
         self.assertFalse(report["comparison_attempted"])
         self.assertEqual(report["comparison_skip_reason"], "comparison_disabled")
         self.assertEqual(report["comparison_source"], "phase_f_pg_corporate_actions_candidate")
+        self.assertEqual(report["mismatch_class"], "query_failure")
+        self.assertEqual(report["blocking_level"], "hard_blocking")
         self.assertEqual(report["request_context"]["action_type"], "cash_dividend")
         self.assertEqual(report["legacy_summary"]["ordered_ids"], [5])
         self.assertEqual(report["owner_context"]["owner_user_id"], "corp-shape-user")
         self.assertFalse(report["owner_context"]["include_all_owners"])
+        self.assertFalse(report["pg_source_available"])
+        self.assertEqual(report["source_unavailable_reason"], "phase_f_corporate_actions_pg_source_unavailable")
+        self.assertEqual(report["query_failure_detail"], "comparison source unavailable")
+        self.assertEqual(report["first_mismatch_position"], 0)
+        self.assertEqual(report["first_mismatch_field"], "note")
+        self.assertEqual(report["first_legacy_value"], "legacy-note")
+        self.assertEqual(report["first_pg_value"], "pg-note")
         self.assertIsNone(report["pg_summary"])
 
     def test_phase_f_trade_list_comparison_report_shape_is_bounded(self) -> None:

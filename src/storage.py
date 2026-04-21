@@ -2782,6 +2782,34 @@ class DatabaseManager:
             owner_user_id=resolved_owner_id,
         )
 
+    def get_phase_f_corporate_actions_comparison_candidate(
+        self,
+        *,
+        account_id: Optional[int],
+        date_from: Optional[date],
+        date_to: Optional[date],
+        symbol: Optional[str],
+        action_type: Optional[str],
+        page: int,
+        page_size: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        return self._phase_f_store.query_corporate_actions_comparison_candidate(
+            account_id=int(account_id) if account_id is not None else None,
+            date_from=date_from,
+            date_to=date_to,
+            symbol=symbol,
+            action_type=action_type,
+            page=int(page),
+            page_size=int(page_size),
+            owner_user_id=resolved_owner_id,
+        )
+
     def sync_phase_g_runtime_config_shadow(
         self,
         *,

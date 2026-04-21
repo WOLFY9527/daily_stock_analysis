@@ -24,6 +24,7 @@ from src.repositories.portfolio_repo import (
 logger = logging.getLogger(__name__)
 
 PortfolioBusyError = RepoPortfolioBusyError
+_PHASE_F_CORPORATE_ACTIONS_SOURCE_UNAVAILABLE = "phase_f_corporate_actions_pg_source_unavailable"
 
 try:
     import yfinance as yf
@@ -1459,6 +1460,8 @@ class PortfolioService:
                     comparison_decision="legacy_served_without_comparison",
                     comparison_source=comparison_source,
                     comparison_skip_reason=skip_reason,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
                     fallback_decision="legacy_served_without_comparison",
                     request_context=legacy_context,
                     legacy_summary=legacy_summary,
@@ -1466,19 +1469,244 @@ class PortfolioService:
             )
             return None
 
+        try:
+            candidate = self._load_phase_f_corporate_actions_comparison_candidate(request_context=legacy_context)
+        except RuntimeError as exc:
+            if str(exc) != _PHASE_F_CORPORATE_ACTIONS_SOURCE_UNAVAILABLE:
+                self._emit_phase_f_corporate_actions_comparison_report(
+                    self._build_phase_f_corporate_actions_comparison_report(
+                        comparison_status="query_failure",
+                        comparison_attempted=True,
+                        comparison_decision="legacy_served_due_to_query_failure",
+                        comparison_source=comparison_source,
+                        comparison_skip_reason=None,
+                        mismatch_class="query_failure",
+                        blocking_level="hard_blocking",
+                        fallback_decision="served_legacy_due_to_query_failure",
+                        request_context=legacy_context,
+                        legacy_summary=legacy_summary,
+                        pg_source_available=True,
+                        query_failure_detail=str(exc) or exc.__class__.__name__,
+                    )
+                )
+                return None
+
+            self._emit_phase_f_corporate_actions_comparison_report(
+                self._build_phase_f_corporate_actions_comparison_report(
+                    comparison_status="source_unavailable",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_due_to_source_unavailable",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class="query_failure",
+                    blocking_level="hard_blocking",
+                    fallback_decision="served_legacy_due_to_source_unavailable",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    pg_source_available=False,
+                    source_unavailable_reason=_PHASE_F_CORPORATE_ACTIONS_SOURCE_UNAVAILABLE,
+                )
+            )
+            return None
+        except Exception as exc:
+            self._emit_phase_f_corporate_actions_comparison_report(
+                self._build_phase_f_corporate_actions_comparison_report(
+                    comparison_status="query_failure",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_due_to_query_failure",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class="query_failure",
+                    blocking_level="hard_blocking",
+                    fallback_decision="served_legacy_due_to_query_failure",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    pg_source_available=True,
+                    query_failure_detail=str(exc) or exc.__class__.__name__,
+                )
+            )
+            return None
+
+        candidate_summary = self._summarize_phase_f_corporate_actions_result(candidate)
+        mismatch = self._compare_phase_f_corporate_actions_results(
+            legacy_view=legacy_view,
+            candidate_view=candidate,
+        )
+        if mismatch is None:
+            self._emit_phase_f_corporate_actions_comparison_report(
+                self._build_phase_f_corporate_actions_comparison_report(
+                    comparison_status="matched",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_after_match",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_after_match",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    pg_summary=candidate_summary,
+                    pg_source_available=True,
+                )
+            )
+            return None
+
         self._emit_phase_f_corporate_actions_comparison_report(
             self._build_phase_f_corporate_actions_comparison_report(
-                comparison_status="noop_scaffold",
-                comparison_attempted=False,
-                comparison_decision="legacy_served_without_comparison",
+                comparison_status="mismatch",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_due_to_mismatch",
                 comparison_source=comparison_source,
-                comparison_skip_reason="scaffold_only",
-                fallback_decision="legacy_served_without_comparison",
+                comparison_skip_reason=None,
+                mismatch_class=mismatch["mismatch_class"],
+                blocking_level=mismatch["blocking_level"],
+                fallback_decision="served_legacy_due_to_mismatch",
                 request_context=legacy_context,
                 legacy_summary=legacy_summary,
+                pg_summary=candidate_summary,
+                pg_source_available=True,
+                first_mismatch_position=mismatch.get("first_mismatch_position"),
+                first_mismatch_field=mismatch.get("first_mismatch_field"),
+                first_legacy_value=mismatch.get("first_legacy_value"),
+                first_pg_value=mismatch.get("first_pg_value"),
             )
         )
         return None
+
+    def _load_phase_f_corporate_actions_comparison_candidate(
+        self,
+        *,
+        request_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        date_from_raw = request_context.get("date_from")
+        date_to_raw = request_context.get("date_to")
+        date_from = date.fromisoformat(date_from_raw) if date_from_raw else None
+        date_to = date.fromisoformat(date_to_raw) if date_to_raw else None
+
+        candidate = self.repo.db.get_phase_f_corporate_actions_comparison_candidate(
+            account_id=request_context.get("account_id"),
+            date_from=date_from,
+            date_to=date_to,
+            symbol=request_context.get("symbol"),
+            action_type=request_context.get("action_type"),
+            page=int(request_context.get("page", 1) or 1),
+            page_size=int(request_context.get("page_size", 20) or 20),
+            **self._owner_kwargs(),
+        )
+        if candidate is None:
+            raise RuntimeError(_PHASE_F_CORPORATE_ACTIONS_SOURCE_UNAVAILABLE)
+        return {
+            "request_context": dict(request_context or {}),
+            "items": [dict(item) for item in (candidate.get("items") or [])],
+            "total": int(candidate.get("total", 0) or 0),
+            "page": int(candidate.get("page", request_context.get("page", 1)) or 1),
+            "page_size": int(candidate.get("page_size", request_context.get("page_size", 20)) or 20),
+        }
+
+    def _compare_phase_f_corporate_actions_results(
+        self,
+        *,
+        legacy_view: Dict[str, Any],
+        candidate_view: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        legacy_request = dict((legacy_view or {}).get("request_context", {}) or {})
+        candidate_request = dict((candidate_view or {}).get("request_context", {}) or {})
+        if legacy_request != candidate_request:
+            return {
+                "mismatch_class": "filter_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "request_context",
+                "first_legacy_value": legacy_request,
+                "first_pg_value": candidate_request,
+            }
+
+        legacy_total = int((legacy_view or {}).get("total", 0) or 0)
+        candidate_total = int((candidate_view or {}).get("total", 0) or 0)
+        if legacy_total != candidate_total:
+            return {
+                "mismatch_class": "count_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "total",
+                "first_legacy_value": legacy_total,
+                "first_pg_value": candidate_total,
+            }
+
+        legacy_items = list((legacy_view or {}).get("items", []) or [])
+        candidate_items = list((candidate_view or {}).get("items", []) or [])
+        if len(legacy_items) != len(candidate_items):
+            return {
+                "mismatch_class": "pagination_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "page_item_count",
+                "first_legacy_value": len(legacy_items),
+                "first_pg_value": len(candidate_items),
+            }
+
+        legacy_ids = [item.get("id") for item in legacy_items]
+        candidate_ids = [item.get("id") for item in candidate_items]
+        if legacy_ids != candidate_ids:
+            first_position = next(
+                (
+                    index
+                    for index, (legacy_id, candidate_id) in enumerate(zip(legacy_ids, candidate_ids))
+                    if legacy_id != candidate_id
+                ),
+                None,
+            )
+            return {
+                "mismatch_class": "ordering_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_position": first_position,
+                "first_mismatch_field": "id",
+                "first_legacy_value": legacy_ids[first_position] if first_position is not None else legacy_ids,
+                "first_pg_value": candidate_ids[first_position] if first_position is not None else candidate_ids,
+            }
+
+        contract_fields = (
+            "id",
+            "account_id",
+            "symbol",
+            "market",
+            "currency",
+            "effective_date",
+            "action_type",
+            "cash_dividend_per_share",
+            "split_ratio",
+            "note",
+            "created_at",
+        )
+        for index, (legacy_item, candidate_item) in enumerate(zip(legacy_items, candidate_items)):
+            for field_name in contract_fields:
+                legacy_value = legacy_item.get(field_name)
+                candidate_value = candidate_item.get(field_name)
+                if self._normalize_phase_f_corporate_actions_compare_value(
+                    field_name=field_name,
+                    value=legacy_value,
+                ) == self._normalize_phase_f_corporate_actions_compare_value(
+                    field_name=field_name,
+                    value=candidate_value,
+                ):
+                    continue
+                mismatch_class = "owner_scope_mismatch" if field_name == "account_id" else "payload_field_mismatch"
+                return {
+                    "mismatch_class": mismatch_class,
+                    "blocking_level": "hard_blocking",
+                    "first_mismatch_position": index,
+                    "first_mismatch_field": field_name,
+                    "first_legacy_value": legacy_value,
+                    "first_pg_value": candidate_value,
+                }
+        return None
+
+    @staticmethod
+    def _normalize_phase_f_corporate_actions_compare_value(
+        *,
+        field_name: str,
+        value: Any,
+    ) -> Any:
+        if field_name != "created_at":
+            return value
+        return PortfolioService._normalize_phase_f_trade_list_created_at_compare_value(value)
 
     def _summarize_phase_f_corporate_actions_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
         items = list((result_view or {}).get("items", []) or [])
@@ -1492,7 +1720,11 @@ class PortfolioService:
 
     def _emit_phase_f_corporate_actions_comparison_report(self, report: Dict[str, Any]) -> None:
         self._collect_phase_f_corporate_actions_comparison_report(report)
+        comparison_status = str((report or {}).get("comparison_status") or "").strip().lower()
         message = json.dumps(report, ensure_ascii=True, sort_keys=True, default=str)
+        if comparison_status in {"mismatch", "query_failure", "source_unavailable"}:
+            logger.warning("Phase F corporate-actions comparison diagnostic: %s", message)
+            return
         logger.info("Phase F corporate-actions comparison diagnostic: %s", message)
 
     def _collect_phase_f_corporate_actions_comparison_report(self, report: Dict[str, Any]) -> None:
@@ -1512,19 +1744,30 @@ class PortfolioService:
         comparison_decision: str,
         comparison_source: str,
         comparison_skip_reason: Optional[str],
+        mismatch_class: Optional[str],
+        blocking_level: str,
         fallback_decision: str,
         request_context: Dict[str, Any],
         legacy_summary: Dict[str, Any],
         pg_summary: Optional[Dict[str, Any]] = None,
+        pg_source_available: bool = True,
+        source_unavailable_reason: Optional[str] = None,
+        query_failure_detail: Optional[str] = None,
+        first_mismatch_position: Optional[int] = None,
+        first_mismatch_field: Optional[str] = None,
+        first_legacy_value: Any = None,
+        first_pg_value: Any = None,
     ) -> Dict[str, Any]:
         return {
-            "report_model": "phase_f_corporate_actions_comparison_diagnostic_v1",
+            "report_model": "phase_f_corporate_actions_comparison_diagnostic_v2",
             "candidate": "portfolio_corporate_actions",
             "comparison_status": str(comparison_status or "").strip(),
             "comparison_attempted": bool(comparison_attempted),
             "comparison_decision": str(comparison_decision or "").strip(),
             "comparison_source": str(comparison_source or "").strip(),
             "comparison_skip_reason": str(comparison_skip_reason or "").strip() or None,
+            "mismatch_class": str(mismatch_class or "").strip() or None,
+            "blocking_level": str(blocking_level or "").strip(),
             "fallback_decision": str(fallback_decision or "").strip(),
             "request_context": dict(request_context or {}),
             "owner_context": {
@@ -1533,6 +1776,13 @@ class PortfolioService:
             },
             "legacy_summary": dict(legacy_summary or {}),
             "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
+            "pg_source_available": bool(pg_source_available),
+            "source_unavailable_reason": str(source_unavailable_reason or "").strip() or None,
+            "query_failure_detail": str(query_failure_detail or "").strip() or None,
+            "first_mismatch_position": first_mismatch_position,
+            "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
+            "first_legacy_value": first_legacy_value,
+            "first_pg_value": first_pg_value,
         }
 
     # ------------------------------------------------------------------
