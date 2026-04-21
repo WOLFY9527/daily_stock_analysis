@@ -1794,10 +1794,14 @@ class RuleBacktestService:
         buy_and_hold_curve: List[Dict[str, Any]],
         buy_and_hold_summary: Dict[str, Any],
         source: str = "stored",
+        completeness: str = "complete",
+        missing_sections: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         return {
             "version": "v1",
             "source": str(source or "stored"),
+            "completeness": str(completeness or "unknown"),
+            "missing_sections": [str(item) for item in (missing_sections or []) if str(item or "").strip()],
             "benchmark_curve": list(benchmark_curve or []),
             "benchmark_summary": dict(benchmark_summary or {}),
             "buy_and_hold_curve": list(buy_and_hold_curve or []),
@@ -1815,22 +1819,67 @@ class RuleBacktestService:
         *,
         visualization: Dict[str, Any],
         metrics: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        stored_payload = visualization.get("comparison") or {}
-        if isinstance(stored_payload, dict) and stored_payload:
-            benchmark_curve = list(stored_payload.get("benchmark_curve") or visualization.get("benchmark_curve") or [])
-            benchmark_summary = dict(stored_payload.get("benchmark_summary") or visualization.get("benchmark_summary") or {})
-            buy_and_hold_curve = list(stored_payload.get("buy_and_hold_curve") or visualization.get("buy_and_hold_curve") or [])
-            buy_and_hold_summary = dict(stored_payload.get("buy_and_hold_summary") or visualization.get("buy_and_hold_summary") or {})
+    ) -> tuple[Dict[str, Any], str, str, List[str]]:
+        stored_payload = visualization.get("comparison")
+        legacy_benchmark_curve = list(visualization.get("benchmark_curve") or [])
+        legacy_benchmark_summary = dict(visualization.get("benchmark_summary") or {})
+        legacy_buy_and_hold_curve = list(visualization.get("buy_and_hold_curve") or [])
+        legacy_buy_and_hold_summary = dict(visualization.get("buy_and_hold_summary") or {})
+
+        if isinstance(stored_payload, dict):
+            missing_sections: List[str] = []
+
+            stored_benchmark_curve = stored_payload.get("benchmark_curve")
+            if isinstance(stored_benchmark_curve, list):
+                benchmark_curve = list(stored_benchmark_curve)
+            else:
+                benchmark_curve = list(legacy_benchmark_curve)
+                if stored_benchmark_curve is None:
+                    missing_sections.append("benchmark_curve")
+
+            stored_benchmark_summary = stored_payload.get("benchmark_summary")
+            if isinstance(stored_benchmark_summary, dict) and stored_benchmark_summary:
+                benchmark_summary = dict(stored_benchmark_summary)
+            else:
+                benchmark_summary = dict(legacy_benchmark_summary)
+                if stored_benchmark_summary is None:
+                    missing_sections.append("benchmark_summary")
+
+            stored_buy_and_hold_curve = stored_payload.get("buy_and_hold_curve")
+            if isinstance(stored_buy_and_hold_curve, list):
+                buy_and_hold_curve = list(stored_buy_and_hold_curve)
+            else:
+                buy_and_hold_curve = list(legacy_buy_and_hold_curve)
+                if stored_buy_and_hold_curve is None:
+                    missing_sections.append("buy_and_hold_curve")
+
+            stored_buy_and_hold_summary = stored_payload.get("buy_and_hold_summary")
+            if isinstance(stored_buy_and_hold_summary, dict) and stored_buy_and_hold_summary:
+                buy_and_hold_summary = dict(stored_buy_and_hold_summary)
+            else:
+                buy_and_hold_summary = dict(legacy_buy_and_hold_summary)
+                if stored_buy_and_hold_summary is None:
+                    missing_sections.append("buy_and_hold_summary")
+
             derived_metrics = cls._build_benchmark_comparison_metrics(
                 total_return_pct=metrics.get("total_return_pct"),
                 benchmark_summary=benchmark_summary,
                 buy_and_hold_summary=buy_and_hold_summary,
             )
-            stored_metrics = dict(stored_payload.get("metrics") or {})
-            return {
+            stored_metrics_raw = stored_payload.get("metrics")
+            stored_metrics = dict(stored_metrics_raw or {}) if isinstance(stored_metrics_raw, dict) else {}
+            if not isinstance(stored_metrics_raw, dict):
+                missing_sections.append("metrics")
+
+            resolved_payload = {
                 "version": str(stored_payload.get("version") or "v1"),
-                "source": str(stored_payload.get("source") or "stored"),
+                "source": (
+                    "summary.visualization.comparison+repaired_sections"
+                    if missing_sections
+                    else "summary.visualization.comparison"
+                ),
+                "completeness": "stored_partial_repaired" if missing_sections else "complete",
+                "missing_sections": missing_sections,
                 "benchmark_curve": benchmark_curve,
                 "benchmark_summary": benchmark_summary,
                 "buy_and_hold_curve": buy_and_hold_curve,
@@ -1840,14 +1889,56 @@ class RuleBacktestService:
                     **{key: stored_metrics.get(key) for key in derived_metrics.keys() if key in stored_metrics},
                 },
             }
+            return (
+                resolved_payload,
+                str(resolved_payload.get("source") or "summary.visualization.comparison"),
+                str(resolved_payload.get("completeness") or "unknown"),
+                list(resolved_payload.get("missing_sections") or []),
+            )
 
-        return cls._build_benchmark_comparison_payload(
+        if (
+            legacy_benchmark_curve
+            or legacy_benchmark_summary
+            or legacy_buy_and_hold_curve
+            or legacy_buy_and_hold_summary
+        ):
+            missing_sections: List[str] = []
+            if not legacy_benchmark_summary:
+                missing_sections.append("benchmark_summary")
+            if not legacy_buy_and_hold_summary:
+                missing_sections.append("buy_and_hold_summary")
+            resolved_payload = cls._build_benchmark_comparison_payload(
+                total_return_pct=metrics.get("total_return_pct"),
+                benchmark_curve=legacy_benchmark_curve,
+                benchmark_summary=legacy_benchmark_summary,
+                buy_and_hold_curve=legacy_buy_and_hold_curve,
+                buy_and_hold_summary=legacy_buy_and_hold_summary,
+                source="derived_from_stored_visualization_components",
+                completeness="legacy_partial" if missing_sections else "legacy_complete",
+                missing_sections=missing_sections,
+            )
+            return (
+                resolved_payload,
+                str(resolved_payload.get("source") or "derived_from_stored_visualization_components"),
+                str(resolved_payload.get("completeness") or "unknown"),
+                list(resolved_payload.get("missing_sections") or []),
+            )
+
+        unavailable_payload = cls._build_benchmark_comparison_payload(
             total_return_pct=metrics.get("total_return_pct"),
-            benchmark_curve=list(visualization.get("benchmark_curve") or []),
-            benchmark_summary=dict(visualization.get("benchmark_summary") or {}),
-            buy_and_hold_curve=list(visualization.get("buy_and_hold_curve") or []),
-            buy_and_hold_summary=dict(visualization.get("buy_and_hold_summary") or {}),
-            source="legacy_derived",
+            benchmark_curve=[],
+            benchmark_summary={},
+            buy_and_hold_curve=[],
+            buy_and_hold_summary={},
+            source="unavailable",
+            completeness="unavailable",
+            missing_sections=["comparison", "benchmark_summary", "buy_and_hold_summary"],
+        )
+        return (
+            unavailable_payload,
+            "unavailable",
+            "unavailable",
+            list(unavailable_payload.get("missing_sections") or []),
         )
 
     @staticmethod
@@ -1937,7 +2028,12 @@ class RuleBacktestService:
         equity_curve: List[Dict[str, Any]],
         trade_rows: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        comparison = self._resolve_benchmark_comparison_payload(
+        (
+            comparison,
+            comparison_source,
+            comparison_completeness,
+            comparison_missing_sections,
+        ) = self._resolve_benchmark_comparison_payload(
             visualization=visualization,
             metrics=metrics,
         )
@@ -1952,6 +2048,9 @@ class RuleBacktestService:
                 "benchmark_summary": benchmark_summary,
                 "buy_and_hold_curve": buy_and_hold_curve,
                 "buy_and_hold_summary": buy_and_hold_summary,
+                "comparison_source": comparison_source,
+                "comparison_completeness": comparison_completeness,
+                "comparison_missing_sections": comparison_missing_sections,
                 "audit_rows": [],
                 "daily_return_series": [],
                 "exposure_curve": [],
@@ -1986,6 +2085,9 @@ class RuleBacktestService:
             "benchmark_summary": benchmark_summary,
             "buy_and_hold_curve": buy_and_hold_curve,
             "buy_and_hold_summary": buy_and_hold_summary,
+            "comparison_source": comparison_source,
+            "comparison_completeness": comparison_completeness,
+            "comparison_missing_sections": comparison_missing_sections,
             "audit_rows": audit_rows,
             "daily_return_series": daily_return_series,
             "exposure_curve": exposure_curve,
@@ -1998,6 +2100,9 @@ class RuleBacktestService:
         row: RuleBacktestRun,
         summary: Dict[str, Any],
         visualization: Dict[str, Any],
+        comparison_source: str,
+        comparison_completeness: str,
+        comparison_missing_sections: List[str],
         metrics_source: str,
         execution_model_source: str,
         execution_assumptions_source: str,
@@ -2007,17 +2112,9 @@ class RuleBacktestService:
         execution_trace_completeness: str,
         execution_trace_missing_fields: List[str],
     ) -> Dict[str, Any]:
-        comparison_payload = visualization.get("comparison")
         stored_audit_rows = list(visualization.get("audit_rows") or [])
         stored_daily_return_series = list(visualization.get("daily_return_series") or [])
         stored_exposure_curve = list(visualization.get("exposure_curve") or [])
-
-        if comparison_payload:
-            comparison_source = "summary.visualization.comparison"
-        elif visualization.get("benchmark_curve") or visualization.get("buy_and_hold_curve") or visualization.get("benchmark_summary") or visualization.get("buy_and_hold_summary"):
-            comparison_source = "rebuilt_from_visualization_components"
-        else:
-            comparison_source = "empty"
 
         if not include_trades:
             audit_rows_source = "omitted_without_detail_read"
@@ -2058,6 +2155,8 @@ class RuleBacktestService:
             "execution_assumptions_snapshot_completeness": execution_assumptions_snapshot_completeness,
             "execution_assumptions_snapshot_missing_keys": list(execution_assumptions_snapshot_missing_keys or []),
             "comparison_source": comparison_source,
+            "comparison_completeness": comparison_completeness,
+            "comparison_missing_sections": list(comparison_missing_sections or []),
             "audit_rows_source": audit_rows_source,
             "daily_return_series_source": daily_return_series_source,
             "exposure_curve_source": exposure_curve_source,
@@ -3922,6 +4021,9 @@ class RuleBacktestService:
         benchmark_summary = dict(replay_visualization.get("benchmark_summary") or {})
         buy_and_hold_curve = list(replay_visualization.get("buy_and_hold_curve") or [])
         buy_and_hold_summary = dict(replay_visualization.get("buy_and_hold_summary") or {})
+        comparison_source = str(replay_visualization.get("comparison_source") or "unknown")
+        comparison_completeness = str(replay_visualization.get("comparison_completeness") or "unknown")
+        comparison_missing_sections = list(replay_visualization.get("comparison_missing_sections") or [])
         audit_rows = list(replay_visualization.get("audit_rows") or [])
         daily_return_series = list(replay_visualization.get("daily_return_series") or [])
         exposure_curve = list(replay_visualization.get("exposure_curve") or [])
@@ -3944,6 +4046,9 @@ class RuleBacktestService:
             row=row,
             summary=summary,
             visualization=visualization,
+            comparison_source=comparison_source,
+            comparison_completeness=comparison_completeness,
+            comparison_missing_sections=comparison_missing_sections,
             metrics_source=metrics_source,
             execution_model_source=execution_model_source,
             execution_assumptions_source=execution_assumptions_source,

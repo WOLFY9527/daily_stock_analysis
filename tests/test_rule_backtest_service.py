@@ -779,6 +779,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["execution_assumptions_snapshot_completeness"], "complete")
         self.assertEqual(authority["execution_assumptions_snapshot_missing_keys"], [])
         self.assertEqual(authority["comparison_source"], "summary.visualization.comparison")
+        self.assertEqual(authority["comparison_completeness"], "complete")
+        self.assertEqual(authority["comparison_missing_sections"], [])
         self.assertEqual(authority["audit_rows_source"], "summary.visualization.audit_rows")
         self.assertEqual(authority["daily_return_series_source"], "summary.visualization.daily_return_series")
         self.assertEqual(authority["exposure_curve_source"], "summary.visualization.exposure_curve")
@@ -1469,6 +1471,141 @@ class RuleBacktestTestCase(unittest.TestCase):
         history = service.list_runs(code="600519", page=1, limit=10)
         self.assertEqual(history["items"][0]["benchmark_summary"]["label"], "stored benchmark")
         self.assertEqual(history["items"][0]["benchmark_return_pct"], 9.9)
+        self.assertEqual(history["items"][0]["result_authority"]["comparison_source"], "summary.visualization.comparison")
+        self.assertEqual(history["items"][0]["result_authority"]["comparison_completeness"], "complete")
+        self.assertEqual(history["items"][0]["result_authority"]["comparison_missing_sections"], [])
+
+    def test_get_run_repairs_partial_stored_benchmark_comparison_payload_with_explicit_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["visualization"]["comparison"] = {
+            "version": "v1",
+            "source": "summary.visualization.comparison",
+            "benchmark_summary": {
+                "label": "stored benchmark partial",
+                "requested_mode": "auto",
+                "resolved_mode": "etf_qqq",
+                "method": "benchmark_security",
+                "price_basis": "close",
+                "return_pct": 8.8,
+                "unavailable_reason": None,
+            },
+        }
+        summary["visualization"]["buy_and_hold_summary"] = {
+            "label": "legacy buy hold fallback",
+            "requested_mode": "same_symbol_buy_and_hold",
+            "resolved_mode": "same_symbol_buy_and_hold",
+            "method": "same_symbol_buy_and_hold",
+            "price_basis": "close",
+            "return_pct": 4.4,
+            "unavailable_reason": None,
+        }
+        summary["visualization"]["buy_and_hold_curve"] = [
+            {"date": "2024-01-20", "close": 204.4, "normalized_value": 1.044, "cumulative_return_pct": 4.4}
+        ]
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["benchmark_summary"]["label"], "stored benchmark partial")
+        self.assertEqual(detail["buy_and_hold_summary"]["label"], "legacy buy hold fallback")
+        self.assertEqual(detail["buy_and_hold_curve"][0]["cumulative_return_pct"], 4.4)
+        self.assertEqual(
+            detail["result_authority"]["comparison_source"],
+            "summary.visualization.comparison+repaired_sections",
+        )
+        self.assertEqual(detail["result_authority"]["comparison_completeness"], "stored_partial_repaired")
+        self.assertIn("buy_and_hold_summary", detail["result_authority"]["comparison_missing_sections"])
+        self.assertIn("buy_and_hold_curve", detail["result_authority"]["comparison_missing_sections"])
+
+    def test_get_run_preserves_stored_empty_comparison_payload_without_legacy_curve_fallback(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["visualization"]["benchmark_curve"] = [
+            {"date": "2024-01-20", "close": 999.0, "normalized_value": 1.99, "cumulative_return_pct": 99.0}
+        ]
+        summary["visualization"]["buy_and_hold_curve"] = [
+            {"date": "2024-01-20", "close": 888.0, "normalized_value": 1.88, "cumulative_return_pct": 88.0}
+        ]
+        summary["visualization"]["comparison"] = {
+            "version": "v1",
+            "source": "summary.visualization.comparison",
+            "benchmark_curve": [],
+            "benchmark_summary": dict(summary["visualization"]["benchmark_summary"] or {}),
+            "buy_and_hold_curve": [],
+            "buy_and_hold_summary": dict(summary["visualization"]["buy_and_hold_summary"] or {}),
+            "metrics": {
+                "benchmark_return_pct": summary["metrics"].get("benchmark_return_pct"),
+                "buy_and_hold_return_pct": summary["metrics"].get("buy_and_hold_return_pct"),
+                "excess_return_vs_benchmark_pct": summary["metrics"].get("excess_return_vs_benchmark_pct"),
+                "excess_return_vs_buy_and_hold_pct": summary["metrics"].get("excess_return_vs_buy_and_hold_pct"),
+            },
+        }
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["benchmark_curve"], [])
+        self.assertEqual(detail["buy_and_hold_curve"], [])
+        self.assertEqual(detail["result_authority"]["comparison_source"], "summary.visualization.comparison")
+        self.assertEqual(detail["result_authority"]["comparison_completeness"], "complete")
+        self.assertEqual(detail["result_authority"]["comparison_missing_sections"], [])
+
+    def test_get_run_marks_comparison_unavailable_when_no_stored_or_legacy_payload_exists(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["visualization"].pop("comparison", None)
+        summary["visualization"]["benchmark_curve"] = []
+        summary["visualization"]["benchmark_summary"] = {}
+        summary["visualization"]["buy_and_hold_curve"] = []
+        summary["visualization"]["buy_and_hold_summary"] = {}
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["benchmark_curve"], [])
+        self.assertEqual(detail["benchmark_summary"], {})
+        self.assertEqual(detail["buy_and_hold_curve"], [])
+        self.assertEqual(detail["buy_and_hold_summary"], {})
+        self.assertEqual(detail["result_authority"]["comparison_source"], "unavailable")
+        self.assertEqual(detail["result_authority"]["comparison_completeness"], "unavailable")
+        self.assertEqual(
+            detail["result_authority"]["comparison_missing_sections"],
+            ["comparison", "benchmark_summary", "buy_and_hold_summary"],
+        )
 
     def test_history_reads_prefer_stored_summary_metrics_over_row_columns(self) -> None:
         service = RuleBacktestService(self.db)
