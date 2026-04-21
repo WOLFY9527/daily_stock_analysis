@@ -140,7 +140,7 @@ const PersonalSettingsPage: React.FC = () => {
         title={language === 'en' ? 'Workspace preferences' : '工作区偏好'}
         description={language === 'en'
           ? 'Keep appearance, readability, and personal session controls separate from system-level operator configuration.'
-          : '将外观、可读性和个人会话控制，与系统级 operator 配置明确分开。'}
+          : '将外观、可读性和个人会话控制，与系统级运维配置明确分开。'}
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
@@ -274,7 +274,7 @@ const PersonalSettingsPage: React.FC = () => {
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
                       {language === 'en'
                         ? 'Your admin account now defaults to a normal user-like surface. Operator tools stay behind an explicit Admin Mode switch.'
-                        : '你的管理员账户现在默认先以普通用户形态进入产品，operator 工具会继续留在显式的 Admin Mode 开关之后。'}
+                        : '你的管理员账户现在默认先以普通用户形态进入产品，运维工具会继续留在显式的管理员模式开关之后。'}
                     </p>
                   </div>
                 </div>
@@ -285,13 +285,13 @@ const PersonalSettingsPage: React.FC = () => {
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                   >
                     {isAdminMode
-                      ? (language === 'en' ? 'Return to User Mode' : '返回 User Mode')
-                      : (language === 'en' ? 'Enter Admin Mode' : '进入 Admin Mode')}
+                      ? (language === 'en' ? 'Return to User Mode' : '返回普通模式')
+                      : (language === 'en' ? 'Enter Admin Mode' : '进入管理员模式')}
                   </button>
                   <span className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text">
                     {isAdminMode
-                      ? (language === 'en' ? 'Current surface: Admin Mode' : '当前产品面：Admin Mode')
-                      : (language === 'en' ? 'Current surface: User Mode' : '当前产品面：User Mode')}
+                      ? (language === 'en' ? 'Current surface: Admin Mode' : '当前产品面：管理员模式')
+                      : (language === 'en' ? 'Current surface: User Mode' : '当前产品面：普通模式')}
                   </span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
@@ -314,7 +314,7 @@ const PersonalSettingsPage: React.FC = () => {
                     <p className="text-xs leading-5 text-secondary-text">
                       {language === 'en'
                         ? 'Stay in User Mode for everyday analysis, then switch into Admin Mode only when you need system settings or operator logs.'
-                        : '日常分析先停留在 User Mode，只有需要系统设置或 operator 日志时再显式切换到 Admin Mode。'}
+                        : '日常分析先停留在普通模式，只有需要系统设置或运维日志时再显式切换到管理员模式。'}
                     </p>
                   )}
                 </div>
@@ -334,7 +334,7 @@ const PersonalSettingsPage: React.FC = () => {
                     <p className="text-xs leading-5 text-secondary-text">
                       {language === 'en'
                         ? 'Personal analysis notifications now resolve to your own email and Discord targets instead of reusing admin/system channels.'
-                        : '个人分析通知现在会解析到你自己的邮箱与 Discord 目标，不再复用 admin/system 通道。'}
+                        : '个人分析通知现在会解析到你自己的邮箱与 Discord 目标，不再复用管理员/系统通道。'}
                     </p>
                     <label className="flex items-center gap-3 text-xs text-secondary-text">
                       <input
@@ -388,7 +388,7 @@ const PersonalSettingsPage: React.FC = () => {
                     <p className="text-xs leading-5 text-secondary-text">
                       {language === 'en'
                         ? 'Discord delivery uses the webhook you provide here and stays separate from shared operator channels.'
-                        : 'Discord 通知会使用你在这里填写的 Webhook，并继续与共享的 operator 通道保持分离。'}
+                        : 'Discord 通知会使用你在这里填写的 Webhook，并继续与共享的运维通道保持分离。'}
                     </p>
                     {notificationNotice ? (
                       <p className="text-xs leading-5 text-[hsl(var(--accent-positive-hsl))]">{notificationNotice}</p>
@@ -409,7 +409,7 @@ const PersonalSettingsPage: React.FC = () => {
                   <p className="mt-2 text-xs leading-5 text-secondary-text">
                     {language === 'en'
                       ? 'This phase keeps notification channel internals under admin control. Personal preferences stay lightweight here.'
-                      : '本阶段仍将通知通道内部配置保留在 admin 控制面，个人偏好在这里保持轻量。'}
+                      : '本阶段仍将通知通道内部配置保留在管理员控制面，个人偏好在这里保持轻量。'}
                   </p>
                 )}
               </div>
