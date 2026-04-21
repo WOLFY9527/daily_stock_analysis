@@ -770,6 +770,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             )
 
         authority = response["result_authority"]
+        self.assertEqual(authority["contract_version"], "v1")
         self.assertEqual(authority["read_mode"], "stored_first")
         self.assertEqual(authority["summary_source"], "row.summary_json")
         self.assertEqual(authority["parsed_strategy_source"], "row.parsed_strategy_json")
@@ -792,6 +793,66 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["trade_rows_source"], "stored_rule_backtest_trades")
         self.assertEqual(authority["equity_curve_source"], "row.equity_curve_json")
         self.assertEqual(authority["execution_trace_source"], "summary.execution_trace")
+        self.assertEqual(
+            authority["domains"]["summary"],
+            {
+                "source": "row.summary_json",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["metrics"],
+            {
+                "source": "summary.metrics+row_columns_fallback",
+                "completeness": "stored_partial_repaired",
+                "state": "available",
+                "missing": authority["metrics_missing_fields"],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["comparison"],
+            {
+                "source": "summary.visualization.comparison",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "sections",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["replay_payload"],
+            {
+                "source": "summary.visualization.audit_rows",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "sections",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["execution_assumptions_snapshot"],
+            {
+                "source": "summary.execution_assumptions_snapshot",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "keys",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["execution_trace"],
+            {
+                "source": "summary.execution_trace",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
         self.assertEqual(response["execution_assumptions_snapshot"]["version"], "v1")
         self.assertEqual(
             response["execution_assumptions_snapshot"]["source"],
@@ -1222,12 +1283,43 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("benchmark_summary", history["items"][0])
         self.assertIn("execution_model", history["items"][0])
         self.assertIn("execution_assumptions", history["items"][0])
+        self.assertEqual(history["items"][0]["result_authority"]["contract_version"], "v1")
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_missing_sections"], [])
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertEqual(
+            history["items"][0]["result_authority"]["domains"]["replay_payload"],
+            {
+                "source": "omitted_without_detail_read",
+                "completeness": "omitted",
+                "state": "omitted",
+                "missing": [],
+                "missing_kind": "sections",
+            },
+        )
+        self.assertEqual(
+            history["items"][0]["result_authority"]["domains"]["trade_rows"],
+            {
+                "source": "omitted_without_detail_read",
+                "completeness": "omitted",
+                "state": "omitted",
+                "missing": [],
+                "missing_kind": "rows",
+            },
+        )
+        self.assertEqual(
+            history["items"][0]["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": "omitted_without_detail_read",
+                "completeness": "omitted",
+                "state": "omitted",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
 
         detail = service.get_run(history["items"][0]["id"])
         self.assertIsNotNone(detail)
@@ -1388,6 +1480,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(
             detail["result_authority"]["replay_payload_missing_sections"],
             ["daily_return_series", "exposure_curve"],
+        )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["replay_payload"],
+            {
+                "source": "summary.visualization.audit_rows+repaired_sections",
+                "completeness": "stored_partial_repaired",
+                "state": "available",
+                "missing": ["daily_return_series", "exposure_curve"],
+                "missing_kind": "sections",
+            },
         )
         self.assertEqual(detail["result_authority"]["audit_rows_source"], "summary.visualization.audit_rows")
         self.assertEqual(
@@ -1631,6 +1733,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(
             detail["result_authority"]["comparison_missing_sections"],
             ["comparison", "benchmark_summary", "buy_and_hold_summary"],
+        )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["comparison"],
+            {
+                "source": "unavailable",
+                "completeness": "unavailable",
+                "state": "unavailable",
+                "missing": ["comparison", "benchmark_summary", "buy_and_hold_summary"],
+                "missing_kind": "sections",
+            },
         )
 
     def test_history_reads_prefer_stored_summary_metrics_over_row_columns(self) -> None:

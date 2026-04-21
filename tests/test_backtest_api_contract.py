@@ -60,6 +60,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "excess_return_vs_buy_and_hold_pct": 0.0,
             "summary": {},
             "result_authority": {
+                "contract_version": "v1",
                 "read_mode": "stored_first",
                 "comparison_source": "summary.visualization.comparison",
                 "comparison_completeness": "complete",
@@ -71,6 +72,43 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "execution_trace_source": "summary.execution_trace",
                 "execution_trace_completeness": "complete",
                 "execution_trace_missing_fields": [],
+                "domains": {
+                    "summary": {
+                        "source": "row.summary_json",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "fields",
+                    },
+                    "metrics": {
+                        "source": "summary.metrics",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "fields",
+                    },
+                    "comparison": {
+                        "source": "summary.visualization.comparison",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "sections",
+                    },
+                    "replay_payload": {
+                        "source": "summary.visualization.audit_rows",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "sections",
+                    },
+                    "execution_trace": {
+                        "source": "summary.execution_trace",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "fields",
+                    },
+                },
             },
             "execution_trace": {
                 "version": "v1",
@@ -291,6 +329,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertNotIn("audit_rows", payload)
         self.assertEqual(len(payload["auditRows"]), 1)
         self.assertEqual(payload["auditRows"][0]["symbol_close"], 101.0)
+        self.assertEqual(payload["result_authority"]["contract_version"], "v1")
         self.assertEqual(payload["result_authority"]["read_mode"], "stored_first")
         self.assertEqual(payload["result_authority"]["comparison_source"], "summary.visualization.comparison")
         self.assertEqual(payload["result_authority"]["comparison_completeness"], "complete")
@@ -305,6 +344,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(payload["result_authority"]["execution_trace_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertEqual(
+            payload["result_authority"]["domains"]["replay_payload"],
+            {
+                "source": "summary.visualization.audit_rows",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "sections",
+            },
+        )
         self.assertEqual(payload["execution_assumptions_snapshot"]["version"], "v1")
         self.assertEqual(payload["execution_assumptions_snapshot"]["source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(payload["execution_trace"]["version"], "v1")

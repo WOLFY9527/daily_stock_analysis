@@ -2236,7 +2236,73 @@ class RuleBacktestService:
             trade_rows_source = "stored_rule_backtest_trades"
             equity_curve_source = "row.equity_curve_json" if row.equity_curve_json else "empty"
 
+        domains = {
+            "summary": RuleBacktestService._build_result_authority_domain_entry(
+                source="row.summary_json" if row.summary_json else "empty",
+                missing_kind="fields",
+            ),
+            "parsed_strategy": RuleBacktestService._build_result_authority_domain_entry(
+                source="row.parsed_strategy_json" if row.parsed_strategy_json else "empty",
+                missing_kind="fields",
+            ),
+            "metrics": RuleBacktestService._build_result_authority_domain_entry(
+                source=metrics_source,
+                completeness=metrics_completeness,
+                missing=metrics_missing_fields,
+                missing_kind="fields",
+            ),
+            "execution_model": RuleBacktestService._build_result_authority_domain_entry(
+                source=execution_model_source,
+                missing_kind="fields",
+            ),
+            "execution_assumptions_snapshot": RuleBacktestService._build_result_authority_domain_entry(
+                source=execution_assumptions_source,
+                completeness=execution_assumptions_snapshot_completeness,
+                missing=execution_assumptions_snapshot_missing_keys,
+                missing_kind="keys",
+            ),
+            "comparison": RuleBacktestService._build_result_authority_domain_entry(
+                source=comparison_source,
+                completeness=comparison_completeness,
+                missing=comparison_missing_sections,
+                missing_kind="sections",
+            ),
+            "replay_payload": RuleBacktestService._build_result_authority_domain_entry(
+                source=replay_payload_source,
+                completeness=replay_payload_completeness,
+                missing=replay_payload_missing_sections,
+                missing_kind="sections",
+            ),
+            "audit_rows": RuleBacktestService._build_result_authority_domain_entry(
+                source=audit_rows_source,
+                missing_kind="rows",
+            ),
+            "daily_return_series": RuleBacktestService._build_result_authority_domain_entry(
+                source=daily_return_series_source,
+                missing_kind="rows",
+            ),
+            "exposure_curve": RuleBacktestService._build_result_authority_domain_entry(
+                source=exposure_curve_source,
+                missing_kind="rows",
+            ),
+            "trade_rows": RuleBacktestService._build_result_authority_domain_entry(
+                source=trade_rows_source,
+                missing_kind="rows",
+            ),
+            "equity_curve": RuleBacktestService._build_result_authority_domain_entry(
+                source=equity_curve_source,
+                missing_kind="rows",
+            ),
+            "execution_trace": RuleBacktestService._build_result_authority_domain_entry(
+                source=execution_trace_source,
+                completeness=execution_trace_completeness,
+                missing=execution_trace_missing_fields,
+                missing_kind="fields",
+            ),
+        }
+
         return {
+            "contract_version": "v1",
             "read_mode": "stored_first",
             "summary_source": "row.summary_json" if row.summary_json else "empty",
             "parsed_strategy_source": "row.parsed_strategy_json" if row.parsed_strategy_json else "empty",
@@ -2261,7 +2327,59 @@ class RuleBacktestService:
             "execution_trace_source": execution_trace_source,
             "execution_trace_completeness": execution_trace_completeness,
             "execution_trace_missing_fields": list(execution_trace_missing_fields or []),
+            "domains": domains,
         }
+
+    @staticmethod
+    def _build_result_authority_domain_entry(
+        *,
+        source: str,
+        completeness: Optional[str] = None,
+        missing: Optional[List[str]] = None,
+        missing_kind: str = "fields",
+    ) -> Dict[str, Any]:
+        normalized_source = str(source or "unknown")
+        normalized_completeness = str(
+            completeness
+            or RuleBacktestService._infer_result_authority_completeness_from_source(normalized_source)
+        )
+        return {
+            "source": normalized_source,
+            "completeness": normalized_completeness,
+            "state": RuleBacktestService._infer_result_authority_state(
+                source=normalized_source,
+                completeness=normalized_completeness,
+            ),
+            "missing": list(missing or []),
+            "missing_kind": str(missing_kind or "fields"),
+        }
+
+    @staticmethod
+    def _infer_result_authority_completeness_from_source(source: str) -> str:
+        normalized_source = str(source or "").strip().lower()
+        if normalized_source == "omitted_without_detail_read":
+            return "omitted"
+        if normalized_source == "unavailable":
+            return "unavailable"
+        if normalized_source == "empty":
+            return "empty"
+        if normalized_source in {"", "unknown"}:
+            return "unknown"
+        return "complete"
+
+    @staticmethod
+    def _infer_result_authority_state(*, source: str, completeness: str) -> str:
+        normalized_source = str(source or "").strip().lower()
+        normalized_completeness = str(completeness or "").strip().lower()
+        if normalized_source == "omitted_without_detail_read" or normalized_completeness == "omitted":
+            return "omitted"
+        if normalized_source == "unavailable" or normalized_completeness == "unavailable":
+            return "unavailable"
+        if normalized_source == "empty" or normalized_completeness == "empty":
+            return "empty"
+        if normalized_completeness == "unknown":
+            return "unknown"
+        return "available"
 
     @staticmethod
     def _build_execution_trace_assumptions(parsed_strategy: Optional[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], str]:

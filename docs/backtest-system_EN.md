@@ -28,6 +28,7 @@
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` is a best-effort cancel endpoint: unfinished runs are marked `cancelled`, while already-finished runs keep their final state.
 - `GET /api/v1/backtest/rule/runs/{run_id}` remains the full-detail endpoint and includes `execution_trace`, trades, and audit data.
 - The `result_authority` object on detail/history payloads now also exposes replay/audit reopen diagnostics: `replay_payload_source` / `replay_payload_completeness` / `replay_payload_missing_sections` plus `audit_rows_source` / `daily_return_series_source` / `exposure_curve_source`. These fields distinguish between directly persisted payloads, sections repaired from persisted audit rows, legacy replay payload rebuilt from stored run artifacts, and omitted/unavailable states.
+- To make the authority contract more uniform across detail/history surfaces, `result_authority` now also includes a versioned normalized view: `contract_version` plus `domains`. Each `domains.<name>` entry uses the same five keys: `source`, `completeness`, `state`, `missing`, and `missing_kind`. The older flat authority fields remain in place for compatibility.
 
 ## P5 Web Usability Layer
 

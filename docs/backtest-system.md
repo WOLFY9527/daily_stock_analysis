@@ -28,6 +28,7 @@
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` 提供 best-effort cancel：对尚未完成的任务会标记为 `cancelled`；若任务已结束，则返回当前最终状态而不覆盖结果。
 - `GET /api/v1/backtest/rule/runs/{run_id}` 继续作为完整详情接口，包含 `execution_trace`、交易明细和审计数据。
 - detail/history 返回里的 `result_authority` 现会额外暴露 replay/audit reopen 诊断：`replay_payload_source` / `replay_payload_completeness` / `replay_payload_missing_sections` 以及 `audit_rows_source` / `daily_return_series_source` / `exposure_curve_source`，用于区分“直接读取已持久化 payload”“基于持久化 audit rows 修补缺失 section”“仅基于已存 run artifacts 回补 legacy payload”“未读取 detail / unavailable”等状态。
+- 为了让 detail/history 的 authority 诊断形状更稳定，`result_authority` 现在还会包含版本化的归一化域视图：`contract_version` + `domains`。`domains.<name>` 统一使用 `source` / `completeness` / `state` / `missing` / `missing_kind` 五个字段表达各诊断域，旧的扁平字段仍保留以兼容既有消费者。
 
 ## P5 Web 可用性收口
 
