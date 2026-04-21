@@ -1946,9 +1946,10 @@ class RuleBacktestService:
         *,
         row: RuleBacktestRun,
         summary: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        stored_metrics = dict(summary.get("metrics") or {})
-        fallbacks = {
+    ) -> tuple[Dict[str, Any], str, str, List[str]]:
+        stored_metrics_raw = summary.get("metrics")
+        stored_metrics = dict(stored_metrics_raw or {}) if isinstance(stored_metrics_raw, dict) else {}
+        metric_fallbacks = {
             "trade_count": row.trade_count,
             "win_count": row.win_count,
             "loss_count": row.loss_count,
@@ -1964,32 +1965,37 @@ class RuleBacktestService:
             "period_start": None,
             "period_end": None,
         }
-        resolved = dict(stored_metrics)
-        for key, fallback in fallbacks.items():
-            if key not in resolved or resolved.get(key) is None:
+
+        resolved: Dict[str, Any] = {}
+        repaired_fields: List[str] = []
+        missing_fields: List[str] = []
+        for key, fallback in metric_fallbacks.items():
+            stored_value = stored_metrics.get(key)
+            if key in stored_metrics and stored_value is not None:
+                resolved[key] = stored_value
+                continue
+            if fallback is not None:
                 resolved[key] = fallback
-        return resolved
+                if stored_metrics:
+                    repaired_fields.append(key)
+                continue
+            resolved[key] = None
+            missing_fields.append(key)
 
-    @staticmethod
-    def _describe_metrics_source(*, row: RuleBacktestRun, summary: Dict[str, Any]) -> str:
-        stored_metrics = dict(summary.get("metrics") or {})
-        if not stored_metrics:
-            return "row_columns_fallback"
+        if stored_metrics:
+            if repaired_fields or missing_fields:
+                return (
+                    resolved,
+                    "summary.metrics+row_columns_fallback",
+                    "stored_partial_repaired",
+                    sorted(set(repaired_fields + missing_fields)),
+                )
+            return resolved, "summary.metrics", "complete", []
 
-        fallback_fields = (
-            ("trade_count", row.trade_count),
-            ("win_count", row.win_count),
-            ("loss_count", row.loss_count),
-            ("total_return_pct", row.total_return_pct),
-            ("win_rate_pct", row.win_rate_pct),
-            ("avg_trade_return_pct", row.avg_trade_return_pct),
-            ("max_drawdown_pct", row.max_drawdown_pct),
-            ("avg_holding_days", row.avg_holding_days),
-            ("final_equity", row.final_equity),
-        )
-        if any(stored_metrics.get(key) is None and fallback is not None for key, fallback in fallback_fields):
-            return "summary.metrics+row_columns_fallback"
-        return "summary.metrics"
+        row_fields_present = any(value is not None for value in metric_fallbacks.values())
+        if row_fields_present:
+            return resolved, "row_columns_fallback", "legacy_row_columns", missing_fields
+        return resolved, "unavailable", "unavailable", sorted(set(metric_fallbacks.keys()))
 
     def _build_legacy_replay_visualization_payload(
         self,
@@ -2104,6 +2110,8 @@ class RuleBacktestService:
         comparison_completeness: str,
         comparison_missing_sections: List[str],
         metrics_source: str,
+        metrics_completeness: str,
+        metrics_missing_fields: List[str],
         execution_model_source: str,
         execution_assumptions_source: str,
         execution_assumptions_snapshot_completeness: str,
@@ -2150,6 +2158,8 @@ class RuleBacktestService:
             "summary_source": "row.summary_json" if row.summary_json else "empty",
             "parsed_strategy_source": "row.parsed_strategy_json" if row.parsed_strategy_json else "empty",
             "metrics_source": metrics_source,
+            "metrics_completeness": metrics_completeness,
+            "metrics_missing_fields": list(metrics_missing_fields or []),
             "execution_model_source": execution_model_source,
             "execution_assumptions_source": execution_assumptions_source,
             "execution_assumptions_snapshot_completeness": execution_assumptions_snapshot_completeness,
@@ -4005,8 +4015,12 @@ class RuleBacktestService:
             or self._describe_execution_assumptions_source(summary)
         )
         execution_assumptions = dict(execution_assumptions_snapshot.get("payload") or {})
-        metrics = self._resolve_run_metrics_payload(row=row, summary=summary)
-        metrics_source = self._describe_metrics_source(row=row, summary=summary)
+        (
+            metrics,
+            metrics_source,
+            metrics_completeness,
+            metrics_missing_fields,
+        ) = self._resolve_run_metrics_payload(row=row, summary=summary)
         visualization = summary.get("visualization") or {}
         stored_audit_rows = list(visualization.get("audit_rows") or [])
         replay_visualization = self._resolve_replay_visualization_payload(
@@ -4050,6 +4064,8 @@ class RuleBacktestService:
             comparison_completeness=comparison_completeness,
             comparison_missing_sections=comparison_missing_sections,
             metrics_source=metrics_source,
+            metrics_completeness=metrics_completeness,
+            metrics_missing_fields=metrics_missing_fields,
             execution_model_source=execution_model_source,
             execution_assumptions_source=execution_assumptions_source,
             execution_assumptions_snapshot_completeness=str(

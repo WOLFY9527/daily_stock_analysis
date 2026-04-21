@@ -773,7 +773,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["read_mode"], "stored_first")
         self.assertEqual(authority["summary_source"], "row.summary_json")
         self.assertEqual(authority["parsed_strategy_source"], "row.parsed_strategy_json")
-        self.assertEqual(authority["metrics_source"], "summary.metrics")
+        self.assertEqual(authority["metrics_source"], "summary.metrics+row_columns_fallback")
+        self.assertEqual(authority["metrics_completeness"], "stored_partial_repaired")
+        self.assertIn("annualized_return_pct", authority["metrics_missing_fields"])
         self.assertEqual(authority["execution_model_source"], "summary.execution_model")
         self.assertEqual(authority["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(authority["execution_assumptions_snapshot_completeness"], "complete")
@@ -1670,6 +1672,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["avg_holding_bars"], 8.0)
         self.assertEqual(detail["avg_holding_calendar_days"], 10.0)
         self.assertEqual(detail["final_equity"], 188800.0)
+        self.assertEqual(detail["result_authority"]["metrics_source"], "summary.metrics")
+        self.assertEqual(detail["result_authority"]["metrics_completeness"], "complete")
+        self.assertEqual(detail["result_authority"]["metrics_missing_fields"], [])
         self.assertEqual(detail["daily_return_series"], summary["visualization"]["daily_return_series"])
         self.assertEqual(detail["exposure_curve"], summary["visualization"]["exposure_curve"])
 
@@ -1678,6 +1683,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(history["items"][0]["total_return_pct"], 88.8)
         self.assertEqual(history["items"][0]["annualized_return_pct"], 44.4)
         self.assertEqual(history["items"][0]["final_equity"], 188800.0)
+        self.assertEqual(history["items"][0]["result_authority"]["metrics_source"], "summary.metrics")
+        self.assertEqual(history["items"][0]["result_authority"]["metrics_completeness"], "complete")
+        self.assertEqual(history["items"][0]["result_authority"]["metrics_missing_fields"], [])
 
     def test_get_run_uses_explicit_legacy_fallback_when_stored_replay_payload_is_missing(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1707,7 +1715,56 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(len(detail["exposure_curve"]), 0)
         self.assertEqual(detail["trade_count"], run_row.trade_count)
         self.assertEqual(detail["total_return_pct"], run_row.total_return_pct)
+        self.assertEqual(detail["result_authority"]["metrics_source"], "row_columns_fallback")
+        self.assertEqual(detail["result_authority"]["metrics_completeness"], "legacy_row_columns")
+        self.assertIn("annualized_return_pct", detail["result_authority"]["metrics_missing_fields"])
+        self.assertIn("avg_holding_calendar_days", detail["result_authority"]["metrics_missing_fields"])
         self.assertEqual(detail["benchmark_return_pct"], detail["benchmark_summary"]["return_pct"])
+
+    def test_get_run_repairs_partial_stored_metrics_with_explicit_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["metrics"] = {
+            "trade_count": 7,
+            "total_return_pct": 88.8,
+            "annualized_return_pct": 44.4,
+        }
+        service.repo.update_run(
+            run_row.id,
+            summary_json=service._serialize_json(summary),
+            win_count=6,
+            loss_count=1,
+            win_rate_pct=85.0,
+            avg_trade_return_pct=12.3,
+            max_drawdown_pct=9.8,
+            avg_holding_days=8.0,
+            final_equity=188800.0,
+        )
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["trade_count"], 7)
+        self.assertEqual(detail["total_return_pct"], 88.8)
+        self.assertEqual(detail["annualized_return_pct"], 44.4)
+        self.assertEqual(detail["win_count"], 6)
+        self.assertEqual(detail["loss_count"], 1)
+        self.assertEqual(detail["final_equity"], 188800.0)
+        self.assertEqual(detail["result_authority"]["metrics_source"], "summary.metrics+row_columns_fallback")
+        self.assertEqual(detail["result_authority"]["metrics_completeness"], "stored_partial_repaired")
+        self.assertIn("win_count", detail["result_authority"]["metrics_missing_fields"])
+        self.assertIn("final_equity", detail["result_authority"]["metrics_missing_fields"])
+        self.assertIn("avg_holding_calendar_days", detail["result_authority"]["metrics_missing_fields"])
 
     def test_get_run_derives_execution_model_for_legacy_runs_without_structured_config(self) -> None:
         service = RuleBacktestService(self.db)

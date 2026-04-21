@@ -64,6 +64,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "comparison_source": "summary.visualization.comparison",
                 "comparison_completeness": "complete",
                 "comparison_missing_sections": [],
+                "metrics_source": "summary.metrics",
+                "metrics_completeness": "complete",
+                "metrics_missing_fields": [],
                 "execution_assumptions_source": "summary.execution_assumptions_snapshot",
                 "execution_trace_source": "summary.execution_trace",
                 "execution_trace_completeness": "complete",
@@ -285,6 +288,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["comparison_source"], "summary.visualization.comparison")
         self.assertEqual(payload["result_authority"]["comparison_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["comparison_missing_sections"], [])
+        self.assertEqual(payload["result_authority"]["metrics_source"], "summary.metrics")
+        self.assertEqual(payload["result_authority"]["metrics_completeness"], "complete")
+        self.assertEqual(payload["result_authority"]["metrics_missing_fields"], [])
         self.assertEqual(payload["result_authority"]["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(payload["result_authority"]["execution_trace_completeness"], "complete")
