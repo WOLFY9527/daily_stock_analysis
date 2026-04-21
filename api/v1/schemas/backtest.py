@@ -572,6 +572,7 @@ class RuleBacktestHistoryItem(BaseModel):
     auditRows: List[RuleBacktestAuditRowItem] = _rule_backtest_audit_rows_field()
     daily_return_series: List[Dict[str, Any]] = Field(default_factory=list)
     exposure_curve: List[Dict[str, Any]] = Field(default_factory=list)
+    result_authority: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleBacktestHistoryResponse(BaseModel):
@@ -640,6 +641,7 @@ class RuleBacktestRunResponse(BaseModel):
     equity_curve: List[Dict[str, Any]] = Field(default_factory=list)
     trades: List[RuleBacktestTradeItem] = Field(default_factory=list)
     execution_trace: Optional[Dict[str, Any]] = None
+    result_authority: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleBacktestDetailResponse(RuleBacktestRunResponse):

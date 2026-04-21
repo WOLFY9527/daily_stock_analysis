@@ -758,12 +758,31 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(any((row.get("动作") or "") in {"买", "卖"} for row in rows))
         self.assertTrue(all((row.get("fallback") or "") for row in rows))
 
-        with open(json_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        self.assertIn("trace_rows", payload)
-        self.assertEqual(payload["trace_rows"], rows)
-        self.assertIn("assumptions", payload)
-        self.assertIn("execution_model", payload)
+    def test_run_response_exposes_stored_first_result_authority(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        authority = response["result_authority"]
+        self.assertEqual(authority["read_mode"], "stored_first")
+        self.assertEqual(authority["summary_source"], "row.summary_json")
+        self.assertEqual(authority["parsed_strategy_source"], "row.parsed_strategy_json")
+        self.assertEqual(authority["metrics_source"], "summary.metrics")
+        self.assertEqual(authority["execution_model_source"], "summary.execution_model")
+        self.assertEqual(authority["execution_assumptions_source"], "summary.execution_assumptions")
+        self.assertEqual(authority["comparison_source"], "summary.visualization.comparison")
+        self.assertEqual(authority["audit_rows_source"], "summary.visualization.audit_rows")
+        self.assertEqual(authority["daily_return_series_source"], "summary.visualization.daily_return_series")
+        self.assertEqual(authority["exposure_curve_source"], "summary.visualization.exposure_curve")
+        self.assertEqual(authority["trade_rows_source"], "stored_rule_backtest_trades")
+        self.assertEqual(authority["equity_curve_source"], "row.equity_curve_json")
+        self.assertEqual(authority["execution_trace_source"], "summary.execution_trace")
 
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
         service = RuleBacktestService(self.db)
@@ -847,6 +866,37 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["execution_trace"]["source"], "rebuilt_from_stored_audit_rows")
         self.assertTrue(detail["execution_trace"]["fallback"]["trace_rebuilt"])
         self.assertTrue(all("历史运行回补trace" in str(row.get("fallback") or "") for row in detail["execution_trace"]["rows"]))
+        self.assertEqual(detail["result_authority"]["execution_trace_source"], "rebuilt_from_stored_audit_rows")
+        self.assertEqual(detail["result_authority"]["audit_rows_source"], "summary.visualization.audit_rows")
+
+    def test_get_run_marks_execution_model_as_derived_when_snapshot_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary.pop("execution_model", None)
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(
+            detail["result_authority"]["execution_model_source"],
+            "derived_from_execution_assumptions_and_request",
+        )
+        self.assertEqual(
+            detail["result_authority"]["execution_assumptions_source"],
+            "summary.execution_assumptions",
+        )
+        self.assertEqual(detail["execution_model"]["entry_timing"], "next_bar_open")
 
     def test_module_level_run_backtest_automated_exports_trace_files(self) -> None:
         with patch.object(RuleBacktestService, "_ensure_market_history", return_value=0), patch.object(

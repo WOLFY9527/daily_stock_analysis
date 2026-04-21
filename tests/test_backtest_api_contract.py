@@ -59,6 +59,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "buy_and_hold_return_pct": 0.0,
             "excess_return_vs_buy_and_hold_pct": 0.0,
             "summary": {},
+            "result_authority": {
+                "read_mode": "stored_first",
+                "execution_trace_source": "summary.execution_trace",
+            },
             "execution_model": {
                 "version": "v1",
                 "timeframe": "daily",
@@ -246,6 +250,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertNotIn("audit_rows", payload)
         self.assertEqual(len(payload["auditRows"]), 1)
         self.assertEqual(payload["auditRows"][0]["symbol_close"], 101.0)
+        self.assertEqual(payload["result_authority"]["read_mode"], "stored_first")
+        self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "macd_crossover")
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["signal_period"], 9)
         self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])

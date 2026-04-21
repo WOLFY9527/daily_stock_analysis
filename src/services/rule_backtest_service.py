@@ -1801,6 +1801,27 @@ class RuleBacktestService:
                 resolved[key] = fallback
         return resolved
 
+    @staticmethod
+    def _describe_metrics_source(*, row: RuleBacktestRun, summary: Dict[str, Any]) -> str:
+        stored_metrics = dict(summary.get("metrics") or {})
+        if not stored_metrics:
+            return "row_columns_fallback"
+
+        fallback_fields = (
+            ("trade_count", row.trade_count),
+            ("win_count", row.win_count),
+            ("loss_count", row.loss_count),
+            ("total_return_pct", row.total_return_pct),
+            ("win_rate_pct", row.win_rate_pct),
+            ("avg_trade_return_pct", row.avg_trade_return_pct),
+            ("max_drawdown_pct", row.max_drawdown_pct),
+            ("avg_holding_days", row.avg_holding_days),
+            ("final_equity", row.final_equity),
+        )
+        if any(stored_metrics.get(key) is None and fallback is not None for key, fallback in fallback_fields):
+            return "summary.metrics+row_columns_fallback"
+        return "summary.metrics"
+
     def _build_legacy_replay_visualization_payload(
         self,
         *,
@@ -1890,6 +1911,75 @@ class RuleBacktestService:
             "audit_rows": audit_rows,
             "daily_return_series": daily_return_series,
             "exposure_curve": exposure_curve,
+        }
+
+    @staticmethod
+    def _build_result_authority_payload(
+        *,
+        include_trades: bool,
+        row: RuleBacktestRun,
+        summary: Dict[str, Any],
+        visualization: Dict[str, Any],
+        metrics_source: str,
+        execution_model_source: str,
+        execution_assumptions_source: str,
+        execution_trace_source: str,
+    ) -> Dict[str, Any]:
+        comparison_payload = visualization.get("comparison")
+        stored_audit_rows = list(visualization.get("audit_rows") or [])
+        stored_daily_return_series = list(visualization.get("daily_return_series") or [])
+        stored_exposure_curve = list(visualization.get("exposure_curve") or [])
+
+        if comparison_payload:
+            comparison_source = "summary.visualization.comparison"
+        elif visualization.get("benchmark_curve") or visualization.get("buy_and_hold_curve") or visualization.get("benchmark_summary") or visualization.get("buy_and_hold_summary"):
+            comparison_source = "rebuilt_from_visualization_components"
+        else:
+            comparison_source = "empty"
+
+        if not include_trades:
+            audit_rows_source = "omitted_without_detail_read"
+            daily_return_series_source = "omitted_without_detail_read"
+            exposure_curve_source = "omitted_without_detail_read"
+            trade_rows_source = "omitted_without_detail_read"
+            equity_curve_source = "omitted_without_detail_read"
+        else:
+            audit_rows_source = (
+                "summary.visualization.audit_rows"
+                if stored_audit_rows
+                else "rebuilt_from_equity_curve_and_benchmark_payloads"
+            )
+            if stored_daily_return_series:
+                daily_return_series_source = "summary.visualization.daily_return_series"
+            elif stored_audit_rows:
+                daily_return_series_source = "rebuilt_from_summary.visualization.audit_rows"
+            else:
+                daily_return_series_source = "rebuilt_from_equity_curve"
+
+            if stored_exposure_curve:
+                exposure_curve_source = "summary.visualization.exposure_curve"
+            elif stored_audit_rows:
+                exposure_curve_source = "rebuilt_from_summary.visualization.audit_rows"
+            else:
+                exposure_curve_source = "rebuilt_from_equity_curve_and_trade_rows"
+
+            trade_rows_source = "stored_rule_backtest_trades"
+            equity_curve_source = "row.equity_curve_json" if row.equity_curve_json else "empty"
+
+        return {
+            "read_mode": "stored_first",
+            "summary_source": "row.summary_json" if row.summary_json else "empty",
+            "parsed_strategy_source": "row.parsed_strategy_json" if row.parsed_strategy_json else "empty",
+            "metrics_source": metrics_source,
+            "execution_model_source": execution_model_source,
+            "execution_assumptions_source": execution_assumptions_source,
+            "comparison_source": comparison_source,
+            "audit_rows_source": audit_rows_source,
+            "daily_return_series_source": daily_return_series_source,
+            "exposure_curve_source": exposure_curve_source,
+            "trade_rows_source": trade_rows_source,
+            "equity_curve_source": equity_curve_source,
+            "execution_trace_source": execution_trace_source,
         }
 
     @staticmethod
@@ -3403,6 +3493,22 @@ class RuleBacktestService:
             normalized = normalized.split(";", 1)[0].strip()
         return normalized or "next_bar_open"
 
+    @staticmethod
+    def _describe_execution_model_source(summary: Dict[str, Any]) -> str:
+        stored = summary.get("execution_model")
+        if isinstance(stored, dict) and stored:
+            return "summary.execution_model"
+        if summary.get("execution_assumptions"):
+            return "derived_from_execution_assumptions_and_request"
+        return "derived_from_row_and_request"
+
+    @staticmethod
+    def _describe_execution_assumptions_source(summary: Dict[str, Any]) -> str:
+        stored = summary.get("execution_assumptions")
+        if isinstance(stored, dict) and stored:
+            return "summary.execution_assumptions"
+        return "derived_from_execution_model"
+
     def _derive_execution_model_payload(
         self,
         *,
@@ -3488,11 +3594,14 @@ class RuleBacktestService:
                 equity_curve = []
 
         request = summary.get("request") or {}
+        execution_model_source = self._describe_execution_model_source(summary)
         execution_model = self._derive_execution_model_payload(summary=summary, row=row, parsed_strategy=parsed_strategy)
+        execution_assumptions_source = self._describe_execution_assumptions_source(summary)
         execution_assumptions = summary.get("execution_assumptions") or self._build_execution_assumptions_payload(
             execution_model=execution_model,
         )
         metrics = self._resolve_run_metrics_payload(row=row, summary=summary)
+        metrics_source = self._describe_metrics_source(row=row, summary=summary)
         visualization = summary.get("visualization") or {}
         replay_visualization = self._resolve_replay_visualization_payload(
             include_trades=include_trades,
@@ -3510,9 +3619,11 @@ class RuleBacktestService:
         daily_return_series = list(replay_visualization.get("daily_return_series") or [])
         exposure_curve = list(replay_visualization.get("exposure_curve") or [])
         execution_trace: Optional[Dict[str, Any]] = None
+        execution_trace_source = "omitted_without_detail_read"
         if include_trades:
             stored_execution_trace = summary.get("execution_trace")
             if isinstance(stored_execution_trace, dict) and stored_execution_trace.get("rows"):
+                execution_trace_source = "summary.execution_trace"
                 execution_trace = {
                     **stored_execution_trace,
                     "execution_model": dict(stored_execution_trace.get("execution_model") or execution_model),
@@ -3543,6 +3654,7 @@ class RuleBacktestService:
                     },
                 }
             else:
+                execution_trace_source = "rebuilt_from_stored_audit_rows"
                 execution_trace = self._build_execution_trace_payload(
                     parsed_strategy=parsed_strategy or {},
                     audit_rows=audit_rows,
@@ -3552,6 +3664,16 @@ class RuleBacktestService:
                     source="rebuilt_from_stored_audit_rows",
                     trace_rebuilt=True,
                 )
+        result_authority = self._build_result_authority_payload(
+            include_trades=include_trades,
+            row=row,
+            summary=summary,
+            visualization=visualization,
+            metrics_source=metrics_source,
+            execution_model_source=execution_model_source,
+            execution_assumptions_source=execution_assumptions_source,
+            execution_trace_source=execution_trace_source,
+        )
         return {
             "id": row.id,
             "code": row.code,
@@ -3609,6 +3731,7 @@ class RuleBacktestService:
             "equity_curve": equity_curve,
             "trades": trade_rows,
             "execution_trace": execution_trace,
+            "result_authority": result_authority,
         }
 
     def _trade_row_to_dict(self, trade: RuleBacktestTrade) -> Dict[str, Any]:
