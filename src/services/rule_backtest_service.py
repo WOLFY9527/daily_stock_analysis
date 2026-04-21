@@ -2004,6 +2004,8 @@ class RuleBacktestService:
         execution_assumptions_snapshot_completeness: str,
         execution_assumptions_snapshot_missing_keys: List[str],
         execution_trace_source: str,
+        execution_trace_completeness: str,
+        execution_trace_missing_fields: List[str],
     ) -> Dict[str, Any]:
         comparison_payload = visualization.get("comparison")
         stored_audit_rows = list(visualization.get("audit_rows") or [])
@@ -2062,6 +2064,8 @@ class RuleBacktestService:
             "trade_rows_source": trade_rows_source,
             "equity_curve_source": equity_curve_source,
             "execution_trace_source": execution_trace_source,
+            "execution_trace_completeness": execution_trace_completeness,
+            "execution_trace_missing_fields": list(execution_trace_missing_fields or []),
         }
 
     @staticmethod
@@ -2131,6 +2135,8 @@ class RuleBacktestService:
         benchmark_summary: Optional[Dict[str, Any]],
         source: str,
         trace_rebuilt: bool,
+        completeness: str = "complete",
+        missing_fields: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         assumptions, assumptions_summary = self._build_execution_trace_assumptions(parsed_strategy)
         fallback_note = self._build_execution_trace_fallback_note(
@@ -2169,7 +2175,10 @@ class RuleBacktestService:
                 }
             )
         return {
+            "version": "v1",
             "source": str(source or "stored_execution_trace"),
+            "completeness": str(completeness or "unknown"),
+            "missing_fields": [str(item) for item in (missing_fields or []) if str(item or "").strip()],
             "rows": rows,
             "execution_model": dict(execution_model or {}),
             "execution_assumptions": dict(execution_assumptions or {}),
@@ -2183,6 +2192,204 @@ class RuleBacktestService:
                 "note": fallback_note,
             },
         }
+
+    @staticmethod
+    def _normalize_execution_trace_source(source: Any) -> str:
+        normalized = str(source or "").strip()
+        if normalized in {"", "stored_execution_trace"}:
+            return "summary.execution_trace"
+        return normalized
+
+    @staticmethod
+    def _build_execution_trace_unavailable_note(*, stored_trace_present: bool) -> str:
+        if stored_trace_present:
+            return "历史运行缺少可用 execution trace rows，且无可回补 audit rows。"
+        return "历史运行缺少已持久化 execution trace，且无可回补 audit rows。"
+
+    def _resolve_execution_trace_payload(
+        self,
+        *,
+        include_trades: bool,
+        summary: Dict[str, Any],
+        parsed_strategy: Optional[Dict[str, Any]],
+        stored_audit_rows: List[Dict[str, Any]],
+        execution_model: Dict[str, Any],
+        execution_assumptions: Dict[str, Any],
+        benchmark_summary: Optional[Dict[str, Any]],
+    ) -> tuple[Optional[Dict[str, Any]], str, str, List[str]]:
+        if not include_trades:
+            return None, "omitted_without_detail_read", "omitted", []
+
+        default_trace = self._build_execution_trace_payload(
+            parsed_strategy=parsed_strategy or {},
+            audit_rows=[],
+            execution_model=execution_model,
+            execution_assumptions=execution_assumptions,
+            benchmark_summary=benchmark_summary,
+            source="summary.execution_trace",
+            trace_rebuilt=False,
+        )
+        stored_trace = summary.get("execution_trace")
+        if isinstance(stored_trace, dict):
+            stored_rows = stored_trace.get("rows")
+            if isinstance(stored_rows, list):
+                missing_fields: List[str] = []
+                if not isinstance(stored_trace.get("execution_model"), dict):
+                    missing_fields.append("execution_model")
+                if not isinstance(stored_trace.get("execution_assumptions"), dict):
+                    missing_fields.append("execution_assumptions")
+                if not isinstance(stored_trace.get("assumptions_defaults"), dict):
+                    missing_fields.append("assumptions_defaults")
+                if not isinstance(stored_trace.get("fallback"), dict):
+                    missing_fields.append("fallback")
+
+                fallback_payload = dict(stored_trace.get("fallback") or {})
+                trace_rebuilt = bool(fallback_payload.get("trace_rebuilt"))
+                resolved_source = self._normalize_execution_trace_source(stored_trace.get("source"))
+                if missing_fields and "repaired_fields" not in resolved_source:
+                    resolved_source = "summary.execution_trace+repaired_fields"
+                resolved_missing_fields = [
+                    str(item)
+                    for item in (stored_trace.get("missing_fields") or missing_fields)
+                    if str(item or "").strip()
+                ]
+                resolved_completeness = str(
+                    stored_trace.get("completeness")
+                    or ("stored_partial_repaired" if missing_fields else "complete")
+                )
+                if missing_fields and resolved_completeness == "complete":
+                    resolved_completeness = "stored_partial_repaired"
+
+                resolved_trace = {
+                    **{
+                        key: value
+                        for key, value in stored_trace.items()
+                        if key
+                        not in {
+                            "version",
+                            "source",
+                            "completeness",
+                            "missing_fields",
+                            "rows",
+                            "execution_model",
+                            "execution_assumptions",
+                            "assumptions_defaults",
+                            "fallback",
+                        }
+                    },
+                    "version": str(stored_trace.get("version") or "v1"),
+                    "source": resolved_source,
+                    "completeness": resolved_completeness,
+                    "missing_fields": resolved_missing_fields,
+                    "rows": list(stored_rows),
+                    "execution_model": dict(stored_trace.get("execution_model") or execution_model),
+                    "execution_assumptions": dict(stored_trace.get("execution_assumptions") or execution_assumptions),
+                    "assumptions_defaults": dict(
+                        stored_trace.get("assumptions_defaults")
+                        or default_trace.get("assumptions_defaults")
+                        or {}
+                    ),
+                    "fallback": {
+                        "run_fallback": bool(
+                            fallback_payload.get("run_fallback")
+                            or dict(benchmark_summary or {}).get("fallback_used")
+                        ),
+                        "trace_rebuilt": trace_rebuilt,
+                        "note": str(
+                            fallback_payload.get("note")
+                            or self._build_execution_trace_fallback_note(
+                                benchmark_summary=benchmark_summary,
+                                trace_rebuilt=trace_rebuilt,
+                            )
+                        ),
+                    },
+                }
+                return (
+                    resolved_trace,
+                    str(resolved_trace.get("source") or "summary.execution_trace"),
+                    str(resolved_trace.get("completeness") or "unknown"),
+                    list(resolved_trace.get("missing_fields") or []),
+                )
+
+            if stored_audit_rows:
+                rebuilt_trace = self._build_execution_trace_payload(
+                    parsed_strategy=parsed_strategy or {},
+                    audit_rows=stored_audit_rows,
+                    execution_model=execution_model,
+                    execution_assumptions=execution_assumptions,
+                    benchmark_summary=benchmark_summary,
+                    source="rebuilt_from_stored_audit_rows",
+                    trace_rebuilt=True,
+                    completeness="stored_partial_repaired",
+                    missing_fields=["rows"],
+                )
+                return (
+                    rebuilt_trace,
+                    str(rebuilt_trace.get("source") or "rebuilt_from_stored_audit_rows"),
+                    str(rebuilt_trace.get("completeness") or "unknown"),
+                    list(rebuilt_trace.get("missing_fields") or []),
+                )
+
+            unavailable_trace = self._build_execution_trace_payload(
+                parsed_strategy=parsed_strategy or {},
+                audit_rows=[],
+                execution_model=execution_model,
+                execution_assumptions=execution_assumptions,
+                benchmark_summary=benchmark_summary,
+                source="unavailable",
+                trace_rebuilt=False,
+                completeness="unavailable",
+                missing_fields=["rows"],
+            )
+            unavailable_trace["fallback"]["note"] = self._build_execution_trace_unavailable_note(
+                stored_trace_present=True,
+            )
+            return (
+                unavailable_trace,
+                "unavailable",
+                "unavailable",
+                list(unavailable_trace.get("missing_fields") or []),
+            )
+
+        if stored_audit_rows:
+            rebuilt_trace = self._build_execution_trace_payload(
+                parsed_strategy=parsed_strategy or {},
+                audit_rows=stored_audit_rows,
+                execution_model=execution_model,
+                execution_assumptions=execution_assumptions,
+                benchmark_summary=benchmark_summary,
+                source="rebuilt_from_stored_audit_rows",
+                trace_rebuilt=True,
+                completeness="legacy_rebuilt",
+                missing_fields=["stored_trace"],
+            )
+            return (
+                rebuilt_trace,
+                "rebuilt_from_stored_audit_rows",
+                "legacy_rebuilt",
+                list(rebuilt_trace.get("missing_fields") or []),
+            )
+
+        unavailable_trace = self._build_execution_trace_payload(
+            parsed_strategy=parsed_strategy or {},
+            audit_rows=[],
+            execution_model=execution_model,
+            execution_assumptions=execution_assumptions,
+            benchmark_summary=benchmark_summary,
+            source="unavailable",
+            trace_rebuilt=False,
+            completeness="unavailable",
+            missing_fields=["stored_trace", "rows"],
+        )
+        unavailable_trace["fallback"]["note"] = self._build_execution_trace_unavailable_note(
+            stored_trace_present=False,
+        )
+        return (
+            unavailable_trace,
+            "unavailable",
+            "unavailable",
+            list(unavailable_trace.get("missing_fields") or []),
+        )
 
     @staticmethod
     def _stringify_execution_trace_value(value: Any) -> str:
@@ -3702,6 +3909,7 @@ class RuleBacktestService:
         metrics = self._resolve_run_metrics_payload(row=row, summary=summary)
         metrics_source = self._describe_metrics_source(row=row, summary=summary)
         visualization = summary.get("visualization") or {}
+        stored_audit_rows = list(visualization.get("audit_rows") or [])
         replay_visualization = self._resolve_replay_visualization_payload(
             include_trades=include_trades,
             visualization=visualization,
@@ -3717,52 +3925,20 @@ class RuleBacktestService:
         audit_rows = list(replay_visualization.get("audit_rows") or [])
         daily_return_series = list(replay_visualization.get("daily_return_series") or [])
         exposure_curve = list(replay_visualization.get("exposure_curve") or [])
-        execution_trace: Optional[Dict[str, Any]] = None
-        execution_trace_source = "omitted_without_detail_read"
-        if include_trades:
-            stored_execution_trace = summary.get("execution_trace")
-            if isinstance(stored_execution_trace, dict) and stored_execution_trace.get("rows"):
-                execution_trace_source = "summary.execution_trace"
-                execution_trace = {
-                    **stored_execution_trace,
-                    "execution_model": dict(stored_execution_trace.get("execution_model") or execution_model),
-                    "execution_assumptions": dict(stored_execution_trace.get("execution_assumptions") or execution_assumptions),
-                    "assumptions_defaults": dict(
-                        stored_execution_trace.get("assumptions_defaults")
-                        or self._build_execution_trace_payload(
-                            parsed_strategy=parsed_strategy or {},
-                            audit_rows=[],
-                            execution_model=execution_model,
-                            execution_assumptions=execution_assumptions,
-                            benchmark_summary=benchmark_summary,
-                            source="stored_execution_trace",
-                            trace_rebuilt=False,
-                        ).get("assumptions_defaults")
-                        or {}
-                    ),
-                    "fallback": {
-                        "run_fallback": bool((stored_execution_trace.get("fallback") or {}).get("run_fallback") or benchmark_summary.get("fallback_used")),
-                        "trace_rebuilt": bool((stored_execution_trace.get("fallback") or {}).get("trace_rebuilt")),
-                        "note": str(
-                            (stored_execution_trace.get("fallback") or {}).get("note")
-                            or self._build_execution_trace_fallback_note(
-                                benchmark_summary=benchmark_summary,
-                                trace_rebuilt=bool((stored_execution_trace.get("fallback") or {}).get("trace_rebuilt")),
-                            )
-                        ),
-                    },
-                }
-            else:
-                execution_trace_source = "rebuilt_from_stored_audit_rows"
-                execution_trace = self._build_execution_trace_payload(
-                    parsed_strategy=parsed_strategy or {},
-                    audit_rows=audit_rows,
-                    execution_model=execution_model,
-                    execution_assumptions=execution_assumptions,
-                    benchmark_summary=benchmark_summary,
-                    source="rebuilt_from_stored_audit_rows",
-                    trace_rebuilt=True,
-                )
+        (
+            execution_trace,
+            execution_trace_source,
+            execution_trace_completeness,
+            execution_trace_missing_fields,
+        ) = self._resolve_execution_trace_payload(
+            include_trades=include_trades,
+            summary=summary,
+            parsed_strategy=parsed_strategy or {},
+            stored_audit_rows=stored_audit_rows,
+            execution_model=execution_model,
+            execution_assumptions=execution_assumptions,
+            benchmark_summary=benchmark_summary,
+        )
         result_authority = self._build_result_authority_payload(
             include_trades=include_trades,
             row=row,
@@ -3778,6 +3954,8 @@ class RuleBacktestService:
                 execution_assumptions_snapshot.get("missing_keys") or []
             ),
             execution_trace_source=execution_trace_source,
+            execution_trace_completeness=execution_trace_completeness,
+            execution_trace_missing_fields=execution_trace_missing_fields,
         )
         return {
             "id": row.id,
@@ -3918,7 +4096,10 @@ class RuleBacktestService:
         destination.write_text(
             json.dumps(
                 {
+                    "version": execution_trace.get("version"),
                     "source": execution_trace.get("source"),
+                    "completeness": execution_trace.get("completeness"),
+                    "missing_fields": list(execution_trace.get("missing_fields") or []),
                     "trace_rows": export_rows,
                     "assumptions": dict(execution_trace.get("assumptions_defaults") or {}),
                     "execution_model": dict(execution_trace.get("execution_model") or {}),

@@ -63,6 +63,23 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "read_mode": "stored_first",
                 "execution_assumptions_source": "summary.execution_assumptions_snapshot",
                 "execution_trace_source": "summary.execution_trace",
+                "execution_trace_completeness": "complete",
+                "execution_trace_missing_fields": [],
+            },
+            "execution_trace": {
+                "version": "v1",
+                "source": "summary.execution_trace",
+                "completeness": "complete",
+                "missing_fields": [],
+                "rows": [],
+                "assumptions_defaults": {"items": [], "summary_text": "默认/推断：无额外默认值"},
+                "execution_model": {},
+                "execution_assumptions": {},
+                "fallback": {
+                    "run_fallback": False,
+                    "trace_rebuilt": False,
+                    "note": "标准执行路径",
+                },
             },
             "execution_assumptions_snapshot": {
                 "version": "v1",
@@ -264,8 +281,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["read_mode"], "stored_first")
         self.assertEqual(payload["result_authority"]["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
+        self.assertEqual(payload["result_authority"]["execution_trace_completeness"], "complete")
+        self.assertEqual(payload["result_authority"]["execution_trace_missing_fields"], [])
         self.assertEqual(payload["execution_assumptions_snapshot"]["version"], "v1")
         self.assertEqual(payload["execution_assumptions_snapshot"]["source"], "summary.execution_assumptions_snapshot")
+        self.assertEqual(payload["execution_trace"]["version"], "v1")
+        self.assertEqual(payload["execution_trace"]["completeness"], "complete")
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "macd_crossover")
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["signal_period"], 9)
         self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])

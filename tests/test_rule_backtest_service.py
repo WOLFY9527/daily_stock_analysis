@@ -878,7 +878,74 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(detail["execution_trace"]["fallback"]["trace_rebuilt"])
         self.assertTrue(all("历史运行回补trace" in str(row.get("fallback") or "") for row in detail["execution_trace"]["rows"]))
         self.assertEqual(detail["result_authority"]["execution_trace_source"], "rebuilt_from_stored_audit_rows")
+        self.assertEqual(detail["result_authority"]["execution_trace_completeness"], "legacy_rebuilt")
+        self.assertEqual(detail["result_authority"]["execution_trace_missing_fields"], ["stored_trace"])
         self.assertEqual(detail["result_authority"]["audit_rows_source"], "summary.visualization.audit_rows")
+
+    def test_get_run_preserves_stored_empty_execution_trace_and_repairs_metadata(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["execution_trace"] = {
+            "source": "summary.execution_trace",
+            "rows": [],
+        }
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["execution_trace"]["rows"], [])
+        self.assertEqual(detail["execution_trace"]["source"], "summary.execution_trace+repaired_fields")
+        self.assertEqual(detail["execution_trace"]["completeness"], "stored_partial_repaired")
+        self.assertIn("execution_model", detail["execution_trace"]["missing_fields"])
+        self.assertIn("execution_assumptions", detail["execution_trace"]["missing_fields"])
+        self.assertEqual(
+            detail["result_authority"]["execution_trace_source"],
+            "summary.execution_trace+repaired_fields",
+        )
+        self.assertEqual(detail["result_authority"]["execution_trace_completeness"], "stored_partial_repaired")
+        self.assertIn("execution_model", detail["result_authority"]["execution_trace_missing_fields"])
+
+    def test_get_run_marks_execution_trace_unavailable_when_trace_and_audit_rows_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary.pop("execution_trace", None)
+        summary["visualization"]["audit_rows"] = []
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["execution_trace"]["source"], "unavailable")
+        self.assertEqual(detail["execution_trace"]["completeness"], "unavailable")
+        self.assertEqual(detail["execution_trace"]["missing_fields"], ["stored_trace", "rows"])
+        self.assertEqual(detail["execution_trace"]["rows"], [])
+        self.assertEqual(detail["result_authority"]["execution_trace_source"], "unavailable")
+        self.assertEqual(detail["result_authority"]["execution_trace_completeness"], "unavailable")
+        self.assertEqual(
+            detail["result_authority"]["execution_trace_missing_fields"],
+            ["stored_trace", "rows"],
+        )
 
     def test_get_run_marks_execution_model_as_derived_when_snapshot_missing(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1148,6 +1215,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("benchmark_summary", history["items"][0])
         self.assertIn("execution_model", history["items"][0])
         self.assertIn("execution_assumptions", history["items"][0])
+        self.assertEqual(history["items"][0]["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
+        self.assertEqual(history["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
+        self.assertEqual(history["items"][0]["result_authority"]["execution_trace_missing_fields"], [])
 
         detail = service.get_run(history["items"][0]["id"])
         self.assertIsNotNone(detail)

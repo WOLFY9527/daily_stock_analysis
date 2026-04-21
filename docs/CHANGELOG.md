@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 新功能
 
+- 🧭 **Rule backtest reopen execution trace provenance hardening** — 规则回测明细重开现在严格优先消费已持久化的 `execution_trace`；若仅有 legacy stored audit rows，则会显式标记为 `rebuilt_from_stored_audit_rows`，并在 `result_authority` 中新增 `execution_trace_completeness` / `execution_trace_missing_fields` 诊断字段。对于只有空/部分 trace 的历史运行，服务会修补缺失元数据但不再把 `rows=[]` 误判成需要重建；若既没有持久化 trace 也没有持久化 audit rows，则会显式返回 `unavailable`，避免从 reopen 时临时回放得到的 audit rows 再次静默生成 trace。
 - 📏 **WS1 基线与验证命令面落地（无优化改动）** — 新增 `scripts/ws1_baseline_capture.py`，用于在单进程 API 前提下统一采集 scanner、portfolio snapshot、analysis/search 与 backtest smoke 的可复现基线时延与结果摘要，并将结果落盘到 `reports/ws1_baseline/`。同时更新 `docs/DEPLOY.md`、`docs/DEPLOY_EN.md`、`docs/full-guide.md`、`docs/full-guide_EN.md`，收口了 clean-checkout smoke 路径（仅仓库已提交脚本）、target-host queue/SSE 单进程验证 checklist 和 WS1 专用回滚 checklist。
 - 🚦 **部署前运行时加固（健康检查 / 队列关停 / 部署文档）** — API 新增 `/api/health/live` 与 `/api/health/ready`，并把 `/api/health` 收口为 readiness alias；readiness 现在会检查 `SystemConfigService`、存储 `SELECT 1`、任务队列 shutdown 状态以及当前 process-local queue/SSE 拓扑是否仍满足单进程部署假设。应用生命周期同时显式接管分析任务队列的激活与关闭，在 shutdown 时停止接受新任务并清理进程内订阅状态；Docker healthcheck 改为直接命中 `/api/health/ready`，不再用兜底成功掩盖真实故障。部署与 smoke 文档也统一切到当前 `--serve` / `--serve-only` 入口，补入 live/ready 检查与单进程 API 部署说明，并将回测 smoke 示例收口为仓库内已提交的 `scripts/smoke_backtest_standard.py` / `scripts/smoke_backtest_rule.py`。
 
