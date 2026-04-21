@@ -489,7 +489,7 @@ const UserScannerPage: React.FC = () => {
 
             {!isLoadingRun && !runDetail?.shortlist?.length ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-6 text-sm leading-6 text-secondary-text">
-                <p className="text-base text-foreground">{t('scanner.emptyTitle')}</p>
+                <p className="text-base text-foreground">{language === 'en' ? t('scanner.emptyTitle') : '准备生成今日候选名单'}</p>
                 <p className="mt-2">
                   {language === 'en'
                     ? 'Run a manual scan to generate a shortlist that belongs to your own account.'

@@ -416,7 +416,7 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus } = useAuth();
-  const { language, setLanguage, t } = useI18n();
+  const { setLanguage, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
   const [showBootSplash, setShowBootSplash] = useState(true);
   const [bootSplashFading, setBootSplashFading] = useState(false);
@@ -430,10 +430,10 @@ export const AppContent: React.FC = () => {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (routeLocale && routeLocale !== language) {
+    if (routeLocale) {
       setLanguage(routeLocale);
     }
-  }, [language, routeLocale, setLanguage]);
+  }, [routeLocale, setLanguage]);
 
   useEffect(() => {
     if (bootStartedAt.current === 0) {
