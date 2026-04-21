@@ -1582,15 +1582,15 @@ const PortfolioPage: React.FC = () => {
                       ) : null}
                 </div>
                 <div className="flex flex-col gap-2 text-[11px] uppercase tracking-widest text-secondary-text sm:flex-row sm:items-center sm:justify-between px-1">
-                  <span>PAGE {eventPage} / {totalEventPages}</span>
+                  <span>页码 {eventPage} / {totalEventPages}</span>
                   <div className="flex gap-2">
                     <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage <= 1}
                       onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>
-                      PREV
+                      上一页
                     </button>
                     <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage >= totalEventPages}
                       onClick={() => setEventPage((prev) => Math.min(totalEventPages, prev + 1))}>
-                      NEXT
+                      下一页
                     </button>
                   </div>
                 </div>
