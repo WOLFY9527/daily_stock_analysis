@@ -17,12 +17,14 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     cancel_rule_backtest_run,
     parse_rule_strategy,
     get_rule_backtest_run,
+    get_rule_backtest_runs,
     get_rule_backtest_run_status,
     run_rule_backtest,
 )
 from api.v1.schemas.backtest import (  # noqa: E402
     BacktestCodeRequest,
     RuleBacktestCancelResponse,
+    RuleBacktestHistoryResponse,
     RuleBacktestParseRequest,
     RuleBacktestParseResponse,
     RuleBacktestRunRequest,
@@ -62,6 +64,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "result_authority": {
                 "contract_version": "v1",
                 "read_mode": "stored_first",
+                "summary_source": "row.summary_json",
+                "summary_completeness": "complete",
+                "summary_missing_fields": [],
+                "parsed_strategy_source": "row.parsed_strategy_json",
+                "parsed_strategy_completeness": "complete",
+                "parsed_strategy_missing_fields": [],
                 "comparison_source": "summary.visualization.comparison",
                 "comparison_completeness": "complete",
                 "comparison_missing_sections": [],
@@ -351,6 +359,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["auditRows"][0]["symbol_close"], 101.0)
         self.assertEqual(payload["result_authority"]["contract_version"], "v1")
         self.assertEqual(payload["result_authority"]["read_mode"], "stored_first")
+        self.assertEqual(payload["result_authority"]["summary_source"], "row.summary_json")
+        self.assertEqual(payload["result_authority"]["summary_completeness"], "complete")
+        self.assertEqual(payload["result_authority"]["summary_missing_fields"], [])
+        self.assertEqual(payload["result_authority"]["parsed_strategy_source"], "row.parsed_strategy_json")
+        self.assertEqual(payload["result_authority"]["parsed_strategy_completeness"], "complete")
+        self.assertEqual(payload["result_authority"]["parsed_strategy_missing_fields"], [])
         self.assertEqual(payload["result_authority"]["comparison_source"], "summary.visualization.comparison")
         self.assertEqual(payload["result_authority"]["comparison_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["comparison_missing_sections"], [])
@@ -407,6 +421,71 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "macd_crossover")
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["signal_period"], 9)
         self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])
+
+    def test_get_rule_backtest_runs_serializes_history_authority_parity_contract(self) -> None:
+        service = MagicMock()
+        item = self._rule_run_payload(status="completed")
+        item["result_authority"].update(
+            {
+                "replay_payload_source": "omitted_without_detail_read",
+                "replay_payload_completeness": "omitted",
+                "replay_payload_missing_sections": [],
+                "trade_rows_source": "omitted_without_detail_read",
+                "trade_rows_completeness": "omitted",
+                "trade_rows_missing_fields": [],
+                "equity_curve_source": "omitted_without_detail_read",
+                "equity_curve_completeness": "omitted",
+                "equity_curve_missing_fields": [],
+                "execution_trace_source": "omitted_without_detail_read",
+                "execution_trace_completeness": "omitted",
+                "execution_trace_missing_fields": [],
+            }
+        )
+        item["result_authority"]["domains"].update(
+            {
+                "parsed_strategy": {
+                    "source": "row.parsed_strategy_json",
+                    "completeness": "complete",
+                    "state": "available",
+                    "missing": [],
+                    "missing_kind": "fields",
+                },
+                "equity_curve": {
+                    "source": "omitted_without_detail_read",
+                    "completeness": "omitted",
+                    "state": "omitted",
+                    "missing": [],
+                    "missing_kind": "fields",
+                },
+            }
+        )
+        service.list_runs.return_value = {"total": 1, "items": [item]}
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_runs(code="600519", page=1, limit=10, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestHistoryResponse)
+        payload = response.model_dump(by_alias=True)
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["result_authority"]["summary_source"], "row.summary_json")
+        self.assertEqual(payload["items"][0]["result_authority"]["summary_completeness"], "complete")
+        self.assertEqual(payload["items"][0]["result_authority"]["parsed_strategy_source"], "row.parsed_strategy_json")
+        self.assertEqual(payload["items"][0]["result_authority"]["parsed_strategy_completeness"], "complete")
+        self.assertEqual(
+            payload["items"][0]["result_authority"]["replay_payload_source"],
+            "omitted_without_detail_read",
+        )
+        self.assertEqual(payload["items"][0]["result_authority"]["replay_payload_completeness"], "omitted")
+        self.assertEqual(payload["items"][0]["result_authority"]["trade_rows_source"], "omitted_without_detail_read")
+        self.assertEqual(payload["items"][0]["result_authority"]["trade_rows_completeness"], "omitted")
+        self.assertEqual(payload["items"][0]["result_authority"]["equity_curve_source"], "omitted_without_detail_read")
+        self.assertEqual(payload["items"][0]["result_authority"]["equity_curve_completeness"], "omitted")
+        self.assertEqual(
+            payload["items"][0]["result_authority"]["execution_trace_source"],
+            "omitted_without_detail_read",
+        )
+        self.assertEqual(payload["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
 
     def test_get_rule_backtest_run_returns_404_not_found_contract(self) -> None:
         service = MagicMock()

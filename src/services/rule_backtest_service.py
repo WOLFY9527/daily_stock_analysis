@@ -4829,22 +4829,14 @@ class RuleBacktestService:
         exposure_curve: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         resolved = dict(stored_visualization or {})
-        if "comparison" not in resolved and comparison:
-            resolved["comparison"] = comparison
-        if "benchmark_curve" not in resolved and benchmark_curve:
-            resolved["benchmark_curve"] = list(benchmark_curve)
-        if "benchmark_summary" not in resolved and benchmark_summary:
-            resolved["benchmark_summary"] = dict(benchmark_summary)
-        if "buy_and_hold_curve" not in resolved and buy_and_hold_curve:
-            resolved["buy_and_hold_curve"] = list(buy_and_hold_curve)
-        if "buy_and_hold_summary" not in resolved and buy_and_hold_summary:
-            resolved["buy_and_hold_summary"] = dict(buy_and_hold_summary)
-        if "audit_rows" not in resolved and audit_rows:
-            resolved["audit_rows"] = list(audit_rows)
-        if "daily_return_series" not in resolved and daily_return_series:
-            resolved["daily_return_series"] = list(daily_return_series)
-        if "exposure_curve" not in resolved and exposure_curve:
-            resolved["exposure_curve"] = list(exposure_curve)
+        resolved["comparison"] = dict(comparison or {})
+        resolved["benchmark_curve"] = list(benchmark_curve or [])
+        resolved["benchmark_summary"] = dict(benchmark_summary or {})
+        resolved["buy_and_hold_curve"] = list(buy_and_hold_curve or [])
+        resolved["buy_and_hold_summary"] = dict(buy_and_hold_summary or {})
+        resolved["audit_rows"] = list(audit_rows or [])
+        resolved["daily_return_series"] = list(daily_return_series or [])
+        resolved["exposure_curve"] = list(exposure_curve or [])
         return resolved
 
     def _resolve_summary_payload(
@@ -4905,12 +4897,7 @@ class RuleBacktestService:
             daily_return_series=daily_return_series,
             exposure_curve=exposure_curve,
         )
-        resolved_payload["execution_trace"] = dict(
-            stored_payload.get("execution_trace")
-            if isinstance(stored_payload.get("execution_trace"), dict)
-            else execution_trace
-            or {}
-        )
+        resolved_payload["execution_trace"] = dict(execution_trace or {})
         resolved_payload["no_result_reason"] = stored_payload.get("no_result_reason", row.no_result_reason)
         resolved_payload["no_result_message"] = stored_payload.get("no_result_message", row.no_result_message)
         resolved_payload["ai_summary"] = stored_payload.get("ai_summary", ai_summary)

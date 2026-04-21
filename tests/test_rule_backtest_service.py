@@ -695,7 +695,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         comparison = response["summary"]["visualization"].get("comparison") or {}
         self.assertEqual(comparison.get("version"), "v1")
-        self.assertEqual(comparison.get("source"), "stored")
+        self.assertEqual(comparison.get("source"), response["result_authority"]["comparison_source"])
         self.assertEqual(comparison.get("benchmark_summary"), response["benchmark_summary"])
         self.assertEqual(comparison.get("buy_and_hold_summary"), response["buy_and_hold_summary"])
         self.assertEqual(comparison.get("benchmark_curve"), response["benchmark_curve"])
