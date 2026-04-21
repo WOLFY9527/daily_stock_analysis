@@ -93,6 +93,41 @@ const STARTER_PROMPT_CARDS_BY_LANGUAGE: Record<'zh' | 'en', StarterPromptCard[]>
   ],
 };
 
+const SKILL_LABELS_BY_ID: Record<string, { zh: string; en: string }> = {
+  bull_trend: { zh: '默认多头趋势', en: 'Default bull trend' },
+  ma_cross: { zh: '均线金叉', en: 'Moving-average golden cross' },
+  volume_breakout: { zh: '放量突破', en: 'Volume breakout' },
+  volume_pullback: { zh: '缩量回踩', en: 'Low-volume pullback' },
+  box_oscillation: { zh: '箱体震荡', en: 'Range oscillation' },
+  bottom_rebound: { zh: '底部放量', en: 'Bottom-volume rebound' },
+  chan_theory: { zh: '缠论', en: 'Chan theory' },
+  wave_theory: { zh: '波浪理论', en: 'Wave theory' },
+  leader_strategy: { zh: '龙头策略', en: 'Leader strategy' },
+  emotion_cycle: { zh: '情绪周期', en: 'Sentiment cycle' },
+  one_rise_three_fall: { zh: '一阳夹三阴', en: 'One-rise three-fall' },
+};
+
+const SKILL_TEXT_ALIASES: Record<string, { zh: string; en: string }> = Object.values(SKILL_LABELS_BY_ID).reduce(
+  (acc, item) => {
+    acc[item.zh] = item;
+    acc[item.en] = item;
+    return acc;
+  },
+  {} as Record<string, { zh: string; en: string }>,
+);
+
+function getLocalizedSkillLabel(rawLabel: string, language: 'zh' | 'en'): string {
+  const alias = SKILL_TEXT_ALIASES[rawLabel];
+  if (alias) return alias[language];
+  return rawLabel;
+}
+
+function getLocalizedSkillNameById(skillId: string, fallbackName: string, language: 'zh' | 'en'): string {
+  const entry = SKILL_LABELS_BY_ID[skillId];
+  if (entry) return entry[language];
+  return getLocalizedSkillLabel(fallbackName, language);
+}
+
 const ChatPage: React.FC = () => {
   const { language } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -564,7 +599,7 @@ const ChatPage: React.FC = () => {
         <div className="workspace-chat-main">
           <WorkspacePageHeader
             className="mb-4 flex-shrink-0"
-            eyebrow="WolfyStock 量化研究"
+            eyebrow={language === 'en' ? 'WolfyStock Quant Research' : 'WolfyStock 量化研究'}
             title={(
               <span className="mb-2 mt-2 flex items-center gap-2">
                 <svg
@@ -580,7 +615,7 @@ const ChatPage: React.FC = () => {
                     d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
                   />
                 </svg>
-                <span>问股</span>
+                <span>{language === 'en' ? 'Ask Stock' : '问股'}</span>
               </span>
             )}
             titleClassName="text-2xl font-bold"
@@ -800,7 +835,7 @@ const ChatPage: React.FC = () => {
                               d="M13 10V3L4 14h7v7l9-11h-7z"
                             />
                           </svg>
-                          {msg.skillName}
+                          {getLocalizedSkillLabel(msg.skillName, language)}
                         </span>
                       </div>
                     )}
@@ -924,11 +959,11 @@ const ChatPage: React.FC = () => {
                             : 'theme-inline-chip text-secondary-text hover:text-foreground'
                         }`}
                       >
-                        {s.name}
+                        {getLocalizedSkillNameById(s.id, s.name, language)}
                       </button>
                       {showSkillDesc === s.id && s.description ? (
                         <div className="theme-menu-panel absolute left-0 bottom-full mb-2 z-50 w-64 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl pointer-events-none animate-fade-in">
-                          <p className="mb-1 font-medium text-foreground">{s.name}</p>
+                          <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, language)}</p>
                           <p>{s.description}</p>
                         </div>
                       ) : null}
@@ -972,7 +1007,13 @@ const ChatPage: React.FC = () => {
                 <span className="text-xs text-secondary-text">
                   {language === 'en' ? 'Current strategy: ' : '当前策略：'}
                   {selectedSkill
-                    ? (skills.find((item) => item.id === selectedSkill)?.name || selectedSkill)
+                    ? (() => {
+                        const skill = skills.find((item) => item.id === selectedSkill);
+                        if (skill) {
+                          return getLocalizedSkillNameById(skill.id, skill.name, language);
+                        }
+                        return getLocalizedSkillLabel(selectedSkill, language);
+                      })()
                     : (language === 'en' ? 'General analysis' : '通用分析')}
                 </span>
               </div>

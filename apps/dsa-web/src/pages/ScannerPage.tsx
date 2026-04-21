@@ -58,6 +58,17 @@ function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): s
   }).format(date);
 }
 
+function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
 function qualityVariant(hint?: string | null): 'success' | 'info' | 'warning' | 'history' {
   if (hint === '高优先级') return 'success';
   if (hint === '优先观察') return 'info';
@@ -553,7 +564,7 @@ const ScannerPage: React.FC = () => {
       <div className="space-y-6">
         <WorkspacePageHeader
           eyebrow={t('scanner.eyebrow')}
-          title={t('scanner.title')}
+          title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
           description={selectedMarketCopy.subtitle}
         >
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
@@ -584,9 +595,9 @@ const ScannerPage: React.FC = () => {
                   value={shortlistSize}
                   onChange={setShortlistSize}
                   options={[
-                    { value: '5', label: 'Top 5' },
-                    { value: '8', label: 'Top 8' },
-                    { value: '10', label: 'Top 10' },
+                    { value: '5', label: language === 'en' ? 'Top 5' : '前 5' },
+                    { value: '8', label: language === 'en' ? 'Top 8' : '前 8' },
+                    { value: '10', label: language === 'en' ? 'Top 10' : '前 10' },
                   ]}
                 />
                 <Select
@@ -638,7 +649,7 @@ const ScannerPage: React.FC = () => {
                         </Badge>
                       ) : null}
                       {runDetail.watchlistDate ? (
-                        <Badge variant="history">{runDetail.watchlistDate}</Badge>
+                        <Badge variant="history">{formatDateOnly(runDetail.watchlistDate, language)}</Badge>
                       ) : null}
                       <Badge variant="history">{formatTimestamp(runDetail.runAt, language)}</Badge>
                       <Badge variant={notificationVariant(runNotificationStatus)}>{`${t('scanner.notificationLabel')} ${t(`scanner.notificationStatus.${runNotificationStatus}`)}`}</Badge>
@@ -661,7 +672,7 @@ const ScannerPage: React.FC = () => {
                     <MetricPair label={t('scanner.metricDetail')} value={`${runDetail.evaluatedSize}`} />
                     <MetricPair label={t('scanner.metricHistory')} value={`${historyStats.localHits ?? 0} 本地 / ${historyStats.networkFetches ?? 0} 在线`} />
                     <MetricPair label={t('scanner.metricShortlist')} value={`${runDetail.shortlistSize}`} />
-                    <MetricPair label={t('scanner.metricWatchlistDate')} value={runDetail.watchlistDate || '--'} />
+                    <MetricPair label={t('scanner.metricWatchlistDate')} value={formatDateOnly(runDetail.watchlistDate, language)} />
                     <MetricPair label={t('scanner.metricNotification')} value={t(`scanner.notificationStatus.${runNotificationStatus}`)} />
                     <MetricPair label={t('scanner.metricSchedule')} value={statusSummary?.scheduleEnabled ? (statusSummary.scheduleTime || '--') : t('scanner.scheduleDisabled')} />
                     <MetricPair label={t('scanner.metricLastScheduled')} value={lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt, language) : '--'} />
@@ -678,7 +689,7 @@ const ScannerPage: React.FC = () => {
                     </Button>
                     {!isViewingTodayWatchlist && runDetail.watchlistDate ? (
                       <span className="text-xs leading-5 text-secondary-text">
-                        {t('scanner.viewingHistoricalRun', { date: runDetail.watchlistDate })}
+                        {t('scanner.viewingHistoricalRun', { date: formatDateOnly(runDetail.watchlistDate, language) })}
                       </span>
                     ) : null}
                   </div>
@@ -855,7 +866,7 @@ const ScannerPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="w-full sm:w-auto sm:min-w-[88px] text-left sm:text-right">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Scanner Score</p>
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{language === 'en' ? 'Scanner Score' : '扫描评分'}</p>
                           <p className="mt-1 text-3xl leading-none text-foreground">{candidate.score.toFixed(1)}</p>
                         </div>
                       </div>
@@ -983,8 +994,12 @@ const ScannerPage: React.FC = () => {
 
               {!isLoadingRun && !runDetail?.shortlist?.length ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-6 text-sm leading-6 text-secondary-text">
-                  <p className="text-base text-foreground">{t('scanner.emptyTitle')}</p>
-                  <p className="mt-2">{t('scanner.emptyBody')}</p>
+                  <p className="text-base text-foreground">{language === 'en' ? 'No shortlist yet' : '尚未生成候选名单'}</p>
+                  <p className="mt-2">
+                    {language === 'en'
+                      ? 'Run a scanner pass to generate shortlist candidates.'
+                      : '运行一次扫描即可生成候选名单。'}
+                  </p>
                 </div>
               ) : null}
             </Card>
@@ -1120,7 +1135,7 @@ const ScannerPage: React.FC = () => {
                               <Badge variant={marketBadgeVariant(item.market)}>
                                 {item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}
                               </Badge>
-                              {item.watchlistDate ? <Badge variant="history">{item.watchlistDate}</Badge> : null}
+                              {item.watchlistDate ? <Badge variant="history">{formatDateOnly(item.watchlistDate, language)}</Badge> : null}
                               {item.triggerMode ? (
                                 <Badge variant={item.triggerMode === 'scheduled' ? 'info' : 'history'}>
                                   {item.triggerMode === 'scheduled' ? t('scanner.triggerScheduled') : t('scanner.triggerManual')}

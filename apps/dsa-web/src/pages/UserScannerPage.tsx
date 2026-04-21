@@ -42,6 +42,17 @@ function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): s
   }).format(date);
 }
 
+function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
 function statusVariant(status?: string | null): 'success' | 'warning' | 'danger' | 'history' {
   if (status === 'completed') return 'success';
   if (status === 'empty') return 'warning';
@@ -306,7 +317,7 @@ const UserScannerPage: React.FC = () => {
     <div className="space-y-6">
       <WorkspacePageHeader
         eyebrow={t('scanner.eyebrow')}
-        title={t('scanner.title')}
+        title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
         description={selectedMarketCopy.subtitle}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
@@ -334,9 +345,9 @@ const UserScannerPage: React.FC = () => {
                   value={shortlistSize}
                   onChange={setShortlistSize}
                   options={[
-                    { value: '5', label: 'Top 5' },
-                    { value: '8', label: 'Top 8' },
-                    { value: '10', label: 'Top 10' },
+                    { value: '5', label: language === 'en' ? 'Top 5' : '前 5' },
+                    { value: '8', label: language === 'en' ? 'Top 8' : '前 8' },
+                    { value: '10', label: language === 'en' ? 'Top 10' : '前 10' },
                   ]}
                 />
                 <Select
@@ -370,7 +381,7 @@ const UserScannerPage: React.FC = () => {
                   </Badge>
                   <Badge variant="info">{runDetail.profileLabel || runDetail.profile}</Badge>
                   <Badge variant={statusVariant(runDetail.status)}>{t(`scanner.status.${runDetail.status}`)}</Badge>
-                  {runDetail.watchlistDate ? <Badge variant="history">{runDetail.watchlistDate}</Badge> : null}
+                  {runDetail.watchlistDate ? <Badge variant="history">{formatDateOnly(runDetail.watchlistDate, language)}</Badge> : null}
                   {runDetail.runAt ? <Badge variant="history">{formatTimestamp(runDetail.runAt, language)}</Badge> : null}
                 </div>
                 <div>
@@ -516,7 +527,7 @@ const UserScannerPage: React.FC = () => {
                         {item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}
                       </Badge>
                       <Badge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
-                      {item.watchlistDate ? <Badge variant="history">{item.watchlistDate}</Badge> : null}
+                      {item.watchlistDate ? <Badge variant="history">{formatDateOnly(item.watchlistDate, language)}</Badge> : null}
                     </div>
                     <p className="mt-3 text-sm font-semibold text-foreground">
                       {item.headline || (item.market === 'us'
