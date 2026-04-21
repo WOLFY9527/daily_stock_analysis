@@ -50,10 +50,14 @@ export const StatusBlocks: React.FC<StatusBlocksProps> = ({
       ? {
           key: 'completed',
           label: t('status.completed'),
-          summary: t('status.completedSummary', {
-            name: selectedReport.meta.stockName || selectedReport.meta.stockCode,
-          }),
-          detail: t('status.completedDetailDefault'),
+          summary: language === 'en'
+            ? `Report ready for ${selectedReport.meta.stockName || selectedReport.meta.stockCode}`
+            : t('status.completedSummary', {
+              name: selectedReport.meta.stockName || selectedReport.meta.stockCode,
+            }),
+          detail: language === 'en'
+            ? 'Open the full report or continue in Ask AI.'
+            : t('status.completedDetailDefault'),
         }
       : {
           key: 'submitted',
