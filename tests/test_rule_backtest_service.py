@@ -783,6 +783,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["comparison_source"], "summary.visualization.comparison")
         self.assertEqual(authority["comparison_completeness"], "complete")
         self.assertEqual(authority["comparison_missing_sections"], [])
+        self.assertEqual(authority["replay_payload_source"], "summary.visualization.audit_rows")
+        self.assertEqual(authority["replay_payload_completeness"], "complete")
+        self.assertEqual(authority["replay_payload_missing_sections"], [])
         self.assertEqual(authority["audit_rows_source"], "summary.visualization.audit_rows")
         self.assertEqual(authority["daily_return_series_source"], "summary.visualization.daily_return_series")
         self.assertEqual(authority["exposure_curve_source"], "summary.visualization.exposure_curve")
@@ -1219,6 +1222,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("benchmark_summary", history["items"][0])
         self.assertIn("execution_model", history["items"][0])
         self.assertIn("execution_assumptions", history["items"][0])
+        self.assertEqual(history["items"][0]["result_authority"]["replay_payload_source"], "omitted_without_detail_read")
+        self.assertEqual(history["items"][0]["result_authority"]["replay_payload_completeness"], "omitted")
+        self.assertEqual(history["items"][0]["result_authority"]["replay_payload_missing_sections"], [])
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_missing_fields"], [])
@@ -1374,6 +1380,24 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["daily_return_series"][0]["daily_return_pct"], 2.88)
         self.assertEqual(detail["exposure_curve"][0]["executed_action"], "buy")
         self.assertEqual(detail["exposure_curve"][0]["position_state"], "flat")
+        self.assertEqual(
+            detail["result_authority"]["replay_payload_source"],
+            "summary.visualization.audit_rows+repaired_sections",
+        )
+        self.assertEqual(detail["result_authority"]["replay_payload_completeness"], "stored_partial_repaired")
+        self.assertEqual(
+            detail["result_authority"]["replay_payload_missing_sections"],
+            ["daily_return_series", "exposure_curve"],
+        )
+        self.assertEqual(detail["result_authority"]["audit_rows_source"], "summary.visualization.audit_rows")
+        self.assertEqual(
+            detail["result_authority"]["daily_return_series_source"],
+            "rebuilt_from_summary.visualization.audit_rows",
+        )
+        self.assertEqual(
+            detail["result_authority"]["exposure_curve_source"],
+            "rebuilt_from_summary.visualization.audit_rows",
+        )
 
     def test_get_run_prefers_persisted_benchmark_comparison_payload_over_legacy_fields(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1719,6 +1743,18 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["result_authority"]["metrics_completeness"], "legacy_row_columns")
         self.assertIn("annualized_return_pct", detail["result_authority"]["metrics_missing_fields"])
         self.assertIn("avg_holding_calendar_days", detail["result_authority"]["metrics_missing_fields"])
+        self.assertEqual(detail["result_authority"]["replay_payload_source"], "derived_from_stored_run_artifacts")
+        self.assertEqual(detail["result_authority"]["replay_payload_completeness"], "legacy_complete")
+        self.assertEqual(detail["result_authority"]["replay_payload_missing_sections"], [])
+        self.assertEqual(detail["result_authority"]["audit_rows_source"], "derived_from_stored_run_artifacts")
+        self.assertEqual(
+            detail["result_authority"]["daily_return_series_source"],
+            "derived_from_stored_run_artifacts",
+        )
+        self.assertEqual(
+            detail["result_authority"]["exposure_curve_source"],
+            "derived_from_stored_run_artifacts",
+        )
         self.assertEqual(detail["benchmark_return_pct"], detail["benchmark_summary"]["return_pct"])
 
     def test_get_run_repairs_partial_stored_metrics_with_explicit_provenance(self) -> None:

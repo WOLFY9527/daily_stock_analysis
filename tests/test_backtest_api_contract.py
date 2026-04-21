@@ -275,6 +275,13 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "fill_price": None,
             }
         ]
+        service.get_run.return_value["result_authority"].update(
+            {
+                "replay_payload_source": "summary.visualization.audit_rows",
+                "replay_payload_completeness": "complete",
+                "replay_payload_missing_sections": [],
+            }
+        )
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             response = get_rule_backtest_run(123, db_manager=MagicMock())
@@ -288,6 +295,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["comparison_source"], "summary.visualization.comparison")
         self.assertEqual(payload["result_authority"]["comparison_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["comparison_missing_sections"], [])
+        self.assertEqual(payload["result_authority"]["replay_payload_source"], "summary.visualization.audit_rows")
+        self.assertEqual(payload["result_authority"]["replay_payload_completeness"], "complete")
+        self.assertEqual(payload["result_authority"]["replay_payload_missing_sections"], [])
         self.assertEqual(payload["result_authority"]["metrics_source"], "summary.metrics")
         self.assertEqual(payload["result_authority"]["metrics_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["metrics_missing_fields"], [])

@@ -2057,20 +2057,67 @@ class RuleBacktestService:
                 "comparison_source": comparison_source,
                 "comparison_completeness": comparison_completeness,
                 "comparison_missing_sections": comparison_missing_sections,
+                "replay_payload_source": "omitted_without_detail_read",
+                "replay_payload_completeness": "omitted",
+                "replay_payload_missing_sections": [],
+                "audit_rows_source": "omitted_without_detail_read",
+                "daily_return_series_source": "omitted_without_detail_read",
+                "exposure_curve_source": "omitted_without_detail_read",
                 "audit_rows": [],
                 "daily_return_series": [],
                 "exposure_curve": [],
             }
 
-        audit_rows = list(visualization.get("audit_rows") or [])
-        daily_return_series = list(visualization.get("daily_return_series") or [])
-        exposure_curve = list(visualization.get("exposure_curve") or [])
-        if audit_rows:
+        stored_audit_rows = visualization.get("audit_rows")
+        stored_daily_return_series = visualization.get("daily_return_series")
+        stored_exposure_curve = visualization.get("exposure_curve")
+        has_stored_audit_rows = isinstance(stored_audit_rows, list)
+        has_stored_daily_return_series = isinstance(stored_daily_return_series, list)
+        has_stored_exposure_curve = isinstance(stored_exposure_curve, list)
+        has_nonempty_stored_audit_rows = has_stored_audit_rows and bool(stored_audit_rows)
+        has_nonempty_stored_daily_return_series = (
+            has_stored_daily_return_series and bool(stored_daily_return_series)
+        )
+        has_nonempty_stored_exposure_curve = has_stored_exposure_curve and bool(stored_exposure_curve)
+
+        audit_rows = list(stored_audit_rows or []) if has_nonempty_stored_audit_rows else []
+        daily_return_series = (
+            list(stored_daily_return_series or [])
+            if has_nonempty_stored_daily_return_series
+            else []
+        )
+        exposure_curve = (
+            list(stored_exposure_curve or [])
+            if has_nonempty_stored_exposure_curve
+            else []
+        )
+
+        if has_nonempty_stored_audit_rows:
             replay_series = self._build_replay_series_from_audit_rows(audit_rows)
-            if not daily_return_series:
+            missing_sections: List[str] = []
+            if not has_nonempty_stored_daily_return_series:
                 daily_return_series = list(replay_series.get("daily_return_series") or [])
-            if not exposure_curve:
+                missing_sections.append("daily_return_series")
+            if not has_nonempty_stored_exposure_curve:
                 exposure_curve = list(replay_series.get("exposure_curve") or [])
+                missing_sections.append("exposure_curve")
+            replay_payload_source = (
+                "summary.visualization.audit_rows+repaired_sections"
+                if missing_sections
+                else "summary.visualization.audit_rows"
+            )
+            replay_payload_completeness = "stored_partial_repaired" if missing_sections else "complete"
+            audit_rows_source = "summary.visualization.audit_rows"
+            daily_return_series_source = (
+                "summary.visualization.daily_return_series"
+                if has_nonempty_stored_daily_return_series
+                else "rebuilt_from_summary.visualization.audit_rows"
+            )
+            exposure_curve_source = (
+                "summary.visualization.exposure_curve"
+                if has_nonempty_stored_exposure_curve
+                else "rebuilt_from_summary.visualization.audit_rows"
+            )
         else:
             legacy_payload = self._build_legacy_replay_visualization_payload(
                 equity_curve=equity_curve,
@@ -2079,11 +2126,62 @@ class RuleBacktestService:
                 buy_and_hold_curve=buy_and_hold_curve,
                 benchmark_summary=benchmark_summary,
             )
-            audit_rows = list(legacy_payload.get("audit_rows") or [])
-            if not daily_return_series:
-                daily_return_series = list(legacy_payload.get("daily_return_series") or [])
-            if not exposure_curve:
-                exposure_curve = list(legacy_payload.get("exposure_curve") or [])
+            derived_audit_rows = list(legacy_payload.get("audit_rows") or [])
+            derived_daily_return_series = list(legacy_payload.get("daily_return_series") or [])
+            derived_exposure_curve = list(legacy_payload.get("exposure_curve") or [])
+            if derived_audit_rows:
+                audit_rows = derived_audit_rows
+            if not has_nonempty_stored_daily_return_series:
+                daily_return_series = derived_daily_return_series
+            if not has_nonempty_stored_exposure_curve:
+                exposure_curve = derived_exposure_curve
+
+            if audit_rows or daily_return_series or exposure_curve:
+                missing_sections = []
+                if not audit_rows:
+                    missing_sections.append("audit_rows")
+                if not daily_return_series:
+                    missing_sections.append("daily_return_series")
+                if not exposure_curve:
+                    missing_sections.append("exposure_curve")
+
+                if has_nonempty_stored_daily_return_series or has_nonempty_stored_exposure_curve:
+                    replay_payload_source = "stored_replay_sections+derived_audit_rows"
+                    replay_payload_completeness = "stored_partial_repaired"
+                else:
+                    replay_payload_source = "derived_from_stored_run_artifacts"
+                    replay_payload_completeness = "legacy_partial" if missing_sections else "legacy_complete"
+
+                audit_rows_source = (
+                    "derived_from_stored_run_artifacts"
+                    if audit_rows
+                    else "unavailable"
+                )
+                daily_return_series_source = (
+                    "summary.visualization.daily_return_series"
+                    if has_nonempty_stored_daily_return_series
+                    else (
+                        "derived_from_stored_run_artifacts"
+                        if daily_return_series
+                        else "unavailable"
+                    )
+                )
+                exposure_curve_source = (
+                    "summary.visualization.exposure_curve"
+                    if has_nonempty_stored_exposure_curve
+                    else (
+                        "derived_from_stored_run_artifacts"
+                        if exposure_curve
+                        else "unavailable"
+                    )
+                )
+            else:
+                missing_sections = ["audit_rows", "daily_return_series", "exposure_curve"]
+                replay_payload_source = "unavailable"
+                replay_payload_completeness = "unavailable"
+                audit_rows_source = "unavailable"
+                daily_return_series_source = "unavailable"
+                exposure_curve_source = "unavailable"
 
         return {
             "comparison": comparison,
@@ -2094,6 +2192,12 @@ class RuleBacktestService:
             "comparison_source": comparison_source,
             "comparison_completeness": comparison_completeness,
             "comparison_missing_sections": comparison_missing_sections,
+            "replay_payload_source": replay_payload_source,
+            "replay_payload_completeness": replay_payload_completeness,
+            "replay_payload_missing_sections": missing_sections,
+            "audit_rows_source": audit_rows_source,
+            "daily_return_series_source": daily_return_series_source,
+            "exposure_curve_source": exposure_curve_source,
             "audit_rows": audit_rows,
             "daily_return_series": daily_return_series,
             "exposure_curve": exposure_curve,
@@ -2105,10 +2209,15 @@ class RuleBacktestService:
         include_trades: bool,
         row: RuleBacktestRun,
         summary: Dict[str, Any],
-        visualization: Dict[str, Any],
         comparison_source: str,
         comparison_completeness: str,
         comparison_missing_sections: List[str],
+        replay_payload_source: str,
+        replay_payload_completeness: str,
+        replay_payload_missing_sections: List[str],
+        audit_rows_source: str,
+        daily_return_series_source: str,
+        exposure_curve_source: str,
         metrics_source: str,
         metrics_completeness: str,
         metrics_missing_fields: List[str],
@@ -2120,36 +2229,10 @@ class RuleBacktestService:
         execution_trace_completeness: str,
         execution_trace_missing_fields: List[str],
     ) -> Dict[str, Any]:
-        stored_audit_rows = list(visualization.get("audit_rows") or [])
-        stored_daily_return_series = list(visualization.get("daily_return_series") or [])
-        stored_exposure_curve = list(visualization.get("exposure_curve") or [])
-
         if not include_trades:
-            audit_rows_source = "omitted_without_detail_read"
-            daily_return_series_source = "omitted_without_detail_read"
-            exposure_curve_source = "omitted_without_detail_read"
             trade_rows_source = "omitted_without_detail_read"
             equity_curve_source = "omitted_without_detail_read"
         else:
-            audit_rows_source = (
-                "summary.visualization.audit_rows"
-                if stored_audit_rows
-                else "rebuilt_from_equity_curve_and_benchmark_payloads"
-            )
-            if stored_daily_return_series:
-                daily_return_series_source = "summary.visualization.daily_return_series"
-            elif stored_audit_rows:
-                daily_return_series_source = "rebuilt_from_summary.visualization.audit_rows"
-            else:
-                daily_return_series_source = "rebuilt_from_equity_curve"
-
-            if stored_exposure_curve:
-                exposure_curve_source = "summary.visualization.exposure_curve"
-            elif stored_audit_rows:
-                exposure_curve_source = "rebuilt_from_summary.visualization.audit_rows"
-            else:
-                exposure_curve_source = "rebuilt_from_equity_curve_and_trade_rows"
-
             trade_rows_source = "stored_rule_backtest_trades"
             equity_curve_source = "row.equity_curve_json" if row.equity_curve_json else "empty"
 
@@ -2167,6 +2250,9 @@ class RuleBacktestService:
             "comparison_source": comparison_source,
             "comparison_completeness": comparison_completeness,
             "comparison_missing_sections": list(comparison_missing_sections or []),
+            "replay_payload_source": replay_payload_source,
+            "replay_payload_completeness": replay_payload_completeness,
+            "replay_payload_missing_sections": list(replay_payload_missing_sections or []),
             "audit_rows_source": audit_rows_source,
             "daily_return_series_source": daily_return_series_source,
             "exposure_curve_source": exposure_curve_source,
@@ -4038,6 +4124,9 @@ class RuleBacktestService:
         comparison_source = str(replay_visualization.get("comparison_source") or "unknown")
         comparison_completeness = str(replay_visualization.get("comparison_completeness") or "unknown")
         comparison_missing_sections = list(replay_visualization.get("comparison_missing_sections") or [])
+        replay_payload_source = str(replay_visualization.get("replay_payload_source") or "unknown")
+        replay_payload_completeness = str(replay_visualization.get("replay_payload_completeness") or "unknown")
+        replay_payload_missing_sections = list(replay_visualization.get("replay_payload_missing_sections") or [])
         audit_rows = list(replay_visualization.get("audit_rows") or [])
         daily_return_series = list(replay_visualization.get("daily_return_series") or [])
         exposure_curve = list(replay_visualization.get("exposure_curve") or [])
@@ -4059,10 +4148,17 @@ class RuleBacktestService:
             include_trades=include_trades,
             row=row,
             summary=summary,
-            visualization=visualization,
             comparison_source=comparison_source,
             comparison_completeness=comparison_completeness,
             comparison_missing_sections=comparison_missing_sections,
+            replay_payload_source=replay_payload_source,
+            replay_payload_completeness=replay_payload_completeness,
+            replay_payload_missing_sections=replay_payload_missing_sections,
+            audit_rows_source=str(replay_visualization.get("audit_rows_source") or "unknown"),
+            daily_return_series_source=str(
+                replay_visualization.get("daily_return_series_source") or "unknown"
+            ),
+            exposure_curve_source=str(replay_visualization.get("exposure_curve_source") or "unknown"),
             metrics_source=metrics_source,
             metrics_completeness=metrics_completeness,
             metrics_missing_fields=metrics_missing_fields,
