@@ -1061,7 +1061,7 @@ const PortfolioPage: React.FC = () => {
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">回撤监控 / Drawdown</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">回撤监控</h3>
             <div className="text-xs text-secondary space-y-1.5">
               <div className="flex justify-between"><span>最大回撤:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
               <div className="flex justify-between"><span>当前回撤:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
@@ -1069,7 +1069,7 @@ const PortfolioPage: React.FC = () => {
             </div>
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">止损接近预警 / Stop Loss</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">止损接近预警</h3>
             <div className="text-xs text-secondary space-y-1.5">
               <div className="flex justify-between"><span>触发数:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.triggeredCount ?? 0}</span></div>
               <div className="flex justify-between"><span>接近数:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.nearCount ?? 0}</span></div>
@@ -1077,7 +1077,7 @@ const PortfolioPage: React.FC = () => {
             </div>
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">口径 / Scope</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">统计口径</h3>
             <div className="text-xs text-secondary space-y-1.5">
               <div className="flex justify-between"><span>账户数:</span> <span className="text-foreground font-mono">{snapshot?.accountCount ?? 0}</span></div>
               <div className="flex justify-between"><span>计价币种:</span> <span className="text-foreground font-mono">{snapshot?.currency || 'CNY'}</span></div>
