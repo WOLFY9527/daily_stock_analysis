@@ -778,6 +778,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["metrics_completeness"], "stored_partial_repaired")
         self.assertIn("annualized_return_pct", authority["metrics_missing_fields"])
         self.assertEqual(authority["execution_model_source"], "summary.execution_model")
+        self.assertEqual(authority["execution_model_completeness"], "complete")
+        self.assertEqual(authority["execution_model_missing_fields"], [])
         self.assertEqual(authority["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(authority["execution_assumptions_snapshot_completeness"], "complete")
         self.assertEqual(authority["execution_assumptions_snapshot_missing_keys"], [])
@@ -810,6 +812,16 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "completeness": "stored_partial_repaired",
                 "state": "available",
                 "missing": authority["metrics_missing_fields"],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["execution_model"],
+            {
+                "source": "summary.execution_model",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
                 "missing_kind": "fields",
             },
         )
@@ -1030,6 +1042,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert run_row is not None
         summary = json.loads(run_row.summary_json)
         summary.pop("execution_model", None)
+        summary["request"].pop("execution_model", None)
         summary.pop("execution_assumptions_snapshot", None)
         summary["execution_assumptions"] = {
             "timeframe": "daily",
@@ -1068,6 +1081,147 @@ class RuleBacktestTestCase(unittest.TestCase):
             "summary.execution_assumptions+derived_defaults",
         )
         self.assertEqual(detail["execution_model"]["entry_timing"], "next_bar_open")
+
+    def test_get_run_prefers_persisted_request_execution_model_when_summary_snapshot_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary.pop("execution_model", None)
+        summary.pop("execution_assumptions_snapshot", None)
+        summary.pop("execution_assumptions", None)
+        summary["request"]["execution_model"] = {
+            "version": "v1",
+            "timeframe": "daily",
+            "signal_evaluation_timing": "bar_close",
+            "entry_timing": "next_bar_open",
+            "exit_timing": "forced_close_at_window_end_close",
+            "entry_fill_price_basis": "open",
+            "exit_fill_price_basis": "close",
+            "position_sizing": "single_position_full_notional",
+            "fee_model": "bps_per_side",
+            "fee_bps_per_side": 1.5,
+            "slippage_model": "bps_per_side",
+            "slippage_bps_per_side": 2.5,
+            "market_rules": {
+                "trading_day_execution": "available_bars_only",
+                "terminal_bar_fill_fallback": "same_bar_close",
+                "window_end_position_handling": "force_flatten",
+            },
+        }
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(
+            detail["result_authority"]["execution_model_source"],
+            "summary.request.execution_model",
+        )
+        self.assertEqual(
+            detail["result_authority"]["execution_model_completeness"],
+            "complete",
+        )
+        self.assertEqual(detail["result_authority"]["execution_model_missing_fields"], [])
+        self.assertEqual(
+            detail["result_authority"]["domains"]["execution_model"],
+            {
+                "source": "summary.request.execution_model",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(detail["execution_model"]["exit_timing"], "forced_close_at_window_end_close")
+        self.assertEqual(detail["execution_model"]["exit_fill_price_basis"], "close")
+        self.assertEqual(detail["execution_model"]["fee_bps_per_side"], 1.5)
+
+    def test_get_run_repairs_partial_stored_execution_model_with_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["execution_model"] = {
+            "version": "v1",
+            "timeframe": "daily",
+            "entry_timing": "same_bar_open",
+            "fee_bps_per_side": 4.2,
+            "market_rules": {
+                "trading_day_execution": "available_bars_only",
+            },
+        }
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(
+            detail["result_authority"]["execution_model_source"],
+            "summary.execution_model+repaired_fields",
+        )
+        self.assertEqual(
+            detail["result_authority"]["execution_model_completeness"],
+            "stored_partial_repaired",
+        )
+        self.assertEqual(
+            detail["result_authority"]["execution_model_missing_fields"],
+            [
+                "signal_evaluation_timing",
+                "exit_timing",
+                "entry_fill_price_basis",
+                "exit_fill_price_basis",
+                "position_sizing",
+                "fee_model",
+                "slippage_model",
+                "slippage_bps_per_side",
+                "market_rules.terminal_bar_fill_fallback",
+                "market_rules.window_end_position_handling",
+            ],
+        )
+        self.assertEqual(detail["execution_model"]["entry_timing"], "same_bar_open")
+        self.assertEqual(detail["execution_model"]["signal_evaluation_timing"], "bar_close")
+        self.assertEqual(
+            detail["execution_model"]["market_rules"]["terminal_bar_fill_fallback"],
+            "same_bar_close",
+        )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["execution_model"],
+            {
+                "source": "summary.execution_model+repaired_fields",
+                "completeness": "stored_partial_repaired",
+                "state": "available",
+                "missing": [
+                    "signal_evaluation_timing",
+                    "exit_timing",
+                    "entry_fill_price_basis",
+                    "exit_fill_price_basis",
+                    "position_sizing",
+                    "fee_model",
+                    "slippage_model",
+                    "slippage_bps_per_side",
+                    "market_rules.terminal_bar_fill_fallback",
+                    "market_rules.window_end_position_handling",
+                ],
+                "missing_kind": "fields",
+            },
+        )
 
     def test_get_run_prefers_stored_execution_assumptions_snapshot_for_reopen(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1930,6 +2084,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert run_row is not None
         summary = json.loads(run_row.summary_json)
         summary.pop("execution_model", None)
+        summary["request"].pop("execution_model", None)
         summary.pop("execution_assumptions_snapshot", None)
         summary["execution_assumptions"] = {
             "timeframe": "daily",

@@ -68,6 +68,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "metrics_source": "summary.metrics",
                 "metrics_completeness": "complete",
                 "metrics_missing_fields": [],
+                "execution_model_source": "summary.execution_model",
+                "execution_model_completeness": "complete",
+                "execution_model_missing_fields": [],
                 "execution_assumptions_source": "summary.execution_assumptions_snapshot",
                 "execution_trace_source": "summary.execution_trace",
                 "execution_trace_completeness": "complete",
@@ -82,6 +85,13 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     },
                     "metrics": {
                         "source": "summary.metrics",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "fields",
+                    },
+                    "execution_model": {
+                        "source": "summary.execution_model",
                         "completeness": "complete",
                         "state": "available",
                         "missing": [],
@@ -340,10 +350,23 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["metrics_source"], "summary.metrics")
         self.assertEqual(payload["result_authority"]["metrics_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["metrics_missing_fields"], [])
+        self.assertEqual(payload["result_authority"]["execution_model_source"], "summary.execution_model")
+        self.assertEqual(payload["result_authority"]["execution_model_completeness"], "complete")
+        self.assertEqual(payload["result_authority"]["execution_model_missing_fields"], [])
         self.assertEqual(payload["result_authority"]["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(payload["result_authority"]["execution_trace_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertEqual(
+            payload["result_authority"]["domains"]["execution_model"],
+            {
+                "source": "summary.execution_model",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
         self.assertEqual(
             payload["result_authority"]["domains"]["replay_payload"],
             {

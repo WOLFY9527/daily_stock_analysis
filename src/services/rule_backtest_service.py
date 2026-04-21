@@ -2222,6 +2222,8 @@ class RuleBacktestService:
         metrics_completeness: str,
         metrics_missing_fields: List[str],
         execution_model_source: str,
+        execution_model_completeness: str,
+        execution_model_missing_fields: List[str],
         execution_assumptions_source: str,
         execution_assumptions_snapshot_completeness: str,
         execution_assumptions_snapshot_missing_keys: List[str],
@@ -2253,6 +2255,8 @@ class RuleBacktestService:
             ),
             "execution_model": RuleBacktestService._build_result_authority_domain_entry(
                 source=execution_model_source,
+                completeness=execution_model_completeness,
+                missing=execution_model_missing_fields,
                 missing_kind="fields",
             ),
             "execution_assumptions_snapshot": RuleBacktestService._build_result_authority_domain_entry(
@@ -2310,6 +2314,8 @@ class RuleBacktestService:
             "metrics_completeness": metrics_completeness,
             "metrics_missing_fields": list(metrics_missing_fields or []),
             "execution_model_source": execution_model_source,
+            "execution_model_completeness": execution_model_completeness,
+            "execution_model_missing_fields": list(execution_model_missing_fields or []),
             "execution_assumptions_source": execution_assumptions_source,
             "execution_assumptions_snapshot_completeness": execution_assumptions_snapshot_completeness,
             "execution_assumptions_snapshot_missing_keys": list(execution_assumptions_snapshot_missing_keys or []),
@@ -4102,14 +4108,6 @@ class RuleBacktestService:
         return normalized or "next_bar_open"
 
     @staticmethod
-    def _describe_execution_model_source(summary: Dict[str, Any]) -> str:
-        stored = summary.get("execution_model")
-        if isinstance(stored, dict) and stored:
-            return "summary.execution_model"
-        if summary.get("execution_assumptions"):
-            return "derived_from_execution_assumptions_and_request"
-        return "derived_from_row_and_request"
-
     @staticmethod
     def _describe_execution_assumptions_source(summary: Dict[str, Any]) -> str:
         snapshot = RuleBacktestService._extract_execution_assumptions_snapshot_payload(summary)
@@ -4120,17 +4118,13 @@ class RuleBacktestService:
             return "summary.execution_assumptions"
         return "derived_from_execution_model"
 
-    def _derive_execution_model_payload(
+    def _build_derived_execution_model_payload(
         self,
         *,
         summary: Dict[str, Any],
         row: RuleBacktestRun,
         parsed_strategy: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        stored = summary.get("execution_model")
-        if isinstance(stored, dict) and stored:
-            return stored
-
         execution_assumptions = dict(summary.get("execution_assumptions") or {})
         request = dict(summary.get("request") or {})
         parsed_payload = parsed_strategy if isinstance(parsed_strategy, dict) else {}
@@ -4169,6 +4163,103 @@ class RuleBacktestService:
 
         return derived
 
+    @staticmethod
+    def _merge_execution_model_payload(
+        *,
+        derived_payload: Dict[str, Any],
+        stored_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        resolved_payload = dict(derived_payload or {})
+        resolved_payload.update(
+            {
+                key: value
+                for key, value in dict(stored_payload or {}).items()
+                if key != "market_rules" and value is not None
+            }
+        )
+        resolved_market_rules = dict(derived_payload.get("market_rules") or {})
+        stored_market_rules = stored_payload.get("market_rules")
+        if isinstance(stored_market_rules, dict):
+            resolved_market_rules.update(
+                {key: value for key, value in stored_market_rules.items() if value is not None}
+            )
+        resolved_payload["market_rules"] = resolved_market_rules
+        resolved_model = ExecutionModelConfig.from_dict(resolved_payload)
+        return resolved_model.to_dict() if resolved_model is not None else dict(derived_payload or {})
+
+    @staticmethod
+    def _collect_missing_execution_model_fields(
+        *,
+        derived_payload: Dict[str, Any],
+        stored_payload: Dict[str, Any],
+    ) -> List[str]:
+        missing_fields: List[str] = []
+        for key, value in (derived_payload or {}).items():
+            if key == "market_rules":
+                expected_market_rules = dict(value or {})
+                stored_market_rules = stored_payload.get("market_rules")
+                if not isinstance(stored_market_rules, dict):
+                    missing_fields.extend(
+                        [f"market_rules.{sub_key}" for sub_key in expected_market_rules.keys()]
+                    )
+                    continue
+                for sub_key in expected_market_rules.keys():
+                    if stored_market_rules.get(sub_key) is None:
+                        missing_fields.append(f"market_rules.{sub_key}")
+                continue
+            if stored_payload.get(key) is None:
+                missing_fields.append(key)
+        return missing_fields
+
+    def _resolve_execution_model_payload(
+        self,
+        *,
+        summary: Dict[str, Any],
+        row: RuleBacktestRun,
+        parsed_strategy: Optional[Dict[str, Any]] = None,
+    ) -> tuple[Dict[str, Any], str, str, List[str]]:
+        derived_payload = self._build_derived_execution_model_payload(
+            summary=summary,
+            row=row,
+            parsed_strategy=parsed_strategy,
+        )
+        request_payload = dict(summary.get("request") or {})
+        for source, stored_payload in (
+            ("summary.execution_model", summary.get("execution_model")),
+            ("summary.request.execution_model", request_payload.get("execution_model")),
+        ):
+            if isinstance(stored_payload, dict) and stored_payload:
+                missing_fields = self._collect_missing_execution_model_fields(
+                    derived_payload=derived_payload,
+                    stored_payload=stored_payload,
+                )
+                resolved_payload = self._merge_execution_model_payload(
+                    derived_payload=derived_payload,
+                    stored_payload=stored_payload,
+                )
+                if missing_fields:
+                    return (
+                        resolved_payload,
+                        f"{source}+repaired_fields",
+                        "stored_partial_repaired",
+                        missing_fields,
+                    )
+                return resolved_payload, source, "complete", []
+
+        if summary.get("execution_assumptions"):
+            return (
+                derived_payload,
+                "derived_from_execution_assumptions_and_request",
+                "derived",
+                ["stored_execution_model"],
+            )
+        return (
+            derived_payload,
+            "derived_from_row_and_request",
+            "derived",
+            ["stored_execution_model", "execution_assumptions"],
+        )
+
     def _run_row_to_dict(
         self,
         row: RuleBacktestRun,
@@ -4205,8 +4296,16 @@ class RuleBacktestService:
                 equity_curve = []
 
         request = summary.get("request") or {}
-        execution_model_source = self._describe_execution_model_source(summary)
-        execution_model = self._derive_execution_model_payload(summary=summary, row=row, parsed_strategy=parsed_strategy)
+        (
+            execution_model,
+            execution_model_source,
+            execution_model_completeness,
+            execution_model_missing_fields,
+        ) = self._resolve_execution_model_payload(
+            summary=summary,
+            row=row,
+            parsed_strategy=parsed_strategy,
+        )
         derived_execution_assumptions = self._build_execution_assumptions_payload(
             execution_model=execution_model,
         )
@@ -4281,6 +4380,8 @@ class RuleBacktestService:
             metrics_completeness=metrics_completeness,
             metrics_missing_fields=metrics_missing_fields,
             execution_model_source=execution_model_source,
+            execution_model_completeness=execution_model_completeness,
+            execution_model_missing_fields=execution_model_missing_fields,
             execution_assumptions_source=execution_assumptions_source,
             execution_assumptions_snapshot_completeness=str(
                 execution_assumptions_snapshot.get("completeness") or "unknown"
