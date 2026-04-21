@@ -61,7 +61,18 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "summary": {},
             "result_authority": {
                 "read_mode": "stored_first",
+                "execution_assumptions_source": "summary.execution_assumptions_snapshot",
                 "execution_trace_source": "summary.execution_trace",
+            },
+            "execution_assumptions_snapshot": {
+                "version": "v1",
+                "source": "summary.execution_assumptions_snapshot",
+                "completeness": "complete",
+                "missing_keys": [],
+                "payload": {
+                    "timeframe": "daily",
+                    "indicator_price_basis": "close",
+                },
             },
             "execution_model": {
                 "version": "v1",
@@ -251,7 +262,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(len(payload["auditRows"]), 1)
         self.assertEqual(payload["auditRows"][0]["symbol_close"], 101.0)
         self.assertEqual(payload["result_authority"]["read_mode"], "stored_first")
+        self.assertEqual(payload["result_authority"]["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
+        self.assertEqual(payload["execution_assumptions_snapshot"]["version"], "v1")
+        self.assertEqual(payload["execution_assumptions_snapshot"]["source"], "summary.execution_assumptions_snapshot")
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "macd_crossover")
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["signal_period"], 9)
         self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])

@@ -775,7 +775,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["parsed_strategy_source"], "row.parsed_strategy_json")
         self.assertEqual(authority["metrics_source"], "summary.metrics")
         self.assertEqual(authority["execution_model_source"], "summary.execution_model")
-        self.assertEqual(authority["execution_assumptions_source"], "summary.execution_assumptions")
+        self.assertEqual(authority["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
+        self.assertEqual(authority["execution_assumptions_snapshot_completeness"], "complete")
+        self.assertEqual(authority["execution_assumptions_snapshot_missing_keys"], [])
         self.assertEqual(authority["comparison_source"], "summary.visualization.comparison")
         self.assertEqual(authority["audit_rows_source"], "summary.visualization.audit_rows")
         self.assertEqual(authority["daily_return_series_source"], "summary.visualization.daily_return_series")
@@ -783,6 +785,15 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["trade_rows_source"], "stored_rule_backtest_trades")
         self.assertEqual(authority["equity_curve_source"], "row.equity_curve_json")
         self.assertEqual(authority["execution_trace_source"], "summary.execution_trace")
+        self.assertEqual(response["execution_assumptions_snapshot"]["version"], "v1")
+        self.assertEqual(
+            response["execution_assumptions_snapshot"]["source"],
+            "summary.execution_assumptions_snapshot",
+        )
+        self.assertEqual(
+            response["execution_assumptions_snapshot"]["payload"],
+            response["execution_assumptions"],
+        )
 
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
         service = RuleBacktestService(self.db)
@@ -884,6 +895,19 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert run_row is not None
         summary = json.loads(run_row.summary_json)
         summary.pop("execution_model", None)
+        summary.pop("execution_assumptions_snapshot", None)
+        summary["execution_assumptions"] = {
+            "timeframe": "daily",
+            "signal_evaluation_timing": "evaluate rules on each bar close",
+            "entry_fill_timing": "next_bar_open",
+            "exit_fill_timing": "next_bar_open; last openless bar falls back to same-bar close",
+            "default_fill_price_basis": "open",
+            "position_sizing": "single_position_full_notional",
+            "fee_model": "bps_per_side",
+            "fee_bps_per_side": 1.5,
+            "slippage_model": "bps_per_side",
+            "slippage_bps_per_side": 2.5,
+        }
         service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
 
         detail = service.get_run(run_row.id)
@@ -894,9 +918,72 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
         self.assertEqual(
             detail["result_authority"]["execution_assumptions_source"],
-            "summary.execution_assumptions",
+            "summary.execution_assumptions+derived_defaults",
+        )
+        self.assertEqual(
+            detail["result_authority"]["execution_assumptions_snapshot_completeness"],
+            "legacy_partial_repaired",
+        )
+        self.assertIn(
+            "benchmark_method",
+            detail["result_authority"]["execution_assumptions_snapshot_missing_keys"],
+        )
+        self.assertEqual(
+            detail["execution_assumptions_snapshot"]["source"],
+            "summary.execution_assumptions+derived_defaults",
         )
         self.assertEqual(detail["execution_model"]["entry_timing"], "next_bar_open")
+
+    def test_get_run_prefers_stored_execution_assumptions_snapshot_for_reopen(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["execution_assumptions_snapshot"] = {
+            "version": "v1",
+            "source": "summary.execution_assumptions_snapshot",
+            "completeness": "complete",
+            "missing_keys": [],
+            "payload": {
+                "timeframe": "daily",
+                "indicator_price_basis": "hlc3",
+                "signal_evaluation_timing": "bar_close",
+                "entry_fill_timing": "next_bar_open",
+                "exit_fill_timing": "next_bar_open; same_bar_close",
+                "default_fill_price_basis": "open",
+                "position_sizing": "single_position_full_notional",
+                "fee_model": "bps_per_side",
+                "fee_bps_per_side": 1.25,
+                "slippage_model": "bps_per_side",
+                "slippage_bps_per_side": 3.5,
+                "benchmark_method": "custom_snapshot_authority",
+                "benchmark_price_basis": "close",
+            },
+        }
+        summary.pop("execution_assumptions", None)
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(
+            detail["result_authority"]["execution_assumptions_source"],
+            "summary.execution_assumptions_snapshot",
+        )
+        self.assertEqual(detail["execution_assumptions"]["indicator_price_basis"], "hlc3")
+        self.assertEqual(detail["execution_assumptions"]["benchmark_method"], "custom_snapshot_authority")
+        self.assertEqual(
+            detail["execution_assumptions_snapshot"]["payload"]["indicator_price_basis"],
+            "hlc3",
+        )
 
     def test_module_level_run_backtest_automated_exports_trace_files(self) -> None:
         with patch.object(RuleBacktestService, "_ensure_market_history", return_value=0), patch.object(
@@ -1431,6 +1518,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert run_row is not None
         summary = json.loads(run_row.summary_json)
         summary.pop("execution_model", None)
+        summary.pop("execution_assumptions_snapshot", None)
         summary["execution_assumptions"] = {
             "timeframe": "daily",
             "signal_evaluation_timing": "evaluate rules on each bar close",

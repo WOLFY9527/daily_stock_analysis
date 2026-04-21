@@ -1608,6 +1608,84 @@ class RuleBacktestService:
         return self.engine._build_execution_assumptions(
             execution_model=resolved_model,
         ).to_dict()
+
+    @staticmethod
+    def _build_execution_assumptions_snapshot_payload(
+        *,
+        payload: Optional[Dict[str, Any]],
+        source: str,
+        completeness: str,
+        missing_keys: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "version": "v1",
+            "source": str(source or "unknown"),
+            "completeness": str(completeness or "unknown"),
+            "missing_keys": [str(item) for item in (missing_keys or []) if str(item or "").strip()],
+            "payload": dict(payload or {}),
+        }
+
+    @staticmethod
+    def _extract_execution_assumptions_snapshot_payload(summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        snapshot = summary.get("execution_assumptions_snapshot")
+        if not isinstance(snapshot, dict) or not snapshot:
+            return None
+        payload = snapshot.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        return snapshot
+
+    @staticmethod
+    def _resolve_execution_assumptions_snapshot(
+        *,
+        summary: Dict[str, Any],
+        derived_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        snapshot = RuleBacktestService._extract_execution_assumptions_snapshot_payload(summary)
+        if snapshot is not None:
+            stored_payload = dict(snapshot.get("payload") or {})
+            missing_keys = [key for key in derived_payload.keys() if stored_payload.get(key) is None]
+            resolved_payload = dict(derived_payload)
+            resolved_payload.update({key: value for key, value in stored_payload.items() if value is not None})
+            if missing_keys:
+                return RuleBacktestService._build_execution_assumptions_snapshot_payload(
+                    payload=resolved_payload,
+                    source="summary.execution_assumptions_snapshot+derived_defaults",
+                    completeness="stored_partial_repaired",
+                    missing_keys=missing_keys,
+                )
+            return RuleBacktestService._build_execution_assumptions_snapshot_payload(
+                payload=resolved_payload,
+                source="summary.execution_assumptions_snapshot",
+                completeness="complete",
+                missing_keys=[],
+            )
+
+        legacy_payload = summary.get("execution_assumptions")
+        if isinstance(legacy_payload, dict) and legacy_payload:
+            missing_keys = [key for key in derived_payload.keys() if legacy_payload.get(key) is None]
+            resolved_payload = dict(derived_payload)
+            resolved_payload.update({key: value for key, value in legacy_payload.items() if value is not None})
+            if missing_keys:
+                return RuleBacktestService._build_execution_assumptions_snapshot_payload(
+                    payload=resolved_payload,
+                    source="summary.execution_assumptions+derived_defaults",
+                    completeness="legacy_partial_repaired",
+                    missing_keys=missing_keys,
+                )
+            return RuleBacktestService._build_execution_assumptions_snapshot_payload(
+                payload=resolved_payload,
+                source="summary.execution_assumptions",
+                completeness="legacy_complete",
+                missing_keys=[],
+            )
+
+        return RuleBacktestService._build_execution_assumptions_snapshot_payload(
+            payload=derived_payload,
+            source="derived_from_execution_model",
+            completeness="derived",
+            missing_keys=[],
+        )
     @staticmethod
     def _build_daily_return_series(equity_curve: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         series: List[Dict[str, Any]] = []
@@ -1923,6 +2001,8 @@ class RuleBacktestService:
         metrics_source: str,
         execution_model_source: str,
         execution_assumptions_source: str,
+        execution_assumptions_snapshot_completeness: str,
+        execution_assumptions_snapshot_missing_keys: List[str],
         execution_trace_source: str,
     ) -> Dict[str, Any]:
         comparison_payload = visualization.get("comparison")
@@ -1973,6 +2053,8 @@ class RuleBacktestService:
             "metrics_source": metrics_source,
             "execution_model_source": execution_model_source,
             "execution_assumptions_source": execution_assumptions_source,
+            "execution_assumptions_snapshot_completeness": execution_assumptions_snapshot_completeness,
+            "execution_assumptions_snapshot_missing_keys": list(execution_assumptions_snapshot_missing_keys or []),
             "comparison_source": comparison_source,
             "audit_rows_source": audit_rows_source,
             "daily_return_series_source": daily_return_series_source,
@@ -2203,6 +2285,12 @@ class RuleBacktestService:
             payload["execution_model"] = execution_model
         if execution_assumptions is not _UNSET:
             payload["execution_assumptions"] = execution_assumptions
+            payload["execution_assumptions_snapshot"] = self._build_execution_assumptions_snapshot_payload(
+                payload=dict(execution_assumptions or {}),
+                source="summary.execution_assumptions_snapshot",
+                completeness="complete",
+                missing_keys=[],
+            )
         if visualization is not _UNSET:
             payload["visualization"] = visualization
         if execution_trace is not _UNSET:
@@ -3504,6 +3592,9 @@ class RuleBacktestService:
 
     @staticmethod
     def _describe_execution_assumptions_source(summary: Dict[str, Any]) -> str:
+        snapshot = RuleBacktestService._extract_execution_assumptions_snapshot_payload(summary)
+        if snapshot is not None:
+            return str(snapshot.get("source") or "summary.execution_assumptions_snapshot")
         stored = summary.get("execution_assumptions")
         if isinstance(stored, dict) and stored:
             return "summary.execution_assumptions"
@@ -3596,10 +3687,18 @@ class RuleBacktestService:
         request = summary.get("request") or {}
         execution_model_source = self._describe_execution_model_source(summary)
         execution_model = self._derive_execution_model_payload(summary=summary, row=row, parsed_strategy=parsed_strategy)
-        execution_assumptions_source = self._describe_execution_assumptions_source(summary)
-        execution_assumptions = summary.get("execution_assumptions") or self._build_execution_assumptions_payload(
+        derived_execution_assumptions = self._build_execution_assumptions_payload(
             execution_model=execution_model,
         )
+        execution_assumptions_snapshot = self._resolve_execution_assumptions_snapshot(
+            summary=summary,
+            derived_payload=derived_execution_assumptions,
+        )
+        execution_assumptions_source = str(
+            execution_assumptions_snapshot.get("source")
+            or self._describe_execution_assumptions_source(summary)
+        )
+        execution_assumptions = dict(execution_assumptions_snapshot.get("payload") or {})
         metrics = self._resolve_run_metrics_payload(row=row, summary=summary)
         metrics_source = self._describe_metrics_source(row=row, summary=summary)
         visualization = summary.get("visualization") or {}
@@ -3672,6 +3771,12 @@ class RuleBacktestService:
             metrics_source=metrics_source,
             execution_model_source=execution_model_source,
             execution_assumptions_source=execution_assumptions_source,
+            execution_assumptions_snapshot_completeness=str(
+                execution_assumptions_snapshot.get("completeness") or "unknown"
+            ),
+            execution_assumptions_snapshot_missing_keys=list(
+                execution_assumptions_snapshot.get("missing_keys") or []
+            ),
             execution_trace_source=execution_trace_source,
         )
         return {
@@ -3720,6 +3825,7 @@ class RuleBacktestService:
             "summary": summary,
             "execution_model": execution_model,
             "execution_assumptions": execution_assumptions,
+            "execution_assumptions_snapshot": execution_assumptions_snapshot,
             "benchmark_curve": benchmark_curve,
             "benchmark_summary": benchmark_summary,
             "buy_and_hold_curve": buy_and_hold_curve,
