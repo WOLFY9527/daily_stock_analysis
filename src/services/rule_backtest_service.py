@@ -127,6 +127,27 @@ TRACE_EXPORT_COLUMNS: List[tuple[str, str]] = [
     ("fallback", "fallback"),
 ]
 
+EQUITY_CURVE_FIELD_ORDER: List[str] = [
+    "date",
+    "equity",
+    "cumulative_return_pct",
+    "drawdown_pct",
+    "close",
+    "signal_summary",
+    "target_position",
+    "executed_action",
+    "fill_price",
+    "shares_held",
+    "cash",
+    "holdings_value",
+    "total_portfolio_value",
+    "position_state",
+    "exposure_pct",
+    "fee_amount",
+    "slippage_amount",
+    "notes",
+]
+
 
 @dataclass
 class _StrategySpecSupportPayload:
@@ -2230,15 +2251,13 @@ class RuleBacktestService:
         trade_rows_source: str,
         trade_rows_completeness: str,
         trade_rows_missing_fields: List[str],
+        equity_curve_source: str,
+        equity_curve_completeness: str,
+        equity_curve_missing_fields: List[str],
         execution_trace_source: str,
         execution_trace_completeness: str,
         execution_trace_missing_fields: List[str],
     ) -> Dict[str, Any]:
-        if not include_trades:
-            equity_curve_source = "omitted_without_detail_read"
-        else:
-            equity_curve_source = "row.equity_curve_json" if row.equity_curve_json else "empty"
-
         domains = {
             "summary": RuleBacktestService._build_result_authority_domain_entry(
                 source="row.summary_json" if row.summary_json else "empty",
@@ -2298,7 +2317,9 @@ class RuleBacktestService:
             ),
             "equity_curve": RuleBacktestService._build_result_authority_domain_entry(
                 source=equity_curve_source,
-                missing_kind="rows",
+                completeness=equity_curve_completeness,
+                missing=equity_curve_missing_fields,
+                missing_kind="fields",
             ),
             "execution_trace": RuleBacktestService._build_result_authority_domain_entry(
                 source=execution_trace_source,
@@ -2335,6 +2356,8 @@ class RuleBacktestService:
             "trade_rows_completeness": trade_rows_completeness,
             "trade_rows_missing_fields": list(trade_rows_missing_fields or []),
             "equity_curve_source": equity_curve_source,
+            "equity_curve_completeness": equity_curve_completeness,
+            "equity_curve_missing_fields": list(equity_curve_missing_fields or []),
             "execution_trace_source": execution_trace_source,
             "execution_trace_completeness": execution_trace_completeness,
             "execution_trace_missing_fields": list(execution_trace_missing_fields or []),
@@ -4517,8 +4540,8 @@ class RuleBacktestService:
                 warnings = json.loads(row.warnings_json)
             except Exception:
                 warnings = []
+        visualization = summary.get("visualization") or {}
         trade_rows_override = trades_override if trades_override is not None else None
-        equity_curve = equity_override or []
         (
             trade_rows,
             trade_rows_source,
@@ -4529,11 +4552,17 @@ class RuleBacktestService:
             row=row,
             trades_override=trade_rows_override,
         )
-        if include_trades and not equity_curve and row.equity_curve_json:
-            try:
-                equity_curve = json.loads(row.equity_curve_json)
-            except Exception:
-                equity_curve = []
+        (
+            equity_curve,
+            equity_curve_source,
+            equity_curve_completeness,
+            equity_curve_missing_fields,
+        ) = self._resolve_equity_curve_payload(
+            include_trades=include_trades,
+            row=row,
+            visualization=visualization,
+            equity_override=equity_override,
+        )
 
         request = summary.get("request") or {}
         (
@@ -4564,7 +4593,6 @@ class RuleBacktestService:
             metrics_completeness,
             metrics_missing_fields,
         ) = self._resolve_run_metrics_payload(row=row, summary=summary)
-        visualization = summary.get("visualization") or {}
         stored_audit_rows = list(visualization.get("audit_rows") or [])
         replay_visualization = self._resolve_replay_visualization_payload(
             include_trades=include_trades,
@@ -4632,6 +4660,9 @@ class RuleBacktestService:
             trade_rows_source=trade_rows_source,
             trade_rows_completeness=trade_rows_completeness,
             trade_rows_missing_fields=trade_rows_missing_fields,
+            equity_curve_source=equity_curve_source,
+            equity_curve_completeness=equity_curve_completeness,
+            equity_curve_missing_fields=equity_curve_missing_fields,
             execution_trace_source=execution_trace_source,
             execution_trace_completeness=execution_trace_completeness,
             execution_trace_missing_fields=execution_trace_missing_fields,
@@ -4700,6 +4731,221 @@ class RuleBacktestService:
     def _trade_row_to_dict(self, trade: RuleBacktestTrade) -> Dict[str, Any]:
         trade_row, _ = self._trade_row_to_dict_with_diagnostics(trade)
         return trade_row
+
+    @staticmethod
+    def _dedupe_equity_curve_missing_fields(missing_fields: List[str]) -> List[str]:
+        requested = [str(item or "").strip() for item in (missing_fields or []) if str(item or "").strip()]
+        ordered_fields = [field for field in list(EQUITY_CURVE_FIELD_ORDER) + ["stored_equity_curve"] if field in requested]
+        seen = set()
+        deduped: List[str] = []
+        for field in ordered_fields + requested:
+            normalized = str(field or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    @classmethod
+    def _normalize_equity_curve_point_payload(
+        cls,
+        point: Dict[str, Any],
+    ) -> tuple[Optional[Dict[str, Any]], List[str]]:
+        payload = dict(point or {})
+        missing_fields: List[str] = []
+
+        def _normalize_date(value: Any) -> Optional[str]:
+            if value in (None, ""):
+                return None
+            if hasattr(value, "isoformat"):
+                try:
+                    return str(value.isoformat())
+                except Exception:
+                    return str(value)
+            return str(value)
+
+        def _normalize_text(value: Any) -> Optional[str]:
+            if value is None:
+                return None
+            normalized = str(value).strip()
+            return normalized or None
+
+        def _normalize_float(value: Any) -> Optional[float]:
+            normalized = _safe_float(value)
+            return round(float(normalized), 6) if normalized is not None else None
+
+        def _resolve_field(
+            field: str,
+            *,
+            aliases: Optional[List[str]] = None,
+            value_type: str = "float",
+        ) -> Any:
+            candidates = [field] + [alias for alias in (aliases or []) if alias]
+            for index, candidate in enumerate(candidates):
+                if candidate not in payload:
+                    continue
+                raw_value = payload.get(candidate)
+                if value_type == "text":
+                    normalized_value = _normalize_text(raw_value)
+                elif value_type == "date":
+                    normalized_value = _normalize_date(raw_value)
+                else:
+                    normalized_value = _normalize_float(raw_value)
+                if index > 0:
+                    missing_fields.append(field)
+                return normalized_value
+
+            missing_fields.append(field)
+            return None
+
+        normalized: Dict[str, Any] = {
+            "date": _resolve_field("date", value_type="date"),
+            "equity": _resolve_field("equity", aliases=["total_portfolio_value"]),
+            "cumulative_return_pct": _resolve_field("cumulative_return_pct", aliases=["cumulative_return"]),
+            "drawdown_pct": _resolve_field("drawdown_pct"),
+            "close": _resolve_field("close", aliases=["symbol_close"]),
+            "signal_summary": _resolve_field("signal_summary", value_type="text"),
+            "target_position": _resolve_field("target_position", aliases=["position"]),
+            "executed_action": _resolve_field("executed_action", aliases=["action", "event_type"], value_type="text"),
+            "fill_price": _resolve_field("fill_price"),
+            "shares_held": _resolve_field("shares_held", aliases=["shares"]),
+            "cash": _resolve_field("cash"),
+            "holdings_value": _resolve_field("holdings_value"),
+            "total_portfolio_value": _resolve_field("total_portfolio_value", aliases=["equity"]),
+            "position_state": _resolve_field("position_state", value_type="text"),
+            "exposure_pct": _resolve_field("exposure_pct", aliases=["position", "target_position"]),
+            "fee_amount": _resolve_field("fee_amount", aliases=["fees"]),
+            "slippage_amount": _resolve_field("slippage_amount", aliases=["slippage"]),
+            "notes": _resolve_field("notes", value_type="text"),
+        }
+
+        if not normalized.get("date"):
+            return None, cls._dedupe_equity_curve_missing_fields(missing_fields)
+
+        if normalized.get("equity") is None and normalized.get("total_portfolio_value") is None:
+            missing_fields.extend(["equity", "total_portfolio_value"])
+            return None, cls._dedupe_equity_curve_missing_fields(missing_fields)
+
+        if normalized.get("equity") is None and normalized.get("total_portfolio_value") is not None:
+            normalized["equity"] = normalized["total_portfolio_value"]
+            missing_fields.append("equity")
+        if normalized.get("total_portfolio_value") is None and normalized.get("equity") is not None:
+            normalized["total_portfolio_value"] = normalized["equity"]
+            missing_fields.append("total_portfolio_value")
+
+        return normalized, cls._dedupe_equity_curve_missing_fields(missing_fields)
+
+    @classmethod
+    def _normalize_equity_curve_payload(
+        cls,
+        equity_curve: List[Any],
+    ) -> tuple[List[Dict[str, Any]], List[str]]:
+        normalized_rows: List[Dict[str, Any]] = []
+        missing_fields: List[str] = []
+        for point in list(equity_curve or []):
+            if not isinstance(point, dict):
+                missing_fields.append("stored_equity_curve")
+                continue
+            normalized_point, point_missing_fields = cls._normalize_equity_curve_point_payload(point)
+            missing_fields.extend(point_missing_fields)
+            if normalized_point is not None:
+                normalized_rows.append(normalized_point)
+        return normalized_rows, cls._dedupe_equity_curve_missing_fields(missing_fields)
+
+    @classmethod
+    def _build_equity_curve_from_audit_rows(
+        cls,
+        audit_rows: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        curve: List[Dict[str, Any]] = []
+        for audit_row in list(audit_rows or []):
+            point_date = audit_row.get("date")
+            total_portfolio_value = _safe_float(audit_row.get("total_portfolio_value"))
+            if not point_date or total_portfolio_value is None:
+                continue
+            position_value = _safe_float(audit_row.get("position"))
+            normalized_point, _ = cls._normalize_equity_curve_point_payload(
+                {
+                    "date": point_date,
+                    "equity": total_portfolio_value,
+                    "cumulative_return_pct": audit_row.get("cumulative_return"),
+                    "drawdown_pct": audit_row.get("drawdown_pct"),
+                    "close": audit_row.get("symbol_close"),
+                    "signal_summary": audit_row.get("signal_summary"),
+                    "target_position": position_value,
+                    "executed_action": audit_row.get("action"),
+                    "fill_price": audit_row.get("fill_price"),
+                    "shares_held": audit_row.get("shares"),
+                    "cash": audit_row.get("cash"),
+                    "holdings_value": audit_row.get("holdings_value"),
+                    "total_portfolio_value": total_portfolio_value,
+                    "position_state": audit_row.get("position_state"),
+                    "exposure_pct": position_value,
+                    "fee_amount": audit_row.get("fees"),
+                    "slippage_amount": audit_row.get("slippage"),
+                    "notes": audit_row.get("notes"),
+                }
+            )
+            if normalized_point is not None:
+                curve.append(normalized_point)
+        return curve
+
+    def _resolve_equity_curve_payload(
+        self,
+        *,
+        include_trades: bool,
+        row: RuleBacktestRun,
+        visualization: Dict[str, Any],
+        equity_override: Optional[List[Any]] = None,
+    ) -> tuple[List[Dict[str, Any]], str, str, List[str]]:
+        if not include_trades:
+            return [], "omitted_without_detail_read", "omitted", []
+
+        stored_audit_rows_raw = visualization.get("audit_rows")
+        stored_audit_rows = list(stored_audit_rows_raw or []) if isinstance(stored_audit_rows_raw, list) else []
+
+        stored_payload = equity_override if equity_override is not None else None
+        stored_payload_present = equity_override is not None
+        if stored_payload is None and row.equity_curve_json:
+            try:
+                loaded_payload = json.loads(row.equity_curve_json)
+                if isinstance(loaded_payload, list):
+                    stored_payload = loaded_payload
+                    stored_payload_present = True
+                else:
+                    stored_payload_present = True
+            except Exception:
+                stored_payload_present = True
+
+        if isinstance(stored_payload, list):
+            normalized_curve, missing_fields = self._normalize_equity_curve_payload(list(stored_payload or []))
+            if normalized_curve:
+                source = "row.equity_curve_json+repaired_fields" if missing_fields else "row.equity_curve_json"
+                completeness = "stored_partial_repaired" if missing_fields else "complete"
+                return normalized_curve, source, completeness, missing_fields
+            if stored_payload == []:
+                if stored_audit_rows:
+                    return (
+                        self._build_equity_curve_from_audit_rows(stored_audit_rows),
+                        "derived_from_summary.visualization.audit_rows",
+                        "legacy_rebuilt",
+                        [],
+                    )
+                return [], "row.equity_curve_json", "empty", []
+
+        if stored_audit_rows:
+            derived_curve = self._build_equity_curve_from_audit_rows(stored_audit_rows)
+            if derived_curve:
+                return (
+                    derived_curve,
+                    "derived_from_summary.visualization.audit_rows",
+                    "legacy_rebuilt",
+                    [],
+                )
+
+        if stored_payload_present:
+            return [], "unavailable", "unavailable", ["stored_equity_curve"]
+        return [], "unavailable", "unavailable", ["stored_equity_curve"]
 
     def export_execution_trace_csv(self, run_id: int, output_path: str) -> str:
         run = self.get_run(run_id)

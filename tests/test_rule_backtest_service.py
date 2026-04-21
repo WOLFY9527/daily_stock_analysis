@@ -798,6 +798,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["trade_rows_completeness"], "complete")
         self.assertEqual(authority["trade_rows_missing_fields"], [])
         self.assertEqual(authority["equity_curve_source"], "row.equity_curve_json")
+        self.assertEqual(authority["equity_curve_completeness"], "complete")
+        self.assertEqual(authority["equity_curve_missing_fields"], [])
         self.assertEqual(authority["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(
             authority["domains"]["summary"],
@@ -863,6 +865,16 @@ class RuleBacktestTestCase(unittest.TestCase):
             authority["domains"]["trade_rows"],
             {
                 "source": "stored_rule_backtest_trades",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["equity_curve"],
+            {
+                "source": "row.equity_curve_json",
                 "completeness": "complete",
                 "state": "available",
                 "missing": [],
@@ -1458,6 +1470,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(history["items"][0]["result_authority"]["trade_rows_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["trade_rows_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["trade_rows_missing_fields"], [])
+        self.assertEqual(history["items"][0]["result_authority"]["equity_curve_source"], "omitted_without_detail_read")
+        self.assertEqual(history["items"][0]["result_authority"]["equity_curve_completeness"], "omitted")
+        self.assertEqual(history["items"][0]["result_authority"]["equity_curve_missing_fields"], [])
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_missing_fields"], [])
@@ -1473,6 +1488,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
         self.assertEqual(
             history["items"][0]["result_authority"]["domains"]["trade_rows"],
+            {
+                "source": "omitted_without_detail_read",
+                "completeness": "omitted",
+                "state": "omitted",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            history["items"][0]["result_authority"]["domains"]["equity_curve"],
             {
                 "source": "omitted_without_detail_read",
                 "completeness": "omitted",
@@ -1583,6 +1608,137 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "missing": ["stored_trade_rows"],
                 "missing_kind": "fields",
             },
+        )
+
+    def test_get_run_repairs_partial_stored_equity_curve_with_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        stored_curve = json.loads(run_row.equity_curve_json)
+        self.assertGreater(len(stored_curve), 0)
+        stored_curve[0] = {
+            "date": stored_curve[0]["date"],
+            "total_portfolio_value": stored_curve[0]["total_portfolio_value"],
+            "cumulative_return_pct": stored_curve[0]["cumulative_return_pct"],
+            "drawdown_pct": stored_curve[0]["drawdown_pct"],
+            "close": stored_curve[0]["close"],
+            "action": stored_curve[0]["executed_action"],
+            "shares": stored_curve[0]["shares_held"],
+            "cash": stored_curve[0]["cash"],
+            "holdings_value": stored_curve[0]["holdings_value"],
+            "position": stored_curve[0]["exposure_pct"],
+            "fees": stored_curve[0]["fee_amount"],
+            "slippage": stored_curve[0]["slippage_amount"],
+            "notes": stored_curve[0]["notes"],
+        }
+        service.repo.update_run(
+            run_row.id,
+            equity_curve_json=service._serialize_json(stored_curve),
+        )
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertGreater(len(detail["equity_curve"]), 0)
+        repaired_point = detail["equity_curve"][0]
+        self.assertIn("equity", repaired_point)
+        self.assertIn("total_portfolio_value", repaired_point)
+        self.assertIn("executed_action", repaired_point)
+        self.assertIn("shares_held", repaired_point)
+        self.assertIn("exposure_pct", repaired_point)
+        self.assertEqual(
+            detail["result_authority"]["equity_curve_source"],
+            "row.equity_curve_json+repaired_fields",
+        )
+        self.assertEqual(
+            detail["result_authority"]["equity_curve_completeness"],
+            "stored_partial_repaired",
+        )
+        self.assertIn("equity", detail["result_authority"]["equity_curve_missing_fields"])
+        self.assertIn("executed_action", detail["result_authority"]["equity_curve_missing_fields"])
+        self.assertIn("shares_held", detail["result_authority"]["equity_curve_missing_fields"])
+        self.assertEqual(
+            detail["result_authority"]["domains"]["equity_curve"]["source"],
+            "row.equity_curve_json+repaired_fields",
+        )
+
+    def test_get_run_derives_equity_curve_from_stored_audit_rows_when_snapshot_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        service.repo.update_run(run_row.id, equity_curve_json=None)
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertGreater(len(detail["equity_curve"]), 0)
+        self.assertEqual(
+            detail["result_authority"]["equity_curve_source"],
+            "derived_from_summary.visualization.audit_rows",
+        )
+        self.assertEqual(
+            detail["result_authority"]["equity_curve_completeness"],
+            "legacy_rebuilt",
+        )
+        self.assertEqual(detail["result_authority"]["equity_curve_missing_fields"], [])
+        self.assertEqual(
+            detail["result_authority"]["domains"]["equity_curve"],
+            {
+                "source": "derived_from_summary.visualization.audit_rows",
+                "completeness": "legacy_rebuilt",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertIn("equity", detail["equity_curve"][0])
+        self.assertIn("total_portfolio_value", detail["equity_curve"][0])
+
+    def test_get_run_marks_equity_curve_unavailable_when_snapshot_and_audit_rows_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["visualization"]["audit_rows"] = []
+        service.repo.update_run(
+            run_row.id,
+            summary_json=service._serialize_json(summary),
+            equity_curve_json=None,
+        )
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["equity_curve"], [])
+        self.assertEqual(detail["result_authority"]["equity_curve_source"], "unavailable")
+        self.assertEqual(detail["result_authority"]["equity_curve_completeness"], "unavailable")
+        self.assertEqual(
+            detail["result_authority"]["equity_curve_missing_fields"],
+            ["stored_equity_curve"],
         )
 
     def test_service_persists_requested_date_range_and_period(self) -> None:
