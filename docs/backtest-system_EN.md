@@ -27,6 +27,7 @@
 - `GET /api/v1/backtest/rule/runs/{run_id}/status` is the lightweight polling endpoint for background progress.
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` is a best-effort cancel endpoint: unfinished runs are marked `cancelled`, while already-finished runs keep their final state.
 - `GET /api/v1/backtest/rule/runs/{run_id}` remains the full-detail endpoint and includes `execution_trace`, trades, and audit data.
+- The `result_authority` object on detail/history payloads now also exposes replay/audit reopen diagnostics: `replay_payload_source` / `replay_payload_completeness` / `replay_payload_missing_sections` plus `audit_rows_source` / `daily_return_series_source` / `exposure_curve_source`. These fields distinguish between directly persisted payloads, sections repaired from persisted audit rows, legacy replay payload rebuilt from stored run artifacts, and omitted/unavailable states.
 
 ## P5 Web Usability Layer
 
@@ -90,3 +91,4 @@ python3 scripts/smoke_backtest_standard.py && python3 scripts/smoke_backtest_rul
 - Real local-parquet reads in production still require `pyarrow` or `fastparquet`; when a parquet engine is unavailable, the repo smoke scripts inject a test-only shim so the `LOCAL_US_PARQUET_DIR` priority path and async endpoints can still be validated.
 - Synchronous rule backtests still depend on market data being available locally or through the existing data-source fallback chain.
 - `execution_trace` detail and CSV / JSON exports treat persisted `audit_rows` as the source of truth; older runs that do not store it are rebuilt on read and marked with `trace_rebuilt`.
+- Replay-visualization reopen now follows the same stored-first rule: non-empty persisted `summary.visualization.audit_rows` / `daily_return_series` / `exposure_curve` sections stay authoritative, while older runs with missing or empty replay sections are explicitly marked as `stored_partial_repaired`, `derived_from_stored_run_artifacts`, or `unavailable` instead of silently presenting regenerated payloads as fully persisted data.

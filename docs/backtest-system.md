@@ -27,6 +27,7 @@
 - `GET /api/v1/backtest/rule/runs/{run_id}/status` 提供轻量状态轮询，不必每次拉取完整详情。
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` 提供 best-effort cancel：对尚未完成的任务会标记为 `cancelled`；若任务已结束，则返回当前最终状态而不覆盖结果。
 - `GET /api/v1/backtest/rule/runs/{run_id}` 继续作为完整详情接口，包含 `execution_trace`、交易明细和审计数据。
+- detail/history 返回里的 `result_authority` 现会额外暴露 replay/audit reopen 诊断：`replay_payload_source` / `replay_payload_completeness` / `replay_payload_missing_sections` 以及 `audit_rows_source` / `daily_return_series_source` / `exposure_curve_source`，用于区分“直接读取已持久化 payload”“基于持久化 audit rows 修补缺失 section”“仅基于已存 run artifacts 回补 legacy payload”“未读取 detail / unavailable”等状态。
 
 ## P5 Web 可用性收口
 
@@ -90,3 +91,4 @@ python3 scripts/smoke_backtest_standard.py && python3 scripts/smoke_backtest_rul
 - 生产环境真实读取本地 parquet 仍依赖 `pyarrow` 或 `fastparquet`；若环境缺少 parquet engine，仓库内 smoke 脚本会注入测试用 shim 来验证 `LOCAL_US_PARQUET_DIR` 优先路径与异步接口行为。
 - 规则回测的同步执行依赖本地数据库中已有行情，或依赖既有数据源 fallback 成功。
 - `execution_trace` 的详情、CSV、JSON 导出以持久化 `audit_rows` 为真源；历史旧记录缺少该字段时，会在读取时回补并标记 `trace_rebuilt`。
+- replay 可视化 reopen 同样遵循 stored-first：非空的已持久化 `summary.visualization.audit_rows` / `daily_return_series` / `exposure_curve` 会优先复用；若历史运行只存了部分或空数组，会显式标记 `stored_partial_repaired`、`derived_from_stored_run_artifacts` 或 `unavailable`，避免把 reopen 时的临时重建结果伪装成完整持久化 payload。
