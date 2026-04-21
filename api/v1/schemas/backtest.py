@@ -636,6 +636,30 @@ class RuleBacktestCompareSummary(BaseModel):
     metric_deltas: Dict[str, RuleBacktestCompareMetricDelta] = Field(default_factory=dict)
 
 
+class RuleBacktestCompareParameterValueItem(BaseModel):
+    run_id: int
+    value: Any = None
+
+
+class RuleBacktestCompareParameterDetail(BaseModel):
+    state: str
+    available_run_ids: List[int] = Field(default_factory=list)
+    unavailable_run_ids: List[int] = Field(default_factory=list)
+    values: List[RuleBacktestCompareParameterValueItem] = Field(default_factory=list)
+
+
+class RuleBacktestCompareParameterComparison(BaseModel):
+    state: str
+    strategy_family_values: List[str] = Field(default_factory=list)
+    strategy_type_values: List[str] = Field(default_factory=list)
+    shared_parameter_keys: List[str] = Field(default_factory=list)
+    differing_parameter_keys: List[str] = Field(default_factory=list)
+    missing_parameter_keys: List[str] = Field(default_factory=list)
+    shared_parameters: Dict[str, Any] = Field(default_factory=dict)
+    differing_parameters: Dict[str, RuleBacktestCompareParameterDetail] = Field(default_factory=dict)
+    missing_parameters: Dict[str, RuleBacktestCompareParameterDetail] = Field(default_factory=dict)
+
+
 class RuleBacktestCompareResponse(BaseModel):
     comparison_source: str
     read_mode: str = "stored_first"
@@ -646,6 +670,7 @@ class RuleBacktestCompareResponse(BaseModel):
     unavailable_runs: List[RuleBacktestCompareUnavailableRun] = Field(default_factory=list)
     field_groups: List[str] = Field(default_factory=list)
     comparison_summary: Optional[RuleBacktestCompareSummary] = None
+    parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 
 

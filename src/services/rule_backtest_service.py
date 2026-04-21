@@ -111,6 +111,74 @@ COMPARE_DELTA_METRICS: List[str] = [
     "excess_return_vs_benchmark_pct",
 ]
 
+COMPARE_PARAMETER_FIELDS_BY_STRATEGY_TYPE: Dict[str, List[str]] = {
+    "periodic_accumulation": [
+        "strategy_spec.schedule.frequency",
+        "strategy_spec.schedule.timing",
+        "strategy_spec.entry.side",
+        "strategy_spec.entry.order.mode",
+        "strategy_spec.entry.order.quantity",
+        "strategy_spec.entry.order.amount",
+        "strategy_spec.entry.price_basis",
+        "strategy_spec.exit.policy",
+        "strategy_spec.exit.price_basis",
+        "strategy_spec.position_behavior.accumulate",
+        "strategy_spec.position_behavior.cash_policy",
+    ],
+    "moving_average_crossover": [
+        "strategy_spec.signal.indicator_family",
+        "strategy_spec.signal.fast_period",
+        "strategy_spec.signal.slow_period",
+        "strategy_spec.signal.fast_type",
+        "strategy_spec.signal.slow_type",
+        "strategy_spec.signal.entry_condition",
+        "strategy_spec.signal.exit_condition",
+        "strategy_spec.execution.frequency",
+        "strategy_spec.execution.signal_timing",
+        "strategy_spec.execution.fill_timing",
+        "strategy_spec.position_behavior.direction",
+        "strategy_spec.position_behavior.entry_sizing",
+        "strategy_spec.position_behavior.max_positions",
+        "strategy_spec.position_behavior.pyramiding",
+        "strategy_spec.end_behavior.policy",
+        "strategy_spec.end_behavior.price_basis",
+    ],
+    "macd_crossover": [
+        "strategy_spec.signal.indicator_family",
+        "strategy_spec.signal.fast_period",
+        "strategy_spec.signal.slow_period",
+        "strategy_spec.signal.signal_period",
+        "strategy_spec.signal.entry_condition",
+        "strategy_spec.signal.exit_condition",
+        "strategy_spec.execution.frequency",
+        "strategy_spec.execution.signal_timing",
+        "strategy_spec.execution.fill_timing",
+        "strategy_spec.position_behavior.direction",
+        "strategy_spec.position_behavior.entry_sizing",
+        "strategy_spec.position_behavior.max_positions",
+        "strategy_spec.position_behavior.pyramiding",
+        "strategy_spec.end_behavior.policy",
+        "strategy_spec.end_behavior.price_basis",
+    ],
+    "rsi_threshold": [
+        "strategy_spec.signal.indicator_family",
+        "strategy_spec.signal.period",
+        "strategy_spec.signal.lower_threshold",
+        "strategy_spec.signal.upper_threshold",
+        "strategy_spec.signal.entry_condition",
+        "strategy_spec.signal.exit_condition",
+        "strategy_spec.execution.frequency",
+        "strategy_spec.execution.signal_timing",
+        "strategy_spec.execution.fill_timing",
+        "strategy_spec.position_behavior.direction",
+        "strategy_spec.position_behavior.entry_sizing",
+        "strategy_spec.position_behavior.max_positions",
+        "strategy_spec.position_behavior.pyramiding",
+        "strategy_spec.end_behavior.policy",
+        "strategy_spec.end_behavior.price_basis",
+    ],
+}
+
 TRACE_EXPORT_COLUMNS: List[tuple[str, str]] = [
     ("date", "日期"),
     ("symbol_close", "标的收盘价"),
@@ -741,6 +809,7 @@ class RuleBacktestService:
             "unavailable_runs": unavailable_runs,
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
             "comparison_summary": self._build_compare_summary(items=items),
+            "parameter_comparison": self._build_compare_parameter_comparison(items=items),
             "items": items,
         }
 
@@ -1788,6 +1857,135 @@ class RuleBacktestService:
             },
         }
 
+    @classmethod
+    def _build_compare_parameter_comparison(cls, *, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        strategy_family_values = sorted(
+            {
+                str(cls._extract_compare_strategy_family(item) or "")
+                for item in items
+                if str(cls._extract_compare_strategy_family(item) or "")
+            }
+        )
+        strategy_type_values = sorted(
+            {
+                str(cls._extract_compare_strategy_type(item) or "")
+                for item in items
+                if str(cls._extract_compare_strategy_type(item) or "")
+            }
+        )
+
+        if not strategy_family_values or not strategy_type_values:
+            return {
+                "state": "unavailable",
+                "strategy_family_values": strategy_family_values,
+                "strategy_type_values": strategy_type_values,
+                "shared_parameter_keys": [],
+                "differing_parameter_keys": [],
+                "missing_parameter_keys": [],
+                "shared_parameters": {},
+                "differing_parameters": {},
+                "missing_parameters": {},
+            }
+
+        if len(strategy_family_values) != 1 or len(strategy_type_values) != 1:
+            return {
+                "state": "different_family",
+                "strategy_family_values": strategy_family_values,
+                "strategy_type_values": strategy_type_values,
+                "shared_parameter_keys": [],
+                "differing_parameter_keys": [],
+                "missing_parameter_keys": [],
+                "shared_parameters": {},
+                "differing_parameters": {},
+                "missing_parameters": {},
+            }
+
+        strategy_type = strategy_type_values[0]
+        parameter_keys = list(COMPARE_PARAMETER_FIELDS_BY_STRATEGY_TYPE.get(strategy_type) or [])
+        if not parameter_keys:
+            return {
+                "state": "unavailable",
+                "strategy_family_values": strategy_family_values,
+                "strategy_type_values": strategy_type_values,
+                "shared_parameter_keys": [],
+                "differing_parameter_keys": [],
+                "missing_parameter_keys": [],
+                "shared_parameters": {},
+                "differing_parameters": {},
+                "missing_parameters": {},
+            }
+
+        shared_parameter_keys: List[str] = []
+        differing_parameter_keys: List[str] = []
+        missing_parameter_keys: List[str] = []
+        shared_parameters: Dict[str, Any] = {}
+        differing_parameters: Dict[str, Any] = {}
+        missing_parameters: Dict[str, Any] = {}
+
+        for parameter_key in parameter_keys:
+            available_run_ids: List[int] = []
+            unavailable_run_ids: List[int] = []
+            values: List[Dict[str, Any]] = []
+
+            for item in items:
+                metadata = dict(item.get("metadata") or {})
+                run_id = int(metadata.get("id") or 0)
+                missing_fields = set(cls._extract_compare_parsed_strategy_missing_fields(item))
+                parsed_strategy = dict(item.get("parsed_strategy") or {})
+                value = cls._nested_value(parsed_strategy, *parameter_key.split("."))
+                if parameter_key in missing_fields or value is None:
+                    unavailable_run_ids.append(run_id)
+                    continue
+                available_run_ids.append(run_id)
+                values.append({"run_id": run_id, "value": value})
+
+            if unavailable_run_ids:
+                missing_parameter_keys.append(parameter_key)
+                missing_parameters[parameter_key] = {
+                    "state": "partial" if available_run_ids else "unavailable",
+                    "available_run_ids": available_run_ids,
+                    "unavailable_run_ids": unavailable_run_ids,
+                    "values": values,
+                }
+                continue
+
+            if not values:
+                missing_parameter_keys.append(parameter_key)
+                missing_parameters[parameter_key] = {
+                    "state": "unavailable",
+                    "available_run_ids": [],
+                    "unavailable_run_ids": [int(dict(item.get("metadata") or {}).get("id") or 0) for item in items],
+                    "values": [],
+                }
+                continue
+
+            first_value = values[0]["value"]
+            if all(value_item.get("value") == first_value for value_item in values[1:]):
+                shared_parameter_keys.append(parameter_key)
+                shared_parameters[parameter_key] = first_value
+                continue
+
+            differing_parameter_keys.append(parameter_key)
+            differing_parameters[parameter_key] = {
+                "state": "different",
+                "available_run_ids": available_run_ids,
+                "unavailable_run_ids": [],
+                "values": values,
+            }
+
+        state = "partial" if missing_parameter_keys else "same_family_comparable"
+        return {
+            "state": state,
+            "strategy_family_values": strategy_family_values,
+            "strategy_type_values": strategy_type_values,
+            "shared_parameter_keys": shared_parameter_keys,
+            "differing_parameter_keys": differing_parameter_keys,
+            "missing_parameter_keys": missing_parameter_keys,
+            "shared_parameters": shared_parameters,
+            "differing_parameters": differing_parameters,
+            "missing_parameters": missing_parameters,
+        }
+
     @staticmethod
     def _extract_compare_strategy_family(item: Dict[str, Any]) -> Optional[str]:
         parsed_strategy = dict(item.get("parsed_strategy") or {})
@@ -1807,6 +2005,18 @@ class RuleBacktestService:
             return None
         normalized = str(value).strip()
         return normalized or None
+
+    @staticmethod
+    def _extract_compare_parsed_strategy_missing_fields(item: Dict[str, Any]) -> List[str]:
+        result_authority = dict(item.get("result_authority") or {})
+        parsed_strategy_domain = dict((result_authority.get("domains") or {}).get("parsed_strategy") or {})
+        missing = parsed_strategy_domain.get("missing")
+        if isinstance(missing, list):
+            return [str(entry or "").strip() for entry in missing if str(entry or "").strip()]
+        missing = result_authority.get("parsed_strategy_missing_fields")
+        if isinstance(missing, list):
+            return [str(entry or "").strip() for entry in missing if str(entry or "").strip()]
+        return []
 
     @classmethod
     def _build_compare_metric_delta(

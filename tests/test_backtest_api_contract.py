@@ -607,6 +607,45 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     },
                 },
             },
+            "parameter_comparison": {
+                "state": "same_family_comparable",
+                "strategy_family_values": ["moving_average_crossover"],
+                "strategy_type_values": ["moving_average_crossover"],
+                "shared_parameter_keys": [
+                    "strategy_spec.execution.signal_timing",
+                    "strategy_spec.execution.fill_timing",
+                ],
+                "differing_parameter_keys": [
+                    "strategy_spec.signal.fast_period",
+                    "strategy_spec.signal.slow_period",
+                ],
+                "missing_parameter_keys": [
+                    "strategy_spec.signal.slow_type",
+                ],
+                "shared_parameters": {
+                    "strategy_spec.execution.signal_timing": "bar_close",
+                    "strategy_spec.execution.fill_timing": "next_bar_open",
+                },
+                "differing_parameters": {
+                    "strategy_spec.signal.fast_period": {
+                        "state": "different",
+                        "values": [
+                            {"run_id": 101, "value": 5},
+                            {"run_id": 202, "value": 10},
+                        ],
+                    },
+                },
+                "missing_parameters": {
+                    "strategy_spec.signal.slow_type": {
+                        "state": "partial",
+                        "available_run_ids": [101],
+                        "unavailable_run_ids": [202],
+                        "values": [
+                            {"run_id": 101, "value": "simple"},
+                        ],
+                    },
+                },
+            },
             "items": [
                 {
                     "metadata": {
@@ -728,6 +767,15 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             payload["comparison_summary"]["metric_deltas"]["annualized_return_pct"]["unavailable_run_ids"],
             [202],
+        )
+        self.assertEqual(payload["parameter_comparison"]["state"], "same_family_comparable")
+        self.assertEqual(
+            payload["parameter_comparison"]["differing_parameter_keys"],
+            ["strategy_spec.signal.fast_period", "strategy_spec.signal.slow_period"],
+        )
+        self.assertEqual(
+            payload["parameter_comparison"]["missing_parameters"]["strategy_spec.signal.slow_type"]["state"],
+            "partial",
         )
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["items"][0]["metadata"]["id"], 101)

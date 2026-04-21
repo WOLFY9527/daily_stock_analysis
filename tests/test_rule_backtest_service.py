@@ -1072,6 +1072,186 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(annualized_delta["deltas"][0]["run_id"], int(first["id"]))
         self.assertEqual(annualized_delta["deltas"][0]["delta_vs_baseline"], 0.0)
 
+    def test_compare_runs_builds_same_family_parameter_comparison(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service,
+            "_ensure_market_history",
+            return_value=0,
+        ):
+            first_parsed = service.parse_strategy(
+                "5日均线上穿20日均线买入，下穿卖出",
+                code="600519",
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                initial_capital=100000.0,
+            )
+            second_parsed = service.parse_strategy(
+                "10日均线上穿30日均线买入，下穿卖出",
+                code="600519",
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                initial_capital=100000.0,
+            )
+            first = service.run_backtest(
+                code="600519",
+                strategy_text="5日均线上穿20日均线买入，下穿卖出",
+                parsed_strategy=first_parsed,
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            second = service.run_backtest(
+                code="600519",
+                strategy_text="10日均线上穿30日均线买入，下穿卖出",
+                parsed_strategy=second_parsed,
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        parameter_comparison = payload["parameter_comparison"]
+        self.assertEqual(parameter_comparison["state"], "same_family_comparable")
+        self.assertEqual(parameter_comparison["strategy_family_values"], ["moving_average_crossover"])
+        self.assertEqual(parameter_comparison["strategy_type_values"], ["moving_average_crossover"])
+        self.assertIn("strategy_spec.signal.fast_period", parameter_comparison["differing_parameter_keys"])
+        self.assertIn("strategy_spec.signal.slow_period", parameter_comparison["differing_parameter_keys"])
+        self.assertIn("strategy_spec.execution.signal_timing", parameter_comparison["shared_parameter_keys"])
+        self.assertEqual(
+            parameter_comparison["shared_parameters"]["strategy_spec.execution.signal_timing"],
+            "bar_close",
+        )
+        self.assertEqual(
+            parameter_comparison["differing_parameters"]["strategy_spec.signal.fast_period"]["values"],
+            [
+                {"run_id": int(first["id"]), "value": 5},
+                {"run_id": int(second["id"]), "value": 10},
+            ],
+        )
+
+    def test_compare_runs_parameter_comparison_marks_different_families(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service,
+            "_ensure_market_history",
+            return_value=0,
+        ):
+            moving_average = service.run_backtest(
+                code="600519",
+                strategy_text="5日均线上穿20日均线买入，下穿卖出",
+                parsed_strategy=service.parse_strategy(
+                    "5日均线上穿20日均线买入，下穿卖出",
+                    code="600519",
+                    start_date="2024-01-01",
+                    end_date="2024-01-24",
+                    initial_capital=100000.0,
+                ),
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            macd = service.run_backtest(
+                code="600519",
+                strategy_text="MACD金叉买入，死叉卖出",
+                parsed_strategy=service.parse_strategy(
+                    "MACD金叉买入，死叉卖出",
+                    code="600519",
+                    start_date="2024-01-01",
+                    end_date="2024-01-24",
+                    initial_capital=100000.0,
+                ),
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        payload = service.compare_runs([int(moving_average["id"]), int(macd["id"])])
+
+        parameter_comparison = payload["parameter_comparison"]
+        self.assertEqual(parameter_comparison["state"], "different_family")
+        self.assertEqual(
+            parameter_comparison["strategy_family_values"],
+            ["macd_crossover", "moving_average_crossover"],
+        )
+        self.assertEqual(parameter_comparison["shared_parameter_keys"], [])
+        self.assertEqual(parameter_comparison["differing_parameter_keys"], [])
+        self.assertEqual(parameter_comparison["missing_parameter_keys"], [])
+
+    def test_compare_runs_parameter_comparison_marks_partial_missing_keys(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service,
+            "_ensure_market_history",
+            return_value=0,
+        ):
+            first = service.run_backtest(
+                code="600519",
+                strategy_text="5日均线上穿20日均线买入，下穿卖出",
+                parsed_strategy=service.parse_strategy(
+                    "5日均线上穿20日均线买入，下穿卖出",
+                    code="600519",
+                    start_date="2024-01-01",
+                    end_date="2024-01-24",
+                    initial_capital=100000.0,
+                ),
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            second = service.run_backtest(
+                code="600519",
+                strategy_text="10日均线上穿30日均线买入，下穿卖出",
+                parsed_strategy=service.parse_strategy(
+                    "10日均线上穿30日均线买入，下穿卖出",
+                    code="600519",
+                    start_date="2024-01-01",
+                    end_date="2024-01-24",
+                    initial_capital=100000.0,
+                ),
+                start_date="2024-01-01",
+                end_date="2024-01-24",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        first_row = service.repo.get_run(int(first["id"]), **service._owner_kwargs())
+        self.assertIsNotNone(first_row)
+        first_parsed_strategy = json.loads(first_row.parsed_strategy_json)
+        first_parsed_strategy["strategy_spec"]["signal"].pop("slow_period", None)
+        service.repo.update_run(
+            int(first["id"]),
+            **service._owner_kwargs(),
+            parsed_strategy_json=service._serialize_json(first_parsed_strategy),
+        )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        parameter_comparison = payload["parameter_comparison"]
+        self.assertEqual(parameter_comparison["state"], "partial")
+        self.assertIn("strategy_spec.signal.slow_period", parameter_comparison["missing_parameter_keys"])
+        self.assertEqual(
+            parameter_comparison["missing_parameters"]["strategy_spec.signal.slow_period"]["available_run_ids"],
+            [int(second["id"])],
+        )
+        self.assertEqual(
+            parameter_comparison["missing_parameters"]["strategy_spec.signal.slow_period"]["unavailable_run_ids"],
+            [int(first["id"])],
+        )
+        self.assertEqual(
+            parameter_comparison["missing_parameters"]["strategy_spec.signal.slow_period"]["state"],
+            "partial",
+        )
+
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
         service = RuleBacktestService(self.db)
 
