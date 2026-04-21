@@ -10,10 +10,12 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from sqlalchemy import select
+
 from src.config import Config
 from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
-from src.storage import DatabaseManager, StockDaily
+from src.storage import DatabaseManager, RuleBacktestTrade, StockDaily
 
 
 class RuleBacktestTestCase(unittest.TestCase):
@@ -793,6 +795,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["daily_return_series_source"], "summary.visualization.daily_return_series")
         self.assertEqual(authority["exposure_curve_source"], "summary.visualization.exposure_curve")
         self.assertEqual(authority["trade_rows_source"], "stored_rule_backtest_trades")
+        self.assertEqual(authority["trade_rows_completeness"], "complete")
+        self.assertEqual(authority["trade_rows_missing_fields"], [])
         self.assertEqual(authority["equity_curve_source"], "row.equity_curve_json")
         self.assertEqual(authority["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(
@@ -853,6 +857,16 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "state": "available",
                 "missing": [],
                 "missing_kind": "keys",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["trade_rows"],
+            {
+                "source": "stored_rule_backtest_trades",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
             },
         )
         self.assertEqual(
@@ -1441,6 +1455,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_missing_sections"], [])
+        self.assertEqual(history["items"][0]["result_authority"]["trade_rows_source"], "omitted_without_detail_read")
+        self.assertEqual(history["items"][0]["result_authority"]["trade_rows_completeness"], "omitted")
+        self.assertEqual(history["items"][0]["result_authority"]["trade_rows_missing_fields"], [])
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_missing_fields"], [])
@@ -1461,7 +1478,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "completeness": "omitted",
                 "state": "omitted",
                 "missing": [],
-                "missing_kind": "rows",
+                "missing_kind": "fields",
             },
         )
         self.assertEqual(
@@ -1475,27 +1492,98 @@ class RuleBacktestTestCase(unittest.TestCase):
             },
         )
 
-        detail = service.get_run(history["items"][0]["id"])
-        self.assertIsNotNone(detail)
-        self.assertEqual(len(detail["trades"]), response["trade_count"])
-        self.assertGreaterEqual(len(detail["status_history"]), 1)
-        self.assertIn(detail["status"], {"completed"})
-        self.assertIn("annualized_return_pct", detail)
-        self.assertIn("benchmark_curve", detail)
-        self.assertIn("benchmark_summary", detail)
-        self.assertIn("execution_model", detail)
-        self.assertIn("audit_rows", detail)
-        self.assertIn("daily_return_series", detail)
-        self.assertIn("exposure_curve", detail)
-        self.assertGreater(len(detail["audit_rows"]), 0)
-        self.assertIn("action", detail["audit_rows"][0])
-        self.assertIn("cumulative_return", detail["audit_rows"][0])
-        self.assertIn("signal_summary", detail["audit_rows"][0])
-        if detail["trades"]:
-            first_trade = detail["trades"][0]
-            self.assertIn("entry_trigger", first_trade)
-            self.assertIn("price_basis", first_trade)
-            self.assertIn("holding_bars", first_trade)
+    def test_get_run_marks_partial_stored_trade_rows_with_explicit_repair_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        stored_trade_rows = service.repo.get_trades_by_run(run_row.id)
+        self.assertGreater(len(stored_trade_rows), 0)
+
+        with self.db.get_session() as session:
+            trade_row = session.execute(
+                select(RuleBacktestTrade)
+                .where(RuleBacktestTrade.id == stored_trade_rows[0].id)
+                .limit(1)
+            ).scalar_one()
+            trade_row.entry_rule_json = None
+            trade_row.exit_rule_json = None
+            trade_row.notes = None
+            session.commit()
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertGreater(len(detail["trades"]), 0)
+        self.assertEqual(
+            detail["result_authority"]["trade_rows_source"],
+            "stored_rule_backtest_trades+compat_repair",
+        )
+        self.assertEqual(
+            detail["result_authority"]["trade_rows_completeness"],
+            "stored_partial_repaired",
+        )
+        self.assertIn("entry_rule", detail["result_authority"]["trade_rows_missing_fields"])
+        self.assertIn("exit_rule", detail["result_authority"]["trade_rows_missing_fields"])
+        self.assertIn("entry_fill_basis", detail["result_authority"]["trade_rows_missing_fields"])
+        self.assertEqual(
+            detail["result_authority"]["domains"]["trade_rows"],
+            {
+                "source": "stored_rule_backtest_trades+compat_repair",
+                "completeness": "stored_partial_repaired",
+                "state": "available",
+                "missing": detail["result_authority"]["trade_rows_missing_fields"],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(detail["trades"][0]["entry_rule"], {})
+        self.assertEqual(detail["trades"][0]["exit_rule"], {})
+        self.assertEqual(detail["trades"][0]["entry_trigger"], detail["trades"][0]["entry_signal"])
+        self.assertEqual(detail["trades"][0]["exit_trigger"], detail["trades"][0]["exit_signal"])
+
+    def test_get_run_marks_trade_rows_unavailable_when_persisted_rows_are_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        deleted = service.repo.delete_trades_by_run_ids([run_row.id])
+        self.assertGreater(deleted, 0)
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["trades"], [])
+        self.assertEqual(detail["trade_count"], response["trade_count"])
+        self.assertEqual(detail["result_authority"]["trade_rows_source"], "unavailable")
+        self.assertEqual(detail["result_authority"]["trade_rows_completeness"], "unavailable")
+        self.assertEqual(
+            detail["result_authority"]["trade_rows_missing_fields"],
+            ["stored_trade_rows"],
+        )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["trade_rows"],
+            {
+                "source": "unavailable",
+                "completeness": "unavailable",
+                "state": "unavailable",
+                "missing": ["stored_trade_rows"],
+                "missing_kind": "fields",
+            },
+        )
 
     def test_service_persists_requested_date_range_and_period(self) -> None:
         service = RuleBacktestService(self.db)

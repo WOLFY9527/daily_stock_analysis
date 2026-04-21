@@ -72,6 +72,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "execution_model_completeness": "complete",
                 "execution_model_missing_fields": [],
                 "execution_assumptions_source": "summary.execution_assumptions_snapshot",
+                "trade_rows_source": "stored_rule_backtest_trades",
+                "trade_rows_completeness": "complete",
+                "trade_rows_missing_fields": [],
                 "execution_trace_source": "summary.execution_trace",
                 "execution_trace_completeness": "complete",
                 "execution_trace_missing_fields": [],
@@ -110,6 +113,13 @@ class BacktestApiContractTestCase(unittest.TestCase):
                         "state": "available",
                         "missing": [],
                         "missing_kind": "sections",
+                    },
+                    "trade_rows": {
+                        "source": "stored_rule_backtest_trades",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "fields",
                     },
                     "execution_trace": {
                         "source": "summary.execution_trace",
@@ -354,6 +364,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["execution_model_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["execution_model_missing_fields"], [])
         self.assertEqual(payload["result_authority"]["execution_assumptions_source"], "summary.execution_assumptions_snapshot")
+        self.assertEqual(payload["result_authority"]["trade_rows_source"], "stored_rule_backtest_trades")
+        self.assertEqual(payload["result_authority"]["trade_rows_completeness"], "complete")
+        self.assertEqual(payload["result_authority"]["trade_rows_missing_fields"], [])
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(payload["result_authority"]["execution_trace_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["execution_trace_missing_fields"], [])
@@ -375,6 +388,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "state": "available",
                 "missing": [],
                 "missing_kind": "sections",
+            },
+        )
+        self.assertEqual(
+            payload["result_authority"]["domains"]["trade_rows"],
+            {
+                "source": "stored_rule_backtest_trades",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
             },
         )
         self.assertEqual(payload["execution_assumptions_snapshot"]["version"], "v1")

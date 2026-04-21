@@ -2227,15 +2227,16 @@ class RuleBacktestService:
         execution_assumptions_source: str,
         execution_assumptions_snapshot_completeness: str,
         execution_assumptions_snapshot_missing_keys: List[str],
+        trade_rows_source: str,
+        trade_rows_completeness: str,
+        trade_rows_missing_fields: List[str],
         execution_trace_source: str,
         execution_trace_completeness: str,
         execution_trace_missing_fields: List[str],
     ) -> Dict[str, Any]:
         if not include_trades:
-            trade_rows_source = "omitted_without_detail_read"
             equity_curve_source = "omitted_without_detail_read"
         else:
-            trade_rows_source = "stored_rule_backtest_trades"
             equity_curve_source = "row.equity_curve_json" if row.equity_curve_json else "empty"
 
         domains = {
@@ -2291,7 +2292,9 @@ class RuleBacktestService:
             ),
             "trade_rows": RuleBacktestService._build_result_authority_domain_entry(
                 source=trade_rows_source,
-                missing_kind="rows",
+                completeness=trade_rows_completeness,
+                missing=trade_rows_missing_fields,
+                missing_kind="fields",
             ),
             "equity_curve": RuleBacktestService._build_result_authority_domain_entry(
                 source=equity_curve_source,
@@ -2329,6 +2332,8 @@ class RuleBacktestService:
             "daily_return_series_source": daily_return_series_source,
             "exposure_curve_source": exposure_curve_source,
             "trade_rows_source": trade_rows_source,
+            "trade_rows_completeness": trade_rows_completeness,
+            "trade_rows_missing_fields": list(trade_rows_missing_fields or []),
             "equity_curve_source": equity_curve_source,
             "execution_trace_source": execution_trace_source,
             "execution_trace_completeness": execution_trace_completeness,
@@ -4260,6 +4265,234 @@ class RuleBacktestService:
             ["stored_execution_model", "execution_assumptions"],
         )
 
+    @staticmethod
+    def _dedupe_trade_row_missing_fields(fields: List[str]) -> List[str]:
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for field in fields or []:
+            normalized = str(field or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    @staticmethod
+    def _normalize_trade_row_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+        row = dict(payload or {})
+        return {
+            "id": row.get("id"),
+            "run_id": row.get("run_id"),
+            "trade_index": row.get("trade_index"),
+            "code": row.get("code"),
+            "entry_signal_date": row.get("entry_signal_date"),
+            "exit_signal_date": row.get("exit_signal_date"),
+            "entry_date": row.get("entry_date"),
+            "exit_date": row.get("exit_date"),
+            "entry_price": row.get("entry_price"),
+            "exit_price": row.get("exit_price"),
+            "entry_signal": row.get("entry_signal"),
+            "exit_signal": row.get("exit_signal"),
+            "entry_trigger": row.get("entry_trigger"),
+            "exit_trigger": row.get("exit_trigger"),
+            "return_pct": row.get("return_pct"),
+            "holding_days": row.get("holding_days"),
+            "holding_bars": row.get("holding_bars"),
+            "holding_calendar_days": row.get("holding_calendar_days"),
+            "entry_rule": dict(row.get("entry_rule") or {}),
+            "exit_rule": dict(row.get("exit_rule") or {}),
+            "entry_indicators": dict(row.get("entry_indicators") or {}),
+            "exit_indicators": dict(row.get("exit_indicators") or {}),
+            "entry_fill_basis": row.get("entry_fill_basis"),
+            "exit_fill_basis": row.get("exit_fill_basis"),
+            "signal_price_basis": row.get("signal_price_basis"),
+            "price_basis": row.get("price_basis"),
+            "fee_bps": row.get("fee_bps"),
+            "slippage_bps": row.get("slippage_bps"),
+            "entry_fee_amount": row.get("entry_fee_amount"),
+            "exit_fee_amount": row.get("exit_fee_amount"),
+            "entry_slippage_amount": row.get("entry_slippage_amount"),
+            "exit_slippage_amount": row.get("exit_slippage_amount"),
+            "notes": row.get("notes"),
+        }
+
+    @staticmethod
+    def _collect_trade_row_missing_fields(
+        *,
+        trade: RuleBacktestTrade,
+        entry_payload: Dict[str, Any],
+        exit_payload: Dict[str, Any],
+        notes_payload: Dict[str, Any],
+    ) -> List[str]:
+        missing_fields: List[str] = []
+        if trade.entry_date is None:
+            missing_fields.append("entry_date")
+        if trade.exit_date is None:
+            missing_fields.append("exit_date")
+        if trade.entry_price is None:
+            missing_fields.append("entry_price")
+        if trade.exit_price is None:
+            missing_fields.append("exit_price")
+        if trade.entry_signal is None:
+            missing_fields.append("entry_signal")
+        if trade.exit_signal is None:
+            missing_fields.append("exit_signal")
+        if trade.return_pct is None:
+            missing_fields.append("return_pct")
+        if trade.holding_days is None:
+            missing_fields.append("holding_days")
+
+        if not entry_payload:
+            missing_fields.extend(
+                ["entry_rule", "entry_signal_date", "entry_trigger", "entry_indicators"]
+            )
+        else:
+            entry_rule = entry_payload.get("rule") or entry_payload
+            if not isinstance(entry_rule, dict) or not entry_rule:
+                missing_fields.append("entry_rule")
+            if entry_payload.get("signal_date") is None:
+                missing_fields.append("entry_signal_date")
+            if entry_payload.get("trigger") is None:
+                missing_fields.append("entry_trigger")
+            if entry_payload.get("indicators") is None:
+                missing_fields.append("entry_indicators")
+
+        if not exit_payload:
+            missing_fields.extend(
+                ["exit_rule", "exit_signal_date", "exit_trigger", "exit_indicators"]
+            )
+        else:
+            exit_rule = exit_payload.get("rule") or exit_payload
+            if not isinstance(exit_rule, dict) or not exit_rule:
+                missing_fields.append("exit_rule")
+            if exit_payload.get("signal_date") is None:
+                missing_fields.append("exit_signal_date")
+            if exit_payload.get("trigger") is None:
+                missing_fields.append("exit_trigger")
+            if exit_payload.get("indicators") is None:
+                missing_fields.append("exit_indicators")
+
+        note_backed_fields = [
+            "holding_bars",
+            "holding_calendar_days",
+            "entry_fill_basis",
+            "exit_fill_basis",
+            "signal_price_basis",
+            "price_basis",
+            "fee_bps",
+            "slippage_bps",
+            "entry_fee_amount",
+            "exit_fee_amount",
+            "entry_slippage_amount",
+            "exit_slippage_amount",
+            "notes",
+        ]
+        if not notes_payload:
+            missing_fields.extend(note_backed_fields)
+        else:
+            for field in note_backed_fields:
+                if notes_payload.get(field) is None:
+                    missing_fields.append(field)
+
+        return RuleBacktestService._dedupe_trade_row_missing_fields(missing_fields)
+
+    def _trade_row_to_dict_with_diagnostics(
+        self,
+        trade: RuleBacktestTrade,
+    ) -> tuple[Dict[str, Any], List[str]]:
+        entry_payload = self._load_summary_payload(trade.entry_rule_json)
+        exit_payload = self._load_summary_payload(trade.exit_rule_json)
+        notes_payload = self._load_summary_payload(trade.notes)
+        entry_rule = entry_payload.get("rule") or entry_payload
+        exit_rule = exit_payload.get("rule") or exit_payload
+        row = self._normalize_trade_row_payload(
+            {
+                "id": trade.id,
+                "run_id": trade.run_id,
+                "trade_index": trade.trade_index,
+                "code": trade.code,
+                "entry_signal_date": entry_payload.get("signal_date"),
+                "exit_signal_date": exit_payload.get("signal_date"),
+                "entry_date": trade.entry_date.isoformat() if trade.entry_date else None,
+                "exit_date": trade.exit_date.isoformat() if trade.exit_date else None,
+                "entry_price": trade.entry_price,
+                "exit_price": trade.exit_price,
+                "entry_signal": trade.entry_signal,
+                "exit_signal": trade.exit_signal,
+                "entry_trigger": entry_payload.get("trigger") or trade.entry_signal,
+                "exit_trigger": exit_payload.get("trigger") or trade.exit_signal,
+                "return_pct": trade.return_pct,
+                "holding_days": trade.holding_days,
+                "holding_bars": notes_payload.get("holding_bars", trade.holding_days),
+                "holding_calendar_days": notes_payload.get("holding_calendar_days"),
+                "entry_rule": entry_rule if isinstance(entry_rule, dict) else {},
+                "exit_rule": exit_rule if isinstance(exit_rule, dict) else {},
+                "entry_indicators": entry_payload.get("indicators") or {},
+                "exit_indicators": exit_payload.get("indicators") or {},
+                "entry_fill_basis": notes_payload.get("entry_fill_basis"),
+                "exit_fill_basis": notes_payload.get("exit_fill_basis"),
+                "signal_price_basis": notes_payload.get("signal_price_basis"),
+                "price_basis": notes_payload.get("price_basis"),
+                "fee_bps": notes_payload.get("fee_bps"),
+                "slippage_bps": notes_payload.get("slippage_bps"),
+                "entry_fee_amount": notes_payload.get("entry_fee_amount"),
+                "exit_fee_amount": notes_payload.get("exit_fee_amount"),
+                "entry_slippage_amount": notes_payload.get("entry_slippage_amount"),
+                "exit_slippage_amount": notes_payload.get("exit_slippage_amount"),
+                "notes": notes_payload.get("notes"),
+            }
+        )
+        missing_fields = self._collect_trade_row_missing_fields(
+            trade=trade,
+            entry_payload=entry_payload,
+            exit_payload=exit_payload,
+            notes_payload=notes_payload,
+        )
+        return row, missing_fields
+
+    def _resolve_trade_rows_payload(
+        self,
+        *,
+        include_trades: bool,
+        row: RuleBacktestRun,
+        trades_override: Optional[List[Any]] = None,
+    ) -> tuple[List[Dict[str, Any]], str, str, List[str]]:
+        if not include_trades:
+            return [], "omitted_without_detail_read", "omitted", []
+
+        if trades_override is not None:
+            normalized_rows = [
+                self._normalize_trade_row_payload(dict(item or {}))
+                for item in list(trades_override or [])
+            ]
+            if normalized_rows:
+                return normalized_rows, "stored_rule_backtest_trades", "complete", []
+            if int(row.trade_count or 0) > 0:
+                return [], "unavailable", "unavailable", ["stored_trade_rows"]
+            return [], "stored_rule_backtest_trades", "empty", []
+
+        stored_trades = self.repo.get_trades_by_run(row.id)
+        if stored_trades:
+            normalized_rows: List[Dict[str, Any]] = []
+            missing_fields: List[str] = []
+            for trade in stored_trades:
+                trade_row, trade_missing_fields = self._trade_row_to_dict_with_diagnostics(trade)
+                normalized_rows.append(trade_row)
+                missing_fields.extend(trade_missing_fields)
+            deduped_missing_fields = self._dedupe_trade_row_missing_fields(missing_fields)
+            if deduped_missing_fields:
+                return (
+                    normalized_rows,
+                    "stored_rule_backtest_trades+compat_repair",
+                    "stored_partial_repaired",
+                    deduped_missing_fields,
+                )
+            return normalized_rows, "stored_rule_backtest_trades", "complete", []
+
+        if int(row.trade_count or 0) > 0:
+            return [], "unavailable", "unavailable", ["stored_trade_rows"]
+        return [], "stored_rule_backtest_trades", "empty", []
+
     def _run_row_to_dict(
         self,
         row: RuleBacktestRun,
@@ -4284,11 +4517,18 @@ class RuleBacktestService:
                 warnings = json.loads(row.warnings_json)
             except Exception:
                 warnings = []
-        trade_rows = trades_override or []
+        trade_rows_override = trades_override if trades_override is not None else None
         equity_curve = equity_override or []
-        if include_trades and not trade_rows:
-            stored_trades = self.repo.get_trades_by_run(row.id)
-            trade_rows = [self._trade_row_to_dict(trade) for trade in stored_trades]
+        (
+            trade_rows,
+            trade_rows_source,
+            trade_rows_completeness,
+            trade_rows_missing_fields,
+        ) = self._resolve_trade_rows_payload(
+            include_trades=include_trades,
+            row=row,
+            trades_override=trade_rows_override,
+        )
         if include_trades and not equity_curve and row.equity_curve_json:
             try:
                 equity_curve = json.loads(row.equity_curve_json)
@@ -4389,6 +4629,9 @@ class RuleBacktestService:
             execution_assumptions_snapshot_missing_keys=list(
                 execution_assumptions_snapshot.get("missing_keys") or []
             ),
+            trade_rows_source=trade_rows_source,
+            trade_rows_completeness=trade_rows_completeness,
+            trade_rows_missing_fields=trade_rows_missing_fields,
             execution_trace_source=execution_trace_source,
             execution_trace_completeness=execution_trace_completeness,
             execution_trace_missing_fields=execution_trace_missing_fields,
@@ -4455,46 +4698,8 @@ class RuleBacktestService:
         }
 
     def _trade_row_to_dict(self, trade: RuleBacktestTrade) -> Dict[str, Any]:
-        entry_payload = self._load_summary_payload(trade.entry_rule_json)
-        exit_payload = self._load_summary_payload(trade.exit_rule_json)
-        notes_payload = self._load_summary_payload(trade.notes)
-        entry_rule = entry_payload.get("rule") or entry_payload
-        exit_rule = exit_payload.get("rule") or exit_payload
-        return {
-            "id": trade.id,
-            "run_id": trade.run_id,
-            "trade_index": trade.trade_index,
-            "code": trade.code,
-            "entry_signal_date": entry_payload.get("signal_date"),
-            "exit_signal_date": exit_payload.get("signal_date"),
-            "entry_date": trade.entry_date.isoformat() if trade.entry_date else None,
-            "exit_date": trade.exit_date.isoformat() if trade.exit_date else None,
-            "entry_price": trade.entry_price,
-            "exit_price": trade.exit_price,
-            "entry_signal": trade.entry_signal,
-            "exit_signal": trade.exit_signal,
-            "entry_trigger": entry_payload.get("trigger") or trade.entry_signal,
-            "exit_trigger": exit_payload.get("trigger") or trade.exit_signal,
-            "return_pct": trade.return_pct,
-            "holding_days": trade.holding_days,
-            "holding_bars": notes_payload.get("holding_bars", trade.holding_days),
-            "holding_calendar_days": notes_payload.get("holding_calendar_days"),
-            "entry_rule": entry_rule if isinstance(entry_rule, dict) else {},
-            "exit_rule": exit_rule if isinstance(exit_rule, dict) else {},
-            "entry_indicators": entry_payload.get("indicators") or {},
-            "exit_indicators": exit_payload.get("indicators") or {},
-            "entry_fill_basis": notes_payload.get("entry_fill_basis"),
-            "exit_fill_basis": notes_payload.get("exit_fill_basis"),
-            "signal_price_basis": notes_payload.get("signal_price_basis"),
-            "price_basis": notes_payload.get("price_basis"),
-            "fee_bps": notes_payload.get("fee_bps"),
-            "slippage_bps": notes_payload.get("slippage_bps"),
-            "entry_fee_amount": notes_payload.get("entry_fee_amount"),
-            "exit_fee_amount": notes_payload.get("exit_fee_amount"),
-            "entry_slippage_amount": notes_payload.get("entry_slippage_amount"),
-            "exit_slippage_amount": notes_payload.get("exit_slippage_amount"),
-            "notes": notes_payload.get("notes"),
-        }
+        trade_row, _ = self._trade_row_to_dict_with_diagnostics(trade)
+        return trade_row
 
     def export_execution_trace_csv(self, run_id: int, output_path: str) -> str:
         run = self.get_run(run_id)

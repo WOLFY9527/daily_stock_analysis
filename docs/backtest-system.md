@@ -29,6 +29,7 @@
 - `GET /api/v1/backtest/rule/runs/{run_id}` 继续作为完整详情接口，包含 `execution_trace`、交易明细和审计数据。
 - detail/history 返回里的 `result_authority` 现会额外暴露 replay/audit reopen 诊断：`replay_payload_source` / `replay_payload_completeness` / `replay_payload_missing_sections` 以及 `audit_rows_source` / `daily_return_series_source` / `exposure_curve_source`，用于区分“直接读取已持久化 payload”“基于持久化 audit rows 修补缺失 section”“仅基于已存 run artifacts 回补 legacy payload”“未读取 detail / unavailable”等状态。
 - `execution_model` reopen 同样遵循 stored-first：优先读取 `summary.execution_model`，其次回退到已持久化的 `summary.request.execution_model`，两者都不存在时才从已存 assumptions / row/request 派生兼容配置。`result_authority` 会同步暴露 `execution_model_source` / `execution_model_completeness` / `execution_model_missing_fields`，用来区分“直接命中持久化 snapshot”“基于持久化 snapshot 修补缺字段”“仅从 legacy assumptions 派生”的不同来源。
+- `trade_rows` reopen 现在也显式遵循 stored-first：detail 读取会优先消费已持久化的 `rule_backtest_trades`，并在 `result_authority` 中新增 `trade_rows_source` / `trade_rows_completeness` / `trade_rows_missing_fields`。历史存量交易行若缺少 `entry_rule_json` / `exit_rule_json` / `notes` 等兼容字段，会返回稳定 shape 的 `trades` 列表并显式标记 `stored_rule_backtest_trades+compat_repair` / `stored_partial_repaired`；若 run row 声明存在交易但持久化 trade rows 已丢失，则会明确返回 `unavailable`，不再把空交易列表伪装成完整重开结果。
 - 为了让 detail/history 的 authority 诊断形状更稳定，`result_authority` 现在还会包含版本化的归一化域视图：`contract_version` + `domains`。`domains.<name>` 统一使用 `source` / `completeness` / `state` / `missing` / `missing_kind` 五个字段表达各诊断域，旧的扁平字段仍保留以兼容既有消费者。
 
 ## P5 Web 可用性收口
@@ -94,4 +95,5 @@ python3 scripts/smoke_backtest_standard.py && python3 scripts/smoke_backtest_rul
 - 规则回测的同步执行依赖本地数据库中已有行情，或依赖既有数据源 fallback 成功。
 - `execution_trace` 的详情、CSV、JSON 导出以持久化 `audit_rows` 为真源；历史旧记录缺少该字段时，会在读取时回补并标记 `trace_rebuilt`。
 - `execution_model` 详情字段现在也会在 reopen 时统一规范为稳定形状；历史记录若只保留了部分 execution-model snapshot，会显式标记 `stored_partial_repaired` 并列出缺失字段，而不是返回形状不完整的 payload。
+- `trade_rows` 详情字段现在也会在 reopen 时统一规范为稳定形状；历史记录若只保留了部分 trade-row 辅助 JSON，会显式标记 `stored_partial_repaired` 并列出缺失字段；若 run row 指示存在交易但持久化交易行缺失，则会标记 `unavailable`，避免把“空列表”误读成“完整但零交易”。
 - replay 可视化 reopen 同样遵循 stored-first：非空的已持久化 `summary.visualization.audit_rows` / `daily_return_series` / `exposure_curve` 会优先复用；若历史运行只存了部分或空数组，会显式标记 `stored_partial_repaired`、`derived_from_stored_run_artifacts` 或 `unavailable`，避免把 reopen 时的临时重建结果伪装成完整持久化 payload。
