@@ -776,6 +776,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["read_mode"], "stored_first")
         self.assertEqual(authority["summary_source"], "row.summary_json")
         self.assertEqual(authority["parsed_strategy_source"], "row.parsed_strategy_json")
+        self.assertEqual(authority["parsed_strategy_completeness"], "complete")
+        self.assertEqual(authority["parsed_strategy_missing_fields"], [])
         self.assertEqual(authority["metrics_source"], "summary.metrics+row_columns_fallback")
         self.assertEqual(authority["metrics_completeness"], "stored_partial_repaired")
         self.assertIn("annualized_return_pct", authority["metrics_missing_fields"])
@@ -805,6 +807,16 @@ class RuleBacktestTestCase(unittest.TestCase):
             authority["domains"]["summary"],
             {
                 "source": "row.summary_json",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            authority["domains"]["parsed_strategy"],
+            {
+                "source": "row.parsed_strategy_json",
                 "completeness": "complete",
                 "state": "available",
                 "missing": [],
@@ -1464,6 +1476,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("execution_model", history["items"][0])
         self.assertIn("execution_assumptions", history["items"][0])
         self.assertEqual(history["items"][0]["result_authority"]["contract_version"], "v1")
+        self.assertEqual(history["items"][0]["result_authority"]["parsed_strategy_source"], "row.parsed_strategy_json")
+        self.assertEqual(history["items"][0]["result_authority"]["parsed_strategy_completeness"], "complete")
+        self.assertEqual(history["items"][0]["result_authority"]["parsed_strategy_missing_fields"], [])
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["replay_payload_missing_sections"], [])
@@ -1476,6 +1491,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertEqual(
+            history["items"][0]["result_authority"]["domains"]["parsed_strategy"],
+            {
+                "source": "row.parsed_strategy_json",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
         self.assertEqual(
             history["items"][0]["result_authority"]["domains"]["replay_payload"],
             {
@@ -1608,6 +1633,142 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "missing": ["stored_trade_rows"],
                 "missing_kind": "fields",
             },
+        )
+
+    def test_get_run_repairs_partial_stored_parsed_strategy_with_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service.parse_strategy(
+            "MACD金叉买入，死叉卖出",
+            code="600519",
+            start_date="2024-01-08",
+            end_date="2024-01-18",
+            initial_capital=100000.0,
+        )
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text=parsed["source_text"],
+                parsed_strategy=parsed,
+                start_date="2024-01-08",
+                end_date="2024-01-18",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        service.repo.update_run(
+            run_row.id,
+            parsed_strategy_json=service._serialize_json(
+                {
+                    "version": "v1",
+                    "timeframe": "daily",
+                    "source_text": parsed["source_text"],
+                    "normalized_text": parsed["normalized_text"],
+                    "summary": parsed["summary"],
+                    "strategy_kind": "macd_crossover",
+                    "setup": {
+                        "symbol": "600519",
+                        "indicator_family": "macd",
+                        "fast_period": 12,
+                        "slow_period": 26,
+                        "signal_period": 9,
+                    },
+                    "strategy_spec": {},
+                }
+            ),
+        )
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["parsed_strategy"]["strategy_kind"], "macd_crossover")
+        self.assertEqual(detail["parsed_strategy"]["strategy_spec"]["strategy_type"], "macd_crossover")
+        self.assertEqual(detail["parsed_strategy"]["strategy_spec"]["signal"]["fast_period"], 12)
+        self.assertEqual(
+            detail["result_authority"]["parsed_strategy_source"],
+            "row.parsed_strategy_json+repaired_fields",
+        )
+        self.assertEqual(
+            detail["result_authority"]["parsed_strategy_completeness"],
+            "stored_partial_repaired",
+        )
+        self.assertIn("entry", detail["result_authority"]["parsed_strategy_missing_fields"])
+        self.assertIn("executable", detail["result_authority"]["parsed_strategy_missing_fields"])
+        self.assertIn("strategy_spec.strategy_type", detail["result_authority"]["parsed_strategy_missing_fields"])
+        self.assertIn(
+            "strategy_spec.signal.fast_period",
+            detail["result_authority"]["parsed_strategy_missing_fields"],
+        )
+        self.assertEqual(
+            detail["result_authority"]["domains"]["parsed_strategy"]["source"],
+            "row.parsed_strategy_json+repaired_fields",
+        )
+
+    def test_get_run_uses_summary_parsed_strategy_fallback_when_snapshot_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        service.repo.update_run(run_row.id, parsed_strategy_json="")
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["parsed_strategy"]["source_text"], response["strategy_text"])
+        self.assertEqual(
+            detail["parsed_strategy"]["summary"]["entry"],
+            response["parsed_strategy"]["summary"]["entry"],
+        )
+        self.assertEqual(
+            detail["result_authority"]["parsed_strategy_source"],
+            "summary.parsed_strategy_summary+row_defaults",
+        )
+        self.assertEqual(
+            detail["result_authority"]["parsed_strategy_completeness"],
+            "legacy_summary_only",
+        )
+        self.assertIn(
+            "strategy_spec.strategy_type",
+            detail["result_authority"]["parsed_strategy_missing_fields"],
+        )
+
+    def test_get_run_marks_parsed_strategy_unavailable_when_snapshot_and_summary_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary.pop("parsed_strategy_summary", None)
+        service.repo.update_run(
+            run_row.id,
+            summary_json=service._serialize_json(summary),
+            parsed_strategy_json="",
+        )
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["parsed_strategy"]["normalization_state"], "unavailable")
+        self.assertEqual(detail["result_authority"]["parsed_strategy_source"], "unavailable")
+        self.assertEqual(detail["result_authority"]["parsed_strategy_completeness"], "unavailable")
+        self.assertEqual(
+            detail["result_authority"]["parsed_strategy_missing_fields"],
+            ["stored_parsed_strategy"],
         )
 
     def test_get_run_repairs_partial_stored_equity_curve_with_provenance(self) -> None:

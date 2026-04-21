@@ -148,6 +148,46 @@ EQUITY_CURVE_FIELD_ORDER: List[str] = [
     "notes",
 ]
 
+PARSED_STRATEGY_FIELD_ORDER: List[str] = [
+    "version",
+    "timeframe",
+    "source_text",
+    "normalized_text",
+    "entry",
+    "exit",
+    "confidence",
+    "needs_confirmation",
+    "ambiguities",
+    "summary.entry",
+    "summary.exit",
+    "summary.strategy",
+    "max_lookback",
+    "strategy_kind",
+    "setup",
+    "strategy_spec.version",
+    "strategy_spec.strategy_type",
+    "strategy_spec.strategy_family",
+    "strategy_spec.timeframe",
+    "strategy_spec.max_lookback",
+    "executable",
+    "normalization_state",
+    "assumptions",
+    "assumption_groups",
+    "detected_strategy_family",
+    "unsupported_reason",
+    "unsupported_details",
+    "unsupported_extensions",
+    "core_intent_summary",
+    "interpretation_confidence",
+    "supported_portion_summary",
+    "rewrite_suggestions",
+    "parse_warnings",
+    "strategy_spec.support.executable",
+    "strategy_spec.support.normalization_state",
+    "strategy_spec.support.requires_confirmation",
+    "strategy_spec.support.detected_strategy_family",
+]
+
 
 @dataclass
 class _StrategySpecSupportPayload:
@@ -2230,6 +2270,9 @@ class RuleBacktestService:
         include_trades: bool,
         row: RuleBacktestRun,
         summary: Dict[str, Any],
+        parsed_strategy_source: str,
+        parsed_strategy_completeness: str,
+        parsed_strategy_missing_fields: List[str],
         comparison_source: str,
         comparison_completeness: str,
         comparison_missing_sections: List[str],
@@ -2264,7 +2307,9 @@ class RuleBacktestService:
                 missing_kind="fields",
             ),
             "parsed_strategy": RuleBacktestService._build_result_authority_domain_entry(
-                source="row.parsed_strategy_json" if row.parsed_strategy_json else "empty",
+                source=parsed_strategy_source,
+                completeness=parsed_strategy_completeness,
+                missing=parsed_strategy_missing_fields,
                 missing_kind="fields",
             ),
             "metrics": RuleBacktestService._build_result_authority_domain_entry(
@@ -2333,7 +2378,9 @@ class RuleBacktestService:
             "contract_version": "v1",
             "read_mode": "stored_first",
             "summary_source": "row.summary_json" if row.summary_json else "empty",
-            "parsed_strategy_source": "row.parsed_strategy_json" if row.parsed_strategy_json else "empty",
+            "parsed_strategy_source": parsed_strategy_source,
+            "parsed_strategy_completeness": parsed_strategy_completeness,
+            "parsed_strategy_missing_fields": list(parsed_strategy_missing_fields or []),
             "metrics_source": metrics_source,
             "metrics_completeness": metrics_completeness,
             "metrics_missing_fields": list(metrics_missing_fields or []),
@@ -4419,6 +4466,262 @@ class RuleBacktestService:
 
         return RuleBacktestService._dedupe_trade_row_missing_fields(missing_fields)
 
+    @staticmethod
+    def _dedupe_parsed_strategy_missing_fields(missing_fields: List[str]) -> List[str]:
+        requested = [str(item or "").strip() for item in (missing_fields or []) if str(item or "").strip()]
+        ordered_fields = [field for field in PARSED_STRATEGY_FIELD_ORDER + ["stored_parsed_strategy"] if field in requested]
+        seen = set()
+        deduped: List[str] = []
+        for field in ordered_fields + requested:
+            normalized = str(field or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    def _parsed_strategy_expected_fields(self, parsed_payload: Dict[str, Any]) -> List[str]:
+        strategy_type = str(
+            self._nested_value(parsed_payload, "strategy_spec", "strategy_type")
+            or parsed_payload.get("strategy_kind")
+            or ""
+        )
+        expected_fields = list(PARSED_STRATEGY_FIELD_ORDER)
+        if strategy_type == "periodic_accumulation":
+            expected_fields.extend(
+                [
+                    "strategy_spec.symbol",
+                    "strategy_spec.date_range.start_date",
+                    "strategy_spec.date_range.end_date",
+                    "strategy_spec.capital.initial_capital",
+                    "strategy_spec.costs.fee_bps",
+                    "strategy_spec.costs.slippage_bps",
+                    "strategy_spec.schedule.frequency",
+                    "strategy_spec.entry.side",
+                    "strategy_spec.entry.order.mode",
+                    "strategy_spec.exit.policy",
+                    "strategy_spec.position_behavior.cash_policy",
+                ]
+            )
+        elif strategy_type == "moving_average_crossover":
+            expected_fields.extend(
+                [
+                    "strategy_spec.symbol",
+                    "strategy_spec.date_range.start_date",
+                    "strategy_spec.date_range.end_date",
+                    "strategy_spec.capital.initial_capital",
+                    "strategy_spec.costs.fee_bps",
+                    "strategy_spec.costs.slippage_bps",
+                    "strategy_spec.signal.indicator_family",
+                    "strategy_spec.signal.fast_period",
+                    "strategy_spec.signal.slow_period",
+                    "strategy_spec.signal.fast_type",
+                    "strategy_spec.signal.slow_type",
+                    "strategy_spec.execution.signal_timing",
+                    "strategy_spec.execution.fill_timing",
+                    "strategy_spec.position_behavior.direction",
+                    "strategy_spec.end_behavior.policy",
+                ]
+            )
+        elif strategy_type == "macd_crossover":
+            expected_fields.extend(
+                [
+                    "strategy_spec.symbol",
+                    "strategy_spec.date_range.start_date",
+                    "strategy_spec.date_range.end_date",
+                    "strategy_spec.capital.initial_capital",
+                    "strategy_spec.costs.fee_bps",
+                    "strategy_spec.costs.slippage_bps",
+                    "strategy_spec.signal.indicator_family",
+                    "strategy_spec.signal.fast_period",
+                    "strategy_spec.signal.slow_period",
+                    "strategy_spec.signal.signal_period",
+                    "strategy_spec.execution.signal_timing",
+                    "strategy_spec.execution.fill_timing",
+                    "strategy_spec.position_behavior.direction",
+                    "strategy_spec.end_behavior.policy",
+                ]
+            )
+        elif strategy_type == "rsi_threshold":
+            expected_fields.extend(
+                [
+                    "strategy_spec.symbol",
+                    "strategy_spec.date_range.start_date",
+                    "strategy_spec.date_range.end_date",
+                    "strategy_spec.capital.initial_capital",
+                    "strategy_spec.costs.fee_bps",
+                    "strategy_spec.costs.slippage_bps",
+                    "strategy_spec.signal.indicator_family",
+                    "strategy_spec.signal.period",
+                    "strategy_spec.signal.lower_threshold",
+                    "strategy_spec.signal.upper_threshold",
+                    "strategy_spec.execution.signal_timing",
+                    "strategy_spec.execution.fill_timing",
+                    "strategy_spec.position_behavior.direction",
+                    "strategy_spec.end_behavior.policy",
+                ]
+            )
+        return self._dedupe_parsed_strategy_missing_fields(expected_fields)
+
+    def _collect_missing_parsed_strategy_fields(
+        self,
+        *,
+        stored_payload: Dict[str, Any],
+        normalized_payload: Dict[str, Any],
+    ) -> List[str]:
+        missing_fields: List[str] = []
+        for field in self._parsed_strategy_expected_fields(normalized_payload):
+            stored_value = self._nested_value(stored_payload, *field.split("."))
+            normalized_value = self._nested_value(normalized_payload, *field.split("."))
+            if stored_value is None:
+                missing_fields.append(field)
+                continue
+            if isinstance(normalized_value, dict) and normalized_value and not isinstance(stored_value, dict):
+                missing_fields.append(field)
+        return self._dedupe_parsed_strategy_missing_fields(missing_fields)
+
+    @staticmethod
+    def _build_default_parsed_strategy_summary(summary_payload: Optional[Dict[str, Any]]) -> Dict[str, str]:
+        summary_payload = dict(summary_payload or {})
+        return {
+            "entry": str(summary_payload.get("entry") or "买入条件：--"),
+            "exit": str(summary_payload.get("exit") or "卖出条件：--"),
+            "strategy": str(summary_payload.get("strategy") or ""),
+        }
+
+    def _build_summary_only_parsed_strategy_payload(
+        self,
+        *,
+        row: RuleBacktestRun,
+        parsed_strategy_summary: Optional[Dict[str, Any]],
+        warnings: List[Dict[str, Any]],
+        source: str,
+    ) -> Dict[str, Any]:
+        support_payload = {
+            "executable": False,
+            "normalization_state": "unavailable",
+            "requires_confirmation": bool(row.needs_confirmation),
+            "unsupported_reason": "stored_parsed_strategy_missing",
+            "detected_strategy_family": None,
+        }
+        return {
+            "version": "v1",
+            "timeframe": str(row.timeframe or "daily"),
+            "source_text": str(row.strategy_text or ""),
+            "normalized_text": str(row.strategy_text or ""),
+            "entry": {},
+            "exit": {},
+            "confidence": float(row.parsed_confidence or 0.0),
+            "needs_confirmation": bool(row.needs_confirmation),
+            "ambiguities": list(warnings or []),
+            "summary": self._build_default_parsed_strategy_summary(parsed_strategy_summary),
+            "max_lookback": 1,
+            "strategy_kind": "rule_conditions",
+            "setup": {},
+            "strategy_spec": {
+                "version": "v1",
+                "strategy_type": "rule_conditions",
+                "strategy_family": "rule_conditions",
+                "timeframe": str(row.timeframe or "daily"),
+                "max_lookback": 1,
+                "support": support_payload,
+            },
+            "executable": False,
+            "normalization_state": "unavailable",
+            "assumptions": [],
+            "assumption_groups": [],
+            "detected_strategy_family": None,
+            "unsupported_reason": "stored_parsed_strategy_missing",
+            "unsupported_details": [],
+            "unsupported_extensions": [],
+            "core_intent_summary": None,
+            "interpretation_confidence": 0.0,
+            "supported_portion_summary": None,
+            "rewrite_suggestions": [],
+            "parse_warnings": [],
+            "source": source,
+        }
+
+    def _resolve_parsed_strategy_payload(
+        self,
+        *,
+        row: RuleBacktestRun,
+        summary: Dict[str, Any],
+        warnings: List[Dict[str, Any]],
+        parsed_override: Optional[Dict[str, Any]] = None,
+    ) -> tuple[Dict[str, Any], str, str, List[str]]:
+        request = dict(summary.get("request") or {})
+        raw_text = str(row.strategy_text or "")
+        stored_payload = parsed_override if isinstance(parsed_override, dict) else None
+
+        if stored_payload is None and row.parsed_strategy_json:
+            try:
+                loaded_payload = json.loads(row.parsed_strategy_json)
+                if isinstance(loaded_payload, dict):
+                    stored_payload = loaded_payload
+            except Exception:
+                stored_payload = None
+
+        if isinstance(stored_payload, dict) and stored_payload:
+            parsed = self._dict_to_parsed_strategy(stored_payload, raw_text)
+            normalized = self._normalize_parsed_strategy(
+                parsed,
+                code=row.code,
+                start_date=request.get("start_date"),
+                end_date=request.get("end_date"),
+                initial_capital=float(request.get("initial_capital") or row.initial_capital or 100000.0),
+                fee_bps=float(request.get("fee_bps") or row.fee_bps or 0.0),
+                slippage_bps=float(request.get("slippage_bps") or 0.0),
+            )
+            normalized_payload = self._parsed_to_dict(normalized)
+            missing_fields = self._collect_missing_parsed_strategy_fields(
+                stored_payload=stored_payload,
+                normalized_payload=normalized_payload,
+            )
+            if missing_fields:
+                return (
+                    normalized_payload,
+                    "row.parsed_strategy_json+repaired_fields",
+                    "stored_partial_repaired",
+                    missing_fields,
+                )
+            return normalized_payload, "row.parsed_strategy_json", "complete", []
+
+        parsed_strategy_summary = summary.get("parsed_strategy_summary")
+        if isinstance(parsed_strategy_summary, dict) and parsed_strategy_summary:
+            return (
+                self._build_summary_only_parsed_strategy_payload(
+                    row=row,
+                    parsed_strategy_summary=parsed_strategy_summary,
+                    warnings=warnings,
+                    source="summary.parsed_strategy_summary+row_defaults",
+                ),
+                "summary.parsed_strategy_summary+row_defaults",
+                "legacy_summary_only",
+                [
+                    "stored_parsed_strategy",
+                    "strategy_kind",
+                    "entry",
+                    "exit",
+                    "setup",
+                    "strategy_spec.strategy_type",
+                    "strategy_spec.strategy_family",
+                    "strategy_spec.support.detected_strategy_family",
+                ],
+            )
+
+        return (
+            self._build_summary_only_parsed_strategy_payload(
+                row=row,
+                parsed_strategy_summary=None,
+                warnings=warnings,
+                source="unavailable",
+            ),
+            "unavailable",
+            "unavailable",
+            ["stored_parsed_strategy"],
+        )
+
     def _trade_row_to_dict_with_diagnostics(
         self,
         trade: RuleBacktestTrade,
@@ -4528,18 +4831,23 @@ class RuleBacktestService:
         summary_override: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         summary = summary_override if summary_override is not None else self._load_summary_payload(row.summary_json)
-        parsed_strategy = parsed_override
-        if parsed_strategy is None and row.parsed_strategy_json:
-            try:
-                parsed_strategy = json.loads(row.parsed_strategy_json)
-            except Exception:
-                parsed_strategy = {}
         warnings = []
         if row.warnings_json:
             try:
                 warnings = json.loads(row.warnings_json)
             except Exception:
                 warnings = []
+        (
+            parsed_strategy,
+            parsed_strategy_source,
+            parsed_strategy_completeness,
+            parsed_strategy_missing_fields,
+        ) = self._resolve_parsed_strategy_payload(
+            row=row,
+            summary=summary,
+            warnings=warnings,
+            parsed_override=parsed_override,
+        )
         visualization = summary.get("visualization") or {}
         trade_rows_override = trades_override if trades_override is not None else None
         (
@@ -4633,6 +4941,9 @@ class RuleBacktestService:
             include_trades=include_trades,
             row=row,
             summary=summary,
+            parsed_strategy_source=parsed_strategy_source,
+            parsed_strategy_completeness=parsed_strategy_completeness,
+            parsed_strategy_missing_fields=parsed_strategy_missing_fields,
             comparison_source=comparison_source,
             comparison_completeness=comparison_completeness,
             comparison_missing_sections=comparison_missing_sections,
