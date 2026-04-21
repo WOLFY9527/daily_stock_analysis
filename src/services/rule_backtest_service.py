@@ -188,6 +188,32 @@ PARSED_STRATEGY_FIELD_ORDER: List[str] = [
     "strategy_spec.support.detected_strategy_family",
 ]
 
+SUMMARY_FIELD_ORDER: List[str] = [
+    "request",
+    "request.start_date",
+    "request.end_date",
+    "request.lookback_bars",
+    "request.initial_capital",
+    "request.fee_bps",
+    "request.slippage_bps",
+    "request.benchmark_mode",
+    "request.benchmark_code",
+    "request.confirmed",
+    "request.execution_model",
+    "parsed_strategy_summary",
+    "metrics",
+    "execution_model",
+    "execution_assumptions",
+    "execution_assumptions_snapshot",
+    "visualization",
+    "execution_trace",
+    "no_result_reason",
+    "no_result_message",
+    "ai_summary",
+    "status_message",
+    "status_history",
+]
+
 
 @dataclass
 class _StrategySpecSupportPayload:
@@ -2270,6 +2296,9 @@ class RuleBacktestService:
         include_trades: bool,
         row: RuleBacktestRun,
         summary: Dict[str, Any],
+        summary_source: str,
+        summary_completeness: str,
+        summary_missing_fields: List[str],
         parsed_strategy_source: str,
         parsed_strategy_completeness: str,
         parsed_strategy_missing_fields: List[str],
@@ -2303,7 +2332,9 @@ class RuleBacktestService:
     ) -> Dict[str, Any]:
         domains = {
             "summary": RuleBacktestService._build_result_authority_domain_entry(
-                source="row.summary_json" if row.summary_json else "empty",
+                source=summary_source,
+                completeness=summary_completeness,
+                missing=summary_missing_fields,
                 missing_kind="fields",
             ),
             "parsed_strategy": RuleBacktestService._build_result_authority_domain_entry(
@@ -2377,7 +2408,9 @@ class RuleBacktestService:
         return {
             "contract_version": "v1",
             "read_mode": "stored_first",
-            "summary_source": "row.summary_json" if row.summary_json else "empty",
+            "summary_source": summary_source,
+            "summary_completeness": summary_completeness,
+            "summary_missing_fields": list(summary_missing_fields or []),
             "parsed_strategy_source": parsed_strategy_source,
             "parsed_strategy_completeness": parsed_strategy_completeness,
             "parsed_strategy_missing_fields": list(parsed_strategy_missing_fields or []),
@@ -4722,6 +4755,214 @@ class RuleBacktestService:
             ["stored_parsed_strategy"],
         )
 
+    @staticmethod
+    def _dedupe_summary_missing_fields(missing_fields: List[str]) -> List[str]:
+        requested = [str(item or "").strip() for item in (missing_fields or []) if str(item or "").strip()]
+        ordered_fields = [field for field in SUMMARY_FIELD_ORDER + ["stored_summary"] if field in requested]
+        seen: set[str] = set()
+        deduped: List[str] = []
+        for field in ordered_fields + requested:
+            normalized = str(field or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    def _build_summary_request_payload(
+        self,
+        *,
+        row: RuleBacktestRun,
+        stored_request: Dict[str, Any],
+    ) -> tuple[Dict[str, Any], List[str]]:
+        request_payload = {
+            "start_date": stored_request.get("start_date"),
+            "end_date": stored_request.get("end_date"),
+            "lookback_bars": int(stored_request.get("lookback_bars") or row.lookback_bars or 252),
+            "initial_capital": float(stored_request.get("initial_capital") or row.initial_capital or 100000.0),
+            "fee_bps": float(stored_request.get("fee_bps") or row.fee_bps or 0.0),
+            "slippage_bps": float(stored_request.get("slippage_bps") or 0.0),
+            "benchmark_mode": str(stored_request.get("benchmark_mode")) if "benchmark_mode" in stored_request else None,
+            "benchmark_code": (
+                str(stored_request.get("benchmark_code") or "").strip() or None
+                if "benchmark_code" in stored_request
+                else None
+            ),
+            "confirmed": bool(stored_request.get("confirmed", False)),
+            "execution_model": dict(stored_request.get("execution_model") or {}),
+        }
+
+        missing_fields: List[str] = []
+        if not stored_request:
+            missing_fields.append("request")
+        request_keys = [
+            "start_date",
+            "end_date",
+            "lookback_bars",
+            "initial_capital",
+            "fee_bps",
+            "slippage_bps",
+            "benchmark_mode",
+            "benchmark_code",
+            "confirmed",
+            "execution_model",
+        ]
+        for key in request_keys:
+            if key not in stored_request:
+                missing_fields.append(f"request.{key}")
+                continue
+            if key == "execution_model" and not isinstance(stored_request.get("execution_model"), dict):
+                missing_fields.append("request.execution_model")
+        return request_payload, self._dedupe_summary_missing_fields(missing_fields)
+
+    def _build_summary_visualization_payload(
+        self,
+        *,
+        stored_visualization: Dict[str, Any],
+        comparison: Dict[str, Any],
+        benchmark_curve: List[Dict[str, Any]],
+        benchmark_summary: Dict[str, Any],
+        buy_and_hold_curve: List[Dict[str, Any]],
+        buy_and_hold_summary: Dict[str, Any],
+        audit_rows: List[Dict[str, Any]],
+        daily_return_series: List[Dict[str, Any]],
+        exposure_curve: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        resolved = dict(stored_visualization or {})
+        if "comparison" not in resolved and comparison:
+            resolved["comparison"] = comparison
+        if "benchmark_curve" not in resolved and benchmark_curve:
+            resolved["benchmark_curve"] = list(benchmark_curve)
+        if "benchmark_summary" not in resolved and benchmark_summary:
+            resolved["benchmark_summary"] = dict(benchmark_summary)
+        if "buy_and_hold_curve" not in resolved and buy_and_hold_curve:
+            resolved["buy_and_hold_curve"] = list(buy_and_hold_curve)
+        if "buy_and_hold_summary" not in resolved and buy_and_hold_summary:
+            resolved["buy_and_hold_summary"] = dict(buy_and_hold_summary)
+        if "audit_rows" not in resolved and audit_rows:
+            resolved["audit_rows"] = list(audit_rows)
+        if "daily_return_series" not in resolved and daily_return_series:
+            resolved["daily_return_series"] = list(daily_return_series)
+        if "exposure_curve" not in resolved and exposure_curve:
+            resolved["exposure_curve"] = list(exposure_curve)
+        return resolved
+
+    def _resolve_summary_payload(
+        self,
+        *,
+        row: RuleBacktestRun,
+        stored_summary: Dict[str, Any],
+        parsed_strategy: Dict[str, Any],
+        metrics: Dict[str, Any],
+        execution_model: Dict[str, Any],
+        execution_assumptions: Dict[str, Any],
+        execution_assumptions_snapshot: Dict[str, Any],
+        comparison: Dict[str, Any],
+        benchmark_curve: List[Dict[str, Any]],
+        benchmark_summary: Dict[str, Any],
+        buy_and_hold_curve: List[Dict[str, Any]],
+        buy_and_hold_summary: Dict[str, Any],
+        audit_rows: List[Dict[str, Any]],
+        daily_return_series: List[Dict[str, Any]],
+        exposure_curve: List[Dict[str, Any]],
+        execution_trace: Dict[str, Any],
+        ai_summary: Optional[str],
+    ) -> tuple[Dict[str, Any], str, str, List[str]]:
+        stored_payload = dict(stored_summary or {})
+        stored_request_raw = stored_payload.get("request")
+        stored_request = dict(stored_request_raw or {}) if isinstance(stored_request_raw, dict) else {}
+        request_payload, request_missing_fields = self._build_summary_request_payload(
+            row=row,
+            stored_request=stored_request,
+        )
+
+        stored_visualization_raw = stored_payload.get("visualization")
+        stored_visualization = (
+            dict(stored_visualization_raw or {})
+            if isinstance(stored_visualization_raw, dict)
+            else {}
+        )
+
+        resolved_payload = dict(stored_payload)
+        resolved_payload["request"] = request_payload
+        resolved_payload["parsed_strategy_summary"] = dict(
+            stored_payload.get("parsed_strategy_summary")
+            or parsed_strategy.get("summary")
+            or {}
+        )
+        resolved_payload["metrics"] = dict(metrics or {})
+        resolved_payload["execution_model"] = dict(execution_model or {})
+        resolved_payload["execution_assumptions"] = dict(execution_assumptions or {})
+        resolved_payload["execution_assumptions_snapshot"] = dict(execution_assumptions_snapshot or {})
+        resolved_payload["visualization"] = self._build_summary_visualization_payload(
+            stored_visualization=stored_visualization,
+            comparison=comparison,
+            benchmark_curve=benchmark_curve,
+            benchmark_summary=benchmark_summary,
+            buy_and_hold_curve=buy_and_hold_curve,
+            buy_and_hold_summary=buy_and_hold_summary,
+            audit_rows=audit_rows,
+            daily_return_series=daily_return_series,
+            exposure_curve=exposure_curve,
+        )
+        resolved_payload["execution_trace"] = dict(
+            stored_payload.get("execution_trace")
+            if isinstance(stored_payload.get("execution_trace"), dict)
+            else execution_trace
+            or {}
+        )
+        resolved_payload["no_result_reason"] = stored_payload.get("no_result_reason", row.no_result_reason)
+        resolved_payload["no_result_message"] = stored_payload.get("no_result_message", row.no_result_message)
+        resolved_payload["ai_summary"] = stored_payload.get("ai_summary", ai_summary)
+        resolved_payload["status_message"] = stored_payload.get("status_message")
+        resolved_payload["status_history"] = list(stored_payload.get("status_history") or [])
+
+        missing_fields = list(request_missing_fields)
+        if not stored_payload:
+            missing_fields.append("stored_summary")
+        if not isinstance(stored_payload.get("parsed_strategy_summary"), dict) or not stored_payload.get("parsed_strategy_summary"):
+            missing_fields.append("parsed_strategy_summary")
+        if not isinstance(stored_payload.get("metrics"), dict) or not stored_payload.get("metrics"):
+            missing_fields.append("metrics")
+        if not isinstance(stored_payload.get("execution_model"), dict) or not stored_payload.get("execution_model"):
+            missing_fields.append("execution_model")
+        if not isinstance(stored_payload.get("execution_assumptions"), dict) or not stored_payload.get("execution_assumptions"):
+            missing_fields.append("execution_assumptions")
+        if not isinstance(stored_payload.get("execution_assumptions_snapshot"), dict) or not stored_payload.get("execution_assumptions_snapshot"):
+            missing_fields.append("execution_assumptions_snapshot")
+        if not isinstance(stored_visualization_raw, dict) or not stored_visualization:
+            missing_fields.append("visualization")
+        if not isinstance(stored_payload.get("execution_trace"), dict) or not stored_payload.get("execution_trace"):
+            missing_fields.append("execution_trace")
+        if "no_result_reason" not in stored_payload:
+            missing_fields.append("no_result_reason")
+        if "no_result_message" not in stored_payload:
+            missing_fields.append("no_result_message")
+        if "ai_summary" not in stored_payload:
+            missing_fields.append("ai_summary")
+        if "status_message" not in stored_payload:
+            missing_fields.append("status_message")
+        if "status_history" not in stored_payload or not isinstance(stored_payload.get("status_history"), list):
+            missing_fields.append("status_history")
+
+        deduped_missing_fields = self._dedupe_summary_missing_fields(missing_fields)
+        if stored_payload:
+            if deduped_missing_fields:
+                return (
+                    resolved_payload,
+                    "row.summary_json+repaired_fields",
+                    "stored_partial_repaired",
+                    deduped_missing_fields,
+                )
+            return resolved_payload, "row.summary_json", "complete", []
+
+        return (
+            resolved_payload,
+            "derived_from_stored_domains+row_columns",
+            "legacy_derived",
+            deduped_missing_fields,
+        )
+
     def _trade_row_to_dict_with_diagnostics(
         self,
         trade: RuleBacktestTrade,
@@ -4830,7 +5071,7 @@ class RuleBacktestService:
         ai_summary_override: Optional[str] = None,
         summary_override: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        summary = summary_override if summary_override is not None else self._load_summary_payload(row.summary_json)
+        stored_summary = summary_override if summary_override is not None else self._load_summary_payload(row.summary_json)
         warnings = []
         if row.warnings_json:
             try:
@@ -4844,11 +5085,11 @@ class RuleBacktestService:
             parsed_strategy_missing_fields,
         ) = self._resolve_parsed_strategy_payload(
             row=row,
-            summary=summary,
+            summary=stored_summary,
             warnings=warnings,
             parsed_override=parsed_override,
         )
-        visualization = summary.get("visualization") or {}
+        visualization = stored_summary.get("visualization") or {}
         trade_rows_override = trades_override if trades_override is not None else None
         (
             trade_rows,
@@ -4872,14 +5113,14 @@ class RuleBacktestService:
             equity_override=equity_override,
         )
 
-        request = summary.get("request") or {}
+        request = stored_summary.get("request") or {}
         (
             execution_model,
             execution_model_source,
             execution_model_completeness,
             execution_model_missing_fields,
         ) = self._resolve_execution_model_payload(
-            summary=summary,
+            summary=stored_summary,
             row=row,
             parsed_strategy=parsed_strategy,
         )
@@ -4887,12 +5128,12 @@ class RuleBacktestService:
             execution_model=execution_model,
         )
         execution_assumptions_snapshot = self._resolve_execution_assumptions_snapshot(
-            summary=summary,
+            summary=stored_summary,
             derived_payload=derived_execution_assumptions,
         )
         execution_assumptions_source = str(
             execution_assumptions_snapshot.get("source")
-            or self._describe_execution_assumptions_source(summary)
+            or self._describe_execution_assumptions_source(stored_summary)
         )
         execution_assumptions = dict(execution_assumptions_snapshot.get("payload") or {})
         (
@@ -4900,7 +5141,7 @@ class RuleBacktestService:
             metrics_source,
             metrics_completeness,
             metrics_missing_fields,
-        ) = self._resolve_run_metrics_payload(row=row, summary=summary)
+        ) = self._resolve_run_metrics_payload(row=row, summary=stored_summary)
         stored_audit_rows = list(visualization.get("audit_rows") or [])
         replay_visualization = self._resolve_replay_visualization_payload(
             include_trades=include_trades,
@@ -4930,17 +5171,45 @@ class RuleBacktestService:
             execution_trace_missing_fields,
         ) = self._resolve_execution_trace_payload(
             include_trades=include_trades,
-            summary=summary,
+            summary=stored_summary,
             parsed_strategy=parsed_strategy or {},
             stored_audit_rows=stored_audit_rows,
             execution_model=execution_model,
             execution_assumptions=execution_assumptions,
             benchmark_summary=benchmark_summary,
         )
+        (
+            summary,
+            summary_source,
+            summary_completeness,
+            summary_missing_fields,
+        ) = self._resolve_summary_payload(
+            row=row,
+            stored_summary=stored_summary,
+            parsed_strategy=parsed_strategy or {},
+            metrics=metrics,
+            execution_model=execution_model,
+            execution_assumptions=execution_assumptions,
+            execution_assumptions_snapshot=execution_assumptions_snapshot,
+            comparison=dict(replay_visualization.get("comparison") or {}),
+            benchmark_curve=benchmark_curve,
+            benchmark_summary=benchmark_summary,
+            buy_and_hold_curve=buy_and_hold_curve,
+            buy_and_hold_summary=buy_and_hold_summary,
+            audit_rows=audit_rows,
+            daily_return_series=daily_return_series,
+            exposure_curve=exposure_curve,
+            execution_trace=execution_trace,
+            ai_summary=ai_summary_override if ai_summary_override is not None else row.ai_summary,
+        )
+        request = summary.get("request") or {}
         result_authority = self._build_result_authority_payload(
             include_trades=include_trades,
             row=row,
             summary=summary,
+            summary_source=summary_source,
+            summary_completeness=summary_completeness,
+            summary_missing_fields=summary_missing_fields,
             parsed_strategy_source=parsed_strategy_source,
             parsed_strategy_completeness=parsed_strategy_completeness,
             parsed_strategy_missing_fields=parsed_strategy_missing_fields,

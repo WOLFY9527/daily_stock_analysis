@@ -775,6 +775,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["contract_version"], "v1")
         self.assertEqual(authority["read_mode"], "stored_first")
         self.assertEqual(authority["summary_source"], "row.summary_json")
+        self.assertEqual(authority["summary_completeness"], "complete")
+        self.assertEqual(authority["summary_missing_fields"], [])
         self.assertEqual(authority["parsed_strategy_source"], "row.parsed_strategy_json")
         self.assertEqual(authority["parsed_strategy_completeness"], "complete")
         self.assertEqual(authority["parsed_strategy_missing_fields"], [])
@@ -809,7 +811,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "source": "row.summary_json",
                 "completeness": "complete",
                 "state": "available",
-                "missing": [],
+                "missing": authority["summary_missing_fields"],
                 "missing_kind": "fields",
             },
         )
@@ -1476,6 +1478,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("execution_model", history["items"][0])
         self.assertIn("execution_assumptions", history["items"][0])
         self.assertEqual(history["items"][0]["result_authority"]["contract_version"], "v1")
+        self.assertEqual(history["items"][0]["result_authority"]["summary_source"], "row.summary_json")
+        self.assertEqual(history["items"][0]["result_authority"]["summary_completeness"], "complete")
+        self.assertEqual(history["items"][0]["result_authority"]["summary_missing_fields"], [])
         self.assertEqual(history["items"][0]["result_authority"]["parsed_strategy_source"], "row.parsed_strategy_json")
         self.assertEqual(history["items"][0]["result_authority"]["parsed_strategy_completeness"], "complete")
         self.assertEqual(history["items"][0]["result_authority"]["parsed_strategy_missing_fields"], [])
@@ -1495,6 +1500,16 @@ class RuleBacktestTestCase(unittest.TestCase):
             history["items"][0]["result_authority"]["domains"]["parsed_strategy"],
             {
                 "source": "row.parsed_strategy_json",
+                "completeness": "complete",
+                "state": "available",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            history["items"][0]["result_authority"]["domains"]["summary"],
+            {
+                "source": "row.summary_json",
                 "completeness": "complete",
                 "state": "available",
                 "missing": [],
@@ -1770,6 +1785,107 @@ class RuleBacktestTestCase(unittest.TestCase):
             detail["result_authority"]["parsed_strategy_missing_fields"],
             ["stored_parsed_strategy"],
         )
+
+    def test_get_run_repairs_partial_stored_summary_with_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        service.repo.update_run(
+            run_row.id,
+            summary_json=service._serialize_json(
+                {
+                    "request": {
+                        "lookback_bars": 20,
+                    },
+                    "status_history": [
+                        {
+                            "status": "completed",
+                            "at": run_row.completed_at.isoformat() if run_row.completed_at else None,
+                        }
+                    ],
+                    "metrics": {
+                        "trade_count": 7,
+                    },
+                }
+            ),
+        )
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["summary"]["request"]["lookback_bars"], 20)
+        self.assertEqual(detail["summary"]["request"]["initial_capital"], response["initial_capital"])
+        self.assertEqual(
+            detail["summary"]["parsed_strategy_summary"]["entry"],
+            response["parsed_strategy"]["summary"]["entry"],
+        )
+        self.assertEqual(
+            detail["summary"]["execution_model"]["entry_timing"],
+            detail["execution_model"]["entry_timing"],
+        )
+        self.assertIn("comparison", detail["summary"]["visualization"])
+        self.assertEqual(
+            detail["result_authority"]["summary_source"],
+            "row.summary_json+repaired_fields",
+        )
+        self.assertEqual(
+            detail["result_authority"]["summary_completeness"],
+            "stored_partial_repaired",
+        )
+        self.assertIn("request.initial_capital", detail["result_authority"]["summary_missing_fields"])
+        self.assertIn("parsed_strategy_summary", detail["result_authority"]["summary_missing_fields"])
+        self.assertIn("execution_model", detail["result_authority"]["summary_missing_fields"])
+        self.assertIn("visualization", detail["result_authority"]["summary_missing_fields"])
+        self.assertEqual(
+            detail["result_authority"]["domains"]["summary"]["source"],
+            "row.summary_json+repaired_fields",
+        )
+
+    def test_get_run_derives_summary_from_stored_domains_when_snapshot_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        service.repo.update_run(run_row.id, summary_json="")
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["summary"]["request"]["lookback_bars"], response["lookback_bars"])
+        self.assertEqual(detail["summary"]["request"]["initial_capital"], response["initial_capital"])
+        self.assertEqual(
+            detail["summary"]["parsed_strategy_summary"]["entry"],
+            response["parsed_strategy"]["summary"]["entry"],
+        )
+        self.assertEqual(detail["summary"]["metrics"]["trade_count"], response["trade_count"])
+        self.assertEqual(detail["summary"]["execution_model"]["entry_timing"], detail["execution_model"]["entry_timing"])
+        self.assertEqual(detail["summary"]["ai_summary"], response["ai_summary"])
+        self.assertEqual(
+            detail["result_authority"]["summary_source"],
+            "derived_from_stored_domains+row_columns",
+        )
+        self.assertEqual(
+            detail["result_authority"]["summary_completeness"],
+            "legacy_derived",
+        )
+        self.assertIn("stored_summary", detail["result_authority"]["summary_missing_fields"])
+        self.assertIn("request.start_date", detail["result_authority"]["summary_missing_fields"])
+        self.assertIn("status_message", detail["result_authority"]["summary_missing_fields"])
 
     def test_get_run_repairs_partial_stored_equity_curve_with_provenance(self) -> None:
         service = RuleBacktestService(self.db)
