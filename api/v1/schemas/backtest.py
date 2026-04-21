@@ -586,6 +586,56 @@ class RuleBacktestCompareRunItem(BaseModel):
     result_authority: Dict[str, Any] = Field(default_factory=dict)
 
 
+class RuleBacktestCompareSummaryBaseline(BaseModel):
+    run_id: int
+    selection_rule: str
+    code: str
+    timeframe: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    strategy_family: Optional[str] = None
+    strategy_type: Optional[str] = None
+
+
+class RuleBacktestCompareSummaryDateRange(BaseModel):
+    run_id: int
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class RuleBacktestCompareSummaryContext(BaseModel):
+    code_values: List[str] = Field(default_factory=list)
+    timeframe_values: List[str] = Field(default_factory=list)
+    strategy_family_values: List[str] = Field(default_factory=list)
+    strategy_type_values: List[str] = Field(default_factory=list)
+    date_ranges: List[RuleBacktestCompareSummaryDateRange] = Field(default_factory=list)
+    all_same_code: bool = False
+    all_same_timeframe: bool = False
+    all_same_date_range: bool = False
+
+
+class RuleBacktestCompareMetricDeltaItem(BaseModel):
+    run_id: int
+    value: Optional[float] = None
+    delta_vs_baseline: Optional[float] = None
+
+
+class RuleBacktestCompareMetricDelta(BaseModel):
+    label: str
+    state: str
+    baseline_run_id: int
+    baseline_value: Optional[float] = None
+    available_run_ids: List[int] = Field(default_factory=list)
+    unavailable_run_ids: List[int] = Field(default_factory=list)
+    deltas: List[RuleBacktestCompareMetricDeltaItem] = Field(default_factory=list)
+
+
+class RuleBacktestCompareSummary(BaseModel):
+    baseline: RuleBacktestCompareSummaryBaseline
+    context: RuleBacktestCompareSummaryContext
+    metric_deltas: Dict[str, RuleBacktestCompareMetricDelta] = Field(default_factory=dict)
+
+
 class RuleBacktestCompareResponse(BaseModel):
     comparison_source: str
     read_mode: str = "stored_first"
@@ -595,6 +645,7 @@ class RuleBacktestCompareResponse(BaseModel):
     missing_run_ids: List[int] = Field(default_factory=list)
     unavailable_runs: List[RuleBacktestCompareUnavailableRun] = Field(default_factory=list)
     field_groups: List[str] = Field(default_factory=list)
+    comparison_summary: Optional[RuleBacktestCompareSummary] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 
 

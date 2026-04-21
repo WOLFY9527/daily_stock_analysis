@@ -957,6 +957,30 @@ class RuleBacktestTestCase(unittest.TestCase):
             first_item["result_authority"]["domains"]["metrics"]["source"],
             first["result_authority"]["domains"]["metrics"]["source"],
         )
+        comparison_summary = payload["comparison_summary"]
+        self.assertEqual(comparison_summary["baseline"]["run_id"], int(first["id"]))
+        self.assertEqual(
+            comparison_summary["baseline"]["selection_rule"],
+            "first_comparable_run_by_request_order",
+        )
+        self.assertEqual(comparison_summary["context"]["code_values"], ["600519"])
+        self.assertTrue(comparison_summary["context"]["all_same_code"])
+        self.assertTrue(comparison_summary["context"]["all_same_timeframe"])
+        self.assertEqual(
+            comparison_summary["context"]["strategy_family_values"],
+            sorted(
+                {
+                    str(first["parsed_strategy"]["strategy_spec"].get("strategy_family") or ""),
+                    str(second["parsed_strategy"]["strategy_spec"].get("strategy_family") or ""),
+                }
+            ),
+        )
+        total_return_delta = comparison_summary["metric_deltas"]["total_return_pct"]
+        self.assertEqual(total_return_delta["state"], "comparable")
+        self.assertEqual(total_return_delta["baseline_run_id"], int(first["id"]))
+        self.assertEqual(total_return_delta["baseline_value"], first["total_return_pct"])
+        self.assertEqual(total_return_delta["deltas"][0]["run_id"], int(first["id"]))
+        self.assertEqual(total_return_delta["deltas"][0]["delta_vs_baseline"], 0.0)
 
     def test_compare_runs_reports_missing_requested_runs_without_recomputing(self) -> None:
         service = RuleBacktestService(self.db)
@@ -983,6 +1007,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["missing_run_ids"], [999999])
         self.assertEqual(payload["unavailable_runs"], [])
         self.assertEqual(len(payload["items"]), 2)
+        self.assertEqual(payload["comparison_summary"]["baseline"]["run_id"], int(first["id"]))
 
     def test_compare_runs_rejects_requests_without_two_completed_runs(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1006,6 +1031,46 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         self.assertIn("At least two completed accessible rule backtest runs are required for comparison", str(ctx.exception))
         self.assertIn(str(int(queued["id"])), str(ctx.exception))
+
+    def test_compare_runs_summary_marks_partial_metric_comparability(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            second = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        first_row = service.repo.get_run(int(first["id"]), **service._owner_kwargs())
+        self.assertIsNotNone(first_row)
+        first_summary = json.loads(first_row.summary_json)
+        first_summary.setdefault("metrics", {})
+        first_summary["metrics"]["annualized_return_pct"] = 12.34
+        service.repo.update_run(
+            int(first["id"]),
+            **service._owner_kwargs(),
+            summary_json=service._serialize_json(first_summary),
+        )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        annualized_delta = payload["comparison_summary"]["metric_deltas"]["annualized_return_pct"]
+        self.assertEqual(annualized_delta["state"], "partial")
+        self.assertEqual(annualized_delta["baseline_run_id"], int(first["id"]))
+        self.assertEqual(annualized_delta["baseline_value"], 12.34)
+        self.assertEqual(annualized_delta["available_run_ids"], [int(first["id"])])
+        self.assertEqual(annualized_delta["unavailable_run_ids"], [int(second["id"])])
+        self.assertEqual(len(annualized_delta["deltas"]), 1)
+        self.assertEqual(annualized_delta["deltas"][0]["run_id"], int(first["id"]))
+        self.assertEqual(annualized_delta["deltas"][0]["delta_vs_baseline"], 0.0)
 
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
         service = RuleBacktestService(self.db)

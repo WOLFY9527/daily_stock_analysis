@@ -103,6 +103,14 @@ AUTOMATED_SCENARIO_STRATEGIES: Dict[str, str] = {
     "rsi_threshold": "RSI 小于 30 买入，大于 70 卖出",
 }
 
+COMPARE_DELTA_METRICS: List[str] = [
+    "total_return_pct",
+    "annualized_return_pct",
+    "max_drawdown_pct",
+    "benchmark_return_pct",
+    "excess_return_vs_benchmark_pct",
+]
+
 TRACE_EXPORT_COLUMNS: List[tuple[str, str]] = [
     ("date", "日期"),
     ("symbol_close", "标的收盘价"),
@@ -732,6 +740,7 @@ class RuleBacktestService:
             "missing_run_ids": missing_run_ids,
             "unavailable_runs": unavailable_runs,
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "comparison_summary": self._build_compare_summary(items=items),
             "items": items,
         }
 
@@ -1691,6 +1700,179 @@ class RuleBacktestService:
             "execution_model": dict(run_payload.get("execution_model") or {}),
             "result_authority": dict(run_payload.get("result_authority") or {}),
         }
+
+    @classmethod
+    def _build_compare_summary(cls, *, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not items:
+            raise ValueError("comparison summary requires at least one comparable run item")
+
+        baseline_item = dict(items[0] or {})
+        baseline_metadata = dict(baseline_item.get("metadata") or {})
+        baseline_parsed_strategy = dict(baseline_item.get("parsed_strategy") or {})
+        baseline_strategy_spec = dict(baseline_parsed_strategy.get("strategy_spec") or {})
+        baseline_strategy_family = cls._extract_compare_strategy_family(baseline_item)
+        baseline_strategy_type = cls._extract_compare_strategy_type(baseline_item)
+
+        code_values = sorted(
+            {
+                str(dict(item.get("metadata") or {}).get("code") or "")
+                for item in items
+                if str(dict(item.get("metadata") or {}).get("code") or "")
+            }
+        )
+        timeframe_values = sorted(
+            {
+                str(dict(item.get("metadata") or {}).get("timeframe") or "")
+                for item in items
+                if str(dict(item.get("metadata") or {}).get("timeframe") or "")
+            }
+        )
+        strategy_family_values = sorted(
+            {
+                str(cls._extract_compare_strategy_family(item) or "")
+                for item in items
+                if str(cls._extract_compare_strategy_family(item) or "")
+            }
+        )
+        strategy_type_values = sorted(
+            {
+                str(cls._extract_compare_strategy_type(item) or "")
+                for item in items
+                if str(cls._extract_compare_strategy_type(item) or "")
+            }
+        )
+        date_ranges = [
+            {
+                "run_id": int(dict(item.get("metadata") or {}).get("id") or 0),
+                "start_date": dict(item.get("metadata") or {}).get("start_date"),
+                "end_date": dict(item.get("metadata") or {}).get("end_date"),
+            }
+            for item in items
+        ]
+        distinct_date_ranges = {
+            (
+                item.get("start_date"),
+                item.get("end_date"),
+            )
+            for item in date_ranges
+        }
+
+        return {
+            "baseline": {
+                "run_id": int(baseline_metadata.get("id") or 0),
+                "selection_rule": "first_comparable_run_by_request_order",
+                "code": str(baseline_metadata.get("code") or ""),
+                "timeframe": str(baseline_metadata.get("timeframe") or ""),
+                "start_date": baseline_metadata.get("start_date"),
+                "end_date": baseline_metadata.get("end_date"),
+                "strategy_family": baseline_strategy_family,
+                "strategy_type": (
+                    str(baseline_strategy_spec.get("strategy_type") or baseline_strategy_type)
+                    if (baseline_strategy_spec or baseline_strategy_type)
+                    else None
+                ),
+            },
+            "context": {
+                "code_values": code_values,
+                "timeframe_values": timeframe_values,
+                "strategy_family_values": strategy_family_values,
+                "strategy_type_values": strategy_type_values,
+                "date_ranges": date_ranges,
+                "all_same_code": len(code_values) <= 1,
+                "all_same_timeframe": len(timeframe_values) <= 1,
+                "all_same_date_range": len(distinct_date_ranges) <= 1,
+            },
+            "metric_deltas": {
+                metric_name: cls._build_compare_metric_delta(metric_name=metric_name, items=items)
+                for metric_name in COMPARE_DELTA_METRICS
+            },
+        }
+
+    @staticmethod
+    def _extract_compare_strategy_family(item: Dict[str, Any]) -> Optional[str]:
+        parsed_strategy = dict(item.get("parsed_strategy") or {})
+        strategy_spec = dict(parsed_strategy.get("strategy_spec") or {})
+        value = strategy_spec.get("strategy_family") or parsed_strategy.get("strategy_kind")
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @staticmethod
+    def _extract_compare_strategy_type(item: Dict[str, Any]) -> Optional[str]:
+        parsed_strategy = dict(item.get("parsed_strategy") or {})
+        strategy_spec = dict(parsed_strategy.get("strategy_spec") or {})
+        value = strategy_spec.get("strategy_type") or parsed_strategy.get("strategy_kind")
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @classmethod
+    def _build_compare_metric_delta(
+        cls,
+        *,
+        metric_name: str,
+        items: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        baseline_item = dict(items[0] or {})
+        baseline_metadata = dict(baseline_item.get("metadata") or {})
+        baseline_metrics = dict(baseline_item.get("metrics") or {})
+        baseline_run_id = int(baseline_metadata.get("id") or 0)
+        baseline_value = cls._normalize_compare_metric_value(baseline_metrics.get(metric_name))
+
+        available_run_ids: List[int] = []
+        unavailable_run_ids: List[int] = []
+        deltas: List[Dict[str, Any]] = []
+
+        for item in items:
+            metadata = dict(item.get("metadata") or {})
+            metrics = dict(item.get("metrics") or {})
+            run_id = int(metadata.get("id") or 0)
+            metric_value = cls._normalize_compare_metric_value(metrics.get(metric_name))
+            if metric_value is None:
+                unavailable_run_ids.append(run_id)
+                continue
+            available_run_ids.append(run_id)
+            deltas.append(
+                {
+                    "run_id": run_id,
+                    "value": metric_value,
+                    "delta_vs_baseline": (
+                        metric_value - baseline_value
+                        if baseline_value is not None
+                        else None
+                    ),
+                }
+            )
+
+        if not available_run_ids:
+            state = "unavailable"
+        elif baseline_value is None:
+            state = "baseline_unavailable"
+        elif unavailable_run_ids:
+            state = "partial"
+        else:
+            state = "comparable"
+
+        return {
+            "label": metric_name,
+            "state": state,
+            "baseline_run_id": baseline_run_id,
+            "baseline_value": baseline_value,
+            "available_run_ids": available_run_ids,
+            "unavailable_run_ids": unavailable_run_ids,
+            "deltas": deltas,
+        }
+
+    @staticmethod
+    def _normalize_compare_metric_value(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     @classmethod
     def _is_run_cancelled_status(cls, status: Optional[str]) -> bool:

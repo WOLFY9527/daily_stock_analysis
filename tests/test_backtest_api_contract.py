@@ -557,6 +557,56 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "missing_run_ids": [999],
             "unavailable_runs": [],
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "comparison_summary": {
+                "baseline": {
+                    "run_id": 101,
+                    "selection_rule": "first_comparable_run_by_request_order",
+                    "code": base_item["code"],
+                    "timeframe": base_item["timeframe"],
+                    "start_date": base_item["start_date"],
+                    "end_date": base_item["end_date"],
+                    "strategy_family": "moving_average_crossover",
+                    "strategy_type": "moving_average_crossover",
+                },
+                "context": {
+                    "code_values": [base_item["code"]],
+                    "timeframe_values": [base_item["timeframe"]],
+                    "strategy_family_values": ["moving_average_crossover"],
+                    "strategy_type_values": ["moving_average_crossover"],
+                    "date_ranges": [
+                        {"run_id": 101, "start_date": base_item["start_date"], "end_date": base_item["end_date"]},
+                        {"run_id": 202, "start_date": base_item["start_date"], "end_date": base_item["end_date"]},
+                    ],
+                    "all_same_code": True,
+                    "all_same_timeframe": True,
+                    "all_same_date_range": True,
+                },
+                "metric_deltas": {
+                    "total_return_pct": {
+                        "label": "total_return_pct",
+                        "state": "comparable",
+                        "baseline_run_id": 101,
+                        "baseline_value": base_item["total_return_pct"],
+                        "available_run_ids": [101, 202],
+                        "unavailable_run_ids": [],
+                        "deltas": [
+                            {"run_id": 101, "value": base_item["total_return_pct"], "delta_vs_baseline": 0.0},
+                            {"run_id": 202, "value": base_item["total_return_pct"], "delta_vs_baseline": 0.0},
+                        ],
+                    },
+                    "annualized_return_pct": {
+                        "label": "annualized_return_pct",
+                        "state": "partial",
+                        "baseline_run_id": 101,
+                        "baseline_value": base_item["annualized_return_pct"],
+                        "available_run_ids": [101],
+                        "unavailable_run_ids": [202],
+                        "deltas": [
+                            {"run_id": 101, "value": base_item["annualized_return_pct"], "delta_vs_baseline": 0.0},
+                        ],
+                    },
+                },
+            },
             "items": [
                 {
                     "metadata": {
@@ -661,6 +711,24 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["read_mode"], "stored_first")
         self.assertEqual(payload["missing_run_ids"], [999])
         self.assertEqual(payload["field_groups"], ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"])
+        self.assertEqual(payload["comparison_summary"]["baseline"]["run_id"], 101)
+        self.assertEqual(
+            payload["comparison_summary"]["baseline"]["selection_rule"],
+            "first_comparable_run_by_request_order",
+        )
+        self.assertTrue(payload["comparison_summary"]["context"]["all_same_code"])
+        self.assertEqual(
+            payload["comparison_summary"]["metric_deltas"]["total_return_pct"]["state"],
+            "comparable",
+        )
+        self.assertEqual(
+            payload["comparison_summary"]["metric_deltas"]["annualized_return_pct"]["state"],
+            "partial",
+        )
+        self.assertEqual(
+            payload["comparison_summary"]["metric_deltas"]["annualized_return_pct"]["unavailable_run_ids"],
+            [202],
+        )
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["items"][0]["metadata"]["id"], 101)
         self.assertEqual(payload["items"][0]["parsed_strategy"]["strategy_kind"], base_item["parsed_strategy"]["strategy_kind"])
