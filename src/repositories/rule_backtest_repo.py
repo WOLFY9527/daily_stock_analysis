@@ -76,6 +76,25 @@ class RuleBacktestRepository:
                 select(RuleBacktestRun).where(and_(*conditions)).limit(1)
             ).scalar_one_or_none()
 
+    def get_runs_by_ids(
+        self,
+        run_ids: List[int],
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[RuleBacktestRun]:
+        normalized_ids = [int(value) for value in run_ids if value is not None]
+        if not normalized_ids:
+            return []
+        with self.db.get_session() as session:
+            conditions = [RuleBacktestRun.id.in_(normalized_ids)]
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
+            rows = session.execute(
+                select(RuleBacktestRun).where(and_(*conditions))
+            ).scalars().all()
+            return list(rows)
+
     def get_runs_paginated(
         self,
         *,

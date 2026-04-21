@@ -413,6 +413,15 @@ class RuleBacktestRunRequest(BaseModel):
     wait_for_completion: bool = Field(False, description="是否阻塞等待回测完成；默认异步提交并轮询状态")
 
 
+class RuleBacktestCompareRequest(BaseModel):
+    run_ids: List[int] = Field(
+        ...,
+        min_length=2,
+        max_length=10,
+        description="需要进行对比的规则回测运行 ID 列表，当前支持 2-10 个。",
+    )
+
+
 class RuleBacktestTradeItem(BaseModel):
     id: Optional[int] = None
     run_id: Optional[int] = None
@@ -515,6 +524,78 @@ def _rule_backtest_audit_rows_field() -> Any:
         validation_alias=AliasChoices("audit_rows", "auditRows"),
         serialization_alias="auditRows",
     )
+
+
+class RuleBacktestCompareRunMetadata(BaseModel):
+    id: int
+    code: str
+    status: str
+    run_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    timeframe: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    period_start: Optional[str] = None
+    period_end: Optional[str] = None
+    lookback_bars: int
+    initial_capital: float
+    fee_bps: float
+    slippage_bps: float = 0.0
+
+
+class RuleBacktestCompareRunMetrics(BaseModel):
+    trade_count: int = 0
+    win_count: int = 0
+    loss_count: int = 0
+    total_return_pct: Optional[float] = None
+    annualized_return_pct: Optional[float] = None
+    benchmark_return_pct: Optional[float] = None
+    excess_return_vs_benchmark_pct: Optional[float] = None
+    buy_and_hold_return_pct: Optional[float] = None
+    excess_return_vs_buy_and_hold_pct: Optional[float] = None
+    win_rate_pct: Optional[float] = None
+    avg_trade_return_pct: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    avg_holding_days: Optional[float] = None
+    avg_holding_bars: Optional[float] = None
+    avg_holding_calendar_days: Optional[float] = None
+    final_equity: Optional[float] = None
+
+
+class RuleBacktestCompareRunBenchmark(BaseModel):
+    benchmark_mode: Optional[str] = None
+    benchmark_code: Optional[str] = None
+    benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
+    buy_and_hold_summary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RuleBacktestCompareUnavailableRun(BaseModel):
+    id: int
+    code: str
+    status: str
+    reason: str
+    message: Optional[str] = None
+
+
+class RuleBacktestCompareRunItem(BaseModel):
+    metadata: RuleBacktestCompareRunMetadata
+    parsed_strategy: RuleBacktestParsedStrategyPayload = Field(default_factory=RuleBacktestParsedStrategyPayload)
+    metrics: RuleBacktestCompareRunMetrics = Field(default_factory=RuleBacktestCompareRunMetrics)
+    benchmark: RuleBacktestCompareRunBenchmark = Field(default_factory=RuleBacktestCompareRunBenchmark)
+    execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
+    result_authority: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RuleBacktestCompareResponse(BaseModel):
+    comparison_source: str
+    read_mode: str = "stored_first"
+    requested_run_ids: List[int] = Field(default_factory=list)
+    resolved_run_ids: List[int] = Field(default_factory=list)
+    comparable_run_ids: List[int] = Field(default_factory=list)
+    missing_run_ids: List[int] = Field(default_factory=list)
+    unavailable_runs: List[RuleBacktestCompareUnavailableRun] = Field(default_factory=list)
+    field_groups: List[str] = Field(default_factory=list)
+    items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 
 
 class RuleBacktestHistoryItem(BaseModel):

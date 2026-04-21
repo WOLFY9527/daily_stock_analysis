@@ -15,6 +15,7 @@ ensure_litellm_stub()
 from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
     cancel_rule_backtest_run,
+    compare_rule_backtest_runs,
     parse_rule_strategy,
     get_rule_backtest_run,
     get_rule_backtest_runs,
@@ -24,6 +25,8 @@ from api.v1.endpoints.backtest import (  # noqa: E402
 from api.v1.schemas.backtest import (  # noqa: E402
     BacktestCodeRequest,
     RuleBacktestCancelResponse,
+    RuleBacktestCompareRequest,
+    RuleBacktestCompareResponse,
     RuleBacktestHistoryResponse,
     RuleBacktestParseRequest,
     RuleBacktestParseResponse,
@@ -52,7 +55,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "fee_bps": 0.0,
             "slippage_bps": 0.0,
             "status": status,
+            "run_at": "2024-01-01T00:00:00",
+            "completed_at": "2024-01-01T00:05:00" if status == "completed" else None,
             "status_history": [{"status": status, "at": "2024-01-01T00:00:00"}],
+            "trade_count": 0,
+            "win_count": 0,
+            "loss_count": 0,
             "annualized_return_pct": 0.0,
             "benchmark_mode": "auto",
             "benchmark_code": None,
@@ -60,6 +68,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "excess_return_vs_benchmark_pct": None,
             "buy_and_hold_return_pct": 0.0,
             "excess_return_vs_buy_and_hold_pct": 0.0,
+            "total_return_pct": 0.0,
+            "win_rate_pct": 0.0,
+            "avg_trade_return_pct": 0.0,
+            "max_drawdown_pct": 0.0,
+            "avg_holding_days": 0.0,
+            "avg_holding_bars": 0.0,
+            "avg_holding_calendar_days": 0.0,
+            "final_equity": 100000.0,
             "summary": {},
             "result_authority": {
                 "contract_version": "v1",
@@ -486,6 +502,184 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "omitted_without_detail_read",
         )
         self.assertEqual(payload["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
+
+    def test_compare_rule_backtest_runs_serializes_stored_first_compare_contract(self) -> None:
+        service = MagicMock()
+        base_item = self._rule_run_payload(status="completed")
+        base_item["parsed_strategy"] = {
+            "strategy_kind": "moving_average_crossover",
+            "strategy_spec": {
+                "version": "v1",
+                "strategy_type": "moving_average_crossover",
+                "strategy_family": "moving_average_crossover",
+                "symbol": "600519",
+                "timeframe": "daily",
+                "max_lookback": 20,
+                "date_range": {"start_date": "2025-01-01", "end_date": "2025-12-31"},
+                "capital": {"initial_capital": 100000.0, "currency": "CNY"},
+                "costs": {"fee_bps": 0.0, "slippage_bps": 0.0},
+                "signal": {
+                    "indicator_family": "moving_average",
+                    "fast_period": 3,
+                    "slow_period": 5,
+                    "fast_type": "simple",
+                    "slow_type": "simple",
+                    "entry_condition": "fast_crosses_above_slow",
+                    "exit_condition": "fast_crosses_below_slow",
+                },
+                "execution": {
+                    "frequency": "daily",
+                    "signal_timing": "bar_close",
+                    "fill_timing": "next_bar_open",
+                },
+                "position_behavior": {
+                    "direction": "long_only",
+                    "entry_sizing": "all_in",
+                    "max_positions": 1,
+                    "pyramiding": False,
+                },
+                "end_behavior": {"policy": "liquidate_at_end", "price_basis": "close"},
+                "support": {
+                    "executable": True,
+                    "normalization_state": "assumed",
+                    "requires_confirmation": False,
+                    "unsupported_reason": None,
+                    "detected_strategy_family": "moving_average_crossover",
+                },
+            },
+        }
+        service.compare_runs.return_value = {
+            "comparison_source": "stored_rule_backtest_runs",
+            "read_mode": "stored_first",
+            "requested_run_ids": [101, 202, 999],
+            "resolved_run_ids": [101, 202],
+            "comparable_run_ids": [101, 202],
+            "missing_run_ids": [999],
+            "unavailable_runs": [],
+            "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "items": [
+                {
+                    "metadata": {
+                        "id": 101,
+                        "code": base_item["code"],
+                        "status": "completed",
+                        "run_at": base_item["run_at"],
+                        "completed_at": base_item["completed_at"],
+                        "timeframe": base_item["timeframe"],
+                        "start_date": base_item["start_date"],
+                        "end_date": base_item["end_date"],
+                        "period_start": base_item["period_start"],
+                        "period_end": base_item["period_end"],
+                        "lookback_bars": base_item["lookback_bars"],
+                        "initial_capital": base_item["initial_capital"],
+                        "fee_bps": base_item["fee_bps"],
+                        "slippage_bps": base_item["slippage_bps"],
+                    },
+                    "parsed_strategy": base_item["parsed_strategy"],
+                    "metrics": {
+                        "trade_count": base_item["trade_count"],
+                        "win_count": base_item["win_count"],
+                        "loss_count": base_item["loss_count"],
+                        "total_return_pct": base_item["total_return_pct"],
+                        "annualized_return_pct": base_item["annualized_return_pct"],
+                        "benchmark_return_pct": base_item["benchmark_return_pct"],
+                        "excess_return_vs_benchmark_pct": base_item["excess_return_vs_benchmark_pct"],
+                        "buy_and_hold_return_pct": base_item["buy_and_hold_return_pct"],
+                        "excess_return_vs_buy_and_hold_pct": base_item["excess_return_vs_buy_and_hold_pct"],
+                        "win_rate_pct": base_item["win_rate_pct"],
+                        "avg_trade_return_pct": base_item["avg_trade_return_pct"],
+                        "max_drawdown_pct": base_item["max_drawdown_pct"],
+                        "avg_holding_days": base_item["avg_holding_days"],
+                        "avg_holding_bars": base_item["avg_holding_bars"],
+                        "avg_holding_calendar_days": base_item["avg_holding_calendar_days"],
+                        "final_equity": base_item["final_equity"],
+                    },
+                    "benchmark": {
+                        "benchmark_mode": base_item["benchmark_mode"],
+                        "benchmark_code": base_item["benchmark_code"],
+                        "benchmark_summary": base_item["benchmark_summary"],
+                        "buy_and_hold_summary": base_item["buy_and_hold_summary"],
+                    },
+                    "execution_model": base_item["execution_model"],
+                    "result_authority": base_item["result_authority"],
+                },
+                {
+                    "metadata": {
+                        "id": 202,
+                        "code": base_item["code"],
+                        "status": "completed",
+                        "run_at": base_item["run_at"],
+                        "completed_at": base_item["completed_at"],
+                        "timeframe": base_item["timeframe"],
+                        "start_date": base_item["start_date"],
+                        "end_date": base_item["end_date"],
+                        "period_start": base_item["period_start"],
+                        "period_end": base_item["period_end"],
+                        "lookback_bars": base_item["lookback_bars"],
+                        "initial_capital": base_item["initial_capital"],
+                        "fee_bps": base_item["fee_bps"],
+                        "slippage_bps": base_item["slippage_bps"],
+                    },
+                    "parsed_strategy": base_item["parsed_strategy"],
+                    "metrics": {
+                        "trade_count": base_item["trade_count"],
+                        "win_count": base_item["win_count"],
+                        "loss_count": base_item["loss_count"],
+                        "total_return_pct": base_item["total_return_pct"],
+                        "annualized_return_pct": base_item["annualized_return_pct"],
+                        "benchmark_return_pct": base_item["benchmark_return_pct"],
+                        "excess_return_vs_benchmark_pct": base_item["excess_return_vs_benchmark_pct"],
+                        "buy_and_hold_return_pct": base_item["buy_and_hold_return_pct"],
+                        "excess_return_vs_buy_and_hold_pct": base_item["excess_return_vs_buy_and_hold_pct"],
+                        "win_rate_pct": base_item["win_rate_pct"],
+                        "avg_trade_return_pct": base_item["avg_trade_return_pct"],
+                        "max_drawdown_pct": base_item["max_drawdown_pct"],
+                        "avg_holding_days": base_item["avg_holding_days"],
+                        "avg_holding_bars": base_item["avg_holding_bars"],
+                        "avg_holding_calendar_days": base_item["avg_holding_calendar_days"],
+                        "final_equity": base_item["final_equity"],
+                    },
+                    "benchmark": {
+                        "benchmark_mode": base_item["benchmark_mode"],
+                        "benchmark_code": base_item["benchmark_code"],
+                        "benchmark_summary": base_item["benchmark_summary"],
+                        "buy_and_hold_summary": base_item["buy_and_hold_summary"],
+                    },
+                    "execution_model": base_item["execution_model"],
+                    "result_authority": base_item["result_authority"],
+                },
+            ],
+        }
+
+        request = RuleBacktestCompareRequest(run_ids=[101, 202, 999])
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = compare_rule_backtest_runs(request, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestCompareResponse)
+        payload = response.model_dump(by_alias=True)
+        self.assertEqual(payload["comparison_source"], "stored_rule_backtest_runs")
+        self.assertEqual(payload["read_mode"], "stored_first")
+        self.assertEqual(payload["missing_run_ids"], [999])
+        self.assertEqual(payload["field_groups"], ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"])
+        self.assertEqual(len(payload["items"]), 2)
+        self.assertEqual(payload["items"][0]["metadata"]["id"], 101)
+        self.assertEqual(payload["items"][0]["parsed_strategy"]["strategy_kind"], base_item["parsed_strategy"]["strategy_kind"])
+        self.assertEqual(
+            payload["items"][0]["result_authority"]["domains"]["comparison"]["source"],
+            "summary.visualization.comparison",
+        )
+
+    def test_compare_rule_backtest_runs_returns_validation_error_for_incomplete_compare_set(self) -> None:
+        request = RuleBacktestCompareRequest(run_ids=[101, 202])
+        service = MagicMock()
+        service.compare_runs.side_effect = ValueError("At least two completed accessible rule backtest runs are required for comparison")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                compare_rule_backtest_runs(request, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail["error"], "validation_error")
 
     def test_get_rule_backtest_run_returns_404_not_found_contract(self) -> None:
         service = MagicMock()

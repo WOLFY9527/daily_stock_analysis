@@ -15,6 +15,7 @@
 - Rule-backtest endpoints are owned by `src/services/rule_backtest_service.py`:
   - `POST /api/v1/backtest/rule/parse`
   - `POST /api/v1/backtest/rule/run`
+  - `POST /api/v1/backtest/rule/compare`
   - `GET /api/v1/backtest/rule/runs`
   - `GET /api/v1/backtest/rule/runs/{run_id}`
   - `GET /api/v1/backtest/rule/runs/{run_id}/status`
@@ -26,6 +27,7 @@
 - Pass `wait_for_completion=true` to run inline and return the full completed payload.
 - `GET /api/v1/backtest/rule/runs/{run_id}/status` is the lightweight polling endpoint for background progress.
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` is a best-effort cancel endpoint: unfinished runs are marked `cancelled`, while already-finished runs keep their final state.
+- `POST /api/v1/backtest/rule/compare` is the first compare-runs stored-first read path: it only reads already-persisted completed runs, does not re-execute backtests, and currently returns the smallest trustworthy comparison surface across metadata, `parsed_strategy`, core metrics, benchmark summary, `execution_model`, and each run's `result_authority`.
 - `GET /api/v1/backtest/rule/runs/{run_id}` remains the full-detail endpoint and includes `execution_trace`, trades, and audit data.
 - The `result_authority` object on detail/history payloads now also exposes replay/audit reopen diagnostics: `replay_payload_source` / `replay_payload_completeness` / `replay_payload_missing_sections` plus `audit_rows_source` / `daily_return_series_source` / `exposure_curve_source`. These fields distinguish between directly persisted payloads, sections repaired from persisted audit rows, legacy replay payload rebuilt from stored run artifacts, and omitted/unavailable states.
 - `execution_model` reopen now follows the same stored-first rule: the service first reads `summary.execution_model`, then falls back to persisted `summary.request.execution_model`, and only derives from stored assumptions / row/request when neither snapshot exists. `result_authority` now also exposes `execution_model_source` / `execution_model_completeness` / `execution_model_missing_fields` so consumers can distinguish a directly persisted snapshot, a repaired stored snapshot, and a legacy-derived execution model.

@@ -22,6 +22,8 @@ from api.v1.schemas.backtest import (
     PrepareBacktestSamplesRequest,
     PrepareBacktestSamplesResponse,
     RuleBacktestDetailResponse,
+    RuleBacktestCompareRequest,
+    RuleBacktestCompareResponse,
     RuleBacktestHistoryItem,
     RuleBacktestHistoryResponse,
     RuleBacktestStatusResponse,
@@ -418,6 +420,29 @@ def get_rule_backtest_runs(
         items = _build_models(RuleBacktestHistoryItem, data.get("items", []))
         return RuleBacktestHistoryResponse(total=int(data.get("total", 0)), page=page, limit=limit, items=items)
     return _run_endpoint("查询规则回测历史失败", _operation)
+
+
+@router.post(
+    "/rule/compare",
+    response_model=RuleBacktestCompareResponse,
+    responses={
+        200: {"description": "规则回测对比结果"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="对比已完成的规则回测运行",
+    description="基于已持久化的规则回测结果做 stored-first compare，不会重新执行回测。",
+)
+def compare_rule_backtest_runs(
+    request: RuleBacktestCompareRequest,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestCompareResponse:
+    def _operation() -> RuleBacktestCompareResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        data = service.compare_runs(request.run_ids)
+        return _build_model(RuleBacktestCompareResponse, data)
+    return _run_endpoint("规则回测对比失败", _operation, allow_validation_error=True)
 
 
 @router.get(

@@ -915,6 +915,98 @@ class RuleBacktestTestCase(unittest.TestCase):
             response["execution_assumptions"],
         )
 
+    def test_compare_runs_returns_stored_first_completed_run_snapshots(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            second = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        payload = service.compare_runs([int(first["id"]), int(second["id"])])
+
+        self.assertEqual(payload["comparison_source"], "stored_rule_backtest_runs")
+        self.assertEqual(payload["read_mode"], "stored_first")
+        self.assertEqual(payload["requested_run_ids"], [int(first["id"]), int(second["id"])])
+        self.assertEqual(payload["resolved_run_ids"], [int(first["id"]), int(second["id"])])
+        self.assertEqual(payload["comparable_run_ids"], [int(first["id"]), int(second["id"])])
+        self.assertEqual(payload["missing_run_ids"], [])
+        self.assertEqual(payload["unavailable_runs"], [])
+        self.assertEqual(payload["field_groups"], ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"])
+        self.assertEqual(len(payload["items"]), 2)
+        first_item = payload["items"][0]
+        self.assertEqual(first_item["metadata"]["id"], int(first["id"]))
+        self.assertEqual(first_item["metadata"]["code"], "600519")
+        self.assertEqual(first_item["metadata"]["status"], "completed")
+        self.assertEqual(first_item["parsed_strategy"]["strategy_kind"], first["parsed_strategy"]["strategy_kind"])
+        self.assertIn("strategy_type", first_item["parsed_strategy"]["strategy_spec"])
+        self.assertEqual(first_item["metrics"]["trade_count"], first["trade_count"])
+        self.assertEqual(first_item["benchmark"]["benchmark_mode"], first["benchmark_mode"])
+        self.assertIn("method", first_item["benchmark"]["benchmark_summary"])
+        self.assertEqual(first_item["execution_model"]["timeframe"], first["execution_model"]["timeframe"])
+        self.assertEqual(
+            first_item["result_authority"]["domains"]["metrics"]["source"],
+            first["result_authority"]["domains"]["metrics"]["source"],
+        )
+
+    def test_compare_runs_reports_missing_requested_runs_without_recomputing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            first = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            second = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        payload = service.compare_runs([int(first["id"]), 999999, int(second["id"])])
+
+        self.assertEqual(payload["requested_run_ids"], [int(first["id"]), 999999, int(second["id"])])
+        self.assertEqual(payload["resolved_run_ids"], [int(first["id"]), int(second["id"])])
+        self.assertEqual(payload["comparable_run_ids"], [int(first["id"]), int(second["id"])])
+        self.assertEqual(payload["missing_run_ids"], [999999])
+        self.assertEqual(payload["unavailable_runs"], [])
+        self.assertEqual(len(payload["items"]), 2)
+
+    def test_compare_runs_rejects_requests_without_two_completed_runs(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            completed = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            queued = service.submit_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA5. Sell when Close < MA5.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        with self.assertRaises(ValueError) as ctx:
+            service.compare_runs([int(completed["id"]), int(queued["id"])])
+
+        self.assertIn("At least two completed accessible rule backtest runs are required for comparison", str(ctx.exception))
+        self.assertIn(str(int(queued["id"])), str(ctx.exception))
+
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
         service = RuleBacktestService(self.db)
 

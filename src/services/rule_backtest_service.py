@@ -686,6 +686,55 @@ class RuleBacktestService:
             return None
         return self._run_row_to_dict(row, include_trades=True)
 
+    def compare_runs(self, run_ids: List[int]) -> Dict[str, Any]:
+        requested_run_ids = self._normalize_compare_run_ids(run_ids)
+        rows = self.repo.get_runs_by_ids(requested_run_ids, **self._owner_kwargs())
+        row_map = {int(row.id): row for row in rows if getattr(row, "id", None) is not None}
+
+        resolved_run_ids: List[int] = []
+        comparable_run_ids: List[int] = []
+        missing_run_ids: List[int] = []
+        unavailable_runs: List[Dict[str, Any]] = []
+        items: List[Dict[str, Any]] = []
+
+        for run_id in requested_run_ids:
+            row = row_map.get(int(run_id))
+            if row is None:
+                missing_run_ids.append(int(run_id))
+                continue
+
+            resolved_run_ids.append(int(run_id))
+            run_payload = self._run_row_to_dict(row, include_trades=False)
+            normalized_status = self._normalize_run_status(run_payload.get("status"))
+            if normalized_status != "completed":
+                unavailable_runs.append(
+                    self._build_compare_unavailable_run_payload(run_payload=run_payload)
+                )
+                continue
+
+            comparable_run_ids.append(int(run_id))
+            items.append(self._build_compare_run_item_payload(run_payload=run_payload))
+
+        if len(comparable_run_ids) < 2:
+            unavailable_ids = [int(item["id"]) for item in unavailable_runs if item.get("id") is not None]
+            raise ValueError(
+                "At least two completed accessible rule backtest runs are required for comparison; "
+                f"requested={requested_run_ids}, comparable={comparable_run_ids}, "
+                f"missing={missing_run_ids}, unavailable={unavailable_ids}"
+            )
+
+        return {
+            "comparison_source": "stored_rule_backtest_runs",
+            "read_mode": "stored_first",
+            "requested_run_ids": requested_run_ids,
+            "resolved_run_ids": resolved_run_ids,
+            "comparable_run_ids": comparable_run_ids,
+            "missing_run_ids": missing_run_ids,
+            "unavailable_runs": unavailable_runs,
+            "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "items": items,
+        }
+
     def get_run_status(self, run_id: int) -> Optional[Dict[str, Any]]:
         row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
@@ -1562,6 +1611,86 @@ class RuleBacktestService:
     @staticmethod
     def _normalize_run_status(status: Optional[str]) -> str:
         return str(status or "").strip().lower()
+
+    @staticmethod
+    def _normalize_compare_run_ids(run_ids: List[int]) -> List[int]:
+        normalized_ids: List[int] = []
+        seen: set[int] = set()
+        for raw_value in list(run_ids or []):
+            try:
+                normalized = int(raw_value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid rule backtest run id: {raw_value}") from exc
+            if normalized <= 0:
+                raise ValueError("Rule backtest compare run ids must be positive integers.")
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            normalized_ids.append(normalized)
+        if len(normalized_ids) < 2:
+            raise ValueError("At least two rule backtest run ids are required for comparison.")
+        if len(normalized_ids) > 10:
+            raise ValueError("Rule backtest compare currently supports at most 10 run ids per request.")
+        return normalized_ids
+
+    @classmethod
+    def _build_compare_unavailable_run_payload(cls, *, run_payload: Dict[str, Any]) -> Dict[str, Any]:
+        status = cls._normalize_run_status(run_payload.get("status"))
+        return {
+            "id": int(run_payload["id"]),
+            "code": str(run_payload.get("code") or ""),
+            "status": status or str(run_payload.get("status") or ""),
+            "reason": "run_not_completed",
+            "message": "Only completed runs are comparable in the stored-first compare foundation.",
+        }
+
+    @staticmethod
+    def _build_compare_run_item_payload(*, run_payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "metadata": {
+                "id": int(run_payload["id"]),
+                "code": str(run_payload.get("code") or ""),
+                "status": str(run_payload.get("status") or ""),
+                "run_at": run_payload.get("run_at"),
+                "completed_at": run_payload.get("completed_at"),
+                "timeframe": str(run_payload.get("timeframe") or ""),
+                "start_date": run_payload.get("start_date"),
+                "end_date": run_payload.get("end_date"),
+                "period_start": run_payload.get("period_start"),
+                "period_end": run_payload.get("period_end"),
+                "lookback_bars": int(run_payload.get("lookback_bars") or 0),
+                "initial_capital": float(run_payload.get("initial_capital") or 0.0),
+                "fee_bps": float(run_payload.get("fee_bps") or 0.0),
+                "slippage_bps": float(run_payload.get("slippage_bps") or 0.0),
+            },
+            "parsed_strategy": dict(run_payload.get("parsed_strategy") or {}),
+            "metrics": {
+                "trade_count": int(run_payload.get("trade_count") or 0),
+                "win_count": int(run_payload.get("win_count") or 0),
+                "loss_count": int(run_payload.get("loss_count") or 0),
+                "total_return_pct": run_payload.get("total_return_pct"),
+                "annualized_return_pct": run_payload.get("annualized_return_pct"),
+                "benchmark_return_pct": run_payload.get("benchmark_return_pct"),
+                "excess_return_vs_benchmark_pct": run_payload.get("excess_return_vs_benchmark_pct"),
+                "buy_and_hold_return_pct": run_payload.get("buy_and_hold_return_pct"),
+                "excess_return_vs_buy_and_hold_pct": run_payload.get("excess_return_vs_buy_and_hold_pct"),
+                "win_rate_pct": run_payload.get("win_rate_pct"),
+                "avg_trade_return_pct": run_payload.get("avg_trade_return_pct"),
+                "max_drawdown_pct": run_payload.get("max_drawdown_pct"),
+                "avg_holding_days": run_payload.get("avg_holding_days"),
+                "avg_holding_bars": run_payload.get("avg_holding_bars"),
+                "avg_holding_calendar_days": run_payload.get("avg_holding_calendar_days"),
+                "final_equity": run_payload.get("final_equity"),
+            },
+            "benchmark": {
+                "benchmark_mode": run_payload.get("benchmark_mode"),
+                "benchmark_code": run_payload.get("benchmark_code"),
+                "benchmark_summary": dict(run_payload.get("benchmark_summary") or {}),
+                "buy_and_hold_summary": dict(run_payload.get("buy_and_hold_summary") or {}),
+            },
+            "execution_model": dict(run_payload.get("execution_model") or {}),
+            "result_authority": dict(run_payload.get("result_authority") or {}),
+        }
 
     @classmethod
     def _is_run_cancelled_status(cls, status: Optional[str]) -> bool:
