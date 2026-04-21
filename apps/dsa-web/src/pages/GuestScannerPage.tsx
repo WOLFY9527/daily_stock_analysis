@@ -15,9 +15,9 @@ const GuestScannerPage: React.FC = () => {
     <div className="space-y-6">
       <WorkspacePageHeader
         eyebrow={language === 'en' ? 'Scanner Preview' : '扫描器预告'}
-        title={language === 'en' ? 'Market Scanner Teaser' : '市场扫描预告'}
+        title={language === 'en' ? 'Market Scanner Preview' : '市场扫描预告'}
         description={language === 'en'
-          ? 'Guests can inspect the scanner workflow and product boundaries, but manual runs, watchlists, and review history unlock only after sign-in.'
+          ? 'Guests can explore how the scanner works, but manual runs, watchlists, and review history unlock only after sign-in.'
           : '游客可以先了解扫描器的工作方式与产品边界，但手动运行、观察名单与复盘历史需要登录后解锁。'}
         actions={(
           <Link
@@ -29,7 +29,7 @@ const GuestScannerPage: React.FC = () => {
         )}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-          <Card title={language === 'en' ? 'How the scanner fits the product' : '扫描器在产品中的位置'} subtitle={language === 'en' ? 'Role-aware boundary' : '角色边界'}>
+          <Card title={language === 'en' ? 'How the scanner fits in' : '扫描器在产品中的位置'} subtitle={language === 'en' ? 'Access boundaries' : '角色边界'}>
             <div className="space-y-4">
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
@@ -38,12 +38,12 @@ const GuestScannerPage: React.FC = () => {
               </div>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
-                  ? 'Admin-only watchlists, schedules, daily operational status, and operator history remain outside the guest and standard-user scanner surface.'
+                  ? 'Admin-only watchlists, schedules, daily operating status, and admin history stay outside the guest and standard user scanner views.'
                   : '管理员专属的系统观察名单、调度、运营状态与运营历史继续保留在游客页和普通用户扫描器之外。'}
               </div>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
-                  ? 'The scanner preview is intentionally explanatory instead of live-running, so guests cannot create shared operational state.'
+                  ? 'This preview explains the scanner instead of running it live, so guests cannot create shared scanner activity.'
                   : '这个预告页刻意只做说明而不执行实时运行，确保游客不会创建共享的运营状态。'}
               </div>
             </div>
@@ -89,7 +89,7 @@ const GuestScannerPage: React.FC = () => {
         <LockedFeatureCard
           icon={Radar}
           title={language === 'en' ? 'Manual runs' : '手动运行'}
-          body={language === 'en' ? 'Generate a scanner run under your own account instead of creating anonymous shared state.' : '在你自己的账户下执行扫描，而不是创建匿名共享状态。'}
+          body={language === 'en' ? 'Generate scanner runs in your own account instead of creating anonymous shared activity.' : '在你自己的账户下执行扫描，而不是创建匿名共享状态。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={language === 'en' ? 'Sign in' : '登录'}
           ctaTo={loginPath}
@@ -105,7 +105,7 @@ const GuestScannerPage: React.FC = () => {
         <LockedFeatureCard
           icon={BarChart3}
           title={language === 'en' ? 'Review context' : '复盘上下文'}
-          body={language === 'en' ? 'See review status and performance context once runs belong to a registered identity.' : '当运行记录归属于注册身份后，才能看到复盘状态和表现上下文。'}
+          body={language === 'en' ? 'See review status and performance context once your runs are saved to a signed-in account.' : '当运行记录归属于注册身份后，才能看到复盘状态和表现上下文。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={language === 'en' ? 'Sign in' : '登录'}
           ctaTo={loginPath}
