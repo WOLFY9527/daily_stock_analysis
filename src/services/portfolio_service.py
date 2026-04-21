@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
@@ -78,6 +78,11 @@ class _AvgState:
 class PortfolioService:
     """Business logic for account CRUD, event writes, and snapshot replay."""
 
+    _phase_f_trade_list_comparison_report_limit = 200
+    _phase_f_trade_list_comparison_report_buffer: deque[Dict[str, Any]] = deque(
+        maxlen=_phase_f_trade_list_comparison_report_limit
+    )
+
     def __init__(
         self,
         repo: Optional[PortfolioRepository] = None,
@@ -88,6 +93,14 @@ class PortfolioService:
         self.repo = repo or PortfolioRepository()
         self.owner_id = owner_id
         self.include_all_owners = bool(include_all_owners)
+
+    @classmethod
+    def clear_phase_f_trade_list_comparison_reports(cls) -> None:
+        cls._phase_f_trade_list_comparison_report_buffer.clear()
+
+    @classmethod
+    def get_phase_f_trade_list_comparison_reports(cls) -> List[Dict[str, Any]]:
+        return [dict(report) for report in list(cls._phase_f_trade_list_comparison_report_buffer)]
 
     def _owner_kwargs(self) -> Dict[str, Any]:
         return {
@@ -125,6 +138,12 @@ class PortfolioService:
         return self._account_to_dict(row)
 
     def list_accounts(self, include_inactive: bool = False) -> List[Dict[str, Any]]:
+        phase_f_rows = self.repo.db.list_phase_f_portfolio_account_metadata_rows(
+            include_inactive=include_inactive,
+            **self._owner_kwargs(),
+        )
+        if phase_f_rows is not None:
+            return [self._account_to_dict(r) for r in phase_f_rows]
         rows = self.repo.list_accounts(include_inactive=include_inactive, **self._owner_kwargs())
         return [self._account_to_dict(r) for r in rows]
 
@@ -224,18 +243,32 @@ class PortfolioService:
         broker_type: Optional[str] = None,
         status: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        if portfolio_account_id is not None:
-            self.repo.get_account(
-                portfolio_account_id,
-                include_inactive=True,
-                **self._owner_kwargs(),
-            ) or self._raise_missing_account(portfolio_account_id)
         broker_type_norm = self._normalize_broker_type(broker_type) if broker_type is not None else None
         status_norm = (
             self._normalize_broker_connection_status(status)
             if status is not None and str(status).strip()
             else None
         )
+        phase_f_rows = self.repo.db.list_phase_f_portfolio_broker_connection_metadata_rows(
+            portfolio_account_id=portfolio_account_id,
+            broker_type=broker_type_norm,
+            status=status_norm,
+            **self._owner_kwargs(),
+        )
+        if phase_f_rows is not None:
+            return [
+                self._broker_connection_to_dict(
+                    row,
+                    portfolio_account_name=getattr(row, "portfolio_account_name", None),
+                )
+                for row in phase_f_rows
+            ]
+        if portfolio_account_id is not None:
+            self.repo.get_account(
+                portfolio_account_id,
+                include_inactive=True,
+                **self._owner_kwargs(),
+            ) or self._raise_missing_account(portfolio_account_id)
         rows = self.repo.list_broker_connections(
             portfolio_account_id=portfolio_account_id,
             broker_type=broker_type_norm,
@@ -431,6 +464,20 @@ class PortfolioService:
         return self._broker_sync_state_row_to_dict(row)
 
     def get_latest_broker_sync_state(self, *, portfolio_account_id: int) -> Optional[Dict[str, Any]]:
+        phase_f_bundle = self.repo.db.get_phase_f_latest_broker_sync_state_bundle(
+            portfolio_account_id=portfolio_account_id,
+            **self._owner_kwargs(),
+        )
+        if phase_f_bundle is not None:
+            row = phase_f_bundle.get("state_row")
+            if row is None:
+                return None
+            return self._broker_sync_bundle_to_dict(
+                row,
+                positions=list(phase_f_bundle.get("positions") or []),
+                cash_balances=list(phase_f_bundle.get("cash_balances") or []),
+            )
+
         row = self.repo.get_latest_broker_sync_state_for_account(
             portfolio_account_id=portfolio_account_id,
             **self._owner_kwargs(),
@@ -663,12 +710,592 @@ class PortfolioService:
             page_size=page_size,
             **self._owner_kwargs(),
         )
-        return {
+        result = {
             "items": [self._trade_row_to_dict(row) for row in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
         }
+        if self._phase_f_trade_list_comparison_enabled():
+            self._maybe_run_phase_f_trade_list_comparison(
+                request_context={
+                    "account_id": int(account_id) if account_id is not None else None,
+                    "date_from": date_from.isoformat() if date_from is not None else None,
+                    "date_to": date_to.isoformat() if date_to is not None else None,
+                    "symbol": symbol_norm,
+                    "side": side_norm,
+                    "page": page,
+                    "page_size": page_size,
+                },
+                legacy_rows=rows,
+                legacy_result=result,
+            )
+        return result
+
+    def _phase_f_trade_list_comparison_enabled(self) -> bool:
+        return bool(getattr(get_config(), "enable_phase_f_trades_list_comparison", False))
+
+    def _phase_f_trade_list_comparison_account_ids(self) -> Set[int]:
+        raw_value = getattr(get_config(), "phase_f_trades_list_comparison_account_ids", [])
+        return {int(item) for item in list(raw_value or []) if item is not None}
+
+    def _phase_f_trade_list_comparison_rollout_decision(
+        self,
+        *,
+        request_context: Dict[str, Any],
+    ) -> Tuple[bool, Optional[str]]:
+        allowed_account_ids = self._phase_f_trade_list_comparison_account_ids()
+        if not allowed_account_ids:
+            return True, None
+
+        account_id = request_context.get("account_id")
+        if account_id is None:
+            return False, "account_not_allowlisted"
+        if int(account_id) not in allowed_account_ids:
+            return False, "account_not_allowlisted"
+        return True, None
+
+    def _maybe_run_phase_f_trade_list_comparison(
+        self,
+        *,
+        request_context: Dict[str, Any],
+        legacy_rows: List[Any],
+        legacy_result: Dict[str, Any],
+    ) -> None:
+        legacy_context = dict(request_context or {})
+        _ = list(legacy_rows or [])
+        legacy_view = {
+            "request_context": legacy_context,
+            "items": [dict(item) for item in (legacy_result or {}).get("items", [])],
+            "total": int((legacy_result or {}).get("total", 0) or 0),
+            "page": int((legacy_result or {}).get("page", legacy_context.get("page", 1)) or 1),
+            "page_size": int((legacy_result or {}).get("page_size", legacy_context.get("page_size", 20)) or 20),
+        }
+        legacy_summary = self._summarize_phase_f_trade_list_result(legacy_view)
+        comparison_source = "phase_f_pg_trade_list_candidate"
+        can_compare, skip_reason = self._phase_f_trade_list_comparison_rollout_decision(
+            request_context=legacy_context,
+        )
+        if not can_compare:
+            self._emit_phase_f_trade_list_comparison_report(
+                self._build_phase_f_trade_list_comparison_report(
+                    comparison_status="skipped",
+                    comparison_attempted=False,
+                    comparison_decision="legacy_served_without_comparison",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=skip_reason,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_without_comparison",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                )
+            )
+            return None
+
+        try:
+            candidate = self._load_phase_f_trade_list_comparison_candidate(request_context=legacy_context)
+        except Exception as exc:
+            self._emit_phase_f_trade_list_comparison_report(
+                self._build_phase_f_trade_list_comparison_report(
+                    comparison_status="query_failure",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_due_to_query_failure",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class="query_failure",
+                    blocking_level="hard_blocking",
+                    fallback_decision="served_legacy_due_to_query_failure",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    query_failure_detail=str(exc) or exc.__class__.__name__,
+                )
+            )
+            return None
+
+        candidate_summary = self._summarize_phase_f_trade_list_result(candidate)
+        mismatch = self._compare_phase_f_trade_list_results(legacy_view=legacy_view, candidate_view=candidate)
+        if mismatch is None:
+            self._emit_phase_f_trade_list_comparison_report(
+                self._build_phase_f_trade_list_comparison_report(
+                    comparison_status="matched",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_after_match",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_after_match",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    pg_summary=candidate_summary,
+                )
+            )
+            return None
+
+        self._emit_phase_f_trade_list_comparison_report(
+            self._build_phase_f_trade_list_comparison_report(
+                comparison_status="mismatch",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_due_to_mismatch",
+                comparison_source=comparison_source,
+                comparison_skip_reason=None,
+                mismatch_class=mismatch["mismatch_class"],
+                blocking_level=mismatch["blocking_level"],
+                fallback_decision="served_legacy_due_to_mismatch",
+                request_context=legacy_context,
+                legacy_summary=legacy_summary,
+                pg_summary=candidate_summary,
+                first_mismatch_position=mismatch.get("first_mismatch_position"),
+                first_mismatch_field=mismatch.get("first_mismatch_field"),
+                first_legacy_value=mismatch.get("first_legacy_value"),
+                first_pg_value=mismatch.get("first_pg_value"),
+            )
+        )
+        return None
+
+    def _load_phase_f_trade_list_comparison_candidate(
+        self,
+        *,
+        request_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        date_from_raw = request_context.get("date_from")
+        date_to_raw = request_context.get("date_to")
+        date_from = date.fromisoformat(date_from_raw) if date_from_raw else None
+        date_to = date.fromisoformat(date_to_raw) if date_to_raw else None
+
+        candidate = self.repo.db.get_phase_f_trade_list_comparison_candidate(
+            account_id=request_context.get("account_id"),
+            date_from=date_from,
+            date_to=date_to,
+            symbol=request_context.get("symbol"),
+            side=request_context.get("side"),
+            page=int(request_context.get("page", 1) or 1),
+            page_size=int(request_context.get("page_size", 20) or 20),
+            **self._owner_kwargs(),
+        )
+        if candidate is None:
+            raise RuntimeError("phase_f_trades_list_pg_source_unavailable")
+        return {
+            "request_context": dict(request_context or {}),
+            "items": [dict(item) for item in (candidate.get("items") or [])],
+            "total": int(candidate.get("total", 0) or 0),
+            "page": int(candidate.get("page", request_context.get("page", 1)) or 1),
+            "page_size": int(candidate.get("page_size", request_context.get("page_size", 20)) or 20),
+        }
+
+    def _compare_phase_f_trade_list_results(
+        self,
+        *,
+        legacy_view: Dict[str, Any],
+        candidate_view: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        legacy_request = dict((legacy_view or {}).get("request_context", {}) or {})
+        candidate_request = dict((candidate_view or {}).get("request_context", {}) or {})
+        if legacy_request != candidate_request:
+            return {
+                "mismatch_class": "request_shape_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "request_context",
+                "first_legacy_value": legacy_request,
+                "first_pg_value": candidate_request,
+            }
+
+        legacy_total = int((legacy_view or {}).get("total", 0) or 0)
+        candidate_total = int((candidate_view or {}).get("total", 0) or 0)
+        if legacy_total != candidate_total:
+            return {
+                "mismatch_class": "count_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "total",
+                "first_legacy_value": legacy_total,
+                "first_pg_value": candidate_total,
+            }
+
+        legacy_items = list((legacy_view or {}).get("items", []) or [])
+        candidate_items = list((candidate_view or {}).get("items", []) or [])
+        if len(legacy_items) != len(candidate_items):
+            return {
+                "mismatch_class": "pagination_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "page_item_count",
+                "first_legacy_value": len(legacy_items),
+                "first_pg_value": len(candidate_items),
+            }
+
+        legacy_ids = [item.get("id") for item in legacy_items]
+        candidate_ids = [item.get("id") for item in candidate_items]
+        if legacy_ids != candidate_ids:
+            first_position = next(
+                (
+                    index
+                    for index, (legacy_id, candidate_id) in enumerate(zip(legacy_ids, candidate_ids))
+                    if legacy_id != candidate_id
+                ),
+                None,
+            )
+            return {
+                "mismatch_class": "ordering_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_position": first_position,
+                "first_mismatch_field": "id",
+                "first_legacy_value": legacy_ids[first_position] if first_position is not None else legacy_ids,
+                "first_pg_value": candidate_ids[first_position] if first_position is not None else candidate_ids,
+            }
+
+        contract_fields = (
+            "id",
+            "account_id",
+            "trade_uid",
+            "symbol",
+            "market",
+            "currency",
+            "trade_date",
+            "side",
+            "quantity",
+            "price",
+            "fee",
+            "tax",
+            "note",
+            "created_at",
+        )
+        for index, (legacy_item, candidate_item) in enumerate(zip(legacy_items, candidate_items)):
+            for field_name in contract_fields:
+                legacy_value = legacy_item.get(field_name)
+                candidate_value = candidate_item.get(field_name)
+                if self._normalize_phase_f_trade_list_compare_value(
+                    field_name=field_name,
+                    value=legacy_value,
+                ) == self._normalize_phase_f_trade_list_compare_value(
+                    field_name=field_name,
+                    value=candidate_value,
+                ):
+                    continue
+                mismatch_class = "owner_scope_mismatch" if field_name == "account_id" else "payload_field_mismatch"
+                return {
+                    "mismatch_class": mismatch_class,
+                    "blocking_level": "hard_blocking",
+                    "first_mismatch_position": index,
+                    "first_mismatch_field": field_name,
+                    "first_legacy_value": legacy_value,
+                    "first_pg_value": candidate_value,
+                }
+        return None
+
+    @staticmethod
+    def _normalize_phase_f_trade_list_compare_value(
+        *,
+        field_name: str,
+        value: Any,
+    ) -> Any:
+        if field_name != "created_at":
+            return value
+        return PortfolioService._normalize_phase_f_trade_list_created_at_compare_value(value)
+
+    @staticmethod
+    def _normalize_phase_f_trade_list_created_at_compare_value(value: Any) -> Any:
+        if value is None:
+            return None
+        parsed: Optional[datetime] = None
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            raw_value = value.strip()
+            if not raw_value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(raw_value)
+            except ValueError:
+                return value
+        else:
+            return value
+
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed.isoformat()
+
+    def _summarize_phase_f_trade_list_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
+        items = list((result_view or {}).get("items", []) or [])
+        return {
+            "total": int((result_view or {}).get("total", 0) or 0),
+            "page": int((result_view or {}).get("page", 1) or 1),
+            "page_size": int((result_view or {}).get("page_size", 20) or 20),
+            "page_item_count": len(items),
+            "ordered_ids": [item.get("id") for item in items],
+        }
+
+    def _emit_phase_f_trade_list_comparison_report(self, report: Dict[str, Any]) -> None:
+        self._collect_phase_f_trade_list_comparison_report(report)
+        comparison_status = str((report or {}).get("comparison_status") or "").strip().lower()
+        message = json.dumps(report, ensure_ascii=True, sort_keys=True, default=str)
+        if comparison_status in {"mismatch", "query_failure"}:
+            logger.warning("Phase F trades-list comparison diagnostic: %s", message)
+            return
+        logger.info("Phase F trades-list comparison diagnostic: %s", message)
+
+    def _collect_phase_f_trade_list_comparison_report(self, report: Dict[str, Any]) -> None:
+        if not isinstance(report, dict):
+            return
+        if str(report.get("candidate") or "").strip() != "portfolio_trades_list":
+            return
+        if not str(report.get("report_model") or "").strip().startswith("phase_f_trades_list_comparison_"):
+            return
+        self.__class__._phase_f_trade_list_comparison_report_buffer.append(dict(report))
+
+    def _build_phase_f_trade_list_comparison_report(
+        self,
+        *,
+        comparison_status: str,
+        comparison_attempted: bool,
+        comparison_decision: str,
+        comparison_source: str,
+        comparison_skip_reason: Optional[str],
+        mismatch_class: str,
+        blocking_level: str,
+        fallback_decision: str,
+        request_context: Dict[str, Any],
+        legacy_summary: Dict[str, Any],
+        pg_summary: Optional[Dict[str, Any]] = None,
+        first_mismatch_position: Optional[int] = None,
+        first_mismatch_field: Optional[str] = None,
+        first_legacy_value: Any = None,
+        first_pg_value: Any = None,
+        query_failure_detail: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "report_model": "phase_f_trades_list_comparison_diagnostic_v2",
+            "candidate": "portfolio_trades_list",
+            "comparison_status": str(comparison_status or "").strip(),
+            "comparison_attempted": bool(comparison_attempted),
+            "comparison_decision": str(comparison_decision or "").strip(),
+            "comparison_source": str(comparison_source or "").strip(),
+            "comparison_skip_reason": str(comparison_skip_reason or "").strip() or None,
+            "mismatch_class": str(mismatch_class or "").strip() or None,
+            "blocking_level": str(blocking_level or "").strip(),
+            "fallback_decision": str(fallback_decision or "").strip(),
+            "request_context": dict(request_context or {}),
+            "owner_context": {
+                "owner_user_id": self._resolve_owner_id(self.owner_id),
+                "include_all_owners": self.include_all_owners,
+            },
+            "legacy_summary": dict(legacy_summary or {}),
+            "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
+            "first_mismatch_position": first_mismatch_position,
+            "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
+            "first_legacy_value": first_legacy_value,
+            "first_pg_value": first_pg_value,
+            "query_failure_detail": str(query_failure_detail or "").strip() or None,
+        }
+
+    def _build_phase_f_trade_list_mismatch_report(
+        self,
+        *,
+        mismatch_class: str,
+        blocking_level: str,
+        fallback_decision: str,
+        request_context: Dict[str, Any],
+        legacy_summary: Dict[str, Any],
+        pg_summary: Optional[Dict[str, Any]] = None,
+        first_mismatch_position: Optional[int] = None,
+        first_mismatch_field: Optional[str] = None,
+        first_legacy_value: Any = None,
+        first_pg_value: Any = None,
+        query_failure_detail: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        normalized_mismatch_class = str(mismatch_class or "").strip()
+        comparison_status = "query_failure" if normalized_mismatch_class == "query_failure" else "mismatch"
+        comparison_decision = (
+            "legacy_served_due_to_query_failure"
+            if comparison_status == "query_failure"
+            else "legacy_served_due_to_mismatch"
+        )
+        return self._build_phase_f_trade_list_comparison_report(
+            comparison_status=comparison_status,
+            comparison_attempted=True,
+            comparison_decision=comparison_decision,
+            comparison_source="phase_f_pg_trade_list_candidate",
+            comparison_skip_reason=None,
+            mismatch_class=normalized_mismatch_class,
+            blocking_level=blocking_level,
+            fallback_decision=fallback_decision,
+            request_context=request_context,
+            legacy_summary=legacy_summary,
+            pg_summary=pg_summary,
+            first_mismatch_position=first_mismatch_position,
+            first_mismatch_field=first_mismatch_field,
+            first_legacy_value=first_legacy_value,
+            first_pg_value=first_pg_value,
+            query_failure_detail=query_failure_detail,
+        )
+
+    def _build_phase_f_trade_list_comparison_evidence_summary(
+        self,
+        *,
+        reports: List[Dict[str, Any]],
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        relevant_reports: List[Dict[str, Any]] = []
+        for report in list(reports or []):
+            if not isinstance(report, dict):
+                continue
+            if str(report.get("candidate") or "").strip() != "portfolio_trades_list":
+                continue
+            if not str(report.get("report_model") or "").strip().startswith("phase_f_trades_list_comparison_"):
+                continue
+            relevant_reports.append(dict(report))
+
+        status_counts = {
+            "skipped": 0,
+            "matched": 0,
+            "mismatch": 0,
+            "query_failure": 0,
+        }
+        mismatch_counts_by_class: Dict[str, int] = {}
+        compared_account_ids: Set[int] = set()
+        skipped_account_ids: Set[int] = set()
+        hard_blocking_mismatch_classes: Set[str] = set()
+
+        for report in relevant_reports:
+            comparison_status = str(report.get("comparison_status") or "").strip().lower()
+            if comparison_status in status_counts:
+                status_counts[comparison_status] += 1
+
+            request_context = dict(report.get("request_context") or {})
+            account_id = request_context.get("account_id")
+            resolved_account_id: Optional[int] = None
+            if account_id is not None:
+                try:
+                    resolved_account_id = int(account_id)
+                except (TypeError, ValueError):
+                    resolved_account_id = None
+
+            if bool(report.get("comparison_attempted")) and resolved_account_id is not None:
+                compared_account_ids.add(resolved_account_id)
+            if comparison_status == "skipped" and resolved_account_id is not None:
+                skipped_account_ids.add(resolved_account_id)
+
+            mismatch_class = str(report.get("mismatch_class") or "").strip()
+            if comparison_status == "mismatch" and mismatch_class:
+                mismatch_counts_by_class[mismatch_class] = mismatch_counts_by_class.get(mismatch_class, 0) + 1
+                if str(report.get("blocking_level") or "").strip().lower() == "hard_blocking":
+                    hard_blocking_mismatch_classes.add(mismatch_class)
+
+        normalized_allowlisted_account_ids = sorted(
+            {int(item) for item in list(allowlisted_account_ids or []) if item is not None}
+        )
+        uncovered_allowlisted_account_ids = sorted(
+            set(normalized_allowlisted_account_ids) - set(compared_account_ids)
+        )
+        total_attempted = status_counts["matched"] + status_counts["mismatch"] + status_counts["query_failure"]
+        evidence_is_thin = total_attempted == 0 or (
+            bool(normalized_allowlisted_account_ids) and bool(uncovered_allowlisted_account_ids)
+        )
+
+        return {
+            "summary_model": "phase_f_trades_list_comparison_evidence_summary_v1",
+            "candidate": "portfolio_trades_list",
+            "total_reports": len(relevant_reports),
+            "total_attempted": total_attempted,
+            "total_skipped": status_counts["skipped"],
+            "total_matched": status_counts["matched"],
+            "total_mismatched": status_counts["mismatch"],
+            "total_query_failures": status_counts["query_failure"],
+            "mismatch_counts_by_class": dict(sorted(mismatch_counts_by_class.items())),
+            "query_failure_count": status_counts["query_failure"],
+            "compared_account_ids": sorted(compared_account_ids),
+            "skipped_account_ids": sorted(skipped_account_ids),
+            "allowlisted_account_ids": normalized_allowlisted_account_ids,
+            "uncovered_allowlisted_account_ids": uncovered_allowlisted_account_ids,
+            "hard_blocking_mismatch_observed": bool(hard_blocking_mismatch_classes),
+            "hard_blocking_mismatch_classes": sorted(hard_blocking_mismatch_classes),
+            "evidence_is_thin": evidence_is_thin,
+        }
+
+    def _build_phase_f_trade_list_comparison_evidence_summary_from_collected_reports(
+        self,
+        *,
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        return self._build_phase_f_trade_list_comparison_evidence_summary(
+            reports=self.get_phase_f_trade_list_comparison_reports(),
+            allowlisted_account_ids=allowlisted_account_ids,
+        )
+
+    def _build_phase_f_trade_list_promotion_readiness_review(
+        self,
+        *,
+        evidence_summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        summary = dict(evidence_summary or {})
+        blocking_reasons: List[str] = []
+
+        evidence_is_thin = bool(summary.get("evidence_is_thin"))
+        if evidence_is_thin:
+            blocking_reasons.append("evidence_still_thin")
+
+        uncovered_allowlisted_account_ids = sorted(
+            {int(item) for item in list(summary.get("uncovered_allowlisted_account_ids") or []) if item is not None}
+        )
+        if uncovered_allowlisted_account_ids:
+            blocking_reasons.append("allowlisted_account_coverage_incomplete")
+
+        hard_blocking_mismatch_observed = bool(summary.get("hard_blocking_mismatch_observed"))
+        hard_blocking_mismatch_classes = sorted(
+            {str(item).strip() for item in list(summary.get("hard_blocking_mismatch_classes") or []) if str(item).strip()}
+        )
+        if hard_blocking_mismatch_observed:
+            blocking_reasons.append("hard_blocking_mismatches_observed")
+
+        total_query_failures = int(summary.get("total_query_failures", 0) or 0)
+        query_failures_observed = total_query_failures > 0
+        if query_failures_observed:
+            blocking_reasons.append("query_failures_observed")
+
+        promotion_discussion_ready = not blocking_reasons
+        review_status = "reviewable_for_promotion_discussion" if promotion_discussion_ready else "blocked"
+
+        return {
+            "review_model": "phase_f_trades_list_promotion_readiness_review_v1",
+            "candidate": str(summary.get("candidate") or "portfolio_trades_list").strip() or "portfolio_trades_list",
+            "evidence_summary_model": str(summary.get("summary_model") or "").strip() or None,
+            "review_status": review_status,
+            "promotion_discussion_ready": promotion_discussion_ready,
+            "pg_serving_ready": False,
+            "serving_readiness": "not_evaluated_by_this_review",
+            "evidence_is_thin": evidence_is_thin,
+            "allowlisted_account_coverage_incomplete": bool(uncovered_allowlisted_account_ids),
+            "uncovered_allowlisted_account_ids": uncovered_allowlisted_account_ids,
+            "hard_blocking_mismatch_observed": hard_blocking_mismatch_observed,
+            "hard_blocking_mismatch_classes": hard_blocking_mismatch_classes,
+            "query_failures_observed": query_failures_observed,
+            "blocking_reasons": blocking_reasons,
+            "summary_snapshot": {
+                "total_reports": int(summary.get("total_reports", 0) or 0),
+                "total_attempted": int(summary.get("total_attempted", 0) or 0),
+                "total_skipped": int(summary.get("total_skipped", 0) or 0),
+                "total_matched": int(summary.get("total_matched", 0) or 0),
+                "total_mismatched": int(summary.get("total_mismatched", 0) or 0),
+                "total_query_failures": total_query_failures,
+                "mismatch_counts_by_class": dict(summary.get("mismatch_counts_by_class") or {}),
+                "compared_account_ids": sorted(
+                    {int(item) for item in list(summary.get("compared_account_ids") or []) if item is not None}
+                ),
+                "allowlisted_account_ids": sorted(
+                    {int(item) for item in list(summary.get("allowlisted_account_ids") or []) if item is not None}
+                ),
+            },
+        }
+
+    def _build_phase_f_trade_list_promotion_readiness_review_from_collected_reports(
+        self,
+        *,
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        return self._build_phase_f_trade_list_promotion_readiness_review(
+            evidence_summary=self._build_phase_f_trade_list_comparison_evidence_summary_from_collected_reports(
+                allowlisted_account_ids=allowlisted_account_ids,
+            )
+        )
 
     def list_cash_ledger_events(
         self,
