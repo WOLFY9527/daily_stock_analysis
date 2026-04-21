@@ -482,6 +482,43 @@ const ScannerPage: React.FC = () => {
   const comparisonToPrevious = runDetail?.comparisonToPrevious;
   const currentReviewSummary = runDetail?.reviewSummary;
   const recentQualitySummary = statusSummary?.qualitySummary;
+  const diagnosticsCopy = language === 'en' ? {
+    title: 'Run Diagnostics',
+    subtitle: 'Coverage and provider observability',
+    inputUniverse: 'Input Universe',
+    universeFetched: 'Fetched Universe',
+    liquidityPassed: 'Passed Liquidity Filters',
+    dataAvailable: 'Passed Data Availability',
+    rankedPool: 'Ranked Pool',
+    shortlisted: 'Shortlisted',
+    bottleneckHeading: 'Why the shortlist is small',
+    bottleneckSummary: `Filtered ${coverageSummary.excludedTotal ?? 0}, missing data ${missingDataSymbolCount}, shortlisted ${coverageSummary.shortlistedCount ?? 0}.`,
+    exclusionHeading: 'Top Exclusion Reasons',
+    providersHeading: 'Providers',
+    snapshotLabel: 'Snapshot',
+    historyLabel: 'History',
+    fallbackSummary: `${fallbackCount} fallback`,
+    failureSummary: `${providerFailureCount} failures`,
+    historyMetricValue: `${historyStats.localHits ?? 0} local / ${historyStats.networkFetches ?? 0} network`,
+  } : {
+    title: '本次扫描诊断',
+    subtitle: '覆盖率与数据源可观测性',
+    inputUniverse: '输入池',
+    universeFetched: '完成候选池获取',
+    liquidityPassed: '通过流动性/约束',
+    dataAvailable: '通过数据可用性',
+    rankedPool: '进入排名池',
+    shortlisted: '进入最终候选名单',
+    bottleneckHeading: '为何候选名单偏少',
+    bottleneckSummary: `过滤 ${coverageSummary.excludedTotal ?? 0} 只，缺数 ${missingDataSymbolCount} 只，最终候选名单 ${coverageSummary.shortlistedCount ?? 0} 只。`,
+    exclusionHeading: '主要排除原因',
+    providersHeading: '数据源',
+    snapshotLabel: '快照',
+    historyLabel: '历史',
+    fallbackSummary: `发生 ${fallbackCount} 次 fallback`,
+    failureSummary: `失败 ${providerFailureCount} 次`,
+    historyMetricValue: `${historyStats.localHits ?? 0} 本地 / ${historyStats.networkFetches ?? 0} 在线`,
+  };
 
   const handleExportSummary = useCallback(() => {
     if (!runDetail) return;
@@ -670,7 +707,7 @@ const ScannerPage: React.FC = () => {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <MetricPair label={t('scanner.metricUniverse')} value={`${runDetail.universeSize}`} />
                     <MetricPair label={t('scanner.metricDetail')} value={`${runDetail.evaluatedSize}`} />
-                    <MetricPair label={t('scanner.metricHistory')} value={`${historyStats.localHits ?? 0} 本地 / ${historyStats.networkFetches ?? 0} 在线`} />
+                    <MetricPair label={t('scanner.metricHistory')} value={diagnosticsCopy.historyMetricValue} />
                     <MetricPair label={t('scanner.metricShortlist')} value={`${runDetail.shortlistSize}`} />
                     <MetricPair label={t('scanner.metricWatchlistDate')} value={formatDateOnly(runDetail.watchlistDate, language)} />
                     <MetricPair label={t('scanner.metricNotification')} value={t(`scanner.notificationStatus.${runNotificationStatus}`)} />
@@ -1008,32 +1045,30 @@ const ScannerPage: React.FC = () => {
           <section className="space-y-4">
             {showRunDiagnosticsPanel ? (
               <Card
-                title="本次扫描诊断"
-                subtitle="覆盖率 / 数据源可观测性"
+                title={diagnosticsCopy.title}
+                subtitle={diagnosticsCopy.subtitle}
                 className="space-y-4"
               >
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <MetricPair label="输入池" value={String(coverageSummary.inputUniverseSize ?? '--')} />
-                  <MetricPair label="完成候选池获取" value={String(coverageSummary.eligibleAfterUniverseFetch ?? '--')} />
-                  <MetricPair label="通过流动性/约束" value={String(coverageSummary.eligibleAfterLiquidityFilter ?? '--')} />
-                  <MetricPair label="通过数据可用性" value={String(coverageSummary.eligibleAfterDataAvailabilityFilter ?? '--')} />
-                  <MetricPair label="进入排名池" value={String(coverageSummary.rankedCandidateCount ?? '--')} />
-                  <MetricPair label="进入最终候选名单" value={String(coverageSummary.shortlistedCount ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.inputUniverse} value={String(coverageSummary.inputUniverseSize ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.universeFetched} value={String(coverageSummary.eligibleAfterUniverseFetch ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.liquidityPassed} value={String(coverageSummary.eligibleAfterLiquidityFilter ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.dataAvailable} value={String(coverageSummary.eligibleAfterDataAvailabilityFilter ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.rankedPool} value={String(coverageSummary.rankedCandidateCount ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.shortlisted} value={String(coverageSummary.shortlistedCount ?? '--')} />
                 </div>
 
                 {coverageSummary.likelyBottleneckLabel ? (
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3 text-sm leading-6 text-secondary-text">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">为何候选名单偏少</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.bottleneckHeading}</p>
                     <p className="mt-1 text-foreground">{String(coverageSummary.likelyBottleneckLabel)}</p>
-                    <p className="mt-1 text-xs text-secondary-text">
-                      {`过滤 ${coverageSummary.excludedTotal ?? 0} 只，缺数 ${missingDataSymbolCount} 只，最终候选名单 ${coverageSummary.shortlistedCount ?? 0} 只。`}
-                    </p>
+                    <p className="mt-1 text-xs text-secondary-text">{diagnosticsCopy.bottleneckSummary}</p>
                   </div>
                 ) : null}
 
                 {coverageReasons.length ? (
                   <div className="space-y-2">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">主要排除原因</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.exclusionHeading}</p>
                     <div className="flex flex-wrap gap-2">
                       {coverageReasons.slice(0, 4).map((item) => (
                         <Badge key={`${item.reason}-${item.count}`} variant="history">
@@ -1045,19 +1080,19 @@ const ScannerPage: React.FC = () => {
                 ) : null}
 
                 <div className="space-y-2 rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Providers</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.providersHeading}</p>
                   <p className="text-sm text-foreground">
                     {providerList.length ? providerList.join(' -> ') : String(providerDiagnostics.configuredPrimaryProvider || '--')}
                   </p>
                   <div className="flex flex-wrap gap-2 text-xs text-secondary-text">
                     {providerDiagnostics.snapshotSourceUsed ? (
-                      <span>{`Snapshot: ${String(providerDiagnostics.snapshotSourceUsed)}`}</span>
+                      <span>{`${diagnosticsCopy.snapshotLabel}: ${String(providerDiagnostics.snapshotSourceUsed)}`}</span>
                     ) : null}
                     {providerDiagnostics.historySourceUsed ? (
-                      <span>{`History: ${String(providerDiagnostics.historySourceUsed)}`}</span>
+                      <span>{`${diagnosticsCopy.historyLabel}: ${String(providerDiagnostics.historySourceUsed)}`}</span>
                     ) : null}
-                    <span>{`发生 ${fallbackCount} 次 fallback`}</span>
-                    <span>{`失败 ${providerFailureCount} 次`}</span>
+                    <span>{diagnosticsCopy.fallbackSummary}</span>
+                    <span>{diagnosticsCopy.failureSummary}</span>
                   </div>
                   {providerWarnings.length ? (
                     <div className="flex flex-wrap gap-2">
