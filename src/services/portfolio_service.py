@@ -82,6 +82,10 @@ class PortfolioService:
     _phase_f_trade_list_comparison_report_buffer: deque[Dict[str, Any]] = deque(
         maxlen=_phase_f_trade_list_comparison_report_limit
     )
+    _phase_f_corporate_actions_comparison_report_limit = 200
+    _phase_f_corporate_actions_comparison_report_buffer: deque[Dict[str, Any]] = deque(
+        maxlen=_phase_f_corporate_actions_comparison_report_limit
+    )
 
     def __init__(
         self,
@@ -101,6 +105,14 @@ class PortfolioService:
     @classmethod
     def get_phase_f_trade_list_comparison_reports(cls) -> List[Dict[str, Any]]:
         return [dict(report) for report in list(cls._phase_f_trade_list_comparison_report_buffer)]
+
+    @classmethod
+    def clear_phase_f_corporate_actions_comparison_reports(cls) -> None:
+        cls._phase_f_corporate_actions_comparison_report_buffer.clear()
+
+    @classmethod
+    def get_phase_f_corporate_actions_comparison_reports(cls) -> List[Dict[str, Any]]:
+        return [dict(report) for report in list(cls._phase_f_corporate_actions_comparison_report_buffer)]
 
     def _owner_kwargs(self) -> Dict[str, Any]:
         return {
@@ -1374,11 +1386,153 @@ class PortfolioService:
             page_size=page_size,
             **self._owner_kwargs(),
         )
-        return {
+        result = {
             "items": [self._corporate_action_row_to_dict(row) for row in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
+        }
+        if self._phase_f_corporate_actions_comparison_enabled():
+            self._maybe_run_phase_f_corporate_actions_comparison(
+                request_context={
+                    "account_id": int(account_id) if account_id is not None else None,
+                    "date_from": date_from.isoformat() if date_from is not None else None,
+                    "date_to": date_to.isoformat() if date_to is not None else None,
+                    "symbol": symbol_norm,
+                    "action_type": action_norm,
+                    "page": page,
+                    "page_size": page_size,
+                },
+                legacy_rows=rows,
+                legacy_result=result,
+            )
+        return result
+
+    def _phase_f_corporate_actions_comparison_enabled(self) -> bool:
+        return bool(getattr(get_config(), "enable_phase_f_corporate_actions_comparison", False))
+
+    def _phase_f_corporate_actions_comparison_account_ids(self) -> Set[int]:
+        raw_value = getattr(get_config(), "phase_f_corporate_actions_comparison_account_ids", [])
+        return {int(item) for item in list(raw_value or []) if item is not None}
+
+    def _phase_f_corporate_actions_comparison_rollout_decision(
+        self,
+        *,
+        request_context: Dict[str, Any],
+    ) -> Tuple[bool, Optional[str]]:
+        allowed_account_ids = self._phase_f_corporate_actions_comparison_account_ids()
+        account_id = request_context.get("account_id")
+        if account_id is None:
+            return False, "account_not_allowlisted"
+        if not allowed_account_ids:
+            return False, "account_not_allowlisted"
+        if int(account_id) not in allowed_account_ids:
+            return False, "account_not_allowlisted"
+        return True, None
+
+    def _maybe_run_phase_f_corporate_actions_comparison(
+        self,
+        *,
+        request_context: Dict[str, Any],
+        legacy_rows: List[Any],
+        legacy_result: Dict[str, Any],
+    ) -> None:
+        legacy_context = dict(request_context or {})
+        _ = list(legacy_rows or [])
+        legacy_view = {
+            "request_context": legacy_context,
+            "items": [dict(item) for item in (legacy_result or {}).get("items", [])],
+            "total": int((legacy_result or {}).get("total", 0) or 0),
+            "page": int((legacy_result or {}).get("page", legacy_context.get("page", 1)) or 1),
+            "page_size": int((legacy_result or {}).get("page_size", legacy_context.get("page_size", 20)) or 20),
+        }
+        legacy_summary = self._summarize_phase_f_corporate_actions_result(legacy_view)
+        comparison_source = "phase_f_pg_corporate_actions_candidate"
+        can_compare, skip_reason = self._phase_f_corporate_actions_comparison_rollout_decision(
+            request_context=legacy_context,
+        )
+        if not can_compare:
+            self._emit_phase_f_corporate_actions_comparison_report(
+                self._build_phase_f_corporate_actions_comparison_report(
+                    comparison_status="skipped",
+                    comparison_attempted=False,
+                    comparison_decision="legacy_served_without_comparison",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=skip_reason,
+                    fallback_decision="legacy_served_without_comparison",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                )
+            )
+            return None
+
+        self._emit_phase_f_corporate_actions_comparison_report(
+            self._build_phase_f_corporate_actions_comparison_report(
+                comparison_status="noop_scaffold",
+                comparison_attempted=False,
+                comparison_decision="legacy_served_without_comparison",
+                comparison_source=comparison_source,
+                comparison_skip_reason="scaffold_only",
+                fallback_decision="legacy_served_without_comparison",
+                request_context=legacy_context,
+                legacy_summary=legacy_summary,
+            )
+        )
+        return None
+
+    def _summarize_phase_f_corporate_actions_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
+        items = list((result_view or {}).get("items", []) or [])
+        return {
+            "total": int((result_view or {}).get("total", 0) or 0),
+            "page": int((result_view or {}).get("page", 1) or 1),
+            "page_size": int((result_view or {}).get("page_size", 20) or 20),
+            "page_item_count": len(items),
+            "ordered_ids": [item.get("id") for item in items],
+        }
+
+    def _emit_phase_f_corporate_actions_comparison_report(self, report: Dict[str, Any]) -> None:
+        self._collect_phase_f_corporate_actions_comparison_report(report)
+        message = json.dumps(report, ensure_ascii=True, sort_keys=True, default=str)
+        logger.info("Phase F corporate-actions comparison diagnostic: %s", message)
+
+    def _collect_phase_f_corporate_actions_comparison_report(self, report: Dict[str, Any]) -> None:
+        if not isinstance(report, dict):
+            return
+        if str(report.get("candidate") or "").strip() != "portfolio_corporate_actions":
+            return
+        if not str(report.get("report_model") or "").strip().startswith("phase_f_corporate_actions_comparison_"):
+            return
+        self.__class__._phase_f_corporate_actions_comparison_report_buffer.append(dict(report))
+
+    def _build_phase_f_corporate_actions_comparison_report(
+        self,
+        *,
+        comparison_status: str,
+        comparison_attempted: bool,
+        comparison_decision: str,
+        comparison_source: str,
+        comparison_skip_reason: Optional[str],
+        fallback_decision: str,
+        request_context: Dict[str, Any],
+        legacy_summary: Dict[str, Any],
+        pg_summary: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "report_model": "phase_f_corporate_actions_comparison_diagnostic_v1",
+            "candidate": "portfolio_corporate_actions",
+            "comparison_status": str(comparison_status or "").strip(),
+            "comparison_attempted": bool(comparison_attempted),
+            "comparison_decision": str(comparison_decision or "").strip(),
+            "comparison_source": str(comparison_source or "").strip(),
+            "comparison_skip_reason": str(comparison_skip_reason or "").strip() or None,
+            "fallback_decision": str(fallback_decision or "").strip(),
+            "request_context": dict(request_context or {}),
+            "owner_context": {
+                "owner_user_id": self._resolve_owner_id(self.owner_id),
+                "include_all_owners": self.include_all_owners,
+            },
+            "legacy_summary": dict(legacy_summary or {}),
+            "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
         }
 
     # ------------------------------------------------------------------

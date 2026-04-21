@@ -30,6 +30,7 @@ from src.postgres_phase_f import (
     PhaseFPortfolioSyncPosition,
     PhaseFPortfolioSyncState,
 )
+from api.v1.schemas.portfolio import PortfolioCorporateActionListResponse
 from src.services.portfolio_service import PortfolioService
 from src.storage import (
     DatabaseManager,
@@ -51,6 +52,7 @@ def _reset_auth_globals() -> None:
 class PostgresPhaseFStorageTestCase(unittest.TestCase):
     def setUp(self) -> None:
         PortfolioService.clear_phase_f_trade_list_comparison_reports()
+        PortfolioService.clear_phase_f_corporate_actions_comparison_reports()
         _reset_auth_globals()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.temp_dir.name)
@@ -61,6 +63,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         PortfolioService.clear_phase_f_trade_list_comparison_reports()
+        PortfolioService.clear_phase_f_corporate_actions_comparison_reports()
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
@@ -2941,6 +2944,177 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual([item["currency"] for item in cash_result["items"]], ["USD"])
         self.assertEqual(action_result["total"], 1)
         self.assertEqual([item["symbol"] for item in action_result["items"]], ["NVDA"])
+
+    def test_phase_f_corporate_actions_comparison_mode_defaults_disabled(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-compare-off-user", username="corp-compare-off-user")
+        service = PortfolioService(owner_id="corp-compare-off-user")
+
+        account = service.create_account(name="Corp Compare Off", broker="IBKR", market="us", base_currency="USD")
+        service.record_corporate_action(
+            account_id=account["id"],
+            symbol="AAPL",
+            effective_date=date(2026, 4, 21),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.25,
+            market="us",
+            currency="USD",
+        )
+
+        with patch.object(
+            service,
+            "_maybe_run_phase_f_corporate_actions_comparison",
+            side_effect=AssertionError("corporate-actions comparison hook should not run while disabled"),
+        ):
+            result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual([item["symbol"] for item in result["items"]], ["AAPL"])
+        self.assertEqual([item["action_type"] for item in result["items"]], ["cash_dividend"])
+        self.assertEqual(result["page"], 1)
+        self.assertEqual(result["page_size"], 20)
+
+    def test_phase_f_corporate_actions_comparison_mode_skip_guard_is_account_scoped_and_legacy_only(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-compare-skip-user", username="corp-compare-skip-user")
+        service = PortfolioService(owner_id="corp-compare-skip-user")
+
+        account = service.create_account(name="Corp Compare Skip", broker="IBKR", market="us", base_currency="USD")
+        service.record_corporate_action(
+            account_id=account["id"],
+            symbol="MSFT",
+            effective_date=date(2026, 4, 22),
+            action_type="split_adjustment",
+            split_ratio=2.0,
+            market="us",
+            currency="USD",
+        )
+
+        skip_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
+            get_config(),
+            "phase_f_corporate_actions_comparison_account_ids",
+            [account["id"] + 999],
+        ), patch.object(
+            service.repo,
+            "query_corporate_actions",
+            wraps=service.repo.query_corporate_actions,
+        ) as legacy_query, patch.object(
+            service,
+            "_emit_phase_f_corporate_actions_comparison_report",
+            side_effect=lambda report: skip_report.update(report),
+        ) as report_emitter:
+            result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+
+        self.assertEqual(legacy_query.call_count, 1)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual([item["symbol"] for item in result["items"]], ["MSFT"])
+        self.assertEqual(skip_report["comparison_status"], "skipped")
+        self.assertFalse(skip_report["comparison_attempted"])
+        self.assertEqual(skip_report["comparison_skip_reason"], "account_not_allowlisted")
+        self.assertEqual(skip_report["comparison_decision"], "legacy_served_without_comparison")
+        self.assertEqual(skip_report["fallback_decision"], "legacy_served_without_comparison")
+        self.assertEqual(skip_report["legacy_summary"]["ordered_ids"], [result["items"][0]["id"]])
+
+    def test_phase_f_corporate_actions_comparison_mode_allowlisted_emits_noop_scaffold_and_preserves_contract(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-compare-noop-user", username="corp-compare-noop-user")
+        service = PortfolioService(owner_id="corp-compare-noop-user")
+
+        account = service.create_account(name="Corp Compare Noop", broker="IBKR", market="us", base_currency="USD")
+        first_action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="NVDA",
+            effective_date=date(2026, 4, 23),
+            action_type="cash_dividend",
+            cash_dividend_per_share=0.1,
+            market="us",
+            currency="USD",
+        )
+        second_action = service.record_corporate_action(
+            account_id=account["id"],
+            symbol="NVDA",
+            effective_date=date(2026, 4, 24),
+            action_type="split_adjustment",
+            split_ratio=4.0,
+            market="us",
+            currency="USD",
+        )
+
+        noop_report: Dict[str, Any] = {}
+
+        with patch.object(get_config(), "enable_phase_f_corporate_actions_comparison", True), patch.object(
+            get_config(),
+            "phase_f_corporate_actions_comparison_account_ids",
+            [account["id"]],
+        ), patch.object(
+            service.repo,
+            "query_corporate_actions",
+            wraps=service.repo.query_corporate_actions,
+        ) as legacy_query, patch.object(
+            service,
+            "_emit_phase_f_corporate_actions_comparison_report",
+            side_effect=lambda report: noop_report.update(report),
+        ) as report_emitter:
+            result = service.list_corporate_action_events(account_id=account["id"], page=1, page_size=20)
+
+        validated = PortfolioCorporateActionListResponse(**result)
+
+        self.assertEqual(legacy_query.call_count, 1)
+        self.assertEqual(report_emitter.call_count, 1)
+        self.assertEqual(result["total"], 2)
+        self.assertEqual([item["id"] for item in result["items"]], [second_action["id"], first_action["id"]])
+        self.assertEqual([item["effective_date"] for item in result["items"]], ["2026-04-24", "2026-04-23"])
+        self.assertEqual(validated.total, 2)
+        self.assertEqual(validated.page, 1)
+        self.assertEqual(validated.page_size, 20)
+        self.assertEqual([item.action_type for item in validated.items], ["split_adjustment", "cash_dividend"])
+        self.assertEqual(noop_report["comparison_status"], "noop_scaffold")
+        self.assertFalse(noop_report["comparison_attempted"])
+        self.assertEqual(noop_report["comparison_skip_reason"], "scaffold_only")
+        self.assertEqual(noop_report["comparison_decision"], "legacy_served_without_comparison")
+        self.assertEqual(noop_report["fallback_decision"], "legacy_served_without_comparison")
+        self.assertEqual(noop_report["comparison_source"], "phase_f_pg_corporate_actions_candidate")
+        self.assertEqual(noop_report["legacy_summary"]["ordered_ids"], [second_action["id"], first_action["id"]])
+        self.assertIsNone(noop_report["pg_summary"])
+
+    def test_phase_f_corporate_actions_comparison_report_shape_is_bounded(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="corp-shape-user", username="corp-shape-user")
+        service = PortfolioService(owner_id="corp-shape-user")
+
+        report = service._build_phase_f_corporate_actions_comparison_report(
+            comparison_status="disabled",
+            comparison_attempted=False,
+            comparison_decision="legacy_served_without_comparison",
+            comparison_source="phase_f_pg_corporate_actions_candidate",
+            comparison_skip_reason="comparison_disabled",
+            fallback_decision="legacy_served_without_comparison",
+            request_context={
+                "account_id": 1,
+                "date_from": None,
+                "date_to": None,
+                "symbol": "AAPL",
+                "action_type": "cash_dividend",
+                "page": 1,
+                "page_size": 20,
+            },
+            legacy_summary={"total": 1, "page_item_count": 1, "ordered_ids": [5]},
+        )
+
+        self.assertEqual(report["report_model"], "phase_f_corporate_actions_comparison_diagnostic_v1")
+        self.assertEqual(report["candidate"], "portfolio_corporate_actions")
+        self.assertEqual(report["comparison_status"], "disabled")
+        self.assertFalse(report["comparison_attempted"])
+        self.assertEqual(report["comparison_skip_reason"], "comparison_disabled")
+        self.assertEqual(report["comparison_source"], "phase_f_pg_corporate_actions_candidate")
+        self.assertEqual(report["request_context"]["action_type"], "cash_dividend")
+        self.assertEqual(report["legacy_summary"]["ordered_ids"], [5])
+        self.assertEqual(report["owner_context"]["owner_user_id"], "corp-shape-user")
+        self.assertFalse(report["owner_context"]["include_all_owners"])
+        self.assertIsNone(report["pg_summary"])
 
     def test_phase_f_trade_list_comparison_report_shape_is_bounded(self) -> None:
         db = self._db()

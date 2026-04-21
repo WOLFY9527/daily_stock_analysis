@@ -723,6 +723,8 @@ class Config:
     postgres_phase_a_apply_schema: bool = True
     enable_phase_f_trades_list_comparison: bool = False
     phase_f_trades_list_comparison_account_ids: List[int] = field(default_factory=list)
+    enable_phase_f_corporate_actions_comparison: bool = False
+    phase_f_corporate_actions_comparison_account_ids: List[int] = field(default_factory=list)
 
     # 是否保存分析上下文快照（用于历史回溯）
     save_context_snapshot: bool = True
@@ -1417,6 +1419,14 @@ class Config:
             phase_f_trades_list_comparison_account_ids=parse_env_int_list(
                 os.getenv('PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS'),
                 field_name='PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS',
+            ),
+            enable_phase_f_corporate_actions_comparison=parse_env_bool(
+                os.getenv('ENABLE_PHASE_F_CORPORATE_ACTIONS_COMPARISON'),
+                False,
+            ),
+            phase_f_corporate_actions_comparison_account_ids=parse_env_int_list(
+                os.getenv('PHASE_F_CORPORATE_ACTIONS_COMPARISON_ACCOUNT_IDS'),
+                field_name='PHASE_F_CORPORATE_ACTIONS_COMPARISON_ACCOUNT_IDS',
             ),
             save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
             backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',
