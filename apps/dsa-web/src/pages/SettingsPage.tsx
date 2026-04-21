@@ -3519,7 +3519,7 @@ const SettingsPage: React.FC = () => {
                     if (adminLocked) {
                       return;
                     }
-                    await saveExternalItems([{ key: 'STOCK_LIST', value }], '自选股配置已更新');
+                    await saveExternalItems([{ key: 'STOCK_LIST', value }], t('settings.success'));
                   }}
                   disabled={isSaving || isLoading || adminLocked}
                 />
