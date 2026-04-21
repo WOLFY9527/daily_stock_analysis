@@ -1473,7 +1473,7 @@ const RESOURCES = {
         awaitingTarget: 'Awaiting target',
         pendingAnalysis: 'Pending analysis',
         ready: 'Ready',
-        liveDraftBody: 'Live draft assembling. Will resolve into final structured report.',
+        liveDraftBody: 'Building a live draft. It will resolve into the final structured report.',
       },
     },
     scanner: {
@@ -2086,7 +2086,7 @@ const RESOURCES = {
       },
       generation: {
         eyebrow: 'Report Draft',
-        body: 'Shell stabilized. Awaiting convergence to final structured analysis.',
+        body: 'The report shell stays stable while the final structured analysis is generated.',
         aria: 'Generation states',
         retryAnalysis: 'Retry analysis',
         restartGeneration: 'Restart generation',
@@ -2113,7 +2113,7 @@ const RESOURCES = {
           failed: 'Fault',
         },
         sections: {
-          summary: 'Decision Scaffold',
+          summary: 'Decision Summary',
           market: 'Market Context',
           evidence: 'Signals & Evidence',
           catalysts: 'Catalysts & News',
@@ -2147,7 +2147,7 @@ const RESOURCES = {
           gateway: 'Gateway: {gateway}',
         },
         catalystsState: {
-          settling: 'Catalysts and narratives resolving into final report.',
+          settling: 'Catalysts and narratives are being consolidated into the final report.',
         },
         riskState: {
           error: 'Generation error: {error}',
