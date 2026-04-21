@@ -124,8 +124,27 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: '返回扫描器预览' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to scanner preview' }));
 
     expect(navigate).toHaveBeenCalledWith('/en/scanner', { replace: true });
+  });
+
+  it('renders visible login copy in English for /en/login', () => {
+    window.history.replaceState(window.history.state, '', '/en/login?redirect=%2Fen%2Fchat');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fen%2Fchat')]);
+    useAuthMock.mockReturnValue({
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    expect(screen.getByRole('heading', { name: 'Sign in to research workspace' })).toBeInTheDocument();
+    expect(screen.getByText('Continue after sign-in')).toBeInTheDocument();
+    expect(screen.getByText('After sign-in you will continue to: Ask Stock workspace')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to home' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Authorize access' })).toBeInTheDocument();
   });
 });

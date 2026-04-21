@@ -15,8 +15,8 @@ To completely redesign the frontend UI/UX, improving clarity, usability, informa
 6. [06_implementation_plan.md](./06_implementation_plan.md) - Phased rollout strategy (Phase 1 & 2).
 
 ## Hard Constraints Addressed
-- **Zero modification to production code** (`apps/dsa-web/src/`).
-- **Zero modification to main or bug-fix branches.**
-- **Strictly scoped to `docs/frontend-redesign/` directory.**
+- **For the redesign-planning deliverables in this directory, keep authored content scoped to `docs/frontend-redesign/`.**
+- **Treat the redesign specs as planning artifacts; implementation PRs may still modify production code outside this directory when executing approved slices.**
+- **Do not treat this document set as evidence that the current PR or branch made zero production-code changes.**
 - **No mixed Chinese/English UI labels.**
 - **Professional finance and Web3 terminology only.**
