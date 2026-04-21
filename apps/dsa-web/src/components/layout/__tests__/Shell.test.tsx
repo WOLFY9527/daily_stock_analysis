@@ -120,6 +120,28 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
   });
 
+  it('keeps a logout path visible for non-guest shell states even when auth is disabled', () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: false,
+      loggedIn: false,
+      currentUser: null,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
+  });
+
   it('hides the Ask Stock navigation entry when the agent runtime is unavailable', async () => {
     mockGetAgentStatus.mockResolvedValueOnce({ enabled: false });
 

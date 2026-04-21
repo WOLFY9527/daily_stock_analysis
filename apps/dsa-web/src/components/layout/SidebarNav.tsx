@@ -108,7 +108,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { authEnabled, loggedIn, logout } = useAuth();
+  const { authEnabled, logout } = useAuth();
   const { isGuest, isAdminAccount, isAdminMode, toggleAdminSurfaceMode } = useProductSurface();
   const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
@@ -336,7 +336,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const logoutAction = authEnabled && loggedIn ? (
+  const logoutAction = !isGuest ? (
     <button
       type="button"
       onClick={() => setShowLogoutConfirm(true)}
