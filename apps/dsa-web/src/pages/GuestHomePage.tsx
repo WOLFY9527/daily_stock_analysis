@@ -69,8 +69,8 @@ const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
     helper: 'Guests can generate a lightweight decision snapshot. Full reports, Ask Stock, backtests, portfolio tools, and saved history unlock after sign-in.',
     previewTitle: 'Instant Analysis Snapshot',
     previewNote: 'This preview is intentionally limited. It is not persisted and does not unlock deep follow-up flows.',
-    unlockTitle: 'Continue the full workflow after sign-in',
-    unlockBody: 'Once you sign in, analysis, chat, portfolio, backtests, and saved history all bind to your own account instead of falling back to any shared workspace assumption.',
+    unlockTitle: 'Continue with the full research workspace after sign-in',
+    unlockBody: 'Once you sign in, your analysis, chat, portfolio, backtests, and saved history all stay attached to your own account instead of a shared guest workspace.',
     decision: 'Action',
     trend: 'Trend',
     score: 'Sentiment',
@@ -233,7 +233,7 @@ const GuestHomePage: React.FC = () => {
             </div>
           </Card>
 
-          <Card title={copy.unlockTitle} subtitle={language === 'en' ? 'Unlock Next' : '继续深入'}>
+          <Card title={copy.unlockTitle} subtitle={language === 'en' ? 'Next Step' : '继续深入'}>
             <div className="space-y-4">
               <p className="text-sm leading-6 text-secondary-text">{copy.unlockBody}</p>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
@@ -273,8 +273,8 @@ const GuestHomePage: React.FC = () => {
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-5">
         <LockedFeatureCard
           icon={BarChart3}
-          title={language === 'en' ? 'Full Report Layers' : '完整研究报告'}
-          body={language === 'en' ? 'Unlock the full report stack, evidence layers, charts, and detailed battle plan.' : '登录后查看完整报告层级、证据链、图表与执行计划。'}
+          title={language === 'en' ? 'Full Research Reports' : '完整研究报告'}
+          body={language === 'en' ? 'Unlock full reports, supporting evidence, charts, and a detailed action plan.' : '登录后查看完整报告层级、证据链、图表与执行计划。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={copy.signIn}
           ctaTo={loginPath}
@@ -305,7 +305,7 @@ const GuestHomePage: React.FC = () => {
         />
         <LockedFeatureCard
           icon={History}
-          title={language === 'en' ? 'Saved History & Reviews' : '历史与复盘'}
+          title={language === 'en' ? 'Saved History and Reviews' : '历史与复盘'}
           body={language === 'en' ? 'Review your own analysis history, scanner runs, and follow-up decisions without shared global state.' : '查看你自己的分析历史、扫描记录与后续复盘，不再依赖共享全局状态。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={language === 'en' ? 'Preview scanner' : '查看扫描器预告'}
@@ -313,21 +313,21 @@ const GuestHomePage: React.FC = () => {
         />
       </div>
 
-      <Card title={language === 'en' ? 'Guest boundaries' : '游客边界'} subtitle={language === 'en' ? 'Security stays server-first' : '安全边界保持后端优先'}>
+      <Card title={language === 'en' ? 'Guest boundaries' : '游客边界'} subtitle={language === 'en' ? 'Guest access stays limited' : '安全边界保持后端优先'}>
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
-              ? 'Guest previews do not create a personal owner record and do not unlock cross-page stateful workflows.'
+              ? 'Guest previews do not create a personal account record and do not unlock connected workflows across the product.'
               : '游客预览不会创建个人账户归属记录，也不会解锁跨页面的持久化工作流。'}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
-              ? 'Persistent portfolio, scanner, backtest, chat, and history flows remain tied to authenticated user identity.'
+              ? 'Portfolio, scanner, backtest, chat, and saved history remain tied to a signed-in account.'
               : '持仓、扫描器、回测、问股与历史等持久化流程仍然严格绑定到已认证用户身份。'}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
-              ? 'System configuration, schedules, notification channels, and operator logs remain outside the guest surface.'
+              ? 'System settings, schedules, notification channels, and admin logs remain outside the guest surface.'
               : '系统配置、调度、通知通道与运营日志仍然保留在游客界面之外。'}
           </div>
         </div>
