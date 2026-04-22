@@ -221,18 +221,18 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
         statusLabel: isEnglish ? 'Admin Sign-in Required' : '需要管理员登录',
         title: isEnglish ? 'Sign in with an admin account to open logs center' : '请使用管理员账户登录后进入日志中心',
         description: isEnglish
-          ? 'Execution logs remain in the operator surface and are not part of the guest or normal-user product flow.'
-          : '执行日志仍属于 operator 控制面，不属于游客或普通用户的默认产品流。',
+          ? 'Execution logs belong to the admin workspace and are not part of the guest or standard-user flow.'
+          : '执行日志属于管理员工作区，不属于游客或普通用户的默认产品流。',
         bullets: isEnglish
           ? [
-            'Guest mode never maps to bootstrap or admin identities.',
+            'Guest mode never maps to setup or admin identities.',
             'System logs stay protected even when the route is known.',
-            'Use an admin account if you need provider, schedule, or observability control.',
+            'Use an admin account if you need data-source, schedule, or observability controls.',
           ]
           : [
-            '游客模式绝不会映射到 bootstrap 或管理员身份。',
+            '游客模式绝不会映射到初始设置账户或管理员身份。',
             '即使知道路由地址，系统日志仍然会被保护。',
-            '如果你需要 provider、调度或可观测性控制，请使用管理员账户。',
+            '如果你需要数据源、调度或可观测性控制，请使用管理员账户。',
           ],
         secondaryAction: {
           label: isEnglish ? 'Back home' : '返回首页',
@@ -271,20 +271,20 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     ? {
       eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
       statusLabel: isEnglish ? 'Admin Sign-in Required' : '需要管理员登录',
-      title: isEnglish ? 'Sign in with an admin account to enter operator surfaces' : '请使用管理员账户登录后进入 operator 界面',
+      title: isEnglish ? 'Sign in with an admin account to enter the admin workspace' : '请使用管理员账户登录后进入管理员工作区',
       description: isEnglish
-        ? 'System configuration, provider controls, schedules, channels, and operator logs are not part of the standard user product surface.'
-        : '系统配置、provider 控制、调度、通道和 operator 日志不属于标准用户产品面。',
+        ? 'System settings, data-source controls, schedules, channels, and admin logs are not part of the standard user product surface.'
+        : '系统设置、数据源控制、调度、通道和管理员日志不属于标准用户产品面。',
       bullets: isEnglish
         ? [
-          'Guest mode never maps to admin or bootstrap identities.',
-          'Operator controls stay behind explicit admin-only entry points.',
-          'Use an admin account if you need system configuration rather than personal settings.',
+          'Guest mode never maps to admin or initial-setup identities.',
+          'Admin tools stay behind explicit admin-only entry points.',
+          'Use an admin account if you need system settings rather than personal preferences.',
         ]
         : [
-          '游客模式绝不会映射到 admin 或 bootstrap 身份。',
-          'operator 控制项仍然保留在显式的 admin-only 入口之后。',
-          '如果你需要系统配置而不是个人偏好，请使用管理员账户登录。',
+          '游客模式绝不会映射到管理员或初始设置身份。',
+          '管理员工具仍然保留在显式的管理员入口之后。',
+          '如果你需要系统设置而不是个人偏好，请使用管理员账户登录。',
         ],
       secondaryAction: {
         label: isEnglish ? 'Back home' : '返回首页',
