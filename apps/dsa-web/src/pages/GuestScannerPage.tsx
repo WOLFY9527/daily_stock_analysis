@@ -34,17 +34,17 @@ const GuestScannerPage: React.FC = () => {
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
                   ? 'Signed-in users get their own manual scanner runs, shortlist detail, and handoff into analysis or backtest without sharing history with other accounts.'
-                  : '登录用户只会看到自己的手动扫描结果、候选名单详情，以及通向分析或回测的个人化工作流，不再与其他账户共享历史。'}
+                  : '登录用户只会看到自己的手动扫描结果、候选名单详情，以及通向分析或回测的个人流程，不再与其他账户共享历史。'}
               </div>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
-                  ? 'Admin-only watchlists, schedules, daily operating status, and admin history stay outside the guest and standard user scanner views.'
-                  : '管理员专属的系统观察名单、调度、运营状态与运营历史继续保留在游客页和普通用户扫描器之外。'}
+                  ? 'Admin-only watchlists, schedules, daily status, and admin history stay outside guest and regular user scanner pages.'
+                  : '管理员专属的系统观察名单、调度、运行状态与管理员历史继续保留在游客页和普通用户扫描器之外。'}
               </div>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
                   ? 'This preview explains the scanner instead of running it live, so guests cannot create shared scanner activity.'
-                  : '这个预告页刻意只做说明而不执行实时运行，确保游客不会创建共享的运营状态。'}
+                  : '这个预览页只做说明而不执行实时运行，确保游客不会创建共享的扫描记录。'}
               </div>
             </div>
           </Card>
@@ -58,7 +58,7 @@ const GuestScannerPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {language === 'en' ? 'Personal scanner workspace' : '个人扫描工作区'}
+                      {language === 'en' ? 'Personal scanner' : '个人扫描器'}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-muted-text">
                       {language === 'en'
@@ -113,7 +113,7 @@ const GuestScannerPage: React.FC = () => {
         <LockedFeatureCard
           icon={TestTubeDiagonal}
           title={language === 'en' ? 'Backtest handoff' : '回测联动'}
-          body={language === 'en' ? 'Push candidates into deterministic backtests and keep the results in your own workspace.' : '把候选送入确定性回测，并将结果保存到你的个人工作区。'}
+          body={language === 'en' ? 'Push candidates into deterministic backtests and keep the results in your own account.' : '把候选送入确定性回测，并将结果保存到你的个人账户中。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={language === 'en' ? 'Open home preview' : '回到首页预览'}
           ctaTo="/"

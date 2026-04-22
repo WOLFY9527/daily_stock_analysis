@@ -38,7 +38,7 @@ type GuestHomeCopy = {
 const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
   zh: {
     title: '游客预览模式',
-    description: '先体验简版分析摘要，再决定是否注册进入完整研究工作台。游客预览不会保存历史，也不会创建用户数据。',
+    description: '先体验简版分析摘要，再决定是否注册解锁完整功能。游客预览不会保存历史，也不会创建用户数据。',
     inputLabel: '输入标的',
     inputPlaceholder: '输入股票代码或名称，如 600519、贵州茅台、AAPL',
     submit: '生成简版判断',
@@ -46,8 +46,8 @@ const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
     helper: '游客可获取一次简版决策摘要；完整报告、问股、回测、持仓与历史需要登录后解锁。',
     previewTitle: '即时分析预览',
     previewNote: '该结果仅用于游客模式预览，不写入历史记录，也不开放深度问答。',
-    unlockTitle: '登录后继续完整研究',
-    unlockBody: '进入账户后，你的分析、问股、持仓、回测与历史都会绑定到个人身份，不再走共享工作区假设。',
+    unlockTitle: '登录后继续完整功能',
+    unlockBody: '进入账户后，你的分析、问股、持仓、回测与历史都会绑定到个人身份，不再走共享游客状态。',
     decision: '动作建议',
     trend: '趋势判断',
     score: '情绪分数',
@@ -57,11 +57,11 @@ const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
     noValue: '待生成',
     signIn: '登录解锁',
     createAccount: '创建账户',
-    unlockPrimary: '登录后解锁完整研究工作台',
+    unlockPrimary: '登录后解锁完整功能',
   },
   en: {
     title: 'Guest Preview Mode',
-    description: 'Try a limited analysis snapshot first, then sign in for the full research workspace. Guest previews are never saved as user data.',
+    description: 'Try a lightweight analysis snapshot first, then sign in for saved reports, Ask Stock, portfolio, and backtests. Guest previews are never saved to an account.',
     inputLabel: 'Enter a symbol',
     inputPlaceholder: 'Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL',
     submit: 'Generate snapshot',
@@ -69,8 +69,8 @@ const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
     helper: 'Guests can generate a lightweight decision snapshot. Full reports, Ask Stock, backtests, portfolio tools, and saved history unlock after sign-in.',
     previewTitle: 'Instant Analysis Snapshot',
     previewNote: 'This preview is intentionally limited. It is not persisted and does not unlock deep follow-up flows.',
-    unlockTitle: 'Continue with the full research workspace after sign-in',
-    unlockBody: 'Once you sign in, your analysis, chat, portfolio, backtests, and saved history all stay attached to your own account instead of a shared guest workspace.',
+    unlockTitle: 'Sign in for the full app',
+    unlockBody: 'Once you sign in, your analysis, chats, portfolio, backtests, and saved history stay attached to your own account.',
     decision: 'Action',
     trend: 'Trend',
     score: 'Sentiment',
@@ -80,7 +80,7 @@ const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
     noValue: 'Waiting',
     signIn: 'Sign in',
     createAccount: 'Create account',
-    unlockPrimary: 'Unlock the full research workspace',
+    unlockPrimary: 'Unlock saved reports, chat, portfolio, and backtests',
   },
 };
 
@@ -128,7 +128,7 @@ const GuestHomePage: React.FC = () => {
   return (
     <div className="space-y-6">
       <WorkspacePageHeader
-        eyebrow={language === 'en' ? 'Guest Surface' : '游客入口'}
+        eyebrow={language === 'en' ? 'Guest Preview' : '游客预览'}
         title={copy.title}
         description={copy.description}
         actions={(
@@ -245,8 +245,8 @@ const GuestHomePage: React.FC = () => {
                     <p className="text-sm font-semibold text-foreground">{copy.unlockPrimary}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-text">
                       {language === 'en'
-                        ? 'Create a personal workspace with saved reports, account-aware chat, watchlists, backtests, and portfolio data.'
-                        : '创建个人工作区后，完整报告、问股、观察名单、回测与持仓都会按账户归属保存。'}
+                        ? 'Create an account to save reports, chats, watchlists, backtests, and portfolio data under your own name.'
+                        : '创建账户后，完整报告、问股、观察名单、回测与持仓都会按你的身份保存。'}
                     </p>
                   </div>
                 </div>
@@ -289,7 +289,7 @@ const GuestHomePage: React.FC = () => {
         />
         <LockedFeatureCard
           icon={BriefcaseBusiness}
-          title={language === 'en' ? 'Portfolio Workspace' : '持仓工作区'}
+          title={language === 'en' ? 'Portfolio' : '持仓'}
           body={language === 'en' ? 'Connect trades, positions, cash events, and portfolio risk to your own account.' : '将交易、仓位、资金流水与风险分析绑定到你的个人账户。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={copy.signIn}
@@ -297,8 +297,8 @@ const GuestHomePage: React.FC = () => {
         />
         <LockedFeatureCard
           icon={TestTubeDiagonal}
-          title={language === 'en' ? 'Backtest Workspace' : '回测工作区'}
-          body={language === 'en' ? 'Run deterministic and rule backtests, then keep the results under your own identity.' : '运行确定性回测与规则回测，并将结果保存在自己的身份空间下。'}
+          title={language === 'en' ? 'Backtests' : '回测'}
+          body={language === 'en' ? 'Run deterministic and rule backtests, then save the results to your own account.' : '运行确定性回测与规则回测，并将结果保存到你自己的账户中。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={copy.signIn}
           ctaTo={loginPath}
@@ -306,7 +306,7 @@ const GuestHomePage: React.FC = () => {
         <LockedFeatureCard
           icon={History}
           title={language === 'en' ? 'Saved History and Reviews' : '历史与复盘'}
-          body={language === 'en' ? 'Review your own analysis history, scanner runs, and follow-up decisions without shared global state.' : '查看你自己的分析历史、扫描记录与后续复盘，不再依赖共享全局状态。'}
+          body={language === 'en' ? 'Review your own analysis history, scanner runs, and follow-up decisions without mixing with other accounts.' : '查看你自己的分析历史、扫描记录与后续复盘，不会和其他账户混在一起。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={language === 'en' ? 'Preview scanner' : '查看扫描器预告'}
           ctaTo="/scanner"
@@ -317,8 +317,8 @@ const GuestHomePage: React.FC = () => {
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
-              ? 'Guest previews do not create a personal account record and do not unlock connected workflows across the product.'
-              : '游客预览不会创建个人账户归属记录，也不会解锁跨页面的持久化工作流。'}
+              ? 'Guest previews do not create an account record and do not unlock saved cross-page features.'
+              : '游客预览不会创建账户记录，也不会解锁跨页面保存的功能。'}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
@@ -327,8 +327,8 @@ const GuestHomePage: React.FC = () => {
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'
-              ? 'System settings, schedules, notification channels, and admin logs remain outside the guest surface.'
-              : '系统配置、调度、通知通道与运营日志仍然保留在游客界面之外。'}
+              ? 'System settings, schedules, notification channels, and admin logs remain outside guest pages.'
+              : '系统配置、调度、通知通道与管理员日志仍然保留在游客页面之外。'}
           </div>
         </div>
       </Card>

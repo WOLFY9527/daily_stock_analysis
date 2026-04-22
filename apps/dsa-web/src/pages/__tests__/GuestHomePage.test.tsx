@@ -79,7 +79,7 @@ describe('GuestHomePage', () => {
 
     expect(screen.getByText('完整研究报告')).toBeInTheDocument();
     expect(screen.getByText('问股追问')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
+    expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/zh/login?mode=create&redirect=%2Fzh');
 
     fireEvent.change(screen.getByLabelText('guest-stock-input'), { target: { value: 'AAPL' } });
     fireEvent.click(screen.getByRole('button', { name: '生成简版判断' }));

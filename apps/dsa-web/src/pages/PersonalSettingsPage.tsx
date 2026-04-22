@@ -137,10 +137,10 @@ const PersonalSettingsPage: React.FC = () => {
     <div className="space-y-6">
       <WorkspacePageHeader
         eyebrow={language === 'en' ? 'Personal Settings' : '个人设置'}
-        title={language === 'en' ? 'Workspace preferences' : '工作区偏好'}
+        title={language === 'en' ? 'Personal preferences' : '个人偏好'}
         description={language === 'en'
-          ? 'Keep appearance, readability, and personal session controls separate from system-level administration settings.'
-          : '将外观、可读性和个人会话控制，与系统级运维配置明确分开。'}
+          ? 'Keep appearance, readability, and personal account controls separate from system administration settings.'
+          : '将外观、可读性和个人账户控制，与系统级管理设置明确分开。'}
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
@@ -203,7 +203,7 @@ const PersonalSettingsPage: React.FC = () => {
           </div>
         </Card>
 
-        <Card title={language === 'en' ? 'Access scope' : '访问层'} subtitle={language === 'en' ? 'Account and settings boundaries' : '账号与设置边界'}>
+        <Card title={language === 'en' ? 'Account access' : '账号访问'} subtitle={language === 'en' ? 'Account and settings boundaries' : '账号与设置边界'}>
           <div className="space-y-4">
             {isGuest && authEnabled ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-4 py-4">
@@ -269,12 +269,12 @@ const PersonalSettingsPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {language === 'en' ? 'Admin mode split' : 'Admin 模式分层'}
+                      {language === 'en' ? 'Separate admin tools' : '管理员工具分层'}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
                       {language === 'en'
-                        ? 'Your admin account now defaults to a normal user-like surface. Operator tools stay behind an explicit Admin Mode switch.'
-                        : '你的管理员账户现在默认先以普通用户形态进入产品，运维工具会继续留在显式的管理员模式开关之后。'}
+                        ? 'Your admin account now defaults to the regular app. Admin tools stay behind a separate switch.'
+                        : '你的管理员账户现在默认先进入普通页面，管理工具会继续保留在单独的开关之后。'}
                     </p>
                   </div>
                 </div>
@@ -285,13 +285,13 @@ const PersonalSettingsPage: React.FC = () => {
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                   >
                     {isAdminMode
-                      ? (language === 'en' ? 'Return to User Mode' : '返回普通模式')
-                      : (language === 'en' ? 'Enter Admin Mode' : '进入管理员模式')}
+                      ? (language === 'en' ? 'Return to regular pages' : '返回普通页面')
+                      : (language === 'en' ? 'Open admin tools' : '打开管理工具')}
                   </button>
                   <span className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text">
                     {isAdminMode
-                      ? (language === 'en' ? 'Current surface: Admin Mode' : '当前产品面：管理员模式')
-                      : (language === 'en' ? 'Current surface: User Mode' : '当前产品面：普通模式')}
+                      ? (language === 'en' ? 'Current view: Admin tools' : '当前视图：管理工具')
+                      : (language === 'en' ? 'Current view: Regular pages' : '当前视图：普通页面')}
                   </span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
@@ -313,8 +313,8 @@ const PersonalSettingsPage: React.FC = () => {
                   ) : (
                     <p className="text-xs leading-5 text-secondary-text">
                       {language === 'en'
-                        ? 'Stay in User Mode for everyday analysis, then switch into Admin Mode only when you need system settings or operator logs.'
-                        : '日常分析先停留在普通模式，只有需要系统设置或运维日志时再显式切换到管理员模式。'}
+                        ? 'Stay in regular pages for everyday analysis, then turn on admin tools only when you need system settings or admin logs.'
+                        : '日常分析先停留在普通页面，只有需要系统设置或管理员日志时再开启管理工具。'}
                     </p>
                   )}
                 </div>
@@ -387,8 +387,8 @@ const PersonalSettingsPage: React.FC = () => {
                     </label>
                     <p className="text-xs leading-5 text-secondary-text">
                       {language === 'en'
-                        ? 'Discord delivery uses the webhook you provide here and stays separate from shared operator channels.'
-                        : 'Discord 通知会使用你在这里填写的 Webhook，并继续与共享的运维通道保持分离。'}
+                        ? 'Discord delivery uses the webhook you provide here and stays separate from shared admin channels.'
+                        : 'Discord 通知会使用你在这里填写的 Webhook，并继续与共享的管理员通道保持分离。'}
                     </p>
                     {notificationNotice ? (
                       <p className="text-xs leading-5 text-[hsl(var(--accent-positive-hsl))]">{notificationNotice}</p>

@@ -164,11 +164,11 @@ describe('AppContent route flows', () => {
 
     renderAt('/settings/system');
 
-    expect(await screen.findByRole('heading', { name: 'This operator surface requires an admin account' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'This page requires an admin account' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open personal settings' })).toHaveAttribute('href', '/settings');
   });
 
-  it('shows the admin-mode gate when an admin account stays in User Mode', async () => {
+  it('shows the admin-tools gate when an admin account stays in regular mode', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -184,11 +184,11 @@ describe('AppContent route flows', () => {
 
     renderAt('/settings/system');
 
-    expect(await screen.findByRole('heading', { name: 'Turn on Admin Mode to open operator tools' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Turn on admin tools to open this page' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open personal settings' })).toHaveAttribute('href', '/settings');
   });
 
-  it('renders admin routes once Admin Mode is enabled', async () => {
+  it('renders admin routes once admin tools are enabled', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,

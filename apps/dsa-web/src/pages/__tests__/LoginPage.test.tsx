@@ -62,7 +62,7 @@ describe('LoginPage', () => {
     renderPage();
 
     fireEvent.change(screen.getByLabelText('登录密码'), { target: { value: 'passwd6' } });
-    fireEvent.click(screen.getByRole('button', { name: '授权进入工作台' }));
+    fireEvent.click(screen.getByRole('button', { name: '登录继续' }));
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings', { replace: true }));
   });
@@ -80,7 +80,7 @@ describe('LoginPage', () => {
     expect(screen.getByRole('heading', { name: '创建账户并登录' })).toBeInTheDocument();
     expect(screen.getByLabelText('用户名')).toBeInTheDocument();
     expect(screen.getByLabelText('显示名称')).toBeInTheDocument();
-    expect(screen.getByText('登录后将继续进入：扫描器工作区')).toBeInTheDocument();
+    expect(screen.getByText('登录后将继续进入：扫描器')).toBeInTheDocument();
   });
 
   it('offers a safe exit back to home for direct login entry', () => {
@@ -140,11 +140,11 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    expect(screen.getByRole('heading', { name: 'Sign in to research workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in to WolfyStock' })).toBeInTheDocument();
     expect(screen.getByText('Continue after sign-in')).toBeInTheDocument();
-    expect(screen.getByText('After sign-in you will continue to: Ask Stock workspace')).toBeInTheDocument();
+    expect(screen.getByText('After sign-in you will continue to: Ask Stock')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back to home' })).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Authorize access' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 });
