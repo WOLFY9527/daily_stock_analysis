@@ -120,7 +120,7 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
       title: isEnglish ? 'Sign in to reopen saved backtest results' : '登录后重新打开已保存的回测结果',
       description: isEnglish
         ? 'Historical backtest results remain bound to authenticated identity so one user never reopens another user’s saved run.'
-        : '历史回测结果会绑定到已认证身份，避免一个用户重新打开另一个用户保存的 run。',
+        : '历史回测结果会绑定到已认证身份，避免一个用户重新打开另一个用户保存的回测记录。',
       bullets: isEnglish
         ? [
           'Backtest results and history are protected by ownership-aware backend rules.',
@@ -128,8 +128,8 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
           'Sign in to continue exactly where your own research workspace left off.',
         ]
         : [
-          '回测结果与历史已经由 owner-aware 后端规则保护。',
-          '游客模式不会暴露已保存 run 的细节和历史指标。',
+          '回测结果与历史已经由基于归属的后端规则保护。',
+          '游客模式不会暴露已保存回测记录的细节和历史指标。',
           '登录后可以从你自己的研究工作区继续接着看。',
         ],
       note: isEnglish
