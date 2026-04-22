@@ -38,16 +38,16 @@ type GuestHomeCopy = {
 const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
   zh: {
     title: '游客预览模式',
-    description: '先体验简版分析摘要，再决定是否注册解锁完整功能。游客预览不会保存历史，也不会创建用户数据。',
+    description: '先看一份简版分析，再决定是否登录继续。游客预览不会保存历史，也不会创建个人数据。',
     inputLabel: '输入标的',
     inputPlaceholder: '输入股票代码或名称，如 600519、贵州茅台、AAPL',
     submit: '生成简版判断',
     submitting: '生成中...',
-    helper: '游客可获取一次简版决策摘要；完整报告、问股、回测、持仓与历史需要登录后解锁。',
+    helper: '游客可以先查看一份简版分析；完整报告、后续交流、回测、持仓和历史记录需要登录后使用。',
     previewTitle: '即时分析预览',
-    previewNote: '该结果仅用于游客模式预览，不写入历史记录，也不开放深度问答。',
+    previewNote: '该结果仅用于游客预览，不写入历史记录，也不开放后续交流。',
     unlockTitle: '登录后继续完整功能',
-    unlockBody: '进入账户后，你的分析、问股、持仓、回测与历史都会绑定到个人身份，不再走共享游客状态。',
+    unlockBody: '登录后，你的分析结果、交流记录、持仓、回测和历史都会保存在你自己的账户下。',
     decision: '动作建议',
     trend: '趋势判断',
     score: '情绪分数',
@@ -57,20 +57,20 @@ const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
     noValue: '待生成',
     signIn: '登录解锁',
     createAccount: '创建账户',
-    unlockPrimary: '登录后解锁完整功能',
+    unlockPrimary: '登录后继续完整使用',
   },
   en: {
     title: 'Guest Preview Mode',
-    description: 'Try a lightweight analysis snapshot first, then sign in for saved reports, Ask Stock, portfolio, and backtests. Guest previews are never saved to an account.',
+    description: 'Start with a lightweight analysis snapshot, then sign in if you want to keep going. Guest previews are never saved to an account.',
     inputLabel: 'Enter a symbol',
     inputPlaceholder: 'Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL',
     submit: 'Generate snapshot',
     submitting: 'Generating...',
-    helper: 'Guests can generate a lightweight decision snapshot. Full reports, Ask Stock, backtests, portfolio tools, and saved history unlock after sign-in.',
+    helper: 'Guests can generate one lightweight analysis snapshot. Full reports, follow-up chat, backtests, portfolio tools, and saved history unlock after sign-in.',
     previewTitle: 'Instant Analysis Snapshot',
-    previewNote: 'This preview is intentionally limited. It is not persisted and does not unlock deep follow-up flows.',
+    previewNote: 'This preview is intentionally limited. It is not saved and does not unlock follow-up chat.',
     unlockTitle: 'Sign in for the full app',
-    unlockBody: 'Once you sign in, your analysis, chats, portfolio, backtests, and saved history stay attached to your own account.',
+    unlockBody: 'Once you sign in, your analysis, chat history, portfolio, backtests, and saved history stay attached to your own account.',
     decision: 'Action',
     trend: 'Trend',
     score: 'Sentiment',
@@ -273,7 +273,7 @@ const GuestHomePage: React.FC = () => {
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-5">
         <LockedFeatureCard
           icon={BarChart3}
-          title={language === 'en' ? 'Full Research Reports' : '完整研究报告'}
+          title={language === 'en' ? 'Full Analysis Reports' : '完整分析报告'}
           body={language === 'en' ? 'Unlock full reports, supporting evidence, charts, and a detailed action plan.' : '登录后查看完整报告层级、证据链、图表与执行计划。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={copy.signIn}
@@ -281,8 +281,8 @@ const GuestHomePage: React.FC = () => {
         />
         <LockedFeatureCard
           icon={MessageSquareText}
-          title={language === 'en' ? 'Ask Stock Follow-up' : '问股追问'}
-          body={language === 'en' ? 'Continue from a saved report into account-aware follow-up chat and session memory.' : '从已保存报告继续进入带会话记忆的问股追问。'}
+          title={language === 'en' ? 'Follow-up Chat' : '后续交流'}
+          body={language === 'en' ? 'Continue from a saved report with follow-up chat and session memory under your own account.' : '从已保存报告继续交流，并把会话记录保存在你自己的账户下。'}
           lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
           ctaLabel={copy.signIn}
           ctaTo={loginPath}
@@ -313,7 +313,7 @@ const GuestHomePage: React.FC = () => {
         />
       </div>
 
-      <Card title={language === 'en' ? 'Guest boundaries' : '游客边界'} subtitle={language === 'en' ? 'Guest access stays limited' : '安全边界保持后端优先'}>
+      <Card title={language === 'en' ? 'Guest limits' : '游客限制'} subtitle={language === 'en' ? 'Guest access stays limited' : '游客权限保持受限'}>
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {language === 'en'

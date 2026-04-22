@@ -43,7 +43,7 @@ describe('GuestHomePage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders locked feature cards and generates a guest preview snapshot', async () => {
+  it('renders simplified guest guidance and generates a guest preview snapshot', async () => {
     previewMock.mockResolvedValue({
       queryId: 'preview-q1',
       stockCode: 'AAPL',
@@ -77,8 +77,8 @@ describe('GuestHomePage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('完整研究报告')).toBeInTheDocument();
-    expect(screen.getByText('问股追问')).toBeInTheDocument();
+    expect(screen.getByText('完整分析报告')).toBeInTheDocument();
+    expect(screen.getByText('后续交流')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/zh/login?mode=create&redirect=%2Fzh');
 
     fireEvent.change(screen.getByLabelText('guest-stock-input'), { target: { value: 'AAPL' } });
