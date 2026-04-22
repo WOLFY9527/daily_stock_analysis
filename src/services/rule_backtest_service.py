@@ -7627,6 +7627,73 @@ class RuleBacktestService:
             },
         }
 
+    @staticmethod
+    def _build_reproducibility_authority_summary(result_authority: Dict[str, Any]) -> Dict[str, Any]:
+        domains = dict(result_authority.get("domains") or {})
+        summarized_domains: Dict[str, Any] = {}
+        for domain_name, domain_payload in domains.items():
+            domain = dict(domain_payload or {})
+            summarized_domains[str(domain_name)] = {
+                "source": domain.get("source"),
+                "completeness": domain.get("completeness"),
+                "state": domain.get("state"),
+            }
+        return {
+            "contract_version": result_authority.get("contract_version"),
+            "read_mode": result_authority.get("read_mode"),
+            "domains": summarized_domains,
+        }
+
+    @staticmethod
+    def _build_execution_assumptions_fingerprint(
+        execution_assumptions_snapshot: Dict[str, Any],
+        execution_assumptions: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload = dict(execution_assumptions_snapshot.get("payload") or execution_assumptions or {})
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return {
+            "source": execution_assumptions_snapshot.get("source"),
+            "completeness": execution_assumptions_snapshot.get("completeness"),
+            "summary_text": payload.get("summary_text"),
+            "hash_sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest() if payload else None,
+        }
+
+    def get_support_bundle_reproducibility_manifest(self, run_id: int) -> Dict[str, Any]:
+        run = self.get_run(run_id)
+        if run is None:
+            raise ValueError(f"Run {run_id} not found.")
+
+        result_authority = dict(run.get("result_authority") or {})
+        execution_assumptions_snapshot = dict(run.get("execution_assumptions_snapshot") or {})
+        execution_assumptions = dict(run.get("execution_assumptions") or {})
+        return {
+            "manifest_version": "v1",
+            "manifest_kind": "rule_backtest_reproducibility_manifest",
+            "run": {
+                "id": run.get("id"),
+                "code": run.get("code"),
+                "status": run.get("status"),
+                "run_at": run.get("run_at"),
+                "completed_at": run.get("completed_at"),
+                "strategy_hash": run.get("strategy_hash"),
+                "timeframe": run.get("timeframe"),
+                "lookback_bars": run.get("lookback_bars"),
+                "period_start": run.get("period_start"),
+                "period_end": run.get("period_end"),
+                "benchmark_mode": run.get("benchmark_mode"),
+                "benchmark_code": run.get("benchmark_code"),
+            },
+            "run_diagnostics": dict(run.get("run_diagnostics") or {}),
+            "run_timing": dict(run.get("run_timing") or {}),
+            "artifact_availability": dict(run.get("artifact_availability") or {}),
+            "readback_integrity": dict(run.get("readback_integrity") or {}),
+            "execution_assumptions_fingerprint": self._build_execution_assumptions_fingerprint(
+                execution_assumptions_snapshot=execution_assumptions_snapshot,
+                execution_assumptions=execution_assumptions,
+            ),
+            "result_authority": self._build_reproducibility_authority_summary(result_authority),
+        }
+
     def get_support_export_index(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:

@@ -864,6 +864,49 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertNotIn("audit_rows", payload)
         self.assertNotIn("execution_trace", payload)
 
+    def test_service_builds_support_bundle_reproducibility_manifest_from_stored_result(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        payload = service.get_support_bundle_reproducibility_manifest(response["id"])
+
+        self.assertEqual(payload["manifest_version"], "v1")
+        self.assertEqual(payload["manifest_kind"], "rule_backtest_reproducibility_manifest")
+        self.assertEqual(payload["run"]["id"], response["id"])
+        self.assertEqual(payload["run"]["strategy_hash"], response["strategy_hash"])
+        self.assertEqual(payload["run_diagnostics"], response["run_diagnostics"])
+        self.assertEqual(payload["run_timing"], response["run_timing"])
+        self.assertEqual(payload["artifact_availability"], response["artifact_availability"])
+        self.assertEqual(payload["readback_integrity"], response["readback_integrity"])
+        self.assertEqual(
+            payload["execution_assumptions_fingerprint"]["source"],
+            response["execution_assumptions_snapshot"]["source"],
+        )
+        self.assertEqual(
+            payload["execution_assumptions_fingerprint"]["completeness"],
+            response["execution_assumptions_snapshot"]["completeness"],
+        )
+        self.assertTrue(payload["execution_assumptions_fingerprint"]["hash_sha256"])
+        self.assertEqual(
+            payload["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": response["result_authority"]["domains"]["execution_trace"]["source"],
+                "completeness": response["result_authority"]["domains"]["execution_trace"]["completeness"],
+                "state": response["result_authority"]["domains"]["execution_trace"]["state"],
+            },
+        )
+        self.assertNotIn("trades", payload)
+        self.assertNotIn("equity_curve", payload)
+        self.assertNotIn("audit_rows", payload)
+        self.assertNotIn("execution_trace", payload)
+
     def test_service_support_export_index_reports_manifest_and_execution_trace_exports(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -3227,6 +3270,34 @@ class RuleBacktestTestCase(unittest.TestCase):
             payload["result_authority"]["domains"]["trade_rows"]["source"],
             "unavailable",
         )
+
+    def test_reproducibility_manifest_preserves_live_storage_repair_summary(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        deleted = service.repo.delete_trades_by_run_ids([response["id"]])
+        self.assertGreater(deleted, 0)
+
+        payload = service.get_support_bundle_reproducibility_manifest(response["id"])
+
+        self.assertFalse(payload["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(
+            payload["artifact_availability"]["source"],
+            "summary.artifact_availability+live_storage_repair",
+        )
+        self.assertTrue(payload["readback_integrity"]["used_live_storage_repair"])
+        self.assertTrue(payload["readback_integrity"]["has_summary_storage_drift"])
+        self.assertEqual(payload["readback_integrity"]["drift_domains"], ["trade_rows"])
+        self.assertEqual(payload["readback_integrity"]["integrity_level"], "drift_repaired")
+        self.assertEqual(payload["result_authority"]["domains"]["trade_rows"]["source"], "unavailable")
+        self.assertTrue(payload["execution_assumptions_fingerprint"]["hash_sha256"])
 
     def test_support_export_index_truthfully_marks_missing_trace_exports_unavailable(self) -> None:
         service = RuleBacktestService(self.db)
