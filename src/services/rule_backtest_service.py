@@ -7549,25 +7549,31 @@ class RuleBacktestService:
         return [], "unavailable", "unavailable", ["stored_equity_curve"]
 
     def export_execution_trace_csv(self, run_id: int, output_path: str) -> str:
+        csv_text = self.get_execution_trace_export_csv_text(run_id)
+        destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(csv_text, encoding="utf-8-sig", newline="")
+        return str(destination)
+
+    def get_execution_trace_export_csv_text(self, run_id: int) -> str:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
 
-        destination = Path(output_path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
         execution_trace = dict(run.get("execution_trace") or {})
         export_rows = self._build_execution_trace_export_rows(execution_trace)
         if not export_rows:
             raise ValueError(f"Run {run_id} has no audit rows to export.")
 
         import csv
+        import io
 
         fieldnames = [label for _, label in TRACE_EXPORT_COLUMNS]
-        with destination.open("w", newline="", encoding="utf-8-sig") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(export_rows)
-        return str(destination)
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(export_rows)
+        return buffer.getvalue()
 
     def get_support_bundle_manifest(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
@@ -7660,8 +7666,8 @@ class RuleBacktestService:
                     "availability_reason": trace_reason,
                     "format": "csv",
                     "media_type": "text/csv",
-                    "delivery_mode": "service_file_export",
-                    "endpoint_path": None,
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/execution-trace.csv",
                     "payload_class": "heavy",
                 },
             ],

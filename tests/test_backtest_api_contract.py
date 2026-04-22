@@ -16,6 +16,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
     cancel_rule_backtest_run,
     compare_rule_backtest_runs,
+    get_rule_backtest_execution_trace_csv,
     get_rule_backtest_execution_trace_json,
     parse_rule_strategy,
     get_rule_backtest_run,
@@ -340,8 +341,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "availability_reason": "execution_trace_rows_present",
                     "format": "csv",
                     "media_type": "text/csv",
-                    "delivery_mode": "service_file_export",
-                    "endpoint_path": None,
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
                     "payload_class": "heavy",
                 },
             ],
@@ -1331,6 +1332,11 @@ class BacktestApiContractTestCase(unittest.TestCase):
         )
         self.assertEqual(response.exports[2].key, "execution_trace_csv")
         self.assertEqual(response.exports[2].media_type, "text/csv")
+        self.assertEqual(response.exports[2].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[2].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/execution-trace.csv",
+        )
         service.get_support_export_index.assert_called_once_with(123)
 
     def test_get_rule_backtest_execution_trace_json_returns_compact_contract(self) -> None:
@@ -1368,6 +1374,30 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
         service.get_execution_trace_export_json.assert_called_once_with(123)
+
+    def test_get_rule_backtest_execution_trace_csv_returns_csv_response(self) -> None:
+        service = MagicMock()
+        service.get_execution_trace_export_csv_text.return_value = "日期,动作\r\n2024-01-02,买\r\n"
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_execution_trace_csv(123, db_manager=MagicMock())
+
+        self.assertEqual(response.media_type, "text/csv; charset=utf-8")
+        self.assertIn('rule-backtest-123-execution-trace.csv', response.headers["Content-Disposition"])
+        self.assertIn("日期,动作", response.body.decode("utf-8"))
+        service.get_execution_trace_export_csv_text.assert_called_once_with(123)
+
+    def test_get_rule_backtest_execution_trace_csv_returns_unavailable_when_trace_missing(self) -> None:
+        service = MagicMock()
+        service.get_execution_trace_export_csv_text.side_effect = ValueError("Run 123 has no audit rows to export.")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_execution_trace_csv(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
+        service.get_execution_trace_export_csv_text.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_export_index_truthfully_marks_missing_trace_exports(self) -> None:
         service = MagicMock()

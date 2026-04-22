@@ -808,6 +808,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(any((row.get("动作") or "") in {"买", "卖"} for row in rows))
         self.assertTrue(all((row.get("fallback") or "") for row in rows))
 
+        csv_text = service.get_execution_trace_export_csv_text(run_id=response["id"])
+        self.assertIn("日期,标的收盘价,基准收盘价", csv_text)
+        self.assertIn("fallback", csv_text)
+
         payload = service.get_execution_trace_export_json(run_id=response["id"])
         self.assertEqual(payload["source"], response["execution_trace"]["source"])
         self.assertGreater(len(payload["trace_rows"]), 0)
@@ -899,8 +903,11 @@ class RuleBacktestTestCase(unittest.TestCase):
             export_index["exports"][1]["endpoint_path"],
             f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.json",
         )
-        self.assertEqual(export_index["exports"][2]["delivery_mode"], "service_file_export")
-        self.assertIsNone(export_index["exports"][2]["endpoint_path"])
+        self.assertEqual(export_index["exports"][2]["delivery_mode"], "api")
+        self.assertEqual(
+            export_index["exports"][2]["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.csv",
+        )
 
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)

@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, Optional, Type, TypeVar
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 
 from api.deps import CurrentUser, get_current_user, get_current_user_id, get_database_manager
 from api.v1.schemas.backtest import (
@@ -586,6 +586,50 @@ def get_rule_backtest_execution_trace_json(
         return _build_model(RuleBacktestExecutionTraceExportResponse, data)
 
     return _run_endpoint("查询规则回测 execution-trace JSON export 失败", _operation)
+
+
+@router.get(
+    "/rule/runs/{run_id}/execution-trace.csv",
+    responses={
+        200: {
+            "description": "规则回测 execution-trace CSV export",
+            "content": {"text/csv": {}},
+        },
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        409: {"description": "导出当前不可用", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取规则回测 execution-trace CSV export",
+    description="返回单条规则回测的 execution-trace CSV 导出载荷，供 operator、表格检查与自动化脚本使用。",
+)
+def get_rule_backtest_execution_trace_csv(
+    run_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    def _operation() -> Response:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        try:
+            csv_text = service.get_execution_trace_export_csv_text(run_id)
+        except ValueError as exc:
+            message = str(exc)
+            if "not found" in message.lower():
+                raise _not_found_error("规则回测记录不存在") from exc
+            if "no audit rows to export" in message.lower():
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "export_unavailable", "message": "当前回测没有可导出的 execution-trace rows"},
+                ) from exc
+            raise
+        return Response(
+            content=csv_text,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="rule-backtest-{run_id}-execution-trace.csv"',
+            },
+        )
+
+    return _run_endpoint("查询规则回测 execution-trace CSV export 失败", _operation)
 
 
 @router.post(
