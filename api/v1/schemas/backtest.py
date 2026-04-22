@@ -833,6 +833,7 @@ class RuleBacktestHistoryItem(BaseModel):
     status: str
     status_message: Optional[str] = None
     status_history: List[Dict[str, Any]] = Field(default_factory=list)
+    run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
     no_result_reason: Optional[str] = None
     no_result_message: Optional[str] = None
     trade_count: int = 0
@@ -899,6 +900,7 @@ class RuleBacktestRunResponse(BaseModel):
     status: str
     status_message: Optional[str] = None
     status_history: List[Dict[str, Any]] = Field(default_factory=list)
+    run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
     no_result_reason: Optional[str] = None
     no_result_message: Optional[str] = None
     trade_count: int = 0
@@ -947,6 +949,7 @@ class RuleBacktestStatusResponse(BaseModel):
     status: str
     status_message: Optional[str] = None
     status_history: List[Dict[str, Any]] = Field(default_factory=list)
+    run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
     run_at: Optional[str] = None
     completed_at: Optional[str] = None
     no_result_reason: Optional[str] = None

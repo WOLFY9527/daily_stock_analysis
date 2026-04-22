@@ -2944,6 +2944,7 @@ class RuleBacktestService:
             "status": str(row.status),
             "status_message": summary.get("status_message"),
             "status_history": list(summary.get("status_history") or []),
+            "run_diagnostics": dict(summary.get("run_diagnostics") or {}),
             "run_at": row.run_at.isoformat() if row.run_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
             "no_result_reason": row.no_result_reason,
@@ -3028,6 +3029,42 @@ class RuleBacktestService:
         summary["status_history"] = status_history
         if status_message:
             summary["status_message"] = status_message
+
+    @classmethod
+    def _build_run_diagnostics_payload(
+        cls,
+        *,
+        current_status: Optional[str],
+        status_history: List[Dict[str, Any]],
+        status_message: Optional[str],
+        no_result_reason: Optional[str],
+        no_result_message: Optional[str],
+    ) -> Dict[str, Any]:
+        normalized_current_status = cls._normalize_run_status(current_status)
+        latest_history = dict(status_history[-1] or {}) if status_history else {}
+        latest_status = cls._normalize_run_status(latest_history.get("status"))
+        effective_status = latest_status or normalized_current_status
+        last_non_terminal_status = None
+        for item in reversed(list(status_history or [])):
+            normalized = cls._normalize_run_status(item.get("status"))
+            if not normalized or normalized == effective_status:
+                continue
+            last_non_terminal_status = normalized
+            break
+
+        return {
+            "current_status": effective_status or None,
+            "terminal_status": (
+                effective_status
+                if effective_status in TERMINAL_RULE_RUN_STATUSES
+                else None
+            ),
+            "reason_code": str(no_result_reason or "").strip() or None,
+            "message": str(no_result_message or status_message or latest_history.get("message") or "").strip() or None,
+            "last_transition_at": latest_history.get("at"),
+            "last_transition_message": str(latest_history.get("message") or status_message or "").strip() or None,
+            "last_non_terminal_status": last_non_terminal_status,
+        }
 
     def _build_execution_model_payload(
         self,
@@ -4300,6 +4337,16 @@ class RuleBacktestService:
             payload["ai_summary"] = ai_summary
         if status is not None:
             self._append_status_history(payload, status, status_message=status_message, at=at)
+        payload["run_diagnostics"] = self._build_run_diagnostics_payload(
+            current_status=(
+                status
+                or ((list(payload.get("status_history") or [])[-1] or {}).get("status") if list(payload.get("status_history") or []) else None)
+            ),
+            status_history=list(payload.get("status_history") or []),
+            status_message=str(payload.get("status_message") or status_message or "").strip() or None,
+            no_result_reason=str(payload.get("no_result_reason") or "").strip() or None,
+            no_result_message=str(payload.get("no_result_message") or "").strip() or None,
+        )
         return payload
 
     @staticmethod
@@ -6266,6 +6313,18 @@ class RuleBacktestService:
         resolved_payload["ai_summary"] = stored_payload.get("ai_summary", ai_summary)
         resolved_payload["status_message"] = stored_payload.get("status_message")
         resolved_payload["status_history"] = list(stored_payload.get("status_history") or [])
+        stored_run_diagnostics = stored_payload.get("run_diagnostics")
+        resolved_payload["run_diagnostics"] = (
+            dict(stored_run_diagnostics)
+            if isinstance(stored_run_diagnostics, dict)
+            else self._build_run_diagnostics_payload(
+                current_status=row.status,
+                status_history=list(resolved_payload.get("status_history") or []),
+                status_message=resolved_payload.get("status_message"),
+                no_result_reason=resolved_payload.get("no_result_reason"),
+                no_result_message=resolved_payload.get("no_result_message"),
+            )
+        )
 
         missing_fields = list(request_missing_fields)
         if not stored_payload:
@@ -6294,6 +6353,8 @@ class RuleBacktestService:
             missing_fields.append("status_message")
         if "status_history" not in stored_payload or not isinstance(stored_payload.get("status_history"), list):
             missing_fields.append("status_history")
+        if not isinstance(stored_run_diagnostics, dict) or not stored_run_diagnostics:
+            missing_fields.append("run_diagnostics")
 
         deduped_missing_fields = self._dedupe_summary_missing_fields(missing_fields)
         if stored_payload:
@@ -6620,6 +6681,7 @@ class RuleBacktestService:
             "status": row.status,
             "status_message": summary.get("status_message"),
             "status_history": list(summary.get("status_history") or []),
+            "run_diagnostics": dict(summary.get("run_diagnostics") or {}),
             "no_result_reason": row.no_result_reason,
             "no_result_message": row.no_result_message,
             "trade_count": metrics.get("trade_count"),

@@ -58,6 +58,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "run_at": "2024-01-01T00:00:00",
             "completed_at": "2024-01-01T00:05:00" if status == "completed" else None,
             "status_history": [{"status": status, "at": "2024-01-01T00:00:00"}],
+            "run_diagnostics": {},
             "trade_count": 0,
             "win_count": 0,
             "loss_count": 0,
@@ -1062,6 +1063,15 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 {"status": "queued", "at": "2024-01-01T00:00:00"},
                 {"status": "cancelled", "at": "2024-01-01T00:00:01"},
             ],
+            "run_diagnostics": {
+                "current_status": "cancelled",
+                "terminal_status": "cancelled",
+                "reason_code": "cancelled",
+                "message": "规则回测已取消。",
+                "last_transition_at": "2024-01-01T00:00:01",
+                "last_transition_message": "规则回测已取消。",
+                "last_non_terminal_status": "queued",
+            },
             "run_at": "2024-01-01T00:00:00",
             "completed_at": "2024-01-01T00:00:01",
             "no_result_reason": "cancelled",
@@ -1077,6 +1087,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsInstance(response, RuleBacktestCancelResponse)
         self.assertEqual(response.status, "cancelled")
         self.assertEqual(response.no_result_reason, "cancelled")
+        self.assertEqual(response.run_diagnostics["terminal_status"], "cancelled")
+        self.assertEqual(response.run_diagnostics["last_non_terminal_status"], "queued")
         service.cancel_run.assert_called_once_with(123)
 
     def test_rule_backtest_run_response_uses_supported_family_strategy_spec_contract(self) -> None:
