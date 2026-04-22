@@ -412,6 +412,94 @@ class BacktestApiContractTestCase(unittest.TestCase):
             ],
         }
 
+    def _assert_support_bundle_api_surface(
+        self,
+        *,
+        service: MagicMock,
+        manifest_payload: dict,
+        reproducibility_payload: dict,
+        export_index_payload: dict,
+        trace_json_payload: dict | None,
+        trace_csv_text: str | None,
+    ) -> None:
+        service.get_support_bundle_manifest.return_value = manifest_payload
+        service.get_support_bundle_reproducibility_manifest.return_value = reproducibility_payload
+        service.get_support_export_index.return_value = export_index_payload
+        if trace_json_payload is None:
+            service.get_execution_trace_export_json.side_effect = ValueError("Run 123 has no audit rows to export.")
+        else:
+            service.get_execution_trace_export_json.return_value = trace_json_payload
+        if trace_csv_text is None:
+            service.get_execution_trace_export_csv_text.side_effect = ValueError("Run 123 has no audit rows to export.")
+        else:
+            service.get_execution_trace_export_csv_text.return_value = trace_csv_text
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            manifest_response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
+            reproducibility_response = get_rule_backtest_support_bundle_reproducibility_manifest(
+                123,
+                db_manager=MagicMock(),
+            )
+            export_index_response = get_rule_backtest_support_export_index(123, db_manager=MagicMock())
+
+            self.assertEqual(manifest_response.run["id"], 123)
+            self.assertEqual(reproducibility_response.run["id"], 123)
+            self.assertEqual(export_index_response.run_id, 123)
+            self.assertEqual(manifest_response.run["status"], export_index_response.status)
+            self.assertEqual(reproducibility_response.run["status"], export_index_response.status)
+            self.assertEqual(manifest_response.run_timing, reproducibility_response.run_timing)
+            self.assertEqual(manifest_response.run_diagnostics, reproducibility_response.run_diagnostics)
+            self.assertEqual(manifest_response.artifact_availability, reproducibility_response.artifact_availability)
+            self.assertEqual(manifest_response.readback_integrity, reproducibility_response.readback_integrity)
+            self.assertEqual(
+                [item.key for item in export_index_response.exports],
+                [
+                    "support_bundle_manifest_json",
+                    "support_bundle_reproducibility_manifest_json",
+                    "execution_trace_json",
+                    "execution_trace_csv",
+                ],
+            )
+            self.assertEqual(
+                [item.endpoint_path for item in export_index_response.exports],
+                [
+                    "/api/v1/backtest/rule/runs/123/support-bundle-manifest",
+                    "/api/v1/backtest/rule/runs/123/support-bundle-reproducibility-manifest",
+                    "/api/v1/backtest/rule/runs/123/execution-trace.json",
+                    "/api/v1/backtest/rule/runs/123/execution-trace.csv",
+                ],
+            )
+
+            if trace_json_payload is None:
+                with self.assertRaises(HTTPException) as json_ctx:
+                    get_rule_backtest_execution_trace_json(123, db_manager=MagicMock())
+                with self.assertRaises(HTTPException) as csv_ctx:
+                    get_rule_backtest_execution_trace_csv(123, db_manager=MagicMock())
+                self.assertEqual(json_ctx.exception.status_code, 409)
+                self.assertEqual(csv_ctx.exception.status_code, 409)
+                self.assertFalse(export_index_response.exports[2].available)
+                self.assertFalse(export_index_response.exports[3].available)
+                self.assertEqual(
+                    export_index_response.exports[2].availability_reason,
+                    "execution_trace_rows_missing",
+                )
+                self.assertEqual(
+                    export_index_response.exports[3].availability_reason,
+                    "execution_trace_rows_missing",
+                )
+            else:
+                trace_json_response = get_rule_backtest_execution_trace_json(123, db_manager=MagicMock())
+                trace_csv_response = get_rule_backtest_execution_trace_csv(123, db_manager=MagicMock())
+                self.assertTrue(export_index_response.exports[2].available)
+                self.assertTrue(export_index_response.exports[3].available)
+                self.assertEqual(trace_json_response.source, trace_json_payload["source"])
+                self.assertEqual(
+                    len(trace_json_response.trace_rows),
+                    manifest_response.artifact_counts["execution_trace_rows_count"],
+                )
+                self.assertIn("rule-backtest-123-execution-trace.csv", trace_csv_response.headers["Content-Disposition"])
+                self.assertIn("日期,动作", trace_csv_response.body.decode("utf-8"))
+
     def test_run_rule_backtest_async_path_enqueues_background_processing(self) -> None:
         request = RuleBacktestRunRequest(
             code="600519",
@@ -1563,6 +1651,119 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
+
+    def test_support_bundle_api_surface_forms_coherent_stored_first_contract(self) -> None:
+        service = MagicMock()
+        manifest_payload = self._support_bundle_manifest_payload(status="completed")
+        manifest_payload["artifact_counts"]["execution_trace_rows_count"] = 1
+        self._assert_support_bundle_api_surface(
+            service=service,
+            manifest_payload=manifest_payload,
+            reproducibility_payload=self._support_bundle_reproducibility_manifest_payload(status="completed"),
+            export_index_payload=self._support_export_index_payload(status="completed"),
+            trace_json_payload={
+                "version": "v1",
+                "source": "stored_execution_trace",
+                "completeness": "complete",
+                "missing_fields": [],
+                "trace_rows": [{"日期": "2024-01-02", "动作": "买"}],
+                "assumptions": {"summary_text": "next bar open / long only"},
+                "execution_model": {"entry_timing": "next_bar_open"},
+                "execution_assumptions": {"position_sizing": "all_available_capital"},
+                "fallback": {"trace_rebuilt": False},
+            },
+            trace_csv_text="日期,动作\r\n2024-01-02,买\r\n",
+        )
+
+    def test_support_bundle_api_surface_preserves_live_storage_repair_signals(self) -> None:
+        service = MagicMock()
+        manifest_payload = self._support_bundle_manifest_payload(status="completed")
+        reproducibility_payload = self._support_bundle_reproducibility_manifest_payload(status="completed")
+        export_index_payload = self._support_export_index_payload(status="completed")
+        manifest_payload["artifact_counts"]["execution_trace_rows_count"] = 1
+        for payload in (manifest_payload, reproducibility_payload):
+            payload["artifact_availability"].update(
+                {
+                    "source": "summary.artifact_availability+live_storage_repair",
+                    "completeness": "stored_partial_repaired",
+                    "has_trade_rows": False,
+                }
+            )
+            payload["readback_integrity"].update(
+                {
+                    "source": "derived_from_result_authority+live_storage_repair",
+                    "completeness": "stored_partial_repaired",
+                    "used_live_storage_repair": True,
+                    "has_summary_storage_drift": True,
+                    "drift_domains": ["trade_rows"],
+                    "integrity_level": "drift_repaired",
+                }
+            )
+        manifest_payload["result_authority"]["domains"]["trade_rows"] = {
+            "source": "unavailable",
+            "completeness": "unavailable",
+            "state": "unavailable",
+            "missing": ["stored_trade_rows"],
+            "missing_kind": "fields",
+        }
+        reproducibility_payload["result_authority"]["domains"]["trade_rows"] = {
+            "source": "unavailable",
+            "completeness": "unavailable",
+            "state": "unavailable",
+        }
+
+        self._assert_support_bundle_api_surface(
+            service=service,
+            manifest_payload=manifest_payload,
+            reproducibility_payload=reproducibility_payload,
+            export_index_payload=export_index_payload,
+            trace_json_payload={
+                "version": "v1",
+                "source": "stored_execution_trace",
+                "completeness": "complete",
+                "missing_fields": [],
+                "trace_rows": [{"日期": "2024-01-02", "动作": "买"}],
+                "assumptions": {"summary_text": "next bar open / long only"},
+                "execution_model": {"entry_timing": "next_bar_open"},
+                "execution_assumptions": {"position_sizing": "all_available_capital"},
+                "fallback": {"trace_rebuilt": False},
+            },
+            trace_csv_text="日期,动作\r\n2024-01-02,买\r\n",
+        )
+
+    def test_support_bundle_api_surface_truthfully_closes_missing_trace_contract(self) -> None:
+        service = MagicMock()
+        manifest_payload = self._support_bundle_manifest_payload(status="completed")
+        reproducibility_payload = self._support_bundle_reproducibility_manifest_payload(status="completed")
+        export_index_payload = self._support_export_index_payload(status="completed")
+        manifest_payload["artifact_availability"]["has_execution_trace"] = False
+        reproducibility_payload["artifact_availability"]["has_execution_trace"] = False
+        manifest_payload["artifact_counts"]["execution_trace_rows_count"] = 0
+        manifest_payload["result_authority"]["domains"]["execution_trace"] = {
+            "source": "unavailable",
+            "completeness": "unavailable",
+            "state": "unavailable",
+            "missing": ["stored_execution_trace"],
+            "missing_kind": "fields",
+        }
+        reproducibility_payload["result_authority"]["domains"]["execution_trace"] = {
+            "source": "unavailable",
+            "completeness": "unavailable",
+            "state": "unavailable",
+        }
+        export_index_payload["exports"][2]["available"] = False
+        export_index_payload["exports"][2]["availability_reason"] = "execution_trace_rows_missing"
+        export_index_payload["exports"][3]["available"] = False
+        export_index_payload["exports"][3]["availability_reason"] = "execution_trace_rows_missing"
+
+        self._assert_support_bundle_api_surface(
+            service=service,
+            manifest_payload=manifest_payload,
+            reproducibility_payload=reproducibility_payload,
+            export_index_payload=export_index_payload,
+            trace_json_payload=None,
+            trace_csv_text=None,
+        )
         service.get_support_export_index.assert_called_once_with(123)
 
     def test_cancel_rule_backtest_run_returns_cancel_contract(self) -> None:
