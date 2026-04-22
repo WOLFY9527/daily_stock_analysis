@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'r
 import ScannerSurfacePage from './pages/ScannerSurfacePage';
 import BacktestPage from './pages/BacktestPage';
 import DeterministicBacktestResultPage from './pages/DeterministicBacktestResultPage';
+import RuleBacktestComparePage from './pages/RuleBacktestComparePage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -504,6 +505,7 @@ export const AppContent: React.FC = () => {
             <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
             <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
             <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+            <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
             <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
             <Route path="/settings" element={<PersonalSettingsPage />} />
             <Route path="/settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
@@ -516,6 +518,7 @@ export const AppContent: React.FC = () => {
             <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
             <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
             <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+            <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
             <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
             <Route path="settings" element={<PersonalSettingsPage />} />
             <Route path="settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />

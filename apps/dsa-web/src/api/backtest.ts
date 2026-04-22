@@ -15,6 +15,7 @@ import type {
   RuleBacktestParseResponse,
   RuleBacktestRunRequest,
   RuleBacktestRunResponse,
+  RuleBacktestCompareResponse,
   RuleBacktestHistoryResponse,
   RuleBacktestStatusResponse,
   RuleBacktestCancelResponse,
@@ -92,6 +93,14 @@ export const backtestApi = {
       `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/cancel`,
     );
     return toCamelCase<RuleBacktestCancelResponse>(response.data);
+  },
+
+  compareRuleBacktestRuns: async (params: { runIds: number[] }): Promise<RuleBacktestCompareResponse> => {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/backtest/rule/compare',
+      { run_ids: params.runIds },
+    );
+    return toCamelCase<RuleBacktestCompareResponse>(response.data);
   },
 
   /**

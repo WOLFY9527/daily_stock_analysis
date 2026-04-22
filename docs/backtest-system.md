@@ -38,6 +38,7 @@
 
 - `/backtest` 继续作为配置与发起页，不改动现有标准回测与规则回测的后端执行链路；本轮主要收口输入分组、按钮文案和状态提示，减少“要先做什么、下一步会发生什么”的理解成本。
 - `/backtest/results/:runId` 会优先展示运行状态卡，再展示结果摘要与图表工作区。运行中页面使用 `GET /api/v1/backtest/rule/runs/{run_id}/status` 做轻量轮询，进入 `completed / failed / cancelled` 后自动停止刷新。
+- `/backtest/compare?runIds=...` 现在作为最小可用 compare workbench 路由存在：它只消费既有 `POST /api/v1/backtest/rule/compare` 的 stored-first 返回，不会在前端重新拉多条 detail 后本地拼结论。当前结果页 `历史结果` tab 里会继续把当前运行固定为 baseline，并允许勾选额外 completed runs；点击 `打开比较工作台` 后，前端会把 `runIds` 以 query 形式带到 compare page，由新页面集中渲染 compare summary / robustness / profile / highlights / market / period / parameter 几个核心 section。
 - 规则回测运行中会明确展示 `parsing / queued / running / summarizing / completed / cancelled / failed` 状态，并在可取消阶段暴露 `取消运行`。取消仍复用既有 `POST /api/v1/backtest/rule/runs/{run_id}/cancel`，不会改写已完成结果。
 - 结果页首屏优先展示用户更容易理解的摘要指标：总收益、相对基准或买入持有、最大回撤、交易次数、胜率、期末权益；原始参数、执行假设、技术说明和历史结果下沉到标签页或 disclosure。
 - `execution_trace` 继续来自既有结果详情响应，但 Web 端默认先显示“关键节点”视图，只突出买卖动作、fallback 与异常说明；完整逐行轨迹仍可切换查看，并继续支持 CSV / JSON 导出。

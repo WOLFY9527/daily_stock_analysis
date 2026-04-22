@@ -463,6 +463,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
   );
   const canCancelCurrentRun = Boolean(run && canCancelRuleRun(run.status));
   const canExportTrace = Boolean(run && hasExecutionTraceRows(run));
+  const compareWorkbenchRunIds = useMemo(
+    () => (run ? [run.id, ...compareRunIds] : []),
+    [compareRunIds, run],
+  );
   const statusSummaryItems = run ? [
     {
       label: '当前阶段',
@@ -492,6 +496,14 @@ const DeterministicBacktestResultPage: React.FC = () => {
       return [...current, item.id].slice(0, 3);
     });
   }, []);
+
+  const handleOpenCompareWorkbench = useCallback(() => {
+    if (!run || compareRunIds.length === 0) return;
+    const params = new URLSearchParams({
+      runIds: compareWorkbenchRunIds.join(','),
+    });
+    navigate(`/backtest/compare?${params.toString()}`);
+  }, [compareRunIds.length, compareWorkbenchRunIds, navigate, run]);
 
   const handleSavePreset = useCallback(() => {
     if (!run) return;
@@ -1092,6 +1104,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 emptyText="先在下方历史表中勾选已完成运行，系统会自动拉取详情并生成比较视图。"
               />
               <div className="product-action-row mt-4">
+                <Button variant="secondary" onClick={handleOpenCompareWorkbench} disabled={compareRunIds.length === 0}>
+                  打开比较工作台
+                </Button>
                 <Button variant="ghost" onClick={() => setCompareRunIds([])} disabled={compareRunIds.length === 0}>清空比较</Button>
               </div>
               <RuleRunsTable

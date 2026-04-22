@@ -72,6 +72,10 @@ vi.mock('../pages/DeterministicBacktestResultPage', () => ({
   default: () => <div>backtest-result-page</div>,
 }));
 
+vi.mock('../pages/RuleBacktestComparePage', () => ({
+  default: () => <div>backtest-compare-page</div>,
+}));
+
 vi.mock('../pages/PersonalSettingsPage', () => ({
   default: () => <div>personal-settings-page</div>,
 }));
@@ -212,5 +216,24 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByRole('heading', { name: 'Sign in to continue Ask Stock follow-up' })).toBeInTheDocument();
     expect(screen.getByText('Guest Preview Only')).toBeInTheDocument();
+  });
+
+  it('renders the rule backtest compare workbench route for signed-in users', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+    });
+
+    renderAt('/backtest/compare?runIds=101,202');
+
+    expect(await screen.findByText('backtest-compare-page')).toBeInTheDocument();
   });
 });

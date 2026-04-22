@@ -624,6 +624,283 @@ export interface RuleBacktestAuditRowItem {
   cumulativeBuyAndHoldReturnPct?: number | null;
 }
 
+export interface RuleBacktestCompareRunMetadata {
+  id: number;
+  code?: string | null;
+  status?: string | null;
+  runAt?: string | null;
+  completedAt?: string | null;
+  timeframe?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  lookbackBars?: number | null;
+  initialCapital?: number | null;
+  feeBps?: number | null;
+  slippageBps?: number | null;
+}
+
+export interface RuleBacktestCompareRunMetrics {
+  tradeCount?: number | null;
+  winCount?: number | null;
+  lossCount?: number | null;
+  totalReturnPct?: number | null;
+  annualizedReturnPct?: number | null;
+  benchmarkReturnPct?: number | null;
+  excessReturnVsBenchmarkPct?: number | null;
+  buyAndHoldReturnPct?: number | null;
+  excessReturnVsBuyAndHoldPct?: number | null;
+  winRatePct?: number | null;
+  avgTradeReturnPct?: number | null;
+  maxDrawdownPct?: number | null;
+  avgHoldingDays?: number | null;
+  avgHoldingBars?: number | null;
+  avgHoldingCalendarDays?: number | null;
+  finalEquity?: number | null;
+}
+
+export interface RuleBacktestCompareRunBenchmark {
+  mode?: string | null;
+  code?: string | null;
+  returnPct?: number | null;
+}
+
+export interface RuleBacktestCompareUnavailableRun {
+  runId: number;
+  reason: string;
+}
+
+export interface RuleBacktestCompareRunItem {
+  metadata: RuleBacktestCompareRunMetadata;
+  parsedStrategy?: Partial<RuleBacktestParsedStrategy>;
+  metrics?: RuleBacktestCompareRunMetrics;
+  benchmark?: RuleBacktestCompareRunBenchmark;
+  resultAuthority?: Record<string, unknown>;
+}
+
+export interface RuleBacktestCompareSummaryBaseline {
+  runId: number;
+  selectionRule: string;
+  code?: string | null;
+  timeframe?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  strategyFamily?: string | null;
+  strategyType?: string | null;
+}
+
+export interface RuleBacktestCompareSummaryDateRange {
+  runId: number;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+export interface RuleBacktestCompareSummaryContext {
+  codeValues: string[];
+  timeframeValues: string[];
+  strategyFamilyValues: string[];
+  strategyTypeValues: string[];
+  dateRanges: RuleBacktestCompareSummaryDateRange[];
+  allSameCode: boolean;
+  allSameTimeframe: boolean;
+  allSameDateRange: boolean;
+}
+
+export interface RuleBacktestCompareMetricDeltaItem {
+  runId: number;
+  value?: number | null;
+  deltaVsBaseline?: number | null;
+}
+
+export interface RuleBacktestCompareMetricDelta {
+  label: string;
+  state: string;
+  baselineRunId: number;
+  baselineValue?: number | null;
+  availableRunIds: number[];
+  unavailableRunIds: number[];
+  deltas: RuleBacktestCompareMetricDeltaItem[];
+}
+
+export interface RuleBacktestCompareSummary {
+  baseline: RuleBacktestCompareSummaryBaseline;
+  context: RuleBacktestCompareSummaryContext;
+  metricDeltas: Record<string, RuleBacktestCompareMetricDelta>;
+}
+
+export interface RuleBacktestComparePeriodBoundsItem {
+  runId: number;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  availability: string;
+}
+
+export interface RuleBacktestComparePeriodPair {
+  runId: number;
+  relationship: string;
+  state: string;
+  meaningfullyComparable?: boolean;
+  overlapStart?: string | null;
+  overlapEnd?: string | null;
+  overlapDays?: number | null;
+  gapDays?: number | null;
+  diagnostics: string[];
+}
+
+export interface RuleBacktestComparePeriodComparison {
+  baselineRunId: number;
+  selectionRule: string;
+  relationship: string;
+  state: string;
+  meaningfullyComparable?: boolean;
+  periodBounds: RuleBacktestComparePeriodBoundsItem[];
+  pairs: RuleBacktestComparePeriodPair[];
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareParameterValueItem {
+  runId: number;
+  value: unknown;
+}
+
+export interface RuleBacktestCompareParameterDetail {
+  state: string;
+  availableRunIds?: number[];
+  unavailableRunIds?: number[];
+  values: RuleBacktestCompareParameterValueItem[];
+}
+
+export interface RuleBacktestCompareParameterComparison {
+  state: string;
+  strategyFamilyValues: string[];
+  strategyTypeValues: string[];
+  sharedParameterKeys: string[];
+  differingParameterKeys: string[];
+  missingParameterKeys: string[];
+  sharedParameters: Record<string, unknown>;
+  differingParameters: Record<string, RuleBacktestCompareParameterDetail>;
+  missingParameters: Record<string, RuleBacktestCompareParameterDetail>;
+}
+
+export interface RuleBacktestCompareMarketCodeRunItem {
+  runId: number;
+  code?: string | null;
+  normalizedCode?: string | null;
+  market?: string | null;
+  availability: string;
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareMarketCodePair {
+  runId: number;
+  relationship: string;
+  state: string;
+  directlyComparable?: boolean;
+  baselineCode?: string | null;
+  candidateCode?: string | null;
+  baselineMarket?: string | null;
+  candidateMarket?: string | null;
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareMarketCodeComparison {
+  baselineRunId: number;
+  selectionRule: string;
+  relationship: string;
+  state: string;
+  directlyComparable?: boolean;
+  runs?: RuleBacktestCompareMarketCodeRunItem[];
+  pairs?: RuleBacktestCompareMarketCodePair[];
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareRobustnessDimension {
+  state: string;
+  sourceState?: string | null;
+  relationship?: string | null;
+  directlyComparable?: boolean | null;
+  meaningfullyComparable?: boolean | null;
+  comparableMetricKeys?: string[];
+  partialMetricKeys?: string[];
+  unavailableMetricKeys?: string[];
+  sharedParameterKeys?: string[];
+  differingParameterKeys?: string[];
+  missingParameterKeys?: string[];
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareRobustnessSummary {
+  baselineRunId: number;
+  selectionRule: string;
+  overallState: string;
+  directlyComparable?: boolean;
+  alignedDimensions: string[];
+  partialDimensions: string[];
+  divergentDimensions: string[];
+  unavailableDimensions: string[];
+  dimensions: Record<string, RuleBacktestCompareRobustnessDimension>;
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareProfileFlags {
+  sameCode?: boolean;
+  sameMarket?: boolean;
+  crossMarket?: boolean;
+  sameStrategyFamily?: boolean;
+  parameterDifferencesPresent?: boolean;
+  periodDifferencesPresent?: boolean;
+}
+
+export interface RuleBacktestCompareProfileSummary {
+  baselineRunId: number;
+  selectionRule: string;
+  primaryProfile: string;
+  alignedDimensions: string[];
+  drivingDimensions: string[];
+  dimensionFlags: RuleBacktestCompareProfileFlags;
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareHighlightItem {
+  metric: string;
+  preference: string;
+  state: string;
+  winnerRunIds: number[];
+  winnerValue?: number | null;
+  availableRunIds: number[];
+  candidateCount: number;
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareHighlightsSummary {
+  baselineRunId: number;
+  selectionRule: string;
+  primaryProfile: string;
+  overallContextState: string;
+  highlights: Record<string, RuleBacktestCompareHighlightItem>;
+  diagnostics: string[];
+}
+
+export interface RuleBacktestCompareResponse {
+  comparisonSource: string;
+  readMode: string;
+  requestedRunIds: number[];
+  resolvedRunIds: number[];
+  comparableRunIds: number[];
+  missingRunIds: number[];
+  unavailableRuns: RuleBacktestCompareUnavailableRun[];
+  fieldGroups: string[];
+  marketCodeComparison?: RuleBacktestCompareMarketCodeComparison | null;
+  periodComparison?: RuleBacktestComparePeriodComparison | null;
+  comparisonSummary?: RuleBacktestCompareSummary | null;
+  robustnessSummary?: RuleBacktestCompareRobustnessSummary | null;
+  comparisonProfile?: RuleBacktestCompareProfileSummary | null;
+  comparisonHighlights?: RuleBacktestCompareHighlightsSummary | null;
+  parameterComparison?: RuleBacktestCompareParameterComparison | null;
+  items: RuleBacktestCompareRunItem[];
+}
+
 export interface RuleBacktestRunResponse {
   id: number;
   code: string;

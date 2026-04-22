@@ -33,6 +33,7 @@ function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
         <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+        <Route path="/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -556,6 +557,33 @@ describe('DeterministicBacktestResultPage', () => {
     });
     expect(await screen.findByLabelText('回测比较收益进度图')).toBeInTheDocument();
     expect(screen.getAllByText('比较运行 #123').length).toBeGreaterThan(0);
+  });
+
+  it('opens the compare workbench from the history tab selection', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    const compareRun = makeResultRun({ id: 123 });
+
+    getRuleBacktestRun.mockImplementation(async (id: number) => (id === 123 ? compareRun : currentRun));
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 10,
+      items: [currentRun, compareRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
+
+    await waitFor(() => {
+      expect(getRuleBacktestRun).toHaveBeenCalledWith(123);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开比较工作台' }));
+
+    expect(await screen.findByTestId('rule-backtest-compare-route')).toBeInTheDocument();
   });
 
   it('runs lightweight scenario variants and exports the summary report', async () => {
