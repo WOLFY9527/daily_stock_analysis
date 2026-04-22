@@ -589,7 +589,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('参数迭代 / Scenario Lab'));
+    fireEvent.click(screen.getByText('参数变体比较'));
     fireEvent.click(screen.getByRole('button', { name: '运行当前场景组' }));
 
     await waitFor(() => {
@@ -598,7 +598,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByText('场景结果比较')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '概览' }));
-    fireEvent.click(screen.getByText('查看可导出的决策摘要'));
+    fireEvent.click(screen.getByText('查看可导出的结果摘要'));
     fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
 
     await waitFor(() => {

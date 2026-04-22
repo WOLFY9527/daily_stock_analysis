@@ -711,7 +711,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-overview"
           >
-            <Card title="概览" subtitle="首屏专注看图，补充说明折叠收起" className="product-section-card product-section-card--backtest-secondary">
+            <Card title="概览" subtitle="先看图表，补充说明按需展开" className="product-section-card product-section-card--backtest-secondary">
               <p className="product-section-copy">
                 日级细节已改为图表 hover 浮层；完整审计表、交易记录、参数与历史结果分别进入专门标签页，避免默认页面继续向下堆叠。
               </p>
@@ -747,13 +747,13 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
                 </div>
               </Disclosure>
-              <Disclosure summary="查看可导出的决策摘要">
+              <Disclosure summary="查看可导出的结果摘要">
                 <div className="backtest-result-page__tab-stack">
                   <div className="summary-block">
                     <div className="summary-block__header">
                       <div>
-                        <h3 className="summary-block__title">决策摘要 / Shareable Report</h3>
-                        <p className="product-section-copy">优先输出人类可读判断，再把深层 trace 留给 CSV / JSON 导出。</p>
+                        <h3 className="summary-block__title">结果摘要</h3>
+                        <p className="product-section-copy">先给出便于阅读的结论，细节轨迹再交给 CSV / JSON 导出。</p>
                       </div>
                       <div className="product-action-row">
                         <Button variant="secondary" onClick={() => handleExportDecisionReport('md')}>导出 Markdown</Button>
@@ -951,13 +951,13 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="参数迭代 / Scenario Lab">
+                <Disclosure summary="参数变体比较">
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
                           <h3 className="summary-block__title">受控场景比较</h3>
-                          <p className="product-section-copy">只做轻量、结构化、确定性的变体，不引入 full optimizer。</p>
+                          <p className="product-section-copy">这里只做轻量、结构化的参数对照，不引入完整优化器。</p>
                         </div>
                         <Button
                           variant="secondary"
@@ -979,7 +979,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           >
                             <div className="comparison-card__header">
                               <div>
-                                <p className="metric-card__label">Scenario Plan</p>
+                                <p className="metric-card__label">参数方案</p>
                                 <h3 className="comparison-card__title">{plan.label}</h3>
                               </div>
                               <span className="product-chip">{plan.variants.length} 个变体</span>
@@ -1036,17 +1036,17 @@ const DeterministicBacktestResultPage: React.FC = () => {
                       title="场景结果比较"
                       subtitle="把当前运行作为基线，对照 P6 轻量参数变体。"
                       items={scenarioComparisonItems}
-                      emptyText="先选择一个 scenario plan 并运行，结果会在这里汇总成紧凑比较表。"
+                      emptyText="先选择一个参数方案并运行，结果会在这里汇总成对照表。"
                     />
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="可复用配置 / Presets">
+                <Disclosure summary="可复用配置">
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block__header">
                       <div>
                         <h3 className="summary-block__title">快速复用当前配置</h3>
-                        <p className="product-section-copy">结果页会自动沉淀 recent draft；也可以手动保存一个具名 preset，回到配置页快速复用。</p>
+                        <p className="product-section-copy">结果页会自动保留最近一次草稿；你也可以手动保存具名预设，回到配置页直接复用。</p>
                       </div>
                       <Button variant="secondary" onClick={handleSavePreset}>保存为预设</Button>
                     </div>
