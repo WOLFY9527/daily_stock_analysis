@@ -810,6 +810,12 @@ class RuleBacktestService:
         period_comparison = self._build_compare_period_comparison(items=items)
         comparison_summary = self._build_compare_summary(items=items)
         parameter_comparison = self._build_compare_parameter_comparison(items=items)
+        robustness_summary = self._build_compare_robustness_summary(
+            market_code_comparison=market_code_comparison,
+            period_comparison=period_comparison,
+            comparison_summary=comparison_summary,
+            parameter_comparison=parameter_comparison,
+        )
 
         return {
             "comparison_source": "stored_rule_backtest_runs",
@@ -823,11 +829,12 @@ class RuleBacktestService:
             "market_code_comparison": market_code_comparison,
             "period_comparison": period_comparison,
             "comparison_summary": comparison_summary,
-            "robustness_summary": self._build_compare_robustness_summary(
+            "robustness_summary": robustness_summary,
+            "comparison_profile": self._build_compare_profile_summary(
                 market_code_comparison=market_code_comparison,
                 period_comparison=period_comparison,
-                comparison_summary=comparison_summary,
                 parameter_comparison=parameter_comparison,
+                robustness_summary=robustness_summary,
             ),
             "parameter_comparison": parameter_comparison,
             "items": items,
@@ -2387,6 +2394,87 @@ class RuleBacktestService:
             "relationship": relationship or None,
             "meaningfully_comparable": bool(period_comparison.get("meaningfully_comparable")),
             "diagnostics": list(period_comparison.get("diagnostics") or []),
+        }
+
+    @classmethod
+    def _build_compare_profile_summary(
+        cls,
+        *,
+        market_code_comparison: Dict[str, Any],
+        period_comparison: Dict[str, Any],
+        parameter_comparison: Dict[str, Any],
+        robustness_summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        baseline_run_id = int(
+            robustness_summary.get("baseline_run_id")
+            or market_code_comparison.get("baseline_run_id")
+            or period_comparison.get("baseline_run_id")
+            or 0
+        )
+        selection_rule = str(
+            robustness_summary.get("selection_rule")
+            or market_code_comparison.get("selection_rule")
+            or period_comparison.get("selection_rule")
+            or "first_comparable_run_by_request_order"
+        )
+
+        market_relationship = str(market_code_comparison.get("relationship") or "").strip()
+        period_relationship = str(period_comparison.get("relationship") or "").strip()
+        parameter_state = str(parameter_comparison.get("state") or "").strip()
+        robustness_overall_state = str(robustness_summary.get("overall_state") or "").strip()
+        aligned_dimensions = list(robustness_summary.get("aligned_dimensions") or [])
+        partial_dimensions = list(robustness_summary.get("partial_dimensions") or [])
+        divergent_dimensions = list(robustness_summary.get("divergent_dimensions") or [])
+        unavailable_dimensions = list(robustness_summary.get("unavailable_dimensions") or [])
+        differing_parameter_keys = list(parameter_comparison.get("differing_parameter_keys") or [])
+
+        dimension_flags = {
+            "same_code": market_relationship == "same_code",
+            "same_market": market_relationship in {"same_code", "same_market_different_code"},
+            "cross_market": market_relationship == "different_market",
+            "same_strategy_family": parameter_state in {"same_family_comparable", "partial"},
+            "parameter_differences_present": bool(differing_parameter_keys),
+            "period_differences_present": period_relationship in {"overlapping", "disjoint", "partial"},
+        }
+
+        if robustness_overall_state == "insufficient_context":
+            primary_profile = "insufficient_context"
+            driving_dimensions = unavailable_dimensions or partial_dimensions or divergent_dimensions
+            diagnostics = list(robustness_summary.get("diagnostics") or [])
+        elif market_relationship == "different_market":
+            primary_profile = "cross_market_mixed"
+            driving_dimensions = ["market_code"]
+            diagnostics = list(market_code_comparison.get("diagnostics") or [])
+        elif market_relationship == "same_market_different_code":
+            primary_profile = "same_market_cross_code"
+            driving_dimensions = ["market_code"]
+            diagnostics = list(market_code_comparison.get("diagnostics") or [])
+        elif (
+            market_relationship == "same_code"
+            and parameter_state == "same_family_comparable"
+            and bool(differing_parameter_keys)
+            and period_relationship == "identical"
+        ):
+            primary_profile = "same_strategy_parameter_variants"
+            driving_dimensions = ["parameter_set"]
+            diagnostics = ["parameter_differences_present"]
+        elif market_relationship == "same_code" and period_relationship in {"overlapping", "disjoint", "partial"}:
+            primary_profile = "same_code_different_periods"
+            driving_dimensions = ["periods"]
+            diagnostics = list(period_comparison.get("diagnostics") or [])
+        else:
+            primary_profile = "mixed_context"
+            driving_dimensions = divergent_dimensions or partial_dimensions or unavailable_dimensions
+            diagnostics = list(robustness_summary.get("diagnostics") or [])
+
+        return {
+            "baseline_run_id": baseline_run_id,
+            "selection_rule": selection_rule,
+            "primary_profile": primary_profile,
+            "aligned_dimensions": aligned_dimensions,
+            "driving_dimensions": driving_dimensions,
+            "dimension_flags": dimension_flags,
+            "diagnostics": cls._dedupe_compare_market_code_diagnostics(diagnostics),
         }
 
     @classmethod

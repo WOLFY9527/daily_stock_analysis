@@ -750,6 +750,25 @@ class RuleBacktestCompareRobustnessSummary(BaseModel):
     diagnostics: List[str] = Field(default_factory=list)
 
 
+class RuleBacktestCompareProfileFlags(BaseModel):
+    same_code: bool = False
+    same_market: bool = False
+    cross_market: bool = False
+    same_strategy_family: bool = False
+    parameter_differences_present: bool = False
+    period_differences_present: bool = False
+
+
+class RuleBacktestCompareProfileSummary(BaseModel):
+    baseline_run_id: int
+    selection_rule: str
+    primary_profile: str
+    aligned_dimensions: List[str] = Field(default_factory=list)
+    driving_dimensions: List[str] = Field(default_factory=list)
+    dimension_flags: RuleBacktestCompareProfileFlags = Field(default_factory=RuleBacktestCompareProfileFlags)
+    diagnostics: List[str] = Field(default_factory=list)
+
+
 class RuleBacktestCompareResponse(BaseModel):
     comparison_source: str
     read_mode: str = "stored_first"
@@ -763,6 +782,7 @@ class RuleBacktestCompareResponse(BaseModel):
     period_comparison: Optional[RuleBacktestComparePeriodComparison] = None
     comparison_summary: Optional[RuleBacktestCompareSummary] = None
     robustness_summary: Optional[RuleBacktestCompareRobustnessSummary] = None
+    comparison_profile: Optional[RuleBacktestCompareProfileSummary] = None
     parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 

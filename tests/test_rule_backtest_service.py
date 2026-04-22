@@ -1902,6 +1902,235 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["dimensions"]["metrics_baseline"]["unavailable_metric_keys"], ["annualized_return_pct", "total_return_pct"])
         self.assertEqual(payload["dimensions"]["market_code"]["state"], "unavailable")
 
+    def test_build_compare_profile_summary_classifies_parameter_variants(self) -> None:
+        payload = RuleBacktestService._build_compare_profile_summary(
+            market_code_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "same_code",
+                "state": "direct",
+                "directly_comparable": True,
+                "diagnostics": ["same_normalized_code"],
+            },
+            period_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "identical",
+                "state": "comparable",
+                "meaningfully_comparable": True,
+                "diagnostics": ["identical_periods"],
+            },
+            parameter_comparison={
+                "state": "same_family_comparable",
+                "shared_parameter_keys": ["strategy_spec.execution.signal_timing"],
+                "differing_parameter_keys": ["strategy_spec.signal.fast_period"],
+                "missing_parameter_keys": [],
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "highly_comparable",
+                "aligned_dimensions": ["market_code", "metrics_baseline", "parameter_set", "periods"],
+                "partial_dimensions": [],
+                "divergent_dimensions": [],
+                "unavailable_dimensions": [],
+                "dimensions": {},
+                "diagnostics": [],
+            },
+        )
+
+        self.assertEqual(payload["primary_profile"], "same_strategy_parameter_variants")
+        self.assertEqual(payload["aligned_dimensions"], ["market_code", "metrics_baseline", "parameter_set", "periods"])
+        self.assertEqual(payload["driving_dimensions"], ["parameter_set"])
+        self.assertTrue(payload["dimension_flags"]["same_code"])
+        self.assertTrue(payload["dimension_flags"]["same_market"])
+        self.assertTrue(payload["dimension_flags"]["same_strategy_family"])
+        self.assertTrue(payload["dimension_flags"]["parameter_differences_present"])
+        self.assertFalse(payload["dimension_flags"]["period_differences_present"])
+
+    def test_build_compare_profile_summary_classifies_same_code_different_periods(self) -> None:
+        payload = RuleBacktestService._build_compare_profile_summary(
+            market_code_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "same_code",
+                "state": "direct",
+                "directly_comparable": True,
+                "diagnostics": ["same_normalized_code"],
+            },
+            period_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "overlapping",
+                "state": "comparable",
+                "meaningfully_comparable": True,
+                "diagnostics": ["overlapping_periods"],
+            },
+            parameter_comparison={
+                "state": "same_family_comparable",
+                "shared_parameter_keys": ["strategy_spec.execution.signal_timing"],
+                "differing_parameter_keys": [],
+                "missing_parameter_keys": [],
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "highly_comparable",
+                "aligned_dimensions": ["market_code", "metrics_baseline", "parameter_set", "periods"],
+                "partial_dimensions": [],
+                "divergent_dimensions": [],
+                "unavailable_dimensions": [],
+                "dimensions": {},
+                "diagnostics": [],
+            },
+        )
+
+        self.assertEqual(payload["primary_profile"], "same_code_different_periods")
+        self.assertEqual(payload["driving_dimensions"], ["periods"])
+        self.assertTrue(payload["dimension_flags"]["same_code"])
+        self.assertTrue(payload["dimension_flags"]["period_differences_present"])
+
+    def test_build_compare_profile_summary_classifies_same_market_cross_code(self) -> None:
+        payload = RuleBacktestService._build_compare_profile_summary(
+            market_code_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "same_market_different_code",
+                "state": "limited",
+                "directly_comparable": False,
+                "diagnostics": ["same_market_different_code"],
+            },
+            period_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "identical",
+                "state": "comparable",
+                "meaningfully_comparable": True,
+                "diagnostics": ["identical_periods"],
+            },
+            parameter_comparison={
+                "state": "unavailable",
+                "shared_parameter_keys": [],
+                "differing_parameter_keys": [],
+                "missing_parameter_keys": [],
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "context_limited",
+                "aligned_dimensions": ["metrics_baseline", "periods"],
+                "partial_dimensions": [],
+                "divergent_dimensions": ["market_code"],
+                "unavailable_dimensions": ["parameter_set"],
+                "dimensions": {},
+                "diagnostics": ["same_market_different_code", "parameter_context_unavailable"],
+            },
+        )
+
+        self.assertEqual(payload["primary_profile"], "same_market_cross_code")
+        self.assertEqual(payload["driving_dimensions"], ["market_code"])
+        self.assertFalse(payload["dimension_flags"]["same_code"])
+        self.assertTrue(payload["dimension_flags"]["same_market"])
+        self.assertFalse(payload["dimension_flags"]["cross_market"])
+
+    def test_build_compare_profile_summary_classifies_mixed_context_when_no_single_mode_dominates(self) -> None:
+        payload = RuleBacktestService._build_compare_profile_summary(
+            market_code_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "same_code",
+                "state": "direct",
+                "directly_comparable": True,
+                "diagnostics": ["same_normalized_code"],
+            },
+            period_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "identical",
+                "state": "comparable",
+                "meaningfully_comparable": True,
+                "diagnostics": ["identical_periods"],
+            },
+            parameter_comparison={
+                "state": "different_family",
+                "shared_parameter_keys": [],
+                "differing_parameter_keys": [],
+                "missing_parameter_keys": [],
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "context_limited",
+                "aligned_dimensions": ["market_code", "metrics_baseline", "periods"],
+                "partial_dimensions": [],
+                "divergent_dimensions": ["parameter_set"],
+                "unavailable_dimensions": [],
+                "dimensions": {},
+                "diagnostics": ["different_parameter_context"],
+            },
+        )
+
+        self.assertEqual(payload["primary_profile"], "mixed_context")
+        self.assertEqual(payload["driving_dimensions"], ["parameter_set"])
+        self.assertEqual(payload["diagnostics"], ["different_parameter_context"])
+
+    def test_build_compare_profile_summary_classifies_insufficient_context(self) -> None:
+        payload = RuleBacktestService._build_compare_profile_summary(
+            market_code_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "unavailable_metadata",
+                "state": "limited",
+                "directly_comparable": False,
+                "diagnostics": ["market_code_metadata_unavailable"],
+            },
+            period_comparison={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "unavailable",
+                "state": "limited",
+                "meaningfully_comparable": False,
+                "diagnostics": ["period_metadata_unavailable"],
+            },
+            parameter_comparison={
+                "state": "unavailable",
+                "shared_parameter_keys": [],
+                "differing_parameter_keys": [],
+                "missing_parameter_keys": [],
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "insufficient_context",
+                "aligned_dimensions": [],
+                "partial_dimensions": [],
+                "divergent_dimensions": [],
+                "unavailable_dimensions": ["market_code", "metrics_baseline", "parameter_set", "periods"],
+                "dimensions": {},
+                "diagnostics": [
+                    "market_code_metadata_unavailable",
+                    "unavailable_metric_deltas",
+                    "parameter_context_unavailable",
+                    "period_metadata_unavailable",
+                ],
+            },
+        )
+
+        self.assertEqual(payload["primary_profile"], "insufficient_context")
+        self.assertEqual(
+            payload["driving_dimensions"],
+            ["market_code", "metrics_baseline", "parameter_set", "periods"],
+        )
+        self.assertEqual(
+            payload["diagnostics"],
+            [
+                "market_code_metadata_unavailable",
+                "unavailable_metric_deltas",
+                "parameter_context_unavailable",
+                "period_metadata_unavailable",
+            ],
+        )
+
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
         service = RuleBacktestService(self.db)
 

@@ -726,6 +726,22 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "missing_period_end",
                 ],
             },
+            "comparison_profile": {
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "primary_profile": "same_code_different_periods",
+                "aligned_dimensions": ["market_code", "metrics_baseline"],
+                "driving_dimensions": ["periods"],
+                "dimension_flags": {
+                    "same_code": True,
+                    "same_market": True,
+                    "cross_market": False,
+                    "same_strategy_family": True,
+                    "parameter_differences_present": True,
+                    "period_differences_present": True,
+                },
+                "diagnostics": ["overlapping_periods"],
+            },
             "parameter_comparison": {
                 "state": "same_family_comparable",
                 "strategy_family_values": ["moving_average_crossover"],
@@ -911,6 +927,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
             payload["robustness_summary"]["dimensions"]["metrics_baseline"]["partial_metric_keys"],
             ["annualized_return_pct"],
         )
+        self.assertEqual(payload["comparison_profile"]["primary_profile"], "same_code_different_periods")
+        self.assertEqual(payload["comparison_profile"]["driving_dimensions"], ["periods"])
+        self.assertTrue(payload["comparison_profile"]["dimension_flags"]["same_code"])
+        self.assertTrue(payload["comparison_profile"]["dimension_flags"]["period_differences_present"])
         self.assertEqual(payload["parameter_comparison"]["state"], "same_family_comparable")
         self.assertEqual(
             payload["parameter_comparison"]["differing_parameter_keys"],
