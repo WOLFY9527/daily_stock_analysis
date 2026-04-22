@@ -318,6 +318,13 @@ ARTIFACT_AVAILABILITY_FIELDS: List[str] = [
     "has_run_timing",
 ]
 
+STATUS_INTEGRITY_SUMMARY_FIELDS: List[str] = [
+    "status_message",
+    "status_history",
+    "run_timing",
+    "run_diagnostics",
+]
+
 
 @dataclass
 class _StrategySpecSupportPayload:
@@ -886,10 +893,17 @@ class RuleBacktestService:
             stored_summary=summary,
             trade_rows_present=bool(trade_run_ids),
         )
+        readback_integrity = self._resolve_status_readback_integrity_payload(
+            row=row,
+            stored_summary=summary,
+            artifact_availability=artifact_availability,
+            trade_rows_present=bool(trade_run_ids),
+        )
         return self._build_run_status_payload(
             row=row,
             summary=summary,
             artifact_availability=artifact_availability,
+            readback_integrity=readback_integrity,
         )
 
     def cancel_run(self, run_id: int) -> Optional[Dict[str, Any]]:
@@ -2980,6 +2994,7 @@ class RuleBacktestService:
         row: RuleBacktestRun,
         summary: Dict[str, Any],
         artifact_availability: Dict[str, Any],
+        readback_integrity: Dict[str, Any],
     ) -> Dict[str, Any]:
         return {
             "id": int(row.id),
@@ -2997,6 +3012,7 @@ class RuleBacktestService:
             "parsed_confidence": row.parsed_confidence,
             "needs_confirmation": bool(row.needs_confirmation),
             "artifact_availability": dict(artifact_availability or {}),
+            "readback_integrity": dict(readback_integrity or {}),
         }
 
     @staticmethod
@@ -3145,6 +3161,246 @@ class RuleBacktestService:
             source="derived_from_live_storage",
             completeness="legacy_derived",
             flags=derived_flags,
+        )
+
+    @staticmethod
+    def _build_readback_integrity_payload(
+        *,
+        source: str,
+        completeness: str,
+        used_legacy_fallback: bool,
+        used_live_storage_repair: bool,
+        has_summary_storage_drift: bool,
+        drift_domains: List[str],
+        missing_summary_fields: List[str],
+        integrity_level: str,
+    ) -> Dict[str, Any]:
+        return {
+            "version": "v1",
+            "source": str(source or "unknown"),
+            "completeness": str(completeness or "unknown"),
+            "used_legacy_fallback": bool(used_legacy_fallback),
+            "used_live_storage_repair": bool(used_live_storage_repair),
+            "has_summary_storage_drift": bool(has_summary_storage_drift),
+            "drift_domains": [str(item) for item in (drift_domains or []) if str(item or "").strip()],
+            "missing_summary_fields": [
+                str(item) for item in (missing_summary_fields or []) if str(item or "").strip()
+            ],
+            "integrity_level": str(integrity_level or "unknown"),
+        }
+
+    @staticmethod
+    def _artifact_availability_field_to_domain(field: str) -> str:
+        normalized = str(field or "").strip()
+        if normalized.startswith("has_"):
+            return normalized[4:]
+        return normalized or "unknown"
+
+    @classmethod
+    def _collect_artifact_availability_drift_domains(
+        cls,
+        *,
+        row: RuleBacktestRun,
+        stored_summary: Dict[str, Any],
+        trade_rows_present: bool,
+    ) -> List[str]:
+        stored_payload = stored_summary.get("artifact_availability")
+        if not isinstance(stored_payload, dict):
+            return []
+        derived_flags = cls._derive_artifact_availability_flags(
+            row=row,
+            stored_summary=stored_summary,
+            trade_rows_present=trade_rows_present,
+        )
+        drift_domains: List[str] = []
+        for field in ARTIFACT_AVAILABILITY_FIELDS:
+            if not isinstance(stored_payload.get(field), bool):
+                continue
+            if bool(stored_payload.get(field)) == bool(derived_flags.get(field, False)):
+                continue
+            drift_domains.append(cls._artifact_availability_field_to_domain(field))
+        seen: set[str] = set()
+        deduped: List[str] = []
+        for domain in drift_domains:
+            if not domain or domain in seen:
+                continue
+            seen.add(domain)
+            deduped.append(domain)
+        return deduped
+
+    @staticmethod
+    def _source_uses_legacy_fallback(*, source: Any, completeness: Any) -> bool:
+        normalized_source = str(source or "").strip().lower()
+        normalized_completeness = str(completeness or "").strip().lower()
+        if "live_storage_repair" in normalized_source:
+            return False
+        if "legacy" in normalized_source or "legacy" in normalized_completeness:
+            return True
+        if normalized_source.startswith("derived_from_"):
+            return True
+        if normalized_completeness == "derived":
+            return True
+        return False
+
+    @classmethod
+    def _resolve_status_readback_integrity_payload(
+        cls,
+        *,
+        row: RuleBacktestRun,
+        stored_summary: Dict[str, Any],
+        artifact_availability: Dict[str, Any],
+        trade_rows_present: bool,
+    ) -> Dict[str, Any]:
+        missing_summary_fields: List[str] = []
+        if not stored_summary:
+            missing_summary_fields.append("stored_summary")
+        for field in STATUS_INTEGRITY_SUMMARY_FIELDS:
+            if field == "status_history":
+                if field not in stored_summary or not isinstance(stored_summary.get(field), list):
+                    missing_summary_fields.append(field)
+                continue
+            if field in {"run_timing", "run_diagnostics"}:
+                if not isinstance(stored_summary.get(field), dict) or not stored_summary.get(field):
+                    missing_summary_fields.append(field)
+                continue
+            if field not in stored_summary:
+                missing_summary_fields.append(field)
+
+        drift_domains = cls._collect_artifact_availability_drift_domains(
+            row=row,
+            stored_summary=stored_summary,
+            trade_rows_present=trade_rows_present,
+        )
+        used_live_storage_repair = bool(drift_domains) or "live_storage_repair" in str(
+            artifact_availability.get("source") or ""
+        )
+        if used_live_storage_repair:
+            return cls._build_readback_integrity_payload(
+                source="derived_from_status_summary+live_storage_repair",
+                completeness="stored_partial_repaired",
+                used_legacy_fallback=not bool(stored_summary),
+                used_live_storage_repair=True,
+                has_summary_storage_drift=True,
+                drift_domains=drift_domains,
+                missing_summary_fields=missing_summary_fields,
+                integrity_level="drift_repaired",
+            )
+        if not stored_summary:
+            return cls._build_readback_integrity_payload(
+                source="derived_from_status_row_columns",
+                completeness="legacy_derived",
+                used_legacy_fallback=True,
+                used_live_storage_repair=False,
+                has_summary_storage_drift=False,
+                drift_domains=[],
+                missing_summary_fields=missing_summary_fields,
+                integrity_level="legacy_fallback",
+            )
+        if missing_summary_fields:
+            return cls._build_readback_integrity_payload(
+                source="derived_from_status_summary+missing_fields",
+                completeness="stored_partial_repaired",
+                used_legacy_fallback=False,
+                used_live_storage_repair=False,
+                has_summary_storage_drift=False,
+                drift_domains=[],
+                missing_summary_fields=missing_summary_fields,
+                integrity_level="stored_repaired",
+            )
+        return cls._build_readback_integrity_payload(
+            source="stored_status_summary",
+            completeness="complete",
+            used_legacy_fallback=False,
+            used_live_storage_repair=False,
+            has_summary_storage_drift=False,
+            drift_domains=[],
+            missing_summary_fields=[],
+            integrity_level="stored_complete",
+        )
+
+    @classmethod
+    def _resolve_readback_integrity_payload(
+        cls,
+        *,
+        row: RuleBacktestRun,
+        stored_summary: Dict[str, Any],
+        result_authority: Dict[str, Any],
+        artifact_availability: Dict[str, Any],
+        trade_rows_present: bool,
+    ) -> Dict[str, Any]:
+        domains = dict((result_authority.get("domains") or {})) if isinstance(result_authority, dict) else {}
+        active_domains = [
+            dict(entry or {})
+            for entry in domains.values()
+            if str((entry or {}).get("state") or "").strip().lower() != "omitted"
+        ]
+        summary_source = str(result_authority.get("summary_source") or "")
+        summary_completeness = str(result_authority.get("summary_completeness") or "")
+        missing_summary_fields = list(result_authority.get("summary_missing_fields") or [])
+        used_legacy_fallback = cls._source_uses_legacy_fallback(
+            source=summary_source,
+            completeness=summary_completeness,
+        ) or any(
+            cls._source_uses_legacy_fallback(
+                source=entry.get("source"),
+                completeness=entry.get("completeness"),
+            )
+            for entry in active_domains
+        )
+        stored_repair = str(summary_completeness).strip().lower() == "stored_partial_repaired" or any(
+            str(entry.get("completeness") or "").strip().lower() == "stored_partial_repaired"
+            for entry in active_domains
+        )
+        drift_domains = cls._collect_artifact_availability_drift_domains(
+            row=row,
+            stored_summary=stored_summary,
+            trade_rows_present=trade_rows_present,
+        )
+        used_live_storage_repair = bool(drift_domains) or "live_storage_repair" in str(
+            artifact_availability.get("source") or ""
+        )
+        if used_live_storage_repair:
+            return cls._build_readback_integrity_payload(
+                source="derived_from_result_authority+live_storage_repair",
+                completeness="stored_partial_repaired",
+                used_legacy_fallback=used_legacy_fallback,
+                used_live_storage_repair=True,
+                has_summary_storage_drift=True,
+                drift_domains=drift_domains,
+                missing_summary_fields=missing_summary_fields,
+                integrity_level="drift_repaired",
+            )
+        if used_legacy_fallback:
+            return cls._build_readback_integrity_payload(
+                source="derived_from_result_authority+legacy_fallback",
+                completeness="legacy_derived",
+                used_legacy_fallback=True,
+                used_live_storage_repair=False,
+                has_summary_storage_drift=False,
+                drift_domains=[],
+                missing_summary_fields=missing_summary_fields,
+                integrity_level="legacy_fallback",
+            )
+        if stored_repair:
+            return cls._build_readback_integrity_payload(
+                source="derived_from_result_authority+stored_repair",
+                completeness="stored_partial_repaired",
+                used_legacy_fallback=False,
+                used_live_storage_repair=False,
+                has_summary_storage_drift=False,
+                drift_domains=[],
+                missing_summary_fields=missing_summary_fields,
+                integrity_level="stored_repaired",
+            )
+        return cls._build_readback_integrity_payload(
+            source="derived_from_result_authority",
+            completeness="complete",
+            used_legacy_fallback=False,
+            used_live_storage_repair=False,
+            has_summary_storage_drift=False,
+            drift_domains=[],
+            missing_summary_fields=missing_summary_fields,
+            integrity_level="stored_complete",
         )
 
     @staticmethod
@@ -7000,6 +7256,14 @@ class RuleBacktestService:
             trade_rows_present=bool(trade_rows_present),
         )
         summary["artifact_availability"] = dict(artifact_availability)
+        readback_integrity = self._resolve_readback_integrity_payload(
+            row=row,
+            stored_summary=stored_summary,
+            result_authority=result_authority,
+            artifact_availability=artifact_availability,
+            trade_rows_present=bool(trade_rows_present),
+        )
+        summary["readback_integrity"] = dict(readback_integrity)
         return {
             "id": row.id,
             "code": row.code,
@@ -7047,6 +7311,7 @@ class RuleBacktestService:
             "final_equity": metrics.get("final_equity"),
             "summary": summary,
             "artifact_availability": artifact_availability,
+            "readback_integrity": readback_integrity,
             "execution_model": execution_model,
             "execution_assumptions": execution_assumptions,
             "execution_assumptions_snapshot": execution_assumptions_snapshot,

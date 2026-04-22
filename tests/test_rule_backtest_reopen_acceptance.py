@@ -109,6 +109,11 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         self.assertTrue(detail["artifact_availability"]["has_trade_rows"])
         self.assertTrue(item["artifact_availability"]["has_trade_rows"])
         self.assertTrue(status["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(detail["readback_integrity"], item["readback_integrity"])
+        self.assertEqual(detail["summary"]["readback_integrity"], detail["readback_integrity"])
+        self.assertEqual(item["summary"]["readback_integrity"], item["readback_integrity"])
+        self.assertEqual(detail["readback_integrity"]["integrity_level"], "stored_repaired")
+        self.assertFalse(detail["readback_integrity"]["used_live_storage_repair"])
 
     def test_reopen_acceptance_repaired_detail_and_history_share_repaired_domains_without_summary_drift(self) -> None:
         service, response, run_row = self._run_completed_backtest()

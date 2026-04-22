@@ -54,6 +54,17 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "has_run_diagnostics": True,
             "has_run_timing": True,
         }
+        readback_integrity = {
+            "version": "v1",
+            "source": "derived_from_result_authority",
+            "completeness": "complete",
+            "used_legacy_fallback": False,
+            "used_live_storage_repair": False,
+            "has_summary_storage_drift": False,
+            "drift_domains": [],
+            "missing_summary_fields": [],
+            "integrity_level": "stored_complete",
+        }
         return {
             "id": run_id,
             "code": "600519",
@@ -102,8 +113,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "avg_holding_bars": 0.0,
             "avg_holding_calendar_days": 0.0,
             "final_equity": 100000.0,
-            "summary": {"artifact_availability": artifact_availability},
+            "summary": {
+                "artifact_availability": artifact_availability,
+                "readback_integrity": readback_integrity,
+            },
             "artifact_availability": artifact_availability,
+            "readback_integrity": readback_integrity,
             "result_authority": {
                 "contract_version": "v1",
                 "read_mode": "stored_first",
@@ -430,6 +445,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["artifact_availability"]["source"], "summary.artifact_availability")
         self.assertTrue(payload["artifact_availability"]["has_trade_rows"])
         self.assertEqual(payload["summary"]["artifact_availability"], payload["artifact_availability"])
+        self.assertEqual(payload["readback_integrity"]["integrity_level"], "stored_complete")
+        self.assertFalse(payload["readback_integrity"]["used_legacy_fallback"])
+        self.assertEqual(payload["summary"]["readback_integrity"], payload["readback_integrity"])
         self.assertEqual(
             payload["result_authority"]["domains"]["execution_model"],
             {
@@ -534,6 +552,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
         self.assertEqual(payload["items"][0]["artifact_availability"]["source"], "summary.artifact_availability")
         self.assertTrue(payload["items"][0]["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(payload["items"][0]["readback_integrity"]["integrity_level"], "stored_complete")
 
     def test_compare_rule_backtest_runs_serializes_stored_first_compare_contract(self) -> None:
         service = MagicMock()
@@ -1088,6 +1107,17 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "has_run_diagnostics": True,
                 "has_run_timing": True,
             },
+            "readback_integrity": {
+                "version": "v1",
+                "source": "stored_status_summary",
+                "completeness": "complete",
+                "used_legacy_fallback": False,
+                "used_live_storage_repair": False,
+                "has_summary_storage_drift": False,
+                "drift_domains": [],
+                "missing_summary_fields": [],
+                "integrity_level": "stored_complete",
+            },
         }
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
@@ -1098,6 +1128,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.status_history[0]["status"], "queued")
         self.assertEqual(response.artifact_availability["source"], "summary.artifact_availability")
         self.assertFalse(response.artifact_availability["has_trade_rows"])
+        self.assertEqual(response.readback_integrity["source"], "stored_status_summary")
+        self.assertEqual(response.readback_integrity["integrity_level"], "stored_complete")
         service.get_run_status.assert_called_once_with(123)
 
     def test_cancel_rule_backtest_run_returns_cancel_contract(self) -> None:

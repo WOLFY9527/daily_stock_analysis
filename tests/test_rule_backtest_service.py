@@ -860,6 +860,17 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(response["artifact_availability"]["has_execution_trace"])
         self.assertEqual(response["summary"]["artifact_availability"], response["artifact_availability"])
         self.assertEqual(
+            response["readback_integrity"]["source"],
+            "derived_from_result_authority+stored_repair",
+        )
+        self.assertEqual(response["readback_integrity"]["completeness"], "stored_partial_repaired")
+        self.assertFalse(response["readback_integrity"]["used_legacy_fallback"])
+        self.assertFalse(response["readback_integrity"]["used_live_storage_repair"])
+        self.assertEqual(response["readback_integrity"]["drift_domains"], [])
+        self.assertEqual(response["readback_integrity"]["missing_summary_fields"], [])
+        self.assertEqual(response["readback_integrity"]["integrity_level"], "stored_repaired")
+        self.assertEqual(response["summary"]["readback_integrity"], response["readback_integrity"])
+        self.assertEqual(
             authority["domains"]["summary"],
             {
                 "source": "row.summary_json",
@@ -3042,6 +3053,17 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["artifact_availability"]["completeness"], "stored_partial_repaired")
         self.assertFalse(detail["artifact_availability"]["has_trade_rows"])
         self.assertEqual(detail["summary"]["artifact_availability"], detail["artifact_availability"])
+        self.assertEqual(
+            detail["readback_integrity"]["source"],
+            "derived_from_result_authority+live_storage_repair",
+        )
+        self.assertEqual(detail["readback_integrity"]["completeness"], "stored_partial_repaired")
+        self.assertFalse(detail["readback_integrity"]["used_legacy_fallback"])
+        self.assertTrue(detail["readback_integrity"]["used_live_storage_repair"])
+        self.assertTrue(detail["readback_integrity"]["has_summary_storage_drift"])
+        self.assertEqual(detail["readback_integrity"]["drift_domains"], ["trade_rows"])
+        self.assertEqual(detail["readback_integrity"]["integrity_level"], "drift_repaired")
+        self.assertEqual(detail["summary"]["readback_integrity"], detail["readback_integrity"])
 
         status = service.get_run_status(run_row.id)
         assert status is not None
@@ -3050,6 +3072,12 @@ class RuleBacktestTestCase(unittest.TestCase):
             status["artifact_availability"]["source"],
             "summary.artifact_availability+live_storage_repair",
         )
+        self.assertEqual(
+            status["readback_integrity"]["source"],
+            "derived_from_status_summary+live_storage_repair",
+        )
+        self.assertTrue(status["readback_integrity"]["used_live_storage_repair"])
+        self.assertEqual(status["readback_integrity"]["drift_domains"], ["trade_rows"])
 
         history = service.list_runs(code="600519", page=1, limit=10)
         self.assertFalse(history["items"][0]["artifact_availability"]["has_trade_rows"])
@@ -3057,6 +3085,12 @@ class RuleBacktestTestCase(unittest.TestCase):
             history["items"][0]["artifact_availability"]["source"],
             "summary.artifact_availability+live_storage_repair",
         )
+        self.assertEqual(
+            history["items"][0]["readback_integrity"]["source"],
+            "derived_from_result_authority+live_storage_repair",
+        )
+        self.assertTrue(history["items"][0]["readback_integrity"]["used_live_storage_repair"])
+        self.assertEqual(history["items"][0]["readback_integrity"]["drift_domains"], ["trade_rows"])
 
     def test_get_run_repairs_partial_stored_parsed_strategy_with_provenance(self) -> None:
         service = RuleBacktestService(self.db)
@@ -3294,6 +3328,19 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("stored_summary", detail["result_authority"]["summary_missing_fields"])
         self.assertIn("request.start_date", detail["result_authority"]["summary_missing_fields"])
         self.assertIn("status_message", detail["result_authority"]["summary_missing_fields"])
+        self.assertEqual(
+            detail["readback_integrity"]["source"],
+            "derived_from_result_authority+legacy_fallback",
+        )
+        self.assertEqual(detail["readback_integrity"]["completeness"], "legacy_derived")
+        self.assertTrue(detail["readback_integrity"]["used_legacy_fallback"])
+        self.assertFalse(detail["readback_integrity"]["used_live_storage_repair"])
+        self.assertFalse(detail["readback_integrity"]["has_summary_storage_drift"])
+        self.assertEqual(detail["readback_integrity"]["integrity_level"], "legacy_fallback")
+        self.assertEqual(
+            detail["readback_integrity"]["missing_summary_fields"],
+            detail["result_authority"]["summary_missing_fields"],
+        )
 
     def test_get_run_repairs_partial_stored_equity_curve_with_provenance(self) -> None:
         service = RuleBacktestService(self.db)
@@ -3520,6 +3567,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(cancelled_status["run_diagnostics"]["terminal_status"], "cancelled")
         self.assertEqual(cancelled_status["run_diagnostics"]["reason_code"], "cancelled")
         self.assertEqual(cancelled_status["run_diagnostics"]["last_non_terminal_status"], "parsing")
+        self.assertEqual(cancelled_status["readback_integrity"]["source"], "stored_status_summary")
+        self.assertEqual(cancelled_status["readback_integrity"]["integrity_level"], "stored_complete")
+        self.assertFalse(cancelled_status["readback_integrity"]["used_legacy_fallback"])
+        self.assertFalse(cancelled_status["readback_integrity"]["used_live_storage_repair"])
 
         with patch.object(service, "parse_strategy", side_effect=RuntimeError("parse boom")):
             failed = service.submit_backtest(
@@ -3540,6 +3591,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(failed_status["run_diagnostics"]["reason_code"], "execution_failed")
         self.assertEqual(failed_status["run_diagnostics"]["last_non_terminal_status"], "parsing")
         self.assertIn("parse boom", failed_status["run_diagnostics"]["message"])
+        self.assertEqual(failed_status["readback_integrity"]["source"], "stored_status_summary")
+        self.assertEqual(failed_status["readback_integrity"]["integrity_level"], "stored_complete")
 
         failed_detail = service.get_run(failed["id"])
         self.assertIsNotNone(failed_detail)
