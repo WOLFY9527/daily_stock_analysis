@@ -620,8 +620,8 @@ const ChatPage: React.FC = () => {
             )}
             titleClassName="text-2xl font-bold"
             description={language === 'en'
-              ? 'Use this as a stock research workspace: ask for the conclusion first, then drill into risk, catalysts, position sizing, and execution.'
-              : '把这里当成股票研究助手工作台来用：先问结论，再追问风险、催化、仓位和执行计划。'}
+              ? 'Start with the takeaway, then dig into risk, catalysts, position sizing, and execution.'
+              : '先问结论，再继续追问风险、催化、仓位和执行计划。'}
             actions={messages.length > 0 ? (
               <>
                 <button
@@ -761,8 +761,8 @@ const ChatPage: React.FC = () => {
                       <h3 className="text-lg font-medium text-foreground">{language === 'en' ? 'Start with a high-value question' : '从一个高价值问题开始'}</h3>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary-text">
                         {language === 'en'
-                          ? 'Ask Stock now behaves more like a research workstation: prioritize actionable conclusions, risk framing, catalysts, and execution instead of generic chat.'
-                          : '问股页现在更偏向“研究助手工作台”：优先帮你形成交易结论、风险提示、催化判断和执行计划，而不是泛泛聊天。'}
+                          ? 'Start with actionable conclusions, then narrow the discussion to risk, catalysts, and execution instead of generic chat.'
+                          : '这里更适合先形成交易结论，再继续细化风险、催化和执行计划，而不是泛泛聊天。'}
                       </p>
                     </div>
                   </div>

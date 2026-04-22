@@ -153,7 +153,7 @@ describe('ChatPage', () => {
     expect(screen.getByText('开仓执行判断')).toBeInTheDocument();
     expect(screen.getByText('持仓风控复盘')).toBeInTheDocument();
     expect(screen.getByText('事件驱动跟踪')).toBeInTheDocument();
-    expect(screen.getAllByText(/研究助手工作台/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/先问结论，再继续追问风险、催化、仓位和执行计划/).length).toBeGreaterThan(0);
   });
 
   it('switches session when clicking anywhere on the session card', async () => {
