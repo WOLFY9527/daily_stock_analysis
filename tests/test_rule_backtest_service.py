@@ -808,6 +808,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(any((row.get("动作") or "") in {"买", "卖"} for row in rows))
         self.assertTrue(all((row.get("fallback") or "") for row in rows))
 
+        payload = service.get_execution_trace_export_json(run_id=response["id"])
+        self.assertEqual(payload["source"], response["execution_trace"]["source"])
+        self.assertGreater(len(payload["trace_rows"]), 0)
+        self.assertEqual(payload["assumptions"]["summary_text"], response["execution_trace"]["assumptions_defaults"]["summary_text"])
+
     def test_service_exports_support_bundle_manifest_json_from_stored_result(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -888,9 +893,14 @@ class RuleBacktestTestCase(unittest.TestCase):
         for item in export_index["exports"][1:]:
             self.assertTrue(item["available"])
             self.assertEqual(item["availability_reason"], "execution_trace_rows_present")
-            self.assertEqual(item["delivery_mode"], "service_file_export")
-            self.assertIsNone(item["endpoint_path"])
             self.assertEqual(item["payload_class"], "heavy")
+        self.assertEqual(export_index["exports"][1]["delivery_mode"], "api")
+        self.assertEqual(
+            export_index["exports"][1]["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.json",
+        )
+        self.assertEqual(export_index["exports"][2]["delivery_mode"], "service_file_export")
+        self.assertIsNone(export_index["exports"][2]["endpoint_path"])
 
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)

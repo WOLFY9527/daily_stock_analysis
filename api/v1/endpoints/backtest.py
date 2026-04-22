@@ -28,6 +28,7 @@ from api.v1.schemas.backtest import (
     RuleBacktestHistoryResponse,
     RuleBacktestStatusResponse,
     RuleBacktestCancelResponse,
+    RuleBacktestExecutionTraceExportResponse,
     RuleBacktestSupportBundleManifestResponse,
     RuleBacktestSupportExportIndexResponse,
     RuleBacktestParseRequest,
@@ -549,6 +550,42 @@ def get_rule_backtest_support_export_index(
             raise
         return _build_model(RuleBacktestSupportExportIndexResponse, data)
     return _run_endpoint("查询规则回测 export index 失败", _operation)
+
+
+@router.get(
+    "/rule/runs/{run_id}/execution-trace.json",
+    response_model=RuleBacktestExecutionTraceExportResponse,
+    responses={
+        200: {"description": "规则回测 execution-trace JSON export"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        409: {"description": "导出当前不可用", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取规则回测 execution-trace JSON export",
+    description="返回单条规则回测的 execution-trace JSON 导出载荷，供 AI 调试、自动化脚本与 backend handoff 使用。",
+)
+def get_rule_backtest_execution_trace_json(
+    run_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestExecutionTraceExportResponse:
+    def _operation() -> RuleBacktestExecutionTraceExportResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        try:
+            data = service.get_execution_trace_export_json(run_id)
+        except ValueError as exc:
+            message = str(exc)
+            if "not found" in message.lower():
+                raise _not_found_error("规则回测记录不存在") from exc
+            if "no audit rows to export" in message.lower():
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "export_unavailable", "message": "当前回测没有可导出的 execution-trace rows"},
+                ) from exc
+            raise
+        return _build_model(RuleBacktestExecutionTraceExportResponse, data)
+
+    return _run_endpoint("查询规则回测 execution-trace JSON export 失败", _operation)
 
 
 @router.post(

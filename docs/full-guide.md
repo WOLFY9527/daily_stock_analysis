@@ -977,6 +977,7 @@ Web 结果页现在也统一按一条确定的数据链路展示：
 - compare workbench 的比较摘要区现在也有一组轻量 share/export controls：用户可以直接复制当前 compare 链接、当前 `runIds` 选择，或者复制一段基于当前 baseline / overall_state / primary_profile / comparable count 生成的短摘要文本，方便把当前比较快速发给别人或贴回自己的工作流。
 - 规则回测的 failed / cancelled runs 现在也有一份更稳定的 stored-first 诊断摘要：status/detail/history 读面除了原有的 `no_result_reason`、`no_result_message` 与 `status_history` 外，还会统一返回结构化 `run_diagnostics`，直接指出终态、reason code、最近状态迁移时间，以及终态前停留的最后一个非终态 stage，方便 reopen 和 AI/debug 工具做一致判断。
 - 规则回测的 lifecycle 时间线现在也有一份 stored-first `run_timing` 摘要：status/detail/history 会统一返回 `created_at`、`started_at`、`finished_at`、`failed_at`、`cancelled_at`、`last_updated_at` 以及队列/执行时长。这样在 reopen 时不必再从 `run_at`、`completed_at` 和零散 `status_history` 自己反推“是否真正开始执行、卡在排队还是执行、终态时间是否一致”。
+- support export index 里原本已经声明的 `execution_trace_json` 现在也有了真实的只读 API export：单条规则回测可直接拿到 execution-trace JSON 载荷，而不必再走 service-file-only 导出路径。这个接口仍然只复用当前 stored-first execution trace 读回逻辑，不会重建新 trace，也会在 trace rows 缺失时明确返回 unavailable，而不是假装可导出。
 - P6 也把 chart workspace 调整为更偏决策支持的结构：主图继续保留策略/基准/买入持有对照，第二张图优先展示回撤，第三张图可在 `相对基准 / 每日盈亏 / 仓位行为` 之间切换，帮助更快判断“是否跑赢、代价多大、交易是否过于频繁”
 - `参数与假设` tab 现在内置受控 `Scenario Lab`，支持对已支持的 rule strategy 做轻量参数迭代（例如 MA window、MACD/RSI 变体、benchmark mode、fee/slippage stress、lookback 窗口），并把当前运行作为基线汇总成紧凑比较表；它不是 full optimizer，只覆盖受控、确定性的 first-step iteration
 - 结果页 `概览` tab 会生成可导出的决策摘要（Markdown / HTML），优先输出人类可读的 decision summary，再把 execution trace 留给 CSV / JSON 导出；结果页同时会自动沉淀 recent draft，并支持手动保存具名 preset，配置页可直接复用这些回测配置而不用重新填写整套参数

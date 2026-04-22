@@ -7650,8 +7650,8 @@ class RuleBacktestService:
                     "availability_reason": trace_reason,
                     "format": "json",
                     "media_type": "application/json",
-                    "delivery_mode": "service_file_export",
-                    "endpoint_path": None,
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/execution-trace.json",
                     "payload_class": "heavy",
                 },
                 {
@@ -7681,36 +7681,36 @@ class RuleBacktestService:
         return str(destination)
 
     def export_execution_trace_json(self, run_id: int, output_path: str) -> str:
+        payload = self.get_execution_trace_export_json(run_id)
+        destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return str(destination)
+
+    def get_execution_trace_export_json(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
 
-        destination = Path(output_path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
         execution_trace = dict(run.get("execution_trace") or {})
         export_rows = self._build_execution_trace_export_rows(execution_trace)
         if not export_rows:
             raise ValueError(f"Run {run_id} has no audit rows to export.")
 
-        destination.write_text(
-            json.dumps(
-                {
-                    "version": execution_trace.get("version"),
-                    "source": execution_trace.get("source"),
-                    "completeness": execution_trace.get("completeness"),
-                    "missing_fields": list(execution_trace.get("missing_fields") or []),
-                    "trace_rows": export_rows,
-                    "assumptions": dict(execution_trace.get("assumptions_defaults") or {}),
-                    "execution_model": dict(execution_trace.get("execution_model") or {}),
-                    "execution_assumptions": dict(execution_trace.get("execution_assumptions") or {}),
-                    "fallback": dict(execution_trace.get("fallback") or {}),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        return str(destination)
+        return {
+            "version": execution_trace.get("version"),
+            "source": execution_trace.get("source"),
+            "completeness": execution_trace.get("completeness"),
+            "missing_fields": list(execution_trace.get("missing_fields") or []),
+            "trace_rows": export_rows,
+            "assumptions": dict(execution_trace.get("assumptions_defaults") or {}),
+            "execution_model": dict(execution_trace.get("execution_model") or {}),
+            "execution_assumptions": dict(execution_trace.get("execution_assumptions") or {}),
+            "fallback": dict(execution_trace.get("fallback") or {}),
+        }
 
     def parse_and_run_automated(
         self,

@@ -984,6 +984,19 @@ class RuleBacktestSupportBundleManifestResponse(BaseModel):
     artifact_counts: Dict[str, int] = Field(default_factory=dict)
 
 
+class RuleBacktestExecutionTraceExportResponse(BaseModel):
+    version: Optional[str] = None
+    source: Optional[str] = None
+    completeness: Optional[str] = None
+    missing_fields: List[str] = Field(default_factory=list)
+    trace_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    assumptions: Dict[str, Any] = Field(default_factory=dict)
+    execution_model: Dict[str, Any] = Field(default_factory=dict)
+    execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
+    benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
+    fallback: Dict[str, Any] = Field(default_factory=dict)
+
+
 class RuleBacktestSupportExportIndexItem(BaseModel):
     key: str
     available: bool

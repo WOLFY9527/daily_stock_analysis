@@ -16,6 +16,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
     cancel_rule_backtest_run,
     compare_rule_backtest_runs,
+    get_rule_backtest_execution_trace_json,
     parse_rule_strategy,
     get_rule_backtest_run,
     get_rule_backtest_runs,
@@ -35,6 +36,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
     RuleBacktestStatusResponse,
+    RuleBacktestExecutionTraceExportResponse,
     RuleBacktestSupportExportIndexResponse,
     RuleBacktestSupportBundleManifestResponse,
 )
@@ -328,8 +330,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "availability_reason": "execution_trace_rows_present",
                     "format": "json",
                     "media_type": "application/json",
-                    "delivery_mode": "service_file_export",
-                    "endpoint_path": None,
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.json",
                     "payload_class": "heavy",
                 },
                 {
@@ -1322,10 +1324,50 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.exports[1].key, "execution_trace_json")
         self.assertTrue(response.exports[1].available)
         self.assertEqual(response.exports[1].payload_class, "heavy")
-        self.assertIsNone(response.exports[1].endpoint_path)
+        self.assertEqual(response.exports[1].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[1].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/execution-trace.json",
+        )
         self.assertEqual(response.exports[2].key, "execution_trace_csv")
         self.assertEqual(response.exports[2].media_type, "text/csv")
         service.get_support_export_index.assert_called_once_with(123)
+
+    def test_get_rule_backtest_execution_trace_json_returns_compact_contract(self) -> None:
+        service = MagicMock()
+        service.get_execution_trace_export_json.return_value = {
+            "version": "v1",
+            "source": "stored_execution_trace",
+            "completeness": "complete",
+            "missing_fields": [],
+            "trace_rows": [{"日期": "2024-01-02", "动作": "买"}],
+            "assumptions": {"summary_text": "next bar open / long only"},
+            "execution_model": {"entry_timing": "next_bar_open"},
+            "execution_assumptions": {"position_sizing": "all_available_capital"},
+            "fallback": {"trace_rebuilt": False},
+        }
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_execution_trace_json(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestExecutionTraceExportResponse)
+        self.assertEqual(response.version, "v1")
+        self.assertEqual(response.source, "stored_execution_trace")
+        self.assertEqual(response.trace_rows[0]["动作"], "买")
+        self.assertEqual(response.assumptions["summary_text"], "next bar open / long only")
+        service.get_execution_trace_export_json.assert_called_once_with(123)
+
+    def test_get_rule_backtest_execution_trace_json_returns_unavailable_when_trace_missing(self) -> None:
+        service = MagicMock()
+        service.get_execution_trace_export_json.side_effect = ValueError("Run 123 has no audit rows to export.")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_execution_trace_json(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
+        service.get_execution_trace_export_json.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_export_index_truthfully_marks_missing_trace_exports(self) -> None:
         service = MagicMock()
