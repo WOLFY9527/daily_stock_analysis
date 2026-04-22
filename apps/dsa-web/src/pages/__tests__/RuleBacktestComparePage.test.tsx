@@ -303,6 +303,10 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByRole('columnheader', { name: /#202 candidate/ })).toBeInTheDocument();
     expect(screen.getByText('delta +6.00%')).toBeInTheDocument();
     expect(screen.getAllByText('unavailable').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('compare-metric-summary-totalReturnPct')).toHaveAttribute('data-tone', 'limited');
+    expect(screen.getByTestId('compare-metric-state-totalReturnPct-202')).toHaveAttribute('data-tone', 'best');
+    expect(screen.getByTestId('compare-metric-delta-totalReturnPct-202')).toHaveAttribute('data-tone', 'positive');
+    expect(screen.getByTestId('compare-metric-state-annualizedReturnPct-202')).toHaveAttribute('data-tone', 'unavailable');
   });
 
   it('shows an explicit empty state when fewer than two run ids are provided', async () => {

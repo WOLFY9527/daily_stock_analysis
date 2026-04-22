@@ -6742,6 +6742,46 @@ html[data-theme] .product-empty-state {
   line-height: 1.35;
 }
 
+.compare-metric-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 1.2rem;
+  padding: 0.08rem 0.42rem;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border-muted-hsl) / 0.55);
+  background: hsl(var(--bg-card-elevated-hsl) / 0.82);
+  font-size: 0.62rem;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.compare-metric-badge[data-tone='best'],
+.compare-metric-badge[data-tone='positive'] {
+  border-color: hsl(142 58% 72% / 0.34);
+  background: hsl(142 52% 20% / 0.22);
+  color: hsl(142 58% 72%);
+}
+
+.compare-metric-badge[data-tone='limited'] {
+  border-color: hsl(39 88% 70% / 0.34);
+  background: hsl(39 82% 24% / 0.2);
+  color: hsl(39 88% 74%);
+}
+
+.compare-metric-badge[data-tone='unavailable'],
+.compare-metric-badge[data-tone='negative'] {
+  border-color: hsl(0 74% 76% / 0.28);
+  background: hsl(0 62% 22% / 0.2);
+  color: hsl(0 74% 76%);
+}
+
+.compare-metric-badge[data-tone='baseline'] {
+  border-color: hsl(var(--accent-primary-hsl) / 0.3);
+  background: hsl(var(--accent-primary-hsl) / 0.16);
+  color: hsl(var(--accent-primary-hsl));
+}
+
 .compare-run-actions {
   align-items: flex-start;
   min-width: 9rem;

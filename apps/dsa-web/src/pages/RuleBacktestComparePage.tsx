@@ -152,6 +152,36 @@ function formatSignedPct(value?: number | null): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
+function getMetricSummaryTone(state?: string): string {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized.includes('unavailable')) return 'unavailable';
+  if (normalized.includes('limited') || normalized.includes('partial')) return 'limited';
+  if (normalized.includes('winner')) return 'best';
+  return 'neutral';
+}
+
+function getMetricStateTone({
+  state,
+  highlightApplies,
+  isUnavailable,
+}: {
+  state?: string;
+  highlightApplies: boolean;
+  isUnavailable: boolean;
+}): string {
+  if (isUnavailable) return 'unavailable';
+  if (highlightApplies) return 'best';
+  const normalized = String(state || '').toLowerCase();
+  if (normalized.includes('limited') || normalized.includes('partial')) return 'limited';
+  return 'neutral';
+}
+
+function getMetricDeltaTone(value?: number | null, isBaseline?: boolean): string {
+  if (isBaseline) return 'baseline';
+  if (value == null || Number.isNaN(value) || value === 0) return 'neutral';
+  return value > 0 ? 'positive' : 'negative';
+}
+
 function orderCompareItems(items: RuleBacktestCompareRunItem[], runIds: number[]): RuleBacktestCompareRunItem[] {
   const orderMap = new Map(runIds.map((runId, index) => [runId, index]));
   return [...items].sort((left, right) => {
@@ -210,12 +240,18 @@ function CompareMetricMatrix({
                 <td>
                   <div className="product-table__stack">
                     <span>{formatMetricLabel(metricKey, metric.label)}</span>
-                    <span className="product-footnote">{metric.state}</span>
+                    <span className="compare-metric-badge" data-tone={getMetricSummaryTone(metric.state)}>{metric.state}</span>
                   </div>
                 </td>
                 <td>
                   <div className="product-table__stack">
-                    <span>{highlight?.state || metric.state}</span>
+                    <span
+                      className="compare-metric-badge"
+                      data-testid={`compare-metric-summary-${metricKey}`}
+                      data-tone={getMetricSummaryTone(highlight?.state || metric.state)}
+                    >
+                      {highlight?.state || metric.state}
+                    </span>
                     <span className="product-footnote">{`context ${overallState || '--'} · profile ${primaryProfile || '--'}`}</span>
                   </div>
                 </td>
@@ -229,18 +265,44 @@ function CompareMetricMatrix({
                     <td key={`${metricKey}-${runId}`} data-tone={cellTone}>
                       {isUnavailable ? (
                         <div className="product-table__stack">
-                          <span>unavailable</span>
+                          <span
+                            className="compare-metric-badge"
+                            data-testid={`compare-metric-state-${metricKey}-${runId}`}
+                            data-tone="unavailable"
+                          >
+                            unavailable
+                          </span>
                           <span className="product-footnote">{highlight?.state || metric.state}</span>
                         </div>
                       ) : (
                         <div className="product-table__stack">
                           <span>{pct(deltaItem.value)}</span>
                           {runId === baselineRunId ? (
-                            <span className="product-footnote">baseline</span>
+                            <span
+                              className="compare-metric-badge"
+                              data-testid={`compare-metric-delta-${metricKey}-${runId}`}
+                              data-tone={getMetricDeltaTone(deltaItem.deltaVsBaseline, true)}
+                            >
+                              baseline
+                            </span>
                           ) : (
-                            <span className="product-footnote">{`delta ${formatSignedPct(deltaItem.deltaVsBaseline)}`}</span>
+                            <span
+                              className="compare-metric-badge"
+                              data-testid={`compare-metric-delta-${metricKey}-${runId}`}
+                              data-tone={getMetricDeltaTone(deltaItem.deltaVsBaseline)}
+                            >
+                              {`delta ${formatSignedPct(deltaItem.deltaVsBaseline)}`}
+                            </span>
                           )}
-                          <span className="product-footnote">
+                          <span
+                            className="compare-metric-badge"
+                            data-testid={`compare-metric-state-${metricKey}-${runId}`}
+                            data-tone={getMetricStateTone({
+                              state: highlight?.state || metric.state,
+                              highlightApplies,
+                              isUnavailable: false,
+                            })}
+                          >
                             {highlightApplies ? (highlight?.state || 'winner') : (highlight?.state || metric.state)}
                           </span>
                         </div>
