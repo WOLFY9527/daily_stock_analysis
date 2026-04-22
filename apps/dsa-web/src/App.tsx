@@ -119,12 +119,12 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
       statusLabel: isEnglish ? 'Saved Result Locked' : '已保存结果已锁定',
       title: isEnglish ? 'Sign in to reopen saved backtest results' : '登录后重新打开已保存的回测结果',
       description: isEnglish
-        ? 'Historical backtest results remain bound to authenticated identity so one user never reopens another user’s saved run.'
+        ? 'Historical backtest results remain bound to authenticated identity so one user never reopens another user’s saved result.'
         : '历史回测结果会绑定到已认证身份，避免一个用户重新打开另一个用户保存的回测记录。',
       bullets: isEnglish
         ? [
-          'Backtest results and history are protected by ownership-aware backend rules.',
-          'Guest mode does not expose saved run details or historical metrics.',
+          'Backtest results and history remain protected by identity-bound backend rules.',
+          'Guest mode does not expose saved result details or historical metrics.',
           'Sign in to continue exactly where your own research workspace left off.',
         ]
         : [
