@@ -203,7 +203,7 @@ const PersonalSettingsPage: React.FC = () => {
           </div>
         </Card>
 
-        <Card title={language === 'en' ? 'Access scope' : '访问层'} subtitle={language === 'en' ? 'Account and settings boundaries' : '角色感知产品面'}>
+        <Card title={language === 'en' ? 'Access scope' : '访问层'} subtitle={language === 'en' ? 'Account and settings boundaries' : '账号与设置边界'}>
           <div className="space-y-4">
             {isGuest && authEnabled ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-4 py-4">
@@ -417,7 +417,7 @@ const PersonalSettingsPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="h-4 w-4 text-foreground" />
                   <p className="text-sm font-semibold text-foreground">
-                    {language === 'en' ? 'System settings stay separate' : '系统分层保持显式'}
+                    {language === 'en' ? 'System settings stay separate' : '系统分层保持清晰'}
                   </p>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-secondary-text">
