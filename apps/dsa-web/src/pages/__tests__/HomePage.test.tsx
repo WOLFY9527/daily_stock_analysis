@@ -166,7 +166,7 @@ describe('HomePage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Research dashboard' })).toBeInTheDocument();
-    expect(screen.getByText('Run analysis, review recent results, and continue from one workspace.')).toBeInTheDocument();
+    expect(screen.getByText('Run analysis, review recent results, and pick up where you left off.')).toBeInTheDocument();
     expect(screen.getByText('Decision Brief')).toBeInTheDocument();
     expect(screen.getByText('Research Status')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL')).toBeInTheDocument();

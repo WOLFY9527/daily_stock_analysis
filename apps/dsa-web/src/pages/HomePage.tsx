@@ -66,7 +66,7 @@ const HOME_INTRO_COPY: Record<'zh' | 'en', HomeIntroCopy> = {
   en: {
     eyebrow: 'Research dashboard',
     title: 'Research dashboard',
-    subtitle: 'Run analysis, review recent results, and continue from one workspace.',
+    subtitle: 'Run analysis, review recent results, and pick up where you left off.',
   },
 };
 
