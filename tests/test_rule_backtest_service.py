@@ -808,6 +808,53 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(any((row.get("动作") or "") in {"买", "卖"} for row in rows))
         self.assertTrue(all((row.get("fallback") or "") for row in rows))
 
+    def test_service_exports_support_bundle_manifest_json_from_stored_result(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        manifest_path = os.path.join(self._temp_dir.name, "support_bundle_manifest.json")
+        service.export_support_bundle_manifest_json(run_id=response["id"], output_path=manifest_path)
+
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        self.assertEqual(payload["manifest_version"], "v1")
+        self.assertEqual(payload["manifest_kind"], "rule_backtest_support_bundle")
+        self.assertEqual(payload["run"]["id"], response["id"])
+        self.assertEqual(payload["run"]["code"], response["code"])
+        self.assertEqual(payload["run"]["status"], response["status"])
+        self.assertEqual(payload["run"]["strategy_hash"], response["strategy_hash"])
+        self.assertEqual(payload["run_timing"], response["run_timing"])
+        self.assertEqual(payload["run_diagnostics"], response["run_diagnostics"])
+        self.assertEqual(payload["artifact_availability"], response["artifact_availability"])
+        self.assertEqual(payload["readback_integrity"], response["readback_integrity"])
+        self.assertEqual(
+            payload["result_authority"],
+            {
+                "contract_version": response["result_authority"]["contract_version"],
+                "read_mode": response["result_authority"]["read_mode"],
+                "domains": response["result_authority"]["domains"],
+            },
+        )
+        self.assertEqual(payload["artifact_counts"]["trade_rows_count"], len(response["trades"]))
+        self.assertEqual(payload["artifact_counts"]["equity_curve_points"], len(response["equity_curve"]))
+        self.assertEqual(payload["artifact_counts"]["audit_rows_count"], len(response["audit_rows"]))
+        self.assertEqual(
+            payload["artifact_counts"]["execution_trace_rows_count"],
+            len(response["execution_trace"]["rows"]),
+        )
+        self.assertNotIn("trades", payload)
+        self.assertNotIn("equity_curve", payload)
+        self.assertNotIn("audit_rows", payload)
+        self.assertNotIn("execution_trace", payload)
+
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -3091,6 +3138,41 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
         self.assertTrue(history["items"][0]["readback_integrity"]["used_live_storage_repair"])
         self.assertEqual(history["items"][0]["readback_integrity"]["drift_domains"], ["trade_rows"])
+
+    def test_support_bundle_manifest_export_preserves_live_storage_repair_summary(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        deleted = service.repo.delete_trades_by_run_ids([response["id"]])
+        self.assertGreater(deleted, 0)
+
+        manifest_path = os.path.join(self._temp_dir.name, "support_bundle_manifest_drift.json")
+        service.export_support_bundle_manifest_json(run_id=response["id"], output_path=manifest_path)
+
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        self.assertFalse(payload["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(
+            payload["artifact_availability"]["source"],
+            "summary.artifact_availability+live_storage_repair",
+        )
+        self.assertTrue(payload["readback_integrity"]["used_live_storage_repair"])
+        self.assertTrue(payload["readback_integrity"]["has_summary_storage_drift"])
+        self.assertEqual(payload["readback_integrity"]["drift_domains"], ["trade_rows"])
+        self.assertEqual(payload["readback_integrity"]["integrity_level"], "drift_repaired")
+        self.assertEqual(payload["artifact_counts"]["trade_rows_count"], 0)
+        self.assertEqual(
+            payload["result_authority"]["domains"]["trade_rows"]["source"],
+            "unavailable",
+        )
 
     def test_get_run_repairs_partial_stored_parsed_strategy_with_provenance(self) -> None:
         service = RuleBacktestService(self.db)
