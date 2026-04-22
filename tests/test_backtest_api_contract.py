@@ -44,6 +44,43 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestSupportBundleReproducibilityManifestResponse,
 )
 
+EXPECTED_TRACE_EXPORT_JSON_KEYS = [
+    "version",
+    "source",
+    "completeness",
+    "missing_fields",
+    "trace_rows",
+    "assumptions",
+    "execution_model",
+    "execution_assumptions",
+    "benchmark_summary",
+    "fallback",
+]
+
+EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
+    "日期",
+    "标的收盘价",
+    "基准收盘价",
+    "信号摘要",
+    "动作",
+    "成交价",
+    "持股数",
+    "现金",
+    "持仓市值",
+    "总资产",
+    "当日盈亏",
+    "当日收益率",
+    "策略累计收益率",
+    "基准累计收益率",
+    "买入持有累计收益率",
+    "仓位",
+    "手续费",
+    "滑点",
+    "备注",
+    "assumptions",
+    "fallback",
+]
+
 
 class BacktestApiContractTestCase(unittest.TestCase):
     @staticmethod
@@ -509,13 +546,40 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 trace_csv_response = get_rule_backtest_execution_trace_csv(123, db_manager=MagicMock())
                 self.assertTrue(export_index_response.exports[2].available)
                 self.assertTrue(export_index_response.exports[3].available)
+                self.assertEqual(
+                    reproducibility_response.result_authority["domains"]["execution_trace"]["source"],
+                    trace_json_response.source,
+                )
+                self.assertEqual(
+                    reproducibility_response.result_authority["domains"]["execution_trace"]["completeness"],
+                    trace_json_response.completeness,
+                )
+                self.assertEqual(
+                    list(trace_json_response.model_dump().keys()),
+                    EXPECTED_TRACE_EXPORT_JSON_KEYS,
+                )
+                self.assertEqual(
+                    list(trace_json_response.trace_rows[0].keys()),
+                    EXPECTED_TRACE_EXPORT_FIELD_LABELS,
+                )
+                self.assertEqual(
+                    trace_csv_response.headers["content-type"],
+                    "text/csv; charset=utf-8",
+                )
+                self.assertEqual(
+                    trace_csv_response.body.decode("utf-8").splitlines()[0].split(","),
+                    EXPECTED_TRACE_EXPORT_FIELD_LABELS,
+                )
                 self.assertEqual(trace_json_response.source, trace_json_payload["source"])
                 self.assertEqual(
                     len(trace_json_response.trace_rows),
                     manifest_response.artifact_counts["execution_trace_rows_count"],
                 )
                 self.assertIn("rule-backtest-123-execution-trace.csv", trace_csv_response.headers["Content-Disposition"])
-                self.assertIn("日期,动作", trace_csv_response.body.decode("utf-8"))
+                self.assertEqual(
+                    trace_json_response.benchmark_summary,
+                    trace_json_payload["benchmark_summary"],
+                )
 
     def test_run_rule_backtest_async_path_enqueues_background_processing(self) -> None:
         request = RuleBacktestRunRequest(
@@ -1680,16 +1744,45 @@ class BacktestApiContractTestCase(unittest.TestCase):
             export_index_payload=self._support_export_index_payload(status="completed"),
             trace_json_payload={
                 "version": "v1",
-                "source": "stored_execution_trace",
+                "source": "summary.execution_trace",
                 "completeness": "complete",
                 "missing_fields": [],
-                "trace_rows": [{"日期": "2024-01-02", "动作": "买"}],
+                "trace_rows": [
+                    {
+                        "日期": "2024-01-02",
+                        "标的收盘价": "10.2",
+                        "基准收盘价": "10.1",
+                        "信号摘要": "Close > MA3",
+                        "动作": "买",
+                        "成交价": "10.3",
+                        "持股数": "100",
+                        "现金": "90000",
+                        "持仓市值": "1030",
+                        "总资产": "91030",
+                        "当日盈亏": "30",
+                        "当日收益率": "0.0003",
+                        "策略累计收益率": "0.0103",
+                        "基准累计收益率": "0.0088",
+                        "买入持有累计收益率": "0.0091",
+                        "仓位": "0.0113",
+                        "手续费": "1.2",
+                        "滑点": "0.5",
+                        "备注": "",
+                        "assumptions": "next bar open / long only",
+                        "fallback": "",
+                    }
+                ],
                 "assumptions": {"summary_text": "next bar open / long only"},
                 "execution_model": {"entry_timing": "next_bar_open"},
                 "execution_assumptions": {"position_sizing": "all_available_capital"},
+                "benchmark_summary": {"benchmark_mode": "auto"},
                 "fallback": {"trace_rebuilt": False},
             },
-            trace_csv_text="日期,动作\r\n2024-01-02,买\r\n",
+            trace_csv_text=(
+                "日期,标的收盘价,基准收盘价,信号摘要,动作,成交价,持股数,现金,持仓市值,总资产,当日盈亏,当日收益率,"
+                "策略累计收益率,基准累计收益率,买入持有累计收益率,仓位,手续费,滑点,备注,assumptions,fallback\r\n"
+                "2024-01-02,10.2,10.1,Close > MA3,买,10.3,100,90000,1030,91030,30,0.0003,0.0103,0.0088,0.0091,0.0113,1.2,0.5,,next bar open / long only,\r\n"
+            ),
         )
 
     def test_support_bundle_api_surface_preserves_live_storage_repair_signals(self) -> None:
@@ -1736,16 +1829,45 @@ class BacktestApiContractTestCase(unittest.TestCase):
             export_index_payload=export_index_payload,
             trace_json_payload={
                 "version": "v1",
-                "source": "stored_execution_trace",
+                "source": "summary.execution_trace",
                 "completeness": "complete",
                 "missing_fields": [],
-                "trace_rows": [{"日期": "2024-01-02", "动作": "买"}],
+                "trace_rows": [
+                    {
+                        "日期": "2024-01-02",
+                        "标的收盘价": "10.2",
+                        "基准收盘价": "10.1",
+                        "信号摘要": "Close > MA3",
+                        "动作": "买",
+                        "成交价": "10.3",
+                        "持股数": "100",
+                        "现金": "90000",
+                        "持仓市值": "1030",
+                        "总资产": "91030",
+                        "当日盈亏": "30",
+                        "当日收益率": "0.0003",
+                        "策略累计收益率": "0.0103",
+                        "基准累计收益率": "0.0088",
+                        "买入持有累计收益率": "0.0091",
+                        "仓位": "0.0113",
+                        "手续费": "1.2",
+                        "滑点": "0.5",
+                        "备注": "",
+                        "assumptions": "next bar open / long only",
+                        "fallback": "",
+                    }
+                ],
                 "assumptions": {"summary_text": "next bar open / long only"},
                 "execution_model": {"entry_timing": "next_bar_open"},
                 "execution_assumptions": {"position_sizing": "all_available_capital"},
+                "benchmark_summary": {"benchmark_mode": "auto"},
                 "fallback": {"trace_rebuilt": False},
             },
-            trace_csv_text="日期,动作\r\n2024-01-02,买\r\n",
+            trace_csv_text=(
+                "日期,标的收盘价,基准收盘价,信号摘要,动作,成交价,持股数,现金,持仓市值,总资产,当日盈亏,当日收益率,"
+                "策略累计收益率,基准累计收益率,买入持有累计收益率,仓位,手续费,滑点,备注,assumptions,fallback\r\n"
+                "2024-01-02,10.2,10.1,Close > MA3,买,10.3,100,90000,1030,91030,30,0.0003,0.0103,0.0088,0.0091,0.0113,1.2,0.5,,next bar open / long only,\r\n"
+            ),
         )
 
     def test_support_bundle_api_surface_truthfully_closes_missing_trace_contract(self) -> None:

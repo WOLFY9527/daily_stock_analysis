@@ -17,6 +17,43 @@ from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
 from src.storage import DatabaseManager, RuleBacktestTrade, StockDaily
 
+EXPECTED_TRACE_EXPORT_JSON_KEYS = [
+    "version",
+    "source",
+    "completeness",
+    "missing_fields",
+    "trace_rows",
+    "assumptions",
+    "execution_model",
+    "execution_assumptions",
+    "benchmark_summary",
+    "fallback",
+]
+
+EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
+    "日期",
+    "标的收盘价",
+    "基准收盘价",
+    "信号摘要",
+    "动作",
+    "成交价",
+    "持股数",
+    "现金",
+    "持仓市值",
+    "总资产",
+    "当日盈亏",
+    "当日收益率",
+    "策略累计收益率",
+    "基准累计收益率",
+    "买入持有累计收益率",
+    "仓位",
+    "手续费",
+    "滑点",
+    "备注",
+    "assumptions",
+    "fallback",
+]
+
 
 class RuleBacktestTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -1089,21 +1126,48 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         if expected_trace_available:
             trace_json = service.get_execution_trace_export_json(run_id)
-            trace_csv_rows = list(
-                csv.DictReader(service.get_execution_trace_export_csv_text(run_id).splitlines())
-            )
+            trace_csv_text = service.get_execution_trace_export_csv_text(run_id)
+            trace_csv_lines = trace_csv_text.splitlines()
+            trace_csv_rows = list(csv.DictReader(trace_csv_lines))
             self.assertEqual(trace_json["source"], run["execution_trace"]["source"])
             self.assertEqual(trace_json["completeness"], run["execution_trace"]["completeness"])
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["source"],
+                trace_json["source"],
+            )
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["completeness"],
+                trace_json["completeness"],
+            )
+            self.assertEqual(list(trace_json.keys()), EXPECTED_TRACE_EXPORT_JSON_KEYS)
+            self.assertEqual(
+                list(trace_json["trace_rows"][0].keys()),
+                EXPECTED_TRACE_EXPORT_FIELD_LABELS,
+            )
+            self.assertEqual(trace_csv_lines[0].split(","), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
             self.assertEqual(len(trace_json["trace_rows"]), len(trace_csv_rows))
             self.assertEqual(
                 len(trace_json["trace_rows"]),
                 manifest["artifact_counts"]["execution_trace_rows_count"],
             )
+            self.assertIsInstance(trace_json["benchmark_summary"], dict)
         else:
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_json(run_id)
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_csv_text(run_id)
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["source"],
+                "unavailable",
+            )
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["completeness"],
+                "unavailable",
+            )
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["state"],
+                "unavailable",
+            )
 
     def test_support_bundle_artifact_exports_form_coherent_handoff_surface(self) -> None:
         service = RuleBacktestService(self.db)

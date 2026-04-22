@@ -25,6 +25,43 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID  # noqa: E402
 from src.services.rule_backtest_service import RuleBacktestService  # noqa: E402
 from src.storage import DatabaseManager, StockDaily  # noqa: E402
 
+EXPECTED_TRACE_EXPORT_JSON_KEYS = [
+    "version",
+    "source",
+    "completeness",
+    "missing_fields",
+    "trace_rows",
+    "assumptions",
+    "execution_model",
+    "execution_assumptions",
+    "benchmark_summary",
+    "fallback",
+]
+
+EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
+    "日期",
+    "标的收盘价",
+    "基准收盘价",
+    "信号摘要",
+    "动作",
+    "成交价",
+    "持股数",
+    "现金",
+    "持仓市值",
+    "总资产",
+    "当日盈亏",
+    "当日收益率",
+    "策略累计收益率",
+    "基准累计收益率",
+    "买入持有累计收益率",
+    "仓位",
+    "手续费",
+    "滑点",
+    "备注",
+    "assumptions",
+    "fallback",
+]
+
 
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
@@ -285,6 +322,23 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
             trace_json = trace_json_response.json()
             trace_csv_rows = list(csv.DictReader(trace_csv_response.text.splitlines()))
+            self.assertEqual(list(trace_json.keys()), EXPECTED_TRACE_EXPORT_JSON_KEYS)
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["source"],
+                trace_json["source"],
+            )
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["completeness"],
+                trace_json["completeness"],
+            )
+            self.assertEqual(
+                list(trace_json["trace_rows"][0].keys()),
+                EXPECTED_TRACE_EXPORT_FIELD_LABELS,
+            )
+            self.assertEqual(
+                trace_csv_response.text.splitlines()[0].split(","),
+                EXPECTED_TRACE_EXPORT_FIELD_LABELS,
+            )
             self.assertEqual(
                 len(trace_json["trace_rows"]),
                 manifest["artifact_counts"]["execution_trace_rows_count"],
@@ -316,6 +370,18 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             )
             self.assertTrue(
                 trace_csv_response.headers.get("content-type", "").startswith("application/json")
+            )
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["source"],
+                "unavailable",
+            )
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["completeness"],
+                "unavailable",
+            )
+            self.assertEqual(
+                reproducibility["result_authority"]["domains"]["execution_trace"]["state"],
+                "unavailable",
             )
 
         return payloads
