@@ -722,6 +722,34 @@ class RuleBacktestCompareMarketCodeComparison(BaseModel):
     diagnostics: List[str] = Field(default_factory=list)
 
 
+class RuleBacktestCompareRobustnessDimension(BaseModel):
+    state: str
+    source_state: Optional[str] = None
+    relationship: Optional[str] = None
+    directly_comparable: Optional[bool] = None
+    meaningfully_comparable: Optional[bool] = None
+    comparable_metric_keys: List[str] = Field(default_factory=list)
+    partial_metric_keys: List[str] = Field(default_factory=list)
+    unavailable_metric_keys: List[str] = Field(default_factory=list)
+    shared_parameter_keys: List[str] = Field(default_factory=list)
+    differing_parameter_keys: List[str] = Field(default_factory=list)
+    missing_parameter_keys: List[str] = Field(default_factory=list)
+    diagnostics: List[str] = Field(default_factory=list)
+
+
+class RuleBacktestCompareRobustnessSummary(BaseModel):
+    baseline_run_id: int
+    selection_rule: str
+    overall_state: str
+    directly_comparable: bool = False
+    aligned_dimensions: List[str] = Field(default_factory=list)
+    partial_dimensions: List[str] = Field(default_factory=list)
+    divergent_dimensions: List[str] = Field(default_factory=list)
+    unavailable_dimensions: List[str] = Field(default_factory=list)
+    dimensions: Dict[str, RuleBacktestCompareRobustnessDimension] = Field(default_factory=dict)
+    diagnostics: List[str] = Field(default_factory=list)
+
+
 class RuleBacktestCompareResponse(BaseModel):
     comparison_source: str
     read_mode: str = "stored_first"
@@ -734,6 +762,7 @@ class RuleBacktestCompareResponse(BaseModel):
     market_code_comparison: Optional[RuleBacktestCompareMarketCodeComparison] = None
     period_comparison: Optional[RuleBacktestComparePeriodComparison] = None
     comparison_summary: Optional[RuleBacktestCompareSummary] = None
+    robustness_summary: Optional[RuleBacktestCompareRobustnessSummary] = None
     parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 

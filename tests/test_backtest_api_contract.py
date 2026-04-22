@@ -680,6 +680,52 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     },
                 },
             },
+            "robustness_summary": {
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "partially_comparable",
+                "directly_comparable": False,
+                "aligned_dimensions": ["market_code"],
+                "partial_dimensions": ["metrics_baseline", "parameter_set", "periods"],
+                "divergent_dimensions": [],
+                "unavailable_dimensions": [],
+                "dimensions": {
+                    "market_code": {
+                        "state": "aligned",
+                        "source_state": "direct",
+                        "relationship": "same_code",
+                        "directly_comparable": True,
+                        "diagnostics": ["same_normalized_code"],
+                    },
+                    "metrics_baseline": {
+                        "state": "partial",
+                        "comparable_metric_keys": ["total_return_pct"],
+                        "partial_metric_keys": ["annualized_return_pct"],
+                        "unavailable_metric_keys": [],
+                        "diagnostics": ["partial_metric_deltas"],
+                    },
+                    "parameter_set": {
+                        "state": "partial",
+                        "source_state": "partial",
+                        "shared_parameter_keys": ["strategy_spec.execution.signal_timing"],
+                        "differing_parameter_keys": ["strategy_spec.signal.fast_period"],
+                        "missing_parameter_keys": ["strategy_spec.signal.slow_type"],
+                        "diagnostics": ["partial_parameter_context"],
+                    },
+                    "periods": {
+                        "state": "partial",
+                        "source_state": "limited",
+                        "relationship": "partial",
+                        "meaningfully_comparable": False,
+                        "diagnostics": ["missing_period_end"],
+                    },
+                },
+                "diagnostics": [
+                    "partial_metric_deltas",
+                    "partial_parameter_context",
+                    "missing_period_end",
+                ],
+            },
             "parameter_comparison": {
                 "state": "same_family_comparable",
                 "strategy_family_values": ["moving_average_crossover"],
@@ -854,6 +900,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             payload["comparison_summary"]["metric_deltas"]["annualized_return_pct"]["unavailable_run_ids"],
             [202],
+        )
+        self.assertEqual(payload["robustness_summary"]["overall_state"], "partially_comparable")
+        self.assertFalse(payload["robustness_summary"]["directly_comparable"])
+        self.assertEqual(
+            payload["robustness_summary"]["partial_dimensions"],
+            ["metrics_baseline", "parameter_set", "periods"],
+        )
+        self.assertEqual(
+            payload["robustness_summary"]["dimensions"]["metrics_baseline"]["partial_metric_keys"],
+            ["annualized_return_pct"],
         )
         self.assertEqual(payload["parameter_comparison"]["state"], "same_family_comparable")
         self.assertEqual(

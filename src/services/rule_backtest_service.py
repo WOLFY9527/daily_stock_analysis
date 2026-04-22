@@ -179,6 +179,13 @@ COMPARE_PARAMETER_FIELDS_BY_STRATEGY_TYPE: Dict[str, List[str]] = {
     ],
 }
 
+COMPARE_ROBUSTNESS_DIMENSION_ORDER: List[str] = [
+    "market_code",
+    "metrics_baseline",
+    "parameter_set",
+    "periods",
+]
+
 TRACE_EXPORT_COLUMNS: List[tuple[str, str]] = [
     ("date", "日期"),
     ("symbol_close", "标的收盘价"),
@@ -799,6 +806,11 @@ class RuleBacktestService:
                 f"missing={missing_run_ids}, unavailable={unavailable_ids}"
             )
 
+        market_code_comparison = self._build_compare_market_code_comparison(items=items)
+        period_comparison = self._build_compare_period_comparison(items=items)
+        comparison_summary = self._build_compare_summary(items=items)
+        parameter_comparison = self._build_compare_parameter_comparison(items=items)
+
         return {
             "comparison_source": "stored_rule_backtest_runs",
             "read_mode": "stored_first",
@@ -808,10 +820,16 @@ class RuleBacktestService:
             "missing_run_ids": missing_run_ids,
             "unavailable_runs": unavailable_runs,
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
-            "market_code_comparison": self._build_compare_market_code_comparison(items=items),
-            "period_comparison": self._build_compare_period_comparison(items=items),
-            "comparison_summary": self._build_compare_summary(items=items),
-            "parameter_comparison": self._build_compare_parameter_comparison(items=items),
+            "market_code_comparison": market_code_comparison,
+            "period_comparison": period_comparison,
+            "comparison_summary": comparison_summary,
+            "robustness_summary": self._build_compare_robustness_summary(
+                market_code_comparison=market_code_comparison,
+                period_comparison=period_comparison,
+                comparison_summary=comparison_summary,
+                parameter_comparison=parameter_comparison,
+            ),
+            "parameter_comparison": parameter_comparison,
             "items": items,
         }
 
@@ -2192,6 +2210,184 @@ class RuleBacktestService:
         if "same_market_different_code" in relationships:
             return "same_market_different_code"
         return "same_code"
+
+    @classmethod
+    def _build_compare_robustness_summary(
+        cls,
+        *,
+        market_code_comparison: Dict[str, Any],
+        period_comparison: Dict[str, Any],
+        comparison_summary: Dict[str, Any],
+        parameter_comparison: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        baseline = dict(comparison_summary.get("baseline") or {})
+        baseline_run_id = int(
+            market_code_comparison.get("baseline_run_id")
+            or period_comparison.get("baseline_run_id")
+            or baseline.get("run_id")
+            or 0
+        )
+        selection_rule = str(
+            market_code_comparison.get("selection_rule")
+            or period_comparison.get("selection_rule")
+            or baseline.get("selection_rule")
+            or "first_comparable_run_by_request_order"
+        )
+
+        dimensions = {
+            "market_code": cls._build_compare_robustness_market_dimension(market_code_comparison=market_code_comparison),
+            "metrics_baseline": cls._build_compare_robustness_metric_dimension(comparison_summary=comparison_summary),
+            "parameter_set": cls._build_compare_robustness_parameter_dimension(parameter_comparison=parameter_comparison),
+            "periods": cls._build_compare_robustness_period_dimension(period_comparison=period_comparison),
+        }
+
+        aligned_dimensions = [
+            name for name in COMPARE_ROBUSTNESS_DIMENSION_ORDER if dict(dimensions.get(name) or {}).get("state") == "aligned"
+        ]
+        partial_dimensions = [
+            name for name in COMPARE_ROBUSTNESS_DIMENSION_ORDER if dict(dimensions.get(name) or {}).get("state") == "partial"
+        ]
+        divergent_dimensions = [
+            name for name in COMPARE_ROBUSTNESS_DIMENSION_ORDER if dict(dimensions.get(name) or {}).get("state") == "divergent"
+        ]
+        unavailable_dimensions = [
+            name for name in COMPARE_ROBUSTNESS_DIMENSION_ORDER if dict(dimensions.get(name) or {}).get("state") == "unavailable"
+        ]
+
+        if divergent_dimensions:
+            overall_state = "context_limited"
+        elif unavailable_dimensions:
+            overall_state = "insufficient_context"
+        elif partial_dimensions:
+            overall_state = "partially_comparable"
+        else:
+            overall_state = "highly_comparable"
+
+        diagnostics = cls._dedupe_compare_market_code_diagnostics(
+            [
+                diagnostic
+                for name in COMPARE_ROBUSTNESS_DIMENSION_ORDER
+                for diagnostic in list(dict(dimensions.get(name) or {}).get("diagnostics") or [])
+            ]
+        )
+
+        return {
+            "baseline_run_id": baseline_run_id,
+            "selection_rule": selection_rule,
+            "overall_state": overall_state,
+            "directly_comparable": overall_state == "highly_comparable",
+            "aligned_dimensions": aligned_dimensions,
+            "partial_dimensions": partial_dimensions,
+            "divergent_dimensions": divergent_dimensions,
+            "unavailable_dimensions": unavailable_dimensions,
+            "dimensions": dimensions,
+            "diagnostics": diagnostics,
+        }
+
+    @classmethod
+    def _build_compare_robustness_market_dimension(cls, *, market_code_comparison: Dict[str, Any]) -> Dict[str, Any]:
+        relationship = str(market_code_comparison.get("relationship") or "").strip()
+        source_state = str(market_code_comparison.get("state") or "").strip() or None
+        if relationship == "same_code":
+            state = "aligned"
+        elif relationship in {"same_market_different_code", "different_market"}:
+            state = "divergent"
+        elif relationship == "partial_metadata":
+            state = "partial"
+        else:
+            state = "unavailable"
+
+        return {
+            "state": state,
+            "source_state": source_state,
+            "relationship": relationship or None,
+            "directly_comparable": bool(market_code_comparison.get("directly_comparable")),
+            "diagnostics": list(market_code_comparison.get("diagnostics") or []),
+        }
+
+    @classmethod
+    def _build_compare_robustness_metric_dimension(cls, *, comparison_summary: Dict[str, Any]) -> Dict[str, Any]:
+        metric_deltas = dict(comparison_summary.get("metric_deltas") or {})
+        comparable_metric_keys: List[str] = []
+        partial_metric_keys: List[str] = []
+        unavailable_metric_keys: List[str] = []
+
+        for metric_name, delta_payload in metric_deltas.items():
+            raw_state = str(dict(delta_payload or {}).get("state") or "").strip()
+            if raw_state == "comparable":
+                comparable_metric_keys.append(str(metric_name))
+            elif raw_state == "partial":
+                partial_metric_keys.append(str(metric_name))
+            else:
+                unavailable_metric_keys.append(str(metric_name))
+
+        diagnostics: List[str] = []
+        if partial_metric_keys or (comparable_metric_keys and unavailable_metric_keys):
+            state = "partial"
+            diagnostics.append("partial_metric_deltas")
+        elif comparable_metric_keys and not unavailable_metric_keys:
+            state = "aligned"
+        else:
+            state = "unavailable"
+            diagnostics.append("unavailable_metric_deltas")
+
+        return {
+            "state": state,
+            "comparable_metric_keys": sorted(comparable_metric_keys),
+            "partial_metric_keys": sorted(partial_metric_keys),
+            "unavailable_metric_keys": sorted(unavailable_metric_keys),
+            "diagnostics": diagnostics,
+        }
+
+    @classmethod
+    def _build_compare_robustness_parameter_dimension(cls, *, parameter_comparison: Dict[str, Any]) -> Dict[str, Any]:
+        source_state = str(parameter_comparison.get("state") or "").strip() or None
+        if source_state == "same_family_comparable":
+            state = "aligned"
+            diagnostics: List[str] = []
+        elif source_state == "partial":
+            state = "partial"
+            diagnostics = ["partial_parameter_context"]
+        elif source_state == "different_family":
+            state = "divergent"
+            diagnostics = ["different_parameter_context"]
+        else:
+            state = "unavailable"
+            diagnostics = ["parameter_context_unavailable"]
+
+        return {
+            "state": state,
+            "source_state": source_state,
+            "shared_parameter_keys": list(parameter_comparison.get("shared_parameter_keys") or []),
+            "differing_parameter_keys": list(parameter_comparison.get("differing_parameter_keys") or []),
+            "missing_parameter_keys": list(parameter_comparison.get("missing_parameter_keys") or []),
+            "diagnostics": diagnostics,
+        }
+
+    @classmethod
+    def _build_compare_robustness_period_dimension(cls, *, period_comparison: Dict[str, Any]) -> Dict[str, Any]:
+        relationship = str(period_comparison.get("relationship") or "").strip()
+        source_state = str(period_comparison.get("state") or "").strip() or None
+        if relationship in {"identical", "overlapping"} and source_state == "comparable":
+            state = "aligned"
+        elif relationship == "disjoint" or source_state == "not_comparable":
+            state = "divergent"
+        elif relationship == "partial":
+            state = "partial"
+        elif relationship == "unavailable":
+            state = "unavailable"
+        elif source_state == "limited":
+            state = "partial"
+        else:
+            state = "unavailable"
+
+        return {
+            "state": state,
+            "source_state": source_state,
+            "relationship": relationship or None,
+            "meaningfully_comparable": bool(period_comparison.get("meaningfully_comparable")),
+            "diagnostics": list(period_comparison.get("diagnostics") or []),
+        }
 
     @classmethod
     def _resolve_compare_period_bounds(cls, item: Dict[str, Any]) -> Dict[str, Any]:
