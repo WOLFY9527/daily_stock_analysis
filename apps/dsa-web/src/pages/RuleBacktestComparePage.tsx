@@ -20,6 +20,14 @@ import type {
   RuleBacktestCompareRunItem,
 } from '../types/backtest';
 
+const COMPARE_METRIC_LABELS: Record<string, string> = {
+  totalReturnPct: '总收益',
+  annualizedReturnPct: '年化收益',
+  maxDrawdownPct: '最大回撤',
+  benchmarkReturnPct: '基准收益',
+  excessReturnVsBenchmarkPct: '相对基准',
+};
+
 function parseRunIdsParam(value: string | null): number[] {
   if (!value) return [];
   const orderedIds: number[] = [];
@@ -127,6 +135,113 @@ function MetricDeltaTable({ metricDeltas }: { metricDeltas: Record<string, RuleB
               </td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function formatMetricLabel(metricKey: string, fallback?: string): string {
+  return COMPARE_METRIC_LABELS[metricKey]
+    || fallback
+    || metricKey.replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');
+}
+
+function formatSignedPct(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) return '--';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function CompareMetricMatrix({
+  items,
+  baselineRunId,
+  metricDeltas,
+  highlights,
+  overallState,
+  primaryProfile,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  metricDeltas: Record<string, RuleBacktestCompareMetricDelta>;
+  highlights: Record<string, RuleBacktestCompareHighlightItem>;
+  overallState?: string;
+  primaryProfile?: string;
+}) {
+  const metricEntries = Object.entries(metricDeltas || {});
+  if (!items.length || !metricEntries.length) {
+    return <div className="product-empty-state product-empty-state--compact">当前比较没有足够的指标数据来生成紧凑矩阵。</div>;
+  }
+
+  return (
+    <div className="product-table-shell compare-metric-matrix" data-testid="compare-metric-matrix">
+      <table className="product-table comparison-table">
+        <thead>
+          <tr>
+            <th>指标</th>
+            <th>摘要</th>
+            {items.map((item) => {
+              const runId = item.metadata.id;
+              const roleLabel = runId === baselineRunId ? 'baseline' : 'candidate';
+              return (
+                <th key={runId} scope="col">
+                  <div className="product-table__stack">
+                    <span>{`#${runId} ${roleLabel}`}</span>
+                    <span>{item.metadata.code || '--'}</span>
+                  </div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {metricEntries.map(([metricKey, metric]) => {
+            const highlight = highlights[metricKey];
+            return (
+              <tr key={metricKey}>
+                <td>
+                  <div className="product-table__stack">
+                    <span>{formatMetricLabel(metricKey, metric.label)}</span>
+                    <span className="product-footnote">{metric.state}</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="product-table__stack">
+                    <span>{highlight?.state || metric.state}</span>
+                    <span className="product-footnote">{`context ${overallState || '--'} · profile ${primaryProfile || '--'}`}</span>
+                  </div>
+                </td>
+                {items.map((item) => {
+                  const runId = item.metadata.id;
+                  const deltaItem = metric.deltas.find((entry) => entry.runId === runId);
+                  const highlightApplies = Boolean(highlight?.winnerRunIds.includes(runId));
+                  const isUnavailable = !deltaItem;
+                  const cellTone = highlightApplies ? 'best' : 'default';
+                  return (
+                    <td key={`${metricKey}-${runId}`} data-tone={cellTone}>
+                      {isUnavailable ? (
+                        <div className="product-table__stack">
+                          <span>unavailable</span>
+                          <span className="product-footnote">{highlight?.state || metric.state}</span>
+                        </div>
+                      ) : (
+                        <div className="product-table__stack">
+                          <span>{pct(deltaItem.value)}</span>
+                          {runId === baselineRunId ? (
+                            <span className="product-footnote">baseline</span>
+                          ) : (
+                            <span className="product-footnote">{`delta ${formatSignedPct(deltaItem.deltaVsBaseline)}`}</span>
+                          )}
+                          <span className="product-footnote">
+                            {highlightApplies ? (highlight?.state || 'winner') : (highlight?.state || metric.state)}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -361,6 +476,40 @@ const RuleBacktestComparePage: React.FC = () => {
               <HighlightCards highlights={comparisonHighlights?.highlights || {}} />
               <div className="mt-4">
                 <DiagnosticChipList diagnostics={comparisonHighlights?.diagnostics} />
+              </div>
+            </Card>
+          </section>
+
+          <section className="backtest-display-section">
+            <Card title="compact metric matrix" subtitle="把 baseline、delta、winner 与 unavailable 压到一张易扫读的比较表" className="product-section-card product-section-card--backtest-secondary">
+              <SummaryStrip
+                items={[
+                  {
+                    label: 'baseline',
+                    value: baselineRunId == null ? '--' : `#${baselineRunId}`,
+                    note: baselineItem?.metadata.code || '--',
+                  },
+                  {
+                    label: 'overall_state',
+                    value: robustnessSummary?.overallState || '--',
+                    note: comparisonProfile?.primaryProfile || '--',
+                  },
+                  {
+                    label: 'metrics',
+                    value: String(Object.keys(comparisonSummary?.metricDeltas || {}).length),
+                    note: response.comparableRunIds.map((id) => `#${id}`).join(', ') || '--',
+                  },
+                ]}
+              />
+              <div className="mt-4">
+                <CompareMetricMatrix
+                  items={response.items}
+                  baselineRunId={baselineRunId}
+                  metricDeltas={comparisonSummary?.metricDeltas || {}}
+                  highlights={comparisonHighlights?.highlights || {}}
+                  overallState={robustnessSummary?.overallState}
+                  primaryProfile={comparisonProfile?.primaryProfile}
+                />
               </div>
             </Card>
           </section>

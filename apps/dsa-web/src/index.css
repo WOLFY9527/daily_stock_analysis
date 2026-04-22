@@ -6710,6 +6710,38 @@ html[data-theme] .product-empty-state {
   color: hsl(0 74% 76%);
 }
 
+.compare-metric-matrix table {
+  min-width: 48rem;
+}
+
+.compare-metric-matrix th,
+.compare-metric-matrix td {
+  vertical-align: top;
+}
+
+.compare-metric-matrix th:first-child,
+.compare-metric-matrix td:first-child {
+  min-width: 8.5rem;
+}
+
+.compare-metric-matrix th:nth-child(2),
+.compare-metric-matrix td:nth-child(2) {
+  min-width: 12rem;
+}
+
+.compare-metric-matrix td[data-tone='best'] {
+  box-shadow: inset 0 0 0 1px hsl(142 58% 72% / 0.24);
+}
+
+.compare-metric-matrix .product-table__stack {
+  gap: 0.18rem;
+}
+
+.compare-metric-matrix .product-footnote {
+  font-size: 0.64rem;
+  line-height: 1.35;
+}
+
 .comparison-chart {
   display: grid;
   gap: 0.72rem;

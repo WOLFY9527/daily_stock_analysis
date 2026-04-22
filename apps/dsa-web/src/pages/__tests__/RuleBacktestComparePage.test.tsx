@@ -235,6 +235,53 @@ describe('RuleBacktestComparePage', () => {
             returnPct: 8,
           },
         },
+        {
+          metadata: {
+            id: 202,
+            code: 'ORCL',
+            status: 'completed',
+            runAt: '2026-04-02T08:00:00Z',
+            completedAt: '2026-04-02T08:03:00Z',
+            timeframe: 'daily',
+            startDate: '2025-03-01',
+            endDate: '2025-12-31',
+            periodStart: '2025-03-01',
+            periodEnd: '2025-12-31',
+            lookbackBars: 252,
+            initialCapital: 100000,
+            feeBps: 0,
+            slippageBps: 0,
+          },
+          metrics: {
+            tradeCount: 9,
+            winCount: 6,
+            lossCount: 3,
+            totalReturnPct: 18,
+            annualizedReturnPct: null,
+            benchmarkReturnPct: 7,
+            excessReturnVsBenchmarkPct: 11,
+            buyAndHoldReturnPct: 8,
+            excessReturnVsBuyAndHoldPct: 10,
+            winRatePct: 66.7,
+            avgTradeReturnPct: 2,
+            maxDrawdownPct: 9.2,
+            avgHoldingDays: 5,
+            avgHoldingBars: 5,
+            avgHoldingCalendarDays: 7,
+            finalEquity: 118000,
+          },
+          parsedStrategy: {
+            strategySpec: {
+              strategyFamily: 'moving_average_crossover',
+              strategyType: 'moving_average_crossover',
+            },
+          },
+          benchmark: {
+            mode: 'auto',
+            code: 'QQQ',
+            returnPct: 7,
+          },
+        },
       ],
     });
 
@@ -247,9 +294,14 @@ describe('RuleBacktestComparePage', () => {
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
     expect(screen.getAllByText('same_code_different_periods').length).toBeGreaterThan(0);
     expect(screen.getAllByText('partially_comparable').length).toBeGreaterThan(0);
-    expect(screen.getByText('limited_context_winner')).toBeInTheDocument();
+    expect(screen.getAllByText('limited_context_winner').length).toBeGreaterThan(0);
     expect(screen.getByText('same_family_comparable')).toBeInTheDocument();
     expect(screen.getAllByText('metric_unavailable').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('compare-metric-matrix')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /#101 baseline/ })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /#202 candidate/ })).toBeInTheDocument();
+    expect(screen.getByText('delta +6.00%')).toBeInTheDocument();
+    expect(screen.getAllByText('unavailable').length).toBeGreaterThan(0);
   });
 
   it('shows an explicit empty state when fewer than two run ids are provided', async () => {
