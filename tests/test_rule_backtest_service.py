@@ -961,6 +961,149 @@ class RuleBacktestTestCase(unittest.TestCase):
             f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.csv",
         )
 
+    def _assert_support_bundle_export_contract(
+        self,
+        *,
+        service: RuleBacktestService,
+        run_id: int,
+    ) -> None:
+        run = service.get_run(run_id)
+        assert run is not None
+
+        manifest = service.get_support_bundle_manifest(run_id)
+        reproducibility = service.get_support_bundle_reproducibility_manifest(run_id)
+        export_index = service.get_support_export_index(run_id)
+
+        self.assertEqual(export_index["run_id"], run_id)
+        self.assertEqual(export_index["status"], run["status"])
+        self.assertEqual(
+            [item["key"] for item in export_index["exports"]],
+            [
+                "support_bundle_manifest_json",
+                "support_bundle_reproducibility_manifest_json",
+                "execution_trace_json",
+                "execution_trace_csv",
+            ],
+        )
+
+        self.assertEqual(manifest["run"]["id"], run_id)
+        self.assertEqual(reproducibility["run"]["id"], run_id)
+        self.assertEqual(manifest["run"]["status"], run["status"])
+        self.assertEqual(reproducibility["run"]["status"], run["status"])
+        self.assertEqual(manifest["run_timing"], run["run_timing"])
+        self.assertEqual(reproducibility["run_timing"], run["run_timing"])
+        self.assertEqual(manifest["run_diagnostics"], run["run_diagnostics"])
+        self.assertEqual(reproducibility["run_diagnostics"], run["run_diagnostics"])
+        self.assertEqual(manifest["artifact_availability"], run["artifact_availability"])
+        self.assertEqual(reproducibility["artifact_availability"], run["artifact_availability"])
+        self.assertEqual(manifest["readback_integrity"], run["readback_integrity"])
+        self.assertEqual(reproducibility["readback_integrity"], run["readback_integrity"])
+        self.assertEqual(
+            manifest["result_authority"],
+            {
+                "contract_version": run["result_authority"]["contract_version"],
+                "read_mode": run["result_authority"]["read_mode"],
+                "domains": run["result_authority"]["domains"],
+            },
+        )
+        self.assertEqual(
+            reproducibility["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": run["result_authority"]["domains"]["execution_trace"]["source"],
+                "completeness": run["result_authority"]["domains"]["execution_trace"]["completeness"],
+                "state": run["result_authority"]["domains"]["execution_trace"]["state"],
+            },
+        )
+        self.assertEqual(manifest["artifact_counts"]["trade_rows_count"], len(run.get("trades") or []))
+        self.assertEqual(
+            manifest["artifact_counts"]["execution_trace_rows_count"],
+            len((run.get("execution_trace") or {}).get("rows") or []),
+        )
+
+        expected_trace_available = bool((run.get("execution_trace") or {}).get("rows") or [])
+        expected_trace_reason = (
+            "execution_trace_rows_present" if expected_trace_available else "execution_trace_rows_missing"
+        )
+        expected_exports = [
+            (
+                "support_bundle_manifest_json",
+                True,
+                "run_exists",
+                "json",
+                "application/json",
+                "api",
+                f"/api/v1/backtest/rule/runs/{run_id}/support-bundle-manifest",
+                "compact",
+            ),
+            (
+                "support_bundle_reproducibility_manifest_json",
+                True,
+                "run_exists",
+                "json",
+                "application/json",
+                "api",
+                f"/api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest",
+                "compact",
+            ),
+            (
+                "execution_trace_json",
+                expected_trace_available,
+                expected_trace_reason,
+                "json",
+                "application/json",
+                "api",
+                f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.json",
+                "heavy",
+            ),
+            (
+                "execution_trace_csv",
+                expected_trace_available,
+                expected_trace_reason,
+                "csv",
+                "text/csv",
+                "api",
+                f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
+                "heavy",
+            ),
+        ]
+        for item, expected in zip(export_index["exports"], expected_exports):
+            (
+                expected_key,
+                expected_available,
+                expected_reason,
+                expected_format,
+                expected_media_type,
+                expected_delivery_mode,
+                expected_endpoint_path,
+                expected_payload_class,
+            ) = expected
+            self.assertEqual(item["key"], expected_key)
+            self.assertEqual(item["available"], expected_available)
+            self.assertEqual(item["availability_reason"], expected_reason)
+            self.assertEqual(item["format"], expected_format)
+            self.assertEqual(item["media_type"], expected_media_type)
+            self.assertEqual(item["delivery_mode"], expected_delivery_mode)
+            self.assertEqual(item["endpoint_path"], expected_endpoint_path)
+            self.assertEqual(item["payload_class"], expected_payload_class)
+
+        if expected_trace_available:
+            trace_json = service.get_execution_trace_export_json(run_id)
+            trace_csv_rows = list(
+                csv.DictReader(service.get_execution_trace_export_csv_text(run_id).splitlines())
+            )
+            self.assertEqual(trace_json["source"], run["execution_trace"]["source"])
+            self.assertEqual(trace_json["completeness"], run["execution_trace"]["completeness"])
+            self.assertEqual(len(trace_json["trace_rows"]), len(trace_csv_rows))
+            self.assertEqual(
+                len(trace_json["trace_rows"]),
+                manifest["artifact_counts"]["execution_trace_rows_count"],
+            )
+        else:
+            with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
+                service.get_execution_trace_export_json(run_id)
+            with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
+                service.get_execution_trace_export_csv_text(run_id)
+
     def test_support_bundle_artifact_exports_form_coherent_handoff_surface(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -972,44 +1115,33 @@ class RuleBacktestTestCase(unittest.TestCase):
                 confirmed=True,
             )
 
-        manifest = service.get_support_bundle_manifest(response["id"])
-        reproducibility = service.get_support_bundle_reproducibility_manifest(response["id"])
-        export_index = service.get_support_export_index(response["id"])
+        self._assert_support_bundle_export_contract(service=service, run_id=response["id"])
 
-        self.assertEqual(manifest["run"]["id"], response["id"])
-        self.assertEqual(reproducibility["run"]["id"], response["id"])
-        self.assertEqual(manifest["run"]["status"], response["status"])
-        self.assertEqual(reproducibility["run"]["status"], response["status"])
-        self.assertEqual(reproducibility["run_timing"], response["run_timing"])
-        self.assertEqual(reproducibility["run_diagnostics"], response["run_diagnostics"])
-        self.assertEqual(reproducibility["artifact_availability"], response["artifact_availability"])
-        self.assertEqual(reproducibility["readback_integrity"], response["readback_integrity"])
+    def test_support_bundle_artifact_exports_preserve_coherent_handoff_surface_during_live_storage_repair(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        deleted = service.repo.delete_trades_by_run_ids([response["id"]])
+        self.assertGreater(deleted, 0)
+
+        self._assert_support_bundle_export_contract(service=service, run_id=response["id"])
+        repaired_run = service.get_run(response["id"])
+        assert repaired_run is not None
+        self.assertFalse(repaired_run["artifact_availability"]["has_trade_rows"])
         self.assertEqual(
-            [item["key"] for item in export_index["exports"]],
-            [
-                "support_bundle_manifest_json",
-                "support_bundle_reproducibility_manifest_json",
-                "execution_trace_json",
-                "execution_trace_csv",
-            ],
+            repaired_run["artifact_availability"]["source"],
+            "summary.artifact_availability+live_storage_repair",
         )
-        endpoint_map = {item["key"]: item["endpoint_path"] for item in export_index["exports"]}
-        self.assertEqual(
-            endpoint_map["support_bundle_manifest_json"],
-            f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-manifest",
-        )
-        self.assertEqual(
-            endpoint_map["support_bundle_reproducibility_manifest_json"],
-            f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-reproducibility-manifest",
-        )
-        self.assertEqual(
-            endpoint_map["execution_trace_json"],
-            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.json",
-        )
-        self.assertEqual(
-            endpoint_map["execution_trace_csv"],
-            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.csv",
-        )
+        self.assertTrue(repaired_run["readback_integrity"]["used_live_storage_repair"])
+        self.assertEqual(repaired_run["readback_integrity"]["integrity_level"], "drift_repaired")
+        self.assertEqual(repaired_run["readback_integrity"]["drift_domains"], ["trade_rows"])
 
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)
@@ -3379,16 +3511,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         summary["visualization"]["exposure_curve"] = []
         service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
 
-        export_index = service.get_support_export_index(response["id"])
-        manifest_item = export_index["exports"][0]
-        trace_json_item = export_index["exports"][1]
-        trace_csv_item = export_index["exports"][2]
-
-        self.assertTrue(manifest_item["available"])
-        self.assertFalse(trace_json_item["available"])
-        self.assertFalse(trace_csv_item["available"])
-        self.assertEqual(trace_json_item["availability_reason"], "execution_trace_rows_missing")
-        self.assertEqual(trace_csv_item["availability_reason"], "execution_trace_rows_missing")
+        self._assert_support_bundle_export_contract(service=service, run_id=response["id"])
 
     def test_get_run_repairs_partial_stored_parsed_strategy_with_provenance(self) -> None:
         service = RuleBacktestService(self.db)
