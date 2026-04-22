@@ -1145,7 +1145,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                     isLoading={!isProfessionalMode && isSubmitting}
                     loadingText="正在打开结果页…"
                   >
-                    {isProfessionalMode ? '继续' : '确认并打开结果页'}
+                    {isProfessionalMode ? '继续' : '确认并查看结果'}
                   </Button>
                 </div>
               </motion.div>
@@ -1309,7 +1309,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       <div className="space-y-6" data-testid="backtest-normal-wizard">
         <Card title="普通版配置" subtitle="配置页" className="product-section-card product-section-card--backtest-result">
           <p className="product-section-copy">
-            普通版只负责引导你完成参数、策略与确认步骤。运行后会跳转到独立结果页，不再把完整图表分析挤在配置页里。
+            普通版只负责带你完成参数、策略与确认步骤。运行后会进入结果页查看图表和明细，不再把完整分析挤在配置页里。
           </p>
         </Card>
 

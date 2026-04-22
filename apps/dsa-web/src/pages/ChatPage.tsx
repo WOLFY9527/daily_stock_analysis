@@ -620,8 +620,8 @@ const ChatPage: React.FC = () => {
             )}
             titleClassName="text-2xl font-bold"
             description={language === 'en'
-              ? 'Start with the takeaway, then dig into risk, catalysts, position sizing, and execution.'
-              : '先问结论，再继续追问风险、催化、仓位和执行计划。'}
+              ? 'Start with a clear question, then drill into risk, catalysts, sizing, and execution.'
+              : '先提一个明确问题，再继续拆解风险、催化、仓位和执行。'}
             actions={messages.length > 0 ? (
               <>
                 <button
@@ -758,11 +758,11 @@ const ChatPage: React.FC = () => {
                       </svg>
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-lg font-medium text-foreground">{language === 'en' ? 'Start with a high-value question' : '从一个高价值问题开始'}</h3>
+                      <h3 className="text-lg font-medium text-foreground">{language === 'en' ? 'Start with a concrete question' : '先提一个具体问题'}</h3>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary-text">
                         {language === 'en'
-                          ? 'Start with actionable conclusions, then narrow the discussion to risk, catalysts, and execution instead of generic chat.'
-                          : '这里更适合先形成交易结论，再继续细化风险、催化和执行计划，而不是泛泛聊天。'}
+                          ? 'Ask for the decision first, then narrow into risk, catalysts, and execution instead of generic chatter.'
+                          : '先拿到结论，再继续细化风险、催化和执行，不必从泛泛聊天开始。'}
                       </p>
                     </div>
                   </div>
@@ -1021,8 +1021,8 @@ const ChatPage: React.FC = () => {
             {isFollowUpContextLoading && (
               <p className="mt-2 text-xs text-secondary-text">
                 {language === 'en'
-                  ? 'Loading previous analysis context. You can send follow-up questions now.'
-                  : '正在加载历史分析上下文；现在可直接发送追问。'}
+                  ? 'Loading the earlier report so your follow-up has context. You can ask now.'
+                  : '正在补齐上一次报告的上下文；你现在就可以继续提问。'}
               </p>
             )}
           </div>

@@ -880,7 +880,7 @@ describe('BacktestPage', () => {
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
     expect(screen.getByText('普通版配置')).toBeInTheDocument();
-    expect(screen.getByText(/运行后会跳转到独立结果页/i)).toBeInTheDocument();
+    expect(screen.getByText(/运行后会进入结果页查看图表和明细/i)).toBeInTheDocument();
 
     const activeStage = screen.getByTestId('backtest-normal-active-stage');
     expect(within(activeStage).getByTestId('backtest-control-section-symbol')).toHaveAttribute('data-active', 'true');
@@ -1047,7 +1047,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
 
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('backtest-control-section-strategy')).getByRole('button', { name: '确认并打开结果页' }));
+    fireEvent.click(within(screen.getByTestId('backtest-control-section-strategy')).getByRole('button', { name: '确认并查看结果' }));
 
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
     expect(runRuleBacktest).toHaveBeenCalledWith(

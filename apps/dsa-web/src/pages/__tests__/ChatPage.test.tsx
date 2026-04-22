@@ -149,11 +149,11 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('从一个高价值问题开始')).toBeInTheDocument();
+    expect(await screen.findByText('先提一个具体问题')).toBeInTheDocument();
     expect(screen.getByText('开仓执行判断')).toBeInTheDocument();
     expect(screen.getByText('持仓风控复盘')).toBeInTheDocument();
     expect(screen.getByText('事件驱动跟踪')).toBeInTheDocument();
-    expect(screen.getAllByText(/先问结论，再继续追问风险、催化、仓位和执行计划/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/先提一个明确问题，再继续拆解风险、催化、仓位和执行/).length).toBeGreaterThan(0);
   });
 
   it('switches session when clicking anywhere on the session card', async () => {
@@ -190,7 +190,7 @@ describe('ChatPage', () => {
 
     const sendButton = screen.getByRole('button', { name: /发送|处理中\.\.\./ });
     expect(sendButton).not.toBeDisabled();
-    expect(screen.getByText('正在加载历史分析上下文；现在可直接发送追问。')).toBeInTheDocument();
+    expect(screen.getByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).toBeInTheDocument();
 
     fireEvent.click(sendButton);
 
@@ -232,7 +232,7 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('正在加载历史分析上下文；现在可直接发送追问。')).not.toBeInTheDocument();
+      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
     });
 
     fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
@@ -287,7 +287,7 @@ describe('ChatPage', () => {
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.queryByText('正在加载历史分析上下文；现在可直接发送追问。')).not.toBeInTheDocument();
+      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -361,7 +361,7 @@ describe('ChatPage', () => {
     render(<RouterProvider router={router} />);
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
-    expect(screen.getByText('正在加载历史分析上下文；现在可直接发送追问。')).toBeInTheDocument();
+    expect(screen.getByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).toBeInTheDocument();
 
     await router.navigate('/chat?stock=AAPL&name=Apple&recordId=2');
 
@@ -412,7 +412,7 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('正在加载历史分析上下文；现在可直接发送追问。')).not.toBeInTheDocument();
+      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -463,7 +463,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByText('Start with a high-value question')).toBeInTheDocument();
+    expect(screen.getByText('Start with a concrete question')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Example: Is 600519 / Kweichow Moutai a buy right now? (Enter to send, Shift+Enter for newline)')).toBeInTheDocument();
   });
 });
