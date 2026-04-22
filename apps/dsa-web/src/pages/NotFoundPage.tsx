@@ -8,16 +8,16 @@ import { buildLocalizedPath } from '../utils/localeRouting';
 const COPY = {
   zh: {
     documentTitle: '页面未找到 - WolfyStock',
-    eyebrow: '导航状态',
+    eyebrow: '页面状态',
     title: '页面未找到',
-    body: '当前地址不存在或已经迁移。返回首页后，可以继续进入研究、问股、持仓或回测工作区。',
+    body: '当前地址不存在或已经迁移。返回首页后，可以继续进入研究、持仓或回测区域。',
     cta: '返回首页',
   },
   en: {
     documentTitle: 'Page Not Found - WolfyStock',
-    eyebrow: 'Navigation State',
+    eyebrow: 'Page State',
     title: 'Page not found',
-    body: 'This address does not exist or has moved. Go back home to continue into the research, Ask Stock, portfolio, or backtest workspace.',
+    body: 'This address does not exist or has moved. Go back home to continue into research, portfolio, or backtest areas.',
     cta: 'Back to home',
   },
 } as const;
