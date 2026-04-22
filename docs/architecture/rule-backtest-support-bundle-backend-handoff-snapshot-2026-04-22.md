@@ -78,12 +78,19 @@ It must stay aligned with the same resolved run payload for:
 - summarized `result_authority.domains`
 - `execution_assumptions_fingerprint`
 
+The reproducibility fingerprint contract is intentionally narrow:
+
+- `source` and `completeness` must stay aligned with `result_authority.domains.execution_assumptions_snapshot`
+- `summary_text` reflects `execution_assumptions_snapshot.payload.summary_text` when present
+- `hash_sha256` is the deterministic hash of the resolved execution-assumptions payload used for reproducibility
+
 ### Heavy Trace Exports
 
 The execution-trace exports are intentionally the only heavy support-bundle artifacts exposed over HTTP in this phase.
 
 - `execution-trace.json` returns structured trace rows and execution metadata for AI/debugging/automation consumers.
 - `execution-trace.csv` returns spreadsheet/operator-friendly trace rows and sets `Content-Disposition` for download.
+- `execution-trace.json.benchmark_summary` must stay aligned with the persisted run-level `benchmark_summary`, including `requested_mode` / `resolved_mode` semantics for the same run.
 - When trace rows are unavailable, both endpoints return `409` with `error=export_unavailable` instead of fabricating an empty export.
 
 ## 4. Cross-Layer Integrity Rules
@@ -93,6 +100,8 @@ The current handoff contract is considered coherent only if the following stay t
 - service helper payloads match the API endpoint payloads for the same run
 - `export-index` keys, endpoint paths, delivery metadata, and availability reasons match the real HTTP surface
 - manifest/reproducibility payloads share the same `run_timing`, `run_diagnostics`, `artifact_availability`, and `readback_integrity`
+- reproducibility fingerprint metadata stays aligned with the execution-assumptions authority domain and hashed payload
+- trace `benchmark_summary` stays aligned with the same run's persisted benchmark contract
 - trace availability flags match both manifest artifact counts and trace endpoint behavior
 - missing-trace runs close both heavy exports truthfully with `409 export_unavailable`
 
@@ -103,7 +112,7 @@ The acceptance surface is explicitly locked for three scenarios:
 - stored-first happy path
   - manifests are available
   - both trace exports are available
-  - trace row counts and authority source agree across service/API/HTTP
+  - trace row counts, benchmark summary, fingerprint metadata, and authority source agree across service/API/HTTP
 - live-storage-repair path
   - manifests remain available
   - trade-row drift is surfaced through `artifact_availability` and `readback_integrity`

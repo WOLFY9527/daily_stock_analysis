@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import tempfile
@@ -270,6 +271,14 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(manifest["artifact_availability"], reproducibility["artifact_availability"])
         self.assertEqual(manifest["readback_integrity"], reproducibility["readback_integrity"])
         self.assertEqual(
+            reproducibility["execution_assumptions_fingerprint"]["source"],
+            manifest["result_authority"]["domains"]["execution_assumptions_snapshot"]["source"],
+        )
+        self.assertEqual(
+            reproducibility["execution_assumptions_fingerprint"]["completeness"],
+            manifest["result_authority"]["domains"]["execution_assumptions_snapshot"]["completeness"],
+        )
+        self.assertEqual(
             [item["endpoint_path"] for item in export_index["exports"]],
             [
                 f"/api/v1/backtest/rule/runs/{run_id}/support-bundle-manifest",
@@ -345,6 +354,10 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             )
             self.assertEqual(len(trace_json["trace_rows"]), len(trace_csv_rows))
             self.assertEqual(
+                trace_json["benchmark_summary"].get("requested_mode"),
+                manifest["run"]["benchmark_mode"],
+            )
+            self.assertEqual(
                 trace_json["source"],
                 manifest["result_authority"]["domains"]["execution_trace"]["source"],
             )
@@ -403,6 +416,25 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(
             payloads["manifest"]["artifact_availability"]["source"],
             "summary.artifact_availability",
+        )
+        self.assertEqual(
+            payloads["trace_json"]["benchmark_summary"],
+            response["benchmark_summary"],
+        )
+        self.assertEqual(
+            payloads["reproducibility"]["execution_assumptions_fingerprint"]["summary_text"],
+            response["execution_assumptions_snapshot"]["payload"].get("summary_text"),
+        )
+        self.assertEqual(
+            payloads["reproducibility"]["execution_assumptions_fingerprint"]["hash_sha256"],
+            hashlib.sha256(
+                json.dumps(
+                    response["execution_assumptions_snapshot"]["payload"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
         )
         self.assertTrue(payloads["manifest"]["artifact_availability"]["has_trade_rows"])
         self.assertTrue(payloads["manifest"]["artifact_availability"]["has_execution_trace"])

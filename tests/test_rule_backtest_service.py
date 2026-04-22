@@ -2,6 +2,7 @@
 """Tests for AI-assisted rule backtesting."""
 
 import csv
+import hashlib
 import json
 import os
 import tempfile
@@ -1052,6 +1053,39 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "state": run["result_authority"]["domains"]["execution_trace"]["state"],
             },
         )
+        execution_assumptions_payload = dict(
+            (run.get("execution_assumptions_snapshot") or {}).get("payload")
+            or run.get("execution_assumptions")
+            or {}
+        )
+        expected_execution_assumptions_hash = (
+            hashlib.sha256(
+                json.dumps(
+                    execution_assumptions_payload,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            if execution_assumptions_payload
+            else None
+        )
+        self.assertEqual(
+            reproducibility["execution_assumptions_fingerprint"]["source"],
+            run["result_authority"]["domains"]["execution_assumptions_snapshot"]["source"],
+        )
+        self.assertEqual(
+            reproducibility["execution_assumptions_fingerprint"]["completeness"],
+            run["result_authority"]["domains"]["execution_assumptions_snapshot"]["completeness"],
+        )
+        self.assertEqual(
+            reproducibility["execution_assumptions_fingerprint"]["summary_text"],
+            execution_assumptions_payload.get("summary_text"),
+        )
+        self.assertEqual(
+            reproducibility["execution_assumptions_fingerprint"]["hash_sha256"],
+            expected_execution_assumptions_hash,
+        )
         self.assertEqual(manifest["artifact_counts"]["trade_rows_count"], len(run.get("trades") or []))
         self.assertEqual(
             manifest["artifact_counts"]["execution_trace_rows_count"],
@@ -1150,7 +1184,11 @@ class RuleBacktestTestCase(unittest.TestCase):
                 len(trace_json["trace_rows"]),
                 manifest["artifact_counts"]["execution_trace_rows_count"],
             )
-            self.assertIsInstance(trace_json["benchmark_summary"], dict)
+            self.assertEqual(trace_json["benchmark_summary"], run["benchmark_summary"])
+            self.assertEqual(
+                trace_json["benchmark_summary"].get("requested_mode"),
+                manifest["run"]["benchmark_mode"],
+            )
         else:
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_json(run_id)

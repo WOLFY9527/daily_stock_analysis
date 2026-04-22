@@ -221,6 +221,13 @@ class BacktestApiContractTestCase(unittest.TestCase):
                         "missing": [],
                         "missing_kind": "fields",
                     },
+                    "execution_assumptions_snapshot": {
+                        "source": "summary.execution_assumptions_snapshot",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "keys",
+                    },
                     "comparison": {
                         "source": "summary.visualization.comparison",
                         "completeness": "complete",
@@ -389,11 +396,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "contract_version": run_payload["result_authority"]["contract_version"],
                 "read_mode": run_payload["result_authority"]["read_mode"],
                 "domains": {
-                    "execution_trace": {
-                        "source": run_payload["result_authority"]["domains"]["execution_trace"]["source"],
-                        "completeness": run_payload["result_authority"]["domains"]["execution_trace"]["completeness"],
-                        "state": run_payload["result_authority"]["domains"]["execution_trace"]["state"],
-                    },
+                    domain_name: {
+                        "source": domain_payload["source"],
+                        "completeness": domain_payload["completeness"],
+                        "state": domain_payload["state"],
+                    }
+                    for domain_name, domain_payload in run_payload["result_authority"]["domains"].items()
                 },
             },
         }
@@ -489,6 +497,18 @@ class BacktestApiContractTestCase(unittest.TestCase):
             self.assertEqual(manifest_response.artifact_availability, reproducibility_response.artifact_availability)
             self.assertEqual(manifest_response.readback_integrity, reproducibility_response.readback_integrity)
             self.assertEqual(
+                reproducibility_response.execution_assumptions_fingerprint["source"],
+                reproducibility_response.result_authority["domains"]["execution_assumptions_snapshot"]["source"],
+            )
+            self.assertEqual(
+                reproducibility_response.execution_assumptions_fingerprint["completeness"],
+                reproducibility_response.result_authority["domains"]["execution_assumptions_snapshot"]["completeness"],
+            )
+            self.assertEqual(
+                reproducibility_response.execution_assumptions_fingerprint["hash_sha256"],
+                reproducibility_payload["execution_assumptions_fingerprint"]["hash_sha256"],
+            )
+            self.assertEqual(
                 [item.key for item in export_index_response.exports],
                 [
                     "support_bundle_manifest_json",
@@ -574,6 +594,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 self.assertEqual(
                     len(trace_json_response.trace_rows),
                     manifest_response.artifact_counts["execution_trace_rows_count"],
+                )
+                self.assertEqual(
+                    trace_json_response.benchmark_summary["requested_mode"],
+                    manifest_response.run["benchmark_mode"],
                 )
                 self.assertIn("rule-backtest-123-execution-trace.csv", trace_csv_response.headers["Content-Disposition"])
                 self.assertEqual(
@@ -1775,7 +1799,11 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "assumptions": {"summary_text": "next bar open / long only"},
                 "execution_model": {"entry_timing": "next_bar_open"},
                 "execution_assumptions": {"position_sizing": "all_available_capital"},
-                "benchmark_summary": {"benchmark_mode": "auto"},
+                "benchmark_summary": {
+                    "method": "same_symbol_buy_and_hold",
+                    "requested_mode": "auto",
+                    "resolved_mode": "same_symbol_buy_and_hold",
+                },
                 "fallback": {"trace_rebuilt": False},
             },
             trace_csv_text=(
@@ -1860,7 +1888,11 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "assumptions": {"summary_text": "next bar open / long only"},
                 "execution_model": {"entry_timing": "next_bar_open"},
                 "execution_assumptions": {"position_sizing": "all_available_capital"},
-                "benchmark_summary": {"benchmark_mode": "auto"},
+                "benchmark_summary": {
+                    "method": "same_symbol_buy_and_hold",
+                    "requested_mode": "auto",
+                    "resolved_mode": "same_symbol_buy_and_hold",
+                },
                 "fallback": {"trace_rebuilt": False},
             },
             trace_csv_text=(
