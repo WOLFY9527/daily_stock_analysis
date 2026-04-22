@@ -856,6 +856,7 @@ class RuleBacktestHistoryItem(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+    artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions_snapshot: Dict[str, Any] = Field(default_factory=dict)
@@ -924,6 +925,7 @@ class RuleBacktestRunResponse(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+    artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions_snapshot: Dict[str, Any] = Field(default_factory=dict)
@@ -960,6 +962,7 @@ class RuleBacktestStatusResponse(BaseModel):
     trade_count: int = 0
     parsed_confidence: Optional[float] = None
     needs_confirmation: bool = False
+    artifact_availability: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleBacktestCancelResponse(RuleBacktestStatusResponse):

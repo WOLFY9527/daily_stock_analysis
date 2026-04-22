@@ -133,6 +133,18 @@ class RuleBacktestRepository:
             ).scalars().all()
             return list(rows)
 
+    def get_trade_run_ids(self, run_ids: List[int]) -> set[int]:
+        normalized_ids = sorted({int(value) for value in run_ids if value is not None})
+        if not normalized_ids:
+            return set()
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(RuleBacktestTrade.run_id)
+                .where(RuleBacktestTrade.run_id.in_(normalized_ids))
+                .group_by(RuleBacktestTrade.run_id)
+            ).scalars().all()
+            return {int(value) for value in rows if value is not None}
+
     def delete_runs_by_code(
         self,
         *,

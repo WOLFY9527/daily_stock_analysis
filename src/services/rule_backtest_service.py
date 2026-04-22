@@ -305,6 +305,19 @@ SUMMARY_FIELD_ORDER: List[str] = [
     "status_history",
 ]
 
+ARTIFACT_AVAILABILITY_FIELDS: List[str] = [
+    "has_summary",
+    "has_parsed_strategy",
+    "has_metrics",
+    "has_execution_model",
+    "has_comparison",
+    "has_trade_rows",
+    "has_equity_curve",
+    "has_execution_trace",
+    "has_run_diagnostics",
+    "has_run_timing",
+]
+
 
 @dataclass
 class _StrategySpecSupportPayload:
@@ -764,11 +777,19 @@ class RuleBacktestService:
             limit=limit,
             **self._owner_kwargs(),
         )
+        trade_run_ids = self.repo.get_trade_run_ids([int(row.id) for row in rows if getattr(row, "id", None) is not None])
         return {
             "total": total,
             "page": page,
             "limit": limit,
-            "items": [self._run_row_to_dict(row, include_trades=False) for row in rows],
+            "items": [
+                self._run_row_to_dict(
+                    row,
+                    include_trades=False,
+                    trade_rows_present_hint=int(row.id) in trade_run_ids,
+                )
+                for row in rows
+            ],
         }
 
     def get_run(self, run_id: int) -> Optional[Dict[str, Any]]:
@@ -859,7 +880,17 @@ class RuleBacktestService:
         if row is None:
             return None
         summary = self._load_summary_payload(row.summary_json)
-        return self._build_run_status_payload(row=row, summary=summary)
+        trade_run_ids = self.repo.get_trade_run_ids([int(row.id)])
+        artifact_availability = self._resolve_artifact_availability_payload(
+            row=row,
+            stored_summary=summary,
+            trade_rows_present=bool(trade_run_ids),
+        )
+        return self._build_run_status_payload(
+            row=row,
+            summary=summary,
+            artifact_availability=artifact_availability,
+        )
 
     def cancel_run(self, run_id: int) -> Optional[Dict[str, Any]]:
         row = self.repo.get_run(run_id, **self._owner_kwargs())
@@ -1455,6 +1486,8 @@ class RuleBacktestService:
             no_result_reason=result.no_result_reason,
             no_result_message=result.no_result_message,
             ai_summary=ai_summary,
+            trade_rows_persisted=bool(trade_payload),
+            equity_curve_persisted=bool(equity_payload),
             status="completed",
             status_message="规则回测已完成，可查看交易明细与执行假设。",
             at=run_at,
@@ -1507,6 +1540,8 @@ class RuleBacktestService:
                 no_result_reason=result.no_result_reason,
                 no_result_message=result.no_result_message,
                 ai_summary=ai_summary,
+                trade_rows_persisted=bool(trade_payload),
+                equity_curve_persisted=bool(equity_payload),
                 status="completed",
                 status_message="规则回测已完成，可查看交易明细与执行假设。",
                 at=run_at,
@@ -2940,7 +2975,12 @@ class RuleBacktestService:
         return self._is_run_cancelled_status(row.status)
 
     @staticmethod
-    def _build_run_status_payload(*, row: RuleBacktestRun, summary: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_run_status_payload(
+        *,
+        row: RuleBacktestRun,
+        summary: Dict[str, Any],
+        artifact_availability: Dict[str, Any],
+    ) -> Dict[str, Any]:
         return {
             "id": int(row.id),
             "code": str(row.code),
@@ -2956,6 +2996,7 @@ class RuleBacktestService:
             "trade_count": int(row.trade_count or 0),
             "parsed_confidence": row.parsed_confidence,
             "needs_confirmation": bool(row.needs_confirmation),
+            "artifact_availability": dict(artifact_availability or {}),
         }
 
     @staticmethod
@@ -2969,8 +3010,142 @@ class RuleBacktestService:
             return {}
 
     @staticmethod
+    def _load_json_payload(raw_json: Optional[str]) -> Any:
+        if not raw_json:
+            return None
+        try:
+            return json.loads(raw_json)
+        except Exception:
+            return None
+
+    @staticmethod
     def _serialize_json(payload: Any) -> str:
         return json.dumps(payload, ensure_ascii=False)
+
+    @staticmethod
+    def _build_artifact_availability_payload(
+        *,
+        source: str,
+        completeness: str,
+        flags: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload = {
+            "version": "v1",
+            "source": str(source or "unknown"),
+            "completeness": str(completeness or "unknown"),
+        }
+        for field in ARTIFACT_AVAILABILITY_FIELDS:
+            payload[field] = bool(flags.get(field, False))
+        return payload
+
+    @staticmethod
+    def _has_row_metrics_snapshot(row: RuleBacktestRun) -> bool:
+        metric_values = [
+            row.total_return_pct,
+            row.win_rate_pct,
+            row.avg_trade_return_pct,
+            row.max_drawdown_pct,
+            row.avg_holding_days,
+            row.final_equity,
+        ]
+        if any(value is not None for value in metric_values):
+            return True
+        return any(int(value or 0) > 0 for value in [row.trade_count, row.win_count, row.loss_count])
+
+    @classmethod
+    def _derive_artifact_availability_flags(
+        cls,
+        *,
+        row: RuleBacktestRun,
+        stored_summary: Dict[str, Any],
+        trade_rows_present: bool,
+    ) -> Dict[str, bool]:
+        visualization = (
+            dict(stored_summary.get("visualization") or {})
+            if isinstance(stored_summary.get("visualization"), dict)
+            else {}
+        )
+        request_payload = (
+            dict(stored_summary.get("request") or {})
+            if isinstance(stored_summary.get("request"), dict)
+            else {}
+        )
+        parsed_strategy_payload = cls._load_json_payload(getattr(row, "parsed_strategy_json", None))
+        equity_curve_payload = cls._load_json_payload(getattr(row, "equity_curve_json", None))
+        return {
+            "has_summary": bool(stored_summary),
+            "has_parsed_strategy": isinstance(parsed_strategy_payload, dict) and bool(parsed_strategy_payload),
+            "has_metrics": (
+                isinstance(stored_summary.get("metrics"), dict)
+                and bool(stored_summary.get("metrics"))
+            ) or cls._has_row_metrics_snapshot(row),
+            "has_execution_model": (
+                isinstance(stored_summary.get("execution_model"), dict)
+                and bool(stored_summary.get("execution_model"))
+            ) or (
+                isinstance(request_payload.get("execution_model"), dict)
+                and bool(request_payload.get("execution_model"))
+            ),
+            "has_comparison": (
+                isinstance(visualization.get("comparison"), dict)
+                and bool(visualization.get("comparison"))
+            ),
+            "has_trade_rows": bool(trade_rows_present),
+            "has_equity_curve": isinstance(equity_curve_payload, list) and bool(equity_curve_payload),
+            "has_execution_trace": (
+                isinstance(stored_summary.get("execution_trace"), dict)
+                and bool(stored_summary.get("execution_trace"))
+            ),
+            "has_run_diagnostics": (
+                isinstance(stored_summary.get("run_diagnostics"), dict)
+                and bool(stored_summary.get("run_diagnostics"))
+            ),
+            "has_run_timing": (
+                isinstance(stored_summary.get("run_timing"), dict)
+                and bool(stored_summary.get("run_timing"))
+            ),
+        }
+
+    @classmethod
+    def _resolve_artifact_availability_payload(
+        cls,
+        *,
+        row: RuleBacktestRun,
+        stored_summary: Dict[str, Any],
+        trade_rows_present: bool,
+    ) -> Dict[str, Any]:
+        derived_flags = cls._derive_artifact_availability_flags(
+            row=row,
+            stored_summary=stored_summary,
+            trade_rows_present=trade_rows_present,
+        )
+        stored_payload = stored_summary.get("artifact_availability")
+        if isinstance(stored_payload, dict):
+            stored_flags = {
+                field: bool(stored_payload.get(field))
+                for field in ARTIFACT_AVAILABILITY_FIELDS
+                if isinstance(stored_payload.get(field), bool)
+            }
+            requires_repair = (
+                len(stored_flags) != len(ARTIFACT_AVAILABILITY_FIELDS)
+                or any(stored_flags.get(field) != derived_flags[field] for field in ARTIFACT_AVAILABILITY_FIELDS)
+            )
+            if not requires_repair:
+                return cls._build_artifact_availability_payload(
+                    source=str(stored_payload.get("source") or "summary.artifact_availability"),
+                    completeness=str(stored_payload.get("completeness") or "complete"),
+                    flags=stored_flags,
+                )
+            return cls._build_artifact_availability_payload(
+                source="summary.artifact_availability+live_storage_repair",
+                completeness="stored_partial_repaired",
+                flags=derived_flags,
+            )
+        return cls._build_artifact_availability_payload(
+            source="derived_from_live_storage",
+            completeness="legacy_derived",
+            flags=derived_flags,
+        )
 
     @staticmethod
     def _extract_request_payload(summary_json: Optional[str]) -> Dict[str, Any]:
@@ -4376,6 +4551,8 @@ class RuleBacktestService:
         no_result_reason: Any = _UNSET,
         no_result_message: Any = _UNSET,
         ai_summary: Any = _UNSET,
+        trade_rows_persisted: Any = _UNSET,
+        equity_curve_persisted: Any = _UNSET,
         status: Optional[str] = None,
         status_message: Optional[str] = None,
         at: Optional[datetime] = None,
@@ -4429,6 +4606,63 @@ class RuleBacktestService:
             status_message=str(payload.get("status_message") or status_message or "").strip() or None,
             no_result_reason=str(payload.get("no_result_reason") or "").strip() or None,
             no_result_message=str(payload.get("no_result_message") or "").strip() or None,
+        )
+        stored_artifact_availability = (
+            dict(payload.get("artifact_availability") or {})
+            if isinstance(payload.get("artifact_availability"), dict)
+            else {}
+        )
+        visualization_payload = (
+            dict(payload.get("visualization") or {})
+            if isinstance(payload.get("visualization"), dict)
+            else {}
+        )
+        request_payload_block = (
+            dict(payload.get("request") or {})
+            if isinstance(payload.get("request"), dict)
+            else {}
+        )
+        payload["artifact_availability"] = self._build_artifact_availability_payload(
+            source="summary.artifact_availability",
+            completeness="complete",
+            flags={
+                "has_summary": bool(payload),
+                "has_parsed_strategy": bool(payload.get("parsed_strategy_summary")),
+                "has_metrics": isinstance(payload.get("metrics"), dict) and bool(payload.get("metrics")),
+                "has_execution_model": (
+                    isinstance(payload.get("execution_model"), dict)
+                    and bool(payload.get("execution_model"))
+                ) or (
+                    isinstance(request_payload_block.get("execution_model"), dict)
+                    and bool(request_payload_block.get("execution_model"))
+                ),
+                "has_comparison": (
+                    isinstance(visualization_payload.get("comparison"), dict)
+                    and bool(visualization_payload.get("comparison"))
+                ),
+                "has_trade_rows": (
+                    bool(trade_rows_persisted)
+                    if trade_rows_persisted is not _UNSET
+                    else bool(stored_artifact_availability.get("has_trade_rows"))
+                ),
+                "has_equity_curve": (
+                    bool(equity_curve_persisted)
+                    if equity_curve_persisted is not _UNSET
+                    else bool(stored_artifact_availability.get("has_equity_curve"))
+                ),
+                "has_execution_trace": (
+                    isinstance(payload.get("execution_trace"), dict)
+                    and bool(payload.get("execution_trace"))
+                ),
+                "has_run_diagnostics": (
+                    isinstance(payload.get("run_diagnostics"), dict)
+                    and bool(payload.get("run_diagnostics"))
+                ),
+                "has_run_timing": (
+                    isinstance(payload.get("run_timing"), dict)
+                    and bool(payload.get("run_timing"))
+                ),
+            },
         )
         return payload
 
@@ -6572,6 +6806,7 @@ class RuleBacktestService:
         row: RuleBacktestRun,
         *,
         include_trades: bool,
+        trade_rows_present_hint: Optional[bool] = None,
         trades_override: Optional[List[Any]] = None,
         equity_override: Optional[List[Any]] = None,
         parsed_override: Optional[Dict[str, Any]] = None,
@@ -6754,6 +6989,17 @@ class RuleBacktestService:
             execution_trace_completeness=execution_trace_completeness,
             execution_trace_missing_fields=execution_trace_missing_fields,
         )
+        trade_rows_present = trade_rows_present_hint
+        if trade_rows_present is None:
+            trade_rows_present = bool(trade_rows)
+            if trade_rows_source == "unavailable":
+                trade_rows_present = False
+        artifact_availability = self._resolve_artifact_availability_payload(
+            row=row,
+            stored_summary=stored_summary,
+            trade_rows_present=bool(trade_rows_present),
+        )
+        summary["artifact_availability"] = dict(artifact_availability)
         return {
             "id": row.id,
             "code": row.code,
@@ -6800,6 +7046,7 @@ class RuleBacktestService:
             "avg_holding_calendar_days": metrics.get("avg_holding_calendar_days"),
             "final_equity": metrics.get("final_equity"),
             "summary": summary,
+            "artifact_availability": artifact_availability,
             "execution_model": execution_model,
             "execution_assumptions": execution_assumptions,
             "execution_assumptions_snapshot": execution_assumptions_snapshot,

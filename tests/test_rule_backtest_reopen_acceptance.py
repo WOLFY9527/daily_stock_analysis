@@ -60,8 +60,10 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         service, _, run_row = self._run_completed_backtest()
 
         detail = service.get_run(run_row.id)
+        status = service.get_run_status(run_row.id)
         history = service.list_runs(code="600519", page=1, limit=10)
         assert detail is not None
+        assert status is not None
         item = history["items"][0]
 
         for domain in [
@@ -99,6 +101,14 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         self.assertEqual(item["summary"]["visualization"]["audit_rows"], [])
         self.assertEqual(item["summary"]["visualization"]["daily_return_series"], [])
         self.assertEqual(item["summary"]["visualization"]["exposure_curve"], [])
+
+        self.assertEqual(detail["artifact_availability"], item["artifact_availability"])
+        self.assertEqual(status["artifact_availability"], item["artifact_availability"])
+        self.assertEqual(detail["summary"]["artifact_availability"], detail["artifact_availability"])
+        self.assertEqual(item["summary"]["artifact_availability"], item["artifact_availability"])
+        self.assertTrue(detail["artifact_availability"]["has_trade_rows"])
+        self.assertTrue(item["artifact_availability"]["has_trade_rows"])
+        self.assertTrue(status["artifact_availability"]["has_trade_rows"])
 
     def test_reopen_acceptance_repaired_detail_and_history_share_repaired_domains_without_summary_drift(self) -> None:
         service, response, run_row = self._run_completed_backtest()

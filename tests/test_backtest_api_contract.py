@@ -39,6 +39,21 @@ from api.v1.schemas.backtest import (  # noqa: E402
 class BacktestApiContractTestCase(unittest.TestCase):
     @staticmethod
     def _rule_run_payload(*, run_id: int = 123, status: str = "queued") -> dict:
+        artifact_availability = {
+            "version": "v1",
+            "source": "summary.artifact_availability",
+            "completeness": "complete",
+            "has_summary": True,
+            "has_parsed_strategy": True,
+            "has_metrics": True,
+            "has_execution_model": True,
+            "has_comparison": status == "completed",
+            "has_trade_rows": status == "completed",
+            "has_equity_curve": status == "completed",
+            "has_execution_trace": status == "completed",
+            "has_run_diagnostics": True,
+            "has_run_timing": True,
+        }
         return {
             "id": run_id,
             "code": "600519",
@@ -87,7 +102,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "avg_holding_bars": 0.0,
             "avg_holding_calendar_days": 0.0,
             "final_equity": 100000.0,
-            "summary": {},
+            "summary": {"artifact_availability": artifact_availability},
+            "artifact_availability": artifact_availability,
             "result_authority": {
                 "contract_version": "v1",
                 "read_mode": "stored_first",
@@ -411,6 +427,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(payload["result_authority"]["execution_trace_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertEqual(payload["artifact_availability"]["source"], "summary.artifact_availability")
+        self.assertTrue(payload["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(payload["summary"]["artifact_availability"], payload["artifact_availability"])
         self.assertEqual(
             payload["result_authority"]["domains"]["execution_model"],
             {
@@ -513,6 +532,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "omitted_without_detail_read",
         )
         self.assertEqual(payload["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
+        self.assertEqual(payload["items"][0]["artifact_availability"]["source"], "summary.artifact_availability")
+        self.assertTrue(payload["items"][0]["artifact_availability"]["has_trade_rows"])
 
     def test_compare_rule_backtest_runs_serializes_stored_first_compare_contract(self) -> None:
         service = MagicMock()
@@ -1052,6 +1073,21 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "trade_count": 0,
             "parsed_confidence": 0.8,
             "needs_confirmation": False,
+            "artifact_availability": {
+                "version": "v1",
+                "source": "summary.artifact_availability",
+                "completeness": "complete",
+                "has_summary": True,
+                "has_parsed_strategy": False,
+                "has_metrics": False,
+                "has_execution_model": True,
+                "has_comparison": False,
+                "has_trade_rows": False,
+                "has_equity_curve": False,
+                "has_execution_trace": False,
+                "has_run_diagnostics": True,
+                "has_run_timing": True,
+            },
         }
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
@@ -1060,6 +1096,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsInstance(response, RuleBacktestStatusResponse)
         self.assertEqual(response.status, "running")
         self.assertEqual(response.status_history[0]["status"], "queued")
+        self.assertEqual(response.artifact_availability["source"], "summary.artifact_availability")
+        self.assertFalse(response.artifact_availability["has_trade_rows"])
         service.get_run_status.assert_called_once_with(123)
 
     def test_cancel_rule_backtest_run_returns_cancel_contract(self) -> None:

@@ -853,6 +853,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(authority["equity_curve_completeness"], "complete")
         self.assertEqual(authority["equity_curve_missing_fields"], [])
         self.assertEqual(authority["execution_trace_source"], "summary.execution_trace")
+        self.assertEqual(response["artifact_availability"]["source"], "summary.artifact_availability")
+        self.assertEqual(response["artifact_availability"]["completeness"], "complete")
+        self.assertTrue(response["artifact_availability"]["has_trade_rows"])
+        self.assertTrue(response["artifact_availability"]["has_equity_curve"])
+        self.assertTrue(response["artifact_availability"]["has_execution_trace"])
+        self.assertEqual(response["summary"]["artifact_availability"], response["artifact_availability"])
         self.assertEqual(
             authority["domains"]["summary"],
             {
@@ -2869,6 +2875,13 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
         self.assertEqual(history["items"][0]["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertEqual(history["items"][0]["artifact_availability"]["source"], "summary.artifact_availability")
+        self.assertTrue(history["items"][0]["artifact_availability"]["has_trade_rows"])
+        self.assertTrue(history["items"][0]["artifact_availability"]["has_execution_trace"])
+        self.assertEqual(
+            history["items"][0]["summary"]["artifact_availability"],
+            history["items"][0]["artifact_availability"],
+        )
         self.assertEqual(
             history["items"][0]["result_authority"]["domains"]["parsed_strategy"],
             {
@@ -3021,6 +3034,28 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "missing": ["stored_trade_rows"],
                 "missing_kind": "fields",
             },
+        )
+        self.assertEqual(
+            detail["artifact_availability"]["source"],
+            "summary.artifact_availability+live_storage_repair",
+        )
+        self.assertEqual(detail["artifact_availability"]["completeness"], "stored_partial_repaired")
+        self.assertFalse(detail["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(detail["summary"]["artifact_availability"], detail["artifact_availability"])
+
+        status = service.get_run_status(run_row.id)
+        assert status is not None
+        self.assertFalse(status["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(
+            status["artifact_availability"]["source"],
+            "summary.artifact_availability+live_storage_repair",
+        )
+
+        history = service.list_runs(code="600519", page=1, limit=10)
+        self.assertFalse(history["items"][0]["artifact_availability"]["has_trade_rows"])
+        self.assertEqual(
+            history["items"][0]["artifact_availability"]["source"],
+            "summary.artifact_availability+live_storage_repair",
         )
 
     def test_get_run_repairs_partial_stored_parsed_strategy_with_provenance(self) -> None:
