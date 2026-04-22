@@ -28,6 +28,7 @@ from sqlalchemy import (
     create_engine,
     delete,
     func,
+    inspect,
     select,
 )
 from sqlalchemy.orm import Session, sessionmaker
@@ -1280,40 +1281,50 @@ class PostgresPhaseFStore:
             return counts
 
         with self.session_scope() as session:
-            counts["portfolio_sync_positions"] = session.execute(
-                delete(PhaseFPortfolioSyncPosition).where(
-                    PhaseFPortfolioSyncPosition.owner_user_id.in_(normalized_user_ids)
-                )
-            ).rowcount or 0
-            counts["portfolio_sync_cash_balances"] = session.execute(
-                delete(PhaseFPortfolioSyncCashBalance).where(
-                    PhaseFPortfolioSyncCashBalance.owner_user_id.in_(normalized_user_ids)
-                )
-            ).rowcount or 0
-            counts["portfolio_sync_states"] = session.execute(
-                delete(PhaseFPortfolioSyncState).where(
-                    PhaseFPortfolioSyncState.owner_user_id.in_(normalized_user_ids)
-                )
-            ).rowcount or 0
-            counts["portfolio_ledger"] = session.execute(
-                delete(PhaseFPortfolioLedger).where(
-                    PhaseFPortfolioLedger.owner_user_id.in_(normalized_user_ids)
-                )
-            ).rowcount or 0
-            counts["portfolio_positions"] = session.execute(
-                delete(PhaseFPortfolioPosition).where(
-                    PhaseFPortfolioPosition.owner_user_id.in_(normalized_user_ids)
-                )
-            ).rowcount or 0
-            counts["broker_connections"] = session.execute(
-                delete(PhaseFBrokerConnection).where(
-                    PhaseFBrokerConnection.owner_user_id.in_(normalized_user_ids)
-                )
-            ).rowcount or 0
-            counts["portfolio_accounts"] = session.execute(
-                delete(PhaseFPortfolioAccount).where(
-                    PhaseFPortfolioAccount.owner_user_id.in_(normalized_user_ids)
-                )
-            ).rowcount or 0
+            inspector = inspect(session.connection())
+            existing_tables = {table_name for table_name in counts if inspector.has_table(table_name)}
+
+            if "portfolio_sync_positions" in existing_tables:
+                counts["portfolio_sync_positions"] = session.execute(
+                    delete(PhaseFPortfolioSyncPosition).where(
+                        PhaseFPortfolioSyncPosition.owner_user_id.in_(normalized_user_ids)
+                    )
+                ).rowcount or 0
+            if "portfolio_sync_cash_balances" in existing_tables:
+                counts["portfolio_sync_cash_balances"] = session.execute(
+                    delete(PhaseFPortfolioSyncCashBalance).where(
+                        PhaseFPortfolioSyncCashBalance.owner_user_id.in_(normalized_user_ids)
+                    )
+                ).rowcount or 0
+            if "portfolio_sync_states" in existing_tables:
+                counts["portfolio_sync_states"] = session.execute(
+                    delete(PhaseFPortfolioSyncState).where(
+                        PhaseFPortfolioSyncState.owner_user_id.in_(normalized_user_ids)
+                    )
+                ).rowcount or 0
+            if "portfolio_ledger" in existing_tables:
+                counts["portfolio_ledger"] = session.execute(
+                    delete(PhaseFPortfolioLedger).where(
+                        PhaseFPortfolioLedger.owner_user_id.in_(normalized_user_ids)
+                    )
+                ).rowcount or 0
+            if "portfolio_positions" in existing_tables:
+                counts["portfolio_positions"] = session.execute(
+                    delete(PhaseFPortfolioPosition).where(
+                        PhaseFPortfolioPosition.owner_user_id.in_(normalized_user_ids)
+                    )
+                ).rowcount or 0
+            if "broker_connections" in existing_tables:
+                counts["broker_connections"] = session.execute(
+                    delete(PhaseFBrokerConnection).where(
+                        PhaseFBrokerConnection.owner_user_id.in_(normalized_user_ids)
+                    )
+                ).rowcount or 0
+            if "portfolio_accounts" in existing_tables:
+                counts["portfolio_accounts"] = session.execute(
+                    delete(PhaseFPortfolioAccount).where(
+                        PhaseFPortfolioAccount.owner_user_id.in_(normalized_user_ids)
+                    )
+                ).rowcount or 0
 
         return {key: int(value or 0) for key, value in counts.items()}
