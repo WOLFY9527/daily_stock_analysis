@@ -218,7 +218,7 @@ const PersonalSettingsPage: React.FC = () => {
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
                       {language === 'en'
                         ? 'Your appearance settings are stored locally, but personal history, chat, portfolio, and scanner data still require sign-in.'
-                        : '你的外观偏好会保存在本地，但个人历史、问股、持仓和扫描器数据仍然需要登录后才会拥有。'}
+                        : '你的外观偏好会保存在本地，但个人历史、问答、持仓和扫描器数据仍然需要登录后才会拥有。'}
                     </p>
                   </div>
                 </div>
@@ -254,7 +254,7 @@ const PersonalSettingsPage: React.FC = () => {
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
                       {language === 'en'
                         ? 'Analysis history, chat sessions, portfolio data, scanner runs, and backtests now resolve against your authenticated identity.'
-                        : '分析历史、问股会话、持仓数据、扫描器运行结果与回测现在都会按你的已认证身份解析。'}
+                        : '分析历史、问答会话、持仓数据、扫描器运行结果与回测现在都会按你的已认证身份解析。'}
                     </p>
                   </div>
                 </div>
