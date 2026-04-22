@@ -162,6 +162,38 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             "reproducibility": reproducibility,
         }
 
+    def _assert_service_http_support_bundle_parity(
+        self,
+        *,
+        service: RuleBacktestService,
+        run_id: int,
+        payloads: dict,
+        trace_available: bool,
+    ) -> None:
+        self.assertEqual(service.get_support_export_index(run_id), payloads["export_index"])
+        self.assertEqual(service.get_support_bundle_manifest(run_id), payloads["manifest"])
+        self.assertEqual(
+            service.get_support_bundle_reproducibility_manifest(run_id),
+            payloads["reproducibility"],
+        )
+
+        trace_json_path = payloads["export_index"]["exports"][2]["endpoint_path"]
+        trace_csv_path = payloads["export_index"]["exports"][3]["endpoint_path"]
+        trace_json_response = self.client.get(trace_json_path)
+        trace_csv_response = self.client.get(trace_csv_path)
+
+        if trace_available:
+            self.assertEqual(service.get_execution_trace_export_json(run_id), trace_json_response.json())
+            self.assertEqual(
+                service.get_execution_trace_export_csv_text(run_id),
+                trace_csv_response.text,
+            )
+        else:
+            with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
+                service.get_execution_trace_export_json(run_id)
+            with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
+                service.get_execution_trace_export_csv_text(run_id)
+
     def _assert_support_bundle_surface(
         self,
         *,
@@ -242,10 +274,16 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         return payloads
 
     def test_support_bundle_e2e_stored_first_surface_is_coherent(self) -> None:
-        _, response = self._run_completed_backtest()
+        service, response = self._run_completed_backtest()
 
         payloads = self._assert_support_bundle_surface(
             run_id=int(response["id"]),
+            trace_available=True,
+        )
+        self._assert_service_http_support_bundle_parity(
+            service=service,
+            run_id=int(response["id"]),
+            payloads=payloads,
             trace_available=True,
         )
 
@@ -265,6 +303,12 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
         payloads = self._assert_support_bundle_surface(
             run_id=int(response["id"]),
+            trace_available=True,
+        )
+        self._assert_service_http_support_bundle_parity(
+            service=service,
+            run_id=int(response["id"]),
+            payloads=payloads,
             trace_available=True,
         )
 
@@ -294,6 +338,12 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
         payloads = self._assert_support_bundle_surface(
             run_id=int(response["id"]),
+            trace_available=False,
+        )
+        self._assert_service_http_support_bundle_parity(
+            service=service,
+            run_id=int(response["id"]),
+            payloads=payloads,
             trace_available=False,
         )
 

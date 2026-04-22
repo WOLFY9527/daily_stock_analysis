@@ -7792,6 +7792,7 @@ class RuleBacktestService:
             "assumptions": dict(execution_trace.get("assumptions_defaults") or {}),
             "execution_model": dict(execution_trace.get("execution_model") or {}),
             "execution_assumptions": dict(execution_trace.get("execution_assumptions") or {}),
+            "benchmark_summary": dict(run.get("benchmark_summary") or {}),
             "fallback": dict(execution_trace.get("fallback") or {}),
         }
 

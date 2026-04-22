@@ -816,6 +816,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["source"], response["execution_trace"]["source"])
         self.assertGreater(len(payload["trace_rows"]), 0)
         self.assertEqual(payload["assumptions"]["summary_text"], response["execution_trace"]["assumptions_defaults"]["summary_text"])
+        self.assertEqual(payload["benchmark_summary"], response["benchmark_summary"])
 
     def test_service_exports_support_bundle_manifest_json_from_stored_result(self) -> None:
         service = RuleBacktestService(self.db)
