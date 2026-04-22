@@ -35,6 +35,8 @@ Meaningful progress does exist on Phase F portfolio read-path validation, but th
 The main backend Phase F progress currently worth carrying forward is:
 
 - the validated portfolio comparison-only line now has three materially stronger checkpoints
+- partial-PostgreSQL-schema reads on the metadata-authority / drift-fallback track now degrade back to legacy reads instead of surfacing cross-phase `UndefinedTable` failures
+- real-PG cash-ledger evidence now explicitly includes multi-user account-scope coverage, so comparison diagnostics stay bounded to the request owner / allowlisted account
 - the obvious bounded expansion candidates inside the current portfolio surface have been substantially exhausted
 - reviewer framing for promotion-readiness, serving-mode boundaries, and cutover prerequisites already exists on this branch
 
@@ -106,6 +108,7 @@ The following points should not be casually reopened:
 - the old trades-list PG source-unavailable blocker as if it were still the active state
 - the old trades-list empty-only framing as if non-empty evidence had not been collected
 - the old trades-list `created_at` false mismatch as if it were still unresolved
+- partial PG schema states on the broker-connections / latest-sync metadata-authority track as if they still hard-fail instead of falling back to legacy reads
 - cash-ledger framed as scaffolding-only as if later real-PG evidence and reviewer artifacts do not exist
 - corporate-actions framed as scaffolding-only or empty-only as if later real-PG evidence and reviewer artifacts do not exist
 - accounts-list being re-proposed as a new comparison implementation line
@@ -178,4 +181,4 @@ How a future task should stay bounded:
 
 ## 10. Final One-Paragraph Status Summary
 
-Backend PostgreSQL / Phase F work is meaningfully advanced but still clearly in-progress: trades-list has a non-empty bounded clean-match checkpoint, cash-ledger has a bounded non-empty real-PG evidence checkpoint, and corporate-actions has a bounded non-empty real-PG evidence checkpoint, while accounts-list remains on a separate metadata-authority / drift-fallback track and no fourth true bounded comparison-only candidate currently remains worth selecting next. Legacy remains the only serving source on the validated lines, PostgreSQL remains comparison-only there, and the branch already contains reviewer framing for the plateau state, promotion-readiness, serving-mode boundaries, and cutover prerequisites. None of this equals PG serving readiness, broader cutover readiness, or database migration completion.
+Backend PostgreSQL / Phase F work is meaningfully advanced but still clearly in-progress: trades-list has a non-empty bounded clean-match checkpoint, cash-ledger has a bounded non-empty real-PG evidence checkpoint plus multi-user scope coverage, and corporate-actions has a bounded non-empty real-PG evidence checkpoint, while accounts-list remains on a separate metadata-authority / drift-fallback track and no fourth true bounded comparison-only candidate currently remains worth selecting next. Partial PG schema states on nearby metadata surfaces now fall back to legacy instead of hard-failing with `UndefinedTable`, but this is still a safety/fallback behavior rather than PG serving approval. Legacy remains the only serving source on the validated lines, PostgreSQL remains comparison-only there, and the branch already contains reviewer framing for the plateau state, promotion-readiness, serving-mode boundaries, and cutover prerequisites. None of this equals PG serving readiness, broader cutover readiness, or database migration completion.

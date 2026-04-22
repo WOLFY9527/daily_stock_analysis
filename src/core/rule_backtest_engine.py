@@ -510,9 +510,11 @@ class RuleBacktestParser:
         quantity_per_trade: Optional[float] = None
         amount_per_trade: Optional[float] = None
         if quantity_match is not None:
+            order_mode = "fixed_shares"
             quantity_per_trade = float(quantity_match.group(1))
             symbol = quantity_match.group(2)
         else:
+            order_mode = "fixed_amount"
             amount_per_trade = float(amount_match.group(1))
             symbol = amount_match.group(3)
 

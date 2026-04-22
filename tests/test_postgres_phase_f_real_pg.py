@@ -475,6 +475,192 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
         self.assertEqual(summary["evidence_strength"], "non_empty_sampled")
         self.assertFalse(summary["evidence_is_thin"])
 
+    def test_real_postgres_phase_f_cash_ledger_comparison_respects_multi_user_account_scope(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="real-pg-phase-f-cash-scope-a", username="real-pg-phase-f-cash-scope-a")
+        db.create_or_update_app_user(user_id="real-pg-phase-f-cash-scope-b", username="real-pg-phase-f-cash-scope-b")
+        service_a = PortfolioService(owner_id="real-pg-phase-f-cash-scope-a")
+        service_b = PortfolioService(owner_id="real-pg-phase-f-cash-scope-b")
+
+        account_a = service_a.create_account(
+            name="Real PG Cash Scope A",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        account_b = service_b.create_account(
+            name="Real PG Cash Scope B",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+
+        PortfolioService.clear_phase_f_cash_ledger_comparison_reports()
+        service_a.record_cash_ledger(
+            account_id=account_a["id"],
+            event_date=date(2026, 4, 5),
+            direction="in",
+            amount=250.0,
+            currency="USD",
+            note="phase_f_cash_scope_a_seed_1",
+        )
+        service_b.record_cash_ledger(
+            account_id=account_b["id"],
+            event_date=date(2026, 4, 6),
+            direction="in",
+            amount=500.0,
+            currency="USD",
+            note="phase_f_cash_scope_b_seed_1",
+        )
+
+        with patch.object(get_config(), "enable_phase_f_cash_ledger_comparison", True), patch.object(
+            get_config(),
+            "phase_f_cash_ledger_comparison_account_ids",
+            [account_a["id"]],
+        ):
+            scoped_a = service_a.list_cash_ledger_events(account_id=account_a["id"], page=1, page_size=20)
+            scoped_b = service_b.list_cash_ledger_events(account_id=account_b["id"], page=1, page_size=20)
+
+        reports = service_a.get_phase_f_cash_ledger_comparison_reports()
+        summary = service_a._build_phase_f_cash_ledger_comparison_evidence_summary_from_collected_reports(
+            allowlisted_account_ids=[account_a["id"]],
+        )
+
+        self.assertEqual(scoped_a["total"], 1)
+        self.assertEqual([item["account_id"] for item in scoped_a["items"]], [account_a["id"]])
+        self.assertEqual(scoped_b["total"], 1)
+        self.assertEqual([item["account_id"] for item in scoped_b["items"]], [account_b["id"]])
+
+        self.assertEqual(len(reports), 2)
+        self.assertEqual([report["comparison_status"] for report in reports], ["matched", "skipped"])
+        self.assertEqual(
+            [report["owner_context"]["owner_user_id"] for report in reports],
+            ["real-pg-phase-f-cash-scope-a", "real-pg-phase-f-cash-scope-b"],
+        )
+        self.assertEqual(
+            [report["request_context"]["account_id"] for report in reports],
+            [account_a["id"], account_b["id"]],
+        )
+        self.assertEqual(reports[1]["comparison_skip_reason"], "account_not_allowlisted")
+        self.assertFalse(reports[1]["comparison_attempted"])
+
+        self.assertEqual(summary["total_reports"], 2)
+        self.assertEqual(summary["total_attempted"], 1)
+        self.assertEqual(summary["total_skipped"], 1)
+        self.assertEqual(summary["total_matched"], 1)
+        self.assertEqual(summary["compared_account_ids"], [account_a["id"]])
+        self.assertEqual(summary["allowlisted_account_ids"], [account_a["id"]])
+        self.assertEqual(summary["uncovered_allowlisted_account_ids"], [])
+        self.assertEqual(summary["matched_non_empty_reports"], 1)
+        self.assertTrue(summary["non_empty_match_observed"])
+
+    def test_real_postgres_phase_f_broker_connection_surface_falls_back_to_legacy_when_pg_tables_are_partial(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(
+            user_id="real-pg-phase-f-bridge-fallback-user",
+            username="real-pg-phase-f-bridge-fallback-user",
+        )
+        service = PortfolioService(owner_id="real-pg-phase-f-bridge-fallback-user")
+
+        account = service.create_account(
+            name="Real PG Bridge Fallback",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Real PG Bridge Fallback",
+            broker_account_ref="U-PARTIAL-BRIDGE-1",
+            import_mode="api",
+            sync_metadata={"source": "partial-schema-test"},
+        )
+
+        with self.pg_engine.begin() as conn:
+            conn.execute(text("drop table if exists broker_connections cascade"))
+
+        rows = service.list_broker_connections(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], connection["id"])
+        self.assertEqual(rows[0]["portfolio_account_id"], account["id"])
+        self.assertEqual(rows[0]["portfolio_account_name"], "Real PG Bridge Fallback")
+        self.assertEqual(rows[0]["broker_account_ref"], "U-PARTIAL-BRIDGE-1")
+        self.assertEqual(rows[0]["import_mode"], "api")
+
+    def test_real_postgres_phase_f_latest_sync_surface_falls_back_to_legacy_when_pg_tables_are_partial(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(
+            user_id="real-pg-phase-f-sync-fallback-user",
+            username="real-pg-phase-f-sync-fallback-user",
+        )
+        service = PortfolioService(owner_id="real-pg-phase-f-sync-fallback-user")
+
+        account = service.create_account(
+            name="Real PG Sync Fallback",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Real PG Sync Fallback",
+            broker_account_ref="U-PARTIAL-SYNC-1",
+            import_mode="api",
+        )
+        service.replace_broker_sync_state(
+            broker_connection_id=connection["id"],
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_account_ref="U-PARTIAL-SYNC-1",
+            sync_source="api",
+            sync_status="success",
+            snapshot_date=date(2026, 4, 16),
+            synced_at=datetime(2026, 4, 16, 8, 45, 0),
+            base_currency="USD",
+            total_cash=1200.0,
+            total_market_value=1800.0,
+            total_equity=3000.0,
+            realized_pnl=10.0,
+            unrealized_pnl=120.0,
+            fx_stale=False,
+            payload={"snapshot": "partial-sync"},
+            positions=[
+                {
+                    "broker_position_ref": "AAPL-PARTIAL-1",
+                    "symbol": "AAPL",
+                    "market": "us",
+                    "currency": "USD",
+                    "quantity": 12.0,
+                    "avg_cost": 150.0,
+                    "last_price": 160.0,
+                    "market_value_base": 1920.0,
+                    "unrealized_pnl_base": 120.0,
+                    "valuation_currency": "USD",
+                }
+            ],
+            cash_balances=[{"currency": "USD", "amount": 1200.0, "amount_base": 1200.0}],
+        )
+
+        with self.pg_engine.begin() as conn:
+            conn.execute(text("drop table if exists portfolio_sync_states cascade"))
+
+        latest_sync = service.get_latest_broker_sync_state(portfolio_account_id=account["id"])
+
+        self.assertIsNotNone(latest_sync)
+        self.assertEqual(latest_sync["broker_connection_id"], connection["id"])
+        self.assertEqual(latest_sync["portfolio_account_id"], account["id"])
+        self.assertEqual(latest_sync["broker_account_ref"], "U-PARTIAL-SYNC-1")
+        self.assertEqual([item["symbol"] for item in latest_sync["positions"]], ["AAPL"])
+        self.assertEqual([item["currency"] for item in latest_sync["cash_balances"]], ["USD"])
+
     def test_real_postgres_phase_f_corporate_actions_comparison_collects_bounded_non_empty_evidence(self) -> None:
         db = self._db()
         db.create_or_update_app_user(

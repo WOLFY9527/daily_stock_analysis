@@ -3282,6 +3282,125 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(len(result.equity_curve), 0)
         self.assertEqual(result.parsed_strategy.strategy_spec["strategy_type"], "rsi_threshold")
 
+    def test_engine_handles_single_day_window_for_periodic_accumulation(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars([10, 10.2, 10.4, 10.6, 10.8, 11.0, 11.2, 11.4])
+        parsed_dict = service.parse_strategy(
+            "资金10000，从2024-01-01到2024-01-08，每天买1000元TEST，买到区间结束",
+            code="TEST",
+            start_date="2024-01-01",
+            end_date="2024-01-08",
+            initial_capital=10000,
+        )
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        engine = RuleBacktestEngine()
+
+        result = engine.run(
+            code="TEST",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=10000.0,
+            lookback_bars=8,
+            start_date=date(2024, 1, 8),
+            end_date=date(2024, 1, 8),
+        )
+
+        self.assertEqual(result.metrics["period_start"], "2024-01-08")
+        self.assertEqual(result.metrics["period_end"], "2024-01-08")
+        self.assertEqual(result.metrics["bars_used"], 1)
+        self.assertEqual(len(result.equity_curve), 1)
+        self.assertEqual(result.metrics["trade_count"], 1)
+
+    def test_engine_handles_single_day_window_for_moving_average_crossover(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars([10, 9.8, 9.6, 9.4, 9.2, 9.4, 9.8, 10.2, 10.8, 11.2, 11.6, 11.1, 10.7, 10.2, 9.8, 9.4, 9.0, 9.3, 9.7, 10.1, 10.5, 10.9, 11.3, 11.7, 12.1, 11.6, 11.0, 10.4, 9.8, 9.2])
+        parsed_dict = service.parse_strategy(
+            "5日均线上穿20日均线买入，下穿卖出",
+            code="TEST",
+            start_date="2024-01-01",
+            end_date="2024-01-30",
+            initial_capital=100000,
+        )
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        engine = RuleBacktestEngine()
+
+        result = engine.run(
+            code="TEST",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            lookback_bars=30,
+            start_date=date(2024, 1, 30),
+            end_date=date(2024, 1, 30),
+        )
+
+        self.assertEqual(result.metrics["period_start"], "2024-01-30")
+        self.assertEqual(result.metrics["period_end"], "2024-01-30")
+        self.assertEqual(result.metrics["bars_used"], 1)
+        self.assertEqual(len(result.equity_curve), 1)
+        self.assertEqual(result.metrics["trade_count"], 0)
+        self.assertIn(result.no_result_reason, {"no_entry_signals", "no_trades"})
+
+    def test_engine_handles_single_day_window_for_macd_crossover(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars([10, 10.1, 10.2, 10.4, 10.7, 11.1, 11.5, 11.8, 12.0, 11.7, 11.2, 10.8, 10.4, 10.0, 9.7, 9.5, 9.8, 10.2, 10.7, 11.2, 11.8, 12.3, 12.6, 12.2, 11.7, 11.1, 10.6, 10.2, 9.9, 9.6, 9.9, 10.4, 10.9, 11.4, 11.9, 12.4, 12.8, 12.3, 11.7, 11.0])
+        parsed_dict = service.parse_strategy(
+            "MACD金叉买入，死叉卖出",
+            code="TEST",
+            start_date="2024-01-01",
+            end_date="2024-02-09",
+            initial_capital=100000,
+        )
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        engine = RuleBacktestEngine()
+
+        result = engine.run(
+            code="TEST",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            lookback_bars=40,
+            start_date=date(2024, 2, 9),
+            end_date=date(2024, 2, 9),
+        )
+
+        self.assertEqual(result.metrics["period_start"], "2024-02-09")
+        self.assertEqual(result.metrics["period_end"], "2024-02-09")
+        self.assertEqual(result.metrics["bars_used"], 1)
+        self.assertEqual(len(result.equity_curve), 1)
+        self.assertEqual(result.metrics["trade_count"], 0)
+        self.assertIn(result.no_result_reason, {"no_entry_signals", "no_trades"})
+
+    def test_engine_handles_single_day_window_for_rsi_threshold(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars([10, 11, 12, 13, 14, 15, 14, 13, 12, 11, 10, 9, 8, 9, 10, 11, 12, 13, 14, 15, 14, 13, 12, 11, 10, 9, 8, 9, 10, 11, 12, 13])
+        parsed_dict = service.parse_strategy(
+            "RSI6 小于 30 买入，RSI6 大于 70 卖出",
+            code="TEST",
+            start_date="2024-01-01",
+            end_date="2024-02-01",
+            initial_capital=100000,
+        )
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        engine = RuleBacktestEngine()
+
+        result = engine.run(
+            code="TEST",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            lookback_bars=32,
+            start_date=date(2024, 2, 1),
+            end_date=date(2024, 2, 1),
+        )
+
+        self.assertEqual(result.metrics["period_start"], "2024-02-01")
+        self.assertEqual(result.metrics["period_end"], "2024-02-01")
+        self.assertEqual(result.metrics["bars_used"], 1)
+        self.assertEqual(len(result.equity_curve), 1)
+        self.assertEqual(result.metrics["trade_count"], 0)
+        self.assertIn(result.no_result_reason, {"no_entry_signals", "no_trades"})
+
     def test_service_generates_fallback_ai_summary_and_persists_runs(self) -> None:
         service = RuleBacktestService(self.db)
         strategy_text = "Buy when Close > MA3. Sell when Close < MA3."

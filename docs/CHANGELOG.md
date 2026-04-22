@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### 修复
+
+- 🧯 **Phase F partial-Postgres fallback hardening** — 当 `broker_connections`、`portfolio_sync_states` 等 Phase F PostgreSQL 表只完成了部分建表或被跨 phase 清理移除时，portfolio metadata / latest-sync 读路径现在会安全回退到 legacy storage，而不是直接抛出 `UndefinedTable`。本次同时补充了 real-PG 回归覆盖，锁定 broker connection surface、latest sync surface，以及 cash-ledger comparison 在多用户 account scope 下的边界行为。
+
 ### 新功能
 
 - 🧭 **Rule backtest support export index API** — `GET /api/v1/backtest/rule/runs/{run_id}/export-index` 现在会返回单条规则回测的紧凑 export discovery/index。当前索引稳定列出四个 support bundle 导出：`support_bundle_manifest_json`、`support_bundle_reproducibility_manifest_json`、`execution_trace_json`、`execution_trace_csv`，并显式给出 `available`、`availability_reason`、`format`、`media_type`、`delivery_mode`、`endpoint_path` 与 `payload_class`。四个导出当前都对应真实的只读 API path；trace availability 仍直接按当前 resolved `execution_trace.rows` 是否可导出判断，缺失时会稳定返回 `execution_trace_rows_missing`，而不会伪造可下载路由。

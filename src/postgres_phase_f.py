@@ -384,6 +384,15 @@ class PostgresPhaseFStore:
         finally:
             session.close()
 
+    @staticmethod
+    def _existing_phase_f_tables(session: Session) -> set[str]:
+        inspector = inspect(session.connection())
+        return {
+            table_name
+            for table_name in _PHASE_F_TABLES
+            if inspector.has_table(table_name)
+        }
+
     def list_account_rows(
         self,
         *,
@@ -391,6 +400,9 @@ class PostgresPhaseFStore:
         include_inactive: bool = False,
     ) -> list[Any]:
         with self.get_session() as session:
+            existing_tables = self._existing_phase_f_tables(session)
+            if "portfolio_accounts" not in existing_tables:
+                return []
             query = select(PhaseFPortfolioAccount)
             if owner_user_id is not None:
                 query = query.where(PhaseFPortfolioAccount.owner_user_id == str(owner_user_id).strip())
@@ -411,6 +423,9 @@ class PostgresPhaseFStore:
         status: Optional[str] = None,
     ) -> list[Any]:
         with self.get_session() as session:
+            existing_tables = self._existing_phase_f_tables(session)
+            if "broker_connections" not in existing_tables:
+                return []
             query = select(PhaseFBrokerConnection)
             if owner_user_id is not None:
                 query = query.where(PhaseFBrokerConnection.owner_user_id == str(owner_user_id).strip())
@@ -437,8 +452,11 @@ class PostgresPhaseFStore:
         page: int,
         page_size: int,
         owner_user_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> Optional[dict[str, Any]]:
         with self.get_session() as session:
+            existing_tables = self._existing_phase_f_tables(session)
+            if "portfolio_ledger" not in existing_tables:
+                return None
             conditions = [PhaseFPortfolioLedger.entry_type == "trade"]
             if owner_user_id is not None:
                 conditions.append(PhaseFPortfolioLedger.owner_user_id == str(owner_user_id).strip())
@@ -487,8 +505,11 @@ class PostgresPhaseFStore:
         page: int,
         page_size: int,
         owner_user_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> Optional[dict[str, Any]]:
         with self.get_session() as session:
+            existing_tables = self._existing_phase_f_tables(session)
+            if "portfolio_ledger" not in existing_tables:
+                return None
             conditions = [PhaseFPortfolioLedger.entry_type == "cash"]
             if owner_user_id is not None:
                 conditions.append(PhaseFPortfolioLedger.owner_user_id == str(owner_user_id).strip())
@@ -536,8 +557,11 @@ class PostgresPhaseFStore:
         page: int,
         page_size: int,
         owner_user_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> Optional[dict[str, Any]]:
         with self.get_session() as session:
+            existing_tables = self._existing_phase_f_tables(session)
+            if "portfolio_ledger" not in existing_tables:
+                return None
             conditions = [PhaseFPortfolioLedger.entry_type == "corporate_action"]
             if owner_user_id is not None:
                 conditions.append(PhaseFPortfolioLedger.owner_user_id == str(owner_user_id).strip())
@@ -1204,6 +1228,9 @@ class PostgresPhaseFStore:
     def get_account_shadow_bundle(self, *, account_id: int) -> Optional[dict[str, Any]]:
         resolved_account_id = int(account_id)
         with self.get_session() as session:
+            existing_tables = self._existing_phase_f_tables(session)
+            if "portfolio_accounts" not in existing_tables:
+                return None
             account_row = session.execute(
                 select(PhaseFPortfolioAccount)
                 .where(PhaseFPortfolioAccount.id == resolved_account_id)
@@ -1212,46 +1239,56 @@ class PostgresPhaseFStore:
             if account_row is None:
                 return None
 
-            broker_connection_rows = session.execute(
-                select(PhaseFBrokerConnection)
-                .where(PhaseFBrokerConnection.portfolio_account_id == resolved_account_id)
-                .order_by(PhaseFBrokerConnection.id.asc())
-            ).scalars().all()
-            ledger_rows = session.execute(
-                select(PhaseFPortfolioLedger)
-                .where(PhaseFPortfolioLedger.portfolio_account_id == resolved_account_id)
-                .order_by(PhaseFPortfolioLedger.event_time.asc(), PhaseFPortfolioLedger.id.asc())
-            ).scalars().all()
-            position_rows = session.execute(
-                select(PhaseFPortfolioPosition)
-                .where(PhaseFPortfolioPosition.portfolio_account_id == resolved_account_id)
-                .order_by(
-                    PhaseFPortfolioPosition.source_kind.asc(),
-                    PhaseFPortfolioPosition.cost_method.asc(),
-                    PhaseFPortfolioPosition.canonical_symbol.asc(),
-                    PhaseFPortfolioPosition.id.asc(),
-                )
-            ).scalars().all()
-            sync_state_row = session.execute(
-                select(PhaseFPortfolioSyncState)
-                .where(PhaseFPortfolioSyncState.portfolio_account_id == resolved_account_id)
-                .order_by(PhaseFPortfolioSyncState.synced_at.desc(), PhaseFPortfolioSyncState.id.desc())
-                .limit(1)
-            ).scalar_one_or_none()
+            broker_connection_rows: list[Any] = []
+            if "broker_connections" in existing_tables:
+                broker_connection_rows = session.execute(
+                    select(PhaseFBrokerConnection)
+                    .where(PhaseFBrokerConnection.portfolio_account_id == resolved_account_id)
+                    .order_by(PhaseFBrokerConnection.id.asc())
+                ).scalars().all()
+            ledger_rows: list[Any] = []
+            if "portfolio_ledger" in existing_tables:
+                ledger_rows = session.execute(
+                    select(PhaseFPortfolioLedger)
+                    .where(PhaseFPortfolioLedger.portfolio_account_id == resolved_account_id)
+                    .order_by(PhaseFPortfolioLedger.event_time.asc(), PhaseFPortfolioLedger.id.asc())
+                ).scalars().all()
+            position_rows: list[Any] = []
+            if "portfolio_positions" in existing_tables:
+                position_rows = session.execute(
+                    select(PhaseFPortfolioPosition)
+                    .where(PhaseFPortfolioPosition.portfolio_account_id == resolved_account_id)
+                    .order_by(
+                        PhaseFPortfolioPosition.source_kind.asc(),
+                        PhaseFPortfolioPosition.cost_method.asc(),
+                        PhaseFPortfolioPosition.canonical_symbol.asc(),
+                        PhaseFPortfolioPosition.id.asc(),
+                    )
+                ).scalars().all()
+            sync_state_row = None
+            if "portfolio_sync_states" in existing_tables:
+                sync_state_row = session.execute(
+                    select(PhaseFPortfolioSyncState)
+                    .where(PhaseFPortfolioSyncState.portfolio_account_id == resolved_account_id)
+                    .order_by(PhaseFPortfolioSyncState.synced_at.desc(), PhaseFPortfolioSyncState.id.desc())
+                    .limit(1)
+                ).scalar_one_or_none()
 
             sync_position_rows: list[Any] = []
             sync_cash_balance_rows: list[Any] = []
             if sync_state_row is not None:
-                sync_position_rows = session.execute(
-                    select(PhaseFPortfolioSyncPosition)
-                    .where(PhaseFPortfolioSyncPosition.portfolio_sync_state_id == int(sync_state_row.id))
-                    .order_by(PhaseFPortfolioSyncPosition.canonical_symbol.asc(), PhaseFPortfolioSyncPosition.id.asc())
-                ).scalars().all()
-                sync_cash_balance_rows = session.execute(
-                    select(PhaseFPortfolioSyncCashBalance)
-                    .where(PhaseFPortfolioSyncCashBalance.portfolio_sync_state_id == int(sync_state_row.id))
-                    .order_by(PhaseFPortfolioSyncCashBalance.currency.asc(), PhaseFPortfolioSyncCashBalance.id.asc())
-                ).scalars().all()
+                if "portfolio_sync_positions" in existing_tables:
+                    sync_position_rows = session.execute(
+                        select(PhaseFPortfolioSyncPosition)
+                        .where(PhaseFPortfolioSyncPosition.portfolio_sync_state_id == int(sync_state_row.id))
+                        .order_by(PhaseFPortfolioSyncPosition.canonical_symbol.asc(), PhaseFPortfolioSyncPosition.id.asc())
+                    ).scalars().all()
+                if "portfolio_sync_cash_balances" in existing_tables:
+                    sync_cash_balance_rows = session.execute(
+                        select(PhaseFPortfolioSyncCashBalance)
+                        .where(PhaseFPortfolioSyncCashBalance.portfolio_sync_state_id == int(sync_state_row.id))
+                        .order_by(PhaseFPortfolioSyncCashBalance.currency.asc(), PhaseFPortfolioSyncCashBalance.id.asc())
+                    ).scalars().all()
 
             return {
                 "account": self._serialize_account_row(account_row),
@@ -1281,8 +1318,7 @@ class PostgresPhaseFStore:
             return counts
 
         with self.session_scope() as session:
-            inspector = inspect(session.connection())
-            existing_tables = {table_name for table_name in counts if inspector.has_table(table_name)}
+            existing_tables = self._existing_phase_f_tables(session)
 
             if "portfolio_sync_positions" in existing_tables:
                 counts["portfolio_sync_positions"] = session.execute(
