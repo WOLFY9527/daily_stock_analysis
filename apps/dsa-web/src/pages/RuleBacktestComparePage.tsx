@@ -30,12 +30,19 @@ const COMPARE_METRIC_LABELS: Record<string, string> = {
 
 const COMPARE_SECTION_LINKS = [
   { id: 'compare-summary', label: '比较摘要' },
+  { id: 'compare-chart-strip', label: 'metric strip' },
   { id: 'compare-highlights', label: 'comparison_highlights' },
   { id: 'compare-metric-matrix', label: 'compact metric matrix' },
   { id: 'compare-robustness', label: 'robustness + profile' },
   { id: 'compare-market-period', label: 'market / period context' },
   { id: 'compare-parameter-metrics', label: 'parameter + metrics' },
   { id: 'compare-items', label: '参与运行' },
+] as const;
+
+const COMPARE_CHART_STRIP_KEYS = [
+  'totalReturnPct',
+  'annualizedReturnPct',
+  'excessReturnVsBenchmarkPct',
 ] as const;
 
 function parseRunIdsParam(value: string | null): number[] {
@@ -329,6 +336,89 @@ function CompareMetricMatrix({
   );
 }
 
+function CompareMetricChartStrip({
+  items,
+  baselineRunId,
+  metricDeltas,
+  highlights,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  metricDeltas: Record<string, RuleBacktestCompareMetricDelta>;
+  highlights: Record<string, RuleBacktestCompareHighlightItem>;
+}) {
+  const metricEntries = COMPARE_CHART_STRIP_KEYS.reduce<Array<[string, RuleBacktestCompareMetricDelta]>>((entries, metricKey) => {
+    const metric = metricDeltas[metricKey];
+    if (metric) entries.push([metricKey, metric]);
+    return entries;
+  }, []);
+
+  if (!metricEntries.length || !items.length) {
+    return <div className="product-empty-state product-empty-state--compact">当前比较没有足够的 trusted metrics 来生成可视化条带。</div>;
+  }
+
+  return (
+    <div className="comparison-chart compare-chart-strip" data-testid="compare-chart-strip">
+      {metricEntries.map(([metricKey, metric]) => {
+        const highlight = highlights[metricKey];
+        const availableValues = metric.deltas.map((entry) => Math.abs(entry.value ?? 0)).filter((value) => value > 0);
+        const maxValue = availableValues.length ? Math.max(...availableValues) : 1;
+
+        return (
+          <div key={metricKey} className="compare-chart-strip__row" data-testid={`compare-chart-strip-row-${metricKey}`}>
+            <div className="compare-chart-strip__label">
+              <span>{formatMetricLabel(metricKey, metric.label)}</span>
+              <span className="compare-metric-badge" data-tone={getMetricSummaryTone(highlight?.state || metric.state)}>
+                {highlight?.state || metric.state}
+              </span>
+            </div>
+            <div className="compare-chart-strip__lanes">
+              {items.map((item) => {
+                const runId = item.metadata.id;
+                const deltaItem = metric.deltas.find((entry) => entry.runId === runId);
+                const isBaseline = runId === baselineRunId;
+                const state = deltaItem ? 'available' : 'unavailable';
+                const widthPct = deltaItem ? Math.max(12, (Math.abs(deltaItem.value ?? 0) / maxValue) * 100) : 0;
+                const tone = deltaItem
+                  ? (highlight?.winnerRunIds.includes(runId) ? 'best' : getMetricDeltaTone(deltaItem.value))
+                  : 'unavailable';
+
+                return (
+                  <div
+                    key={`${metricKey}-${runId}`}
+                    className="compare-chart-strip__lane"
+                    data-testid={`compare-chart-strip-${metricKey}-${runId}`}
+                    data-role={isBaseline ? 'baseline' : 'candidate'}
+                    data-state={state}
+                  >
+                    <div className="compare-chart-strip__meta">
+                      <span>{`#${runId} ${isBaseline ? 'baseline' : 'candidate'}`}</span>
+                      <span>{item.metadata.code || '--'}</span>
+                    </div>
+                    {deltaItem ? (
+                      <>
+                        <div className="compare-chart-strip__bar-shell">
+                          <div className="compare-chart-strip__bar" data-tone={tone} style={{ width: `${widthPct}%` }} />
+                        </div>
+                        <div className="compare-chart-strip__value">
+                          <span>{pct(deltaItem.value)}</span>
+                          {!isBaseline ? <span className="product-footnote">{`vs baseline ${formatSignedPct(deltaItem.deltaVsBaseline)}`}</span> : null}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="compare-metric-badge" data-tone="unavailable">unavailable</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CompareItemsTable({
   items,
   baselineRunId,
@@ -604,6 +694,17 @@ const RuleBacktestComparePage: React.FC = () => {
                   />
                 </div>
               ) : null}
+            </Card>
+          </section>
+
+          <section id="compare-chart-strip" className="backtest-display-section">
+            <Card title="metric strip" subtitle="只取最小 trusted metric 子集，先用轻量条带看 baseline 与 candidate 的相对位置" className="product-section-card product-section-card--backtest-secondary">
+              <CompareMetricChartStrip
+                items={orderedItems}
+                baselineRunId={baselineRunId}
+                metricDeltas={comparisonSummary?.metricDeltas || {}}
+                highlights={comparisonHighlights?.highlights || {}}
+              />
             </Card>
           </section>
 

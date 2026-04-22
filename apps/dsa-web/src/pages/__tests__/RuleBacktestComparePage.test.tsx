@@ -295,6 +295,7 @@ describe('RuleBacktestComparePage', () => {
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '比较区块导航' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '比较摘要' })).toHaveAttribute('href', '#compare-summary');
+    expect(screen.getByRole('link', { name: 'metric strip' })).toHaveAttribute('href', '#compare-chart-strip');
     expect(screen.getByRole('link', { name: 'comparison_highlights' })).toHaveAttribute('href', '#compare-highlights');
     expect(screen.getByRole('link', { name: 'compact metric matrix' })).toHaveAttribute('href', '#compare-metric-matrix');
     expect(screen.getByRole('link', { name: 'robustness + profile' })).toHaveAttribute('href', '#compare-robustness');
@@ -315,6 +316,10 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByTestId('compare-metric-state-totalReturnPct-202')).toHaveAttribute('data-tone', 'best');
     expect(screen.getByTestId('compare-metric-delta-totalReturnPct-202')).toHaveAttribute('data-tone', 'positive');
     expect(screen.getByTestId('compare-metric-state-annualizedReturnPct-202')).toHaveAttribute('data-tone', 'unavailable');
+    expect(screen.getByTestId('compare-chart-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-chart-strip-totalReturnPct-101')).toHaveAttribute('data-role', 'baseline');
+    expect(screen.getByTestId('compare-chart-strip-totalReturnPct-202')).toHaveAttribute('data-role', 'candidate');
+    expect(screen.getByTestId('compare-chart-strip-annualizedReturnPct-202')).toHaveAttribute('data-state', 'unavailable');
   });
 
   it('shows an explicit empty state when fewer than two run ids are provided', async () => {

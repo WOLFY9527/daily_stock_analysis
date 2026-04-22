@@ -6871,6 +6871,76 @@ html[data-theme] .product-empty-state {
   stroke-width: 2.2;
 }
 
+.compare-chart-strip {
+  gap: 0.9rem;
+}
+
+.compare-chart-strip__row {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.compare-chart-strip__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.compare-chart-strip__lanes {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.compare-chart-strip__lane {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid hsl(var(--border-muted-hsl) / 0.45);
+  border-radius: var(--cohere-radius-medium);
+  background: hsl(var(--bg-card-elevated-hsl) / 0.68);
+}
+
+.compare-chart-strip__lane[data-role='baseline'] {
+  border-color: hsl(var(--accent-primary-hsl) / 0.32);
+  background: hsl(var(--accent-primary-hsl) / 0.08);
+}
+
+.compare-chart-strip__meta,
+.compare-chart-strip__value {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.compare-chart-strip__meta {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.compare-chart-strip__bar-shell {
+  height: 0.46rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: hsl(var(--border-muted-hsl) / 0.22);
+}
+
+.compare-chart-strip__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: hsl(var(--text-secondary-hsl) / 0.55);
+}
+
+.compare-chart-strip__bar[data-tone='best'],
+.compare-chart-strip__bar[data-tone='positive'] {
+  background: hsl(142 58% 58%);
+}
+
+.compare-chart-strip__bar[data-tone='negative'],
+.compare-chart-strip__bar[data-tone='unavailable'] {
+  background: hsl(0 72% 64%);
+}
+
 .comparison-report-preview {
   margin: 0;
   padding: 1rem;
