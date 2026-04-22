@@ -294,10 +294,10 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     : {
       eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
       statusLabel: isEnglish ? 'Admin Account Required' : '需要管理员账户',
-      title: isEnglish ? 'This operator surface requires an admin account' : '这个 operator 页面需要管理员账户',
+      title: isEnglish ? 'This operator surface requires an admin account' : '这个运维页面需要管理员账户',
       description: isEnglish
         ? 'System configuration, provider controls, schedules, channels, and operator logs remain outside the normal-user product surface.'
-        : '系统配置、provider 控制、调度、通道和 operator 日志仍然留在普通用户产品面之外。',
+        : '系统配置、数据源控制、调度、通道和运维日志仍然留在普通用户产品面之外。',
       bullets: isEnglish
         ? [
           'Normal users no longer see raw system controls in the default navigation.',
