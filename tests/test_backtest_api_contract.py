@@ -18,6 +18,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     compare_rule_backtest_runs,
     get_rule_backtest_execution_trace_csv,
     get_rule_backtest_execution_trace_json,
+    get_rule_backtest_support_bundle_reproducibility_manifest,
     parse_rule_strategy,
     get_rule_backtest_run,
     get_rule_backtest_runs,
@@ -40,6 +41,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestExecutionTraceExportResponse,
     RuleBacktestSupportExportIndexResponse,
     RuleBacktestSupportBundleManifestResponse,
+    RuleBacktestSupportBundleReproducibilityManifestResponse,
 )
 
 
@@ -102,6 +104,15 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "run_duration_seconds": None,
             },
             "run_diagnostics": {},
+            "run_diagnostics": {
+                "current_status": status,
+                "terminal_status": status if status in {"completed", "failed", "cancelled"} else None,
+                "reason_code": None,
+                "message": None,
+                "last_transition_at": "2024-01-01T00:00:00",
+                "last_transition_message": None,
+                "last_non_terminal_status": None,
+            },
             "trade_count": 0,
             "win_count": 0,
             "loss_count": 0,
@@ -304,6 +315,49 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "daily_return_series_count": len(run_payload.get("daily_return_series") or []),
                 "exposure_curve_count": len(run_payload.get("exposure_curve") or []),
                 "execution_trace_rows_count": len((run_payload.get("execution_trace") or {}).get("rows") or []),
+            },
+        }
+
+    @classmethod
+    def _support_bundle_reproducibility_manifest_payload(cls, *, status: str = "completed") -> dict:
+        run_payload = cls._rule_run_payload(status=status)
+        return {
+            "manifest_version": "v1",
+            "manifest_kind": "rule_backtest_reproducibility_manifest",
+            "run": {
+                "id": run_payload["id"],
+                "code": run_payload["code"],
+                "status": run_payload["status"],
+                "run_at": run_payload["run_at"],
+                "completed_at": run_payload["completed_at"],
+                "strategy_hash": run_payload["strategy_hash"],
+                "timeframe": run_payload["timeframe"],
+                "lookback_bars": run_payload["lookback_bars"],
+                "period_start": run_payload["period_start"],
+                "period_end": run_payload["period_end"],
+                "benchmark_mode": run_payload["benchmark_mode"],
+                "benchmark_code": run_payload["benchmark_code"],
+            },
+            "run_timing": run_payload["run_timing"],
+            "run_diagnostics": run_payload["run_diagnostics"],
+            "artifact_availability": run_payload["artifact_availability"],
+            "readback_integrity": run_payload["readback_integrity"],
+            "execution_assumptions_fingerprint": {
+                "source": "summary.execution_assumptions_snapshot",
+                "completeness": "complete",
+                "summary_text": "next bar open / long only",
+                "hash_sha256": "abc123",
+            },
+            "result_authority": {
+                "contract_version": run_payload["result_authority"]["contract_version"],
+                "read_mode": run_payload["result_authority"]["read_mode"],
+                "domains": {
+                    "execution_trace": {
+                        "source": run_payload["result_authority"]["domains"]["execution_trace"]["source"],
+                        "completeness": run_payload["result_authority"]["domains"]["execution_trace"]["completeness"],
+                        "state": run_payload["result_authority"]["domains"]["execution_trace"]["state"],
+                    },
+                },
             },
         }
 
@@ -1303,6 +1357,69 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
         service.get_support_bundle_manifest.assert_called_once_with(123)
+
+    def test_get_rule_backtest_support_bundle_reproducibility_manifest_returns_compact_contract(self) -> None:
+        service = MagicMock()
+        service.get_support_bundle_reproducibility_manifest.return_value = self._support_bundle_reproducibility_manifest_payload(status="completed")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_bundle_reproducibility_manifest(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestSupportBundleReproducibilityManifestResponse)
+        self.assertEqual(response.manifest_version, "v1")
+        self.assertEqual(response.manifest_kind, "rule_backtest_reproducibility_manifest")
+        self.assertEqual(response.run["id"], 123)
+        self.assertEqual(response.run_diagnostics["current_status"], "completed")
+        self.assertEqual(response.execution_assumptions_fingerprint["source"], "summary.execution_assumptions_snapshot")
+        self.assertEqual(response.result_authority["read_mode"], "stored_first")
+        service.get_support_bundle_reproducibility_manifest.assert_called_once_with(123)
+
+    def test_get_rule_backtest_support_bundle_reproducibility_manifest_preserves_drift_signals(self) -> None:
+        service = MagicMock()
+        payload = self._support_bundle_reproducibility_manifest_payload(status="completed")
+        payload["artifact_availability"].update(
+            {
+                "source": "summary.artifact_availability+live_storage_repair",
+                "completeness": "stored_partial_repaired",
+                "has_trade_rows": False,
+            }
+        )
+        payload["readback_integrity"].update(
+            {
+                "source": "derived_from_result_authority+live_storage_repair",
+                "completeness": "stored_partial_repaired",
+                "used_live_storage_repair": True,
+                "has_summary_storage_drift": True,
+                "drift_domains": ["trade_rows"],
+                "integrity_level": "drift_repaired",
+            }
+        )
+        payload["result_authority"]["domains"]["trade_rows"] = {
+            "source": "unavailable",
+            "completeness": "unavailable",
+            "state": "unavailable",
+        }
+        service.get_support_bundle_reproducibility_manifest.return_value = payload
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_bundle_reproducibility_manifest(123, db_manager=MagicMock())
+
+        self.assertFalse(response.artifact_availability["has_trade_rows"])
+        self.assertTrue(response.readback_integrity["used_live_storage_repair"])
+        self.assertEqual(response.readback_integrity["drift_domains"], ["trade_rows"])
+        self.assertEqual(response.result_authority["domains"]["trade_rows"]["source"], "unavailable")
+
+    def test_get_rule_backtest_support_bundle_reproducibility_manifest_returns_not_found(self) -> None:
+        service = MagicMock()
+        service.get_support_bundle_reproducibility_manifest.side_effect = ValueError("Run 123 not found.")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_support_bundle_reproducibility_manifest(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail["error"], "not_found")
+        service.get_support_bundle_reproducibility_manifest.assert_called_once_with(123)
 
     def test_get_rule_backtest_support_export_index_returns_compact_discovery_contract(self) -> None:
         service = MagicMock()

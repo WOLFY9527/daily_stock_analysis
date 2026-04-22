@@ -984,6 +984,18 @@ class RuleBacktestSupportBundleManifestResponse(BaseModel):
     artifact_counts: Dict[str, int] = Field(default_factory=dict)
 
 
+class RuleBacktestSupportBundleReproducibilityManifestResponse(BaseModel):
+    manifest_version: str
+    manifest_kind: str
+    run: Dict[str, Any] = Field(default_factory=dict)
+    run_timing: Dict[str, Any] = Field(default_factory=dict)
+    run_diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    artifact_availability: Dict[str, Any] = Field(default_factory=dict)
+    readback_integrity: Dict[str, Any] = Field(default_factory=dict)
+    execution_assumptions_fingerprint: Dict[str, Any] = Field(default_factory=dict)
+    result_authority: Dict[str, Any] = Field(default_factory=dict)
+
+
 class RuleBacktestExecutionTraceExportResponse(BaseModel):
     version: Optional[str] = None
     source: Optional[str] = None
