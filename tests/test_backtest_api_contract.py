@@ -154,6 +154,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "win_count": 0,
             "loss_count": 0,
             "annualized_return_pct": 0.0,
+            "sharpe_ratio": None,
             "benchmark_mode": "auto",
             "benchmark_code": None,
             "benchmark_return_pct": None,
@@ -795,6 +796,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["result_authority"]["execution_trace_source"], "summary.execution_trace")
         self.assertEqual(payload["result_authority"]["execution_trace_completeness"], "complete")
         self.assertEqual(payload["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertIsNone(payload["sharpe_ratio"])
         self.assertEqual(payload["artifact_availability"]["source"], "summary.artifact_availability")
         self.assertTrue(payload["artifact_availability"]["has_trade_rows"])
         self.assertEqual(payload["summary"]["artifact_availability"], payload["artifact_availability"])
@@ -903,6 +905,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "omitted_without_detail_read",
         )
         self.assertEqual(payload["items"][0]["result_authority"]["execution_trace_completeness"], "omitted")
+        self.assertIsNone(payload["items"][0]["sharpe_ratio"])
         self.assertEqual(payload["items"][0]["artifact_availability"]["source"], "summary.artifact_availability")
         self.assertTrue(payload["items"][0]["artifact_availability"]["has_trade_rows"])
         self.assertEqual(payload["items"][0]["readback_integrity"]["integrity_level"], "stored_complete")

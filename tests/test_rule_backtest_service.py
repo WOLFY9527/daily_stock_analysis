@@ -713,6 +713,69 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(service._default_benchmark_mode_for_code("AAPL"), "etf_qqq")
         self.assertEqual(service._default_benchmark_mode_for_code("BTC-USD"), "same_symbol_buy_and_hold")
 
+    def test_service_exposes_sharpe_ratio_through_run_detail_and_history(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        detail = service.get_run(response["id"])
+        history = service.list_runs(code="600519", page=1, limit=10)
+
+        self.assertIsNotNone(response["sharpe_ratio"])
+        self.assertEqual(response["sharpe_ratio"], response["summary"]["metrics"]["sharpe_ratio"])
+        self.assertEqual(detail["sharpe_ratio"], response["sharpe_ratio"])
+        self.assertEqual(history["items"][0]["sharpe_ratio"], response["sharpe_ratio"])
+        self.assertIn("summary.metrics", detail["result_authority"]["metrics_source"])
+        self.assertIn("summary.metrics", history["items"][0]["result_authority"]["metrics_source"])
+
+    def test_service_applies_custom_benchmark_context_for_custom_code_mode(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service,
+            "_load_external_benchmark_context",
+            return_value=(
+                [
+                    {"date": "2024-01-08", "close": 100.0, "cumulative_return_pct": 0.0},
+                    {"date": "2024-01-09", "close": 103.0, "cumulative_return_pct": 3.0},
+                ],
+                {
+                    "requested_mode": "custom_code",
+                    "resolved_mode": "custom_code",
+                    "label": "自定义 SPY",
+                    "code": "SPY",
+                    "method": "benchmark_security",
+                    "auto_resolved": False,
+                    "fallback_used": False,
+                    "return_pct": 3.0,
+                },
+                None,
+            ),
+        ):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="custom_code",
+                benchmark_code="SPY",
+                confirmed=True,
+            )
+
+        self.assertEqual(response["benchmark_summary"]["resolved_mode"], "custom_code")
+        self.assertEqual(response["benchmark_summary"]["code"], "SPY")
+        self.assertEqual(response["benchmark_return_pct"], 3.0)
+        self.assertEqual(
+            response["summary"]["visualization"]["comparison"]["metrics"]["benchmark_return_pct"],
+            3.0,
+        )
+        self.assertIn("sharpe_ratio", response["summary"]["metrics"])
+
     def test_engine_honors_explicit_start_end_date_window(self) -> None:
         parser = RuleBacktestParser()
         parsed = parser.parse("Buy when Close > MA3. Sell when Close < MA3.")

@@ -25,7 +25,7 @@ import math
 import re
 from dataclasses import dataclass, asdict, field
 from datetime import date
-from statistics import mean
+from statistics import mean, pstdev
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
@@ -2844,6 +2844,7 @@ class RuleBacktestEngine:
             "final_equity": float(initial_capital),
             "total_return_pct": 0.0,
             "annualized_return_pct": None,
+            "sharpe_ratio": None,
             "benchmark_return_pct": None,
             "excess_return_vs_benchmark_pct": None,
             "buy_and_hold_return_pct": 0.0,
@@ -2884,6 +2885,11 @@ class RuleBacktestEngine:
         holding_bars = [trade.holding_bars for trade in trades]
         holding_calendar_days = [trade.holding_calendar_days for trade in trades]
         total_return_pct = round(((final_equity / initial_capital) - 1.0) * 100.0, 4) if initial_capital else 0.0
+        daily_returns = [
+            ((curr.equity / prev.equity) - 1.0)
+            for prev, curr in zip(equity_curve, equity_curve[1:])
+            if prev.equity > 0
+        ]
         buy_and_hold_return_pct = float(benchmark_metrics.get("buy_and_hold_return_pct") or 0.0)
         annualized_return_pct = self._calculate_annualized_return_pct(
             total_return_pct=total_return_pct,
@@ -2895,6 +2901,7 @@ class RuleBacktestEngine:
             "final_equity": round(float(final_equity), 6),
             "total_return_pct": total_return_pct,
             "annualized_return_pct": annualized_return_pct,
+            "sharpe_ratio": self._calculate_sharpe_ratio(daily_returns),
             "benchmark_return_pct": buy_and_hold_return_pct,
             "excess_return_vs_benchmark_pct": round(total_return_pct - buy_and_hold_return_pct, 4),
             "buy_and_hold_return_pct": buy_and_hold_return_pct,
@@ -2937,6 +2944,16 @@ class RuleBacktestEngine:
         if total_return <= 0:
             return None
         return round((math.pow(total_return, 365.0 / float(days)) - 1.0) * 100.0, 4)
+
+    @staticmethod
+    def _calculate_sharpe_ratio(daily_returns: Sequence[float]) -> Optional[float]:
+        returns = [float(value) for value in daily_returns if value is not None]
+        if len(returns) < 2:
+            return None
+        volatility = pstdev(returns)
+        if volatility <= 0:
+            return None
+        return round((mean(returns) / volatility) * math.sqrt(252.0), 4)
 
     def _build_benchmark_metrics(self, bars: Sequence[Any]) -> Dict[str, Any]:
         if not bars:

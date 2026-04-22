@@ -549,6 +549,7 @@ class RuleBacktestCompareRunMetrics(BaseModel):
     loss_count: int = 0
     total_return_pct: Optional[float] = None
     annualized_return_pct: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
     benchmark_return_pct: Optional[float] = None
     excess_return_vs_benchmark_pct: Optional[float] = None
     buy_and_hold_return_pct: Optional[float] = None
@@ -842,6 +843,7 @@ class RuleBacktestHistoryItem(BaseModel):
     loss_count: int = 0
     total_return_pct: Optional[float] = None
     annualized_return_pct: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
     benchmark_mode: Optional[str] = None
     benchmark_code: Optional[str] = None
     benchmark_return_pct: Optional[float] = None
@@ -912,6 +914,7 @@ class RuleBacktestRunResponse(BaseModel):
     loss_count: int = 0
     total_return_pct: Optional[float] = None
     annualized_return_pct: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
     benchmark_mode: Optional[str] = None
     benchmark_code: Optional[str] = None
     benchmark_return_pct: Optional[float] = None
