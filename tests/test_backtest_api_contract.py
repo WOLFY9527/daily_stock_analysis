@@ -58,6 +58,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "run_at": "2024-01-01T00:00:00",
             "completed_at": "2024-01-01T00:05:00" if status == "completed" else None,
             "status_history": [{"status": status, "at": "2024-01-01T00:00:00"}],
+            "run_timing": {
+                "created_at": "2024-01-01T00:00:00",
+                "started_at": None,
+                "finished_at": "2024-01-01T00:05:00" if status == "completed" else None,
+                "failed_at": None,
+                "cancelled_at": None,
+                "last_updated_at": "2024-01-01T00:05:00" if status == "completed" else "2024-01-01T00:00:00",
+                "queue_duration_seconds": None,
+                "run_duration_seconds": None,
+            },
             "run_diagnostics": {},
             "trade_count": 0,
             "win_count": 0,
@@ -1063,6 +1073,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 {"status": "queued", "at": "2024-01-01T00:00:00"},
                 {"status": "cancelled", "at": "2024-01-01T00:00:01"},
             ],
+            "run_timing": {
+                "created_at": "2024-01-01T00:00:00",
+                "started_at": None,
+                "finished_at": "2024-01-01T00:00:01",
+                "failed_at": None,
+                "cancelled_at": "2024-01-01T00:00:01",
+                "last_updated_at": "2024-01-01T00:00:01",
+                "queue_duration_seconds": None,
+                "run_duration_seconds": None,
+            },
             "run_diagnostics": {
                 "current_status": "cancelled",
                 "terminal_status": "cancelled",
@@ -1087,6 +1107,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsInstance(response, RuleBacktestCancelResponse)
         self.assertEqual(response.status, "cancelled")
         self.assertEqual(response.no_result_reason, "cancelled")
+        self.assertEqual(response.run_timing["cancelled_at"], "2024-01-01T00:00:01")
+        self.assertEqual(response.run_timing["finished_at"], "2024-01-01T00:00:01")
         self.assertEqual(response.run_diagnostics["terminal_status"], "cancelled")
         self.assertEqual(response.run_diagnostics["last_non_terminal_status"], "queued")
         service.cancel_run.assert_called_once_with(123)

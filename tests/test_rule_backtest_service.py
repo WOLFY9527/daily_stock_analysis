@@ -3517,6 +3517,53 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(by_status["cancelled"]["run_diagnostics"]["terminal_status"], "cancelled")
         self.assertEqual(by_status["failed"]["run_diagnostics"]["terminal_status"], "failed")
 
+    def test_failed_and_cancelled_runs_expose_structured_run_timing(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        cancelled = service.submit_backtest(
+            code="600519",
+            strategy_text=strategy_text,
+            start_date="2024-01-08",
+            end_date="2024-01-18",
+            lookback_bars=20,
+            confirmed=True,
+        )
+        cancelled_status = service.cancel_run(cancelled["id"])
+        self.assertIsNotNone(cancelled_status)
+        assert cancelled_status is not None
+        self.assertEqual(cancelled_status["run_timing"]["created_at"], cancelled_status["run_at"])
+        self.assertEqual(cancelled_status["run_timing"]["cancelled_at"], cancelled_status["completed_at"])
+        self.assertEqual(cancelled_status["run_timing"]["finished_at"], cancelled_status["completed_at"])
+        self.assertIsNone(cancelled_status["run_timing"]["started_at"])
+        self.assertIsNone(cancelled_status["run_timing"]["queue_duration_seconds"])
+
+        with patch.object(service, "parse_strategy", side_effect=RuntimeError("parse boom")):
+            failed = service.submit_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                start_date="2024-01-08",
+                end_date="2024-01-18",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            service.process_submitted_run(failed["id"])
+
+        failed_detail = service.get_run(failed["id"])
+        self.assertIsNotNone(failed_detail)
+        assert failed_detail is not None
+        self.assertEqual(failed_detail["run_timing"]["created_at"], failed_detail["run_at"])
+        self.assertEqual(failed_detail["run_timing"]["failed_at"], failed_detail["completed_at"])
+        self.assertEqual(failed_detail["run_timing"]["finished_at"], failed_detail["completed_at"])
+        self.assertIsNone(failed_detail["run_timing"]["started_at"])
+        self.assertIsNone(failed_detail["run_timing"]["run_duration_seconds"])
+        self.assertEqual(failed_detail["summary"]["run_timing"]["failed_at"], failed_detail["completed_at"])
+
+        history = service.list_runs(code="600519", page=1, limit=10)
+        by_status = {item["status"]: item for item in history["items"]}
+        self.assertEqual(by_status["cancelled"]["run_timing"]["cancelled_at"], by_status["cancelled"]["completed_at"])
+        self.assertEqual(by_status["failed"]["run_timing"]["failed_at"], by_status["failed"]["completed_at"])
+
     def test_get_run_prefers_persisted_audit_ledger_over_reconstruction(self) -> None:
         service = RuleBacktestService(self.db)
         strategy_text = "Buy when Close > MA3. Sell when Close < MA3."

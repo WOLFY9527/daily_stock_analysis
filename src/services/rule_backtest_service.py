@@ -1685,18 +1685,20 @@ class RuleBacktestService:
         row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return
+        failed_at = datetime.now()
         summary = self._update_summary_payload(
             self._load_summary_payload(row.summary_json),
             no_result_reason=no_result_reason,
             no_result_message=no_result_message,
             status="failed",
             status_message=no_result_message,
+            at=failed_at,
         )
         self.repo.update_run(
             run_id,
             **self._owner_kwargs(),
             status="failed",
-            completed_at=datetime.now(),
+            completed_at=failed_at,
             no_result_reason=no_result_reason,
             no_result_message=no_result_message,
             summary_json=self._serialize_json(summary),
@@ -1708,6 +1710,7 @@ class RuleBacktestService:
             return
         if self._is_run_cancelled_status(row.status):
             return
+        cancelled_at = row.completed_at or datetime.now()
 
         summary = self._update_summary_payload(
             self._load_summary_payload(row.summary_json),
@@ -1715,13 +1718,13 @@ class RuleBacktestService:
             no_result_message=no_result_message,
             status="cancelled",
             status_message=no_result_message,
-            at=datetime.now(),
+            at=cancelled_at,
         )
         self.repo.update_run(
             run_id,
             **self._owner_kwargs(),
             status="cancelled",
-            completed_at=row.completed_at or datetime.now(),
+            completed_at=cancelled_at,
             no_result_reason="cancelled",
             no_result_message=no_result_message,
             summary_json=self._serialize_json(summary),
@@ -2944,6 +2947,7 @@ class RuleBacktestService:
             "status": str(row.status),
             "status_message": summary.get("status_message"),
             "status_history": list(summary.get("status_history") or []),
+            "run_timing": dict(summary.get("run_timing") or {}),
             "run_diagnostics": dict(summary.get("run_diagnostics") or {}),
             "run_at": row.run_at.isoformat() if row.run_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
@@ -3064,6 +3068,76 @@ class RuleBacktestService:
             "last_transition_at": latest_history.get("at"),
             "last_transition_message": str(latest_history.get("message") or status_message or "").strip() or None,
             "last_non_terminal_status": last_non_terminal_status,
+        }
+
+    @staticmethod
+    def _parse_status_history_timestamp(value: Any) -> Optional[datetime]:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw)
+        except Exception:
+            return None
+
+    @classmethod
+    def _build_run_timing_payload(
+        cls,
+        *,
+        current_status: Optional[str],
+        status_history: List[Dict[str, Any]],
+        run_at: Optional[datetime],
+        completed_at: Optional[datetime],
+    ) -> Dict[str, Any]:
+        created_at_dt = run_at or cls._parse_status_history_timestamp((list(status_history or [{}])[0] or {}).get("at"))
+        started_at_dt = None
+        finished_at_dt = completed_at
+        failed_at_dt = None
+        cancelled_at_dt = None
+        last_updated_at_dt = completed_at or created_at_dt
+
+        for item in list(status_history or []):
+            normalized_status = cls._normalize_run_status(item.get("status"))
+            item_at = cls._parse_status_history_timestamp(item.get("at"))
+            if item_at is None:
+                continue
+            last_updated_at_dt = item_at
+            if normalized_status == "running" and started_at_dt is None:
+                started_at_dt = item_at
+            if normalized_status == "failed":
+                failed_at_dt = item_at
+                finished_at_dt = item_at
+            if normalized_status == "cancelled":
+                cancelled_at_dt = item_at
+                finished_at_dt = item_at
+            if normalized_status == "completed":
+                finished_at_dt = item_at
+
+        normalized_current_status = cls._normalize_run_status(current_status)
+        if finished_at_dt is None and normalized_current_status in TERMINAL_RULE_RUN_STATUSES:
+            finished_at_dt = completed_at or last_updated_at_dt
+        if normalized_current_status == "failed" and failed_at_dt is None:
+            failed_at_dt = finished_at_dt
+        if normalized_current_status == "cancelled" and cancelled_at_dt is None:
+            cancelled_at_dt = finished_at_dt
+
+        queue_duration_seconds = None
+        if created_at_dt is not None and started_at_dt is not None:
+            queue_duration_seconds = max(0.0, round((started_at_dt - created_at_dt).total_seconds(), 6))
+
+        run_duration_seconds = None
+        if started_at_dt is not None and finished_at_dt is not None:
+            run_duration_seconds = max(0.0, round((finished_at_dt - started_at_dt).total_seconds(), 6))
+
+        return {
+            "created_at": created_at_dt.isoformat() if created_at_dt else None,
+            "started_at": started_at_dt.isoformat() if started_at_dt else None,
+            "finished_at": finished_at_dt.isoformat() if finished_at_dt else None,
+            "failed_at": failed_at_dt.isoformat() if failed_at_dt else None,
+            "cancelled_at": cancelled_at_dt.isoformat() if cancelled_at_dt else None,
+            "last_updated_at": last_updated_at_dt.isoformat() if last_updated_at_dt else None,
+            "queue_duration_seconds": queue_duration_seconds,
+            "run_duration_seconds": run_duration_seconds,
         }
 
     def _build_execution_model_payload(
@@ -4337,6 +4411,15 @@ class RuleBacktestService:
             payload["ai_summary"] = ai_summary
         if status is not None:
             self._append_status_history(payload, status, status_message=status_message, at=at)
+        payload["run_timing"] = self._build_run_timing_payload(
+            current_status=(
+                status
+                or ((list(payload.get("status_history") or [])[-1] or {}).get("status") if list(payload.get("status_history") or []) else None)
+            ),
+            status_history=list(payload.get("status_history") or []),
+            run_at=self._parse_status_history_timestamp((list(payload.get("status_history") or [{}])[0] or {}).get("at")),
+            completed_at=(at if status in TERMINAL_RULE_RUN_STATUSES else None),
+        )
         payload["run_diagnostics"] = self._build_run_diagnostics_payload(
             current_status=(
                 status
@@ -6313,6 +6396,17 @@ class RuleBacktestService:
         resolved_payload["ai_summary"] = stored_payload.get("ai_summary", ai_summary)
         resolved_payload["status_message"] = stored_payload.get("status_message")
         resolved_payload["status_history"] = list(stored_payload.get("status_history") or [])
+        stored_run_timing = stored_payload.get("run_timing")
+        resolved_payload["run_timing"] = (
+            dict(stored_run_timing)
+            if isinstance(stored_run_timing, dict)
+            else self._build_run_timing_payload(
+                current_status=row.status,
+                status_history=list(resolved_payload.get("status_history") or []),
+                run_at=row.run_at,
+                completed_at=row.completed_at,
+            )
+        )
         stored_run_diagnostics = stored_payload.get("run_diagnostics")
         resolved_payload["run_diagnostics"] = (
             dict(stored_run_diagnostics)
@@ -6353,6 +6447,8 @@ class RuleBacktestService:
             missing_fields.append("status_message")
         if "status_history" not in stored_payload or not isinstance(stored_payload.get("status_history"), list):
             missing_fields.append("status_history")
+        if not isinstance(stored_run_timing, dict) or not stored_run_timing:
+            missing_fields.append("run_timing")
         if not isinstance(stored_run_diagnostics, dict) or not stored_run_diagnostics:
             missing_fields.append("run_diagnostics")
 
@@ -6681,6 +6777,7 @@ class RuleBacktestService:
             "status": row.status,
             "status_message": summary.get("status_message"),
             "status_history": list(summary.get("status_history") or []),
+            "run_timing": dict(summary.get("run_timing") or {}),
             "run_diagnostics": dict(summary.get("run_diagnostics") or {}),
             "no_result_reason": row.no_result_reason,
             "no_result_message": row.no_result_message,
