@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button, Card, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Button, Card, Disclosure, WorkspacePageHeader } from '../components/common';
 import {
   Banner,
   SummaryStrip,
@@ -710,24 +710,28 @@ const RuleBacktestComparePage: React.FC = () => {
 
           <section id="compare-highlights" className="backtest-display-section">
             <Card title="comparison_highlights" subtitle="只展示 backend 已信任的 highlights" className="product-section-card product-section-card--backtest-secondary">
-              <SummaryStrip
-                items={[
-                  {
-                    label: 'primary_profile',
-                    value: comparisonHighlights?.primaryProfile || '--',
-                    note: comparisonHighlights?.selectionRule || '--',
-                  },
-                  {
-                    label: 'overall_context_state',
-                    value: comparisonHighlights?.overallContextState || '--',
-                    note: `baseline #${comparisonHighlights?.baselineRunId ?? '--'}`,
-                  },
-                ]}
-              />
-              <HighlightCards highlights={comparisonHighlights?.highlights || {}} />
-              <div className="mt-4">
-                <DiagnosticChipList diagnostics={comparisonHighlights?.diagnostics} />
-              </div>
+              <Disclosure defaultOpen summary="toggle / comparison_highlights" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+                <SummaryStrip
+                  items={[
+                    {
+                      label: 'primary_profile',
+                      value: comparisonHighlights?.primaryProfile || '--',
+                      note: comparisonHighlights?.selectionRule || '--',
+                    },
+                    {
+                      label: 'overall_context_state',
+                      value: comparisonHighlights?.overallContextState || '--',
+                      note: `baseline #${comparisonHighlights?.baselineRunId ?? '--'}`,
+                    },
+                  ]}
+                />
+                <div className="mt-4">
+                  <HighlightCards highlights={comparisonHighlights?.highlights || {}} />
+                </div>
+                <div className="mt-4">
+                  <DiagnosticChipList diagnostics={comparisonHighlights?.diagnostics} />
+                </div>
+              </Disclosure>
             </Card>
           </section>
 
@@ -817,57 +821,63 @@ const RuleBacktestComparePage: React.FC = () => {
 
           <section id="compare-market-period" className="backtest-display-section">
             <Card title="market / period context" subtitle="比较边界直接展示 backend state，不二次推断" className="product-section-card product-section-card--backtest-secondary">
-              <div className="preview-grid">
-                <div className="preview-card">
-                  <p className="metric-card__label">market_code_comparison</p>
-                  <p className="preview-card__text">{marketCodeComparison?.state || '--'}</p>
-                  <p className="product-footnote">relationship: {marketCodeComparison?.relationship || '--'}</p>
-                  <p className="product-footnote">directly_comparable: {marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
-                  <DiagnosticChipList diagnostics={marketCodeComparison?.diagnostics} />
+              <Disclosure defaultOpen summary="toggle / market / period context" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+                <div className="preview-grid">
+                  <div className="preview-card">
+                    <p className="metric-card__label">market_code_comparison</p>
+                    <p className="preview-card__text">{marketCodeComparison?.state || '--'}</p>
+                    <p className="product-footnote">relationship: {marketCodeComparison?.relationship || '--'}</p>
+                    <p className="product-footnote">directly_comparable: {marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
+                    <DiagnosticChipList diagnostics={marketCodeComparison?.diagnostics} />
+                  </div>
+                  <div className="preview-card">
+                    <p className="metric-card__label">period_comparison</p>
+                    <p className="preview-card__text">{periodComparison?.state || '--'}</p>
+                    <p className="product-footnote">relationship: {periodComparison?.relationship || '--'}</p>
+                    <p className="product-footnote">meaningfully_comparable: {periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
+                    <DiagnosticChipList diagnostics={periodComparison?.diagnostics} />
+                  </div>
                 </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">period_comparison</p>
-                  <p className="preview-card__text">{periodComparison?.state || '--'}</p>
-                  <p className="product-footnote">relationship: {periodComparison?.relationship || '--'}</p>
-                  <p className="product-footnote">meaningfully_comparable: {periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
-                  <DiagnosticChipList diagnostics={periodComparison?.diagnostics} />
-                </div>
-              </div>
+              </Disclosure>
             </Card>
           </section>
 
           <section id="compare-parameter-metrics" className="backtest-display-section">
             <Card title="parameter + metrics" subtitle="参数差异与 trusted metric delta 放在同一工作台里读" className="product-section-card product-section-card--backtest-secondary">
-              <div className="preview-grid">
-                <div className="preview-card">
-                  <p className="metric-card__label">parameter_comparison</p>
-                  <p className="preview-card__text">{parameterComparison?.state || '--'}</p>
-                  <p className="product-footnote">shared: {parameterComparison?.sharedParameterKeys.length ?? 0}</p>
-                  <p className="product-footnote">differing: {parameterComparison?.differingParameterKeys.length ?? 0}</p>
-                  <p className="product-footnote">missing: {parameterComparison?.missingParameterKeys.length ?? 0}</p>
+              <Disclosure defaultOpen summary="toggle / parameter + metrics" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+                <div className="preview-grid">
+                  <div className="preview-card">
+                    <p className="metric-card__label">parameter_comparison</p>
+                    <p className="preview-card__text">{parameterComparison?.state || '--'}</p>
+                    <p className="product-footnote">shared: {parameterComparison?.sharedParameterKeys.length ?? 0}</p>
+                    <p className="product-footnote">differing: {parameterComparison?.differingParameterKeys.length ?? 0}</p>
+                    <p className="product-footnote">missing: {parameterComparison?.missingParameterKeys.length ?? 0}</p>
+                  </div>
+                  <div className="preview-card">
+                    <p className="metric-card__label">summary context</p>
+                    <p className="preview-card__text">all_same_code: {renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
+                    <p className="product-footnote">all_same_timeframe: {renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
+                    <p className="product-footnote">all_same_date_range: {renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
+                  </div>
                 </div>
-                <div className="preview-card">
-                  <p className="metric-card__label">summary context</p>
-                  <p className="preview-card__text">all_same_code: {renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
-                  <p className="product-footnote">all_same_timeframe: {renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
-                  <p className="product-footnote">all_same_date_range: {renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
+                <div className="mt-4">
+                  <MetricDeltaTable metricDeltas={comparisonSummary?.metricDeltas || {}} />
                 </div>
-              </div>
-              <div className="mt-4">
-                <MetricDeltaTable metricDeltas={comparisonSummary?.metricDeltas || {}} />
-              </div>
+              </Disclosure>
             </Card>
           </section>
 
           <section id="compare-items" className="backtest-display-section">
             <Card title="参与运行" subtitle="保留 compact run table，方便 AI / 人快速对照 baseline 与候选" className="product-section-card product-section-card--backtest-secondary">
-              <CompareItemsTable
-                items={orderedItems}
-                baselineRunId={baselineRunId}
-                onOpenRun={handleOpenRun}
-                onMakeBaseline={handleMakeBaseline}
-                onRemoveRun={handleRemoveRun}
-              />
+              <Disclosure defaultOpen summary="toggle / 参与运行" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+                <CompareItemsTable
+                  items={orderedItems}
+                  baselineRunId={baselineRunId}
+                  onOpenRun={handleOpenRun}
+                  onMakeBaseline={handleMakeBaseline}
+                  onRemoveRun={handleRemoveRun}
+                />
+              </Disclosure>
             </Card>
           </section>
         </>

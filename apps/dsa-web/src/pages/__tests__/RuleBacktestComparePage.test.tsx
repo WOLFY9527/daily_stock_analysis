@@ -302,6 +302,10 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByRole('link', { name: 'market / period context' })).toHaveAttribute('href', '#compare-market-period');
     expect(screen.getByRole('link', { name: 'parameter + metrics' })).toHaveAttribute('href', '#compare-parameter-metrics');
     expect(screen.getByRole('link', { name: '参与运行' })).toHaveAttribute('href', '#compare-items');
+    const parameterSummary = screen.getByText('toggle / parameter + metrics');
+    const parameterDisclosure = parameterSummary.closest('details');
+    expect(parameterDisclosure).not.toBeNull();
+    expect(parameterDisclosure).toHaveAttribute('open');
     expect(screen.getAllByText('same_code_different_periods').length).toBeGreaterThan(0);
     expect(screen.getAllByText('partially_comparable').length).toBeGreaterThan(0);
     expect(screen.getAllByText('limited_context_winner').length).toBeGreaterThan(0);
@@ -320,6 +324,12 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByTestId('compare-chart-strip-totalReturnPct-101')).toHaveAttribute('data-role', 'baseline');
     expect(screen.getByTestId('compare-chart-strip-totalReturnPct-202')).toHaveAttribute('data-role', 'candidate');
     expect(screen.getByTestId('compare-chart-strip-annualizedReturnPct-202')).toHaveAttribute('data-state', 'unavailable');
+
+    fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
+    expect(parameterDisclosure).not.toHaveAttribute('open');
+
+    fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
+    expect(parameterDisclosure).toHaveAttribute('open');
   });
 
   it('shows an explicit empty state when fewer than two run ids are provided', async () => {

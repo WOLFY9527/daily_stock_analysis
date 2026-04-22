@@ -6804,6 +6804,23 @@ html[data-theme] .product-empty-state {
   text-decoration: none;
 }
 
+.compare-section-disclosure {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+  background: transparent;
+}
+
+.compare-section-disclosure__summary {
+  padding: 0.3rem 0;
+  color: var(--text-secondary);
+}
+
+.compare-section-disclosure__body {
+  margin-top: 0.2rem;
+  padding: 0;
+}
+
 .compare-run-actions {
   align-items: flex-start;
   min-width: 9rem;
