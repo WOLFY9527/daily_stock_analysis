@@ -65,6 +65,39 @@ The completed P0 reopen hardening line covers these domains:
 - `execution_trace`
   - persisted trace preferred with explicit rebuilt / repaired / unavailable states
 
+### Reopen/Readback Contract Snapshot
+
+The current phase-complete reopen/readback contract should be understood as:
+
+- covered read surfaces
+  - `status`
+    - intentionally lighter than detail/history
+    - carries the compact reopen summaries that are safe and useful for polling/reopen trust checks: `run_diagnostics`, `run_timing`, `artifact_availability`, `readback_integrity`
+  - `detail`
+    - carries the full stored-first reopen payload plus the same compact summaries
+    - remains the authority surface for heavyweight persisted domains such as `execution_trace`, replay/audit payloads, and trade rows
+  - `history`
+    - carries the same shared compact summaries as `detail`/`status`
+    - preserves parity for the shared stored-first reopen domains that are safe to list without performing a detail-only read
+
+- supported reopen/readback scenarios
+  - `stored-first`
+    - modern stored summary/domain snapshots exist and reopen directly from persisted data
+  - `stored-repaired`
+    - stored snapshots exist but require bounded repair from other already-persisted artifacts
+  - `legacy fallback`
+    - modern stored summary blocks are absent and the service derives a compatibility view from older persisted row/storage data
+  - `live-storage repair / summary-storage drift`
+    - stored summary booleans or summary-level expectations no longer match current persisted artifacts, so the read path repairs the response from live stored facts and marks the drift explicitly
+
+- summary domains that are now part of the stable reopen contract
+  - `run_diagnostics`
+  - `run_timing`
+  - `artifact_availability`
+  - `readback_integrity`
+
+This snapshot is the intended backend handoff/readiness boundary for the current phase. Future work may consume these summaries, but should not add another parallel reopen summary layer without new contradictory evidence.
+
 ## 4. Authority States
 
 The intended meanings of the main authority states are:
