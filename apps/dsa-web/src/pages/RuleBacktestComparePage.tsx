@@ -152,6 +152,15 @@ function formatSignedPct(value?: number | null): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
+function orderCompareItems(items: RuleBacktestCompareRunItem[], runIds: number[]): RuleBacktestCompareRunItem[] {
+  const orderMap = new Map(runIds.map((runId, index) => [runId, index]));
+  return [...items].sort((left, right) => {
+    const leftOrder = orderMap.get(left.metadata.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = orderMap.get(right.metadata.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
+}
+
 function CompareMetricMatrix({
   items,
   baselineRunId,
@@ -252,11 +261,13 @@ function CompareItemsTable({
   items,
   baselineRunId,
   onOpenRun,
+  onMakeBaseline,
   onRemoveRun,
 }: {
   items: RuleBacktestCompareRunItem[];
   baselineRunId?: number | null;
   onOpenRun: (runId: number) => void;
+  onMakeBaseline: (runId: number) => void;
   onRemoveRun: (runId: number) => void;
 }) {
   if (!items.length) {
@@ -313,11 +324,16 @@ function CompareItemsTable({
                       打开结果页
                     </Button>
                     {isBaseline ? (
-                      <span className="product-footnote">baseline 固定保留</span>
+                      <span className="product-footnote">当前 baseline</span>
                     ) : (
-                      <Button size="sm" variant="ghost" aria-label={`移除运行 ${metadata.id}`} onClick={() => onRemoveRun(metadata.id)}>
-                        移除运行
-                      </Button>
+                      <>
+                        <Button size="sm" variant="ghost" aria-label={`设为 baseline ${metadata.id}`} onClick={() => onMakeBaseline(metadata.id)}>
+                          设为 baseline
+                        </Button>
+                        <Button size="sm" variant="ghost" aria-label={`移除运行 ${metadata.id}`} onClick={() => onRemoveRun(metadata.id)}>
+                          移除运行
+                        </Button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -366,12 +382,13 @@ const RuleBacktestComparePage: React.FC = () => {
     void fetchCompare();
   }, [fetchCompare]);
 
+  const orderedItems = useMemo(() => orderCompareItems(response?.items || [], runIds), [response?.items, runIds]);
   const baselineRunId = response?.comparisonSummary?.baseline.runId
     ?? response?.robustnessSummary?.baselineRunId
     ?? response?.comparisonProfile?.baselineRunId
     ?? runIds[0]
     ?? null;
-  const baselineItem = response?.items.find((item) => item.metadata.id === baselineRunId) || null;
+  const baselineItem = orderedItems.find((item) => item.metadata.id === baselineRunId) || null;
   const comparisonSummary = response?.comparisonSummary || null;
   const robustnessSummary = response?.robustnessSummary || null;
   const comparisonProfile = response?.comparisonProfile || null;
@@ -387,11 +404,21 @@ const RuleBacktestComparePage: React.FC = () => {
   const handleRemoveRun = useCallback((runId: number) => {
     const nextRunIds = runIds.filter((id) => id !== runId);
     const nextParams = new URLSearchParams(searchParams);
+    setResponse(null);
     if (nextRunIds.length) {
       nextParams.set('runIds', nextRunIds.join(','));
     } else {
       nextParams.delete('runIds');
     }
+    setSearchParams(nextParams);
+  }, [runIds, searchParams, setSearchParams]);
+
+  const handleMakeBaseline = useCallback((runId: number) => {
+    if (runIds[0] === runId) return;
+    const nextRunIds = [runId, ...runIds.filter((id) => id !== runId)];
+    const nextParams = new URLSearchParams(searchParams);
+    setResponse(null);
+    nextParams.set('runIds', nextRunIds.join(','));
     setSearchParams(nextParams);
   }, [runIds, searchParams, setSearchParams]);
 
@@ -544,7 +571,7 @@ const RuleBacktestComparePage: React.FC = () => {
               />
               <div className="mt-4">
                 <CompareMetricMatrix
-                  items={response.items}
+                  items={orderedItems}
                   baselineRunId={baselineRunId}
                   metricDeltas={comparisonSummary?.metricDeltas || {}}
                   highlights={comparisonHighlights?.highlights || {}}
@@ -652,9 +679,10 @@ const RuleBacktestComparePage: React.FC = () => {
           <section className="backtest-display-section">
             <Card title="参与运行" subtitle="保留 compact run table，方便 AI / 人快速对照 baseline 与候选" className="product-section-card product-section-card--backtest-secondary">
               <CompareItemsTable
-                items={response.items}
+                items={orderedItems}
                 baselineRunId={baselineRunId}
                 onOpenRun={handleOpenRun}
+                onMakeBaseline={handleMakeBaseline}
                 onRemoveRun={handleRemoveRun}
               />
             </Card>

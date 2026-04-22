@@ -702,4 +702,225 @@ describe('RuleBacktestComparePage', () => {
     expect(await screen.findByText('至少需要 2 条已完成运行才能打开比较工作台。')).toBeInTheDocument();
     expect(compareRuleBacktestRuns).toHaveBeenCalledTimes(1);
   });
+
+  it('switches the baseline by reordering runIds and keeps the rendered order aligned', async () => {
+    const runFixtures = {
+      101: {
+        metadata: {
+          id: 101,
+          code: 'ORCL',
+          status: 'completed',
+          runAt: '2026-04-01T08:00:00Z',
+          completedAt: '2026-04-01T08:02:00Z',
+          timeframe: 'daily',
+          startDate: '2025-01-01',
+          endDate: '2025-12-31',
+          periodStart: '2025-01-01',
+          periodEnd: '2025-12-31',
+          lookbackBars: 252,
+          initialCapital: 100000,
+          feeBps: 0,
+          slippageBps: 0,
+        },
+        metrics: {
+          tradeCount: 12,
+          totalReturnPct: 12,
+          excessReturnVsBenchmarkPct: 4,
+          maxDrawdownPct: 8.5,
+        },
+        parsedStrategy: {
+          strategySpec: {
+            strategyFamily: 'moving_average_crossover',
+            strategyType: 'moving_average_crossover',
+          },
+        },
+        benchmark: {
+          mode: 'auto',
+          code: 'QQQ',
+          returnPct: 8,
+        },
+      },
+      202: {
+        metadata: {
+          id: 202,
+          code: 'ORCL',
+          status: 'completed',
+          runAt: '2026-04-02T08:00:00Z',
+          completedAt: '2026-04-02T08:03:00Z',
+          timeframe: 'daily',
+          startDate: '2025-03-01',
+          endDate: '2025-12-31',
+          periodStart: '2025-03-01',
+          periodEnd: '2025-12-31',
+          lookbackBars: 252,
+          initialCapital: 100000,
+          feeBps: 0,
+          slippageBps: 0,
+        },
+        metrics: {
+          tradeCount: 9,
+          totalReturnPct: 18,
+          excessReturnVsBenchmarkPct: 11,
+          maxDrawdownPct: 9.2,
+        },
+        parsedStrategy: {
+          strategySpec: {
+            strategyFamily: 'moving_average_crossover',
+            strategyType: 'moving_average_crossover',
+          },
+        },
+        benchmark: {
+          mode: 'auto',
+          code: 'QQQ',
+          returnPct: 7,
+        },
+      },
+    } as const;
+
+    compareRuleBacktestRuns.mockImplementation(async ({ runIds }: { runIds: number[] }) => {
+      const baselineRunId = runIds[0];
+      const candidateRunId = runIds.find((id) => id !== baselineRunId) || runIds[1];
+      const baselineValue = runFixtures[baselineRunId as 101 | 202].metrics.totalReturnPct;
+
+      return {
+        comparisonSource: 'stored_rule_backtest_runs',
+        readMode: 'stored_first',
+        requestedRunIds: runIds,
+        resolvedRunIds: runIds,
+        comparableRunIds: runIds,
+        missingRunIds: [],
+        unavailableRuns: [],
+        fieldGroups: ['market_code_comparison', 'period_comparison', 'comparison_summary'],
+        marketCodeComparison: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          relationship: 'same_code',
+          state: 'direct',
+          directlyComparable: true,
+          diagnostics: ['same_normalized_code'],
+        },
+        periodComparison: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          relationship: 'overlapping',
+          state: 'comparable',
+          meaningfullyComparable: true,
+          diagnostics: ['overlapping_periods'],
+        },
+        comparisonSummary: {
+          baseline: {
+            runId: baselineRunId,
+            selectionRule: 'first_comparable_run_by_request_order',
+            code: 'ORCL',
+            timeframe: 'daily',
+            startDate: baselineRunId === 101 ? '2025-01-01' : '2025-03-01',
+            endDate: '2025-12-31',
+            strategyFamily: 'moving_average_crossover',
+            strategyType: 'moving_average_crossover',
+          },
+          context: {
+            codeValues: ['ORCL'],
+            timeframeValues: ['daily'],
+            strategyFamilyValues: ['moving_average_crossover'],
+            strategyTypeValues: ['moving_average_crossover'],
+            dateRanges: [
+              { runId: 101, startDate: '2025-01-01', endDate: '2025-12-31' },
+              { runId: 202, startDate: '2025-03-01', endDate: '2025-12-31' },
+            ],
+            allSameCode: true,
+            allSameTimeframe: true,
+            allSameDateRange: false,
+          },
+          metricDeltas: {
+            totalReturnPct: {
+              label: 'total_return_pct',
+              state: 'comparable',
+              baselineRunId,
+              baselineValue,
+              availableRunIds: runIds,
+              unavailableRunIds: [],
+              deltas: [
+                {
+                  runId: baselineRunId,
+                  value: runFixtures[baselineRunId as 101 | 202].metrics.totalReturnPct,
+                  deltaVsBaseline: 0,
+                },
+                {
+                  runId: candidateRunId,
+                  value: runFixtures[candidateRunId as 101 | 202].metrics.totalReturnPct,
+                  deltaVsBaseline: runFixtures[candidateRunId as 101 | 202].metrics.totalReturnPct - baselineValue,
+                },
+              ],
+            },
+          },
+        },
+        robustnessSummary: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          overallState: 'partially_comparable',
+          directlyComparable: false,
+          alignedDimensions: ['market_code'],
+          partialDimensions: ['periods'],
+          divergentDimensions: [],
+          unavailableDimensions: [],
+          dimensions: {},
+          diagnostics: ['partial_metric_deltas'],
+        },
+        comparisonProfile: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          primaryProfile: 'same_code_different_periods',
+          alignedDimensions: ['market_code'],
+          drivingDimensions: ['periods'],
+          dimensionFlags: {
+            sameCode: true,
+            sameMarket: true,
+            crossMarket: false,
+            sameStrategyFamily: true,
+            parameterDifferencesPresent: false,
+            periodDifferencesPresent: true,
+          },
+          diagnostics: ['overlapping_periods'],
+        },
+        comparisonHighlights: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          primaryProfile: 'same_code_different_periods',
+          overallContextState: 'partially_comparable',
+          highlights: {},
+          diagnostics: [],
+        },
+        parameterComparison: {
+          state: 'same_family_comparable',
+          strategyFamilyValues: ['moving_average_crossover'],
+          strategyTypeValues: ['moving_average_crossover'],
+          sharedParameterKeys: [],
+          differingParameterKeys: [],
+          missingParameterKeys: [],
+          sharedParameters: {},
+          differingParameters: {},
+          missingParameters: {},
+        },
+        items: [runFixtures[101], runFixtures[202]],
+      };
+    });
+
+    renderComparePage();
+
+    await waitFor(() => {
+      expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [101, 202] });
+    });
+    expect(await screen.findByRole('columnheader', { name: /#101 baseline/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '设为 baseline 202' }));
+
+    await waitFor(() => {
+      expect(compareRuleBacktestRuns).toHaveBeenLastCalledWith({ runIds: [202, 101] });
+    });
+
+    const leadingHeaders = screen.getAllByRole('columnheader').slice(0, 4).map((node) => node.textContent);
+    expect(leadingHeaders).toEqual(['指标', '摘要', '#202 baselineORCL', '#101 candidateORCL']);
+    expect(screen.getByRole('button', { name: '设为 baseline 101' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '设为 baseline 202' })).not.toBeInTheDocument();
+  });
 });
