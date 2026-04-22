@@ -6742,6 +6742,15 @@ html[data-theme] .product-empty-state {
   line-height: 1.35;
 }
 
+.compare-run-actions {
+  align-items: flex-start;
+  min-width: 9rem;
+}
+
+.compare-run-actions .inline-flex {
+  justify-content: flex-start;
+}
+
 .comparison-chart {
   display: grid;
   gap: 0.72rem;

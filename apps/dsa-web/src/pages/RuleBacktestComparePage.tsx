@@ -248,7 +248,17 @@ function CompareMetricMatrix({
   );
 }
 
-function CompareItemsTable({ items, baselineRunId }: { items: RuleBacktestCompareRunItem[]; baselineRunId?: number | null }) {
+function CompareItemsTable({
+  items,
+  baselineRunId,
+  onOpenRun,
+  onRemoveRun,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  onOpenRun: (runId: number) => void;
+  onRemoveRun: (runId: number) => void;
+}) {
   if (!items.length) {
     return <div className="product-empty-state product-empty-state--compact">当前比较没有可展示的运行详情。</div>;
   }
@@ -265,18 +275,20 @@ function CompareItemsTable({ items, baselineRunId }: { items: RuleBacktestCompar
             <th className="product-table__align-right">超额</th>
             <th className="product-table__align-right">回撤</th>
             <th className="product-table__align-right">交易</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => {
             const metadata = item.metadata || { id: 0 };
             const metrics = item.metrics || {};
+            const isBaseline = baselineRunId === metadata.id;
             return (
-              <tr key={metadata.id} data-active={baselineRunId === metadata.id ? 'true' : 'false'}>
+              <tr key={metadata.id} data-active={isBaseline ? 'true' : 'false'}>
                 <td>
                   <div className="product-table__stack">
                     <span>#{metadata.id}</span>
-                    <span>{baselineRunId === metadata.id ? 'baseline' : 'candidate'}</span>
+                    <span>{isBaseline ? 'baseline' : 'candidate'}</span>
                   </div>
                 </td>
                 <td>
@@ -295,6 +307,20 @@ function CompareItemsTable({ items, baselineRunId }: { items: RuleBacktestCompar
                 <td className="product-table__align-right">{pct(metrics.excessReturnVsBenchmarkPct)}</td>
                 <td className="product-table__align-right">{pct(metrics.maxDrawdownPct)}</td>
                 <td className="product-table__align-right">{metrics.tradeCount ?? '--'}</td>
+                <td>
+                  <div className="product-table__stack compare-run-actions">
+                    <Button size="sm" variant="ghost" aria-label={`打开结果页 ${metadata.id}`} onClick={() => onOpenRun(metadata.id)}>
+                      打开结果页
+                    </Button>
+                    {isBaseline ? (
+                      <span className="product-footnote">baseline 固定保留</span>
+                    ) : (
+                      <Button size="sm" variant="ghost" aria-label={`移除运行 ${metadata.id}`} onClick={() => onRemoveRun(metadata.id)}>
+                        移除运行
+                      </Button>
+                    )}
+                  </div>
+                </td>
               </tr>
             );
           })}
@@ -306,7 +332,7 @@ function CompareItemsTable({ items, baselineRunId }: { items: RuleBacktestCompar
 
 const RuleBacktestComparePage: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const runIds = useMemo(() => parseRunIdsParam(searchParams.get('runIds')), [searchParams]);
   const [response, setResponse] = useState<RuleBacktestCompareResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -353,6 +379,21 @@ const RuleBacktestComparePage: React.FC = () => {
   const parameterComparison = response?.parameterComparison || null;
   const marketCodeComparison = response?.marketCodeComparison || null;
   const periodComparison = response?.periodComparison || null;
+
+  const handleOpenRun = useCallback((runId: number) => {
+    navigate(`/backtest/results/${runId}`);
+  }, [navigate]);
+
+  const handleRemoveRun = useCallback((runId: number) => {
+    const nextRunIds = runIds.filter((id) => id !== runId);
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextRunIds.length) {
+      nextParams.set('runIds', nextRunIds.join(','));
+    } else {
+      nextParams.delete('runIds');
+    }
+    setSearchParams(nextParams);
+  }, [runIds, searchParams, setSearchParams]);
 
   return (
     <div className="theme-page-transition backtest-v1-page workspace-page--backtest" data-testid="rule-backtest-compare-page">
@@ -610,7 +651,12 @@ const RuleBacktestComparePage: React.FC = () => {
 
           <section className="backtest-display-section">
             <Card title="参与运行" subtitle="保留 compact run table，方便 AI / 人快速对照 baseline 与候选" className="product-section-card product-section-card--backtest-secondary">
-              <CompareItemsTable items={response.items} baselineRunId={baselineRunId} />
+              <CompareItemsTable
+                items={response.items}
+                baselineRunId={baselineRunId}
+                onOpenRun={handleOpenRun}
+                onRemoveRun={handleRemoveRun}
+              />
             </Card>
           </section>
         </>

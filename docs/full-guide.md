@@ -968,6 +968,7 @@ Web 结果页现在也统一按一条确定的数据链路展示：
 - P6 起，结果页的 `历史结果` tab 增加了轻量 compare workflow：当前运行固定为基线，可再勾选最多 3 条已完成运行做 side-by-side comparison；比较区会同时展示收益/超额/回撤/胜率/期末权益/策略设置，并对日期区间、费滑或 benchmark 不一致给出公平性提醒。
 - 当前 compare workflow 已进一步接出最小可用的 `/backtest/compare?runIds=...` compare workbench：结果页历史 tab 勾选 completed runs 后可直接进入新页面，由前端统一消费 `POST /api/v1/backtest/rule/compare` 返回的 `comparison_summary / parameter_comparison / period_comparison / market_code_comparison / robustness_summary / comparison_profile / comparison_highlights` 等摘要层，而不是继续在页面本地重组 compare 结论。
 - 当前 compare workbench 还新增了一块 compact metric matrix：它会把 baseline 与候选 run 在 trusted compare metrics 上的值、相对 baseline 的 delta、winner/highlight 状态，以及 `partial / limited / unavailable` 情况压进一张紧凑表格，方便用户先横向扫读关键差异，再决定是否继续往下看更细的 profile / diagnostics section。
+- compare workbench 的 `参与运行` 表也已经具备基础 selection/navigation polish：每个已参与比较的 run 都能直接跳回自己的结果页，candidate 可以在当前 compare 会话里直接移除，而 baseline 会明确保持固定，方便用户快速缩小比较范围而不用回到历史页重新勾选。
 - P6 也把 chart workspace 调整为更偏决策支持的结构：主图继续保留策略/基准/买入持有对照，第二张图优先展示回撤，第三张图可在 `相对基准 / 每日盈亏 / 仓位行为` 之间切换，帮助更快判断“是否跑赢、代价多大、交易是否过于频繁”
 - `参数与假设` tab 现在内置受控 `Scenario Lab`，支持对已支持的 rule strategy 做轻量参数迭代（例如 MA window、MACD/RSI 变体、benchmark mode、fee/slippage stress、lookback 窗口），并把当前运行作为基线汇总成紧凑比较表；它不是 full optimizer，只覆盖受控、确定性的 first-step iteration
 - 结果页 `概览` tab 会生成可导出的决策摘要（Markdown / HTML），优先输出人类可读的 decision summary，再把 execution trace 留给 CSV / JSON 导出；结果页同时会自动沉淀 recent draft，并支持手动保存具名 preset，配置页可直接复用这些回测配置而不用重新填写整套参数
