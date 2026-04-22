@@ -160,7 +160,7 @@ function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse): FxRefreshFeed
   if (data.staleCount > 0) {
     return {
       tone: 'warning',
-      text: `已尝试刷新，但仍有部分货币对使用 stale/fallback 汇率。${summary}`,
+      text: `已尝试刷新，但仍有部分货币对使用旧汇率或备用汇率。${summary}`,
     };
   }
 
@@ -655,7 +655,7 @@ const PortfolioPage: React.FC = () => {
       return;
     }
     if (!ibkrSessionToken.trim()) {
-      setWriteWarning('请提供当前有效的 IBKR session token，再执行只读同步。');
+      setWriteWarning('请提供当前有效的 IBKR 登录令牌，再执行只读同步。');
       return;
     }
     try {
@@ -931,7 +931,7 @@ const PortfolioPage: React.FC = () => {
                 </select>
               </div>
               <p className="workspace-header-actions-note xl:text-right">
-                当前视图会同步刷新组合快照、风险指标与账户维度的持仓明细。
+                当前选择会一起刷新组合快照、风险指标和该账户下的持仓明细。
               </p>
             </div>
           </div>
@@ -1256,7 +1256,7 @@ const PortfolioPage: React.FC = () => {
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-foreground">IBKR 只读同步 / Read-only Sync</p>
                       <p className="mt-1 text-[11px] text-muted-text">
-                        仅同步账户状态与持仓，不会暴露任何交易 / 下单能力。session token 只用于本次同步，不会保存到系统。
+                        仅同步账户状态与持仓，不会开放任何交易或下单能力。登录令牌只用于本次同步，不会保存到系统。
                       </p>
                     </div>
                     <Badge>Read-only</Badge>

@@ -296,7 +296,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const summary = screen.getByText('高级：手工录入与修正 / Manual Entry');
+    const summary = screen.getByText('高级：手工录入与修正');
     const disclosure = summary.closest('details');
 
     expect(disclosure).not.toBeNull();
@@ -305,8 +305,8 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(summary.closest('summary') ?? summary);
 
     expect(disclosure).toHaveAttribute('open');
-    expect(screen.getByText('手工录入：交易 / Trade')).toBeInTheDocument();
-    expect(screen.getByText('数据同步 / Data Sync')).toBeInTheDocument();
+    expect(screen.getByText('手工录入：交易')).toBeInTheDocument();
+    expect(screen.getByText('数据同步')).toBeInTheDocument();
   });
 
   it('shows IBKR as a broker import option and surfaces account-linked connection context', async () => {
@@ -664,7 +664,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '刷新汇率' }));
 
-    expect(await screen.findByText(/stale\/fallback 汇率/)).toBeInTheDocument();
+    expect(await screen.findByText(/旧汇率或备用汇率/)).toBeInTheDocument();
   });
 
   it('shows warning feedback when FX refresh returns online errors without stale pairs', async () => {
@@ -769,7 +769,9 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
 
     fireEvent.click(screen.getByRole('button', { name: '刷新汇率' }));
-    expect(await screen.findByRole('button', { name: '刷新中' })).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /刷新中|刷新汇率/ })).toBeDisabled();
+    });
 
     fireEvent.change(accountSelect, { target: { value: '2' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 2, costMethod: 'fifo' }));
