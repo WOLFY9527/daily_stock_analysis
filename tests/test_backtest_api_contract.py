@@ -469,6 +469,23 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "/api/v1/backtest/rule/runs/123/execution-trace.csv",
                 ],
             )
+            self.assertEqual(
+                [
+                    (item.format, item.media_type, item.delivery_mode, item.payload_class)
+                    for item in export_index_response.exports
+                ],
+                [
+                    ("json", "application/json", "api", "compact"),
+                    ("json", "application/json", "api", "compact"),
+                    ("json", "application/json", "api", "heavy"),
+                    ("csv", "text/csv", "api", "heavy"),
+                ],
+            )
+            self.assertEqual(manifest_response.manifest_kind, "rule_backtest_support_bundle")
+            self.assertEqual(
+                reproducibility_response.manifest_kind,
+                "rule_backtest_reproducibility_manifest",
+            )
 
             if trace_json_payload is None:
                 with self.assertRaises(HTTPException) as json_ctx:

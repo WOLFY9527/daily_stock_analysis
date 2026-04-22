@@ -147,6 +147,18 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 "execution_trace_csv",
             ],
         )
+        self.assertEqual(
+            [
+                (item["format"], item["media_type"], item["delivery_mode"], item["payload_class"])
+                for item in export_index["exports"]
+            ],
+            [
+                ("json", "application/json", "api", "compact"),
+                ("json", "application/json", "api", "compact"),
+                ("json", "application/json", "api", "heavy"),
+                ("csv", "text/csv", "api", "heavy"),
+            ],
+        )
 
         manifest_response = self.client.get(export_index["exports"][0]["endpoint_path"])
         reproducibility_response = self.client.get(export_index["exports"][1]["endpoint_path"])
@@ -160,6 +172,8 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             "export_index": export_index,
             "manifest": manifest,
             "reproducibility": reproducibility,
+            "manifest_content_type": manifest_response.headers.get("content-type", ""),
+            "reproducibility_content_type": reproducibility_response.headers.get("content-type", ""),
         }
 
     def _assert_service_http_support_bundle_parity(
@@ -209,6 +223,11 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(reproducibility["run"]["id"], run_id)
         self.assertEqual(manifest["run"]["status"], export_index["status"])
         self.assertEqual(reproducibility["run"]["status"], export_index["status"])
+        self.assertEqual(manifest["manifest_kind"], "rule_backtest_support_bundle")
+        self.assertEqual(
+            reproducibility["manifest_kind"],
+            "rule_backtest_reproducibility_manifest",
+        )
         self.assertEqual(manifest["run_timing"], reproducibility["run_timing"])
         self.assertEqual(manifest["run_diagnostics"], reproducibility["run_diagnostics"])
         self.assertEqual(manifest["artifact_availability"], reproducibility["artifact_availability"])
@@ -221,6 +240,14 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.json",
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
             ],
+        )
+        self.assertTrue(
+            payloads["manifest_content_type"].startswith(export_index["exports"][0]["media_type"])
+        )
+        self.assertTrue(
+            payloads["reproducibility_content_type"].startswith(
+                export_index["exports"][1]["media_type"]
+            )
         )
 
         trace_json_path = export_index["exports"][2]["endpoint_path"]
@@ -241,6 +268,20 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             )
             self.assertEqual(trace_json_response.status_code, 200)
             self.assertEqual(trace_csv_response.status_code, 200)
+            self.assertTrue(
+                trace_json_response.headers.get("content-type", "").startswith(
+                    export_index["exports"][2]["media_type"]
+                )
+            )
+            self.assertTrue(
+                trace_csv_response.headers.get("content-type", "").startswith(
+                    export_index["exports"][3]["media_type"]
+                )
+            )
+            self.assertIn(
+                f'rule-backtest-{run_id}-execution-trace.csv',
+                trace_csv_response.headers.get("content-disposition", ""),
+            )
 
             trace_json = trace_json_response.json()
             trace_csv_rows = list(csv.DictReader(trace_csv_response.text.splitlines()))
@@ -270,6 +311,12 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             self.assertEqual(trace_csv_response.status_code, 409)
             self.assertEqual(self._error_code(trace_json_response), "export_unavailable")
             self.assertEqual(self._error_code(trace_csv_response), "export_unavailable")
+            self.assertTrue(
+                trace_json_response.headers.get("content-type", "").startswith("application/json")
+            )
+            self.assertTrue(
+                trace_csv_response.headers.get("content-type", "").startswith("application/json")
+            )
 
         return payloads
 
