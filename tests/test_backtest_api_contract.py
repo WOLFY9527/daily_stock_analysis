@@ -19,6 +19,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     parse_rule_strategy,
     get_rule_backtest_run,
     get_rule_backtest_runs,
+    get_rule_backtest_support_bundle_manifest,
     get_rule_backtest_run_status,
     run_rule_backtest,
 )
@@ -33,6 +34,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
     RuleBacktestStatusResponse,
+    RuleBacktestSupportBundleManifestResponse,
 )
 
 
@@ -250,6 +252,54 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "exposure_curve": [],
             "equity_curve": [],
             "trades": [],
+        }
+
+    @classmethod
+    def _support_bundle_manifest_payload(cls, *, status: str = "completed") -> dict:
+        run_payload = cls._rule_run_payload(status=status)
+        return {
+            "manifest_version": "v1",
+            "manifest_kind": "rule_backtest_support_bundle",
+            "run": {
+                "id": run_payload["id"],
+                "code": run_payload["code"],
+                "status": run_payload["status"],
+                "status_message": run_payload.get("status_message"),
+                "run_at": run_payload["run_at"],
+                "completed_at": run_payload["completed_at"],
+                "strategy_hash": run_payload["strategy_hash"],
+                "timeframe": run_payload["timeframe"],
+                "lookback_bars": run_payload["lookback_bars"],
+                "period_start": run_payload["period_start"],
+                "period_end": run_payload["period_end"],
+                "benchmark_mode": run_payload["benchmark_mode"],
+                "benchmark_code": run_payload["benchmark_code"],
+                "trade_count": run_payload["trade_count"],
+                "total_return_pct": run_payload["total_return_pct"],
+                "max_drawdown_pct": run_payload["max_drawdown_pct"],
+                "final_equity": run_payload["final_equity"],
+                "no_result_reason": run_payload.get("no_result_reason"),
+                "no_result_message": run_payload.get("no_result_message"),
+            },
+            "run_timing": run_payload["run_timing"],
+            "run_diagnostics": run_payload["run_diagnostics"],
+            "artifact_availability": run_payload["artifact_availability"],
+            "readback_integrity": run_payload["readback_integrity"],
+            "result_authority": {
+                "contract_version": run_payload["result_authority"]["contract_version"],
+                "read_mode": run_payload["result_authority"]["read_mode"],
+                "domains": run_payload["result_authority"]["domains"],
+            },
+            "artifact_counts": {
+                "status_history_count": len(run_payload.get("status_history") or []),
+                "warning_count": len(run_payload.get("warnings") or []),
+                "trade_rows_count": len(run_payload.get("trades") or []),
+                "equity_curve_points": len(run_payload.get("equity_curve") or []),
+                "audit_rows_count": len(run_payload.get("audit_rows") or []),
+                "daily_return_series_count": len(run_payload.get("daily_return_series") or []),
+                "exposure_curve_count": len(run_payload.get("exposure_curve") or []),
+                "execution_trace_rows_count": len((run_payload.get("execution_trace") or {}).get("rows") or []),
+            },
         }
 
     def test_run_rule_backtest_async_path_enqueues_background_processing(self) -> None:
@@ -1131,6 +1181,82 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.readback_integrity["source"], "stored_status_summary")
         self.assertEqual(response.readback_integrity["integrity_level"], "stored_complete")
         service.get_run_status.assert_called_once_with(123)
+
+    def test_get_rule_backtest_support_bundle_manifest_returns_compact_contract(self) -> None:
+        service = MagicMock()
+        service.get_support_bundle_manifest.return_value = self._support_bundle_manifest_payload(status="completed")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestSupportBundleManifestResponse)
+        self.assertEqual(response.manifest_version, "v1")
+        self.assertEqual(response.manifest_kind, "rule_backtest_support_bundle")
+        self.assertEqual(response.run["id"], 123)
+        self.assertEqual(response.run["status"], "completed")
+        self.assertEqual(response.artifact_availability["source"], "summary.artifact_availability")
+        self.assertEqual(response.readback_integrity["integrity_level"], "stored_complete")
+        self.assertEqual(response.result_authority["contract_version"], "v1")
+        self.assertEqual(response.result_authority["read_mode"], "stored_first")
+        self.assertIn("trade_rows", response.result_authority["domains"])
+        self.assertEqual(response.artifact_counts["trade_rows_count"], 0)
+        service.get_support_bundle_manifest.assert_called_once_with(123)
+
+    def test_get_rule_backtest_support_bundle_manifest_preserves_drift_signals(self) -> None:
+        service = MagicMock()
+        payload = self._support_bundle_manifest_payload(status="completed")
+        payload["artifact_availability"].update(
+            {
+                "source": "summary.artifact_availability+live_storage_repair",
+                "completeness": "stored_partial_repaired",
+                "has_trade_rows": False,
+            }
+        )
+        payload["readback_integrity"].update(
+            {
+                "source": "derived_from_result_authority+live_storage_repair",
+                "completeness": "stored_partial_repaired",
+                "used_live_storage_repair": True,
+                "has_summary_storage_drift": True,
+                "drift_domains": ["trade_rows"],
+                "integrity_level": "drift_repaired",
+            }
+        )
+        payload["result_authority"]["domains"]["trade_rows"] = {
+            "source": "unavailable",
+            "completeness": "unavailable",
+            "state": "unavailable",
+            "missing": ["stored_trade_rows"],
+            "missing_kind": "fields",
+        }
+        payload["artifact_counts"]["trade_rows_count"] = 0
+        service.get_support_bundle_manifest.return_value = payload
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
+
+        self.assertFalse(response.artifact_availability["has_trade_rows"])
+        self.assertEqual(
+            response.artifact_availability["source"],
+            "summary.artifact_availability+live_storage_repair",
+        )
+        self.assertTrue(response.readback_integrity["used_live_storage_repair"])
+        self.assertTrue(response.readback_integrity["has_summary_storage_drift"])
+        self.assertEqual(response.readback_integrity["drift_domains"], ["trade_rows"])
+        self.assertEqual(response.readback_integrity["integrity_level"], "drift_repaired")
+        self.assertEqual(response.result_authority["domains"]["trade_rows"]["source"], "unavailable")
+
+    def test_get_rule_backtest_support_bundle_manifest_returns_not_found(self) -> None:
+        service = MagicMock()
+        service.get_support_bundle_manifest.side_effect = ValueError("Run 123 not found.")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail["error"], "not_found")
+        service.get_support_bundle_manifest.assert_called_once_with(123)
 
     def test_cancel_rule_backtest_run_returns_cancel_contract(self) -> None:
         service = MagicMock()

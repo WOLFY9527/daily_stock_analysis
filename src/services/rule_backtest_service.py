@@ -7569,61 +7569,64 @@ class RuleBacktestService:
             writer.writerows(export_rows)
         return str(destination)
 
-    def export_support_bundle_manifest_json(self, run_id: int, output_path: str) -> str:
+    def get_support_bundle_manifest(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
 
         execution_trace = dict(run.get("execution_trace") or {})
         result_authority = dict(run.get("result_authority") or {})
+        return {
+            "manifest_version": "v1",
+            "manifest_kind": "rule_backtest_support_bundle",
+            "run": {
+                "id": run.get("id"),
+                "code": run.get("code"),
+                "status": run.get("status"),
+                "status_message": run.get("status_message"),
+                "run_at": run.get("run_at"),
+                "completed_at": run.get("completed_at"),
+                "strategy_hash": run.get("strategy_hash"),
+                "timeframe": run.get("timeframe"),
+                "lookback_bars": run.get("lookback_bars"),
+                "period_start": run.get("period_start"),
+                "period_end": run.get("period_end"),
+                "benchmark_mode": run.get("benchmark_mode"),
+                "benchmark_code": run.get("benchmark_code"),
+                "trade_count": run.get("trade_count"),
+                "total_return_pct": run.get("total_return_pct"),
+                "max_drawdown_pct": run.get("max_drawdown_pct"),
+                "final_equity": run.get("final_equity"),
+                "no_result_reason": run.get("no_result_reason"),
+                "no_result_message": run.get("no_result_message"),
+            },
+            "run_timing": dict(run.get("run_timing") or {}),
+            "run_diagnostics": dict(run.get("run_diagnostics") or {}),
+            "artifact_availability": dict(run.get("artifact_availability") or {}),
+            "readback_integrity": dict(run.get("readback_integrity") or {}),
+            "result_authority": {
+                "contract_version": result_authority.get("contract_version"),
+                "read_mode": result_authority.get("read_mode"),
+                "domains": dict(result_authority.get("domains") or {}),
+            },
+            "artifact_counts": {
+                "status_history_count": len(list(run.get("status_history") or [])),
+                "warning_count": len(list(run.get("warnings") or [])),
+                "trade_rows_count": len(list(run.get("trades") or [])),
+                "equity_curve_points": len(list(run.get("equity_curve") or [])),
+                "audit_rows_count": len(list(run.get("audit_rows") or [])),
+                "daily_return_series_count": len(list(run.get("daily_return_series") or [])),
+                "exposure_curve_count": len(list(run.get("exposure_curve") or [])),
+                "execution_trace_rows_count": len(list(execution_trace.get("rows") or [])),
+            },
+        }
+
+    def export_support_bundle_manifest_json(self, run_id: int, output_path: str) -> str:
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(
             json.dumps(
-                {
-                    "manifest_version": "v1",
-                    "manifest_kind": "rule_backtest_support_bundle",
-                    "run": {
-                        "id": run.get("id"),
-                        "code": run.get("code"),
-                        "status": run.get("status"),
-                        "status_message": run.get("status_message"),
-                        "run_at": run.get("run_at"),
-                        "completed_at": run.get("completed_at"),
-                        "strategy_hash": run.get("strategy_hash"),
-                        "timeframe": run.get("timeframe"),
-                        "lookback_bars": run.get("lookback_bars"),
-                        "period_start": run.get("period_start"),
-                        "period_end": run.get("period_end"),
-                        "benchmark_mode": run.get("benchmark_mode"),
-                        "benchmark_code": run.get("benchmark_code"),
-                        "trade_count": run.get("trade_count"),
-                        "total_return_pct": run.get("total_return_pct"),
-                        "max_drawdown_pct": run.get("max_drawdown_pct"),
-                        "final_equity": run.get("final_equity"),
-                        "no_result_reason": run.get("no_result_reason"),
-                        "no_result_message": run.get("no_result_message"),
-                    },
-                    "run_timing": dict(run.get("run_timing") or {}),
-                    "run_diagnostics": dict(run.get("run_diagnostics") or {}),
-                    "artifact_availability": dict(run.get("artifact_availability") or {}),
-                    "readback_integrity": dict(run.get("readback_integrity") or {}),
-                    "result_authority": {
-                        "contract_version": result_authority.get("contract_version"),
-                        "read_mode": result_authority.get("read_mode"),
-                        "domains": dict(result_authority.get("domains") or {}),
-                    },
-                    "artifact_counts": {
-                        "status_history_count": len(list(run.get("status_history") or [])),
-                        "warning_count": len(list(run.get("warnings") or [])),
-                        "trade_rows_count": len(list(run.get("trades") or [])),
-                        "equity_curve_points": len(list(run.get("equity_curve") or [])),
-                        "audit_rows_count": len(list(run.get("audit_rows") or [])),
-                        "daily_return_series_count": len(list(run.get("daily_return_series") or [])),
-                        "exposure_curve_count": len(list(run.get("exposure_curve") or [])),
-                        "execution_trace_rows_count": len(list(execution_trace.get("rows") or [])),
-                    },
-                },
+                self.get_support_bundle_manifest(run_id),
                 ensure_ascii=False,
                 indent=2,
             ),

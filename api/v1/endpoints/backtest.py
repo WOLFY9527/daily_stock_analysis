@@ -28,6 +28,7 @@ from api.v1.schemas.backtest import (
     RuleBacktestHistoryResponse,
     RuleBacktestStatusResponse,
     RuleBacktestCancelResponse,
+    RuleBacktestSupportBundleManifestResponse,
     RuleBacktestParseRequest,
     RuleBacktestParseResponse,
     RuleBacktestRunRequest,
@@ -491,6 +492,34 @@ def get_rule_backtest_run_status(
             raise _not_found_error("规则回测记录不存在")
         return _build_model(RuleBacktestStatusResponse, data)
     return _run_endpoint("查询规则回测状态失败", _operation)
+
+
+@router.get(
+    "/rule/runs/{run_id}/support-bundle-manifest",
+    response_model=RuleBacktestSupportBundleManifestResponse,
+    responses={
+        200: {"description": "规则回测 support bundle manifest"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取规则回测 support bundle manifest",
+    description="返回单条规则回测的紧凑 stored-first support bundle manifest，供 backend handoff、AI 调试与自动化脚本读取。",
+)
+def get_rule_backtest_support_bundle_manifest(
+    run_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestSupportBundleManifestResponse:
+    def _operation() -> RuleBacktestSupportBundleManifestResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        try:
+            data = service.get_support_bundle_manifest(run_id)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise _not_found_error("规则回测记录不存在") from exc
+            raise
+        return _build_model(RuleBacktestSupportBundleManifestResponse, data)
+    return _run_endpoint("查询规则回测 support bundle manifest 失败", _operation)
 
 
 @router.post(
