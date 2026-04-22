@@ -984,6 +984,23 @@ class RuleBacktestSupportBundleManifestResponse(BaseModel):
     artifact_counts: Dict[str, int] = Field(default_factory=dict)
 
 
+class RuleBacktestSupportExportIndexItem(BaseModel):
+    key: str
+    available: bool
+    availability_reason: str
+    format: str
+    media_type: str
+    delivery_mode: str
+    endpoint_path: Optional[str] = None
+    payload_class: str
+
+
+class RuleBacktestSupportExportIndexResponse(BaseModel):
+    run_id: int
+    status: str
+    exports: List[RuleBacktestSupportExportIndexItem] = Field(default_factory=list)
+
+
 class BacktestResultItem(BaseModel):
     analysis_history_id: int
     code: str

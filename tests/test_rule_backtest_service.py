@@ -855,6 +855,43 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertNotIn("audit_rows", payload)
         self.assertNotIn("execution_trace", payload)
 
+    def test_service_support_export_index_reports_manifest_and_execution_trace_exports(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        export_index = service.get_support_export_index(response["id"])
+        self.assertEqual(export_index["run_id"], response["id"])
+        self.assertEqual(export_index["status"], response["status"])
+        self.assertEqual(
+            [item["key"] for item in export_index["exports"]],
+            [
+                "support_bundle_manifest_json",
+                "execution_trace_json",
+                "execution_trace_csv",
+            ],
+        )
+        manifest_item = export_index["exports"][0]
+        self.assertTrue(manifest_item["available"])
+        self.assertEqual(manifest_item["delivery_mode"], "api")
+        self.assertEqual(
+            manifest_item["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-manifest",
+        )
+        self.assertEqual(manifest_item["payload_class"], "compact")
+        for item in export_index["exports"][1:]:
+            self.assertTrue(item["available"])
+            self.assertEqual(item["availability_reason"], "execution_trace_rows_present")
+            self.assertEqual(item["delivery_mode"], "service_file_export")
+            self.assertIsNone(item["endpoint_path"])
+            self.assertEqual(item["payload_class"], "heavy")
+
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -3173,6 +3210,38 @@ class RuleBacktestTestCase(unittest.TestCase):
             payload["result_authority"]["domains"]["trade_rows"]["source"],
             "unavailable",
         )
+
+    def test_support_export_index_truthfully_marks_missing_trace_exports_unavailable(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["execution_trace"] = {}
+        summary["visualization"] = dict(summary.get("visualization") or {})
+        summary["visualization"]["audit_rows"] = []
+        summary["visualization"]["daily_return_series"] = []
+        summary["visualization"]["exposure_curve"] = []
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        export_index = service.get_support_export_index(response["id"])
+        manifest_item = export_index["exports"][0]
+        trace_json_item = export_index["exports"][1]
+        trace_csv_item = export_index["exports"][2]
+
+        self.assertTrue(manifest_item["available"])
+        self.assertFalse(trace_json_item["available"])
+        self.assertFalse(trace_csv_item["available"])
+        self.assertEqual(trace_json_item["availability_reason"], "execution_trace_rows_missing")
+        self.assertEqual(trace_csv_item["availability_reason"], "execution_trace_rows_missing")
 
     def test_get_run_repairs_partial_stored_parsed_strategy_with_provenance(self) -> None:
         service = RuleBacktestService(self.db)

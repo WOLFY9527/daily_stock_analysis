@@ -7621,6 +7621,52 @@ class RuleBacktestService:
             },
         }
 
+    def get_support_export_index(self, run_id: int) -> Dict[str, Any]:
+        run = self.get_run(run_id)
+        if run is None:
+            raise ValueError(f"Run {run_id} not found.")
+
+        resolved_run_id = int(run.get("id") or run_id)
+        trace_rows = list((dict(run.get("execution_trace") or {})).get("rows") or [])
+        trace_available = bool(trace_rows)
+        trace_reason = "execution_trace_rows_present" if trace_available else "execution_trace_rows_missing"
+        return {
+            "run_id": resolved_run_id,
+            "status": str(run.get("status") or ""),
+            "exports": [
+                {
+                    "key": "support_bundle_manifest_json",
+                    "available": True,
+                    "availability_reason": "run_exists",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/support-bundle-manifest",
+                    "payload_class": "compact",
+                },
+                {
+                    "key": "execution_trace_json",
+                    "available": trace_available,
+                    "availability_reason": trace_reason,
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "service_file_export",
+                    "endpoint_path": None,
+                    "payload_class": "heavy",
+                },
+                {
+                    "key": "execution_trace_csv",
+                    "available": trace_available,
+                    "availability_reason": trace_reason,
+                    "format": "csv",
+                    "media_type": "text/csv",
+                    "delivery_mode": "service_file_export",
+                    "endpoint_path": None,
+                    "payload_class": "heavy",
+                },
+            ],
+        }
+
     def export_support_bundle_manifest_json(self, run_id: int, output_path: str) -> str:
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)

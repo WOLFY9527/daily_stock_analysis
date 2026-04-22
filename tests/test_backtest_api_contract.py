@@ -19,6 +19,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     parse_rule_strategy,
     get_rule_backtest_run,
     get_rule_backtest_runs,
+    get_rule_backtest_support_export_index,
     get_rule_backtest_support_bundle_manifest,
     get_rule_backtest_run_status,
     run_rule_backtest,
@@ -34,6 +35,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
     RuleBacktestStatusResponse,
+    RuleBacktestSupportExportIndexResponse,
     RuleBacktestSupportBundleManifestResponse,
 )
 
@@ -300,6 +302,47 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "exposure_curve_count": len(run_payload.get("exposure_curve") or []),
                 "execution_trace_rows_count": len((run_payload.get("execution_trace") or {}).get("rows") or []),
             },
+        }
+
+    @classmethod
+    def _support_export_index_payload(cls, *, status: str = "completed") -> dict:
+        run_payload = cls._rule_run_payload(status=status)
+        run_id = int(run_payload["id"])
+        return {
+            "run_id": run_id,
+            "status": run_payload["status"],
+            "exports": [
+                {
+                    "key": "support_bundle_manifest_json",
+                    "available": True,
+                    "availability_reason": "run_exists",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/support-bundle-manifest",
+                    "payload_class": "compact",
+                },
+                {
+                    "key": "execution_trace_json",
+                    "available": True,
+                    "availability_reason": "execution_trace_rows_present",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "service_file_export",
+                    "endpoint_path": None,
+                    "payload_class": "heavy",
+                },
+                {
+                    "key": "execution_trace_csv",
+                    "available": True,
+                    "availability_reason": "execution_trace_rows_present",
+                    "format": "csv",
+                    "media_type": "text/csv",
+                    "delivery_mode": "service_file_export",
+                    "endpoint_path": None,
+                    "payload_class": "heavy",
+                },
+            ],
         }
 
     def test_run_rule_backtest_async_path_enqueues_background_processing(self) -> None:
@@ -1257,6 +1300,62 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
         service.get_support_bundle_manifest.assert_called_once_with(123)
+
+    def test_get_rule_backtest_support_export_index_returns_compact_discovery_contract(self) -> None:
+        service = MagicMock()
+        service.get_support_export_index.return_value = self._support_export_index_payload(status="completed")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_export_index(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestSupportExportIndexResponse)
+        self.assertEqual(response.run_id, 123)
+        self.assertEqual(response.status, "completed")
+        self.assertEqual(len(response.exports), 3)
+        self.assertEqual(response.exports[0].key, "support_bundle_manifest_json")
+        self.assertTrue(response.exports[0].available)
+        self.assertEqual(response.exports[0].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[0].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/support-bundle-manifest",
+        )
+        self.assertEqual(response.exports[1].key, "execution_trace_json")
+        self.assertTrue(response.exports[1].available)
+        self.assertEqual(response.exports[1].payload_class, "heavy")
+        self.assertIsNone(response.exports[1].endpoint_path)
+        self.assertEqual(response.exports[2].key, "execution_trace_csv")
+        self.assertEqual(response.exports[2].media_type, "text/csv")
+        service.get_support_export_index.assert_called_once_with(123)
+
+    def test_get_rule_backtest_support_export_index_truthfully_marks_missing_trace_exports(self) -> None:
+        service = MagicMock()
+        payload = self._support_export_index_payload(status="completed")
+        payload["exports"][1]["available"] = False
+        payload["exports"][1]["availability_reason"] = "execution_trace_rows_missing"
+        payload["exports"][2]["available"] = False
+        payload["exports"][2]["availability_reason"] = "execution_trace_rows_missing"
+        service.get_support_export_index.return_value = payload
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_export_index(123, db_manager=MagicMock())
+
+        self.assertTrue(response.exports[0].available)
+        self.assertFalse(response.exports[1].available)
+        self.assertFalse(response.exports[2].available)
+        self.assertEqual(response.exports[1].availability_reason, "execution_trace_rows_missing")
+        self.assertEqual(response.exports[2].availability_reason, "execution_trace_rows_missing")
+
+    def test_get_rule_backtest_support_export_index_returns_not_found(self) -> None:
+        service = MagicMock()
+        service.get_support_export_index.side_effect = ValueError("Run 123 not found.")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_support_export_index(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail["error"], "not_found")
+        service.get_support_export_index.assert_called_once_with(123)
 
     def test_cancel_rule_backtest_run_returns_cancel_contract(self) -> None:
         service = MagicMock()
