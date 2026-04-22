@@ -28,6 +28,16 @@ const COMPARE_METRIC_LABELS: Record<string, string> = {
   excessReturnVsBenchmarkPct: '相对基准',
 };
 
+const COMPARE_SECTION_LINKS = [
+  { id: 'compare-summary', label: '比较摘要' },
+  { id: 'compare-highlights', label: 'comparison_highlights' },
+  { id: 'compare-metric-matrix', label: 'compact metric matrix' },
+  { id: 'compare-robustness', label: 'robustness + profile' },
+  { id: 'compare-market-period', label: 'market / period context' },
+  { id: 'compare-parameter-metrics', label: 'parameter + metrics' },
+  { id: 'compare-items', label: '参与运行' },
+] as const;
+
 function parseRunIdsParam(value: string | null): number[] {
   if (!value) return [];
   const orderedIds: number[] = [];
@@ -531,7 +541,17 @@ const RuleBacktestComparePage: React.FC = () => {
 
       {runIds.length >= 2 && response ? (
         <>
-          <section className="backtest-display-section">
+          <div className="compare-section-nav-shell">
+            <nav className="compare-section-nav" aria-label="比较区块导航">
+              {COMPARE_SECTION_LINKS.map((item) => (
+                <a key={item.id} className="product-chip product-chip--interactive compare-section-nav__link" href={`#${item.id}`}>
+                  {item.label}
+                </a>
+              ))}
+            </nav>
+          </div>
+
+          <section id="compare-summary" className="backtest-display-section">
             <Card title="比较摘要" subtitle="先看整体上下文，再决定是否相信单项领先" className="product-section-card product-section-card--backtest-result">
               <SummaryStrip
                 items={[
@@ -587,7 +607,7 @@ const RuleBacktestComparePage: React.FC = () => {
             </Card>
           </section>
 
-          <section className="backtest-display-section">
+          <section id="compare-highlights" className="backtest-display-section">
             <Card title="comparison_highlights" subtitle="只展示 backend 已信任的 highlights" className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
                 items={[
@@ -610,7 +630,7 @@ const RuleBacktestComparePage: React.FC = () => {
             </Card>
           </section>
 
-          <section className="backtest-display-section">
+          <section id="compare-metric-matrix" className="backtest-display-section">
             <Card title="compact metric matrix" subtitle="把 baseline、delta、winner 与 unavailable 压到一张易扫读的比较表" className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
                 items={[
@@ -644,7 +664,7 @@ const RuleBacktestComparePage: React.FC = () => {
             </Card>
           </section>
 
-          <section className="backtest-display-section">
+          <section id="compare-robustness" className="backtest-display-section">
             <Card title="robustness + profile" subtitle="明确显示 partial / limited / unavailable，而不是静默吞掉" className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
                 items={[
@@ -694,7 +714,7 @@ const RuleBacktestComparePage: React.FC = () => {
             </Card>
           </section>
 
-          <section className="backtest-display-section">
+          <section id="compare-market-period" className="backtest-display-section">
             <Card title="market / period context" subtitle="比较边界直接展示 backend state，不二次推断" className="product-section-card product-section-card--backtest-secondary">
               <div className="preview-grid">
                 <div className="preview-card">
@@ -715,7 +735,7 @@ const RuleBacktestComparePage: React.FC = () => {
             </Card>
           </section>
 
-          <section className="backtest-display-section">
+          <section id="compare-parameter-metrics" className="backtest-display-section">
             <Card title="parameter + metrics" subtitle="参数差异与 trusted metric delta 放在同一工作台里读" className="product-section-card product-section-card--backtest-secondary">
               <div className="preview-grid">
                 <div className="preview-card">
@@ -738,7 +758,7 @@ const RuleBacktestComparePage: React.FC = () => {
             </Card>
           </section>
 
-          <section className="backtest-display-section">
+          <section id="compare-items" className="backtest-display-section">
             <Card title="参与运行" subtitle="保留 compact run table，方便 AI / 人快速对照 baseline 与候选" className="product-section-card product-section-card--backtest-secondary">
               <CompareItemsTable
                 items={orderedItems}

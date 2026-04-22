@@ -971,6 +971,7 @@ Web 结果页现在也统一按一条确定的数据链路展示：
 - compare workbench 的 `参与运行` 表也已经具备基础 selection/navigation polish：每个已参与比较的 run 都能直接跳回自己的结果页，candidate 可以在当前 compare 会话里直接移除，而 baseline 会明确保持固定，方便用户快速缩小比较范围而不用回到历史页重新勾选。
 - compare workbench 现在还支持直接在页内切换 baseline：candidate 行可以提升为新的 baseline，底层只是重排现有 `runIds` query param 顺序，不改变 compare API 语义；同时 compact matrix 与参与运行表也会按新的 `runIds` 顺序稳定重排，保证“当前谁是 baseline”与“表里谁排第一”保持一致。
 - compact metric matrix 还补了一层更轻量的 scanability polish：矩阵中的 summary state、winner/limited/unavailable 状态和 `delta vs baseline` 方向现在会直接显示成紧凑 badge/tone，用户不用逐行读完所有 footnote 才能判断“谁领先、这个领先是否受限、delta 是正还是负”。
+- compare workbench 的多区块结果页现在也有一块顶部 sticky section navigation：用户可以直接跳到 `比较摘要 / comparison_highlights / compact metric matrix / robustness + profile / market / period context / parameter + metrics / 参与运行`，避免在较长的 compare 页面里来回滚动查找目标区块。
 - P6 也把 chart workspace 调整为更偏决策支持的结构：主图继续保留策略/基准/买入持有对照，第二张图优先展示回撤，第三张图可在 `相对基准 / 每日盈亏 / 仓位行为` 之间切换，帮助更快判断“是否跑赢、代价多大、交易是否过于频繁”
 - `参数与假设` tab 现在内置受控 `Scenario Lab`，支持对已支持的 rule strategy 做轻量参数迭代（例如 MA window、MACD/RSI 变体、benchmark mode、fee/slippage stress、lookback 窗口），并把当前运行作为基线汇总成紧凑比较表；它不是 full optimizer，只覆盖受控、确定性的 first-step iteration
 - 结果页 `概览` tab 会生成可导出的决策摘要（Markdown / HTML），优先输出人类可读的 decision summary，再把 execution trace 留给 CSV / JSON 导出；结果页同时会自动沉淀 recent draft，并支持手动保存具名 preset，配置页可直接复用这些回测配置而不用重新填写整套参数

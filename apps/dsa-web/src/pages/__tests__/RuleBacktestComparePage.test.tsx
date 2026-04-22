@@ -293,6 +293,14 @@ describe('RuleBacktestComparePage', () => {
     });
 
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '比较区块导航' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '比较摘要' })).toHaveAttribute('href', '#compare-summary');
+    expect(screen.getByRole('link', { name: 'comparison_highlights' })).toHaveAttribute('href', '#compare-highlights');
+    expect(screen.getByRole('link', { name: 'compact metric matrix' })).toHaveAttribute('href', '#compare-metric-matrix');
+    expect(screen.getByRole('link', { name: 'robustness + profile' })).toHaveAttribute('href', '#compare-robustness');
+    expect(screen.getByRole('link', { name: 'market / period context' })).toHaveAttribute('href', '#compare-market-period');
+    expect(screen.getByRole('link', { name: 'parameter + metrics' })).toHaveAttribute('href', '#compare-parameter-metrics');
+    expect(screen.getByRole('link', { name: '参与运行' })).toHaveAttribute('href', '#compare-items');
     expect(screen.getAllByText('same_code_different_periods').length).toBeGreaterThan(0);
     expect(screen.getAllByText('partially_comparable').length).toBeGreaterThan(0);
     expect(screen.getAllByText('limited_context_winner').length).toBeGreaterThan(0);

@@ -6782,6 +6782,28 @@ html[data-theme] .product-empty-state {
   color: hsl(var(--accent-primary-hsl));
 }
 
+.compare-section-nav-shell {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 6;
+  margin-bottom: 0.9rem;
+}
+
+.compare-section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid hsl(var(--border-muted-hsl) / 0.5);
+  border-radius: var(--cohere-radius-medium);
+  background: hsl(var(--bg-card-elevated-hsl) / 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.compare-section-nav__link {
+  text-decoration: none;
+}
+
 .compare-run-actions {
   align-items: flex-start;
   min-width: 9rem;
