@@ -165,7 +165,9 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Decision Brief')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Research dashboard' })).toBeInTheDocument();
+    expect(screen.getByText('Run analysis, review recent results, and continue from one workspace.')).toBeInTheDocument();
+    expect(screen.getByText('Decision Brief')).toBeInTheDocument();
     expect(screen.getByText('Research Status')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL')).toBeInTheDocument();
     expect(screen.getByText('No analysis history yet')).toBeInTheDocument();

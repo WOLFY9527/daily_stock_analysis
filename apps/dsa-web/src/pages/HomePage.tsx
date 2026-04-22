@@ -51,9 +51,29 @@ type DecisionSummaryBlock = {
   metrics: DecisionSummaryMetric[];
 };
 
+type HomeIntroCopy = {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+};
+
+const HOME_INTRO_COPY: Record<'zh' | 'en', HomeIntroCopy> = {
+  zh: {
+    eyebrow: '研究总览',
+    title: '研究仪表盘',
+    subtitle: '在一个工作区里发起分析、查看最近结果，并继续后续操作。',
+  },
+  en: {
+    eyebrow: 'Research dashboard',
+    title: 'Research dashboard',
+    subtitle: 'Run analysis, review recent results, and continue from one workspace.',
+  },
+};
+
 const HomePage: React.FC = () => {
   const { t, language } = useI18n();
   const navigate = useNavigate();
+  const introCopy = HOME_INTRO_COPY[language];
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const resultRegionRef = useRef<HTMLElement | null>(null);
   const handledCompletedTaskIdsRef = useRef<Set<string>>(new Set());
@@ -413,9 +433,9 @@ const HomePage: React.FC = () => {
     <div data-testid="home-dashboard" className="workspace-page workspace-page--home">
       <section className="home-workspace-shell">
         <header className="home-workspace-intro workspace-header">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-1">{t('home.eyebrow')}</p>
-          <h1 className="text-2xl sm:text-3xl font-semibold uppercase tracking-widest text-foreground">{t('home.title')}</h1>
-          <p className="mt-2 text-sm text-muted-text max-w-2xl leading-relaxed">{t('home.subtitle')}</p>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-1">{introCopy.eyebrow}</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold uppercase tracking-widest text-foreground">{introCopy.title}</h1>
+          <p className="mt-2 text-sm text-muted-text max-w-2xl leading-relaxed">{introCopy.subtitle}</p>
         </header>
 
         <section className="home-dashboard-layout" data-testid="home-dashboard-layout">
