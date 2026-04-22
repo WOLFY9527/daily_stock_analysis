@@ -1,194 +1,218 @@
-# Rule Backtest Reopen Trustworthiness P0 Status Index
+# Rule Backtest Support Bundle Final Backend Handoff Snapshot
 
 ## 1. Goal
 
-Provide one concise backend handoff/index document for the completed P0 rule-backtest stored-first reopen trustworthiness line.
+Provide one internal, closure-level backend handoff snapshot for the completed rule-backtest support bundle surface.
 
-This document is closure-only and handoff-only. It does not authorize or implement:
+This snapshot is intentionally narrow. It confirms the final backend contract for:
 
-- new reopen provenance slices
-- P1 feature work
-- database migration or PG cutover
+- service helpers
+- export-index discovery
+- compact artifact manifests
+- heavy execution-trace exports
+- HTTP E2E behavior
+
+It does not introduce:
+
 - frontend changes
-- strategy-runtime changes
-- broad backtest redesign
+- new artifact kinds
+- packaging/download bundling
+- multi-run exports
+- runtime or engine redesign
 
-Its purpose is narrower:
+## 2. Stable Support Bundle Surface
 
-- summarize which reopen domains are already hardened
-- define the intended authority states
-- point future reviewers/agents to the acceptance entry points
-- state what is intentionally still out of scope after P0 closure
+The current backend support bundle surface for one rule-backtest run is:
 
-## 2. Current P0 Posture
+- `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-manifest`
+- `GET /api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest`
+- `GET /api/v1/backtest/rule/runs/{run_id}/export-index`
+- `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.json`
+- `GET /api/v1/backtest/rule/runs/{run_id}/execution-trace.csv`
 
-The P0 stored-first reopen trustworthiness line is now considered functionally complete enough for closure.
+The stable export-index artifact set is exactly:
 
-What this means:
+- `support_bundle_manifest_json`
+- `support_bundle_reproducibility_manifest_json`
+- `execution_trace_json`
+- `execution_trace_csv`
 
-- detail/history reopen paths now have a stable `result_authority` contract
-- the major persisted rule-backtest domains now reopen with explicit provenance and completeness diagnostics
-- integrated acceptance coverage now checks detail/history parity and summary/subdomain anti-drift
-- future work should not casually reopen these P0 slices unless new contradictory evidence appears
+No additional artifact kinds are part of this phase-complete handoff boundary.
 
-What this does not mean:
+## 3. Contract Rules
 
-- no claim of P1 analytics/product completeness
-- no claim of engine/runtime redesign
-- no claim of database or PG migration progress
+### 3.1 Shared compact summaries
 
-## 3. Hardened Domains
+Both compact manifests reuse the same resolved run-level summaries from the stored-first detail read path:
 
-The completed P0 reopen hardening line covers these domains:
+- `run_timing`
+- `run_diagnostics`
+- `artifact_availability`
+- `readback_integrity`
 
-- `result_authority`
-  - versioned top-level contract via `contract_version` + `domains`
-  - legacy flat authority fields preserved for compatibility
-- `summary`
-  - stored-first reopen with repaired/derived fallback diagnostics
-- `parsed_strategy`
-  - stored-first parsed/executable spec reopen with repaired/summary-only/unavailable handling
-- `metrics`
-  - stored `summary.metrics` preferred, explicit row-column fallback diagnostics
-- `execution_model`
-  - stored `summary.execution_model` preferred, then stored request snapshot, then derived fallback
-- `execution_assumptions_snapshot`
-  - persisted snapshot preferred over loose assumptions payload
-- `comparison`
-  - stored `summary.visualization.comparison` preferred with explicit missing-section repair states
-- `replay/audit payload`
-  - stored `audit_rows` / `daily_return_series` / `exposure_curve` preferred with explicit repair/legacy rebuild states
-- `trade_rows`
-  - persisted `rule_backtest_trades` preferred with compat-repair diagnostics
+These blocks must stay consistent with `RuleBacktestService.get_run(run_id)` and must not fork into a second provenance system.
+
+### 3.2 Support bundle manifest
+
+`support-bundle-manifest` is the compact operator/debug handoff artifact.
+
+It contains:
+
+- `manifest_version = "v1"`
+- `manifest_kind = "rule_backtest_support_bundle"`
+- compact `run` metadata
+- shared compact summaries
+- normalized `result_authority` subset:
+  - `contract_version`
+  - `read_mode`
+  - `domains`
+- lightweight `artifact_counts`
+
+It intentionally does not inline heavy payloads such as:
+
+- `trades`
 - `equity_curve`
-  - persisted `equity_curve_json` preferred with explicit repair / derived / unavailable states
+- `audit_rows`
 - `execution_trace`
-  - persisted trace preferred with explicit rebuilt / repaired / unavailable states
 
-### Reopen/Readback Contract Snapshot
+### 3.3 Reproducibility manifest
 
-The current phase-complete reopen/readback contract should be understood as:
+`support-bundle-reproducibility-manifest` is the compact reproducibility/migration handoff artifact.
 
-- covered read surfaces
-  - `status`
-    - intentionally lighter than detail/history
-    - carries the compact reopen summaries that are safe and useful for polling/reopen trust checks: `run_diagnostics`, `run_timing`, `artifact_availability`, `readback_integrity`
-  - `detail`
-    - carries the full stored-first reopen payload plus the same compact summaries
-    - remains the authority surface for heavyweight persisted domains such as `execution_trace`, replay/audit payloads, and trade rows
-  - `history`
-    - carries the same shared compact summaries as `detail`/`status`
-    - preserves parity for the shared stored-first reopen domains that are safe to list without performing a detail-only read
+It contains:
 
-- supported reopen/readback scenarios
-  - `stored-first`
-    - modern stored summary/domain snapshots exist and reopen directly from persisted data
-  - `stored-repaired`
-    - stored snapshots exist but require bounded repair from other already-persisted artifacts
-  - `legacy fallback`
-    - modern stored summary blocks are absent and the service derives a compatibility view from older persisted row/storage data
-  - `live-storage repair / summary-storage drift`
-    - stored summary booleans or summary-level expectations no longer match current persisted artifacts, so the read path repairs the response from live stored facts and marks the drift explicitly
+- `manifest_version = "v1"`
+- `manifest_kind = "rule_backtest_reproducibility_manifest"`
+- compact `run` metadata
+- shared compact summaries
+- `execution_assumptions_fingerprint`
+- reduced `result_authority` summary with `source / completeness / state`
 
-- summary domains that are now part of the stable reopen contract
-  - `run_diagnostics`
-  - `run_timing`
-  - `artifact_availability`
-  - `readback_integrity`
+It intentionally stays compact and does not inline heavy replay payloads.
 
-This snapshot is the intended backend handoff/readiness boundary for the current phase. Future work may consume these summaries, but should not add another parallel reopen summary layer without new contradictory evidence.
+### 3.4 Execution-trace heavy exports
 
-## 4. Authority States
+The heavy exports remain:
 
-The intended meanings of the main authority states are:
+- `execution_trace_json`
+- `execution_trace_csv`
 
-- `complete`
-  - the reopened payload came directly from the persisted domain snapshot in the expected shape
-- `stored_partial_repaired`
-  - a persisted snapshot existed, but one or more fields/sections were missing and were repaired from other already-stored artifacts or row columns
-- `legacy_row_columns`
-  - no modern stored domain snapshot existed, and reopen fell back to legacy run-row columns
-- `legacy_rebuilt`
-  - no direct stored snapshot existed for that domain, but the payload was rebuilt from older stored artifacts that are still considered acceptable for legacy compatibility
-- `legacy_derived`
-  - no stored summary snapshot existed, and the top-level summary was derived from already-resolved stored domains and row columns
-- `omitted`
-  - the domain was intentionally not read on this surface, typically history/list endpoints
-- `unavailable`
-  - the service could not produce a trustworthy payload from persisted artifacts
+They are gated by the resolved detail readback `execution_trace.rows`.
 
-The main source labels that future work should continue to preserve semantically are:
+Meaning:
 
-- persisted domain sources such as `row.summary_json`, `row.parsed_strategy_json`, `row.equity_curve_json`, `summary.execution_model`, `summary.visualization.comparison`
-- repaired variants such as `+repaired_fields` and `+repaired_sections`
-- intentional list/history omission via `omitted_without_detail_read`
-- legacy derivation labels such as `row_columns_fallback`, `derived_from_stored_run_artifacts`, `derived_from_summary.visualization.audit_rows`, `derived_from_stored_domains+row_columns`
-- hard failure state `unavailable`
+- trace rows present:
+  - export-index reports `available=true`
+  - both execution-trace endpoints are readable
+- trace rows missing:
+  - export-index reports `available=false`
+  - `availability_reason = execution_trace_rows_missing`
+  - both execution-trace endpoints fail closed instead of fabricating empty exports
 
-## 5. Acceptance Entry Points
+## 4. Scenario Matrix
 
-The key acceptance and contract entry points for this P0 line are:
+The final support bundle handoff snapshot is expected to behave as follows:
 
-- Integrated reopen acceptance:
+| Scenario | Compact manifests | Export index | Trace JSON/CSV |
+| --- | --- | --- | --- |
+| stored-first complete run | shared summaries align with detail readback | both manifests available, trace exports available | readable |
+| live-storage repair / summary drift | shared summaries reflect repaired live state, not stale summary booleans | both manifests available, trace exports still available when trace rows exist | readable |
+| missing trace rows | compact manifests stay readable and truthfully report `has_execution_trace=false` / unavailable authority | both manifests available, trace exports marked unavailable | closed with export-unavailable semantics |
+
+The key drift scenario intentionally covered in this phase is:
+
+- trade-row storage drift with live-storage repair
+
+The key missing-artifact scenario intentionally covered in this phase is:
+
+- no exportable execution-trace rows
+
+## 5. Cross-Layer Integrity Requirements
+
+The following properties are now treated as phase-complete and must stay aligned:
+
+- artifact metadata
+  - manifest kinds, export keys, format/media metadata, payload class
+- availability flags
+  - export-index availability must match the actual heavy-export gate
+- endpoint paths
+  - service-produced `endpoint_path` values must match the real HTTP routes
+- payload formats
+  - compact manifests stay compact
+  - trace JSON stays structured for AI/automation
+  - trace CSV stays spreadsheet/operator-friendly
+
+The practical rule is:
+
+- the export index is the discoverability layer
+- the manifests are the compact handoff layer
+- the execution-trace JSON/CSV endpoints are the heavy artifact layer
+
+All three layers must tell the same truth about one run.
+
+## 6. Validation Entry Points
+
+Focused validation for this handoff snapshot:
+
+- acceptance:
 
 ```bash
 python3 -m pytest tests/test_rule_backtest_reopen_acceptance.py -q
 ```
 
-- Backend service reopen contract coverage:
+- backend service support bundle coverage:
 
 ```bash
 python3 -m pytest tests/test_rule_backtest_service.py -q
 ```
 
-- API contract coverage for detail/history authority serialization:
+- backend API contract coverage:
 
 ```bash
 python3 -m pytest tests/test_backtest_api_contract.py -q
 ```
 
-- Combined closure sweep:
+- HTTP E2E support bundle coverage:
 
 ```bash
-python3 -m pytest tests/test_rule_backtest_service.py tests/test_rule_backtest_reopen_acceptance.py tests/test_backtest_api_contract.py -q
+python3 -m pytest tests/test_rule_backtest_support_bundle_e2e.py -q
 ```
 
-- Minimal syntax check for the touched Python surfaces:
+- combined handoff sweep:
 
 ```bash
-python3 -m py_compile src/services/rule_backtest_service.py tests/test_rule_backtest_service.py tests/test_rule_backtest_reopen_acceptance.py tests/test_backtest_api_contract.py
+python3 -m pytest tests/test_rule_backtest_reopen_acceptance.py tests/test_rule_backtest_service.py tests/test_backtest_api_contract.py tests/test_rule_backtest_support_bundle_e2e.py -q
 ```
 
-## 6. What Is Intentionally Out Of Scope For P0
+- minimal syntax check:
 
-The following should still be treated as out of scope for this completed P0 line:
+```bash
+python3 -m py_compile tests/test_rule_backtest_reopen_acceptance.py
+```
 
-- new provenance domains beyond the completed list above
-- UI/UX work on how the authority contract is displayed
-- new analytics or debugging features layered on top of the contract
-- engine or strategy-runtime rewrites
+## 7. Read Order For Future Work
+
+If a future reviewer or AI debugging session needs to reason about this surface, use this order:
+
+1. this handoff snapshot
+2. `docs/backtest-system.md`
+3. `docs/backtest-system_EN.md`
+4. `tests/test_rule_backtest_reopen_acceptance.py`
+5. `tests/test_rule_backtest_service.py`
+6. `tests/test_backtest_api_contract.py`
+7. `tests/test_rule_backtest_support_bundle_e2e.py`
+
+## 8. Out Of Scope
+
+The following remain intentionally out of scope for this completed slice:
+
+- frontend support bundle UX
+- zip packaging or download bundle assembly
+- additional artifact families beyond the four stable exports
+- multi-run export surfaces
 - broader backtest architecture cleanup
-- database migration or PG cutover work
-- scanner or other unrelated backend lines
+- PostgreSQL migration or storage-model redesign
 
-## 7. Future-Conversation Guidance
+## 9. Final Handoff Summary
 
-A future reviewer or future AI-assisted debugging session should treat the following as already settled unless new evidence contradicts them:
-
-- stored-first reopen is the default policy for the hardened rule-backtest domains
-- detail/history authority semantics are intentional and tested
-- `domains.<name>` is the normalized authority view that should be preferred for cross-domain reasoning
-- history surfaces may intentionally omit detail-only domains while still preserving shared-domain parity
-- reopened `summary` should stay aligned with the resolved subdomain payloads rather than echoing stale stored fragments
-
-Recommended read order for a future bounded conversation:
-
-1. this status index
-2. `docs/backtest-system.md` or `docs/backtest-system_EN.md` for user/system-facing backtest context
-3. `tests/test_rule_backtest_reopen_acceptance.py`
-4. `tests/test_rule_backtest_service.py`
-5. `tests/test_backtest_api_contract.py`
-
-## 8. Final One-Paragraph Handoff Summary
-
-The rule-backtest stored-first reopen trustworthiness P0 line is now closed at a practical backend-handoff level: `result_authority` is normalized and versioned, the main persisted rule-backtest domains reopen with explicit provenance/completeness semantics, detail/history parity is covered by integrated acceptance tests, and reopened `summary` is aligned to the resolved subdomain payloads rather than stale stored fragments. Future work should use this as a stable baseline for AI-assisted debugging and any later P1 work, without casually reopening these P0 slices unless genuinely new inconsistency is found.
+The rule-backtest support bundle backend surface is now phase-complete at the contract level: service helpers, export-index discovery, compact manifests, heavy execution-trace exports, and HTTP endpoints all resolve to one coherent stored-first truth. Stored-first, live-storage-repair, and missing-trace scenarios are explicitly covered; compact manifests stay aligned with run-level diagnostics and authority metadata; export-index paths and availability flags match the real endpoints; and execution-trace JSON/CSV exports fail closed when no trace rows exist. Future work should treat this as the stable backend handoff baseline unless genuinely contradictory evidence appears.
