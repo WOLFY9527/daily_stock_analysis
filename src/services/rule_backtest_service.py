@@ -7718,6 +7718,16 @@ class RuleBacktestService:
                     "payload_class": "compact",
                 },
                 {
+                    "key": "support_bundle_reproducibility_manifest_json",
+                    "available": True,
+                    "availability_reason": "run_exists",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/support-bundle-reproducibility-manifest",
+                    "payload_class": "compact",
+                },
+                {
                     "key": "execution_trace_json",
                     "available": trace_available,
                     "availability_reason": trace_reason,

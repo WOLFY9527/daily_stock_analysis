@@ -380,6 +380,16 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "payload_class": "compact",
                 },
                 {
+                    "key": "support_bundle_reproducibility_manifest_json",
+                    "available": True,
+                    "availability_reason": "run_exists",
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest",
+                    "payload_class": "compact",
+                },
+                {
                     "key": "execution_trace_json",
                     "available": True,
                     "availability_reason": "execution_trace_rows_present",
@@ -1431,7 +1441,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsInstance(response, RuleBacktestSupportExportIndexResponse)
         self.assertEqual(response.run_id, 123)
         self.assertEqual(response.status, "completed")
-        self.assertEqual(len(response.exports), 3)
+        self.assertEqual(len(response.exports), 4)
         self.assertEqual(response.exports[0].key, "support_bundle_manifest_json")
         self.assertTrue(response.exports[0].available)
         self.assertEqual(response.exports[0].delivery_mode, "api")
@@ -1439,19 +1449,27 @@ class BacktestApiContractTestCase(unittest.TestCase):
             response.exports[0].endpoint_path,
             "/api/v1/backtest/rule/runs/123/support-bundle-manifest",
         )
-        self.assertEqual(response.exports[1].key, "execution_trace_json")
+        self.assertEqual(response.exports[1].key, "support_bundle_reproducibility_manifest_json")
         self.assertTrue(response.exports[1].available)
-        self.assertEqual(response.exports[1].payload_class, "heavy")
+        self.assertEqual(response.exports[1].payload_class, "compact")
         self.assertEqual(response.exports[1].delivery_mode, "api")
         self.assertEqual(
             response.exports[1].endpoint_path,
-            "/api/v1/backtest/rule/runs/123/execution-trace.json",
+            "/api/v1/backtest/rule/runs/123/support-bundle-reproducibility-manifest",
         )
-        self.assertEqual(response.exports[2].key, "execution_trace_csv")
-        self.assertEqual(response.exports[2].media_type, "text/csv")
+        self.assertEqual(response.exports[2].key, "execution_trace_json")
+        self.assertTrue(response.exports[2].available)
+        self.assertEqual(response.exports[2].payload_class, "heavy")
         self.assertEqual(response.exports[2].delivery_mode, "api")
         self.assertEqual(
             response.exports[2].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/execution-trace.json",
+        )
+        self.assertEqual(response.exports[3].key, "execution_trace_csv")
+        self.assertEqual(response.exports[3].media_type, "text/csv")
+        self.assertEqual(response.exports[3].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[3].endpoint_path,
             "/api/v1/backtest/rule/runs/123/execution-trace.csv",
         )
         service.get_support_export_index.assert_called_once_with(123)
@@ -1519,20 +1537,21 @@ class BacktestApiContractTestCase(unittest.TestCase):
     def test_get_rule_backtest_support_export_index_truthfully_marks_missing_trace_exports(self) -> None:
         service = MagicMock()
         payload = self._support_export_index_payload(status="completed")
-        payload["exports"][1]["available"] = False
-        payload["exports"][1]["availability_reason"] = "execution_trace_rows_missing"
         payload["exports"][2]["available"] = False
         payload["exports"][2]["availability_reason"] = "execution_trace_rows_missing"
+        payload["exports"][3]["available"] = False
+        payload["exports"][3]["availability_reason"] = "execution_trace_rows_missing"
         service.get_support_export_index.return_value = payload
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             response = get_rule_backtest_support_export_index(123, db_manager=MagicMock())
 
         self.assertTrue(response.exports[0].available)
-        self.assertFalse(response.exports[1].available)
+        self.assertTrue(response.exports[1].available)
         self.assertFalse(response.exports[2].available)
-        self.assertEqual(response.exports[1].availability_reason, "execution_trace_rows_missing")
+        self.assertFalse(response.exports[3].available)
         self.assertEqual(response.exports[2].availability_reason, "execution_trace_rows_missing")
+        self.assertEqual(response.exports[3].availability_reason, "execution_trace_rows_missing")
 
     def test_get_rule_backtest_support_export_index_returns_not_found(self) -> None:
         service = MagicMock()

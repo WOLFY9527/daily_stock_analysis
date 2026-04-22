@@ -925,6 +925,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             [item["key"] for item in export_index["exports"]],
             [
                 "support_bundle_manifest_json",
+                "support_bundle_reproducibility_manifest_json",
                 "execution_trace_json",
                 "execution_trace_csv",
             ],
@@ -937,18 +938,76 @@ class RuleBacktestTestCase(unittest.TestCase):
             f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-manifest",
         )
         self.assertEqual(manifest_item["payload_class"], "compact")
-        for item in export_index["exports"][1:]:
+        reproducibility_item = export_index["exports"][1]
+        self.assertTrue(reproducibility_item["available"])
+        self.assertEqual(reproducibility_item["delivery_mode"], "api")
+        self.assertEqual(
+            reproducibility_item["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-reproducibility-manifest",
+        )
+        self.assertEqual(reproducibility_item["payload_class"], "compact")
+        for item in export_index["exports"][2:]:
             self.assertTrue(item["available"])
             self.assertEqual(item["availability_reason"], "execution_trace_rows_present")
             self.assertEqual(item["payload_class"], "heavy")
-        self.assertEqual(export_index["exports"][1]["delivery_mode"], "api")
-        self.assertEqual(
-            export_index["exports"][1]["endpoint_path"],
-            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.json",
-        )
         self.assertEqual(export_index["exports"][2]["delivery_mode"], "api")
         self.assertEqual(
             export_index["exports"][2]["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.json",
+        )
+        self.assertEqual(export_index["exports"][3]["delivery_mode"], "api")
+        self.assertEqual(
+            export_index["exports"][3]["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.csv",
+        )
+
+    def test_support_bundle_artifact_exports_form_coherent_handoff_surface(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        manifest = service.get_support_bundle_manifest(response["id"])
+        reproducibility = service.get_support_bundle_reproducibility_manifest(response["id"])
+        export_index = service.get_support_export_index(response["id"])
+
+        self.assertEqual(manifest["run"]["id"], response["id"])
+        self.assertEqual(reproducibility["run"]["id"], response["id"])
+        self.assertEqual(manifest["run"]["status"], response["status"])
+        self.assertEqual(reproducibility["run"]["status"], response["status"])
+        self.assertEqual(reproducibility["run_timing"], response["run_timing"])
+        self.assertEqual(reproducibility["run_diagnostics"], response["run_diagnostics"])
+        self.assertEqual(reproducibility["artifact_availability"], response["artifact_availability"])
+        self.assertEqual(reproducibility["readback_integrity"], response["readback_integrity"])
+        self.assertEqual(
+            [item["key"] for item in export_index["exports"]],
+            [
+                "support_bundle_manifest_json",
+                "support_bundle_reproducibility_manifest_json",
+                "execution_trace_json",
+                "execution_trace_csv",
+            ],
+        )
+        endpoint_map = {item["key"]: item["endpoint_path"] for item in export_index["exports"]}
+        self.assertEqual(
+            endpoint_map["support_bundle_manifest_json"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-manifest",
+        )
+        self.assertEqual(
+            endpoint_map["support_bundle_reproducibility_manifest_json"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-reproducibility-manifest",
+        )
+        self.assertEqual(
+            endpoint_map["execution_trace_json"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.json",
+        )
+        self.assertEqual(
+            endpoint_map["execution_trace_csv"],
             f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.csv",
         )
 
