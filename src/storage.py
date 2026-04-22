@@ -17,7 +17,7 @@ import hashlib
 import json
 import logging
 import re
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 from types import SimpleNamespace
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Iterable
 from zoneinfo import ZoneInfo
@@ -71,7 +71,7 @@ from src.postgres_phase_b import PostgresPhaseBStore
 from src.postgres_phase_c import PostgresPhaseCStore
 from src.postgres_phase_d import PostgresPhaseDStore
 from src.postgres_phase_e import PostgresPhaseEStore
-from src.postgres_phase_f import PostgresPhaseFStore
+from src.postgres_phase_f import PostgresPhaseFStore, phase_f_ledger_shadow_id
 from src.postgres_phase_g import PostgresPhaseGStore
 
 logger = logging.getLogger(__name__)
@@ -2730,6 +2730,50 @@ class DatabaseManager:
             self._phase_f_store.delete_account_shadow(account_id=resolved_account_id)
             return False
 
+        if not list(projection.get("position_rows") or []):
+            shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+            preserved_shadow_positions = list((shadow_bundle or {}).get("positions") or [])
+            if preserved_shadow_positions:
+                hydrated_position_rows: List[Any] = []
+                for row in preserved_shadow_positions:
+                    updated_at_raw = row.get("updated_at")
+                    updated_at = None
+                    if updated_at_raw:
+                        try:
+                            updated_at = datetime.fromisoformat(str(updated_at_raw))
+                        except ValueError:
+                            updated_at = None
+                    hydrated_position_rows.append(
+                        SimpleNamespace(
+                            id=int(row.get("id") or 0),
+                            cost_method=str(row.get("cost_method", "") or "fifo"),
+                            symbol=str(row.get("canonical_symbol", "") or ""),
+                            market=str(row.get("market", "") or ""),
+                            currency=str(row.get("currency", "") or ""),
+                            quantity=float(row.get("quantity", 0.0) or 0.0),
+                            avg_cost=float(row.get("avg_cost", 0.0) or 0.0),
+                            total_cost=float(row.get("total_cost", 0.0) or 0.0),
+                            last_price=(
+                                float(row.get("last_price"))
+                                if row.get("last_price") is not None
+                                else None
+                            ),
+                            market_value_base=(
+                                float(row.get("market_value_base"))
+                                if row.get("market_value_base") is not None
+                                else None
+                            ),
+                            unrealized_pnl_base=(
+                                float(row.get("unrealized_pnl_base"))
+                                if row.get("unrealized_pnl_base") is not None
+                                else None
+                            ),
+                            valuation_currency=row.get("valuation_currency"),
+                            updated_at=updated_at,
+                        )
+                    )
+                projection["position_rows"] = hydrated_position_rows
+
         self._phase_f_store.replace_account_shadow(**projection)
         return True
 
@@ -2794,8 +2838,48 @@ class DatabaseManager:
         )
 
     @staticmethod
-    def _phase_f_shadow_account_payload(row: Any) -> Dict[str, Any]:
-        return {
+    def _phase_f_normalize_compare_time_value(value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, date):
+            return value.isoformat()
+        elif isinstance(value, str):
+            raw_value = value.strip()
+            if not raw_value:
+                return None
+            if "T" not in raw_value and " " not in raw_value:
+                try:
+                    return date.fromisoformat(raw_value).isoformat()
+                except ValueError:
+                    pass
+            try:
+                parsed = datetime.fromisoformat(raw_value)
+            except ValueError:
+                return value
+        else:
+            return value
+
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed.isoformat()
+
+    @classmethod
+    def _phase_f_normalize_compare_time_fields(
+        cls,
+        payload: Dict[str, Any],
+        *,
+        fields: Tuple[str, ...],
+    ) -> Dict[str, Any]:
+        normalized = dict(payload)
+        for field in fields:
+            normalized[field] = cls._phase_f_normalize_compare_time_value(normalized.get(field))
+        return normalized
+
+    @classmethod
+    def _phase_f_shadow_account_payload(cls, row: Any) -> Dict[str, Any]:
+        return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "owner_user_id": str(getattr(row, "owner_id", "") or ""),
             "name": str(getattr(row, "name", "") or ""),
@@ -2803,13 +2887,13 @@ class DatabaseManager:
             "market": str(getattr(row, "market", "") or ""),
             "base_currency": str(getattr(row, "base_currency", "") or ""),
             "is_active": bool(getattr(row, "is_active", True)),
-            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
-            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
-        }
+            "created_at": getattr(row, "created_at", None),
+            "updated_at": getattr(row, "updated_at", None),
+        }, fields=("created_at", "updated_at"))
 
-    @staticmethod
-    def _phase_f_shadow_broker_connection_payload(row: Any) -> Dict[str, Any]:
-        return {
+    @classmethod
+    def _phase_f_shadow_broker_connection_payload(cls, row: Any) -> Dict[str, Any]:
+        return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "owner_user_id": str(getattr(row, "owner_id", "") or ""),
             "portfolio_account_id": int(row.portfolio_account_id),
@@ -2819,19 +2903,17 @@ class DatabaseManager:
             "broker_account_ref": getattr(row, "broker_account_ref", None),
             "import_mode": str(getattr(row, "import_mode", "") or ""),
             "status": str(getattr(row, "status", "") or ""),
-            "last_imported_at": getattr(row, "last_imported_at", None).isoformat()
-            if getattr(row, "last_imported_at", None)
-            else None,
+            "last_imported_at": getattr(row, "last_imported_at", None),
             "last_import_source": getattr(row, "last_import_source", None),
             "last_import_fingerprint": getattr(row, "last_import_fingerprint", None),
             "sync_metadata": DatabaseManager._phase_f_json_payload(getattr(row, "sync_metadata_json", None)),
-            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
-            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
-        }
+            "created_at": getattr(row, "created_at", None),
+            "updated_at": getattr(row, "updated_at", None),
+        }, fields=("last_imported_at", "created_at", "updated_at"))
 
-    @staticmethod
-    def _phase_f_shadow_sync_state_payload(row: Any) -> Dict[str, Any]:
-        return {
+    @classmethod
+    def _phase_f_shadow_sync_state_payload(cls, row: Any) -> Dict[str, Any]:
+        return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "owner_user_id": str(getattr(row, "owner_id", "") or ""),
             "broker_connection_id": int(row.broker_connection_id),
@@ -2840,8 +2922,8 @@ class DatabaseManager:
             "broker_account_ref": getattr(row, "broker_account_ref", None),
             "sync_source": str(getattr(row, "sync_source", "") or ""),
             "sync_status": str(getattr(row, "sync_status", "") or ""),
-            "snapshot_date": getattr(row, "snapshot_date", None).isoformat() if getattr(row, "snapshot_date", None) else None,
-            "synced_at": getattr(row, "synced_at", None).isoformat() if getattr(row, "synced_at", None) else None,
+            "snapshot_date": getattr(row, "snapshot_date", None),
+            "synced_at": getattr(row, "synced_at", None),
             "base_currency": str(getattr(row, "base_currency", "") or ""),
             "total_cash": float(getattr(row, "total_cash", 0.0) or 0.0),
             "total_market_value": float(getattr(row, "total_market_value", 0.0) or 0.0),
@@ -2850,13 +2932,13 @@ class DatabaseManager:
             "unrealized_pnl": float(getattr(row, "unrealized_pnl", 0.0) or 0.0),
             "fx_stale": bool(getattr(row, "fx_stale", False)),
             "payload_json": DatabaseManager._phase_f_json_payload(getattr(row, "payload_json", None)),
-            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
-            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
-        }
+            "created_at": getattr(row, "created_at", None),
+            "updated_at": getattr(row, "updated_at", None),
+        }, fields=("snapshot_date", "synced_at", "created_at", "updated_at"))
 
-    @staticmethod
-    def _phase_f_shadow_sync_position_payload(row: Any) -> Dict[str, Any]:
-        return {
+    @classmethod
+    def _phase_f_shadow_sync_position_payload(cls, row: Any) -> Dict[str, Any]:
+        return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "portfolio_sync_state_id": int(getattr(row, "broker_connection_id", 0) or 0),
             "owner_user_id": str(getattr(row, "owner_id", "") or ""),
@@ -2872,13 +2954,13 @@ class DatabaseManager:
             "unrealized_pnl_base": float(getattr(row, "unrealized_pnl_base", 0.0) or 0.0),
             "valuation_currency": getattr(row, "valuation_currency", None),
             "payload_json": DatabaseManager._phase_f_json_payload(getattr(row, "payload_json", None)),
-            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
-            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
-        }
+            "created_at": getattr(row, "created_at", None),
+            "updated_at": getattr(row, "updated_at", None),
+        }, fields=("created_at", "updated_at"))
 
-    @staticmethod
-    def _phase_f_shadow_sync_cash_balance_payload(row: Any) -> Dict[str, Any]:
-        return {
+    @classmethod
+    def _phase_f_shadow_sync_cash_balance_payload(cls, row: Any) -> Dict[str, Any]:
+        return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "portfolio_sync_state_id": int(getattr(row, "broker_connection_id", 0) or 0),
             "owner_user_id": str(getattr(row, "owner_id", "") or ""),
@@ -2886,9 +2968,9 @@ class DatabaseManager:
             "currency": str(getattr(row, "currency", "") or ""),
             "amount": float(getattr(row, "amount", 0.0) or 0.0),
             "amount_base": float(getattr(row, "amount_base", 0.0) or 0.0),
-            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
-            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
-        }
+            "created_at": getattr(row, "created_at", None),
+            "updated_at": getattr(row, "updated_at", None),
+        }, fields=("created_at", "updated_at"))
 
     @staticmethod
     def _phase_f_broker_connection_metadata_row(
@@ -3010,11 +3092,39 @@ class DatabaseManager:
                     .order_by(PortfolioBrokerSyncCashBalance.currency.asc(), PortfolioBrokerSyncCashBalance.id.asc())
                 ).scalars().all()
 
-        shadow_account_payload = dict(shadow_bundle.get("account") or {})
-        shadow_broker_connection_payloads = list(shadow_bundle.get("broker_connections") or [])
-        shadow_sync_state_payload = shadow_bundle.get("sync_state")
-        shadow_sync_position_payloads = list(shadow_bundle.get("sync_positions") or [])
-        shadow_sync_cash_balance_payloads = list(shadow_bundle.get("sync_cash_balances") or [])
+        shadow_account_payload = self._phase_f_normalize_compare_time_fields(
+            dict(shadow_bundle.get("account") or {}),
+            fields=("created_at", "updated_at"),
+        )
+        shadow_broker_connection_payloads = [
+            self._phase_f_normalize_compare_time_fields(
+                dict(row or {}),
+                fields=("last_imported_at", "created_at", "updated_at"),
+            )
+            for row in list(shadow_bundle.get("broker_connections") or [])
+        ]
+        shadow_sync_state_payload = (
+            self._phase_f_normalize_compare_time_fields(
+                dict(shadow_bundle.get("sync_state") or {}),
+                fields=("snapshot_date", "synced_at", "created_at", "updated_at"),
+            )
+            if shadow_bundle.get("sync_state") is not None
+            else None
+        )
+        shadow_sync_position_payloads = [
+            self._phase_f_normalize_compare_time_fields(
+                dict(row or {}),
+                fields=("created_at", "updated_at"),
+            )
+            for row in list(shadow_bundle.get("sync_positions") or [])
+        ]
+        shadow_sync_cash_balance_payloads = [
+            self._phase_f_normalize_compare_time_fields(
+                dict(row or {}),
+                fields=("created_at", "updated_at"),
+            )
+            for row in list(shadow_bundle.get("sync_cash_balances") or [])
+        ]
 
         legacy_account_payload = (
             self._phase_f_shadow_account_payload(legacy_account_row)
@@ -3222,6 +3332,1036 @@ class DatabaseManager:
                 self._phase_f_broker_sync_cash_balance_row(row)
                 for row in list(shadow_bundle.get("sync_cash_balances") or [])
             ],
+        }
+
+    @staticmethod
+    def _phase_f_ledger_entry_types() -> Tuple[str, ...]:
+        return ("cash", "corporate_action", "trade")
+
+    @staticmethod
+    def _phase_f_ledger_event_time(*, value: Any, entry_type: str) -> str:
+        if isinstance(value, datetime):
+            normalized_value = value.replace(tzinfo=None) if value.tzinfo is not None else value
+            return normalized_value.isoformat()
+        if isinstance(value, date):
+            second_by_type = {
+                "cash": 0,
+                "corporate_action": 1,
+                "trade": 2,
+                "adjustment": 3,
+            }
+            return datetime.combine(value, time(0, 0, second_by_type.get(str(entry_type or ""), 0))).isoformat()
+        if value is None:
+            return ""
+        raw_value = str(value)
+        try:
+            parsed = datetime.fromisoformat(raw_value)
+        except ValueError:
+            return raw_value
+        if parsed.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=None)
+        return parsed.isoformat()
+
+    @staticmethod
+    def _phase_f_normalize_ledger_payload_json(payload: Dict[str, Any], *, entry_type: str) -> Dict[str, Any]:
+        normalized_payload = dict(payload or {})
+        if entry_type == "trade":
+            return {
+                "legacy_table": normalized_payload.get("legacy_table"),
+                "legacy_row_id": int(normalized_payload.get("legacy_row_id") or 0),
+                "trade_uid": normalized_payload.get("trade_uid"),
+                "side": normalized_payload.get("side"),
+                "quantity": (
+                    float(normalized_payload.get("quantity"))
+                    if normalized_payload.get("quantity") is not None
+                    else None
+                ),
+                "price": (
+                    float(normalized_payload.get("price"))
+                    if normalized_payload.get("price") is not None
+                    else None
+                ),
+                "fee": (
+                    float(normalized_payload.get("fee"))
+                    if normalized_payload.get("fee") is not None
+                    else None
+                ),
+                "tax": (
+                    float(normalized_payload.get("tax"))
+                    if normalized_payload.get("tax") is not None
+                    else None
+                ),
+                "note": normalized_payload.get("note"),
+            }
+        if entry_type == "cash":
+            return {
+                "legacy_table": normalized_payload.get("legacy_table"),
+                "legacy_row_id": int(normalized_payload.get("legacy_row_id") or 0),
+                "direction": normalized_payload.get("direction"),
+                "amount": (
+                    float(normalized_payload.get("amount"))
+                    if normalized_payload.get("amount") is not None
+                    else None
+                ),
+                "currency": normalized_payload.get("currency"),
+                "note": normalized_payload.get("note"),
+            }
+        if entry_type == "corporate_action":
+            return {
+                "legacy_table": normalized_payload.get("legacy_table"),
+                "legacy_row_id": int(normalized_payload.get("legacy_row_id") or 0),
+                "action_type": normalized_payload.get("action_type"),
+                "cash_dividend_per_share": (
+                    float(normalized_payload.get("cash_dividend_per_share"))
+                    if normalized_payload.get("cash_dividend_per_share") is not None
+                    else None
+                ),
+                "split_ratio": (
+                    float(normalized_payload.get("split_ratio"))
+                    if normalized_payload.get("split_ratio") is not None
+                    else None
+                ),
+                "note": normalized_payload.get("note"),
+            }
+        return dict(normalized_payload)
+
+    @classmethod
+    def _phase_f_legacy_trade_ledger_payload(cls, row: Any) -> Dict[str, Any]:
+        payload_json = cls._phase_f_normalize_ledger_payload_json(
+            {
+                "legacy_table": "portfolio_trades",
+                "legacy_row_id": int(getattr(row, "id", 0) or 0),
+                "trade_uid": getattr(row, "trade_uid", None),
+                "side": getattr(row, "side", None),
+                "quantity": getattr(row, "quantity", None),
+                "price": getattr(row, "price", None),
+                "fee": getattr(row, "fee", None),
+                "tax": getattr(row, "tax", None),
+                "note": getattr(row, "note", None),
+            },
+            entry_type="trade",
+        )
+        return {
+            "id": int(phase_f_ledger_shadow_id("trade", int(getattr(row, "id", 0) or 0))),
+            "entry_type": "trade",
+            "event_time": cls._phase_f_ledger_event_time(
+                value=getattr(row, "trade_date", None),
+                entry_type="trade",
+            ),
+            "canonical_symbol": getattr(row, "symbol", None),
+            "market": getattr(row, "market", None),
+            "currency": getattr(row, "currency", None),
+            "direction": getattr(row, "side", None),
+            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
+            "price": float(getattr(row, "price", 0.0) or 0.0),
+            "amount": None,
+            "fee": float(getattr(row, "fee", 0.0) or 0.0),
+            "tax": float(getattr(row, "tax", 0.0) or 0.0),
+            "corporate_action_type": None,
+            "external_ref": getattr(row, "trade_uid", None),
+            "dedup_hash": getattr(row, "dedup_hash", None),
+            "note": getattr(row, "note", None),
+            "payload_json": payload_json,
+        }
+
+    @classmethod
+    def _phase_f_legacy_cash_ledger_payload(cls, row: Any) -> Dict[str, Any]:
+        payload_json = cls._phase_f_normalize_ledger_payload_json(
+            {
+                "legacy_table": "portfolio_cash_ledger",
+                "legacy_row_id": int(getattr(row, "id", 0) or 0),
+                "direction": getattr(row, "direction", None),
+                "amount": getattr(row, "amount", None),
+                "currency": getattr(row, "currency", None),
+                "note": getattr(row, "note", None),
+            },
+            entry_type="cash",
+        )
+        return {
+            "id": int(phase_f_ledger_shadow_id("cash", int(getattr(row, "id", 0) or 0))),
+            "entry_type": "cash",
+            "event_time": cls._phase_f_ledger_event_time(
+                value=getattr(row, "event_date", None),
+                entry_type="cash",
+            ),
+            "canonical_symbol": None,
+            "market": None,
+            "currency": getattr(row, "currency", None),
+            "direction": getattr(row, "direction", None),
+            "quantity": None,
+            "price": None,
+            "amount": float(getattr(row, "amount", 0.0) or 0.0),
+            "fee": None,
+            "tax": None,
+            "corporate_action_type": None,
+            "external_ref": None,
+            "dedup_hash": None,
+            "note": getattr(row, "note", None),
+            "payload_json": payload_json,
+        }
+
+    @classmethod
+    def _phase_f_legacy_corporate_action_ledger_payload(cls, row: Any) -> Dict[str, Any]:
+        payload_json = cls._phase_f_normalize_ledger_payload_json(
+            {
+                "legacy_table": "portfolio_corporate_actions",
+                "legacy_row_id": int(getattr(row, "id", 0) or 0),
+                "action_type": getattr(row, "action_type", None),
+                "cash_dividend_per_share": getattr(row, "cash_dividend_per_share", None),
+                "split_ratio": getattr(row, "split_ratio", None),
+                "note": getattr(row, "note", None),
+            },
+            entry_type="corporate_action",
+        )
+        return {
+            "id": int(
+                phase_f_ledger_shadow_id("corporate_action", int(getattr(row, "id", 0) or 0))
+            ),
+            "entry_type": "corporate_action",
+            "event_time": cls._phase_f_ledger_event_time(
+                value=getattr(row, "effective_date", None),
+                entry_type="corporate_action",
+            ),
+            "canonical_symbol": getattr(row, "symbol", None),
+            "market": getattr(row, "market", None),
+            "currency": getattr(row, "currency", None),
+            "direction": None,
+            "quantity": None,
+            "price": None,
+            "amount": None,
+            "fee": None,
+            "tax": None,
+            "corporate_action_type": getattr(row, "action_type", None),
+            "external_ref": None,
+            "dedup_hash": None,
+            "note": getattr(row, "note", None),
+            "payload_json": payload_json,
+        }
+
+    @classmethod
+    def _phase_f_normalize_shadow_ledger_payload(cls, row: Dict[str, Any]) -> Dict[str, Any]:
+        entry_type = str(row.get("entry_type", "") or "")
+        return {
+            "id": int(row.get("id") or 0),
+            "entry_type": entry_type,
+            "event_time": cls._phase_f_ledger_event_time(value=row.get("event_time"), entry_type=entry_type),
+            "canonical_symbol": row.get("canonical_symbol"),
+            "market": row.get("market"),
+            "currency": row.get("currency"),
+            "direction": row.get("direction"),
+            "quantity": float(row.get("quantity")) if row.get("quantity") is not None else None,
+            "price": float(row.get("price")) if row.get("price") is not None else None,
+            "amount": float(row.get("amount")) if row.get("amount") is not None else None,
+            "fee": float(row.get("fee")) if row.get("fee") is not None else None,
+            "tax": float(row.get("tax")) if row.get("tax") is not None else None,
+            "corporate_action_type": row.get("corporate_action_type"),
+            "external_ref": row.get("external_ref"),
+            "dedup_hash": row.get("dedup_hash"),
+            "note": row.get("note"),
+            "payload_json": cls._phase_f_normalize_ledger_payload_json(
+                cls._phase_f_json_payload(row.get("payload_json")),
+                entry_type=entry_type,
+            ),
+        }
+
+    @classmethod
+    def _build_phase_f_legacy_ledger_payloads(cls, projection: Dict[str, Any]) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for row in list(projection.get("cash_rows") or []):
+            rows.append(cls._phase_f_legacy_cash_ledger_payload(row))
+        for row in list(projection.get("corporate_action_rows") or []):
+            rows.append(cls._phase_f_legacy_corporate_action_ledger_payload(row))
+        for row in list(projection.get("trade_rows") or []):
+            rows.append(cls._phase_f_legacy_trade_ledger_payload(row))
+        return sorted(
+            rows,
+            key=lambda item: (
+                str(item.get("event_time") or ""),
+                int(item.get("id") or 0),
+            ),
+        )
+
+    @classmethod
+    def _build_phase_f_shadow_ledger_payloads(cls, shadow_bundle: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        rows = [cls._phase_f_normalize_shadow_ledger_payload(row) for row in list((shadow_bundle or {}).get("ledger") or [])]
+        return sorted(
+            rows,
+            key=lambda item: (
+                str(item.get("event_time") or ""),
+                int(item.get("id") or 0),
+            ),
+        )
+
+    @classmethod
+    def _phase_f_count_ledger_event_types(cls, rows: List[Dict[str, Any]]) -> Dict[str, int]:
+        counts = {entry_type: 0 for entry_type in cls._phase_f_ledger_entry_types()}
+        for row in rows:
+            entry_type = str(row.get("entry_type", "") or "")
+            if entry_type in counts:
+                counts[entry_type] += 1
+        return counts
+
+    @staticmethod
+    def _phase_f_first_ledger_payload_mismatch(
+        legacy_rows: List[Dict[str, Any]],
+        shadow_rows: List[Dict[str, Any]],
+    ) -> Tuple[Optional[int], Optional[str], Optional[str]]:
+        for index, (legacy_row, shadow_row) in enumerate(zip(legacy_rows, shadow_rows)):
+            if legacy_row != shadow_row:
+                return (
+                    index,
+                    str(legacy_row.get("entry_type", "") or ""),
+                    str(shadow_row.get("entry_type", "") or ""),
+                )
+        return (None, None, None)
+
+    def _build_phase_f_ledger_event_payload_authority_state(
+        self,
+        *,
+        account_id: int,
+        projection: Dict[str, Any],
+        shadow_bundle: Optional[Dict[str, Any]],
+        shadow_authority_state: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        account_row = projection.get("account_row")
+        legacy_rows = self._build_phase_f_legacy_ledger_payloads(projection)
+        shadow_rows = self._build_phase_f_shadow_ledger_payloads(shadow_bundle)
+        legacy_counts = self._phase_f_count_ledger_event_types(legacy_rows)
+        shadow_counts = self._phase_f_count_ledger_event_types(shadow_rows)
+        representative_shapes = [
+            entry_type
+            for entry_type in self._phase_f_ledger_entry_types()
+            if legacy_counts[entry_type] > 0 and shadow_counts[entry_type] > 0
+        ]
+        missing_shapes = [
+            entry_type
+            for entry_type in self._phase_f_ledger_entry_types()
+            if entry_type not in representative_shapes
+        ]
+
+        first_mismatch_index, legacy_entry_type_at_mismatch, shadow_entry_type_at_mismatch = (
+            self._phase_f_first_ledger_payload_mismatch(legacy_rows, shadow_rows)
+        )
+        payload_parity_observed = bool(legacy_rows) and legacy_rows == shadow_rows
+        legacy_total_rows = len(legacy_rows)
+        shadow_total_rows = len(shadow_rows)
+        account_metadata_authority_ready = bool(
+            shadow_authority_state and shadow_authority_state["effective_readiness"].get("account_metadata")
+        )
+
+        if legacy_total_rows == 0:
+            current_signal = "no_events_present"
+            blocked_reasons = ["legacy_event_history_missing"]
+        elif shadow_total_rows == 0:
+            current_signal = "shadow_missing"
+            blocked_reasons = ["shadow_ledger_missing"]
+        elif legacy_counts != shadow_counts or legacy_total_rows != shadow_total_rows:
+            current_signal = "count_mismatch"
+            blocked_reasons = ["ledger_event_count_mismatch"]
+        elif not payload_parity_observed:
+            current_signal = "payload_drift"
+            blocked_reasons = ["event_payload_parity_not_observed"]
+        elif not account_metadata_authority_ready:
+            current_signal = "payload_parity_observed"
+            blocked_reasons = ["account_metadata_authority_missing"]
+        else:
+            current_signal = "payload_parity_observed"
+            blocked_reasons = []
+
+        if payload_parity_observed and account_metadata_authority_ready:
+            authority_prerequisite_state = "authority_ready"
+            authority_ready = True
+        elif payload_parity_observed:
+            authority_prerequisite_state = "observed_only"
+            authority_ready = False
+        else:
+            authority_prerequisite_state = "blocked"
+            authority_ready = False
+
+        if current_signal == "payload_parity_observed":
+            if len(representative_shapes) >= 3:
+                audit_signal = "representative_parity_observed"
+                evidence_coverage_state = "representative"
+                operational_confidence_state = "representative"
+                design_prerequisite_support = "stronger_operational_evidence"
+            else:
+                audit_signal = "narrow_parity_observed"
+                evidence_coverage_state = "narrow"
+                operational_confidence_state = "narrow"
+                design_prerequisite_support = "limited_observation_only"
+        elif current_signal == "count_mismatch":
+            audit_signal = "count_mismatch_visible"
+            evidence_coverage_state = "narrow"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
+        elif current_signal == "payload_drift":
+            audit_signal = "payload_drift_visible"
+            evidence_coverage_state = "narrow"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
+        elif current_signal == "shadow_missing":
+            audit_signal = "shadow_missing_visible"
+            evidence_coverage_state = "narrow"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
+        else:
+            audit_signal = "legacy_history_missing"
+            evidence_coverage_state = "none"
+            operational_confidence_state = "blocked"
+            design_prerequisite_support = "blocked"
+
+        return {
+            "account_id": int(account_id),
+            "owner_user_id": str(getattr(account_row, "owner_id", "") or ""),
+            "account_name": str(getattr(account_row, "name", "") or ""),
+            "authority_model": "phase_f_ledger_event_payload_authority_v1",
+            "phase_f_authority_model": "phase_f_projection_compare",
+            "current_signal": current_signal,
+            "payload_parity_observed": payload_parity_observed,
+            "authority_prerequisite_state": authority_prerequisite_state,
+            "authority_ready": authority_ready,
+            "runtime_cutover_ready": False,
+            "future_authority_scope": "event_history_and_replay_input_design",
+            "blocked_reasons": list(blocked_reasons),
+            "missing_signals": list(blocked_reasons),
+            "downstream_blockers": [
+                "event_history_domain_authority_layer_required",
+                "replay_as_of_subset_authority_missing",
+            ],
+            "account_metadata_authority_ready": account_metadata_authority_ready,
+            "legacy_row_counts": {
+                "total_event_rows": legacy_total_rows,
+            },
+            "shadow_row_counts": {
+                "ledger_rows": shadow_total_rows,
+            },
+            "parity_evidence": {
+                "legacy_event_type_counts": dict(legacy_counts),
+                "shadow_event_type_counts": dict(shadow_counts),
+                "legacy_event_types_present": [
+                    entry_type for entry_type in self._phase_f_ledger_entry_types() if legacy_counts[entry_type] > 0
+                ],
+                "shadow_event_types_present": [
+                    entry_type for entry_type in self._phase_f_ledger_entry_types() if shadow_counts[entry_type] > 0
+                ],
+                "representative_event_shapes_observed": list(representative_shapes),
+                "event_type_count_parity_observed": legacy_counts == shadow_counts,
+            },
+            "drift_details": {
+                "legacy_total_event_rows": legacy_total_rows,
+                "shadow_total_event_rows": shadow_total_rows,
+                "legacy_event_types_missing_in_shadow": [
+                    entry_type
+                    for entry_type in self._phase_f_ledger_entry_types()
+                    if legacy_counts[entry_type] > 0 and shadow_counts[entry_type] == 0
+                ],
+                "shadow_event_types_missing_in_legacy": [
+                    entry_type
+                    for entry_type in self._phase_f_ledger_entry_types()
+                    if shadow_counts[entry_type] > 0 and legacy_counts[entry_type] == 0
+                ],
+                "first_mismatch_index": first_mismatch_index,
+                "legacy_entry_type_at_mismatch": legacy_entry_type_at_mismatch,
+                "shadow_entry_type_at_mismatch": shadow_entry_type_at_mismatch,
+            },
+            "operational_audit": {
+                "audit_signal": audit_signal,
+                "evidence_coverage_state": evidence_coverage_state,
+                "representative_event_shape_count": len(representative_shapes),
+                "representative_event_shape_target": len(self._phase_f_ledger_entry_types()),
+                "missing_representative_event_shapes": missing_shapes,
+                "operational_confidence_state": operational_confidence_state,
+                "design_prerequisite_support": design_prerequisite_support,
+            },
+        }
+
+    def _build_phase_f_event_history_authority_state(
+        self,
+        *,
+        account_id: int,
+        ledger_authority_state: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        prerequisite_state = str(ledger_authority_state.get("authority_prerequisite_state", "") or "blocked")
+        blocked_reasons = list(ledger_authority_state.get("blocked_reasons") or [])
+
+        if prerequisite_state == "authority_ready":
+            current_signal = "prerequisite_ready"
+            current_blocked_reasons: List[str] = []
+            authority_ready = True
+        elif prerequisite_state == "observed_only":
+            current_signal = "ledger_payload_observed_only"
+            current_blocked_reasons = blocked_reasons
+            authority_ready = False
+        else:
+            current_signal = "ledger_payload_blocked"
+            current_blocked_reasons = blocked_reasons
+            authority_ready = False
+
+        return {
+            "account_id": int(account_id),
+            "owner_user_id": str(ledger_authority_state.get("owner_user_id", "") or ""),
+            "account_name": str(ledger_authority_state.get("account_name", "") or ""),
+            "authority_model": "phase_f_event_history_authority_v1",
+            "phase_f_authority_model": "phase_f_projection_compare",
+            "prerequisite_helper": "get_phase_f_ledger_event_payload_authority_state",
+            "current_signal": current_signal,
+            "authority_prerequisite_state": prerequisite_state,
+            "authority_ready": authority_ready,
+            "runtime_cutover_ready": False,
+            "blocked_reasons": current_blocked_reasons,
+            "missing_signals": list(current_blocked_reasons),
+            "downstream_blockers": [
+                "replay_input_cost_method_specific_authority_missing",
+                "replay_input_lot_authority_missing",
+                "replay_input_as_of_boundary_missing",
+                "snapshot_cache_freshness_authority_missing",
+                "runtime_pg_event_history_read_cutover_not_enabled",
+            ],
+        }
+
+    def _build_phase_f_replay_input_authority_state(
+        self,
+        *,
+        account_id: int,
+        ledger_authority_state: Dict[str, Any],
+        event_history_authority_state: Dict[str, Any],
+        snapshot_cost_methods: List[str],
+        legacy_snapshot_row_count: int,
+        legacy_lot_row_count: int,
+        shadow_position_row_count: int,
+        replay_capabilities: Dict[str, bool],
+    ) -> Dict[str, Any]:
+        prerequisite_state = str(
+            event_history_authority_state.get("authority_prerequisite_state", "") or "blocked"
+        )
+        replay_specific_readiness = {
+            "cost_method_specific_authority": bool(
+                replay_capabilities.get("cost_method_specific_authority", False)
+            ),
+            "lot_authority": bool(replay_capabilities.get("lot_authority", False)),
+            "as_of_replay_boundary": bool(replay_capabilities.get("as_of_replay_boundary", False)),
+        }
+
+        if prerequisite_state == "authority_ready":
+            blocked_reasons = [
+                blocker
+                for blocker, ready in [
+                    ("cost_method_specific_authority_missing", replay_specific_readiness["cost_method_specific_authority"]),
+                    ("lot_authority_missing", replay_specific_readiness["lot_authority"]),
+                    ("as_of_replay_boundary_missing", replay_specific_readiness["as_of_replay_boundary"]),
+                ]
+                if not ready
+            ]
+            if blocked_reasons:
+                current_signal = "replay_specific_gaps_observed"
+                resolved_state = "observed_only"
+                authority_ready = False
+            else:
+                current_signal = "prerequisite_ready"
+                resolved_state = "authority_ready"
+                authority_ready = True
+        elif prerequisite_state == "observed_only":
+            current_signal = "event_history_observed_only"
+            resolved_state = "observed_only"
+            blocked_reasons = list(event_history_authority_state.get("blocked_reasons") or [])
+            authority_ready = False
+        else:
+            current_signal = "event_history_blocked"
+            resolved_state = "blocked"
+            blocked_reasons = list(event_history_authority_state.get("blocked_reasons") or [])
+            authority_ready = False
+
+        return {
+            "account_id": int(account_id),
+            "owner_user_id": str(ledger_authority_state.get("owner_user_id", "") or ""),
+            "account_name": str(ledger_authority_state.get("account_name", "") or ""),
+            "authority_model": "phase_f_replay_input_authority_v1",
+            "phase_f_authority_model": "phase_f_projection_compare",
+            "prerequisite_helper": "get_phase_f_event_history_authority_state",
+            "current_signal": current_signal,
+            "authority_prerequisite_state": resolved_state,
+            "authority_ready": authority_ready,
+            "runtime_cutover_ready": False,
+            "blocked_reasons": list(blocked_reasons),
+            "missing_signals": list(blocked_reasons),
+            "downstream_blockers": [
+                "snapshot_cache_freshness_authority_missing",
+                "runtime_pg_replay_input_cutover_not_enabled",
+            ],
+            "snapshot_cost_methods": list(snapshot_cost_methods),
+            "legacy_snapshot_row_count": int(legacy_snapshot_row_count),
+            "legacy_lot_row_count": int(legacy_lot_row_count),
+            "shadow_position_row_count": int(shadow_position_row_count),
+            "replay_specific_readiness": replay_specific_readiness,
+        }
+
+    def _build_phase_f_snapshot_cache_authority_state(
+        self,
+        *,
+        account_id: int,
+        ledger_authority_state: Dict[str, Any],
+        event_history_authority_state: Dict[str, Any],
+        snapshot_cost_methods: List[str],
+        legacy_snapshot_row_count: int,
+        legacy_position_row_count: int,
+        legacy_lot_row_count: int,
+        shadow_position_row_count: int,
+        snapshot_capabilities: Dict[str, bool],
+    ) -> Dict[str, Any]:
+        prerequisite_state = str(
+            event_history_authority_state.get("authority_prerequisite_state", "") or "blocked"
+        )
+        snapshot_specific_readiness = {
+            "snapshot_projection_authority": bool(
+                snapshot_capabilities.get("snapshot_projection_authority", False)
+            ),
+            "lot_projection_authority": bool(snapshot_capabilities.get("lot_projection_authority", False)),
+            "freshness_invalidation_authority": bool(
+                snapshot_capabilities.get("freshness_invalidation_authority", False)
+            ),
+            "valuation_semantic_authority": bool(
+                snapshot_capabilities.get("valuation_semantic_authority", False)
+            ),
+        }
+
+        if prerequisite_state == "authority_ready":
+            blocked_reasons = [
+                blocker
+                for blocker, ready in [
+                    (
+                        "snapshot_projection_authority_missing",
+                        snapshot_specific_readiness["snapshot_projection_authority"],
+                    ),
+                    ("lot_projection_authority_missing", snapshot_specific_readiness["lot_projection_authority"]),
+                    (
+                        "snapshot_freshness_invalidation_authority_missing",
+                        snapshot_specific_readiness["freshness_invalidation_authority"],
+                    ),
+                    (
+                        "valuation_semantic_authority_missing",
+                        snapshot_specific_readiness["valuation_semantic_authority"],
+                    ),
+                ]
+                if not ready
+            ]
+            if blocked_reasons:
+                current_signal = "snapshot_specific_gaps_observed"
+                resolved_state = "observed_only"
+                authority_ready = False
+            else:
+                current_signal = "prerequisite_ready"
+                resolved_state = "authority_ready"
+                authority_ready = True
+        elif prerequisite_state == "observed_only":
+            current_signal = "event_history_observed_only"
+            resolved_state = "observed_only"
+            blocked_reasons = list(event_history_authority_state.get("blocked_reasons") or [])
+            authority_ready = False
+        else:
+            current_signal = "event_history_blocked"
+            resolved_state = "blocked"
+            blocked_reasons = list(event_history_authority_state.get("blocked_reasons") or [])
+            authority_ready = False
+
+        return {
+            "account_id": int(account_id),
+            "owner_user_id": str(ledger_authority_state.get("owner_user_id", "") or ""),
+            "account_name": str(ledger_authority_state.get("account_name", "") or ""),
+            "authority_model": "phase_f_snapshot_cache_authority_v1",
+            "phase_f_authority_model": "phase_f_projection_compare",
+            "prerequisite_helper": "get_phase_f_event_history_authority_state",
+            "current_signal": current_signal,
+            "authority_prerequisite_state": resolved_state,
+            "authority_ready": authority_ready,
+            "runtime_cutover_ready": False,
+            "blocked_reasons": list(blocked_reasons),
+            "missing_signals": list(blocked_reasons),
+            "downstream_blockers": ["runtime_pg_snapshot_cache_cutover_not_enabled"],
+            "snapshot_cost_methods": list(snapshot_cost_methods),
+            "legacy_snapshot_row_count": int(legacy_snapshot_row_count),
+            "legacy_position_row_count": int(legacy_position_row_count),
+            "legacy_lot_row_count": int(legacy_lot_row_count),
+            "shadow_position_row_count": int(shadow_position_row_count),
+            "snapshot_specific_readiness": snapshot_specific_readiness,
+        }
+
+    @staticmethod
+    def _build_phase_f_authority_summary_domain_state(
+        *,
+        state: Dict[str, Any],
+        domain_specific_blockers: List[str],
+        inherited_upstream_blockers: List[str],
+    ) -> Dict[str, Any]:
+        return {
+            "authority_model": state.get("authority_model"),
+            "current_signal": state.get("current_signal"),
+            "authority_prerequisite_state": state.get("authority_prerequisite_state"),
+            "authority_ready": bool(state.get("authority_ready", False)),
+            "runtime_cutover_ready": bool(state.get("runtime_cutover_ready", False)),
+            "domain_specific_blockers": list(domain_specific_blockers),
+            "inherited_upstream_blockers": list(inherited_upstream_blockers),
+            "has_domain_specific_blockers": bool(domain_specific_blockers),
+            "blocked_only_by_upstream": (not domain_specific_blockers and bool(inherited_upstream_blockers)),
+            "downstream_blockers": list(state.get("downstream_blockers") or []),
+        }
+
+    def _build_phase_f_effective_authority_summary(
+        self,
+        *,
+        account_id: int,
+        ledger_authority_state: Dict[str, Any],
+        event_history_authority_state: Dict[str, Any],
+        replay_input_authority_state: Dict[str, Any],
+        snapshot_cache_authority_state: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        ledger_domain = self._build_phase_f_authority_summary_domain_state(
+            state=ledger_authority_state,
+            domain_specific_blockers=list(ledger_authority_state.get("missing_signals") or []),
+            inherited_upstream_blockers=[],
+        )
+        ledger_ready = str(ledger_authority_state.get("authority_prerequisite_state", "")) == "authority_ready"
+        event_history_domain = self._build_phase_f_authority_summary_domain_state(
+            state=event_history_authority_state,
+            domain_specific_blockers=[],
+            inherited_upstream_blockers=[] if ledger_ready else list(ledger_authority_state.get("blocked_reasons") or []),
+        )
+        event_history_ready = (
+            str(event_history_authority_state.get("authority_prerequisite_state", "")) == "authority_ready"
+        )
+        replay_domain = self._build_phase_f_authority_summary_domain_state(
+            state=replay_input_authority_state,
+            domain_specific_blockers=(
+                list(replay_input_authority_state.get("blocked_reasons") or [])
+                if event_history_ready
+                else []
+            ),
+            inherited_upstream_blockers=(
+                []
+                if event_history_ready
+                else list(event_history_authority_state.get("blocked_reasons") or [])
+            ),
+        )
+        snapshot_domain = self._build_phase_f_authority_summary_domain_state(
+            state=snapshot_cache_authority_state,
+            domain_specific_blockers=(
+                list(snapshot_cache_authority_state.get("blocked_reasons") or [])
+                if event_history_ready
+                else []
+            ),
+            inherited_upstream_blockers=(
+                []
+                if event_history_ready
+                else list(event_history_authority_state.get("blocked_reasons") or [])
+            ),
+        )
+
+        domains = {
+            "ledger_event_payload_parity": ledger_domain,
+            "event_history_authority": event_history_domain,
+            "replay_input_authority": replay_domain,
+            "snapshot_cache_authority": snapshot_domain,
+        }
+        domain_order = [
+            "event_history_authority",
+            "ledger_event_payload_parity",
+            "replay_input_authority",
+            "snapshot_cache_authority",
+        ]
+
+        next_unmet_boundary = None
+        if not ledger_domain["authority_ready"]:
+            next_unmet_boundary = {
+                "domain": "ledger_event_payload_parity",
+                "reason": "foundational_boundary_not_ready",
+            }
+        elif replay_domain["has_domain_specific_blockers"]:
+            next_unmet_boundary = {
+                "domain": "replay_input_authority",
+                "reason": "domain_specific_blockers_remaining",
+            }
+        elif snapshot_domain["has_domain_specific_blockers"]:
+            next_unmet_boundary = {
+                "domain": "snapshot_cache_authority",
+                "reason": "domain_specific_blockers_remaining",
+            }
+
+        effective_readiness = {
+            "authority_ready_domains": [
+                domain for domain in domain_order if domains[domain]["authority_ready"]
+            ],
+            "observed_only_domains": [
+                domain
+                for domain in domain_order
+                if domains[domain]["authority_prerequisite_state"] == "observed_only"
+            ],
+            "blocked_domains": [
+                domain for domain in domain_order if domains[domain]["authority_prerequisite_state"] == "blocked"
+            ],
+            "domains_blocked_only_by_upstream": [
+                domain for domain in domain_order if domains[domain]["blocked_only_by_upstream"]
+            ],
+            "domains_with_domain_specific_blockers": [
+                domain for domain in domain_order if domains[domain]["has_domain_specific_blockers"]
+            ],
+            "runtime_cutover_ready": all(domains[domain]["runtime_cutover_ready"] for domain in domain_order),
+            "domains_with_runtime_cutover_disabled": [
+                domain for domain in domain_order if not domains[domain]["runtime_cutover_ready"]
+            ],
+        }
+
+        foundational_boundary = dict(domains["ledger_event_payload_parity"])
+        foundational_boundary["domain"] = "ledger_event_payload_parity"
+
+        return {
+            "account_id": int(account_id),
+            "authority_model": "phase_f_effective_authority_summary_v1",
+            "highest_roi_category": "ledger_event_payload_parity",
+            "foundational_boundary": foundational_boundary,
+            "next_unmet_boundary": next_unmet_boundary,
+            "effective_readiness": effective_readiness,
+            "domains": domains,
+        }
+
+    def _build_phase_f_domain_readiness_gate(
+        self,
+        *,
+        target_domain: str,
+        effective_authority_summary: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        domains = dict(effective_authority_summary.get("domains") or {})
+        target_state = domains.get(target_domain)
+        if not isinstance(target_state, dict):
+            return None
+
+        if target_state.get("authority_ready"):
+            gate_status = "design_prerequisite_ready"
+            next_unmet_boundary = None
+        elif target_state.get("blocked_only_by_upstream"):
+            gate_status = "upstream_blocked"
+            next_unmet_boundary = effective_authority_summary.get("next_unmet_boundary")
+        else:
+            gate_status = "domain_specific_blocked"
+            summary_boundary = effective_authority_summary.get("next_unmet_boundary")
+            if isinstance(summary_boundary, dict) and summary_boundary.get("domain") == target_domain:
+                next_unmet_boundary = summary_boundary
+            else:
+                next_unmet_boundary = {
+                    "domain": target_domain,
+                    "reason": "domain_specific_blockers_remaining",
+                }
+
+        return {
+            "gate_model": "phase_f_domain_readiness_gate_v1",
+            "target_domain": target_domain,
+            "gate_status": gate_status,
+            "design_prerequisite_ready": bool(target_state.get("authority_ready", False)),
+            "upstream_blocked": bool(target_state.get("blocked_only_by_upstream", False)),
+            "has_domain_specific_blockers": bool(target_state.get("has_domain_specific_blockers", False)),
+            "inherited_upstream_blockers": list(target_state.get("inherited_upstream_blockers") or []),
+            "domain_specific_blockers": list(target_state.get("domain_specific_blockers") or []),
+            "next_unmet_boundary": next_unmet_boundary,
+            "runtime_cutover_ready": bool(target_state.get("runtime_cutover_ready", False)),
+            "highest_roi_category": effective_authority_summary.get("highest_roi_category"),
+            "target_domain_state": dict(target_state),
+        }
+
+    def get_phase_f_ledger_event_payload_authority_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+        if projection is None:
+            return None
+
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        shadow_authority_state = self.get_phase_f_portfolio_shadow_authority_state(account_id=resolved_account_id)
+        return self._build_phase_f_ledger_event_payload_authority_state(
+            account_id=resolved_account_id,
+            projection=projection,
+            shadow_bundle=shadow_bundle,
+            shadow_authority_state=shadow_authority_state,
+        )
+
+    def get_phase_f_event_history_authority_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(account_id=int(account_id))
+        if ledger_authority_state is None:
+            return None
+        return self._build_phase_f_event_history_authority_state(
+            account_id=int(account_id),
+            ledger_authority_state=ledger_authority_state,
+        )
+
+    def get_phase_f_replay_input_authority_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(account_id=resolved_account_id)
+        event_history_authority_state = self.get_phase_f_event_history_authority_state(account_id=resolved_account_id)
+        if ledger_authority_state is None or event_history_authority_state is None:
+            return None
+
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+            if projection is None:
+                return None
+            legacy_lot_row_count = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(PortfolioPositionLot)
+                    .where(PortfolioPositionLot.account_id == resolved_account_id)
+                ).scalar_one()
+                or 0
+            )
+
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        replay_capabilities = {
+            "cost_method_specific_authority": False,
+            "lot_authority": False,
+            "as_of_replay_boundary": False,
+        }
+        snapshot_cost_methods = sorted(
+            {
+                str(getattr(row, "cost_method", "") or "").strip().lower()
+                for row in list(projection.get("snapshot_rows") or [])
+                if str(getattr(row, "cost_method", "") or "").strip()
+            }
+        )
+        return self._build_phase_f_replay_input_authority_state(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            snapshot_cost_methods=snapshot_cost_methods,
+            legacy_snapshot_row_count=len(list(projection.get("snapshot_rows") or [])),
+            legacy_lot_row_count=legacy_lot_row_count,
+            shadow_position_row_count=len(list((shadow_bundle or {}).get("positions") or [])),
+            replay_capabilities=replay_capabilities,
+        )
+
+    def get_phase_f_snapshot_cache_authority_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(account_id=resolved_account_id)
+        event_history_authority_state = self.get_phase_f_event_history_authority_state(account_id=resolved_account_id)
+        if ledger_authority_state is None or event_history_authority_state is None:
+            return None
+
+        with self.get_session() as session:
+            projection = self._load_phase_f_portfolio_projection_in_session(
+                session=session,
+                account_id=resolved_account_id,
+            )
+            if projection is None:
+                return None
+            legacy_lot_row_count = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(PortfolioPositionLot)
+                    .where(PortfolioPositionLot.account_id == resolved_account_id)
+                ).scalar_one()
+                or 0
+            )
+
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        snapshot_capabilities = {
+            "snapshot_projection_authority": False,
+            "lot_projection_authority": False,
+            "freshness_invalidation_authority": False,
+            "valuation_semantic_authority": False,
+        }
+        snapshot_cost_methods = sorted(
+            {
+                str(getattr(row, "cost_method", "") or "").strip().lower()
+                for row in list(projection.get("snapshot_rows") or [])
+                if str(getattr(row, "cost_method", "") or "").strip()
+            }
+        )
+        return self._build_phase_f_snapshot_cache_authority_state(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            snapshot_cost_methods=snapshot_cost_methods,
+            legacy_snapshot_row_count=len(list(projection.get("snapshot_rows") or [])),
+            legacy_position_row_count=len(list(projection.get("position_rows") or [])),
+            legacy_lot_row_count=legacy_lot_row_count,
+            shadow_position_row_count=len(list((shadow_bundle or {}).get("positions") or [])),
+            snapshot_capabilities=snapshot_capabilities,
+        )
+
+    def get_phase_f_effective_authority_summary(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        resolved_account_id = int(account_id)
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(account_id=resolved_account_id)
+        event_history_authority_state = self.get_phase_f_event_history_authority_state(account_id=resolved_account_id)
+        replay_input_authority_state = self.get_phase_f_replay_input_authority_state(account_id=resolved_account_id)
+        snapshot_cache_authority_state = self.get_phase_f_snapshot_cache_authority_state(account_id=resolved_account_id)
+        if (
+            ledger_authority_state is None
+            or event_history_authority_state is None
+            or replay_input_authority_state is None
+            or snapshot_cache_authority_state is None
+        ):
+            return None
+
+        return self._build_phase_f_effective_authority_summary(
+            account_id=resolved_account_id,
+            ledger_authority_state=ledger_authority_state,
+            event_history_authority_state=event_history_authority_state,
+            replay_input_authority_state=replay_input_authority_state,
+            snapshot_cache_authority_state=snapshot_cache_authority_state,
+        )
+
+    def get_phase_f_domain_readiness_gate(
+        self,
+        *,
+        account_id: int,
+        target_domain: str,
+    ) -> Optional[Dict[str, Any]]:
+        effective_authority_summary = self.get_phase_f_effective_authority_summary(account_id=int(account_id))
+        if effective_authority_summary is None:
+            return None
+        return self._build_phase_f_domain_readiness_gate(
+            target_domain=str(target_domain or "").strip(),
+            effective_authority_summary=effective_authority_summary,
+        )
+
+    def get_phase_f_portfolio_prerequisite_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        resolved_account_id = int(account_id)
+        ledger_authority_state = self.get_phase_f_ledger_event_payload_authority_state(account_id=resolved_account_id)
+        event_history_authority_state = self.get_phase_f_event_history_authority_state(account_id=resolved_account_id)
+        replay_input_authority_state = self.get_phase_f_replay_input_authority_state(account_id=resolved_account_id)
+        snapshot_cache_authority_state = self.get_phase_f_snapshot_cache_authority_state(account_id=resolved_account_id)
+        effective_authority_summary = self.get_phase_f_effective_authority_summary(account_id=resolved_account_id)
+        if (
+            ledger_authority_state is None
+            or event_history_authority_state is None
+            or replay_input_authority_state is None
+            or snapshot_cache_authority_state is None
+            or effective_authority_summary is None
+        ):
+            return None
+
+        return {
+            "account_id": resolved_account_id,
+            "highest_roi_category": effective_authority_summary.get("highest_roi_category"),
+            "categories": {
+                "ledger_event_payload_parity": dict(ledger_authority_state),
+                "replay_input_parity": dict(replay_input_authority_state),
+                "snapshot_cache_freshness_parity": dict(snapshot_cache_authority_state),
+            },
+            "event_history_authority": dict(event_history_authority_state),
+            "replay_input_authority": dict(replay_input_authority_state),
+            "snapshot_cache_authority": dict(snapshot_cache_authority_state),
+            "effective_authority_summary": dict(effective_authority_summary),
         }
 
     def get_phase_f_trade_list_comparison_candidate(
