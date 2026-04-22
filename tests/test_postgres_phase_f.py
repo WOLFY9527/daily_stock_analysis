@@ -104,6 +104,263 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
     def _db(self) -> DatabaseManager:
         return DatabaseManager.get_instance()
 
+    def test_phase_f_account_metadata_surface_returns_service_compatible_rows(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-surface-a", username="phase-f-surface-a")
+        db.create_or_update_app_user(user_id="phase-f-surface-b", username="phase-f-surface-b")
+        service_a = PortfolioService(owner_id="phase-f-surface-a")
+        service_b = PortfolioService(owner_id="phase-f-surface-b")
+
+        active_account = service_a.create_account(name="Active", broker="IBKR", market="us", base_currency="USD")
+        inactive_account = service_a.create_account(
+            name="Inactive",
+            broker="Futu",
+            market="hk",
+            base_currency="HKD",
+        )
+        service_a.deactivate_account(inactive_account["id"])
+        other_account = service_b.create_account(name="Other", broker="Demo", market="us", base_currency="USD")
+
+        scoped_rows = db.list_phase_f_portfolio_account_metadata_rows(
+            owner_id="phase-f-surface-a",
+            include_inactive=False,
+        )
+        self.assertEqual([row.id for row in scoped_rows], [active_account["id"]])
+        self.assertEqual(scoped_rows[0].owner_id, "phase-f-surface-a")
+        self.assertEqual(scoped_rows[0].name, "Active")
+        self.assertEqual(scoped_rows[0].broker, "IBKR")
+        self.assertEqual(scoped_rows[0].market, "us")
+        self.assertEqual(scoped_rows[0].base_currency, "USD")
+        self.assertTrue(scoped_rows[0].is_active)
+
+        include_inactive_rows = db.list_phase_f_portfolio_account_metadata_rows(
+            owner_id="phase-f-surface-a",
+            include_inactive=True,
+        )
+        self.assertEqual(
+            [row.id for row in include_inactive_rows],
+            [active_account["id"], inactive_account["id"]],
+        )
+        self.assertFalse(include_inactive_rows[1].is_active)
+
+        all_owner_rows = db.list_phase_f_portfolio_account_metadata_rows(
+            include_inactive=True,
+            include_all_owners=True,
+        )
+        self.assertEqual(
+            [row.id for row in all_owner_rows],
+            [active_account["id"], inactive_account["id"], other_account["id"]],
+        )
+
+    def test_phase_f_portfolio_shadow_bundle_surface_returns_serialized_bundle(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-shadow-surface", username="phase-f-shadow-surface")
+        service = PortfolioService(owner_id="phase-f-shadow-surface")
+
+        account = service.create_account(name="Shadow", broker="IBKR", market="us", base_currency="USD")
+
+        shadow = db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"])
+
+        self.assertIsNotNone(shadow)
+        self.assertEqual(shadow["account"]["id"], account["id"])
+        self.assertEqual(shadow["account"]["owner_user_id"], "phase-f-shadow-surface")
+        self.assertEqual(shadow["account"]["broker_label"], "IBKR")
+        self.assertEqual(shadow["broker_connections"], [])
+        self.assertEqual(shadow["ledger"], [])
+        self.assertEqual(shadow["positions"], [])
+        self.assertIsNone(shadow["sync_state"])
+        self.assertEqual(shadow["sync_positions"], [])
+        self.assertEqual(shadow["sync_cash_balances"], [])
+        self.assertIsNone(db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"] + 999))
+
+    def test_phase_f_broker_connection_metadata_surface_returns_service_compatible_rows(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-bridge-surface", username="phase-f-bridge-surface")
+        service = PortfolioService(owner_id="phase-f-bridge-surface")
+
+        primary = service.create_account(name="Primary", broker="IBKR", market="us", base_currency="USD")
+        secondary = service.create_account(name="Secondary", broker="Demo", market="cn", base_currency="CNY")
+        service.create_broker_connection(
+            portfolio_account_id=primary["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Primary IBKR",
+            broker_account_ref="UBRIDGE-SURFACE-1",
+            import_mode="api",
+            sync_metadata={"source": "api"},
+        )
+        service.create_broker_connection(
+            portfolio_account_id=secondary["id"],
+            broker_type="citic",
+            broker_name="CITIC",
+            connection_name="Secondary CITIC",
+            broker_account_ref="CBRIDGE-SURFACE-2",
+            import_mode="file",
+            sync_metadata={"source": "csv"},
+        )
+
+        rows = db.list_phase_f_portfolio_broker_connection_metadata_rows(
+            owner_id="phase-f-bridge-surface",
+            portfolio_account_id=primary["id"],
+            broker_type="ibkr",
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].owner_id, "phase-f-bridge-surface")
+        self.assertEqual(rows[0].portfolio_account_id, primary["id"])
+        self.assertEqual(rows[0].portfolio_account_name, "Primary")
+        self.assertEqual(rows[0].broker_type, "ibkr")
+        self.assertEqual(rows[0].connection_name, "Primary IBKR")
+        self.assertEqual(rows[0].broker_account_ref, "UBRIDGE-SURFACE-1")
+        self.assertEqual(rows[0].import_mode, "api")
+        self.assertEqual(rows[0].status, "active")
+        self.assertEqual(rows[0].sync_metadata_json, '{"source": "api"}')
+
+    def test_phase_f_broker_connection_metadata_surface_returns_none_on_authority_drift(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-bridge-drift", username="phase-f-bridge-drift")
+        service = PortfolioService(owner_id="phase-f-bridge-drift")
+
+        account = service.create_account(name="Drift", broker="IBKR", market="us", base_currency="USD")
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Drift IBKR",
+            broker_account_ref="UBRIDGE-DRIFT-1",
+            import_mode="api",
+        )
+
+        with db.get_session() as session:
+            session.execute(
+                delete(PortfolioBrokerConnection).where(
+                    PortfolioBrokerConnection.id == connection["id"]
+                )
+            )
+            session.commit()
+
+        authority = db.get_phase_f_portfolio_shadow_authority_state(account_id=account["id"])
+        self.assertIsNotNone(authority)
+        self.assertFalse(authority["effective_readiness"]["broker_connection_list"])
+
+        rows = db.list_phase_f_portfolio_broker_connection_metadata_rows(
+            owner_id="phase-f-bridge-drift",
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+        )
+
+        self.assertIsNone(rows)
+
+    def test_phase_f_latest_broker_sync_state_bundle_surface_returns_service_compatible_rows(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-sync-surface", username="phase-f-sync-surface")
+        service = PortfolioService(owner_id="phase-f-sync-surface")
+
+        account = service.create_account(name="Sync Surface", broker="IBKR", market="us", base_currency="USD")
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Sync Surface IBKR",
+            broker_account_ref="USYNC-SURFACE-1",
+            import_mode="api",
+        )
+        service.replace_broker_sync_state(
+            broker_connection_id=connection["id"],
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_account_ref="USYNC-SURFACE-1",
+            sync_source="api",
+            sync_status="success",
+            snapshot_date=date(2026, 4, 20),
+            synced_at=datetime(2026, 4, 20, 9, 45, 0),
+            base_currency="USD",
+            total_cash=900.0,
+            total_market_value=1100.0,
+            total_equity=2000.0,
+            realized_pnl=10.0,
+            unrealized_pnl=20.0,
+            fx_stale=False,
+            payload={"slice": "sync-surface"},
+            positions=[
+                {
+                    "broker_position_ref": "AAPL-SYNC-SURFACE",
+                    "symbol": "AAPL",
+                    "market": "us",
+                    "currency": "USD",
+                    "quantity": 6.0,
+                    "avg_cost": 150.0,
+                    "last_price": 170.0,
+                    "market_value_base": 1020.0,
+                    "unrealized_pnl_base": 120.0,
+                    "valuation_currency": "USD",
+                }
+            ],
+            cash_balances=[{"currency": "USD", "amount": 900.0, "amount_base": 900.0}],
+        )
+
+        bundle = db.get_phase_f_latest_broker_sync_state_bundle(portfolio_account_id=account["id"])
+
+        self.assertIsNotNone(bundle)
+        self.assertEqual(bundle["state_row"].owner_id, "phase-f-sync-surface")
+        self.assertEqual(bundle["state_row"].broker_connection_id, connection["id"])
+        self.assertEqual(bundle["state_row"].snapshot_date.isoformat(), "2026-04-20")
+        self.assertEqual(bundle["state_row"].payload_json, '{"slice": "sync-surface"}')
+        self.assertEqual([item.symbol for item in bundle["positions"]], ["AAPL"])
+        self.assertEqual([item.currency for item in bundle["cash_balances"]], ["USD"])
+
+    def test_phase_f_latest_broker_sync_state_bundle_surface_returns_none_on_authority_drift(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-sync-drift", username="phase-f-sync-drift")
+        service = PortfolioService(owner_id="phase-f-sync-drift")
+
+        account = service.create_account(name="Sync Drift", broker="IBKR", market="us", base_currency="USD")
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Sync Drift IBKR",
+            broker_account_ref="USYNC-DRIFT-1",
+            import_mode="api",
+        )
+        service.replace_broker_sync_state(
+            broker_connection_id=connection["id"],
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_account_ref="USYNC-DRIFT-1",
+            sync_source="api",
+            sync_status="success",
+            snapshot_date=date(2026, 4, 20),
+            synced_at=datetime(2026, 4, 20, 10, 0, 0),
+            base_currency="USD",
+            total_cash=700.0,
+            total_market_value=1300.0,
+            total_equity=2000.0,
+            realized_pnl=10.0,
+            unrealized_pnl=30.0,
+            fx_stale=False,
+            payload={"slice": "sync-drift"},
+            positions=[],
+            cash_balances=[{"currency": "USD", "amount": 700.0, "amount_base": 700.0}],
+        )
+
+        with db.get_session() as session:
+            row = session.execute(
+                select(PortfolioBrokerSyncState).where(
+                    PortfolioBrokerSyncState.portfolio_account_id == account["id"]
+                ).limit(1)
+            ).scalar_one()
+            row.total_equity = 2100.0
+            session.commit()
+
+        authority = db.get_phase_f_portfolio_shadow_authority_state(account_id=account["id"])
+        self.assertIsNotNone(authority)
+        self.assertFalse(authority["effective_readiness"]["latest_sync_overlay"])
+
+        bundle = db.get_phase_f_latest_broker_sync_state_bundle(portfolio_account_id=account["id"])
+
+        self.assertIsNone(bundle)
+
     def test_phase_f_dual_writes_accounts_connections_and_sync_overlay_without_changing_current_reads(self) -> None:
         db = self._db()
         db.create_or_update_app_user(user_id="phase-f-user", username="phase-f-user")

@@ -18,6 +18,7 @@ import json
 import logging
 import re
 from datetime import datetime, date, timedelta
+from types import SimpleNamespace
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Iterable
 from zoneinfo import ZoneInfo
 
@@ -2753,6 +2754,475 @@ class DatabaseManager:
                 ):
                     synced += 1
         return synced
+
+    @staticmethod
+    def _phase_f_account_metadata_row(row: Any) -> Any:
+        return SimpleNamespace(
+            id=int(row.id),
+            owner_id=str(getattr(row, "owner_user_id", "") or ""),
+            name=str(getattr(row, "name", "") or ""),
+            broker=getattr(row, "broker_label", None),
+            market=str(getattr(row, "market", "") or ""),
+            base_currency=str(getattr(row, "base_currency", "") or ""),
+            is_active=bool(getattr(row, "is_active", True)),
+            created_at=getattr(row, "created_at", None),
+            updated_at=getattr(row, "updated_at", None),
+        )
+
+    @staticmethod
+    def _phase_f_json_payload(value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, str):
+            raw_text = value.strip()
+            if not raw_text:
+                return {}
+            try:
+                parsed = json.loads(raw_text)
+            except Exception:
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
+
+    @staticmethod
+    def _phase_f_json_text(value: Any) -> str:
+        return json.dumps(
+            DatabaseManager._phase_f_json_payload(value),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+
+    @staticmethod
+    def _phase_f_shadow_account_payload(row: Any) -> Dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(getattr(row, "owner_id", "") or ""),
+            "name": str(getattr(row, "name", "") or ""),
+            "broker_label": getattr(row, "broker", None),
+            "market": str(getattr(row, "market", "") or ""),
+            "base_currency": str(getattr(row, "base_currency", "") or ""),
+            "is_active": bool(getattr(row, "is_active", True)),
+            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
+            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
+        }
+
+    @staticmethod
+    def _phase_f_shadow_broker_connection_payload(row: Any) -> Dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(getattr(row, "owner_id", "") or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "broker_type": str(getattr(row, "broker_type", "") or ""),
+            "broker_name": getattr(row, "broker_name", None),
+            "connection_name": str(getattr(row, "connection_name", "") or ""),
+            "broker_account_ref": getattr(row, "broker_account_ref", None),
+            "import_mode": str(getattr(row, "import_mode", "") or ""),
+            "status": str(getattr(row, "status", "") or ""),
+            "last_imported_at": getattr(row, "last_imported_at", None).isoformat()
+            if getattr(row, "last_imported_at", None)
+            else None,
+            "last_import_source": getattr(row, "last_import_source", None),
+            "last_import_fingerprint": getattr(row, "last_import_fingerprint", None),
+            "sync_metadata": DatabaseManager._phase_f_json_payload(getattr(row, "sync_metadata_json", None)),
+            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
+            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
+        }
+
+    @staticmethod
+    def _phase_f_shadow_sync_state_payload(row: Any) -> Dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "owner_user_id": str(getattr(row, "owner_id", "") or ""),
+            "broker_connection_id": int(row.broker_connection_id),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "broker_type": str(getattr(row, "broker_type", "") or ""),
+            "broker_account_ref": getattr(row, "broker_account_ref", None),
+            "sync_source": str(getattr(row, "sync_source", "") or ""),
+            "sync_status": str(getattr(row, "sync_status", "") or ""),
+            "snapshot_date": getattr(row, "snapshot_date", None).isoformat() if getattr(row, "snapshot_date", None) else None,
+            "synced_at": getattr(row, "synced_at", None).isoformat() if getattr(row, "synced_at", None) else None,
+            "base_currency": str(getattr(row, "base_currency", "") or ""),
+            "total_cash": float(getattr(row, "total_cash", 0.0) or 0.0),
+            "total_market_value": float(getattr(row, "total_market_value", 0.0) or 0.0),
+            "total_equity": float(getattr(row, "total_equity", 0.0) or 0.0),
+            "realized_pnl": float(getattr(row, "realized_pnl", 0.0) or 0.0),
+            "unrealized_pnl": float(getattr(row, "unrealized_pnl", 0.0) or 0.0),
+            "fx_stale": bool(getattr(row, "fx_stale", False)),
+            "payload_json": DatabaseManager._phase_f_json_payload(getattr(row, "payload_json", None)),
+            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
+            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
+        }
+
+    @staticmethod
+    def _phase_f_shadow_sync_position_payload(row: Any) -> Dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "portfolio_sync_state_id": int(getattr(row, "broker_connection_id", 0) or 0),
+            "owner_user_id": str(getattr(row, "owner_id", "") or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "broker_position_ref": getattr(row, "broker_position_ref", None),
+            "canonical_symbol": str(getattr(row, "symbol", "") or ""),
+            "market": str(getattr(row, "market", "") or ""),
+            "currency": str(getattr(row, "currency", "") or ""),
+            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
+            "avg_cost": float(getattr(row, "avg_cost", 0.0) or 0.0),
+            "last_price": float(getattr(row, "last_price", 0.0) or 0.0),
+            "market_value_base": float(getattr(row, "market_value_base", 0.0) or 0.0),
+            "unrealized_pnl_base": float(getattr(row, "unrealized_pnl_base", 0.0) or 0.0),
+            "valuation_currency": getattr(row, "valuation_currency", None),
+            "payload_json": DatabaseManager._phase_f_json_payload(getattr(row, "payload_json", None)),
+            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
+            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
+        }
+
+    @staticmethod
+    def _phase_f_shadow_sync_cash_balance_payload(row: Any) -> Dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "portfolio_sync_state_id": int(getattr(row, "broker_connection_id", 0) or 0),
+            "owner_user_id": str(getattr(row, "owner_id", "") or ""),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "currency": str(getattr(row, "currency", "") or ""),
+            "amount": float(getattr(row, "amount", 0.0) or 0.0),
+            "amount_base": float(getattr(row, "amount_base", 0.0) or 0.0),
+            "created_at": getattr(row, "created_at", None).isoformat() if getattr(row, "created_at", None) else None,
+            "updated_at": getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None,
+        }
+
+    @staticmethod
+    def _phase_f_broker_connection_metadata_row(
+        row: Any,
+        *,
+        portfolio_account_name: Optional[str],
+    ) -> Any:
+        return SimpleNamespace(
+            id=int(row.id),
+            owner_id=str(getattr(row, "owner_user_id", "") or ""),
+            portfolio_account_id=int(row.portfolio_account_id),
+            portfolio_account_name=portfolio_account_name,
+            broker_type=str(getattr(row, "broker_type", "") or ""),
+            broker_name=getattr(row, "broker_name", None),
+            connection_name=str(getattr(row, "connection_name", "") or ""),
+            broker_account_ref=getattr(row, "broker_account_ref", None),
+            import_mode=str(getattr(row, "import_mode", "") or ""),
+            status=str(getattr(row, "status", "") or ""),
+            last_imported_at=getattr(row, "last_imported_at", None),
+            last_import_source=getattr(row, "last_import_source", None),
+            last_import_fingerprint=getattr(row, "last_import_fingerprint", None),
+            sync_metadata_json=DatabaseManager._phase_f_json_text(getattr(row, "sync_metadata", None)),
+            created_at=getattr(row, "created_at", None),
+            updated_at=getattr(row, "updated_at", None),
+        )
+
+    @staticmethod
+    def _phase_f_broker_sync_state_row(row: Dict[str, Any]) -> Any:
+        return SimpleNamespace(
+            id=int(row["id"]),
+            owner_id=str(row.get("owner_user_id", "") or ""),
+            broker_connection_id=int(row["broker_connection_id"]),
+            portfolio_account_id=int(row["portfolio_account_id"]),
+            broker_type=str(row.get("broker_type", "") or ""),
+            broker_account_ref=row.get("broker_account_ref"),
+            sync_source=str(row.get("sync_source", "") or ""),
+            sync_status=str(row.get("sync_status", "") or ""),
+            snapshot_date=date.fromisoformat(row["snapshot_date"]) if row.get("snapshot_date") else None,
+            synced_at=datetime.fromisoformat(row["synced_at"]) if row.get("synced_at") else None,
+            base_currency=str(row.get("base_currency", "") or ""),
+            total_cash=float(row.get("total_cash", 0.0) or 0.0),
+            total_market_value=float(row.get("total_market_value", 0.0) or 0.0),
+            total_equity=float(row.get("total_equity", 0.0) or 0.0),
+            realized_pnl=float(row.get("realized_pnl", 0.0) or 0.0),
+            unrealized_pnl=float(row.get("unrealized_pnl", 0.0) or 0.0),
+            fx_stale=bool(row.get("fx_stale", False)),
+            payload_json=DatabaseManager._phase_f_json_text(row.get("payload_json")),
+            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+            updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
+        )
+
+    @staticmethod
+    def _phase_f_broker_sync_position_row(row: Dict[str, Any]) -> Any:
+        return SimpleNamespace(
+            id=int(row["id"]),
+            broker_position_ref=row.get("broker_position_ref"),
+            symbol=str(row.get("canonical_symbol", "") or ""),
+            market=str(row.get("market", "") or ""),
+            currency=str(row.get("currency", "") or ""),
+            quantity=float(row.get("quantity", 0.0) or 0.0),
+            avg_cost=float(row.get("avg_cost", 0.0) or 0.0),
+            last_price=float(row.get("last_price", 0.0) or 0.0),
+            market_value_base=float(row.get("market_value_base", 0.0) or 0.0),
+            unrealized_pnl_base=float(row.get("unrealized_pnl_base", 0.0) or 0.0),
+            valuation_currency=row.get("valuation_currency"),
+        )
+
+    @staticmethod
+    def _phase_f_broker_sync_cash_balance_row(row: Dict[str, Any]) -> Any:
+        return SimpleNamespace(
+            id=int(row["id"]),
+            currency=str(row.get("currency", "") or ""),
+            amount=float(row.get("amount", 0.0) or 0.0),
+            amount_base=float(row.get("amount_base", 0.0) or 0.0),
+        )
+
+    def get_phase_f_portfolio_shadow_authority_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_account_id = int(account_id)
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
+        if shadow_bundle is None:
+            return None
+
+        with self.get_session() as session:
+            legacy_account_row = session.execute(
+                select(PortfolioAccount).where(PortfolioAccount.id == resolved_account_id).limit(1)
+            ).scalar_one_or_none()
+            legacy_broker_connection_rows = session.execute(
+                select(PortfolioBrokerConnection)
+                .where(PortfolioBrokerConnection.portfolio_account_id == resolved_account_id)
+                .order_by(PortfolioBrokerConnection.id.asc())
+            ).scalars().all()
+            legacy_sync_state_row = session.execute(
+                select(PortfolioBrokerSyncState)
+                .where(PortfolioBrokerSyncState.portfolio_account_id == resolved_account_id)
+                .order_by(PortfolioBrokerSyncState.synced_at.desc(), PortfolioBrokerSyncState.id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+
+            legacy_sync_position_rows: List[Any] = []
+            legacy_sync_cash_balance_rows: List[Any] = []
+            if legacy_sync_state_row is not None:
+                legacy_sync_position_rows = session.execute(
+                    select(PortfolioBrokerSyncPosition)
+                    .where(
+                        PortfolioBrokerSyncPosition.broker_connection_id
+                        == int(legacy_sync_state_row.broker_connection_id)
+                    )
+                    .order_by(PortfolioBrokerSyncPosition.symbol.asc(), PortfolioBrokerSyncPosition.id.asc())
+                ).scalars().all()
+                legacy_sync_cash_balance_rows = session.execute(
+                    select(PortfolioBrokerSyncCashBalance)
+                    .where(
+                        PortfolioBrokerSyncCashBalance.broker_connection_id
+                        == int(legacy_sync_state_row.broker_connection_id)
+                    )
+                    .order_by(PortfolioBrokerSyncCashBalance.currency.asc(), PortfolioBrokerSyncCashBalance.id.asc())
+                ).scalars().all()
+
+        shadow_account_payload = dict(shadow_bundle.get("account") or {})
+        shadow_broker_connection_payloads = list(shadow_bundle.get("broker_connections") or [])
+        shadow_sync_state_payload = shadow_bundle.get("sync_state")
+        shadow_sync_position_payloads = list(shadow_bundle.get("sync_positions") or [])
+        shadow_sync_cash_balance_payloads = list(shadow_bundle.get("sync_cash_balances") or [])
+
+        legacy_account_payload = (
+            self._phase_f_shadow_account_payload(legacy_account_row)
+            if legacy_account_row is not None
+            else None
+        )
+        legacy_broker_connection_payloads = [
+            self._phase_f_shadow_broker_connection_payload(row) for row in legacy_broker_connection_rows
+        ]
+        legacy_sync_state_payload = (
+            self._phase_f_shadow_sync_state_payload(legacy_sync_state_row)
+            if legacy_sync_state_row is not None
+            else None
+        )
+        legacy_sync_position_payloads = [
+            self._phase_f_shadow_sync_position_payload(row) for row in legacy_sync_position_rows
+        ]
+        legacy_sync_cash_balance_payloads = [
+            self._phase_f_shadow_sync_cash_balance_payload(row) for row in legacy_sync_cash_balance_rows
+        ]
+        if legacy_sync_state_row is not None:
+            for payload in legacy_sync_position_payloads:
+                payload["portfolio_sync_state_id"] = int(legacy_sync_state_row.id)
+            for payload in legacy_sync_cash_balance_payloads:
+                payload["portfolio_sync_state_id"] = int(legacy_sync_state_row.id)
+
+        drift_reasons: List[str] = []
+        surface_trust = {
+            "account_metadata": "shadow_matches_legacy",
+            "broker_connection_list": "shadow_matches_legacy",
+            "latest_sync_overlay": "shadow_matches_legacy",
+        }
+
+        account_metadata_ready = legacy_account_payload is not None and shadow_account_payload == legacy_account_payload
+        if legacy_account_payload is None:
+            surface_trust["account_metadata"] = "legacy_missing"
+            drift_reasons.append("account_row_missing")
+        elif shadow_account_payload != legacy_account_payload:
+            surface_trust["account_metadata"] = "shadow_drift"
+            drift_reasons.append("account_row_payload_mismatch")
+
+        broker_connection_list_ready = False
+        if len(legacy_broker_connection_payloads) != len(shadow_broker_connection_payloads):
+            surface_trust["broker_connection_list"] = "shadow_drift"
+            drift_reasons.append("broker_connections_count_mismatch")
+        elif legacy_broker_connection_payloads != shadow_broker_connection_payloads:
+            surface_trust["broker_connection_list"] = "shadow_drift"
+            drift_reasons.append("broker_connections_payload_mismatch")
+        else:
+            broker_connection_list_ready = account_metadata_ready
+
+        latest_sync_overlay_ready = False
+        if legacy_sync_state_payload is None and shadow_sync_state_payload is None:
+            latest_sync_overlay_ready = broker_connection_list_ready
+        elif legacy_sync_state_payload is None or shadow_sync_state_payload is None:
+            surface_trust["latest_sync_overlay"] = "shadow_drift"
+            drift_reasons.append("sync_state_count_mismatch")
+        elif legacy_sync_state_payload != shadow_sync_state_payload:
+            surface_trust["latest_sync_overlay"] = "shadow_drift"
+            drift_reasons.append("sync_state_payload_mismatch")
+        elif legacy_sync_position_payloads != shadow_sync_position_payloads:
+            surface_trust["latest_sync_overlay"] = "shadow_drift"
+            drift_reasons.append("sync_positions_payload_mismatch")
+        elif legacy_sync_cash_balance_payloads != shadow_sync_cash_balance_payloads:
+            surface_trust["latest_sync_overlay"] = "shadow_drift"
+            drift_reasons.append("sync_cash_balances_payload_mismatch")
+        else:
+            latest_sync_overlay_ready = broker_connection_list_ready
+
+        return {
+            "shadow_account_id": resolved_account_id,
+            "legacy_row_counts": {
+                "broker_connections": len(legacy_broker_connection_payloads),
+                "sync_positions": len(legacy_sync_position_payloads),
+                "sync_cash_balances": len(legacy_sync_cash_balance_payloads),
+            },
+            "shadow_row_counts": {
+                "broker_connections": len(shadow_broker_connection_payloads),
+                "sync_positions": len(shadow_sync_position_payloads),
+                "sync_cash_balances": len(shadow_sync_cash_balance_payloads),
+            },
+            "observed_readiness": {
+                "account_row": legacy_account_payload is not None and bool(shadow_account_payload),
+                "broker_connections": True,
+                "sync_state": legacy_sync_state_payload is not None and shadow_sync_state_payload is not None,
+            },
+            "effective_readiness": {
+                "account_metadata": account_metadata_ready,
+                "broker_connection_list": broker_connection_list_ready,
+                "latest_sync_overlay": latest_sync_overlay_ready,
+            },
+            "surface_trust": surface_trust,
+            "drift_reasons": drift_reasons,
+        }
+
+    def list_phase_f_portfolio_account_metadata_rows(
+        self,
+        *,
+        include_inactive: bool = False,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[List[Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        rows = self._phase_f_store.list_account_rows(
+            owner_user_id=resolved_owner_id,
+            include_inactive=include_inactive,
+        )
+        return [self._phase_f_account_metadata_row(row) for row in rows]
+
+    def get_phase_f_portfolio_shadow_bundle(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+        return self._phase_f_store.get_account_shadow_bundle(account_id=int(account_id))
+
+    def list_phase_f_portfolio_broker_connection_metadata_rows(
+        self,
+        *,
+        portfolio_account_id: Optional[int] = None,
+        broker_type: Optional[str] = None,
+        status: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[List[Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_owner_id = None if include_all_owners or owner_id is None else self.require_user_id(owner_id)
+        rows = self._phase_f_store.list_broker_connection_rows(
+            owner_user_id=resolved_owner_id,
+            portfolio_account_id=int(portfolio_account_id) if portfolio_account_id is not None else None,
+            broker_type=broker_type,
+            status=status,
+        )
+
+        account_ids = sorted({int(row.portfolio_account_id) for row in rows})
+        if portfolio_account_id is not None:
+            account_ids = sorted({int(portfolio_account_id), *account_ids})
+
+        account_rows = self._phase_f_store.list_account_rows(
+            owner_user_id=resolved_owner_id,
+            include_inactive=True,
+        )
+        account_name_by_id = {int(row.id): str(getattr(row, "name", "") or "") for row in account_rows}
+        account_owner_by_id = {int(row.id): str(getattr(row, "owner_user_id", "") or "") for row in account_rows}
+
+        for current_account_id in account_ids:
+            authority = self.get_phase_f_portfolio_shadow_authority_state(account_id=current_account_id)
+            if authority is None:
+                return None
+            if not authority["effective_readiness"].get("account_metadata"):
+                return None
+            if not authority["effective_readiness"].get("broker_connection_list"):
+                return None
+            if resolved_owner_id is not None and account_owner_by_id.get(current_account_id) != resolved_owner_id:
+                return None
+
+        return [
+            self._phase_f_broker_connection_metadata_row(
+                row,
+                portfolio_account_name=account_name_by_id.get(int(row.portfolio_account_id)),
+            )
+            for row in rows
+        ]
+
+    def get_phase_f_latest_broker_sync_state_bundle(
+        self,
+        *,
+        portfolio_account_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return None
+
+        resolved_owner_id = None if include_all_owners or owner_id is None else self.require_user_id(owner_id)
+        authority = self.get_phase_f_portfolio_shadow_authority_state(account_id=int(portfolio_account_id))
+        if authority is None:
+            return None
+        if not authority["effective_readiness"].get("account_metadata"):
+            return None
+        if not authority["effective_readiness"].get("latest_sync_overlay"):
+            return None
+
+        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=int(portfolio_account_id))
+        if shadow_bundle is None:
+            return None
+        shadow_account = dict(shadow_bundle.get("account") or {})
+        if resolved_owner_id is not None and str(shadow_account.get("owner_user_id", "") or "") != resolved_owner_id:
+            return None
+
+        state_row = shadow_bundle.get("sync_state")
+        if state_row is None:
+            return None
+
+        return {
+            "state_row": self._phase_f_broker_sync_state_row(state_row),
+            "positions": [
+                self._phase_f_broker_sync_position_row(row)
+                for row in list(shadow_bundle.get("sync_positions") or [])
+            ],
+            "cash_balances": [
+                self._phase_f_broker_sync_cash_balance_row(row)
+                for row in list(shadow_bundle.get("sync_cash_balances") or [])
+            ],
+        }
 
     def get_phase_f_trade_list_comparison_candidate(
         self,
