@@ -61,6 +61,54 @@ class RuleBacktestTestCase(unittest.TestCase):
             for index, close in enumerate(closes)
         ]
 
+    @staticmethod
+    def _compare_run_payload(
+        *,
+        run_id: int,
+        code: str,
+        status: str = "completed",
+        parsed_strategy: dict | None = None,
+    ) -> dict:
+        return {
+            "id": run_id,
+            "code": code,
+            "status": status,
+            "run_at": "2024-01-01T00:00:00",
+            "completed_at": "2024-01-01T00:05:00" if status == "completed" else None,
+            "timeframe": "daily",
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-31",
+            "period_start": "2024-01-01",
+            "period_end": "2024-01-31",
+            "lookback_bars": 20,
+            "initial_capital": 100000.0,
+            "fee_bps": 0.0,
+            "slippage_bps": 0.0,
+            "parsed_strategy": parsed_strategy or {},
+            "trade_count": 0,
+            "win_count": 0,
+            "loss_count": 0,
+            "total_return_pct": 0.0,
+            "annualized_return_pct": 0.0,
+            "benchmark_return_pct": 0.0,
+            "excess_return_vs_benchmark_pct": 0.0,
+            "buy_and_hold_return_pct": 0.0,
+            "excess_return_vs_buy_and_hold_pct": 0.0,
+            "win_rate_pct": 0.0,
+            "avg_trade_return_pct": 0.0,
+            "max_drawdown_pct": 0.0,
+            "avg_holding_days": 0.0,
+            "avg_holding_bars": 0.0,
+            "avg_holding_calendar_days": 0.0,
+            "final_equity": 100000.0,
+            "benchmark_mode": "auto",
+            "benchmark_code": None,
+            "benchmark_summary": {},
+            "buy_and_hold_summary": {},
+            "execution_model": {},
+            "result_authority": {},
+        }
+
     def test_parse_simple_ma_rsi_strategy(self) -> None:
         parser = RuleBacktestParser()
         parsed = parser.parse("Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70.")
@@ -1507,6 +1555,181 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(
             parameter_comparison["missing_parameters"]["strategy_spec.signal.slow_period"]["state"],
             "partial",
+        )
+
+    def test_compare_runs_adds_same_code_market_code_comparison(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_payload = self._compare_run_payload(run_id=101, code="600519")
+        second_payload = self._compare_run_payload(run_id=202, code="SH600519")
+        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+
+        with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
+            service,
+            "_run_row_to_dict",
+            side_effect=[first_payload, second_payload],
+        ):
+            payload = service.compare_runs([101, 202])
+
+        market_code_comparison = payload["market_code_comparison"]
+        self.assertEqual(market_code_comparison["baseline_run_id"], 101)
+        self.assertEqual(market_code_comparison["selection_rule"], "first_comparable_run_by_request_order")
+        self.assertEqual(market_code_comparison["relationship"], "same_code")
+        self.assertEqual(market_code_comparison["state"], "direct")
+        self.assertTrue(market_code_comparison["directly_comparable"])
+        self.assertEqual(
+            market_code_comparison["runs"],
+            [
+                {
+                    "run_id": 101,
+                    "code": "600519",
+                    "normalized_code": "600519",
+                    "market": "cn",
+                    "availability": "complete",
+                    "diagnostics": [],
+                },
+                {
+                    "run_id": 202,
+                    "code": "SH600519",
+                    "normalized_code": "600519",
+                    "market": "cn",
+                    "availability": "complete",
+                    "diagnostics": [],
+                },
+            ],
+        )
+        self.assertEqual(
+            market_code_comparison["pairs"],
+            [
+                {
+                    "run_id": 202,
+                    "relationship": "same_code",
+                    "state": "direct",
+                    "directly_comparable": True,
+                    "baseline_code": "600519",
+                    "candidate_code": "600519",
+                    "baseline_market": "cn",
+                    "candidate_market": "cn",
+                    "diagnostics": ["same_normalized_code"],
+                }
+            ],
+        )
+        self.assertEqual(market_code_comparison["diagnostics"], ["same_normalized_code"])
+
+    def test_compare_runs_adds_same_market_different_code_market_code_comparison(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_payload = self._compare_run_payload(run_id=101, code="600519")
+        second_payload = self._compare_run_payload(run_id=202, code="000001")
+        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+
+        with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
+            service,
+            "_run_row_to_dict",
+            side_effect=[first_payload, second_payload],
+        ):
+            payload = service.compare_runs([101, 202])
+
+        market_code_comparison = payload["market_code_comparison"]
+        self.assertEqual(market_code_comparison["relationship"], "same_market_different_code")
+        self.assertEqual(market_code_comparison["state"], "limited")
+        self.assertFalse(market_code_comparison["directly_comparable"])
+        self.assertEqual(market_code_comparison["pairs"][0]["relationship"], "same_market_different_code")
+        self.assertEqual(market_code_comparison["pairs"][0]["baseline_market"], "cn")
+        self.assertEqual(market_code_comparison["pairs"][0]["candidate_market"], "cn")
+        self.assertEqual(
+            market_code_comparison["pairs"][0]["diagnostics"],
+            ["same_market_different_code"],
+        )
+
+    def test_compare_runs_adds_different_market_market_code_comparison(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_payload = self._compare_run_payload(run_id=101, code="600519")
+        second_payload = self._compare_run_payload(run_id=202, code="AAPL")
+        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+
+        with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
+            service,
+            "_run_row_to_dict",
+            side_effect=[first_payload, second_payload],
+        ):
+            payload = service.compare_runs([101, 202])
+
+        market_code_comparison = payload["market_code_comparison"]
+        self.assertEqual(market_code_comparison["relationship"], "different_market")
+        self.assertEqual(market_code_comparison["state"], "limited")
+        self.assertFalse(market_code_comparison["directly_comparable"])
+        self.assertEqual(market_code_comparison["pairs"][0]["relationship"], "different_market")
+        self.assertEqual(market_code_comparison["pairs"][0]["baseline_market"], "cn")
+        self.assertEqual(market_code_comparison["pairs"][0]["candidate_market"], "us")
+        self.assertEqual(
+            market_code_comparison["pairs"][0]["diagnostics"],
+            ["different_market"],
+        )
+
+    def test_compare_runs_marks_partial_and_unavailable_market_code_metadata(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_payload = self._compare_run_payload(run_id=101, code="600519")
+        partial_payload = self._compare_run_payload(run_id=202, code="UNKNOWN-CODE")
+        unavailable_payload = self._compare_run_payload(run_id=303, code="")
+        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202), SimpleNamespace(id=303)]
+
+        with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
+            service,
+            "_run_row_to_dict",
+            side_effect=[first_payload, partial_payload, unavailable_payload],
+        ):
+            payload = service.compare_runs([101, 202, 303])
+
+        market_code_comparison = payload["market_code_comparison"]
+        self.assertEqual(market_code_comparison["relationship"], "unavailable_metadata")
+        self.assertEqual(market_code_comparison["state"], "limited")
+        self.assertFalse(market_code_comparison["directly_comparable"])
+        self.assertEqual(
+            market_code_comparison["runs"],
+            [
+                {
+                    "run_id": 101,
+                    "code": "600519",
+                    "normalized_code": "600519",
+                    "market": "cn",
+                    "availability": "complete",
+                    "diagnostics": [],
+                },
+                {
+                    "run_id": 202,
+                    "code": "UNKNOWN-CODE",
+                    "normalized_code": "UNKNOWN-CODE",
+                    "market": None,
+                    "availability": "partial",
+                    "diagnostics": ["unrecognized_market_from_code"],
+                },
+                {
+                    "run_id": 303,
+                    "code": None,
+                    "normalized_code": None,
+                    "market": None,
+                    "availability": "unavailable",
+                    "diagnostics": ["missing_code"],
+                },
+            ],
+        )
+        self.assertEqual(market_code_comparison["pairs"][0]["relationship"], "partial_metadata")
+        self.assertEqual(
+            market_code_comparison["pairs"][0]["diagnostics"],
+            ["candidate_market_unavailable", "partial_market_code_metadata"],
+        )
+        self.assertEqual(market_code_comparison["pairs"][1]["relationship"], "unavailable_metadata")
+        self.assertEqual(
+            market_code_comparison["pairs"][1]["diagnostics"],
+            ["candidate_code_unavailable", "market_code_metadata_unavailable"],
+        )
+        self.assertEqual(
+            market_code_comparison["diagnostics"],
+            [
+                "candidate_market_unavailable",
+                "partial_market_code_metadata",
+                "candidate_code_unavailable",
+                "market_code_metadata_unavailable",
+            ],
         )
 
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:

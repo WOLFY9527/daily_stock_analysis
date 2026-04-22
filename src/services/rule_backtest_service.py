@@ -808,6 +808,7 @@ class RuleBacktestService:
             "missing_run_ids": missing_run_ids,
             "unavailable_runs": unavailable_runs,
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "market_code_comparison": self._build_compare_market_code_comparison(items=items),
             "period_comparison": self._build_compare_period_comparison(items=items),
             "comparison_summary": self._build_compare_summary(items=items),
             "parameter_comparison": self._build_compare_parameter_comparison(items=items),
@@ -2025,6 +2026,172 @@ class RuleBacktestService:
             "differing_parameters": differing_parameters,
             "missing_parameters": missing_parameters,
         }
+
+    @classmethod
+    def _build_compare_market_code_comparison(cls, *, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not items:
+            raise ValueError("market/code comparison requires at least one comparable run item")
+
+        baseline_context = cls._resolve_compare_market_code_context(items[0])
+        candidate_contexts = [cls._resolve_compare_market_code_context(item) for item in items[1:]]
+        pairs = [
+            cls._build_compare_market_code_pair(
+                baseline_context=baseline_context,
+                candidate_context=context,
+            )
+            for context in candidate_contexts
+        ]
+
+        relationship = cls._summarize_compare_market_code_relationship(pairs)
+        diagnostics = cls._dedupe_compare_market_code_diagnostics(
+            [diagnostic for pair in pairs for diagnostic in list(pair.get("diagnostics") or [])]
+        )
+
+        return {
+            "baseline_run_id": int(baseline_context.get("run_id") or 0),
+            "selection_rule": "first_comparable_run_by_request_order",
+            "relationship": relationship,
+            "state": "direct" if relationship == "same_code" else "limited",
+            "directly_comparable": relationship == "same_code",
+            "runs": [baseline_context, *candidate_contexts],
+            "pairs": pairs,
+            "diagnostics": diagnostics,
+        }
+
+    @classmethod
+    def _resolve_compare_market_code_context(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = dict(item.get("metadata") or {})
+        run_id = int(metadata.get("id") or 0)
+        raw_code = str(metadata.get("code") or "").strip() or None
+        normalized_code = cls._canonicalize_compare_market_code(raw_code)
+        diagnostics: List[str] = []
+
+        if raw_code is None:
+            return {
+                "run_id": run_id,
+                "code": None,
+                "normalized_code": None,
+                "market": None,
+                "availability": "unavailable",
+                "diagnostics": ["missing_code"],
+            }
+
+        market = cls._infer_compare_market_from_code(normalized_code)
+        availability = "complete"
+        if market is None:
+            availability = "partial"
+            diagnostics.append("unrecognized_market_from_code")
+
+        return {
+            "run_id": run_id,
+            "code": raw_code,
+            "normalized_code": normalized_code,
+            "market": market,
+            "availability": availability,
+            "diagnostics": diagnostics,
+        }
+
+    @classmethod
+    def _build_compare_market_code_pair(
+        cls,
+        *,
+        baseline_context: Dict[str, Any],
+        candidate_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        diagnostics: List[str] = []
+        baseline_availability = str(baseline_context.get("availability") or "unavailable")
+        candidate_availability = str(candidate_context.get("availability") or "unavailable")
+        baseline_code = baseline_context.get("normalized_code")
+        candidate_code = candidate_context.get("normalized_code")
+        baseline_market = baseline_context.get("market")
+        candidate_market = candidate_context.get("market")
+
+        if "unavailable" in {baseline_availability, candidate_availability}:
+            if baseline_availability == "unavailable":
+                diagnostics.append("baseline_code_unavailable")
+            if candidate_availability == "unavailable":
+                diagnostics.append("candidate_code_unavailable")
+            diagnostics.append("market_code_metadata_unavailable")
+            relationship = "unavailable_metadata"
+        elif "partial" in {baseline_availability, candidate_availability}:
+            if baseline_market is None and baseline_availability == "partial":
+                diagnostics.append("baseline_market_unavailable")
+            if candidate_market is None and candidate_availability == "partial":
+                diagnostics.append("candidate_market_unavailable")
+            diagnostics.append("partial_market_code_metadata")
+            relationship = "partial_metadata"
+        elif baseline_market != candidate_market:
+            diagnostics.append("different_market")
+            relationship = "different_market"
+        elif baseline_code == candidate_code:
+            diagnostics.append("same_normalized_code")
+            relationship = "same_code"
+        else:
+            diagnostics.append("same_market_different_code")
+            relationship = "same_market_different_code"
+
+        return {
+            "run_id": int(candidate_context.get("run_id") or 0),
+            "relationship": relationship,
+            "state": "direct" if relationship == "same_code" else "limited",
+            "directly_comparable": relationship == "same_code",
+            "baseline_code": baseline_code,
+            "candidate_code": candidate_code,
+            "baseline_market": baseline_market,
+            "candidate_market": candidate_market,
+            "diagnostics": cls._dedupe_compare_market_code_diagnostics(diagnostics),
+        }
+
+    @staticmethod
+    def _canonicalize_compare_market_code(value: Any) -> Optional[str]:
+        raw_code = str(value or "").strip()
+        if not raw_code:
+            return None
+
+        normalized = normalize_stock_code(raw_code).strip().upper()
+        if normalized.isdigit() and 1 <= len(normalized) <= 5:
+            return f"HK{normalized.zfill(5)}"
+        return normalized or None
+
+    @staticmethod
+    def _infer_compare_market_from_code(code: Optional[str]) -> Optional[str]:
+        normalized = str(code or "").strip().upper()
+        if not normalized:
+            return None
+        if is_us_index_code(normalized) or is_us_stock_code(normalized):
+            return "us"
+        if normalized.startswith("HK") and normalized[2:].isdigit() and 1 <= len(normalized[2:]) <= 5:
+            return "hk"
+        if normalized.isdigit() and len(normalized) == 6:
+            return "cn"
+        return None
+
+    @staticmethod
+    def _dedupe_compare_market_code_diagnostics(diagnostics: List[str]) -> List[str]:
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for raw_value in diagnostics:
+            normalized = str(raw_value or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    @classmethod
+    def _summarize_compare_market_code_relationship(cls, pairs: List[Dict[str, Any]]) -> str:
+        relationships = [str(pair.get("relationship") or "").strip() for pair in pairs if str(pair.get("relationship") or "").strip()]
+        if not relationships:
+            return "same_code"
+        if "unavailable_metadata" in relationships:
+            return "unavailable_metadata"
+        if "partial_metadata" in relationships:
+            return "partial_metadata"
+        if "different_market" in relationships:
+            return "different_market"
+        if "same_market_different_code" in relationships:
+            return "same_market_different_code"
+        return "same_code"
 
     @classmethod
     def _resolve_compare_period_bounds(cls, item: Dict[str, Any]) -> Dict[str, Any]:

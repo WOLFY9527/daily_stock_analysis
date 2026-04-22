@@ -690,6 +690,38 @@ class RuleBacktestCompareParameterComparison(BaseModel):
     missing_parameters: Dict[str, RuleBacktestCompareParameterDetail] = Field(default_factory=dict)
 
 
+class RuleBacktestCompareMarketCodeRunItem(BaseModel):
+    run_id: int
+    code: Optional[str] = None
+    normalized_code: Optional[str] = None
+    market: Optional[str] = None
+    availability: str
+    diagnostics: List[str] = Field(default_factory=list)
+
+
+class RuleBacktestCompareMarketCodePair(BaseModel):
+    run_id: int
+    relationship: str
+    state: str
+    directly_comparable: bool = False
+    baseline_code: Optional[str] = None
+    candidate_code: Optional[str] = None
+    baseline_market: Optional[str] = None
+    candidate_market: Optional[str] = None
+    diagnostics: List[str] = Field(default_factory=list)
+
+
+class RuleBacktestCompareMarketCodeComparison(BaseModel):
+    baseline_run_id: int
+    selection_rule: str
+    relationship: str
+    state: str
+    directly_comparable: bool = False
+    runs: List[RuleBacktestCompareMarketCodeRunItem] = Field(default_factory=list)
+    pairs: List[RuleBacktestCompareMarketCodePair] = Field(default_factory=list)
+    diagnostics: List[str] = Field(default_factory=list)
+
+
 class RuleBacktestCompareResponse(BaseModel):
     comparison_source: str
     read_mode: str = "stored_first"
@@ -699,6 +731,7 @@ class RuleBacktestCompareResponse(BaseModel):
     missing_run_ids: List[int] = Field(default_factory=list)
     unavailable_runs: List[RuleBacktestCompareUnavailableRun] = Field(default_factory=list)
     field_groups: List[str] = Field(default_factory=list)
+    market_code_comparison: Optional[RuleBacktestCompareMarketCodeComparison] = None
     period_comparison: Optional[RuleBacktestComparePeriodComparison] = None
     comparison_summary: Optional[RuleBacktestCompareSummary] = None
     parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None

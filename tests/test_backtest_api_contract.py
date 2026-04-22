@@ -557,6 +557,45 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "missing_run_ids": [999],
             "unavailable_runs": [],
             "field_groups": ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"],
+            "market_code_comparison": {
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "relationship": "same_code",
+                "state": "direct",
+                "directly_comparable": True,
+                "runs": [
+                    {
+                        "run_id": 101,
+                        "code": base_item["code"],
+                        "normalized_code": base_item["code"],
+                        "market": "cn",
+                        "availability": "complete",
+                        "diagnostics": [],
+                    },
+                    {
+                        "run_id": 202,
+                        "code": f"SH{base_item['code']}",
+                        "normalized_code": base_item["code"],
+                        "market": "cn",
+                        "availability": "complete",
+                        "diagnostics": [],
+                    },
+                ],
+                "pairs": [
+                    {
+                        "run_id": 202,
+                        "relationship": "same_code",
+                        "state": "direct",
+                        "directly_comparable": True,
+                        "baseline_code": base_item["code"],
+                        "candidate_code": base_item["code"],
+                        "baseline_market": "cn",
+                        "candidate_market": "cn",
+                        "diagnostics": ["same_normalized_code"],
+                    }
+                ],
+                "diagnostics": ["same_normalized_code"],
+            },
             "period_comparison": {
                 "baseline_run_id": 101,
                 "selection_rule": "first_comparable_run_by_request_order",
@@ -784,6 +823,13 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["read_mode"], "stored_first")
         self.assertEqual(payload["missing_run_ids"], [999])
         self.assertEqual(payload["field_groups"], ["metadata", "parsed_strategy", "metrics", "benchmark", "execution_model"])
+        self.assertEqual(payload["market_code_comparison"]["relationship"], "same_code")
+        self.assertEqual(payload["market_code_comparison"]["state"], "direct")
+        self.assertTrue(payload["market_code_comparison"]["directly_comparable"])
+        self.assertEqual(
+            payload["market_code_comparison"]["pairs"][0]["diagnostics"],
+            ["same_normalized_code"],
+        )
         self.assertEqual(payload["period_comparison"]["relationship"], "overlapping")
         self.assertEqual(payload["period_comparison"]["state"], "comparable")
         self.assertTrue(payload["period_comparison"]["meaningfully_comparable"])
