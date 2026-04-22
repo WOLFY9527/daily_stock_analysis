@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage';
+import RuleBacktestComparePage from '../RuleBacktestComparePage';
 
 const {
   getRuleBacktestRun,
@@ -10,12 +11,18 @@ const {
   getRuleBacktestRunStatus,
   cancelRuleBacktestRun,
   runRuleBacktest,
+  compareRuleBacktestRuns,
 } = vi.hoisted(() => ({
   getRuleBacktestRun: vi.fn(),
   getRuleBacktestRuns: vi.fn(),
   getRuleBacktestRunStatus: vi.fn(),
   cancelRuleBacktestRun: vi.fn(),
   runRuleBacktest: vi.fn(),
+  compareRuleBacktestRuns: vi.fn(),
+}));
+
+const { writeTextMock } = vi.hoisted(() => ({
+  writeTextMock: vi.fn(),
 }));
 
 vi.mock('../../api/backtest', () => ({
@@ -25,6 +32,7 @@ vi.mock('../../api/backtest', () => ({
     getRuleBacktestRunStatus,
     cancelRuleBacktestRun,
     runRuleBacktest,
+    compareRuleBacktestRuns,
   },
 }));
 
@@ -34,6 +42,17 @@ function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
       <Routes>
         <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
         <Route path="/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function renderResultPageWithCompareWorkbench(initialEntries: string[] = ['/backtest/results/99']) {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <Routes>
+        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+        <Route path="/backtest/compare" element={<RuleBacktestComparePage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -258,15 +277,30 @@ function makeResultRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
 }
 
 describe('DeterministicBacktestResultPage', () => {
+  let originalClipboard: Navigator['clipboard'] | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
     vi.stubGlobal('confirm', vi.fn(() => true));
+    writeTextMock.mockReset();
+    writeTextMock.mockResolvedValue(undefined);
+    originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
   });
 
   it('polls processing runs on the result page and then renders the completed analysis workspace', async () => {
@@ -584,6 +618,265 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开比较工作台' }));
 
     expect(await screen.findByTestId('rule-backtest-compare-route')).toBeInTheDocument();
+  });
+
+  it('supports the integrated compare workbench flow from history selection through key compare actions', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    const compareRun = makeResultRun({
+      id: 123,
+      totalReturnPct: 2.1,
+      annualizedReturnPct: null,
+      excessReturnVsBenchmarkPct: -0.8,
+      maxDrawdownPct: 3.4,
+      tradeCount: 2,
+      winRatePct: 50,
+      startDate: '2026-02-01',
+      endDate: '2026-03-31',
+      periodStart: '2026-02-01',
+      periodEnd: '2026-03-31',
+      completedAt: '2026-04-08T08:03:00Z',
+    });
+    const toCompareItem = (run: RuleBacktestRunResponse) => ({
+      metadata: {
+        id: run.id,
+        code: run.code,
+        status: run.status,
+        runAt: run.runAt,
+        completedAt: run.completedAt,
+        timeframe: run.timeframe,
+        startDate: run.startDate,
+        endDate: run.endDate,
+        periodStart: run.periodStart,
+        periodEnd: run.periodEnd,
+        lookbackBars: run.lookbackBars,
+        initialCapital: run.initialCapital,
+        feeBps: run.feeBps,
+        slippageBps: run.slippageBps,
+      },
+      metrics: {
+        tradeCount: run.tradeCount,
+        winCount: run.winCount,
+        lossCount: run.lossCount,
+        totalReturnPct: run.totalReturnPct,
+        annualizedReturnPct: run.annualizedReturnPct,
+        benchmarkReturnPct: run.benchmarkReturnPct,
+        excessReturnVsBenchmarkPct: run.excessReturnVsBenchmarkPct,
+        buyAndHoldReturnPct: run.buyAndHoldReturnPct,
+        excessReturnVsBuyAndHoldPct: run.excessReturnVsBuyAndHoldPct,
+        winRatePct: run.winRatePct,
+        avgTradeReturnPct: run.avgTradeReturnPct,
+        maxDrawdownPct: run.maxDrawdownPct,
+        avgHoldingDays: run.avgHoldingDays,
+        avgHoldingBars: run.avgHoldingBars,
+        avgHoldingCalendarDays: run.avgHoldingCalendarDays,
+        finalEquity: run.finalEquity,
+      },
+      parsedStrategy: run.parsedStrategy,
+      benchmark: {
+        mode: run.benchmarkMode,
+        code: run.benchmarkCode,
+        returnPct: run.benchmarkReturnPct,
+      },
+    });
+
+    getRuleBacktestRun.mockImplementation(async (id: number) => (id === 123 ? compareRun : currentRun));
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 10,
+      items: [currentRun, compareRun],
+    });
+    compareRuleBacktestRuns.mockImplementation(async ({ runIds }: { runIds: number[] }) => {
+      const baselineRunId = runIds[0];
+      const candidateRunId = runIds.find((id) => id !== baselineRunId) || runIds[1];
+      const baseline = baselineRunId === 99 ? currentRun : compareRun;
+      const candidate = candidateRunId === 99 ? currentRun : compareRun;
+      const baselineTotalReturn = baseline.totalReturnPct ?? 0;
+      const candidateTotalReturn = candidate.totalReturnPct ?? 0;
+
+      return {
+        comparisonSource: 'stored_rule_backtest_runs',
+        readMode: 'stored_first',
+        requestedRunIds: runIds,
+        resolvedRunIds: runIds,
+        comparableRunIds: runIds,
+        missingRunIds: [],
+        unavailableRuns: [],
+        fieldGroups: ['market_code_comparison', 'period_comparison', 'comparison_summary'],
+        marketCodeComparison: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          relationship: 'same_code',
+          state: 'direct',
+          directlyComparable: true,
+          diagnostics: ['same_normalized_code'],
+        },
+        periodComparison: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          relationship: 'overlapping',
+          state: 'comparable',
+          meaningfullyComparable: true,
+          diagnostics: ['overlapping_periods'],
+        },
+        comparisonSummary: {
+          baseline: {
+            runId: baselineRunId,
+            selectionRule: 'first_comparable_run_by_request_order',
+            code: baseline.code,
+            timeframe: baseline.timeframe,
+            startDate: baseline.startDate,
+            endDate: baseline.endDate,
+            strategyFamily: baseline.parsedStrategy?.strategySpec?.strategyFamily || 'moving_average_crossover',
+            strategyType: baseline.parsedStrategy?.strategySpec?.strategyType || 'moving_average_crossover',
+          },
+          context: {
+            codeValues: [baseline.code || compareRun.code || currentRun.code],
+            timeframeValues: ['daily'],
+            strategyFamilyValues: ['moving_average_crossover'],
+            strategyTypeValues: ['moving_average_crossover'],
+            dateRanges: [
+              { runId: currentRun.id, startDate: currentRun.startDate, endDate: currentRun.endDate },
+              { runId: compareRun.id, startDate: compareRun.startDate, endDate: compareRun.endDate },
+            ],
+            allSameCode: true,
+            allSameTimeframe: true,
+            allSameDateRange: false,
+          },
+          metricDeltas: {
+            totalReturnPct: {
+              label: 'total_return_pct',
+              state: 'comparable',
+              baselineRunId,
+              baselineValue: baselineTotalReturn,
+              availableRunIds: runIds,
+              unavailableRunIds: [],
+              deltas: [
+                { runId: baselineRunId, value: baselineTotalReturn, deltaVsBaseline: 0 },
+                { runId: candidateRunId, value: candidateTotalReturn, deltaVsBaseline: candidateTotalReturn - baselineTotalReturn },
+              ],
+            },
+            annualizedReturnPct: {
+              label: 'annualized_return_pct',
+              state: 'partial',
+              baselineRunId,
+              baselineValue: baseline.annualizedReturnPct,
+              availableRunIds: baseline.annualizedReturnPct == null ? [] : [baselineRunId],
+              unavailableRunIds: candidate.annualizedReturnPct == null ? [candidateRunId] : [],
+              deltas: baseline.annualizedReturnPct == null ? [] : [{ runId: baselineRunId, value: baseline.annualizedReturnPct, deltaVsBaseline: 0 }],
+            },
+          },
+        },
+        robustnessSummary: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          overallState: 'partially_comparable',
+          directlyComparable: false,
+          alignedDimensions: ['market_code'],
+          partialDimensions: ['periods'],
+          divergentDimensions: [],
+          unavailableDimensions: [],
+          dimensions: {},
+          diagnostics: ['partial_metric_deltas'],
+        },
+        comparisonProfile: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          primaryProfile: 'same_code_different_periods',
+          alignedDimensions: ['market_code'],
+          drivingDimensions: ['periods'],
+          dimensionFlags: {
+            sameCode: true,
+            sameMarket: true,
+            crossMarket: false,
+            sameStrategyFamily: true,
+            parameterDifferencesPresent: false,
+            periodDifferencesPresent: true,
+          },
+          diagnostics: ['overlapping_periods'],
+        },
+        comparisonHighlights: {
+          baselineRunId,
+          selectionRule: 'first_comparable_run_by_request_order',
+          primaryProfile: 'same_code_different_periods',
+          overallContextState: 'partially_comparable',
+          highlights: {
+            totalReturnPct: {
+              metric: 'total_return_pct',
+              preference: 'higher_is_better',
+              state: 'limited_context_winner',
+              winnerRunIds: baselineTotalReturn >= candidateTotalReturn ? [baselineRunId] : [candidateRunId],
+              winnerValue: Math.max(baselineTotalReturn, candidateTotalReturn),
+              availableRunIds: runIds,
+              candidateCount: 2,
+              diagnostics: ['partially_comparable_context'],
+            },
+            annualizedReturnPct: {
+              metric: 'annualized_return_pct',
+              preference: 'higher_is_better',
+              state: 'unavailable',
+              winnerRunIds: [],
+              winnerValue: null,
+              availableRunIds: baseline.annualizedReturnPct == null ? [] : [baselineRunId],
+              candidateCount: baseline.annualizedReturnPct == null ? 0 : 1,
+              diagnostics: ['metric_unavailable'],
+            },
+          },
+          diagnostics: ['partially_comparable_context', 'metric_unavailable'],
+        },
+        parameterComparison: {
+          state: 'same_family_comparable',
+          strategyFamilyValues: ['moving_average_crossover'],
+          strategyTypeValues: ['moving_average_crossover'],
+          sharedParameterKeys: ['strategy_spec.execution.signal_timing'],
+          differingParameterKeys: ['strategy_spec.signal.fast_period'],
+          missingParameterKeys: [],
+          sharedParameters: {},
+          differingParameters: {},
+          missingParameters: {},
+        },
+        items: [toCompareItem(currentRun), toCompareItem(compareRun)],
+      };
+    });
+
+    renderResultPageWithCompareWorkbench();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
+
+    await waitFor(() => {
+      expect(getRuleBacktestRun).toHaveBeenCalledWith(123);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开比较工作台' }));
+
+    expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
+    expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [99, 123] });
+    expect(screen.getByRole('navigation', { name: '比较区块导航' })).toBeInTheDocument();
+
+    const parameterSummary = screen.getByText('toggle / parameter + metrics');
+    const parameterDisclosure = parameterSummary.closest('details');
+    expect(parameterDisclosure).toHaveAttribute('open');
+    fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
+    expect(parameterDisclosure).not.toHaveAttribute('open');
+    fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
+    expect(parameterDisclosure).toHaveAttribute('open');
+
+    fireEvent.click(screen.getByRole('button', { name: '复制摘要' }));
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('compare 99,123 | baseline #99 ORCL | overall partially_comparable | profile same_code_different_periods | comparable 2/2');
+    });
+    expect(screen.getByText('已复制比较摘要')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '设为 baseline 123' }));
+    await waitFor(() => {
+      expect(compareRuleBacktestRuns).toHaveBeenLastCalledWith({ runIds: [123, 99] });
+    });
+    expect(screen.getByRole('columnheader', { name: /#123 baseline/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '移除运行 99' }));
+    expect(await screen.findByText('至少需要 2 条已完成运行才能打开比较工作台。')).toBeInTheDocument();
   });
 
   it('runs lightweight scenario variants and exports the summary report', async () => {
