@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import RuleBacktestComparePage from '../RuleBacktestComparePage';
 
 const { compareRuleBacktestRuns } = vi.hoisted(() => ({
   compareRuleBacktestRuns: vi.fn(),
+}));
+
+const { writeTextMock } = vi.hoisted(() => ({
+  writeTextMock: vi.fn(),
 }));
 
 vi.mock('../../api/backtest', () => ({
@@ -25,8 +29,26 @@ function renderComparePage(initialEntry = '/backtest/compare?runIds=101,202') {
 }
 
 describe('RuleBacktestComparePage', () => {
+  let originalClipboard: Navigator['clipboard'] | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    writeTextMock.mockReset();
+    writeTextMock.mockResolvedValue(undefined);
+    originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
   });
 
   it('loads the compare API and renders the foundation workbench sections', async () => {
@@ -532,6 +554,215 @@ describe('RuleBacktestComparePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开结果页 202' }));
 
     expect(await screen.findByTestId('rule-backtest-result-route')).toBeInTheDocument();
+  });
+
+  it('copies shareable compare values from the summary area', async () => {
+    compareRuleBacktestRuns.mockResolvedValue({
+      comparisonSource: 'stored_rule_backtest_runs',
+      readMode: 'stored_first',
+      requestedRunIds: [101, 202],
+      resolvedRunIds: [101, 202],
+      comparableRunIds: [101, 202],
+      missingRunIds: [],
+      unavailableRuns: [],
+      fieldGroups: ['market_code_comparison', 'period_comparison', 'comparison_summary'],
+      marketCodeComparison: {
+        baselineRunId: 101,
+        selectionRule: 'first_comparable_run_by_request_order',
+        relationship: 'same_code',
+        state: 'direct',
+        directlyComparable: true,
+        diagnostics: ['same_normalized_code'],
+      },
+      periodComparison: {
+        baselineRunId: 101,
+        selectionRule: 'first_comparable_run_by_request_order',
+        relationship: 'overlapping',
+        state: 'comparable',
+        meaningfullyComparable: true,
+        diagnostics: ['overlapping_periods'],
+      },
+      comparisonSummary: {
+        baseline: {
+          runId: 101,
+          selectionRule: 'first_comparable_run_by_request_order',
+          code: 'ORCL',
+          timeframe: 'daily',
+          startDate: '2025-01-01',
+          endDate: '2025-12-31',
+          strategyFamily: 'moving_average_crossover',
+          strategyType: 'moving_average_crossover',
+        },
+        context: {
+          codeValues: ['ORCL'],
+          timeframeValues: ['daily'],
+          strategyFamilyValues: ['moving_average_crossover'],
+          strategyTypeValues: ['moving_average_crossover'],
+          dateRanges: [
+            { runId: 101, startDate: '2025-01-01', endDate: '2025-12-31' },
+            { runId: 202, startDate: '2025-03-01', endDate: '2025-12-31' },
+          ],
+          allSameCode: true,
+          allSameTimeframe: true,
+          allSameDateRange: false,
+        },
+        metricDeltas: {
+          totalReturnPct: {
+            label: 'total_return_pct',
+            state: 'comparable',
+            baselineRunId: 101,
+            baselineValue: 12,
+            availableRunIds: [101, 202],
+            unavailableRunIds: [],
+            deltas: [
+              { runId: 101, value: 12, deltaVsBaseline: 0 },
+              { runId: 202, value: 18, deltaVsBaseline: 6 },
+            ],
+          },
+        },
+      },
+      robustnessSummary: {
+        baselineRunId: 101,
+        selectionRule: 'first_comparable_run_by_request_order',
+        overallState: 'partially_comparable',
+        directlyComparable: false,
+        alignedDimensions: ['market_code'],
+        partialDimensions: ['periods'],
+        divergentDimensions: [],
+        unavailableDimensions: [],
+        dimensions: {},
+        diagnostics: ['partial_metric_deltas'],
+      },
+      comparisonProfile: {
+        baselineRunId: 101,
+        selectionRule: 'first_comparable_run_by_request_order',
+        primaryProfile: 'same_code_different_periods',
+        alignedDimensions: ['market_code'],
+        drivingDimensions: ['periods'],
+        dimensionFlags: {
+          sameCode: true,
+          sameMarket: true,
+          crossMarket: false,
+          sameStrategyFamily: true,
+          parameterDifferencesPresent: false,
+          periodDifferencesPresent: true,
+        },
+        diagnostics: ['overlapping_periods'],
+      },
+      comparisonHighlights: {
+        baselineRunId: 101,
+        selectionRule: 'first_comparable_run_by_request_order',
+        primaryProfile: 'same_code_different_periods',
+        overallContextState: 'partially_comparable',
+        highlights: {},
+        diagnostics: [],
+      },
+      parameterComparison: {
+        state: 'same_family_comparable',
+        strategyFamilyValues: ['moving_average_crossover'],
+        strategyTypeValues: ['moving_average_crossover'],
+        sharedParameterKeys: [],
+        differingParameterKeys: [],
+        missingParameterKeys: [],
+        sharedParameters: {},
+        differingParameters: {},
+        missingParameters: {},
+      },
+      items: [
+        {
+          metadata: {
+            id: 101,
+            code: 'ORCL',
+            status: 'completed',
+            runAt: '2026-04-01T08:00:00Z',
+            completedAt: '2026-04-01T08:02:00Z',
+            timeframe: 'daily',
+            startDate: '2025-01-01',
+            endDate: '2025-12-31',
+            periodStart: '2025-01-01',
+            periodEnd: '2025-12-31',
+            lookbackBars: 252,
+            initialCapital: 100000,
+            feeBps: 0,
+            slippageBps: 0,
+          },
+          metrics: {
+            tradeCount: 12,
+            totalReturnPct: 12,
+            excessReturnVsBenchmarkPct: 4,
+            maxDrawdownPct: 8.5,
+          },
+          parsedStrategy: {
+            strategySpec: {
+              strategyFamily: 'moving_average_crossover',
+              strategyType: 'moving_average_crossover',
+            },
+          },
+          benchmark: {
+            mode: 'auto',
+            code: 'QQQ',
+            returnPct: 8,
+          },
+        },
+        {
+          metadata: {
+            id: 202,
+            code: 'ORCL',
+            status: 'completed',
+            runAt: '2026-04-02T08:00:00Z',
+            completedAt: '2026-04-02T08:03:00Z',
+            timeframe: 'daily',
+            startDate: '2025-03-01',
+            endDate: '2025-12-31',
+            periodStart: '2025-03-01',
+            periodEnd: '2025-12-31',
+            lookbackBars: 252,
+            initialCapital: 100000,
+            feeBps: 0,
+            slippageBps: 0,
+          },
+          metrics: {
+            tradeCount: 9,
+            totalReturnPct: 18,
+            excessReturnVsBenchmarkPct: 11,
+            maxDrawdownPct: 9.2,
+          },
+          parsedStrategy: {
+            strategySpec: {
+              strategyFamily: 'moving_average_crossover',
+              strategyType: 'moving_average_crossover',
+            },
+          },
+          benchmark: {
+            mode: 'auto',
+            code: 'QQQ',
+            returnPct: 7,
+          },
+        },
+      ],
+    });
+
+    renderComparePage();
+
+    expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '复制链接' }));
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenNthCalledWith(1, 'http://localhost:3000/backtest/compare?runIds=101%2C202');
+    });
+    expect(screen.getByText('已复制当前比较链接')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '复制 runIds' }));
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenNthCalledWith(2, '101,202');
+    });
+    expect(screen.getByText('已复制当前 runIds')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '复制摘要' }));
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenNthCalledWith(3, 'compare 101,202 | baseline #101 ORCL | overall partially_comparable | profile same_code_different_periods | comparable 2/2');
+    });
+    expect(screen.getByText('已复制比较摘要')).toBeInTheDocument();
   });
 
   it('lets users remove a candidate run from the current compare selection', async () => {

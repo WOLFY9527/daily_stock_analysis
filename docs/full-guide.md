@@ -974,6 +974,7 @@ Web 结果页现在也统一按一条确定的数据链路展示：
 - compare workbench 的多区块结果页现在也有一块顶部 sticky section navigation：用户可以直接跳到 `比较摘要 / comparison_highlights / compact metric matrix / robustness + profile / market / period context / parameter + metrics / 参与运行`，避免在较长的 compare 页面里来回滚动查找目标区块。
 - compare workbench 现在还带一条很轻量的 visual chart strip：它不会扩展成 dashboard，也不会请求新数据，只会基于当前 compare API 已有的关键 metric values 做一层紧凑条形可视化，帮助用户更快扫读 baseline 与 candidate 在 trusted 指标上的相对位置。
 - compare workbench 现在也对较低优先级的 sections 提供轻量 collapse/expand 控件：`comparison_highlights / market / period context / parameter + metrics / 参与运行` 默认仍然展开，但用户可以临时收起它们来压缩页面长度，而不用改变 route、刷新 compare 或保存额外偏好。
+- compare workbench 的比较摘要区现在也有一组轻量 share/export controls：用户可以直接复制当前 compare 链接、当前 `runIds` 选择，或者复制一段基于当前 baseline / overall_state / primary_profile / comparable count 生成的短摘要文本，方便把当前比较快速发给别人或贴回自己的工作流。
 - P6 也把 chart workspace 调整为更偏决策支持的结构：主图继续保留策略/基准/买入持有对照，第二张图优先展示回撤，第三张图可在 `相对基准 / 每日盈亏 / 仓位行为` 之间切换，帮助更快判断“是否跑赢、代价多大、交易是否过于频繁”
 - `参数与假设` tab 现在内置受控 `Scenario Lab`，支持对已支持的 rule strategy 做轻量参数迭代（例如 MA window、MACD/RSI 变体、benchmark mode、fee/slippage stress、lookback 窗口），并把当前运行作为基线汇总成紧凑比较表；它不是 full optimizer，只覆盖受控、确定性的 first-step iteration
 - 结果页 `概览` tab 会生成可导出的决策摘要（Markdown / HTML），优先输出人类可读的 decision summary，再把 execution trace 留给 CSV / JSON 导出；结果页同时会自动沉淀 recent draft，并支持手动保存具名 preset，配置页可直接复用这些回测配置而不用重新填写整套参数

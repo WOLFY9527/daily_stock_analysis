@@ -6804,6 +6804,18 @@ html[data-theme] .product-empty-state {
   text-decoration: none;
 }
 
+.compare-share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.compare-share-actions__feedback {
+  color: var(--text-secondary);
+}
+
 .compare-section-disclosure {
   margin-top: 0;
   border-top: 0;

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -206,6 +206,32 @@ function orderCompareItems(items: RuleBacktestCompareRunItem[], runIds: number[]
     const rightOrder = orderMap.get(right.metadata.id) ?? Number.MAX_SAFE_INTEGER;
     return leftOrder - rightOrder;
   });
+}
+
+function buildCompareShareSummary({
+  runIds,
+  baselineRunId,
+  baselineCode,
+  overallState,
+  primaryProfile,
+  comparableCount,
+  requestedCount,
+}: {
+  runIds: number[];
+  baselineRunId?: number | null;
+  baselineCode?: string | null;
+  overallState?: string;
+  primaryProfile?: string;
+  comparableCount?: number;
+  requestedCount?: number;
+}): string {
+  return [
+    `compare ${runIds.join(',') || '--'}`,
+    `baseline #${baselineRunId ?? '--'} ${baselineCode || '--'}`,
+    `overall ${overallState || '--'}`,
+    `profile ${primaryProfile || '--'}`,
+    `comparable ${comparableCount ?? 0}/${requestedCount ?? 0}`,
+  ].join(' | ');
 }
 
 function CompareMetricMatrix({
@@ -515,6 +541,8 @@ const RuleBacktestComparePage: React.FC = () => {
   const [response, setResponse] = useState<RuleBacktestCompareResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const copyResetTimerRef = useRef<number | null>(null);
 
   const fetchCompare = useCallback(async () => {
     if (runIds.length < 2) {
@@ -544,6 +572,12 @@ const RuleBacktestComparePage: React.FC = () => {
     void fetchCompare();
   }, [fetchCompare]);
 
+  useEffect(() => () => {
+    if (copyResetTimerRef.current != null) {
+      window.clearTimeout(copyResetTimerRef.current);
+    }
+  }, []);
+
   const orderedItems = useMemo(() => orderCompareItems(response?.items || [], runIds), [response?.items, runIds]);
   const baselineRunId = response?.comparisonSummary?.baseline.runId
     ?? response?.robustnessSummary?.baselineRunId
@@ -558,10 +592,49 @@ const RuleBacktestComparePage: React.FC = () => {
   const parameterComparison = response?.parameterComparison || null;
   const marketCodeComparison = response?.marketCodeComparison || null;
   const periodComparison = response?.periodComparison || null;
+  const compareUrl = useMemo(() => {
+    const query = searchParams.toString();
+    return `${window.location.origin}/backtest/compare${query ? `?${query}` : ''}`;
+  }, [searchParams]);
+  const compareSummaryText = useMemo(() => buildCompareShareSummary({
+    runIds,
+    baselineRunId,
+    baselineCode: baselineItem?.metadata.code || comparisonSummary?.baseline.code || '--',
+    overallState: robustnessSummary?.overallState,
+    primaryProfile: comparisonProfile?.primaryProfile,
+    comparableCount: response?.comparableRunIds.length,
+    requestedCount: response?.requestedRunIds.length,
+  }), [
+    baselineItem?.metadata.code,
+    baselineRunId,
+    comparisonProfile?.primaryProfile,
+    comparisonSummary?.baseline.code,
+    response?.comparableRunIds.length,
+    response?.requestedRunIds.length,
+    robustnessSummary?.overallState,
+    runIds,
+  ]);
 
   const handleOpenRun = useCallback((runId: number) => {
     navigate(`/backtest/results/${runId}`);
   }, [navigate]);
+
+  const handleCopyText = useCallback(async (content: string, successMessage: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
+      await navigator.clipboard.writeText(content);
+      setCopyFeedback(successMessage);
+    } catch {
+      setCopyFeedback('复制失败，请手动复制');
+    }
+    if (copyResetTimerRef.current != null) {
+      window.clearTimeout(copyResetTimerRef.current);
+    }
+    copyResetTimerRef.current = window.setTimeout(() => {
+      setCopyFeedback(null);
+      copyResetTimerRef.current = null;
+    }, 2000);
+  }, []);
 
   const handleRemoveRun = useCallback((runId: number) => {
     const nextRunIds = runIds.filter((id) => id !== runId);
@@ -667,6 +740,12 @@ const RuleBacktestComparePage: React.FC = () => {
                   },
                 ]}
               />
+              <div className="compare-share-actions">
+                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareUrl, '已复制当前比较链接')}>复制链接</Button>
+                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(runIds.join(','), '已复制当前 runIds')}>复制 runIds</Button>
+                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareSummaryText, '已复制比较摘要')}>复制摘要</Button>
+                {copyFeedback ? <span className="product-footnote compare-share-actions__feedback">{copyFeedback}</span> : null}
+              </div>
               <div className="preview-grid">
                 <div className="preview-card">
                   <p className="metric-card__label">baseline</p>
