@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### 修复
 
 - 🧯 **Phase F partial-Postgres fallback hardening** — 当 `broker_connections`、`portfolio_sync_states` 等 Phase F PostgreSQL 表只完成了部分建表或被跨 phase 清理移除时，portfolio metadata / latest-sync 读路径现在会安全回退到 legacy storage，而不是直接抛出 `UndefinedTable`。本次同时补充了 real-PG 回归覆盖，锁定 broker connection surface、latest sync surface，以及 cash-ledger comparison 在多用户 account scope 下的边界行为。
+- 🧮 **Rule backtest fixed-amount accumulation now honors insufficient-cash policy** — `periodic_accumulation` 在 `fixed_amount` 模式下不再用剩余现金做隐式部分成交；当剩余现金低于目标金额时，现在会按既有 `skip_when_insufficient_cash / stop_when_insufficient_cash` 语义稳定跳过或停止。此次同时补上了中文按金额定投解析回归，以及 single-account small-capital 边界测试，避免 deterministic 回测结果在资金尾段悄悄漂移。
 
 ### 新功能
 

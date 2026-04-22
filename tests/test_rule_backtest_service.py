@@ -183,6 +183,19 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(parsed["strategy_spec"]["support"]["executable"])
         self.assertTrue(parsed["needs_confirmation"])
 
+    def test_parse_chinese_periodic_amount_instruction_into_structured_draft(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service.parse_strategy("资金100000，从2025-01-01到2025-12-31，每天买1000元ORCL，买到区间结束")
+
+        self.assertEqual(parsed["strategy_kind"], "periodic_accumulation")
+        self.assertEqual(parsed["strategy_spec"]["strategy_type"], "periodic_accumulation")
+        self.assertEqual(parsed["strategy_spec"]["symbol"], "ORCL")
+        self.assertEqual(parsed["strategy_spec"]["entry"]["order"]["mode"], "fixed_amount")
+        self.assertIsNone(parsed["strategy_spec"]["entry"]["order"]["quantity"])
+        self.assertEqual(parsed["strategy_spec"]["entry"]["order"]["amount"], 1000.0)
+        self.assertEqual(parsed["strategy_spec"]["position_behavior"]["cash_policy"], "skip_when_insufficient_cash")
+        self.assertTrue(parsed["strategy_spec"]["support"]["executable"])
+
     def test_normalize_moving_average_crossover_strategy_spec(self) -> None:
         service = RuleBacktestService(self.db)
         parsed = service.parse_strategy(
@@ -3310,6 +3323,68 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(result.metrics["bars_used"], 1)
         self.assertEqual(len(result.equity_curve), 1)
         self.assertEqual(result.metrics["trade_count"], 1)
+
+    def test_engine_skips_fixed_amount_accumulation_when_remaining_cash_is_below_target(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars([10, 10.1, 10.2], start=date(2024, 1, 1))
+        parsed_dict = service.parse_strategy(
+            "资金1000，从2024-01-01到2024-01-03，每天买600元TEST，买到区间结束",
+            code="TEST",
+            start_date="2024-01-01",
+            end_date="2024-01-03",
+            initial_capital=1000,
+        )
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        engine = RuleBacktestEngine()
+
+        result = engine.run(
+            code="TEST",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=1000.0,
+            lookback_bars=3,
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 3),
+        )
+
+        self.assertEqual(result.parsed_strategy.strategy_spec["entry"]["order"]["mode"], "fixed_amount")
+        self.assertEqual([point.executed_action for point in result.equity_curve], ["accumulate", None, "forced_close"])
+        self.assertEqual(result.equity_curve[1].notes, "skip_buy_when_insufficient_cash")
+        self.assertEqual(result.equity_curve[1].signal_summary, "现金不足，跳过本次计划买入")
+        self.assertEqual(result.metrics["trade_count"], 1)
+        self.assertEqual(result.metrics["entry_signal_count"], 3)
+        self.assertEqual(result.trades[0].entry_indicators["shares"], 60.606061)
+
+    def test_engine_stops_fixed_amount_accumulation_when_cash_policy_requires_stop(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars([10, 10.1, 10.2], start=date(2024, 1, 1))
+        parsed_dict = service.parse_strategy(
+            "资金1000，从2024-01-01到2024-01-03，每天买600元TEST，买到资金耗尽为止",
+            code="TEST",
+            start_date="2024-01-01",
+            end_date="2024-01-03",
+            initial_capital=1000,
+        )
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        engine = RuleBacktestEngine()
+
+        result = engine.run(
+            code="TEST",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=1000.0,
+            lookback_bars=3,
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 3),
+        )
+
+        self.assertEqual(result.parsed_strategy.strategy_spec["position_behavior"]["cash_policy"], "stop_when_insufficient_cash")
+        self.assertEqual([point.executed_action for point in result.equity_curve], ["accumulate", None, "forced_close"])
+        self.assertEqual(result.equity_curve[1].notes, "stop_buying_when_insufficient_cash")
+        self.assertEqual(result.equity_curve[1].signal_summary, "现金不足，后续停止继续买入")
+        self.assertEqual(result.metrics["trade_count"], 1)
+        self.assertEqual(result.metrics["entry_signal_count"], 2)
+        self.assertEqual(result.trades[0].entry_indicators["shares"], 60.606061)
 
     def test_engine_handles_single_day_window_for_moving_average_crossover(self) -> None:
         service = RuleBacktestService(self.db)

@@ -2343,8 +2343,9 @@ class RuleBacktestEngine:
             target_amount = float(amount_per_trade or 0.0)
             if target_amount <= 0:
                 return None
-            gross_budget = min(target_amount, float(available_cash))
-            shares = gross_budget / per_share_cost
+            if float(available_cash) + 1e-9 < target_amount:
+                return None
+            shares = target_amount / per_share_cost
         else:
             shares = float(quantity_per_trade or 0.0)
         if shares <= 0:
