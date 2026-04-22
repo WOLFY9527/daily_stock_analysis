@@ -3235,6 +3235,15 @@ class DatabaseManager:
             owner_user_id=resolved_owner_id,
             include_inactive=include_inactive,
         )
+        for row in rows:
+            current_account_id = int(row.id)
+            authority = self.get_phase_f_portfolio_shadow_authority_state(account_id=current_account_id)
+            if authority is None:
+                return None
+            if not authority["effective_readiness"].get("account_metadata"):
+                return None
+            if resolved_owner_id is not None and str(getattr(row, "owner_user_id", "") or "") != resolved_owner_id:
+                return None
         return [self._phase_f_account_metadata_row(row) for row in rows]
 
     def get_phase_f_portfolio_shadow_bundle(self, *, account_id: int) -> Optional[Dict[str, Any]]:
