@@ -7,28 +7,14 @@ import { scannerApi } from '../api/scanner';
 import { ApiErrorAlert, Badge, Button, Card, Pagination, Select, WorkspacePageHeader } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerCandidate, ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
+import {
+  getScannerDetailOptions,
+  getScannerProfileOptions,
+  getScannerUniverseOptions,
+  SCANNER_PROFILE_DEFAULTS,
+} from './scannerPageShared';
 
 const HISTORY_PAGE_SIZE = 8;
-const PROFILE_DEFAULTS = {
-  cn: {
-    profile: 'cn_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '300',
-    detailLimit: '60',
-  },
-  us: {
-    profile: 'us_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '180',
-    detailLimit: '40',
-  },
-  hk: {
-    profile: 'hk_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '120',
-    detailLimit: '30',
-  },
-} as const;
 
 function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
@@ -130,60 +116,16 @@ const UserScannerPage: React.FC = () => {
     document.title = t('scanner.documentTitle');
   }, [t]);
 
-  const profileOptions = useMemo(() => (
-    market === 'us'
-      ? [{ value: 'us_preopen_v1', label: t('scanner.profileOptionUs') }]
-      : market === 'hk'
-        ? [{ value: 'hk_preopen_v1', label: t('scanner.profileOptionHk') }]
-        : [{ value: 'cn_preopen_v1', label: t('scanner.profileOptionCn') }]
-  ), [market, t]);
-
-  const universeOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '120', label: '120' },
-        { value: '180', label: '180' },
-        { value: '240', label: '240' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '80', label: '80' },
-          { value: '120', label: '120' },
-          { value: '180', label: '180' },
-        ]
-      : [
-        { value: '200', label: language === 'en' ? '200' : '200 只' },
-        { value: '300', label: language === 'en' ? '300' : '300 只' },
-        { value: '500', label: language === 'en' ? '500' : '500 只' },
-      ]
-  ), [language, market]);
-
-  const detailOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '30', label: '30' },
-        { value: '40', label: '40' },
-        { value: '60', label: '60' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '20', label: '20' },
-          { value: '30', label: '30' },
-          { value: '40', label: '40' },
-        ]
-      : [
-        { value: '40', label: language === 'en' ? '40' : '40 只' },
-        { value: '60', label: language === 'en' ? '60' : '60 只' },
-        { value: '80', label: language === 'en' ? '80' : '80 只' },
-      ]
-  ), [language, market]);
+  const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
+  const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
+  const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
 
   const selectedMarketCopy = useMemo(() => (
     market === 'us'
       ? {
         subtitle: language === 'en'
-          ? 'Run manual scanner sessions in your own account. System watchlists and schedules stay in admin-only views.'
-          : '以你的个人账户执行手动扫描。系统观察名单与调度留在仅管理员可见的运营空间。',
+          ? 'Run manual scanner sessions in your own account. System watchlists and schedules stay in admin-only pages.'
+          : '以你的个人账户执行手动扫描。系统观察名单和调度仍只在管理员页面中可见。',
         runHint: t('scanner.runHintUs'),
         currentRunFallback: t('scanner.currentRunFallbackUs'),
       }
@@ -191,7 +133,7 @@ const UserScannerPage: React.FC = () => {
         ? {
           subtitle: language === 'en'
             ? 'Run personal Hong Kong scanner sessions in your own account. System watchlists and schedules remain admin-only.'
-            : '以你的个人账户执行港股手动扫描。系统观察名单与调度继续保留在仅管理员可见的运营空间。',
+            : '以你的个人账户执行港股手动扫描。系统观察名单和调度继续保留在仅管理员可见的页面中。',
           runHint: t('scanner.runHintHk'),
           currentRunFallback: t('scanner.currentRunFallbackHk'),
         }
@@ -206,7 +148,7 @@ const UserScannerPage: React.FC = () => {
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
-    const defaults = PROFILE_DEFAULTS[normalizedMarket];
+    const defaults = SCANNER_PROFILE_DEFAULTS[normalizedMarket];
     setMarket(normalizedMarket);
     setProfile(defaults.profile);
     setShortlistSize(defaults.shortlistSize);
@@ -569,13 +511,13 @@ const UserScannerPage: React.FC = () => {
             <div className="space-y-3 text-sm leading-6 text-secondary-text">
               <p>
                 {language === 'en'
-                  ? 'This page focuses on manual runs, shortlist details, and handoff into other signed-in product features.'
-                  : '这个页面只保留手动运行、候选名单详情和跨功能联动，作为标准登录用户的产品面。'}
+                  ? 'This page focuses on manual runs, shortlist details, and links into other signed-in product features.'
+                  : '这个页面只保留手动运行、候选名单详情和登录后功能跳转，面向普通登录用户。'}
               </p>
               <p>
                 {language === 'en'
-                  ? 'Operational status, system watchlists, schedules, and channel-level settings stay in admin-only views.'
-                  : '运营状态、系统观察名单、调度和通道内部配置继续保留在仅管理员可见的运营界面。'}
+                  ? 'Run status, system watchlists, schedules, and channel settings stay in admin-only pages.'
+                  : '运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。'}
               </p>
             </div>
           </Card>

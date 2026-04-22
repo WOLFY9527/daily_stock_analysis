@@ -23,28 +23,14 @@ import type {
   ScannerRunDetail,
   ScannerRunHistoryItem,
 } from '../types/scanner';
+import {
+  getScannerDetailOptions,
+  getScannerProfileOptions,
+  getScannerUniverseOptions,
+  SCANNER_PROFILE_DEFAULTS,
+} from './scannerPageShared';
 
 const HISTORY_PAGE_SIZE = 6;
-const PROFILE_DEFAULTS = {
-  cn: {
-    profile: 'cn_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '300',
-    detailLimit: '60',
-  },
-  us: {
-    profile: 'us_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '180',
-    detailLimit: '40',
-  },
-  hk: {
-    profile: 'hk_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '120',
-    detailLimit: '30',
-  },
-} as const;
 
 function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
@@ -200,53 +186,9 @@ const ScannerPage: React.FC = () => {
     document.title = t('scanner.documentTitle');
   }, [t]);
 
-  const profileOptions = useMemo(() => (
-    market === 'us'
-      ? [{ value: 'us_preopen_v1', label: t('scanner.profileOptionUs') }]
-      : market === 'hk'
-        ? [{ value: 'hk_preopen_v1', label: t('scanner.profileOptionHk') }]
-        : [{ value: 'cn_preopen_v1', label: t('scanner.profileOptionCn') }]
-  ), [market, t]);
-
-  const universeOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '120', label: '120' },
-        { value: '180', label: '180' },
-        { value: '240', label: '240' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '80', label: '80' },
-          { value: '120', label: '120' },
-          { value: '180', label: '180' },
-        ]
-      : [
-        { value: '200', label: language === 'en' ? '200' : '200 只' },
-        { value: '300', label: language === 'en' ? '300' : '300 只' },
-        { value: '500', label: language === 'en' ? '500' : '500 只' },
-      ]
-  ), [language, market]);
-
-  const detailOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '30', label: '30' },
-        { value: '40', label: '40' },
-        { value: '60', label: '60' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '20', label: '20' },
-          { value: '30', label: '30' },
-          { value: '40', label: '40' },
-        ]
-      : [
-        { value: '40', label: language === 'en' ? '40' : '40 只' },
-        { value: '60', label: language === 'en' ? '60' : '60 只' },
-        { value: '80', label: language === 'en' ? '80' : '80 只' },
-      ]
-  ), [language, market]);
+  const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
+  const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
+  const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
 
   const selectedMarketCopy = useMemo(() => (
     market === 'us'
@@ -276,7 +218,7 @@ const ScannerPage: React.FC = () => {
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
-    const defaults = PROFILE_DEFAULTS[normalizedMarket];
+    const defaults = SCANNER_PROFILE_DEFAULTS[normalizedMarket];
     setMarket(normalizedMarket);
     setProfile(defaults.profile);
     setShortlistSize(defaults.shortlistSize);
@@ -1294,7 +1236,7 @@ const ScannerPage: React.FC = () => {
 
               {!isLoadingPersonalHistory && !personalHistoryItems.length ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
-                  {language === 'en' ? 'No personal scanner history yet.' : '当前管理员账户下还没有个人扫描历史。'}
+                  {language === 'en' ? 'No scanner history yet.' : '当前还没有扫描历史。'}
                 </div>
               ) : null}
             </Card>

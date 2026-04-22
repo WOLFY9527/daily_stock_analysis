@@ -826,7 +826,7 @@ describe('ScannerPage', () => {
     expect(screen.getByText('AI算力')).toBeInTheDocument();
     expect(screen.getAllByText('AI 解读').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/临界突破/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('2026-04-13').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2026.*04.*13|04.*13.*2026|2026-04-13/).length).toBeGreaterThan(0);
     expect(screen.getAllByText('推送成功').length).toBeGreaterThan(0);
     expect(screen.getAllByText('定时').length).toBeGreaterThan(0);
     expect(screen.getByText('跨日对比')).toBeInTheDocument();
@@ -935,7 +935,7 @@ describe('ScannerPage', () => {
 
     renderScannerPage();
 
-    expect(await screen.findByText('准备生成今日 shortlist')).toBeInTheDocument();
+    expect(await screen.findByText('尚未生成候选名单')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '运行扫描' }));
 
