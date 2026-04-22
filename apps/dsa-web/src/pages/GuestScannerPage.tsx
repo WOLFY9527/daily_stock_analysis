@@ -6,6 +6,49 @@ import { LockedFeatureCard } from '../components/access/LockedFeatureCard';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLoginPath, buildRegistrationPath } from '../hooks/useProductSurface';
 
+const LOCKED_FEATURES = [
+  {
+    icon: Radar,
+    title: { zh: '手动运行', en: 'Manual runs' },
+    body: {
+      zh: '在你自己的账户下执行扫描，而不是创建匿名共享状态。',
+      en: 'Run scanner sessions in your own account instead of creating anonymous shared activity.',
+    },
+    ctaLabel: { zh: '登录', en: 'Sign in' },
+    ctaTo: 'login',
+  },
+  {
+    icon: History,
+    title: { zh: '保存观察名单', en: 'Saved watchlists' },
+    body: {
+      zh: '查看你自己的历史运行、候选名单变化和后续执行决策。',
+      en: 'Review your own run history, shortlist changes, and follow-through decisions.',
+    },
+    ctaLabel: { zh: '登录', en: 'Sign in' },
+    ctaTo: 'login',
+  },
+  {
+    icon: BarChart3,
+    title: { zh: '复盘上下文', en: 'Review context' },
+    body: {
+      zh: '当运行记录归属于注册身份后，才能看到复盘状态和表现上下文。',
+      en: 'Review status and performance context appear once your runs are saved under a signed-in account.',
+    },
+    ctaLabel: { zh: '登录', en: 'Sign in' },
+    ctaTo: 'login',
+  },
+  {
+    icon: TestTubeDiagonal,
+    title: { zh: '回测联动', en: 'Backtest handoff' },
+    body: {
+      zh: '把候选送入确定性回测，并将结果保存到你的个人账户中。',
+      en: 'Send candidates into deterministic backtests and keep the results in your own account.',
+    },
+    ctaLabel: { zh: '回到首页预览', en: 'Open home preview' },
+    ctaTo: '/',
+  },
+] as const;
+
 const GuestScannerPage: React.FC = () => {
   const { language } = useI18n();
   const loginPath = buildLoginPath('/scanner');
@@ -33,17 +76,17 @@ const GuestScannerPage: React.FC = () => {
             <div className="space-y-4">
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
-                  ? 'Signed-in users get their own manual scanner runs, shortlist detail, and handoff into analysis or backtest without sharing history with other accounts.'
+                  ? 'Signed-in users get their own manual scanner runs, shortlist details, and links into analysis or backtest without sharing history across accounts.'
                   : '登录用户只会看到自己的手动扫描结果、候选名单详情，以及通向分析或回测的个人流程，不再与其他账户共享历史。'}
               </div>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
-                  ? 'Admin-only watchlists, schedules, daily status, and admin history stay outside guest and regular user scanner pages.'
+                  ? 'Admin-only watchlists, schedules, run status, and admin history stay outside guest and regular-user scanner pages.'
                   : '管理员专属的系统观察名单、调度、运行状态与管理员历史继续保留在游客页和普通用户扫描器之外。'}
               </div>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
-                  ? 'This preview explains the scanner instead of running it live, so guests cannot create shared scanner activity.'
+                  ? 'This preview explains the scanner instead of running it live, so guests cannot create shared scanner records.'
                   : '这个预览页只做说明而不执行实时运行，确保游客不会创建共享的扫描记录。'}
               </div>
             </div>
@@ -86,38 +129,17 @@ const GuestScannerPage: React.FC = () => {
       </WorkspacePageHeader>
 
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
-        <LockedFeatureCard
-          icon={Radar}
-          title={language === 'en' ? 'Manual runs' : '手动运行'}
-          body={language === 'en' ? 'Generate scanner runs in your own account instead of creating anonymous shared activity.' : '在你自己的账户下执行扫描，而不是创建匿名共享状态。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={language === 'en' ? 'Sign in' : '登录'}
-          ctaTo={loginPath}
-        />
-        <LockedFeatureCard
-          icon={History}
-          title={language === 'en' ? 'Saved watchlists' : '保存观察名单'}
-          body={language === 'en' ? 'Review your own historical runs, shortlist changes, and follow-through decisions.' : '查看你自己的历史运行、候选名单变化和后续执行决策。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={language === 'en' ? 'Sign in' : '登录'}
-          ctaTo={loginPath}
-        />
-        <LockedFeatureCard
-          icon={BarChart3}
-          title={language === 'en' ? 'Review context' : '复盘上下文'}
-          body={language === 'en' ? 'See review status and performance context once your runs are saved to a signed-in account.' : '当运行记录归属于注册身份后，才能看到复盘状态和表现上下文。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={language === 'en' ? 'Sign in' : '登录'}
-          ctaTo={loginPath}
-        />
-        <LockedFeatureCard
-          icon={TestTubeDiagonal}
-          title={language === 'en' ? 'Backtest handoff' : '回测联动'}
-          body={language === 'en' ? 'Push candidates into deterministic backtests and keep the results in your own account.' : '把候选送入确定性回测，并将结果保存到你的个人账户中。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={language === 'en' ? 'Open home preview' : '回到首页预览'}
-          ctaTo="/"
-        />
+        {LOCKED_FEATURES.map((item) => (
+          <LockedFeatureCard
+            key={item.title[language]}
+            icon={item.icon}
+            title={item.title[language]}
+            body={item.body[language]}
+            lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
+            ctaLabel={item.ctaLabel[language]}
+            ctaTo={item.ctaTo === 'login' ? loginPath : item.ctaTo}
+          />
+        ))}
       </div>
     </div>
   );
