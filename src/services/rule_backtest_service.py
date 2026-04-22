@@ -186,6 +186,14 @@ COMPARE_ROBUSTNESS_DIMENSION_ORDER: List[str] = [
     "periods",
 ]
 
+COMPARE_HIGHLIGHT_PREFERENCE: Dict[str, str] = {
+    "total_return_pct": "higher_is_better",
+    "annualized_return_pct": "higher_is_better",
+    "max_drawdown_pct": "lower_is_better",
+    "benchmark_return_pct": "higher_is_better",
+    "excess_return_vs_benchmark_pct": "higher_is_better",
+}
+
 TRACE_EXPORT_COLUMNS: List[tuple[str, str]] = [
     ("date", "日期"),
     ("symbol_close", "标的收盘价"),
@@ -816,6 +824,12 @@ class RuleBacktestService:
             comparison_summary=comparison_summary,
             parameter_comparison=parameter_comparison,
         )
+        comparison_profile = self._build_compare_profile_summary(
+            market_code_comparison=market_code_comparison,
+            period_comparison=period_comparison,
+            parameter_comparison=parameter_comparison,
+            robustness_summary=robustness_summary,
+        )
 
         return {
             "comparison_source": "stored_rule_backtest_runs",
@@ -830,11 +844,11 @@ class RuleBacktestService:
             "period_comparison": period_comparison,
             "comparison_summary": comparison_summary,
             "robustness_summary": robustness_summary,
-            "comparison_profile": self._build_compare_profile_summary(
-                market_code_comparison=market_code_comparison,
-                period_comparison=period_comparison,
-                parameter_comparison=parameter_comparison,
+            "comparison_profile": comparison_profile,
+            "comparison_highlights": self._build_compare_highlights_summary(
+                comparison_summary=comparison_summary,
                 robustness_summary=robustness_summary,
+                comparison_profile=comparison_profile,
             ),
             "parameter_comparison": parameter_comparison,
             "items": items,
@@ -2474,6 +2488,151 @@ class RuleBacktestService:
             "aligned_dimensions": aligned_dimensions,
             "driving_dimensions": driving_dimensions,
             "dimension_flags": dimension_flags,
+            "diagnostics": cls._dedupe_compare_market_code_diagnostics(diagnostics),
+        }
+
+    @classmethod
+    def _build_compare_highlights_summary(
+        cls,
+        *,
+        comparison_summary: Dict[str, Any],
+        robustness_summary: Dict[str, Any],
+        comparison_profile: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        baseline = dict(comparison_summary.get("baseline") or {})
+        baseline_run_id = int(
+            comparison_summary.get("baseline_run_id")
+            or robustness_summary.get("baseline_run_id")
+            or baseline.get("run_id")
+            or 0
+        )
+        selection_rule = str(
+            baseline.get("selection_rule")
+            or robustness_summary.get("selection_rule")
+            or "first_comparable_run_by_request_order"
+        )
+        primary_profile = str(comparison_profile.get("primary_profile") or "mixed_context")
+        overall_context_state = str(robustness_summary.get("overall_state") or "insufficient_context")
+        metric_deltas = dict(comparison_summary.get("metric_deltas") or {})
+
+        highlights = {
+            metric_name: cls._build_compare_highlight_item(
+                metric_name=metric_name,
+                metric_delta=dict(metric_deltas.get(metric_name) or {}),
+                overall_context_state=overall_context_state,
+                primary_profile=primary_profile,
+            )
+            for metric_name in COMPARE_DELTA_METRICS
+        }
+
+        diagnostics = cls._dedupe_compare_market_code_diagnostics(
+            [
+                diagnostic
+                for metric_name in COMPARE_DELTA_METRICS
+                for diagnostic in list(dict(highlights.get(metric_name) or {}).get("diagnostics") or [])
+            ]
+        )
+
+        return {
+            "baseline_run_id": baseline_run_id,
+            "selection_rule": selection_rule,
+            "primary_profile": primary_profile,
+            "overall_context_state": overall_context_state,
+            "highlights": highlights,
+            "diagnostics": diagnostics,
+        }
+
+    @classmethod
+    def _build_compare_highlight_item(
+        cls,
+        *,
+        metric_name: str,
+        metric_delta: Dict[str, Any],
+        overall_context_state: str,
+        primary_profile: str,
+    ) -> Dict[str, Any]:
+        preference = COMPARE_HIGHLIGHT_PREFERENCE.get(metric_name, "higher_is_better")
+        delta_state = str(metric_delta.get("state") or "").strip()
+        deltas = list(metric_delta.get("deltas") or [])
+        available_run_ids = list(metric_delta.get("available_run_ids") or [])
+        diagnostics: List[str] = []
+
+        if overall_context_state == "insufficient_context":
+            return {
+                "metric": metric_name,
+                "preference": preference,
+                "state": "unavailable",
+                "winner_run_ids": [],
+                "winner_value": None,
+                "available_run_ids": available_run_ids,
+                "candidate_count": len(available_run_ids),
+                "diagnostics": ["insufficient_compare_context"],
+            }
+
+        if delta_state in {"unavailable", "baseline_unavailable"} or not deltas:
+            if delta_state == "partial":
+                diagnostics.append("partial_metric_availability")
+            elif delta_state in {"unavailable", "baseline_unavailable"}:
+                diagnostics.append("metric_unavailable")
+            return {
+                "metric": metric_name,
+                "preference": preference,
+                "state": "unavailable",
+                "winner_run_ids": [],
+                "winner_value": None,
+                "available_run_ids": available_run_ids,
+                "candidate_count": len(available_run_ids),
+                "diagnostics": diagnostics,
+            }
+
+        ranked_values: List[tuple[int, float]] = []
+        for delta_item in deltas:
+            try:
+                run_id = int(dict(delta_item or {}).get("run_id") or 0)
+                value = float(dict(delta_item or {}).get("value"))
+            except (TypeError, ValueError):
+                continue
+            ranked_values.append((run_id, value))
+
+        if not ranked_values:
+            return {
+                "metric": metric_name,
+                "preference": preference,
+                "state": "unavailable",
+                "winner_run_ids": [],
+                "winner_value": None,
+                "available_run_ids": available_run_ids,
+                "candidate_count": len(available_run_ids),
+                "diagnostics": ["metric_unavailable"],
+            }
+
+        winner_value = (
+            min(value for _, value in ranked_values)
+            if preference == "lower_is_better"
+            else max(value for _, value in ranked_values)
+        )
+        winner_run_ids = [run_id for run_id, value in ranked_values if value == winner_value]
+
+        limited_context = overall_context_state in {"partially_comparable", "context_limited"} or delta_state == "partial"
+        if delta_state == "partial":
+            diagnostics.append("partial_metric_availability")
+        if overall_context_state in {"partially_comparable", "context_limited"}:
+            diagnostics.append(f"{overall_context_state}_context")
+            diagnostics.append(f"profile_{primary_profile}")
+
+        if len(winner_run_ids) > 1:
+            state = "limited_context_tie" if limited_context else "tie"
+        else:
+            state = "limited_context_winner" if limited_context else "winner"
+
+        return {
+            "metric": metric_name,
+            "preference": preference,
+            "state": state,
+            "winner_run_ids": winner_run_ids,
+            "winner_value": winner_value,
+            "available_run_ids": available_run_ids or [run_id for run_id, _ in ranked_values],
+            "candidate_count": len(available_run_ids or ranked_values),
             "diagnostics": cls._dedupe_compare_market_code_diagnostics(diagnostics),
         }
 

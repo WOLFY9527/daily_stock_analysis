@@ -1067,7 +1067,7 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 | `/api/v1/backtest/performance/{code}` | GET | 获取单股历史分析评估表现 |
 | `/api/v1/backtest/rule/parse` | POST | 解析规则策略文本 |
 | `/api/v1/backtest/rule/run` | POST | 提交或同步执行确定性规则回测 |
-| `/api/v1/backtest/rule/compare` | POST | 对比 2-10 条已完成规则回测的 stored-first 摘要视图，并返回 `market_code_comparison`、`period_comparison`、baseline/delta `comparison_summary`、参数集 `parameter_comparison`、整体 `robustness_summary` 与主模式 `comparison_profile` |
+| `/api/v1/backtest/rule/compare` | POST | 对比 2-10 条已完成规则回测的 stored-first 摘要视图，并返回 `market_code_comparison`、`period_comparison`、baseline/delta `comparison_summary`、参数集 `parameter_comparison`、整体 `robustness_summary`、主模式 `comparison_profile` 与 `comparison_highlights` |
 | `/api/v1/backtest/rule/runs` | GET | 查询规则回测历史 |
 | `/api/v1/backtest/rule/runs/{run_id}` | GET | 查询规则回测详情 |
 | `/api/v1/backtest/rule/runs/{run_id}/status` | GET | 查询规则回测轻量状态 |

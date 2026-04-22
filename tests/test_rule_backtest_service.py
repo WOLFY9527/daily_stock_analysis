@@ -2131,6 +2131,163 @@ class RuleBacktestTestCase(unittest.TestCase):
             ],
         )
 
+    def test_build_compare_highlights_summary_marks_clear_single_winners(self) -> None:
+        payload = RuleBacktestService._build_compare_highlights_summary(
+            comparison_summary={
+                "baseline": {"run_id": 101, "selection_rule": "first_comparable_run_by_request_order"},
+                "metric_deltas": {
+                    "total_return_pct": {
+                        "state": "comparable",
+                        "available_run_ids": [101, 202],
+                        "deltas": [
+                            {"run_id": 101, "value": 10.0, "delta_vs_baseline": 0.0},
+                            {"run_id": 202, "value": 15.0, "delta_vs_baseline": 5.0},
+                        ],
+                    },
+                    "max_drawdown_pct": {
+                        "state": "comparable",
+                        "available_run_ids": [101, 202],
+                        "deltas": [
+                            {"run_id": 101, "value": 12.0, "delta_vs_baseline": 0.0},
+                            {"run_id": 202, "value": 8.0, "delta_vs_baseline": -4.0},
+                        ],
+                    },
+                },
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "highly_comparable",
+                "diagnostics": [],
+            },
+            comparison_profile={
+                "primary_profile": "same_strategy_parameter_variants",
+            },
+        )
+
+        self.assertEqual(payload["primary_profile"], "same_strategy_parameter_variants")
+        self.assertEqual(payload["overall_context_state"], "highly_comparable")
+        self.assertEqual(payload["highlights"]["total_return_pct"]["state"], "winner")
+        self.assertEqual(payload["highlights"]["total_return_pct"]["winner_run_ids"], [202])
+        self.assertEqual(payload["highlights"]["total_return_pct"]["winner_value"], 15.0)
+        self.assertEqual(payload["highlights"]["max_drawdown_pct"]["state"], "winner")
+        self.assertEqual(payload["highlights"]["max_drawdown_pct"]["winner_run_ids"], [202])
+        self.assertEqual(payload["highlights"]["max_drawdown_pct"]["preference"], "lower_is_better")
+
+    def test_build_compare_highlights_summary_marks_ties(self) -> None:
+        payload = RuleBacktestService._build_compare_highlights_summary(
+            comparison_summary={
+                "baseline": {"run_id": 101, "selection_rule": "first_comparable_run_by_request_order"},
+                "metric_deltas": {
+                    "total_return_pct": {
+                        "state": "comparable",
+                        "available_run_ids": [101, 202],
+                        "deltas": [
+                            {"run_id": 101, "value": 15.0, "delta_vs_baseline": 0.0},
+                            {"run_id": 202, "value": 15.0, "delta_vs_baseline": 0.0},
+                        ],
+                    },
+                },
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "highly_comparable",
+                "diagnostics": [],
+            },
+            comparison_profile={
+                "primary_profile": "same_strategy_parameter_variants",
+            },
+        )
+
+        self.assertEqual(payload["highlights"]["total_return_pct"]["state"], "tie")
+        self.assertEqual(payload["highlights"]["total_return_pct"]["winner_run_ids"], [101, 202])
+        self.assertEqual(payload["highlights"]["total_return_pct"]["winner_value"], 15.0)
+
+    def test_build_compare_highlights_summary_marks_limited_context_winners(self) -> None:
+        payload = RuleBacktestService._build_compare_highlights_summary(
+            comparison_summary={
+                "baseline": {"run_id": 101, "selection_rule": "first_comparable_run_by_request_order"},
+                "metric_deltas": {
+                    "total_return_pct": {
+                        "state": "comparable",
+                        "available_run_ids": [101, 202],
+                        "deltas": [
+                            {"run_id": 101, "value": 10.0, "delta_vs_baseline": 0.0},
+                            {"run_id": 202, "value": 12.0, "delta_vs_baseline": 2.0},
+                        ],
+                    },
+                    "annualized_return_pct": {
+                        "state": "partial",
+                        "available_run_ids": [101],
+                        "deltas": [
+                            {"run_id": 101, "value": 8.0, "delta_vs_baseline": 0.0},
+                        ],
+                    },
+                },
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "context_limited",
+                "diagnostics": ["different_parameter_context"],
+            },
+            comparison_profile={
+                "primary_profile": "mixed_context",
+            },
+        )
+
+        self.assertEqual(payload["highlights"]["total_return_pct"]["state"], "limited_context_winner")
+        self.assertEqual(payload["highlights"]["total_return_pct"]["winner_run_ids"], [202])
+        self.assertEqual(
+            payload["highlights"]["total_return_pct"]["diagnostics"],
+            ["context_limited_context", "profile_mixed_context"],
+        )
+        self.assertEqual(payload["highlights"]["annualized_return_pct"]["state"], "limited_context_winner")
+        self.assertEqual(
+            payload["highlights"]["annualized_return_pct"]["diagnostics"],
+            ["partial_metric_availability", "context_limited_context", "profile_mixed_context"],
+        )
+
+    def test_build_compare_highlights_summary_marks_unavailable_metrics(self) -> None:
+        payload = RuleBacktestService._build_compare_highlights_summary(
+            comparison_summary={
+                "baseline": {"run_id": 101, "selection_rule": "first_comparable_run_by_request_order"},
+                "metric_deltas": {
+                    "annualized_return_pct": {
+                        "state": "unavailable",
+                        "available_run_ids": [],
+                        "deltas": [],
+                    },
+                    "benchmark_return_pct": {
+                        "state": "baseline_unavailable",
+                        "available_run_ids": [202],
+                        "deltas": [
+                            {"run_id": 202, "value": 3.0, "delta_vs_baseline": None},
+                        ],
+                    },
+                },
+            },
+            robustness_summary={
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "overall_state": "insufficient_context",
+                "diagnostics": ["unavailable_metric_deltas"],
+            },
+            comparison_profile={
+                "primary_profile": "insufficient_context",
+            },
+        )
+
+        self.assertEqual(payload["highlights"]["annualized_return_pct"]["state"], "unavailable")
+        self.assertEqual(payload["highlights"]["annualized_return_pct"]["winner_run_ids"], [])
+        self.assertEqual(
+            payload["highlights"]["annualized_return_pct"]["diagnostics"],
+            ["insufficient_compare_context"],
+        )
+        self.assertEqual(payload["highlights"]["benchmark_return_pct"]["state"], "unavailable")
+        self.assertEqual(payload["highlights"]["benchmark_return_pct"]["winner_run_ids"], [])
+
     def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
         service = RuleBacktestService(self.db)
 

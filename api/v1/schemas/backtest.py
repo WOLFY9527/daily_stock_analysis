@@ -769,6 +769,26 @@ class RuleBacktestCompareProfileSummary(BaseModel):
     diagnostics: List[str] = Field(default_factory=list)
 
 
+class RuleBacktestCompareHighlightItem(BaseModel):
+    metric: str
+    preference: str
+    state: str
+    winner_run_ids: List[int] = Field(default_factory=list)
+    winner_value: Optional[float] = None
+    available_run_ids: List[int] = Field(default_factory=list)
+    candidate_count: int = 0
+    diagnostics: List[str] = Field(default_factory=list)
+
+
+class RuleBacktestCompareHighlightsSummary(BaseModel):
+    baseline_run_id: int
+    selection_rule: str
+    primary_profile: str
+    overall_context_state: str
+    highlights: Dict[str, RuleBacktestCompareHighlightItem] = Field(default_factory=dict)
+    diagnostics: List[str] = Field(default_factory=list)
+
+
 class RuleBacktestCompareResponse(BaseModel):
     comparison_source: str
     read_mode: str = "stored_first"
@@ -783,6 +803,7 @@ class RuleBacktestCompareResponse(BaseModel):
     comparison_summary: Optional[RuleBacktestCompareSummary] = None
     robustness_summary: Optional[RuleBacktestCompareRobustnessSummary] = None
     comparison_profile: Optional[RuleBacktestCompareProfileSummary] = None
+    comparison_highlights: Optional[RuleBacktestCompareHighlightsSummary] = None
     parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 

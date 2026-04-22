@@ -742,6 +742,55 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 },
                 "diagnostics": ["overlapping_periods"],
             },
+            "comparison_highlights": {
+                "baseline_run_id": 101,
+                "selection_rule": "first_comparable_run_by_request_order",
+                "primary_profile": "same_code_different_periods",
+                "overall_context_state": "partially_comparable",
+                "highlights": {
+                    "total_return_pct": {
+                        "metric": "total_return_pct",
+                        "preference": "higher_is_better",
+                        "state": "limited_context_winner",
+                        "winner_run_ids": [202],
+                        "winner_value": 18.0,
+                        "available_run_ids": [101, 202],
+                        "candidate_count": 2,
+                        "diagnostics": [
+                            "partially_comparable_context",
+                            "profile_same_code_different_periods",
+                        ],
+                    },
+                    "max_drawdown_pct": {
+                        "metric": "max_drawdown_pct",
+                        "preference": "lower_is_better",
+                        "state": "limited_context_tie",
+                        "winner_run_ids": [101, 202],
+                        "winner_value": 8.5,
+                        "available_run_ids": [101, 202],
+                        "candidate_count": 2,
+                        "diagnostics": [
+                            "partially_comparable_context",
+                            "profile_same_code_different_periods",
+                        ],
+                    },
+                    "annualized_return_pct": {
+                        "metric": "annualized_return_pct",
+                        "preference": "higher_is_better",
+                        "state": "unavailable",
+                        "winner_run_ids": [],
+                        "winner_value": None,
+                        "available_run_ids": [],
+                        "candidate_count": 0,
+                        "diagnostics": ["metric_unavailable"],
+                    },
+                },
+                "diagnostics": [
+                    "partially_comparable_context",
+                    "profile_same_code_different_periods",
+                    "metric_unavailable",
+                ],
+            },
             "parameter_comparison": {
                 "state": "same_family_comparable",
                 "strategy_family_values": ["moving_average_crossover"],
@@ -931,6 +980,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["comparison_profile"]["driving_dimensions"], ["periods"])
         self.assertTrue(payload["comparison_profile"]["dimension_flags"]["same_code"])
         self.assertTrue(payload["comparison_profile"]["dimension_flags"]["period_differences_present"])
+        self.assertEqual(payload["comparison_highlights"]["primary_profile"], "same_code_different_periods")
+        self.assertEqual(payload["comparison_highlights"]["overall_context_state"], "partially_comparable")
+        self.assertEqual(payload["comparison_highlights"]["highlights"]["total_return_pct"]["state"], "limited_context_winner")
+        self.assertEqual(payload["comparison_highlights"]["highlights"]["total_return_pct"]["winner_run_ids"], [202])
+        self.assertEqual(payload["comparison_highlights"]["highlights"]["max_drawdown_pct"]["state"], "limited_context_tie")
+        self.assertEqual(payload["comparison_highlights"]["highlights"]["annualized_return_pct"]["state"], "unavailable")
         self.assertEqual(payload["parameter_comparison"]["state"], "same_family_comparable")
         self.assertEqual(
             payload["parameter_comparison"]["differing_parameter_keys"],
