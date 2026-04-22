@@ -326,7 +326,7 @@ const PersonalSettingsPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <BellRing className="h-4 w-4 text-foreground" />
                   <p className="text-sm font-semibold text-foreground">
-                    {language === 'en' ? 'Notification scope' : '个人通知语境'}
+                    {language === 'en' ? 'Notification scope' : '个人通知范围'}
                   </p>
                 </div>
                 {loggedIn ? (
