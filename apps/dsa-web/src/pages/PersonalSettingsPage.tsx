@@ -139,7 +139,7 @@ const PersonalSettingsPage: React.FC = () => {
         eyebrow={language === 'en' ? 'Personal Settings' : '个人设置'}
         title={language === 'en' ? 'Workspace preferences' : '工作区偏好'}
         description={language === 'en'
-          ? 'Keep appearance, readability, and personal session controls separate from system-level operator configuration.'
+          ? 'Keep appearance, readability, and personal session controls separate from system-level administration settings.'
           : '将外观、可读性和个人会话控制，与系统级运维配置明确分开。'}
       />
 
@@ -203,7 +203,7 @@ const PersonalSettingsPage: React.FC = () => {
           </div>
         </Card>
 
-        <Card title={language === 'en' ? 'Access layer' : '访问层'} subtitle={language === 'en' ? 'Role-aware product surface' : '角色感知产品面'}>
+        <Card title={language === 'en' ? 'Access scope' : '访问层'} subtitle={language === 'en' ? 'Account and settings boundaries' : '角色感知产品面'}>
           <div className="space-y-4">
             {isGuest && authEnabled ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-4 py-4">
@@ -326,7 +326,7 @@ const PersonalSettingsPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <BellRing className="h-4 w-4 text-foreground" />
                   <p className="text-sm font-semibold text-foreground">
-                    {language === 'en' ? 'Personal notification posture' : '个人通知语境'}
+                    {language === 'en' ? 'Notification scope' : '个人通知语境'}
                   </p>
                 </div>
                 {loggedIn ? (
@@ -408,7 +408,7 @@ const PersonalSettingsPage: React.FC = () => {
                 ) : (
                   <p className="mt-2 text-xs leading-5 text-secondary-text">
                     {language === 'en'
-                      ? 'This phase keeps notification channel internals under admin control. Personal preferences stay lightweight here.'
+                      ? 'Notification channels are still managed in admin settings. Personal preferences stay lightweight here.'
                       : '本阶段仍将通知通道内部配置保留在管理员控制面，个人偏好在这里保持轻量。'}
                   </p>
                 )}
@@ -417,12 +417,12 @@ const PersonalSettingsPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="h-4 w-4 text-foreground" />
                   <p className="text-sm font-semibold text-foreground">
-                    {language === 'en' ? 'System split stays explicit' : '系统分层保持显式'}
+                    {language === 'en' ? 'System settings stay separate' : '系统分层保持显式'}
                   </p>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-secondary-text">
                   {language === 'en'
-                    ? 'Normal users only see harmless local preferences here. System knobs stay out of the default settings surface.'
+                    ? 'Normal users only see local preferences here. System controls stay out of the default settings page.'
                     : '普通用户在这里仅看到无害的本地偏好，系统级开关不会再出现在默认设置面。'}
                 </p>
               </div>
