@@ -286,7 +286,7 @@ const BacktestPage: React.FC = () => {
     ];
     if (excludedRecentMessage) parts.push(`较新日期未纳入原因: ${excludedRecentMessage}`);
     if (pricingResolvedSource) {
-      parts.push(`实际定价来源: ${pricingResolvedSource}${pricingFallbackUsed == null ? '' : `（${pricingFallbackUsed ? '发生回退' : '未回退'}）`}`);
+      parts.push(`本次使用的价格来源: ${pricingResolvedSource}${pricingFallbackUsed == null ? '' : `（${pricingFallbackUsed ? '已切换到备用数据源' : '未切换备用数据源'}）`}`);
     }
     return parts.join(' · ');
   }, [
