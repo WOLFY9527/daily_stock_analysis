@@ -476,6 +476,54 @@ class PostgresPhaseFStore:
                 "page_size": int(page_size),
             }
 
+    def query_cash_ledger_comparison_candidate(
+        self,
+        *,
+        account_id: Optional[int],
+        date_from: Optional[date],
+        date_to: Optional[date],
+        direction: Optional[str],
+        page: int,
+        page_size: int,
+        owner_user_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        with self.get_session() as session:
+            conditions = [PhaseFPortfolioLedger.entry_type == "cash"]
+            if owner_user_id is not None:
+                conditions.append(PhaseFPortfolioLedger.owner_user_id == str(owner_user_id).strip())
+            if account_id is not None:
+                conditions.append(PhaseFPortfolioLedger.portfolio_account_id == int(account_id))
+            if date_from is not None:
+                conditions.append(
+                    PhaseFPortfolioLedger.event_time >= datetime.combine(date_from, time.min)
+                )
+            if date_to is not None:
+                conditions.append(
+                    PhaseFPortfolioLedger.event_time <= datetime.combine(date_to, time.max)
+                )
+            if direction:
+                conditions.append(PhaseFPortfolioLedger.direction == str(direction).strip().lower())
+
+            query = select(PhaseFPortfolioLedger)
+            count_query = select(func.count()).select_from(PhaseFPortfolioLedger)
+            for condition in conditions:
+                query = query.where(condition)
+                count_query = count_query.where(condition)
+
+            total = int(session.execute(count_query).scalar_one() or 0)
+            rows = session.execute(
+                query
+                .order_by(PhaseFPortfolioLedger.event_time.desc(), PhaseFPortfolioLedger.id.desc())
+                .offset((int(page) - 1) * int(page_size))
+                .limit(int(page_size))
+            ).scalars().all()
+            return {
+                "items": [self._serialize_cash_ledger_comparison_row(row) for row in rows],
+                "total": total,
+                "page": int(page),
+                "page_size": int(page_size),
+            }
+
     def query_corporate_actions_comparison_candidate(
         self,
         *,
@@ -633,6 +681,27 @@ class PostgresPhaseFStore:
             "fee": float(getattr(row, "fee", 0.0) or 0.0),
             "tax": float(getattr(row, "tax", 0.0) or 0.0),
             "note": getattr(row, "note", None),
+            "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
+        }
+
+    def _serialize_cash_ledger_comparison_row(self, row: Any) -> dict[str, Any]:
+        payload = self._safe_json_load(getattr(row, "payload_json", None))
+        legacy_row_id = int(payload.get("legacy_row_id") or 0)
+        event_time = getattr(row, "event_time", None)
+        event_date = ""
+        if isinstance(event_time, datetime):
+            event_date = event_time.date().isoformat()
+        elif isinstance(event_time, date):
+            event_date = event_time.isoformat()
+
+        return {
+            "id": legacy_row_id,
+            "account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
+            "event_date": event_date,
+            "direction": payload.get("direction") if payload.get("direction") is not None else getattr(row, "direction", None),
+            "amount": float(payload.get("amount")) if payload.get("amount") is not None else float(getattr(row, "amount", 0.0) or 0.0),
+            "currency": payload.get("currency") if payload.get("currency") is not None else getattr(row, "currency", None),
+            "note": payload.get("note") if payload.get("note") is not None else getattr(row, "note", None),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
         }
 

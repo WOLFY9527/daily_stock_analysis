@@ -723,6 +723,8 @@ class Config:
     postgres_phase_a_apply_schema: bool = True
     enable_phase_f_trades_list_comparison: bool = False
     phase_f_trades_list_comparison_account_ids: List[int] = field(default_factory=list)
+    enable_phase_f_cash_ledger_comparison: bool = False
+    phase_f_cash_ledger_comparison_account_ids: List[int] = field(default_factory=list)
     enable_phase_f_corporate_actions_comparison: bool = False
     phase_f_corporate_actions_comparison_account_ids: List[int] = field(default_factory=list)
 
@@ -1419,6 +1421,14 @@ class Config:
             phase_f_trades_list_comparison_account_ids=parse_env_int_list(
                 os.getenv('PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS'),
                 field_name='PHASE_F_TRADES_LIST_COMPARISON_ACCOUNT_IDS',
+            ),
+            enable_phase_f_cash_ledger_comparison=parse_env_bool(
+                os.getenv('ENABLE_PHASE_F_CASH_LEDGER_COMPARISON'),
+                False,
+            ),
+            phase_f_cash_ledger_comparison_account_ids=parse_env_int_list(
+                os.getenv('PHASE_F_CASH_LEDGER_COMPARISON_ACCOUNT_IDS'),
+                field_name='PHASE_F_CASH_LEDGER_COMPARISON_ACCOUNT_IDS',
             ),
             enable_phase_f_corporate_actions_comparison=parse_env_bool(
                 os.getenv('ENABLE_PHASE_F_CORPORATE_ACTIONS_COMPARISON'),

@@ -83,6 +83,10 @@ class PortfolioService:
     _phase_f_trade_list_comparison_report_buffer: deque[Dict[str, Any]] = deque(
         maxlen=_phase_f_trade_list_comparison_report_limit
     )
+    _phase_f_cash_ledger_comparison_report_limit = 200
+    _phase_f_cash_ledger_comparison_report_buffer: deque[Dict[str, Any]] = deque(
+        maxlen=_phase_f_cash_ledger_comparison_report_limit
+    )
     _phase_f_corporate_actions_comparison_report_limit = 200
     _phase_f_corporate_actions_comparison_report_buffer: deque[Dict[str, Any]] = deque(
         maxlen=_phase_f_corporate_actions_comparison_report_limit
@@ -106,6 +110,14 @@ class PortfolioService:
     @classmethod
     def get_phase_f_trade_list_comparison_reports(cls) -> List[Dict[str, Any]]:
         return [dict(report) for report in list(cls._phase_f_trade_list_comparison_report_buffer)]
+
+    @classmethod
+    def clear_phase_f_cash_ledger_comparison_reports(cls) -> None:
+        cls._phase_f_cash_ledger_comparison_report_buffer.clear()
+
+    @classmethod
+    def get_phase_f_cash_ledger_comparison_reports(cls) -> List[Dict[str, Any]]:
+        return [dict(report) for report in list(cls._phase_f_cash_ledger_comparison_report_buffer)]
 
     @classmethod
     def clear_phase_f_corporate_actions_comparison_reports(cls) -> None:
@@ -1341,12 +1353,453 @@ class PortfolioService:
             page_size=page_size,
             **self._owner_kwargs(),
         )
-        return {
+        result = {
             "items": [self._cash_ledger_row_to_dict(row) for row in rows],
             "total": total,
             "page": page,
             "page_size": page_size,
         }
+        if self._phase_f_cash_ledger_comparison_enabled():
+            self._maybe_run_phase_f_cash_ledger_comparison(
+                request_context={
+                    "account_id": int(account_id) if account_id is not None else None,
+                    "date_from": date_from.isoformat() if date_from is not None else None,
+                    "date_to": date_to.isoformat() if date_to is not None else None,
+                    "direction": direction_norm,
+                    "page": page,
+                    "page_size": page_size,
+                },
+                legacy_rows=rows,
+                legacy_result=result,
+            )
+        return result
+
+    def _phase_f_cash_ledger_comparison_enabled(self) -> bool:
+        return bool(getattr(get_config(), "enable_phase_f_cash_ledger_comparison", False))
+
+    def _phase_f_cash_ledger_comparison_account_ids(self) -> Set[int]:
+        raw_value = getattr(get_config(), "phase_f_cash_ledger_comparison_account_ids", [])
+        return {int(item) for item in list(raw_value or []) if item is not None}
+
+    def _phase_f_cash_ledger_comparison_rollout_decision(
+        self,
+        *,
+        request_context: Dict[str, Any],
+    ) -> Tuple[bool, Optional[str]]:
+        allowed_account_ids = self._phase_f_cash_ledger_comparison_account_ids()
+        account_id = request_context.get("account_id")
+        if account_id is None:
+            return False, "account_not_allowlisted"
+        if not allowed_account_ids:
+            return False, "account_not_allowlisted"
+        if int(account_id) not in allowed_account_ids:
+            return False, "account_not_allowlisted"
+        return True, None
+
+    def _maybe_run_phase_f_cash_ledger_comparison(
+        self,
+        *,
+        request_context: Dict[str, Any],
+        legacy_rows: List[Any],
+        legacy_result: Dict[str, Any],
+    ) -> None:
+        legacy_context = dict(request_context or {})
+        _ = list(legacy_rows or [])
+        legacy_view = {
+            "request_context": legacy_context,
+            "items": [dict(item) for item in (legacy_result or {}).get("items", [])],
+            "total": int((legacy_result or {}).get("total", 0) or 0),
+            "page": int((legacy_result or {}).get("page", legacy_context.get("page", 1)) or 1),
+            "page_size": int((legacy_result or {}).get("page_size", legacy_context.get("page_size", 20)) or 20),
+        }
+        legacy_summary = self._summarize_phase_f_cash_ledger_result(legacy_view)
+        comparison_source = "phase_f_pg_cash_ledger_candidate"
+        can_compare, skip_reason = self._phase_f_cash_ledger_comparison_rollout_decision(
+            request_context=legacy_context,
+        )
+        if not can_compare:
+            self._emit_phase_f_cash_ledger_comparison_report(
+                self._build_phase_f_cash_ledger_comparison_report(
+                    comparison_status="skipped",
+                    comparison_attempted=False,
+                    comparison_decision="legacy_served_without_comparison",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=skip_reason,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_without_comparison",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                )
+            )
+            return None
+
+        try:
+            candidate = self._load_phase_f_cash_ledger_comparison_candidate(request_context=legacy_context)
+        except Exception as exc:
+            self._emit_phase_f_cash_ledger_comparison_report(
+                self._build_phase_f_cash_ledger_comparison_report(
+                    comparison_status="query_failure",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_due_to_query_failure",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class="query_failure",
+                    blocking_level="hard_blocking",
+                    fallback_decision="served_legacy_due_to_query_failure",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    query_failure_detail=str(exc) or exc.__class__.__name__,
+                )
+            )
+            return None
+
+        candidate_summary = self._summarize_phase_f_cash_ledger_result(candidate)
+        mismatch = self._compare_phase_f_cash_ledger_results(legacy_view=legacy_view, candidate_view=candidate)
+        if mismatch is None:
+            self._emit_phase_f_cash_ledger_comparison_report(
+                self._build_phase_f_cash_ledger_comparison_report(
+                    comparison_status="matched",
+                    comparison_attempted=True,
+                    comparison_decision="legacy_served_after_match",
+                    comparison_source=comparison_source,
+                    comparison_skip_reason=None,
+                    mismatch_class=None,
+                    blocking_level="not_applicable",
+                    fallback_decision="legacy_served_after_match",
+                    request_context=legacy_context,
+                    legacy_summary=legacy_summary,
+                    pg_summary=candidate_summary,
+                )
+            )
+            return None
+
+        self._emit_phase_f_cash_ledger_comparison_report(
+            self._build_phase_f_cash_ledger_comparison_report(
+                comparison_status="mismatch",
+                comparison_attempted=True,
+                comparison_decision="legacy_served_due_to_mismatch",
+                comparison_source=comparison_source,
+                comparison_skip_reason=None,
+                mismatch_class=mismatch["mismatch_class"],
+                blocking_level=mismatch["blocking_level"],
+                fallback_decision="served_legacy_due_to_mismatch",
+                request_context=legacy_context,
+                legacy_summary=legacy_summary,
+                pg_summary=candidate_summary,
+                first_mismatch_position=mismatch.get("first_mismatch_position"),
+                first_mismatch_field=mismatch.get("first_mismatch_field"),
+                first_legacy_value=mismatch.get("first_legacy_value"),
+                first_pg_value=mismatch.get("first_pg_value"),
+            )
+        )
+        return None
+
+    def _load_phase_f_cash_ledger_comparison_candidate(
+        self,
+        *,
+        request_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        date_from_raw = request_context.get("date_from")
+        date_to_raw = request_context.get("date_to")
+        date_from = date.fromisoformat(date_from_raw) if date_from_raw else None
+        date_to = date.fromisoformat(date_to_raw) if date_to_raw else None
+
+        candidate = self.repo.db.get_phase_f_cash_ledger_comparison_candidate(
+            account_id=request_context.get("account_id"),
+            date_from=date_from,
+            date_to=date_to,
+            direction=request_context.get("direction"),
+            page=int(request_context.get("page", 1) or 1),
+            page_size=int(request_context.get("page_size", 20) or 20),
+            **self._owner_kwargs(),
+        )
+        if candidate is None:
+            raise RuntimeError("phase_f_cash_ledger_pg_source_unavailable")
+        return {
+            "request_context": dict(request_context or {}),
+            "items": [dict(item) for item in (candidate.get("items") or [])],
+            "total": int(candidate.get("total", 0) or 0),
+            "page": int(candidate.get("page", request_context.get("page", 1)) or 1),
+            "page_size": int(candidate.get("page_size", request_context.get("page_size", 20)) or 20),
+        }
+
+    def _compare_phase_f_cash_ledger_results(
+        self,
+        *,
+        legacy_view: Dict[str, Any],
+        candidate_view: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        legacy_request = dict((legacy_view or {}).get("request_context", {}) or {})
+        candidate_request = dict((candidate_view or {}).get("request_context", {}) or {})
+        if legacy_request != candidate_request:
+            return {
+                "mismatch_class": "request_shape_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "request_context",
+                "first_legacy_value": legacy_request,
+                "first_pg_value": candidate_request,
+            }
+
+        legacy_total = int((legacy_view or {}).get("total", 0) or 0)
+        candidate_total = int((candidate_view or {}).get("total", 0) or 0)
+        if legacy_total != candidate_total:
+            return {
+                "mismatch_class": "count_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "total",
+                "first_legacy_value": legacy_total,
+                "first_pg_value": candidate_total,
+            }
+
+        legacy_items = list((legacy_view or {}).get("items", []) or [])
+        candidate_items = list((candidate_view or {}).get("items", []) or [])
+        if len(legacy_items) != len(candidate_items):
+            return {
+                "mismatch_class": "pagination_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_field": "page_item_count",
+                "first_legacy_value": len(legacy_items),
+                "first_pg_value": len(candidate_items),
+            }
+
+        legacy_ids = [item.get("id") for item in legacy_items]
+        candidate_ids = [item.get("id") for item in candidate_items]
+        if legacy_ids != candidate_ids:
+            first_position = next(
+                (
+                    index
+                    for index, (legacy_id, candidate_id) in enumerate(zip(legacy_ids, candidate_ids))
+                    if legacy_id != candidate_id
+                ),
+                None,
+            )
+            return {
+                "mismatch_class": "ordering_mismatch",
+                "blocking_level": "hard_blocking",
+                "first_mismatch_position": first_position,
+                "first_mismatch_field": "id",
+                "first_legacy_value": legacy_ids[first_position] if first_position is not None else legacy_ids,
+                "first_pg_value": candidate_ids[first_position] if first_position is not None else candidate_ids,
+            }
+
+        contract_fields = ("id", "account_id", "event_date", "direction", "amount", "currency", "note", "created_at")
+        for index, (legacy_item, candidate_item) in enumerate(zip(legacy_items, candidate_items)):
+            for field_name in contract_fields:
+                legacy_value = legacy_item.get(field_name)
+                candidate_value = candidate_item.get(field_name)
+                if self._normalize_phase_f_cash_ledger_compare_value(
+                    field_name=field_name,
+                    value=legacy_value,
+                ) == self._normalize_phase_f_cash_ledger_compare_value(
+                    field_name=field_name,
+                    value=candidate_value,
+                ):
+                    continue
+                mismatch_class = "owner_scope_mismatch" if field_name == "account_id" else "payload_field_mismatch"
+                return {
+                    "mismatch_class": mismatch_class,
+                    "blocking_level": "hard_blocking",
+                    "first_mismatch_position": index,
+                    "first_mismatch_field": field_name,
+                    "first_legacy_value": legacy_value,
+                    "first_pg_value": candidate_value,
+                }
+        return None
+
+    @staticmethod
+    def _normalize_phase_f_cash_ledger_compare_value(
+        *,
+        field_name: str,
+        value: Any,
+    ) -> Any:
+        if field_name != "created_at":
+            return value
+        return PortfolioService._normalize_phase_f_trade_list_created_at_compare_value(value)
+
+    def _summarize_phase_f_cash_ledger_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
+        items = list((result_view or {}).get("items", []) or [])
+        return {
+            "total": int((result_view or {}).get("total", 0) or 0),
+            "page": int((result_view or {}).get("page", 1) or 1),
+            "page_size": int((result_view or {}).get("page_size", 20) or 20),
+            "page_item_count": len(items),
+            "ordered_ids": [item.get("id") for item in items],
+        }
+
+    def _emit_phase_f_cash_ledger_comparison_report(self, report: Dict[str, Any]) -> None:
+        self._collect_phase_f_cash_ledger_comparison_report(report)
+        comparison_status = str((report or {}).get("comparison_status") or "").strip().lower()
+        message = json.dumps(report, ensure_ascii=True, sort_keys=True, default=str)
+        if comparison_status in {"mismatch", "query_failure"}:
+            logger.warning("Phase F cash-ledger comparison diagnostic: %s", message)
+            return
+        logger.info("Phase F cash-ledger comparison diagnostic: %s", message)
+
+    def _collect_phase_f_cash_ledger_comparison_report(self, report: Dict[str, Any]) -> None:
+        if not isinstance(report, dict):
+            return
+        if str(report.get("candidate") or "").strip() != "portfolio_cash_ledger_list":
+            return
+        if not str(report.get("report_model") or "").strip().startswith("phase_f_cash_ledger_comparison_"):
+            return
+        self.__class__._phase_f_cash_ledger_comparison_report_buffer.append(dict(report))
+
+    def _build_phase_f_cash_ledger_comparison_report(
+        self,
+        *,
+        comparison_status: str,
+        comparison_attempted: bool,
+        comparison_decision: str,
+        comparison_source: str,
+        comparison_skip_reason: Optional[str],
+        mismatch_class: Optional[str],
+        blocking_level: str,
+        fallback_decision: str,
+        request_context: Dict[str, Any],
+        legacy_summary: Dict[str, Any],
+        pg_summary: Optional[Dict[str, Any]] = None,
+        query_failure_detail: Optional[str] = None,
+        first_mismatch_position: Optional[int] = None,
+        first_mismatch_field: Optional[str] = None,
+        first_legacy_value: Any = None,
+        first_pg_value: Any = None,
+    ) -> Dict[str, Any]:
+        return {
+            "report_model": "phase_f_cash_ledger_comparison_diagnostic_v1",
+            "candidate": "portfolio_cash_ledger_list",
+            "comparison_status": str(comparison_status or "").strip(),
+            "comparison_attempted": bool(comparison_attempted),
+            "comparison_decision": str(comparison_decision or "").strip(),
+            "comparison_source": str(comparison_source or "").strip(),
+            "comparison_skip_reason": str(comparison_skip_reason or "").strip() or None,
+            "mismatch_class": str(mismatch_class or "").strip() or None,
+            "blocking_level": str(blocking_level or "").strip(),
+            "fallback_decision": str(fallback_decision or "").strip(),
+            "request_context": dict(request_context or {}),
+            "owner_context": {
+                "owner_user_id": self._resolve_owner_id(self.owner_id),
+                "include_all_owners": self.include_all_owners,
+            },
+            "legacy_summary": dict(legacy_summary or {}),
+            "pg_summary": dict(pg_summary) if isinstance(pg_summary, dict) else None,
+            "query_failure_detail": str(query_failure_detail or "").strip() or None,
+            "first_mismatch_position": first_mismatch_position,
+            "first_mismatch_field": str(first_mismatch_field or "").strip() or None,
+            "first_legacy_value": first_legacy_value,
+            "first_pg_value": first_pg_value,
+        }
+
+    def _build_phase_f_cash_ledger_comparison_evidence_summary(
+        self,
+        *,
+        reports: List[Dict[str, Any]],
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        relevant_reports = [
+            dict(report)
+            for report in list(reports or [])
+            if str((report or {}).get("candidate") or "").strip() == "portfolio_cash_ledger_list"
+            and str((report or {}).get("report_model") or "").strip().startswith("phase_f_cash_ledger_comparison_")
+        ]
+        status_counts = {"matched": 0, "mismatch": 0, "query_failure": 0, "skipped": 0}
+        mismatch_counts_by_class: Dict[str, int] = {}
+        compared_account_ids: Set[int] = set()
+        skipped_account_ids: Set[int] = set()
+        hard_blocking_issue_classes: Set[str] = set()
+        matched_empty_reports = 0
+        matched_non_empty_reports = 0
+
+        for report in relevant_reports:
+            comparison_status = str(report.get("comparison_status") or "").strip().lower()
+            if comparison_status in status_counts:
+                status_counts[comparison_status] += 1
+
+            request_context = dict(report.get("request_context") or {})
+            account_id = request_context.get("account_id")
+            resolved_account_id: Optional[int] = None
+            if account_id is not None:
+                try:
+                    resolved_account_id = int(account_id)
+                except (TypeError, ValueError):
+                    resolved_account_id = None
+
+            if bool(report.get("comparison_attempted")) and resolved_account_id is not None:
+                compared_account_ids.add(resolved_account_id)
+            if comparison_status == "skipped" and resolved_account_id is not None:
+                skipped_account_ids.add(resolved_account_id)
+
+            if comparison_status == "matched":
+                page_item_count = int(dict(report.get("legacy_summary") or {}).get("page_item_count", 0) or 0)
+                if page_item_count > 0:
+                    matched_non_empty_reports += 1
+                else:
+                    matched_empty_reports += 1
+
+            mismatch_class = str(report.get("mismatch_class") or "").strip()
+            if comparison_status == "mismatch" and mismatch_class:
+                mismatch_counts_by_class[mismatch_class] = mismatch_counts_by_class.get(mismatch_class, 0) + 1
+                if str(report.get("blocking_level") or "").strip().lower() == "hard_blocking":
+                    hard_blocking_issue_classes.add(mismatch_class)
+            if comparison_status == "query_failure":
+                hard_blocking_issue_classes.add("query_failure")
+
+        normalized_allowlisted_account_ids = sorted(
+            {int(item) for item in list(allowlisted_account_ids or []) if item is not None}
+        )
+        uncovered_allowlisted_account_ids = sorted(
+            set(normalized_allowlisted_account_ids) - set(compared_account_ids)
+        )
+        total_attempted = status_counts["matched"] + status_counts["mismatch"] + status_counts["query_failure"]
+        non_empty_match_observed = matched_non_empty_reports > 0
+        hard_blocking_issue_observed = bool(hard_blocking_issue_classes)
+
+        if total_attempted == 0 or (
+            bool(normalized_allowlisted_account_ids) and bool(uncovered_allowlisted_account_ids)
+        ):
+            evidence_strength = "thin"
+        elif non_empty_match_observed:
+            evidence_strength = "non_empty_sampled"
+        elif matched_empty_reports > 0 and not hard_blocking_issue_observed:
+            evidence_strength = "empty_only"
+        else:
+            evidence_strength = "mismatch_or_failure_only"
+
+        evidence_is_thin = evidence_strength == "thin" or not non_empty_match_observed
+
+        return {
+            "summary_model": "phase_f_cash_ledger_comparison_evidence_summary_v1",
+            "candidate": "portfolio_cash_ledger_list",
+            "total_reports": len(relevant_reports),
+            "total_attempted": total_attempted,
+            "total_skipped": status_counts["skipped"],
+            "total_matched": status_counts["matched"],
+            "total_mismatched": status_counts["mismatch"],
+            "total_query_failures": status_counts["query_failure"],
+            "mismatch_counts_by_class": dict(sorted(mismatch_counts_by_class.items())),
+            "query_failure_count": status_counts["query_failure"],
+            "compared_account_ids": sorted(compared_account_ids),
+            "skipped_account_ids": sorted(skipped_account_ids),
+            "allowlisted_account_ids": normalized_allowlisted_account_ids,
+            "uncovered_allowlisted_account_ids": uncovered_allowlisted_account_ids,
+            "matched_empty_reports": matched_empty_reports,
+            "matched_non_empty_reports": matched_non_empty_reports,
+            "non_empty_match_observed": non_empty_match_observed,
+            "hard_blocking_issue_observed": hard_blocking_issue_observed,
+            "hard_blocking_issue_classes": sorted(hard_blocking_issue_classes),
+            "evidence_strength": evidence_strength,
+            "evidence_is_thin": evidence_is_thin,
+        }
+
+    def _build_phase_f_cash_ledger_comparison_evidence_summary_from_collected_reports(
+        self,
+        *,
+        allowlisted_account_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        return self._build_phase_f_cash_ledger_comparison_evidence_summary(
+            reports=self.get_phase_f_cash_ledger_comparison_reports(),
+            allowlisted_account_ids=allowlisted_account_ids,
+        )
 
     def list_corporate_action_events(
         self,
