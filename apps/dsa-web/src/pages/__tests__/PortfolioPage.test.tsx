@@ -997,4 +997,73 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('industry-attribution-distribution-band-tooltip')).toHaveTextContent('半导体');
     expect(screen.getByTestId('industry-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
   });
+
+  it('supports keyboard focus details and linked highlights across attribution panels', async () => {
+    const snapshot = makeSnapshot();
+    snapshot.portfolioAttribution = {
+      accountAttribution: {
+        topAccounts: [
+          { accountId: 1, accountName: 'Account 1', equityWeightPct: 70 },
+          { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
+        ],
+      },
+      industryAttribution: {
+        topIndustries: [
+          { industry: '半导体', weightPct: 55, symbolCount: 2 },
+          { industry: '软件', weightPct: 25, symbolCount: 1 },
+        ],
+      },
+    };
+
+    const risk = makeRisk();
+    risk.accountAttribution = {
+      topAccounts: [
+        { accountId: 1, accountName: 'Main', equityWeightPct: 70 },
+        { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
+      ],
+    };
+    risk.industryAttribution = {
+      topIndustries: [
+        { industry: '半导体', weightPct: 55, symbolCount: 2 },
+        { industry: '软件', weightPct: 25, symbolCount: 1 },
+      ],
+    };
+
+    getSnapshot.mockImplementation(async () => snapshot);
+    getRisk.mockResolvedValue(risk);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const portfolioHero = screen.getByTestId('portfolio-attribution-hero');
+    expect(portfolioHero).toHaveAttribute('tabindex', '0');
+    fireEvent.focus(portfolioHero);
+
+    expect(screen.getByTestId('portfolio-attribution-hover-tooltip')).toHaveTextContent('Top account focus');
+    expect(screen.getByTestId('account-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
+
+    fireEvent.blur(portfolioHero);
+    expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
+
+    const accountLegend = screen.getByTestId('account-attribution-distribution-band-legend-1');
+    expect(accountLegend).toHaveAttribute('tabindex', '0');
+    fireEvent.focus(accountLegend);
+
+    expect(screen.getByTestId('account-attribution-distribution-band-tooltip')).toHaveTextContent('Satellite');
+    expect(screen.getByTestId('account-attribution-top-list-row-1')).toHaveAttribute('data-linked-highlight', 'true');
+
+    fireEvent.blur(accountLegend);
+    expect(screen.queryByTestId('account-attribution-distribution-band-tooltip')).not.toBeInTheDocument();
+
+    const industrySegment = screen.getByTestId('industry-attribution-distribution-band-segment-0');
+    expect(industrySegment).toHaveAttribute('tabindex', '0');
+    fireEvent.focus(industrySegment);
+
+    expect(screen.getByTestId('industry-attribution-distribution-band-tooltip')).toHaveTextContent('半导体');
+    expect(screen.getByTestId('industry-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
+
+    fireEvent.blur(industrySegment);
+    expect(screen.queryByTestId('industry-attribution-distribution-band-tooltip')).not.toBeInTheDocument();
+  });
 });

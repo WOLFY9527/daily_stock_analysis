@@ -234,30 +234,35 @@ function AttributionHero({
   activeLinkKey: string | null;
   onActiveLinkChange: (linkKey: string | null) => void;
 }) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [isActive, setIsActive] = useState(false);
   if (!rows.length) return null;
 
   const sortedRows = [...rows].sort((left, right) => right.percent - left.percent);
   const leadRow = sortedRows[0];
   const companionRows = sortedRows.slice(1, 3);
   const isLinkedHighlight = Boolean(leadRow.linkKey && activeLinkKey === leadRow.linkKey);
+  const activateLeadRow = () => {
+    setIsActive(true);
+    onActiveLinkChange(leadRow.linkKey ?? null);
+  };
+  const clearLeadRow = () => {
+    setIsActive(false);
+    onActiveLinkChange(null);
+  };
 
   return (
     <div
-      className={`mt-4 rounded-[var(--theme-panel-radius-lg)] border bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(255,255,255,0.04))] p-3 transition-colors ${
+      className={`relative mt-4 rounded-[var(--theme-panel-radius-lg)] border bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(255,255,255,0.04))] p-3 transition-[border-color,box-shadow,background-color] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)] ${
         isLinkedHighlight ? 'border-[rgba(125,211,252,0.55)] shadow-[0_0_0_1px_rgba(125,211,252,0.2)]' : 'border-[var(--border-muted)]'
       }`}
       data-testid={testId}
       data-linked-highlight={isLinkedHighlight ? 'true' : undefined}
       title={title}
-      onMouseEnter={() => {
-        setIsHovered(true);
-        onActiveLinkChange(leadRow.linkKey ?? null);
-      }}
-      onMouseLeave={() => {
-        setIsHovered(false);
-        onActiveLinkChange(null);
-      }}
+      tabIndex={0}
+      onMouseEnter={activateLeadRow}
+      onMouseLeave={clearLeadRow}
+      onFocus={activateLeadRow}
+      onBlur={clearLeadRow}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -269,9 +274,9 @@ function AttributionHero({
           {leadRow.valueLabel}
         </div>
       </div>
-      {isHovered ? (
+      {isActive ? (
         <div
-          className="mt-3 rounded-lg border border-[rgba(125,211,252,0.32)] bg-[rgba(15,23,42,0.34)] px-3 py-2 text-[11px] text-secondary"
+          className="mt-3 rounded-lg border border-[rgba(125,211,252,0.32)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_10px_30px_rgba(15,23,42,0.18)] transition-all duration-150 ease-out motion-reduce:transition-none"
           data-testid={tooltipTestId}
         >
           <span className="text-foreground">{getAttributionHoverHeading(leadRow)}</span>
@@ -325,16 +330,21 @@ function AttributionDistributionBand({
 
   const coverage = getAttributionCoverage(segments);
   const remaining = Math.max(0, 100 - coverage);
+  const activateRow = (row: AttributionVisualRow) => {
+    setHoveredRow(row);
+    onActiveLinkChange(row.linkKey ?? null);
+  };
+  const clearRow = () => {
+    setHoveredRow(null);
+    onActiveLinkChange(null);
+  };
 
   return (
     <div
       className="mt-4 space-y-2.5"
       data-testid={testId}
       title={title}
-      onMouseLeave={() => {
-        setHoveredRow(null);
-        onActiveLinkChange(null);
-      }}
+      onMouseLeave={clearRow}
     >
       <div className="flex items-center justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Distribution Band</p>
@@ -342,7 +352,7 @@ function AttributionDistributionBand({
       </div>
       {hoveredRow ? (
         <div
-          className="rounded-lg border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.3)] px-3 py-2 text-[11px] text-secondary"
+          className="rounded-lg border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_10px_30px_rgba(15,23,42,0.16)] transition-all duration-150 ease-out motion-reduce:transition-none"
           data-testid={tooltipTestId}
         >
           <span className="text-foreground">{hoveredRow.label}</span>
@@ -357,10 +367,11 @@ function AttributionDistributionBand({
             className={`h-full transition-opacity ${row.linkKey && activeLinkKey === row.linkKey ? 'opacity-100' : 'opacity-80'}`}
             data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
             data-testid={`${testId}-segment-${index}`}
-            onMouseEnter={() => {
-              setHoveredRow(row);
-              onActiveLinkChange(row.linkKey ?? null);
-            }}
+            tabIndex={0}
+            aria-label={`${row.label} ${row.valueLabel}`}
+            onMouseEnter={() => activateRow(row)}
+            onFocus={() => activateRow(row)}
+            onBlur={clearRow}
             style={{
               width: `${row.percent}%`,
               backgroundColor: ATTRIBUTION_VISUAL_COLORS[index % ATTRIBUTION_VISUAL_COLORS.length],
@@ -383,13 +394,14 @@ function AttributionDistributionBand({
             key={`${testId}-legend-${row.label}-${row.valueLabel}`}
             className={`rounded-lg px-3 py-2 transition-colors ${
               row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[var(--surface-muted)]'
-            }`}
+            } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
             data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
             data-testid={`${testId}-legend-${index}`}
-            onMouseEnter={() => {
-              setHoveredRow(row);
-              onActiveLinkChange(row.linkKey ?? null);
-            }}
+            tabIndex={0}
+            aria-label={`${row.label} ${row.valueLabel}`}
+            onMouseEnter={() => activateRow(row)}
+            onFocus={() => activateRow(row)}
+            onBlur={clearRow}
           >
             <p className="truncate text-[11px] text-foreground">{row.label}</p>
             <p className="text-[10px] text-secondary-text">{row.meta || 'Top slice'}</p>

@@ -348,6 +348,22 @@ function AdditiveDashboardPanels({
     ? robustnessLensRows.reduce((total, row) => total + row.ratio, 0) / robustnessLensRows.length
     : 0;
   const strongestRiskControl = riskControlRows.reduce((currentMax, row) => Math.max(currentMax, row.value), 0);
+  const activateRobustnessRow = (row: CoverageTrackItem) => {
+    setHoveredRobustnessRow(row);
+    onActiveRobustnessChange(row.key);
+  };
+  const clearRobustnessRow = () => {
+    setHoveredRobustnessRow(null);
+    onActiveRobustnessChange(null);
+  };
+  const activateRiskControlRow = (row: RiskControlVisualRow) => {
+    setHoveredRiskControlRow(row);
+    onActiveRiskControlChange(row.key);
+  };
+  const clearRiskControlRow = () => {
+    setHoveredRiskControlRow(null);
+    onActiveRiskControlChange(null);
+  };
 
   return (
     <div className="backtest-display-section mt-3" data-testid="result-additive-dashboard">
@@ -377,17 +393,15 @@ function AdditiveDashboardPanels({
                   key={`dashboard-${row.key}`}
                   className={`rounded-[1rem] px-3 py-2.5 transition-colors ${
                     activeRobustnessKey === row.key ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.18)]'
-                  }`}
+                  } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
                   data-linked-highlight={activeRobustnessKey === row.key ? 'true' : undefined}
                   data-testid={`dashboard-robustness-row-${row.key}`}
-                  onMouseEnter={() => {
-                    setHoveredRobustnessRow(row);
-                    onActiveRobustnessChange(row.key);
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredRobustnessRow(null);
-                    onActiveRobustnessChange(null);
-                  }}
+                  tabIndex={0}
+                  aria-label={`${row.label} ${row.summary} ${row.detail}`}
+                  onMouseEnter={() => activateRobustnessRow(row)}
+                  onMouseLeave={clearRobustnessRow}
+                  onFocus={() => activateRobustnessRow(row)}
+                  onBlur={clearRobustnessRow}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <p className="metric-card__label">{row.label}</p>
@@ -400,7 +414,7 @@ function AdditiveDashboardPanels({
             </div>
             {hoveredRobustnessRow ? (
               <div
-                className="mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.28)] px-3 py-2 text-[11px] text-secondary"
+                className="relative z-10 mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_12px_32px_rgba(15,23,42,0.18)] transition-all duration-150 ease-out motion-reduce:transition-none"
                 data-testid="dashboard-robustness-hover-tooltip"
               >
                 <span className="text-foreground">{hoveredRobustnessRow.label}</span>
@@ -437,17 +451,15 @@ function AdditiveDashboardPanels({
                   key={`dashboard-risk-${row.key}`}
                   className={`rounded-[1rem] px-3 py-2.5 transition-colors ${
                     activeRiskControlKey === row.key ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.18)]'
-                  }`}
+                  } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
                   data-linked-highlight={activeRiskControlKey === row.key ? 'true' : undefined}
                   data-testid={`dashboard-risk-controls-row-${row.key}`}
-                  onMouseEnter={() => {
-                    setHoveredRiskControlRow(row);
-                    onActiveRiskControlChange(row.key);
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredRiskControlRow(null);
-                    onActiveRiskControlChange(null);
-                  }}
+                  tabIndex={0}
+                  aria-label={`${row.label} ${row.valueLabel}`}
+                  onMouseEnter={() => activateRiskControlRow(row)}
+                  onMouseLeave={clearRiskControlRow}
+                  onFocus={() => activateRiskControlRow(row)}
+                  onBlur={clearRiskControlRow}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <p className="metric-card__label">{row.label}</p>
@@ -458,7 +470,7 @@ function AdditiveDashboardPanels({
             </div>
             {hoveredRiskControlRow ? (
               <div
-                className="mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.28)] px-3 py-2 text-[11px] text-secondary"
+                className="relative z-10 mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_12px_32px_rgba(15,23,42,0.18)] transition-all duration-150 ease-out motion-reduce:transition-none"
                 data-testid="dashboard-risk-controls-hover-tooltip"
               >
                 <span className="text-foreground">{hoveredRiskControlRow.label}阈值</span>
