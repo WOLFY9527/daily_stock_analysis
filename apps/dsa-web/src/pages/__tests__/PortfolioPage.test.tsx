@@ -1040,30 +1040,45 @@ describe('PortfolioPage FX refresh', () => {
     expect(portfolioHero).toHaveAttribute('tabindex', '0');
     fireEvent.focus(portfolioHero);
 
-    expect(screen.getByTestId('portfolio-attribution-hover-tooltip')).toHaveTextContent('Top account focus');
+    const portfolioTooltip = screen.getByTestId('portfolio-attribution-hover-tooltip');
+    expect(portfolioTooltip).toHaveTextContent('Top account focus');
+    expect(portfolioTooltip).toHaveAttribute('role', 'tooltip');
+    expect(portfolioTooltip).toHaveAttribute('id', 'portfolio-attribution-hover-tooltip');
+    expect(portfolioHero).toHaveAttribute('aria-describedby', 'portfolio-attribution-hover-tooltip');
     expect(screen.getByTestId('account-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
 
     fireEvent.blur(portfolioHero);
     expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
+    expect(portfolioHero).not.toHaveAttribute('aria-describedby');
 
     const accountLegend = screen.getByTestId('account-attribution-distribution-band-legend-1');
     expect(accountLegend).toHaveAttribute('tabindex', '0');
     fireEvent.focus(accountLegend);
 
-    expect(screen.getByTestId('account-attribution-distribution-band-tooltip')).toHaveTextContent('Satellite');
+    const accountTooltip = screen.getByTestId('account-attribution-distribution-band-tooltip');
+    expect(accountTooltip).toHaveTextContent('Satellite');
+    expect(accountTooltip).toHaveAttribute('role', 'tooltip');
+    expect(accountTooltip).toHaveAttribute('id', 'account-attribution-distribution-band-tooltip');
+    expect(accountLegend).toHaveAttribute('aria-describedby', 'account-attribution-distribution-band-tooltip');
     expect(screen.getByTestId('account-attribution-top-list-row-1')).toHaveAttribute('data-linked-highlight', 'true');
 
     fireEvent.blur(accountLegend);
     expect(screen.queryByTestId('account-attribution-distribution-band-tooltip')).not.toBeInTheDocument();
+    expect(accountLegend).not.toHaveAttribute('aria-describedby');
 
     const industrySegment = screen.getByTestId('industry-attribution-distribution-band-segment-0');
     expect(industrySegment).toHaveAttribute('tabindex', '0');
     fireEvent.focus(industrySegment);
 
-    expect(screen.getByTestId('industry-attribution-distribution-band-tooltip')).toHaveTextContent('半导体');
+    const industryTooltip = screen.getByTestId('industry-attribution-distribution-band-tooltip');
+    expect(industryTooltip).toHaveTextContent('半导体');
+    expect(industryTooltip).toHaveAttribute('role', 'tooltip');
+    expect(industryTooltip).toHaveAttribute('id', 'industry-attribution-distribution-band-tooltip');
+    expect(industrySegment).toHaveAttribute('aria-describedby', 'industry-attribution-distribution-band-tooltip');
     expect(screen.getByTestId('industry-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
 
     fireEvent.blur(industrySegment);
     expect(screen.queryByTestId('industry-attribution-distribution-band-tooltip')).not.toBeInTheDocument();
+    expect(industrySegment).not.toHaveAttribute('aria-describedby');
   });
 });

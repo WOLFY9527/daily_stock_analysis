@@ -728,22 +728,32 @@ describe('DeterministicBacktestResultPage', () => {
     expect(robustnessRow).toHaveAttribute('tabindex', '0');
     fireEvent.focus(robustnessRow);
 
-    expect(screen.getByTestId('dashboard-robustness-hover-tooltip')).toHaveTextContent('Walk-forward');
+    const robustnessTooltip = screen.getByTestId('dashboard-robustness-hover-tooltip');
+    expect(robustnessTooltip).toHaveTextContent('Walk-forward');
+    expect(robustnessTooltip).toHaveAttribute('role', 'tooltip');
+    expect(robustnessTooltip).toHaveAttribute('id', 'dashboard-robustness-hover-tooltip');
+    expect(robustnessRow).toHaveAttribute('aria-describedby', 'dashboard-robustness-hover-tooltip');
     expect(screen.getByTestId('robustness-lens-row-walk-forward')).toHaveAttribute('data-linked-highlight', 'true');
 
     fireEvent.blur(robustnessRow);
     expect(screen.queryByTestId('dashboard-robustness-hover-tooltip')).not.toBeInTheDocument();
+    expect(robustnessRow).not.toHaveAttribute('aria-describedby');
 
     const riskControlRow = screen.getByTestId('dashboard-risk-controls-row-stop-loss');
     expect(riskControlRow).toHaveAttribute('tabindex', '0');
     fireEvent.focus(riskControlRow);
 
-    expect(screen.getByTestId('dashboard-risk-controls-hover-tooltip')).toHaveTextContent('止损阈值');
+    const riskControlTooltip = screen.getByTestId('dashboard-risk-controls-hover-tooltip');
+    expect(riskControlTooltip).toHaveTextContent('止损阈值');
+    expect(riskControlTooltip).toHaveAttribute('role', 'tooltip');
+    expect(riskControlTooltip).toHaveAttribute('id', 'dashboard-risk-controls-hover-tooltip');
+    expect(riskControlRow).toHaveAttribute('aria-describedby', 'dashboard-risk-controls-hover-tooltip');
     expect(screen.getByTestId('dashboard-risk-controls-threshold-summary')).toHaveAttribute('data-linked-highlight', 'true');
     expect(screen.getByTestId('result-risk-controls-row-stop-loss')).toHaveAttribute('data-linked-highlight', 'true');
 
     fireEvent.blur(riskControlRow);
     expect(screen.queryByTestId('dashboard-risk-controls-hover-tooltip')).not.toBeInTheDocument();
+    expect(riskControlRow).not.toHaveAttribute('aria-describedby');
   });
 
   it('renders indicator risk controls as a read-only protection ladder in the parameters tab', async () => {

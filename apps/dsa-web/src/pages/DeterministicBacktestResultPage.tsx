@@ -398,6 +398,7 @@ function AdditiveDashboardPanels({
                   data-testid={`dashboard-robustness-row-${row.key}`}
                   tabIndex={0}
                   aria-label={`${row.label} ${row.summary} ${row.detail}`}
+                  aria-describedby={hoveredRobustnessRow?.key === row.key ? 'dashboard-robustness-hover-tooltip' : undefined}
                   onMouseEnter={() => activateRobustnessRow(row)}
                   onMouseLeave={clearRobustnessRow}
                   onFocus={() => activateRobustnessRow(row)}
@@ -416,6 +417,8 @@ function AdditiveDashboardPanels({
               <div
                 className="relative z-10 mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_12px_32px_rgba(15,23,42,0.18)] transition-all duration-150 ease-out motion-reduce:transition-none"
                 data-testid="dashboard-robustness-hover-tooltip"
+                id="dashboard-robustness-hover-tooltip"
+                role="tooltip"
               >
                 <span className="text-foreground">{hoveredRobustnessRow.label}</span>
                 <span className="ml-1">{hoveredRobustnessRow.summary}</span>
@@ -456,6 +459,7 @@ function AdditiveDashboardPanels({
                   data-testid={`dashboard-risk-controls-row-${row.key}`}
                   tabIndex={0}
                   aria-label={`${row.label} ${row.valueLabel}`}
+                  aria-describedby={hoveredRiskControlRow?.key === row.key ? 'dashboard-risk-controls-hover-tooltip' : undefined}
                   onMouseEnter={() => activateRiskControlRow(row)}
                   onMouseLeave={clearRiskControlRow}
                   onFocus={() => activateRiskControlRow(row)}
@@ -472,6 +476,8 @@ function AdditiveDashboardPanels({
               <div
                 className="relative z-10 mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_12px_32px_rgba(15,23,42,0.18)] transition-all duration-150 ease-out motion-reduce:transition-none"
                 data-testid="dashboard-risk-controls-hover-tooltip"
+                id="dashboard-risk-controls-hover-tooltip"
+                role="tooltip"
               >
                 <span className="text-foreground">{hoveredRiskControlRow.label}阈值</span>
                 <span className="ml-1 font-mono text-foreground">{hoveredRiskControlRow.valueLabel}</span>

@@ -259,6 +259,8 @@ function AttributionHero({
       data-linked-highlight={isLinkedHighlight ? 'true' : undefined}
       title={title}
       tabIndex={0}
+      aria-label={title}
+      aria-describedby={isActive ? tooltipTestId : undefined}
       onMouseEnter={activateLeadRow}
       onMouseLeave={clearLeadRow}
       onFocus={activateLeadRow}
@@ -278,6 +280,8 @@ function AttributionHero({
         <div
           className="mt-3 rounded-lg border border-[rgba(125,211,252,0.32)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_10px_30px_rgba(15,23,42,0.18)] transition-all duration-150 ease-out motion-reduce:transition-none"
           data-testid={tooltipTestId}
+          id={tooltipTestId}
+          role="tooltip"
         >
           <span className="text-foreground">{getAttributionHoverHeading(leadRow)}</span>
           <span className="ml-1">{leadRow.label}</span>
@@ -338,6 +342,9 @@ function AttributionDistributionBand({
     setHoveredRow(null);
     onActiveLinkChange(null);
   };
+  const isTooltipTriggerActive = (row: AttributionVisualRow) => (
+    hoveredRow?.label === row.label && hoveredRow?.valueLabel === row.valueLabel
+  );
 
   return (
     <div
@@ -354,6 +361,8 @@ function AttributionDistributionBand({
         <div
           className="rounded-lg border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_10px_30px_rgba(15,23,42,0.16)] transition-all duration-150 ease-out motion-reduce:transition-none"
           data-testid={tooltipTestId}
+          id={tooltipTestId}
+          role="tooltip"
         >
           <span className="text-foreground">{hoveredRow.label}</span>
           {hoveredRow.meta ? <span className="ml-1">{hoveredRow.meta}</span> : null}
@@ -369,6 +378,7 @@ function AttributionDistributionBand({
             data-testid={`${testId}-segment-${index}`}
             tabIndex={0}
             aria-label={`${row.label} ${row.valueLabel}`}
+            aria-describedby={isTooltipTriggerActive(row) ? tooltipTestId : undefined}
             onMouseEnter={() => activateRow(row)}
             onFocus={() => activateRow(row)}
             onBlur={clearRow}
@@ -399,6 +409,7 @@ function AttributionDistributionBand({
             data-testid={`${testId}-legend-${index}`}
             tabIndex={0}
             aria-label={`${row.label} ${row.valueLabel}`}
+            aria-describedby={isTooltipTriggerActive(row) ? tooltipTestId : undefined}
             onMouseEnter={() => activateRow(row)}
             onFocus={() => activateRow(row)}
             onBlur={clearRow}
