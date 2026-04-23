@@ -945,4 +945,56 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveTextContent('Top coverage 86.00%');
     expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveAttribute('title', '行业归因 Top coverage 86.00%');
   });
+
+  it('shows attribution hover details and linked highlights across the additive dashboard panels', async () => {
+    const snapshot = makeSnapshot();
+    snapshot.portfolioAttribution = {
+      accountAttribution: {
+        topAccounts: [
+          { accountId: 1, accountName: 'Account 1', equityWeightPct: 70 },
+          { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
+        ],
+      },
+      industryAttribution: {
+        topIndustries: [
+          { industry: '半导体', weightPct: 55, symbolCount: 2 },
+          { industry: '软件', weightPct: 25, symbolCount: 1 },
+        ],
+      },
+    };
+
+    const risk = makeRisk();
+    risk.accountAttribution = {
+      topAccounts: [
+        { accountId: 1, accountName: 'Main', equityWeightPct: 70 },
+        { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
+      ],
+    };
+    risk.industryAttribution = {
+      topIndustries: [
+        { industry: '半导体', weightPct: 55, symbolCount: 2 },
+        { industry: '软件', weightPct: 25, symbolCount: 1 },
+      ],
+    };
+
+    getSnapshot.mockImplementation(async () => snapshot);
+    getRisk.mockResolvedValue(risk);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByTestId('portfolio-attribution-hero'));
+
+    expect(screen.getByTestId('portfolio-attribution-hover-tooltip')).toHaveTextContent('Top account focus');
+    expect(screen.getByTestId('account-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
+
+    fireEvent.mouseLeave(screen.getByTestId('portfolio-attribution-hero'));
+    expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(screen.getByTestId('industry-attribution-distribution-band-legend-0'));
+    expect(screen.getByTestId('industry-attribution-distribution-band-tooltip')).toHaveTextContent('半导体');
+    expect(screen.getByTestId('industry-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
+  });
 });

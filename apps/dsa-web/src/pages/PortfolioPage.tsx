@@ -65,6 +65,7 @@ type AttributionVisualRow = {
   valueLabel: string;
   percent: number;
   meta?: string;
+  linkKey?: string | null;
 };
 
 function getTodayIso(): string {
@@ -196,6 +197,24 @@ function formatAttributionCount(value: unknown): string {
   return `${numeric.toFixed(0)}`;
 }
 
+function getAttributionAccountLinkKey(entry: Record<string, unknown> | null): string | null {
+  const value = entry?.account_id ?? entry?.accountId;
+  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+  if (!Number.isFinite(numeric)) return null;
+  return `account:${numeric.toFixed(0)}`;
+}
+
+function getAttributionIndustryLinkKey(entry: Record<string, unknown> | null): string | null {
+  const value = String(entry?.industry || entry?.name || '').trim();
+  return value ? `industry:${value}` : null;
+}
+
+function getAttributionHoverHeading(row: AttributionVisualRow): string {
+  if (row.meta === '账户') return 'Top account focus';
+  if (row.meta === '行业') return 'Top industry focus';
+  return 'Attribution focus';
+}
+
 function getAttributionCoverage(rows: AttributionVisualRow[]): number {
   return Math.min(100, rows.reduce((total, row) => total + Math.max(0, Math.min(100, row.percent)), 0));
 }
@@ -204,22 +223,41 @@ function AttributionHero({
   rows,
   testId,
   title,
+  tooltipTestId,
+  activeLinkKey,
+  onActiveLinkChange,
 }: {
   rows: AttributionVisualRow[];
   testId: string;
   title?: string;
+  tooltipTestId: string;
+  activeLinkKey: string | null;
+  onActiveLinkChange: (linkKey: string | null) => void;
 }) {
+  const [isHovered, setIsHovered] = useState(false);
   if (!rows.length) return null;
 
   const sortedRows = [...rows].sort((left, right) => right.percent - left.percent);
   const leadRow = sortedRows[0];
   const companionRows = sortedRows.slice(1, 3);
+  const isLinkedHighlight = Boolean(leadRow.linkKey && activeLinkKey === leadRow.linkKey);
 
   return (
     <div
-      className="mt-4 rounded-[var(--theme-panel-radius-lg)] border border-[var(--border-muted)] bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(255,255,255,0.04))] p-3"
+      className={`mt-4 rounded-[var(--theme-panel-radius-lg)] border bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(255,255,255,0.04))] p-3 transition-colors ${
+        isLinkedHighlight ? 'border-[rgba(125,211,252,0.55)] shadow-[0_0_0_1px_rgba(125,211,252,0.2)]' : 'border-[var(--border-muted)]'
+      }`}
       data-testid={testId}
+      data-linked-highlight={isLinkedHighlight ? 'true' : undefined}
       title={title}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        onActiveLinkChange(leadRow.linkKey ?? null);
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        onActiveLinkChange(null);
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -231,10 +269,24 @@ function AttributionHero({
           {leadRow.valueLabel}
         </div>
       </div>
+      {isHovered ? (
+        <div
+          className="mt-3 rounded-lg border border-[rgba(125,211,252,0.32)] bg-[rgba(15,23,42,0.34)] px-3 py-2 text-[11px] text-secondary"
+          data-testid={tooltipTestId}
+        >
+          <span className="text-foreground">{getAttributionHoverHeading(leadRow)}</span>
+          <span className="ml-1">{leadRow.label}</span>
+          <span className="ml-1 font-mono text-foreground">{leadRow.valueLabel}</span>
+        </div>
+      ) : null}
       {companionRows.length ? (
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {companionRows.map((row) => (
-            <div key={`${testId}-${row.label}-${row.valueLabel}`} className="rounded-lg bg-[rgba(15,23,42,0.22)] px-3 py-2">
+            <div
+              key={`${testId}-${row.label}-${row.valueLabel}`}
+              className={`rounded-lg px-3 py-2 ${row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.22)]'}`}
+              data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
+            >
               <p className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">{row.meta || 'Secondary signal'}</p>
               <p className="mt-1 text-xs font-medium text-foreground">{row.label}</p>
               <p className="text-[11px] font-mono text-secondary">{row.valueLabel}</p>
@@ -250,11 +302,18 @@ function AttributionDistributionBand({
   rows,
   testId,
   title,
+  tooltipTestId,
+  activeLinkKey,
+  onActiveLinkChange,
 }: {
   rows: AttributionVisualRow[];
   testId: string;
   title?: string;
+  tooltipTestId: string;
+  activeLinkKey: string | null;
+  onActiveLinkChange: (linkKey: string | null) => void;
 }) {
+  const [hoveredRow, setHoveredRow] = useState<AttributionVisualRow | null>(null);
   const segments = rows
     .filter((row) => row.percent > 0)
     .map((row) => ({
@@ -268,16 +327,40 @@ function AttributionDistributionBand({
   const remaining = Math.max(0, 100 - coverage);
 
   return (
-    <div className="mt-4 space-y-2.5" data-testid={testId} title={title}>
+    <div
+      className="mt-4 space-y-2.5"
+      data-testid={testId}
+      title={title}
+      onMouseLeave={() => {
+        setHoveredRow(null);
+        onActiveLinkChange(null);
+      }}
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Distribution Band</p>
         <span className="text-[11px] font-mono text-foreground">Top coverage {coverage.toFixed(2)}%</span>
       </div>
+      {hoveredRow ? (
+        <div
+          className="rounded-lg border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.3)] px-3 py-2 text-[11px] text-secondary"
+          data-testid={tooltipTestId}
+        >
+          <span className="text-foreground">{hoveredRow.label}</span>
+          {hoveredRow.meta ? <span className="ml-1">{hoveredRow.meta}</span> : null}
+          <span className="ml-1 font-mono text-foreground">{hoveredRow.valueLabel}</span>
+        </div>
+      ) : null}
       <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
         {segments.map((row, index) => (
           <div
             key={`${testId}-${row.label}-${row.valueLabel}`}
-            className="h-full"
+            className={`h-full transition-opacity ${row.linkKey && activeLinkKey === row.linkKey ? 'opacity-100' : 'opacity-80'}`}
+            data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
+            data-testid={`${testId}-segment-${index}`}
+            onMouseEnter={() => {
+              setHoveredRow(row);
+              onActiveLinkChange(row.linkKey ?? null);
+            }}
             style={{
               width: `${row.percent}%`,
               backgroundColor: ATTRIBUTION_VISUAL_COLORS[index % ATTRIBUTION_VISUAL_COLORS.length],
@@ -295,8 +378,19 @@ function AttributionDistributionBand({
         ) : null}
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
-        {segments.map((row) => (
-          <div key={`${testId}-legend-${row.label}-${row.valueLabel}`} className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+        {segments.map((row, index) => (
+          <div
+            key={`${testId}-legend-${row.label}-${row.valueLabel}`}
+            className={`rounded-lg px-3 py-2 transition-colors ${
+              row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[var(--surface-muted)]'
+            }`}
+            data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
+            data-testid={`${testId}-legend-${index}`}
+            onMouseEnter={() => {
+              setHoveredRow(row);
+              onActiveLinkChange(row.linkKey ?? null);
+            }}
+          >
             <p className="truncate text-[11px] text-foreground">{row.label}</p>
             <p className="text-[10px] text-secondary-text">{row.meta || 'Top slice'}</p>
             <p className="mt-1 font-mono text-[11px] text-secondary">{row.valueLabel}</p>
@@ -311,18 +405,27 @@ function AttributionVisualList({
   title,
   rows,
   testId,
+  activeLinkKey,
 }: {
   title: string;
   rows: AttributionVisualRow[];
   testId: string;
+  activeLinkKey: string | null;
 }) {
   if (!rows.length) return null;
 
   return (
     <div className="mt-4 space-y-2.5" data-testid={testId}>
       <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{title}</p>
-      {rows.map((row) => (
-        <div key={`${title}-${row.label}-${row.valueLabel}`} className="space-y-1">
+      {rows.map((row, index) => (
+        <div
+          key={`${title}-${row.label}-${row.valueLabel}`}
+          className={`space-y-1 rounded-lg px-2 py-1 transition-colors ${
+            row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.12)]' : ''
+          }`}
+          data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
+          data-testid={`${testId}-row-${index}`}
+        >
           <div className="flex items-center justify-between gap-3 text-[11px] text-secondary">
             <span className="truncate">
               <span className="text-foreground">{row.label}</span>
@@ -455,6 +558,7 @@ const PortfolioPage: React.FC = () => {
   const [eventSide, setEventSide] = useState<'' | PortfolioSide>('');
   const [eventDirection, setEventDirection] = useState<'' | PortfolioCashDirection>('');
   const [eventActionType, setEventActionType] = useState<'' | PortfolioCorporateActionType>('');
+  const [activeAttributionLinkKey, setActiveAttributionLinkKey] = useState<string | null>(null);
   const [eventPage, setEventPage] = useState(1);
   const [eventTotal, setEventTotal] = useState(0);
   const [eventLoading, setEventLoading] = useState(false);
@@ -797,6 +901,7 @@ const PortfolioPage: React.FC = () => {
         meta: '账户',
         percent: topAccountPercent,
         valueLabel: formatAttributionWeight(topAccountPercent),
+        linkKey: getAttributionAccountLinkKey(portfolioTopAccount),
       });
     }
     const topIndustryPercent = parseAttributionPercent(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct);
@@ -806,6 +911,7 @@ const PortfolioPage: React.FC = () => {
         meta: '行业',
         percent: topIndustryPercent,
         valueLabel: formatAttributionWeight(topIndustryPercent),
+        linkKey: getAttributionIndustryLinkKey(portfolioTopIndustry),
       });
     }
     return rows;
@@ -820,6 +926,7 @@ const PortfolioPage: React.FC = () => {
           meta: `#${formatAttributionCount(entry.account_id ?? entry.accountId)}`,
           percent,
           valueLabel: formatAttributionWeight(percent),
+          linkKey: getAttributionAccountLinkKey(entry),
         } satisfies AttributionVisualRow];
       }),
     [risk?.accountAttribution],
@@ -834,6 +941,7 @@ const PortfolioPage: React.FC = () => {
           meta: `${formatAttributionCount(entry.symbol_count ?? entry.symbolCount)} 持仓`,
           percent,
           valueLabel: formatAttributionWeight(percent),
+          linkKey: getAttributionIndustryLinkKey(entry),
         } satisfies AttributionVisualRow];
       }),
     [risk?.industryAttribution],
@@ -1395,8 +1503,20 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
               <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
             </div>
-            <AttributionHero rows={portfolioDominantRows} testId="portfolio-attribution-hero" title="查看组合主导归因的聚合摘要" />
-            <AttributionVisualList title="主导分布 / Dominant Mix" rows={portfolioDominantRows} testId="portfolio-attribution-visual-summary" />
+            <AttributionHero
+              rows={portfolioDominantRows}
+              testId="portfolio-attribution-hero"
+              title="查看组合主导归因的聚合摘要"
+              tooltipTestId="portfolio-attribution-hover-tooltip"
+              activeLinkKey={activeAttributionLinkKey}
+              onActiveLinkChange={setActiveAttributionLinkKey}
+            />
+            <AttributionVisualList
+              title="主导分布 / Dominant Mix"
+              rows={portfolioDominantRows}
+              testId="portfolio-attribution-visual-summary"
+              activeLinkKey={activeAttributionLinkKey}
+            />
           </Card>
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">账户归因 / Account Attribution</h3>
@@ -1409,8 +1529,16 @@ const PortfolioPage: React.FC = () => {
               rows={riskAccountRows}
               testId="account-attribution-distribution-band"
               title={`账户归因 Top coverage ${getAttributionCoverage(riskAccountRows).toFixed(2)}%`}
+              tooltipTestId="account-attribution-distribution-band-tooltip"
+              activeLinkKey={activeAttributionLinkKey}
+              onActiveLinkChange={setActiveAttributionLinkKey}
             />
-            <AttributionVisualList title="Top 账户分布" rows={riskAccountRows} testId="account-attribution-top-list" />
+            <AttributionVisualList
+              title="Top 账户分布"
+              rows={riskAccountRows}
+              testId="account-attribution-top-list"
+              activeLinkKey={activeAttributionLinkKey}
+            />
           </Card>
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">行业归因 / Industry Attribution</h3>
@@ -1423,8 +1551,16 @@ const PortfolioPage: React.FC = () => {
               rows={riskIndustryRows}
               testId="industry-attribution-distribution-band"
               title={`行业归因 Top coverage ${getAttributionCoverage(riskIndustryRows).toFixed(2)}%`}
+              tooltipTestId="industry-attribution-distribution-band-tooltip"
+              activeLinkKey={activeAttributionLinkKey}
+              onActiveLinkChange={setActiveAttributionLinkKey}
             />
-            <AttributionVisualList title="Top 行业分布" rows={riskIndustryRows} testId="industry-attribution-top-list" />
+            <AttributionVisualList
+              title="Top 行业分布"
+              rows={riskIndustryRows}
+              testId="industry-attribution-top-list"
+              activeLinkKey={activeAttributionLinkKey}
+            />
           </Card>
         </section>
 

@@ -585,6 +585,82 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByText('已启用 3 项')).toBeInTheDocument();
   });
 
+  it('adds hover tooltips and linked highlights for additive robustness and risk-control cards', async () => {
+    const baselineRun = makeResultRun();
+    const currentRun = makeResultRun({
+      parsedStrategy: {
+        ...baselineRun.parsedStrategy,
+        strategySpec: {
+          ...(baselineRun.parsedStrategy?.strategySpec || {}),
+          riskControls: {
+            stopLossPct: 5,
+            takeProfitPct: 10,
+            trailingStopPct: 8,
+          },
+        },
+      },
+      robustnessAnalysis: {
+        state: 'available',
+        configuration: {
+          walkForward: {
+            maxWindows: 6,
+          },
+          monteCarlo: {
+            simulationCount: 250,
+          },
+          stressTests: {
+            scenarioKeys: ['single_day_shock_down_15', 'volatility_whipsaw', 'gap_down_open'],
+          },
+        },
+        walkForward: {
+          windowCount: 4,
+          aggregateMetrics: {
+            meanTotalReturnPct: 6.2,
+          },
+        },
+        monteCarlo: {
+          simulationCount: 200,
+          aggregateMetrics: {
+            medianTotalReturnPct: 8.4,
+          },
+        },
+        stressTests: {
+          scenarioCount: 3,
+          worstScenario: {
+            scenarioKey: 'single_day_shock_down_15',
+          },
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
+    expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
+
+    expect(screen.queryByTestId('dashboard-robustness-hover-tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByTestId('dashboard-robustness-row-walk-forward'));
+
+    expect(screen.getByTestId('dashboard-robustness-hover-tooltip')).toHaveTextContent('Walk-forward');
+    expect(screen.getByTestId('robustness-lens-row-walk-forward')).toHaveAttribute('data-linked-highlight', 'true');
+
+    fireEvent.mouseEnter(screen.getByTestId('dashboard-risk-controls-row-stop-loss'));
+
+    expect(screen.getByTestId('dashboard-risk-controls-hover-tooltip')).toHaveTextContent('止损阈值');
+    expect(screen.getByTestId('dashboard-risk-controls-threshold-summary')).toHaveAttribute('data-linked-highlight', 'true');
+    expect(screen.getByTestId('result-risk-controls-row-stop-loss')).toHaveAttribute('data-linked-highlight', 'true');
+  });
+
   it('renders indicator risk controls as a read-only protection ladder in the parameters tab', async () => {
     const baselineRun = makeResultRun();
     const currentRun = makeResultRun({

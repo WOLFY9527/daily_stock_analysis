@@ -273,8 +273,10 @@ function RobustnessCoverageTrack({
 
 function RiskControlsLadder({
   rows,
+  activeRiskControlKey,
 }: {
   rows: RiskControlVisualRow[];
+  activeRiskControlKey: RiskControlVisualRow['key'] | null;
 }) {
   if (!rows.length) return null;
 
@@ -295,7 +297,14 @@ function RiskControlsLadder({
         {rows.map((row) => {
           const width = strongestRiskControl > 0 ? Math.max(16, (row.value / strongestRiskControl) * 100) : 0;
           return (
-            <div key={`risk-control-${row.key}`} className="space-y-1.5" data-testid={`result-risk-controls-row-${row.key}`}>
+            <div
+              key={`risk-control-${row.key}`}
+              className={`space-y-1.5 rounded-[0.85rem] px-2 py-1.5 transition-colors ${
+                activeRiskControlKey === row.key ? 'bg-[rgba(125,211,252,0.1)]' : ''
+              }`}
+              data-linked-highlight={activeRiskControlKey === row.key ? 'true' : undefined}
+              data-testid={`result-risk-controls-row-${row.key}`}
+            >
               <div className="flex items-center justify-between gap-3">
                 <span className="metric-card__label">{row.label}</span>
                 <span className="preview-card__text">{row.valueLabel}</span>
@@ -318,11 +327,21 @@ function AdditiveDashboardPanels({
   hasRobustnessAnalysis,
   robustnessLensRows,
   riskControlRows,
+  activeRobustnessKey,
+  activeRiskControlKey,
+  onActiveRobustnessChange,
+  onActiveRiskControlChange,
 }: {
   hasRobustnessAnalysis: boolean;
   robustnessLensRows: CoverageTrackItem[];
   riskControlRows: RiskControlVisualRow[];
+  activeRobustnessKey: string | null;
+  activeRiskControlKey: RiskControlVisualRow['key'] | null;
+  onActiveRobustnessChange: (key: string | null) => void;
+  onActiveRiskControlChange: (key: RiskControlVisualRow['key'] | null) => void;
 }) {
+  const [hoveredRobustnessRow, setHoveredRobustnessRow] = useState<CoverageTrackItem | null>(null);
+  const [hoveredRiskControlRow, setHoveredRiskControlRow] = useState<RiskControlVisualRow | null>(null);
   if (!hasRobustnessAnalysis && riskControlRows.length === 0) return null;
 
   const averageCoverage = robustnessLensRows.length
@@ -344,12 +363,32 @@ function AdditiveDashboardPanels({
                 <h3 className="summary-block__title">鲁棒性分析卡片 / Robustness</h3>
               </div>
               <div className="product-chip-list product-chip-list--tight">
-                <span className="product-chip">平均覆盖 {pct(averageCoverage * 100)}</span>
+                <span
+                  className="product-chip"
+                  data-linked-highlight={activeRobustnessKey ? 'true' : undefined}
+                >
+                  平均覆盖 {pct(averageCoverage * 100)}
+                </span>
               </div>
             </div>
             <div className="space-y-2.5">
               {robustnessLensRows.map((row) => (
-                <div key={`dashboard-${row.key}`} className="rounded-[1rem] bg-[rgba(15,23,42,0.18)] px-3 py-2.5">
+                <div
+                  key={`dashboard-${row.key}`}
+                  className={`rounded-[1rem] px-3 py-2.5 transition-colors ${
+                    activeRobustnessKey === row.key ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.18)]'
+                  }`}
+                  data-linked-highlight={activeRobustnessKey === row.key ? 'true' : undefined}
+                  data-testid={`dashboard-robustness-row-${row.key}`}
+                  onMouseEnter={() => {
+                    setHoveredRobustnessRow(row);
+                    onActiveRobustnessChange(row.key);
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredRobustnessRow(null);
+                    onActiveRobustnessChange(null);
+                  }}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <p className="metric-card__label">{row.label}</p>
                     <span className="product-chip">{row.state}</span>
@@ -359,6 +398,16 @@ function AdditiveDashboardPanels({
                 </div>
               ))}
             </div>
+            {hoveredRobustnessRow ? (
+              <div
+                className="mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.28)] px-3 py-2 text-[11px] text-secondary"
+                data-testid="dashboard-robustness-hover-tooltip"
+              >
+                <span className="text-foreground">{hoveredRobustnessRow.label}</span>
+                <span className="ml-1">{hoveredRobustnessRow.summary}</span>
+                <span className="ml-1">{hoveredRobustnessRow.detail}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {riskControlRows.length ? (
@@ -373,12 +422,33 @@ function AdditiveDashboardPanels({
               </div>
               <div className="product-chip-list product-chip-list--tight">
                 <span className="product-chip">已启用 {riskControlRows.length} 项</span>
-                <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+                <span
+                  className="product-chip"
+                  data-linked-highlight={activeRiskControlKey ? 'true' : undefined}
+                  data-testid="dashboard-risk-controls-threshold-summary"
+                >
+                  最高阈值 {strongestRiskControl.toFixed(2)}%
+                </span>
               </div>
             </div>
             <div className="space-y-2.5">
               {riskControlRows.map((row) => (
-                <div key={`dashboard-risk-${row.key}`} className="rounded-[1rem] bg-[rgba(15,23,42,0.18)] px-3 py-2.5">
+                <div
+                  key={`dashboard-risk-${row.key}`}
+                  className={`rounded-[1rem] px-3 py-2.5 transition-colors ${
+                    activeRiskControlKey === row.key ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.18)]'
+                  }`}
+                  data-linked-highlight={activeRiskControlKey === row.key ? 'true' : undefined}
+                  data-testid={`dashboard-risk-controls-row-${row.key}`}
+                  onMouseEnter={() => {
+                    setHoveredRiskControlRow(row);
+                    onActiveRiskControlChange(row.key);
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredRiskControlRow(null);
+                    onActiveRiskControlChange(null);
+                  }}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <p className="metric-card__label">{row.label}</p>
                     <span className="preview-card__text">{row.valueLabel}</span>
@@ -386,6 +456,15 @@ function AdditiveDashboardPanels({
                 </div>
               ))}
             </div>
+            {hoveredRiskControlRow ? (
+              <div
+                className="mt-3 rounded-[0.9rem] border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.28)] px-3 py-2 text-[11px] text-secondary"
+                data-testid="dashboard-risk-controls-hover-tooltip"
+              >
+                <span className="text-foreground">{hoveredRiskControlRow.label}阈值</span>
+                <span className="ml-1 font-mono text-foreground">{hoveredRiskControlRow.valueLabel}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -435,6 +514,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [scenarioError, setScenarioError] = useState<ParsedApiError | null>(null);
   const [presetNotice, setPresetNotice] = useState<string | null>(null);
   const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>([]);
+  const [activeRobustnessKey, setActiveRobustnessKey] = useState<string | null>(null);
+  const [activeRiskControlKey, setActiveRiskControlKey] = useState<RiskControlVisualRow['key'] | null>(null);
   const density = useDeterministicResultDensity();
   const robustnessAnalysis = useMemo(() => asObjectRecord(run?.robustnessAnalysis), [run?.robustnessAnalysis]);
   const robustnessConfiguration = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'configuration')), [robustnessAnalysis]);
@@ -1245,7 +1326,14 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           {robustnessLensRows.map((row) => {
                             const width = row.ratio > 0 ? Math.max(14, row.ratio * 100) : 0;
                             return (
-                              <div key={row.key} className="space-y-1.5" data-testid={`robustness-lens-row-${row.key}`}>
+                              <div
+                                key={row.key}
+                                className={`space-y-1.5 rounded-[0.85rem] px-2 py-1.5 transition-colors ${
+                                  activeRobustnessKey === row.key ? 'bg-[rgba(125,211,252,0.1)]' : ''
+                                }`}
+                                data-linked-highlight={activeRobustnessKey === row.key ? 'true' : undefined}
+                                data-testid={`robustness-lens-row-${row.key}`}
+                              >
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="metric-card__label">{row.label}</p>
@@ -1294,7 +1382,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                    <RiskControlsLadder rows={riskControlRows} />
+                    <RiskControlsLadder rows={riskControlRows} activeRiskControlKey={activeRiskControlKey} />
                   </div>
                 </Disclosure>
 
@@ -1584,6 +1672,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
               hasRobustnessAnalysis={hasRobustnessAnalysis}
               robustnessLensRows={robustnessLensRows}
               riskControlRows={riskControlRows}
+              activeRobustnessKey={activeRobustnessKey}
+              activeRiskControlKey={activeRiskControlKey}
+              onActiveRobustnessChange={setActiveRobustnessKey}
+              onActiveRiskControlChange={setActiveRiskControlKey}
             />
           </section>
 
