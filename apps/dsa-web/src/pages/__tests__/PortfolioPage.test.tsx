@@ -932,11 +932,14 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(screen.getByTestId('portfolio-attribution-visual-summary')).toBeInTheDocument();
     expect(screen.getByText('主导分布 / Dominant Mix')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-attribution-hero')).toBeInTheDocument();
     expect(screen.getByTestId('account-attribution-top-list')).toBeInTheDocument();
     expect(screen.getByText('Top 账户分布')).toBeInTheDocument();
-    expect(screen.getByText('Satellite')).toBeInTheDocument();
+    expect(screen.getAllByText('Satellite').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveTextContent('Top coverage 100.00%');
     expect(screen.getByTestId('industry-attribution-top-list')).toBeInTheDocument();
     expect(screen.getByText('Top 行业分布')).toBeInTheDocument();
-    expect(screen.getByText('软件')).toBeInTheDocument();
+    expect(screen.getAllByText('软件').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveTextContent('Top coverage 86.00%');
   });
 });

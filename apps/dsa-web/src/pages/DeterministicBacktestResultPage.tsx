@@ -28,6 +28,7 @@ import {
   getBenchmarkModeLabel,
   getRuleRunStatusDescription,
   getRuleRunStatusLabel,
+  getStrategySpecValue,
   isRuleRunTerminal,
   pct,
   type RuleBenchmarkMode,
@@ -91,6 +92,24 @@ const RESULT_PAGE_TABS: Array<{ key: ResultPageTabKey; label: string }> = [
   { key: 'parameters', label: '参数与假设' },
   { key: 'history', label: '历史结果' },
 ];
+
+type CoverageTrackItem = {
+  key: string;
+  label: string;
+  summary: string;
+  detail: string;
+  state: string;
+  ratio: number;
+};
+
+type RiskControlVisualRow = {
+  key: 'stop-loss' | 'take-profit' | 'trailing-stop';
+  label: string;
+  value: number;
+  valueLabel: string;
+};
+
+const COVERAGE_TRACK_COLORS = ['#7dd3fc', '#86efac', '#fbbf24'];
 
 function formatStatusHistoryLabel(item: StatusHistoryItem): string {
   return `${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`;
@@ -158,6 +177,143 @@ function getRobustnessStateLabel(value: unknown): string {
   return normalized ? String(value) : '--';
 }
 
+function getRiskControlVisualRows(
+  parsedStrategy: RuleBacktestRunResponse['parsedStrategy'] | null | undefined,
+): RiskControlVisualRow[] {
+  const directSpec = parsedStrategy?.strategySpec;
+  const strategySpec = directSpec && typeof directSpec === 'object'
+    ? directSpec as Record<string, unknown>
+    : undefined;
+  if (!strategySpec) return [];
+
+  const controls = [
+    {
+      key: 'stop-loss' as const,
+      label: '止损',
+      value: getStrategySpecValue(strategySpec, ['risk_controls', 'stop_loss_pct']),
+    },
+    {
+      key: 'take-profit' as const,
+      label: '止盈',
+      value: getStrategySpecValue(strategySpec, ['risk_controls', 'take_profit_pct']),
+    },
+    {
+      key: 'trailing-stop' as const,
+      label: '移动止损',
+      value: getStrategySpecValue(strategySpec, ['risk_controls', 'trailing_stop_pct']),
+    },
+  ];
+
+  return controls
+    .filter((item) => typeof item.value === 'number' && Number.isFinite(item.value))
+    .map((item) => ({
+      key: item.key,
+      label: item.label,
+      value: Number(item.value),
+      valueLabel: `${Number(item.value).toFixed(2)}%`,
+    }));
+}
+
+function RobustnessCoverageTrack({
+  rows,
+}: {
+  rows: CoverageTrackItem[];
+}) {
+  if (!rows.length) return null;
+
+  const averageCoverage = rows.reduce((total, row) => total + row.ratio, 0) / rows.length;
+
+  return (
+    <div className="summary-block mt-4" data-testid="robustness-coverage-overview">
+      <div className="summary-block__header">
+        <div>
+          <h3 className="summary-block__title">覆盖进度 / Coverage Track</h3>
+        </div>
+        <div className="product-chip-list product-chip-list--tight">
+          <span className="product-chip">平均覆盖 {pct(averageCoverage * 100)}</span>
+        </div>
+      </div>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+        {rows.map((row, index) => (
+          <div
+            key={`coverage-${row.key}`}
+            className="h-full"
+            style={{
+              width: `${row.ratio * 100}%`,
+              backgroundColor: COVERAGE_TRACK_COLORS[index % COVERAGE_TRACK_COLORS.length],
+            }}
+          />
+        ))}
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {rows.map((row, index) => (
+          <div
+            key={`coverage-card-${row.key}`}
+            className="rounded-[1rem] border border-[var(--border-muted)] bg-[rgba(15,23,42,0.18)] px-3 py-2.5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="metric-card__label">{row.label}</p>
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: COVERAGE_TRACK_COLORS[index % COVERAGE_TRACK_COLORS.length] }}
+              />
+            </div>
+            <p className="mt-1 preview-card__text">{row.summary}</p>
+            <p className="mt-1 text-[11px] text-secondary">{row.detail}</p>
+            <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-secondary">
+              <span>覆盖 {pct(row.ratio * 100)}</span>
+              <span className="product-chip">{row.state}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RiskControlsLadder({
+  rows,
+}: {
+  rows: RiskControlVisualRow[];
+}) {
+  if (!rows.length) return null;
+
+  const strongestRiskControl = rows.reduce((currentMax, row) => Math.max(currentMax, row.value), 0);
+
+  return (
+    <div className="summary-block mt-4" data-testid="result-risk-controls-visualization">
+      <div className="summary-block__header">
+        <div>
+          <h3 className="summary-block__title">保护梯度 / Protection Ladder</h3>
+        </div>
+        <div className="product-chip-list product-chip-list--tight">
+          <span className="product-chip">已启用 {rows.length} 项</span>
+          <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const width = strongestRiskControl > 0 ? Math.max(16, (row.value / strongestRiskControl) * 100) : 0;
+          return (
+            <div key={`risk-control-${row.key}`} className="space-y-1.5" data-testid={`result-risk-controls-row-${row.key}`}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="metric-card__label">{row.label}</span>
+                <span className="preview-card__text">{row.valueLabel}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+                <div
+                  className="h-full rounded-full bg-[var(--backtest-accent,#7dd3fc)]"
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -221,7 +377,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     ),
     [monteCarlo, robustnessAnalysis, stressTests, walkForward],
   );
-  const robustnessLensRows = useMemo(() => {
+  const robustnessLensRows = useMemo<CoverageTrackItem[]>(() => {
     const walkForwardCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
     const walkForwardMax = getFiniteNumber(getObjectField(walkForwardConfig, 'maxWindows'));
     const monteCarloCount = getFiniteNumber(getObjectField(monteCarlo, 'simulationCount'));
@@ -555,6 +711,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
       ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '')
       : []),
     [run],
+  );
+  const riskControlRows = useMemo(
+    () => getRiskControlVisualRows(run?.parsedStrategy),
+    [run?.parsedStrategy],
   );
   const strategyWarningEntries = Array.from(
     new Set([
@@ -1025,6 +1185,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           })}
                         </div>
                       </div>
+                      <RobustnessCoverageTrack rows={robustnessLensRows} />
                     </div>
                   </Disclosure>
                 ) : null}
@@ -1054,6 +1215,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         </div>
                       ))}
                     </div>
+                    <RiskControlsLadder rows={riskControlRows} />
                   </div>
                 </Disclosure>
 

@@ -28,6 +28,7 @@ import type {
 } from '../types/portfolio';
 
 const PIE_COLORS = ['#f0f0fa', '#d8d8e2', '#b5b5c1', '#8d8d98', '#6b6b74', '#4c4c53'];
+const ATTRIBUTION_VISUAL_COLORS = ['#7dd3fc', '#86efac', '#fbbf24'];
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
   { broker: 'huatai', aliases: [], displayName: '华泰', fileExtensions: ['csv'] },
@@ -193,6 +194,112 @@ function formatAttributionCount(value: unknown): string {
   const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
   if (!Number.isFinite(numeric)) return '--';
   return `${numeric.toFixed(0)}`;
+}
+
+function getAttributionCoverage(rows: AttributionVisualRow[]): number {
+  return Math.min(100, rows.reduce((total, row) => total + Math.max(0, Math.min(100, row.percent)), 0));
+}
+
+function AttributionHero({
+  rows,
+  testId,
+}: {
+  rows: AttributionVisualRow[];
+  testId: string;
+}) {
+  if (!rows.length) return null;
+
+  const sortedRows = [...rows].sort((left, right) => right.percent - left.percent);
+  const leadRow = sortedRows[0];
+  const companionRows = sortedRows.slice(1, 3);
+
+  return (
+    <div
+      className="mt-4 rounded-[var(--theme-panel-radius-lg)] border border-[var(--border-muted)] bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(255,255,255,0.04))] p-3"
+      data-testid={testId}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Attribution Highlight</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{leadRow.label}</p>
+          <p className="text-xs text-secondary">{leadRow.meta ? `${leadRow.meta} · ` : ''}{leadRow.valueLabel}</p>
+        </div>
+        <div className="rounded-full border border-[rgba(125,211,252,0.32)] bg-[rgba(15,23,42,0.3)] px-3 py-1 text-sm font-mono text-foreground">
+          {leadRow.valueLabel}
+        </div>
+      </div>
+      {companionRows.length ? (
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {companionRows.map((row) => (
+            <div key={`${testId}-${row.label}-${row.valueLabel}`} className="rounded-lg bg-[rgba(15,23,42,0.22)] px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">{row.meta || 'Secondary signal'}</p>
+              <p className="mt-1 text-xs font-medium text-foreground">{row.label}</p>
+              <p className="text-[11px] font-mono text-secondary">{row.valueLabel}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AttributionDistributionBand({
+  rows,
+  testId,
+}: {
+  rows: AttributionVisualRow[];
+  testId: string;
+}) {
+  const segments = rows
+    .filter((row) => row.percent > 0)
+    .map((row) => ({
+      ...row,
+      percent: Math.max(0, Math.min(100, row.percent)),
+    }));
+
+  if (!segments.length) return null;
+
+  const coverage = getAttributionCoverage(segments);
+  const remaining = Math.max(0, 100 - coverage);
+
+  return (
+    <div className="mt-4 space-y-2.5" data-testid={testId}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Distribution Band</p>
+        <span className="text-[11px] font-mono text-foreground">Top coverage {coverage.toFixed(2)}%</span>
+      </div>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+        {segments.map((row, index) => (
+          <div
+            key={`${testId}-${row.label}-${row.valueLabel}`}
+            className="h-full"
+            style={{
+              width: `${row.percent}%`,
+              backgroundColor: ATTRIBUTION_VISUAL_COLORS[index % ATTRIBUTION_VISUAL_COLORS.length],
+            }}
+          />
+        ))}
+        {remaining > 0 ? (
+          <div
+            className="h-full"
+            style={{
+              width: `${remaining}%`,
+              backgroundColor: 'rgba(148, 163, 184, 0.28)',
+            }}
+          />
+        ) : null}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {segments.map((row) => (
+          <div key={`${testId}-legend-${row.label}-${row.valueLabel}`} className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+            <p className="truncate text-[11px] text-foreground">{row.label}</p>
+            <p className="text-[10px] text-secondary-text">{row.meta || 'Top slice'}</p>
+            <p className="mt-1 font-mono text-[11px] text-secondary">{row.valueLabel}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function AttributionVisualList({
@@ -1283,6 +1390,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
               <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
             </div>
+            <AttributionHero rows={portfolioDominantRows} testId="portfolio-attribution-hero" />
             <AttributionVisualList title="主导分布 / Dominant Mix" rows={portfolioDominantRows} testId="portfolio-attribution-visual-summary" />
           </Card>
           <Card padding="md">
@@ -1292,6 +1400,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>权益占比:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>账户 ID:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
             </div>
+            <AttributionDistributionBand rows={riskAccountRows} testId="account-attribution-distribution-band" />
             <AttributionVisualList title="Top 账户分布" rows={riskAccountRows} testId="account-attribution-top-list" />
           </Card>
           <Card padding="md">
@@ -1301,6 +1410,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>持仓数:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
             </div>
+            <AttributionDistributionBand rows={riskIndustryRows} testId="industry-attribution-distribution-band" />
             <AttributionVisualList title="Top 行业分布" rows={riskIndustryRows} testId="industry-attribution-top-list" />
           </Card>
         </section>

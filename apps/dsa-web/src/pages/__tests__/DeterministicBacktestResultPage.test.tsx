@@ -508,9 +508,51 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByText('single_day_shock_down_15')).toBeInTheDocument();
     expect(screen.getByTestId('robustness-lens')).toBeInTheDocument();
     expect(screen.getByText('鲁棒性概览 / Robustness Lens')).toBeInTheDocument();
+    expect(screen.getByTestId('robustness-coverage-overview')).toBeInTheDocument();
+    expect(screen.getByText('覆盖进度 / Coverage Track')).toBeInTheDocument();
     expect(screen.getByTestId('robustness-lens-row-walk-forward')).toHaveTextContent('4 窗口');
     expect(screen.getByTestId('robustness-lens-row-monte-carlo')).toHaveTextContent('200 路径');
     expect(screen.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
+  });
+
+  it('renders indicator risk controls as a read-only protection ladder in the parameters tab', async () => {
+    const baselineRun = makeResultRun();
+    const currentRun = makeResultRun({
+      parsedStrategy: {
+        ...baselineRun.parsedStrategy,
+        strategySpec: {
+          ...(baselineRun.parsedStrategy?.strategySpec || {}),
+          riskControls: {
+            stopLossPct: 5,
+            takeProfitPct: 10,
+            trailingStopPct: 8,
+          },
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
+    expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
+
+    expect(screen.getByTestId('result-risk-controls-visualization')).toBeInTheDocument();
+    expect(screen.getByText('保护梯度 / Protection Ladder')).toBeInTheDocument();
+    expect(screen.getByText('已启用 3 项')).toBeInTheDocument();
+    expect(screen.getByText('最高阈值 10.00%')).toBeInTheDocument();
+    expect(screen.getByTestId('result-risk-controls-row-stop-loss')).toHaveTextContent('5.00%');
+    expect(screen.getByTestId('result-risk-controls-row-take-profit')).toHaveTextContent('10.00%');
+    expect(screen.getByTestId('result-risk-controls-row-trailing-stop')).toHaveTextContent('8.00%');
   });
 
   it('hides the robustness analysis section when legacy runs only expose an empty object', async () => {
