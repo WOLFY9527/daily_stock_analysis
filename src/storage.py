@@ -73,8 +73,21 @@ from src.postgres_phase_d import PostgresPhaseDStore
 from src.postgres_phase_e import PostgresPhaseEStore
 from src.postgres_phase_f import PostgresPhaseFStore, phase_f_ledger_shadow_id
 from src.postgres_phase_g import PostgresPhaseGStore
+import src.storage_phase_g_observability as storage_phase_g_observability
+import src.storage_postgres_bridge as storage_postgres_bridge
+import src.storage_topology_report as storage_topology_report
 
 logger = logging.getLogger(__name__)
+
+_POSTGRES_PHASE_STORE_SPECS = tuple(
+    (
+        spec.phase_key,
+        spec.store_attr,
+        spec.enabled_attr,
+        spec.store_cls,
+    )
+    for spec in storage_postgres_bridge.iter_phase_store_specs()
+)
 
 # SQLAlchemy ORM 基类
 Base = declarative_base()
@@ -1158,52 +1171,60 @@ class DatabaseManager:
         self._phase_f_enabled = False
         self._phase_g_store: Optional[PostgresPhaseGStore] = None
         self._phase_g_enabled = False
-        phase_a_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip()
-        if phase_a_url:
+        self._postgres_bridge_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip() or None
+        self._postgres_bridge_auto_apply_schema = bool(
+            getattr(config, "postgres_phase_a_apply_schema", True)
+        )
+        if self._postgres_bridge_url:
             try:
-                self._phase_a_store = PostgresPhaseAStore(
-                    phase_a_url,
-                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                storage_postgres_bridge.initialize_postgres_phase_stores(
+                    self,
+                    bridge_url=self._postgres_bridge_url,
+                    auto_apply_schema=self._postgres_bridge_auto_apply_schema,
                 )
-                self._phase_a_enabled = True
-                self._phase_b_store = PostgresPhaseBStore(
-                    phase_a_url,
-                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
-                )
-                self._phase_b_enabled = True
-                self._phase_c_store = PostgresPhaseCStore(
-                    phase_a_url,
-                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
-                )
-                self._phase_c_enabled = True
-                self._phase_d_store = PostgresPhaseDStore(
-                    phase_a_url,
-                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
-                )
-                self._phase_d_enabled = True
-                self._phase_e_store = PostgresPhaseEStore(
-                    phase_a_url,
-                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
-                )
-                self._phase_e_enabled = True
-                self._phase_f_store = PostgresPhaseFStore(
-                    phase_a_url,
-                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
-                )
-                self._phase_f_enabled = True
-                self._phase_g_store = PostgresPhaseGStore(
-                    phase_a_url,
-                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
-                )
-                self._phase_g_enabled = True
             except Exception as exc:
+                self._dispose_postgres_phase_stores()
                 raise RuntimeError(
-                    "Failed to initialize PostgreSQL Phase A/B/C/D/E/F/G storage. "
-                    "Check POSTGRES_PHASE_A_URL / POSTGRES_PHASE_A_APPLY_SCHEMA configuration."
+                    storage_postgres_bridge.format_bridge_initialization_error(
+                        failed_phase=getattr(exc, "failed_phase", None),
+                        initialized_phases=getattr(exc, "initialized_phases", ()),
+                    )
                 ) from exc
 
         self._initialized = True
         logger.info(f"数据库初始化完成: {db_url}")
+        topology = self.describe_database_topology()
+        enabled_store_names = [
+            phase_key
+            for phase_key, phase_state in topology["stores"].items()
+            if phase_state.get("enabled")
+        ]
+        logger.info(
+            "数据库拓扑: primary=%s postgres_bridge=%s enabled_stores=%s phase_f_mode=%s phase_g_mode=%s",
+            topology["primary_runtime"],
+            topology["postgres_bridge"]["enabled"],
+            ",".join(enabled_store_names) if enabled_store_names else "none",
+            topology["stores"]["phase_f"]["mode"],
+            topology["stores"]["phase_g"]["mode"],
+        )
+        if topology["postgres_bridge"]["enabled"]:
+            logger.info(
+                "PostgreSQL store 初始化状态: %s",
+                json.dumps(
+                    {
+                        phase_key: {
+                            "mode": phase_state["mode"],
+                            "last_apply_status": phase_state["schema"]["last_apply_status"],
+                            "bootstrap_recorded": phase_state["schema"]["bootstrap_recorded"],
+                        }
+                        for phase_key, phase_state in topology["stores"].items()
+                        if phase_state.get("enabled")
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            )
+        logger.debug("数据库拓扑详情: %s", json.dumps(topology, ensure_ascii=False, sort_keys=True))
 
         # 注册退出钩子，确保程序退出时关闭数据库连接
         atexit.register(DatabaseManager._cleanup_engine, self._engine)
@@ -1219,24 +1240,21 @@ class DatabaseManager:
     def reset_instance(cls) -> None:
         """重置单例（用于测试）"""
         if cls._instance is not None:
-            if getattr(cls._instance, "_phase_a_store", None) is not None:
-                cls._instance._phase_a_store.dispose()
-            if getattr(cls._instance, "_phase_b_store", None) is not None:
-                cls._instance._phase_b_store.dispose()
-            if getattr(cls._instance, "_phase_c_store", None) is not None:
-                cls._instance._phase_c_store.dispose()
-            if getattr(cls._instance, "_phase_d_store", None) is not None:
-                cls._instance._phase_d_store.dispose()
-            if getattr(cls._instance, "_phase_e_store", None) is not None:
-                cls._instance._phase_e_store.dispose()
-            if getattr(cls._instance, "_phase_f_store", None) is not None:
-                cls._instance._phase_f_store.dispose()
-            if getattr(cls._instance, "_phase_g_store", None) is not None:
-                cls._instance._phase_g_store.dispose()
+            cls._instance._dispose_postgres_phase_stores()
             if hasattr(cls._instance, '_engine') and cls._instance._engine is not None:
                 cls._instance._engine.dispose()
             cls._instance._initialized = False
             cls._instance = None
+
+    def _dispose_postgres_phase_stores(self) -> None:
+        storage_postgres_bridge.dispose_postgres_phase_stores(self)
+
+    def describe_database_topology(self, *, include_connection_probe: bool = False) -> Dict[str, Any]:
+        return storage_topology_report.build_database_topology_report(
+            self,
+            config=get_config(),
+            include_connection_probe=include_connection_probe,
+        )
 
     @classmethod
     def _cleanup_engine(cls, engine) -> None:
@@ -4535,6 +4553,38 @@ class DatabaseManager:
             return []
         return self._phase_g_store.list_system_actions(limit=limit)
 
+    def list_phase_g_execution_sessions(
+        self,
+        *,
+        limit: int = 50,
+        subsystem: Optional[str] = None,
+        overall_status: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if not self._phase_g_enabled or self._phase_g_store is None:
+            return []
+        return self._phase_g_store.list_execution_sessions(
+            limit=limit,
+            subsystem=subsystem,
+            overall_status=overall_status,
+        )
+
+    def get_phase_g_execution_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
+        if not self._phase_g_enabled or self._phase_g_store is None:
+            return None
+        return self._phase_g_store.get_execution_session_detail(session_id)
+
+    def describe_phase_g_execution_log_status(
+        self,
+        *,
+        include_connection_probe: bool = False,
+    ) -> Dict[str, Any]:
+        topology = self.describe_database_topology(include_connection_probe=include_connection_probe)
+        return storage_phase_g_observability.build_phase_g_execution_log_status(
+            self,
+            topology=topology,
+            include_connection_probe=include_connection_probe,
+        )
+
     def upsert_user_notification_preferences(
         self,
         user_id: str,
@@ -5230,6 +5280,22 @@ class DatabaseManager:
                     row.started_at = started_at
                 row.updated_at = now
 
+        if self._phase_g_enabled and self._phase_g_store is not None:
+            try:
+                self._phase_g_store.upsert_execution_session(
+                    session_id=session_id,
+                    task_id=task_id,
+                    query_id=query_id,
+                    canonical_symbol=code,
+                    display_name=name,
+                    overall_status=overall_status,
+                    truth_level=truth_level,
+                    summary_json=summary or {},
+                    started_at=started_at or now,
+                )
+            except Exception as exc:
+                logger.warning("Phase G execution session shadow sync failed during create: %s", exc)
+
     def append_execution_log_event(
         self,
         *,
@@ -5261,6 +5327,23 @@ class DatabaseManager:
         )
         with self.session_scope() as session:
             session.add(row)
+
+        if self._phase_g_enabled and self._phase_g_store is not None:
+            try:
+                self._phase_g_store.append_execution_event(
+                    session_id=session_id,
+                    phase=phase,
+                    step=step,
+                    target=target,
+                    status=status,
+                    truth_level=truth_level,
+                    message=message,
+                    error_code=error_code,
+                    detail_json=detail or {},
+                    occurred_at=event_at,
+                )
+            except Exception as exc:
+                logger.warning("Phase G execution event shadow sync failed during append: %s", exc)
 
     def finalize_execution_log_session(
         self,
@@ -5294,6 +5377,19 @@ class DatabaseManager:
             row.ended_at = ended_at or now
             row.updated_at = now
 
+        if self._phase_g_enabled and self._phase_g_store is not None:
+            try:
+                self._phase_g_store.upsert_execution_session(
+                    session_id=session_id,
+                    query_id=query_id,
+                    overall_status=overall_status,
+                    truth_level=truth_level,
+                    summary_json=summary if isinstance(summary, dict) else None,
+                    ended_at=ended_at or now,
+                )
+            except Exception as exc:
+                logger.warning("Phase G execution session shadow sync failed during finalize: %s", exc)
+
     def attach_execution_session_to_query(
         self,
         *,
@@ -5320,6 +5416,15 @@ class DatabaseManager:
                 if latest is not None:
                     row.analysis_history_id = latest.id
             row.updated_at = datetime.now()
+
+        if self._phase_g_enabled and self._phase_g_store is not None and query_id:
+            try:
+                self._phase_g_store.upsert_execution_session(
+                    session_id=session_id,
+                    query_id=query_id,
+                )
+            except Exception as exc:
+                logger.warning("Phase G execution session shadow sync failed during query attach: %s", exc)
 
     def list_execution_log_sessions(
         self,

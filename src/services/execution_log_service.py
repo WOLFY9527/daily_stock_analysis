@@ -233,6 +233,7 @@ class ExecutionLogService:
         actor_payload = self._resolve_actor(owner_id, actor)
         return {
             "meta": {
+                "owner_user_id": _as_str(owner_id) or actor_payload.get("user_id"),
                 "actor_user_id": actor_payload.get("user_id"),
                 "actor_username": actor_payload.get("username"),
                 "actor_display": actor_payload.get("display_name"),

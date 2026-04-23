@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 try:
     import litellm  # noqa: F401
@@ -23,8 +23,11 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.postgres_phase_g import (
     PhaseGAdminLog,
     PhaseGProviderConfig,
+    PhaseGExecutionEvent,
+    PhaseGExecutionSession,
     PhaseGSystemAction,
     PhaseGSystemConfig,
+    PostgresPhaseGStore,
 )
 from src.services.execution_log_service import ExecutionLogService
 from src.services.system_config_service import SystemConfigService
@@ -287,6 +290,113 @@ class PostgresPhaseGStorageTestCase(unittest.TestCase):
             )
         self.assertEqual(row.value_type, "boolean")
         self.assertEqual(row.value_json, False)
+
+    def test_phase_g_execution_log_shadow_observability_surfaces_runtime_flags_and_ownership(self) -> None:
+        db = self._db()
+        db.ensure_bootstrap_admin_user()
+        db.create_or_update_app_user(user_id="user-1", username="alice", role="user")
+        service = ExecutionLogService()
+
+        analysis_session_id = service.start_session(
+            task_id="task-1",
+            stock_code="600519",
+            stock_name="贵州茅台",
+            configured_execution={
+                "ai": {
+                    "configured_primary_gateway": "openai",
+                    "configured_primary_model": "gpt-4o-mini",
+                    "model": "gpt-4o-mini",
+                },
+                "data": {
+                    "market": {
+                        "source": "akshare",
+                        "status": "succeeded",
+                    }
+                },
+                "notification": {"channels": ["feishu"]},
+            },
+            owner_id="user-1",
+            actor={
+                "user_id": "user-1",
+                "username": "alice",
+                "display_name": "Alice",
+                "role": "user",
+            },
+            subsystem="analysis",
+        )
+        admin_session_id = service.record_admin_action(
+            action="factory_reset_system",
+            message="Factory reset completed",
+            actor={
+                "user_id": BOOTSTRAP_ADMIN_USER_ID,
+                "username": "admin",
+                "display_name": "Bootstrap Admin",
+                "role": "admin",
+            },
+            subsystem="system_control",
+            destructive=True,
+            detail={"counts": {"users": 2}},
+        )
+
+        status = db.describe_phase_g_execution_log_status()
+        sessions = db.list_phase_g_execution_sessions(limit=10)
+        analysis_detail = db.get_phase_g_execution_session_detail(analysis_session_id)
+        admin_detail = db.get_phase_g_execution_session_detail(admin_session_id)
+
+        self.assertTrue(status["bridge_enabled"])
+        self.assertTrue(status["shadow_enabled"])
+        self.assertTrue(status["serving_flags"]["sqlite_primary"])
+        self.assertFalse(status["serving_flags"]["pg_execution_logs_are_serving_truth"])
+        self.assertEqual(status["schema"]["last_apply_status"], "applied")
+        self.assertIn("execution_sessions", status["schema"]["expected_tables"])
+        self.assertIn("execution_events", status["schema"]["expected_tables"])
+        self.assertGreaterEqual(len(sessions), 2)
+
+        analysis_summary = next(item for item in sessions if item["session_id"] == analysis_session_id)
+        self.assertEqual(analysis_summary["ownership"]["execution_store"], "phase_g")
+        self.assertEqual(analysis_summary["ownership"]["execution_entity"], "execution_sessions")
+        self.assertEqual(analysis_summary["ownership"]["runtime_primary_store"], "sqlite")
+        self.assertEqual(analysis_summary["ownership"]["runtime_primary_entity"], "execution_log_sessions")
+        self.assertEqual(analysis_summary["ownership"]["domain_store"], "phase_b")
+        self.assertEqual(analysis_summary["ownership"]["domain_entity"], "analysis_records")
+        self.assertEqual(analysis_summary["ownership"]["subsystem"], "analysis")
+
+        self.assertIsNotNone(analysis_detail)
+        self.assertEqual(analysis_detail["ownership"]["domain_store"], "phase_b")
+        self.assertGreaterEqual(len(analysis_detail["events"]), 2)
+        self.assertTrue(
+            all(event["ownership"]["execution_entity"] == "execution_events" for event in analysis_detail["events"])
+        )
+        self.assertTrue(
+            any(event["ownership"]["domain_store"] == "phase_b" for event in analysis_detail["events"])
+        )
+
+        self.assertIsNotNone(admin_detail)
+        self.assertEqual(admin_detail["ownership"]["domain_store"], "phase_g")
+        self.assertEqual(admin_detail["ownership"]["domain_entity"], "system_actions")
+        self.assertEqual(admin_detail["related_phase_g_admin_log_count"], 1)
+        self.assertEqual(admin_detail["related_phase_g_system_action_count"], 1)
+
+        with db._phase_g_store.session_scope() as session:
+            self.assertGreaterEqual(session.query(PhaseGExecutionSession).count(), 2)
+            self.assertGreaterEqual(session.query(PhaseGExecutionEvent).count(), 3)
+
+    def test_phase_g_store_runtime_report_marks_schema_bootstrap_failure(self) -> None:
+        manual_db_path = self.data_dir / "phase-g-manual.sqlite"
+        store = PostgresPhaseGStore(f"sqlite:///{manual_db_path}", auto_apply_schema=False)
+        try:
+            with patch("src.postgres_control_plane_store.apply_baseline_schema", side_effect=RuntimeError("boom")):
+                with self.assertRaises(RuntimeError):
+                    store.apply_schema()
+            report = store.describe_runtime()
+        finally:
+            store.dispose()
+
+        self.assertEqual(report["schema"]["schema_key"], "phase_g")
+        self.assertEqual(report["schema"]["last_apply_status"], "failed")
+        self.assertIn("RuntimeError: boom", report["schema"]["last_error"])
+        self.assertIn("execution_sessions", report["schema"]["expected_tables"])
+        self.assertIn("execution_events", report["schema"]["expected_tables"])
 
 
 if __name__ == "__main__":

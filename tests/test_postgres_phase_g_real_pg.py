@@ -23,9 +23,12 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.postgres_phase_g import (
     PhaseGAdminLog,
     PhaseGProviderConfig,
+    PhaseGExecutionEvent,
+    PhaseGExecutionSession,
     PhaseGSystemAction,
     PhaseGSystemConfig,
 )
+from src.services.execution_log_service import ExecutionLogService
 from src.services.system_config_service import SystemConfigService
 from src.storage import DatabaseManager
 
@@ -80,6 +83,8 @@ class PostgresPhaseGRealPgTestCase(unittest.TestCase):
 
     def _drop_phase_g_tables(self) -> None:
         with self.pg_engine.begin() as conn:
+            conn.execute(text("drop table if exists execution_events cascade"))
+            conn.execute(text("drop table if exists execution_sessions cascade"))
             conn.execute(text("drop table if exists system_actions cascade"))
             conn.execute(text("drop table if exists admin_logs cascade"))
             conn.execute(text("drop table if exists system_configs cascade"))
@@ -136,6 +141,74 @@ class PostgresPhaseGRealPgTestCase(unittest.TestCase):
                 .one()
             )
         self.assertIsNone(schedule_time.updated_by_user_id)
+
+    def test_real_postgres_phase_g_execution_log_shadow_observability_round_trip(self) -> None:
+        db = self._db()
+        db.ensure_bootstrap_admin_user()
+        db.create_or_update_app_user(user_id="real-pg-user", username="real-pg-user", role="user")
+        service = ExecutionLogService()
+
+        analysis_session_id = service.start_session(
+            task_id="task-real-pg",
+            stock_code="600519",
+            stock_name="贵州茅台",
+            configured_execution={
+                "ai": {
+                    "configured_primary_gateway": "openai",
+                    "configured_primary_model": "gpt-4o-mini",
+                    "model": "gpt-4o-mini",
+                },
+                "data": {
+                    "market": {
+                        "source": "akshare",
+                        "status": "succeeded",
+                    }
+                },
+                "notification": {"channels": ["feishu"]},
+            },
+            owner_id="real-pg-user",
+            actor={
+                "user_id": "real-pg-user",
+                "username": "real-pg-user",
+                "display_name": "Real PG User",
+                "role": "user",
+            },
+            subsystem="analysis",
+        )
+        admin_session_id = service.record_admin_action(
+            action="factory_reset_system",
+            message="Factory reset completed",
+            actor={
+                "user_id": BOOTSTRAP_ADMIN_USER_ID,
+                "username": "admin",
+                "display_name": "Bootstrap Admin",
+                "role": "admin",
+            },
+            subsystem="system_control",
+            destructive=True,
+            detail={"counts": {"users": 1}},
+        )
+
+        status = db.describe_phase_g_execution_log_status(include_connection_probe=True)
+        analysis_detail = db.get_phase_g_execution_session_detail(analysis_session_id)
+        admin_detail = db.get_phase_g_execution_session_detail(admin_session_id)
+
+        self.assertTrue(status["bridge_enabled"])
+        self.assertTrue(status["shadow_enabled"])
+        self.assertTrue(status["connection"]["ok"])
+        self.assertEqual(status["schema"]["last_apply_status"], "applied")
+        self.assertEqual(self._pg_scalar("select count(*) from execution_sessions"), 2)
+        self.assertGreaterEqual(self._pg_scalar("select count(*) from execution_events"), 3)
+        self.assertIsNotNone(analysis_detail)
+        self.assertEqual(analysis_detail["ownership"]["domain_store"], "phase_b")
+        self.assertIsNotNone(admin_detail)
+        self.assertEqual(admin_detail["ownership"]["domain_store"], "phase_g")
+        self.assertEqual(admin_detail["related_phase_g_admin_log_count"], 1)
+        self.assertEqual(admin_detail["related_phase_g_system_action_count"], 1)
+
+        with db._phase_g_store.session_scope() as session:
+            self.assertEqual(session.query(PhaseGExecutionSession).count(), 2)
+            self.assertGreaterEqual(session.query(PhaseGExecutionEvent).count(), 3)
 
 
 if __name__ == "__main__":

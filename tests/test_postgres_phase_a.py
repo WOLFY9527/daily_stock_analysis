@@ -32,6 +32,7 @@ from src.postgres_phase_a import (
     PhaseAAppUserSession,
     PhaseAGuestSession,
     PhaseANotificationTarget,
+    PostgresPhaseAStore,
 )
 from src.storage import AnalysisHistory, AppUser, AppUserSession, DatabaseManager
 
@@ -467,6 +468,46 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
                 .count(),
                 0,
             )
+
+    def test_database_topology_report_surfaces_sqlite_primary_pg_bridge_and_schema_registry(self) -> None:
+        db = self._db()
+
+        report = db.describe_database_topology()
+
+        self.assertEqual(report["primary_runtime"], "sqlite")
+        self.assertTrue(report["postgres_bridge"]["configured"])
+        self.assertTrue(report["postgres_bridge"]["enabled"])
+        self.assertEqual(report["postgres_bridge"]["config_env_var"], "POSTGRES_PHASE_A_URL")
+        self.assertEqual(report["postgres_bridge"]["apply_schema_env_var"], "POSTGRES_PHASE_A_APPLY_SCHEMA")
+        self.assertIn("phase_a", report["bootstrap_registry"]["recorded_schema_keys"])
+        self.assertIn("phase_g", report["bootstrap_registry"]["recorded_schema_keys"])
+
+        phase_a = report["stores"]["phase_a"]
+        self.assertTrue(phase_a["enabled"])
+        self.assertEqual(phase_a["schema"]["last_apply_status"], "applied")
+        self.assertTrue(phase_a["schema"]["bootstrap_recorded"])
+        self.assertIn("app_users", phase_a["schema"]["expected_tables"])
+
+        phase_f = report["stores"]["phase_f"]
+        self.assertEqual(phase_f["mode"], "comparison_only_shadow")
+
+        phase_g = report["stores"]["phase_g"]
+        self.assertEqual(phase_g["mode"], "env_live_source_with_pg_snapshot")
+
+    def test_phase_a_store_runtime_report_marks_auto_apply_disabled_as_skipped(self) -> None:
+        manual_db_path = self.data_dir / "phase-a-manual.sqlite"
+        store = PostgresPhaseAStore(f"sqlite:///{manual_db_path}", auto_apply_schema=False)
+        try:
+            report = store.describe_runtime()
+        finally:
+            store.dispose()
+
+        self.assertEqual(report["schema"]["schema_key"], "phase_a")
+        self.assertEqual(report["schema"]["last_apply_status"], "skipped")
+        self.assertEqual(report["schema"]["skip_reason"], "auto_apply_schema_disabled")
+        self.assertFalse(report["schema"]["bootstrap_recorded"])
+        self.assertIn("app_users", report["schema"]["expected_tables"])
+        self.assertEqual(report["schema"]["present_tables"], [])
 
 
 if __name__ == "__main__":
