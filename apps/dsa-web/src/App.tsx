@@ -562,7 +562,15 @@ export const AppContent: React.FC = () => {
 };
 
 const PreviewRoutes: React.FC = () => {
-  const { t } = useI18n();
+  const location = useLocation();
+  const { setLanguage, t } = useI18n();
+  const routeLocale = parseLocaleFromPathname(location.pathname);
+
+  useEffect(() => {
+    if (routeLocale) {
+      setLanguage(routeLocale);
+    }
+  }, [routeLocale, setLanguage]);
 
   return (
     <PreviewShell>
@@ -570,6 +578,8 @@ const PreviewRoutes: React.FC = () => {
         <Routes>
           <Route path="/__preview/report" element={<PreviewReportPage />} />
           <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
+          <Route path="/:locale/__preview/report" element={<PreviewReportPage />} />
+          <Route path="/:locale/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
@@ -579,7 +589,8 @@ const PreviewRoutes: React.FC = () => {
 
 const AppBody: React.FC = () => {
   const location = useLocation();
-  const isPreviewRoute = import.meta.env.DEV && location.pathname.startsWith('/__preview/');
+  const routePathname = stripLocalePrefix(location.pathname);
+  const isPreviewRoute = import.meta.env.DEV && routePathname.startsWith('/__preview/');
 
   if (isPreviewRoute) {
     return <PreviewRoutes />;
