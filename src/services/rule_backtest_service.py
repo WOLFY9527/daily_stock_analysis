@@ -6,10 +6,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import random
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from statistics import mean, pstdev
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from data_provider.base import normalize_stock_code
@@ -178,6 +181,13 @@ COMPARE_PARAMETER_FIELDS_BY_STRATEGY_TYPE: Dict[str, List[str]] = {
         "strategy_spec.end_behavior.price_basis",
     ],
 }
+
+DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS = 24
+DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS = 12
+DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS = 12
+DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS = 4
+DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT = 12
+DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE = 0.75
 
 COMPARE_ROBUSTNESS_DIMENSION_ORDER: List[str] = [
     "market_code",
@@ -1024,6 +1034,23 @@ class RuleBacktestService:
                 buy_and_hold_curve=getattr(result, "buy_and_hold_curve", []) or [],
                 benchmark_summary=dict(result.benchmark_summary or {}),
             )
+            setattr(
+                result,
+                "robustness_analysis",
+                self._build_robustness_analysis(
+                    code=code,
+                    parsed=parsed,
+                    bars=bars,
+                    initial_capital=initial_capital,
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    lookback_bars=lookback_bars,
+                    benchmark_mode=benchmark_mode,
+                    benchmark_code=benchmark_code,
+                    start_date=normalized_start_date,
+                    end_date=normalized_end_date,
+                ),
+            )
             return result
 
         result = self.engine.run(
@@ -1051,11 +1078,523 @@ class RuleBacktestService:
             buy_and_hold_curve=getattr(result, "buy_and_hold_curve", []) or [],
             benchmark_summary=dict(result.benchmark_summary or {}),
         )
+        setattr(
+            result,
+            "robustness_analysis",
+            self._build_robustness_analysis(
+                code=code,
+                parsed=parsed,
+                bars=bars,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                lookback_bars=lookback_bars,
+                benchmark_mode=benchmark_mode,
+                benchmark_code=benchmark_code,
+                start_date=normalized_start_date,
+                end_date=normalized_end_date,
+            ),
+        )
 
         if not result.no_result_reason and result.metrics.get("trade_count", 0) <= 0:
             result.no_result_reason = "no_trades"
             result.no_result_message = "规则已解析并执行，但未产生任何交易。"
         return result
+
+    def _build_robustness_analysis(
+        self,
+        *,
+        code: str,
+        parsed: ParsedStrategy,
+        bars: List[Any],
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        lookback_bars: int,
+        benchmark_mode: str,
+        benchmark_code: Optional[str],
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> Dict[str, Any]:
+        seed = self._build_robustness_seed(
+            code=code,
+            parsed=parsed,
+            start_date=start_date,
+            end_date=end_date,
+            lookback_bars=lookback_bars,
+            initial_capital=initial_capital,
+        )
+        walk_forward = self._build_walk_forward_analysis(
+            code=code,
+            parsed=parsed,
+            bars=bars,
+            initial_capital=initial_capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            lookback_bars=lookback_bars,
+            benchmark_mode=benchmark_mode,
+            benchmark_code=benchmark_code,
+            train_bars=DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS,
+            test_bars=DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS,
+            step_bars=DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS,
+            max_windows=DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS,
+        )
+        monte_carlo = self._build_monte_carlo_analysis(
+            code=code,
+            parsed=parsed,
+            bars=bars,
+            initial_capital=initial_capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            lookback_bars=lookback_bars,
+            benchmark_mode=benchmark_mode,
+            benchmark_code=benchmark_code,
+            start_date=start_date,
+            end_date=end_date,
+            simulation_count=DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT,
+            noise_scale=DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE,
+            seed=seed,
+        )
+        stress_tests = self._build_stress_test_analysis(
+            code=code,
+            parsed=parsed,
+            bars=bars,
+            initial_capital=initial_capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            lookback_bars=lookback_bars,
+            benchmark_mode=benchmark_mode,
+            benchmark_code=benchmark_code,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        states = {
+            str(walk_forward.get("state") or ""),
+            str(monte_carlo.get("state") or ""),
+            str(stress_tests.get("state") or ""),
+        }
+        overall_state = "available" if "available" in states else "unavailable"
+        diagnostics = (
+            list(walk_forward.get("diagnostics") or [])
+            + list(monte_carlo.get("diagnostics") or [])
+            + list(stress_tests.get("diagnostics") or [])
+        )
+        return {
+            "state": overall_state,
+            "seed": seed,
+            "configuration": {
+                "walk_forward": {
+                    "train_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS,
+                    "test_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS,
+                    "step_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS,
+                    "max_windows": DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS,
+                },
+                "monte_carlo": {
+                    "simulation_count": DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT,
+                    "noise_scale": DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE,
+                },
+                "stress_tests": {
+                    "scenario_keys": ["single_day_shock_down_15", "volatility_whipsaw"],
+                },
+            },
+            "walk_forward": walk_forward,
+            "monte_carlo": monte_carlo,
+            "stress_tests": stress_tests,
+            "diagnostics": diagnostics[:20],
+        }
+
+    def _build_walk_forward_analysis(
+        self,
+        *,
+        code: str,
+        parsed: ParsedStrategy,
+        bars: List[Any],
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        lookback_bars: int,
+        benchmark_mode: str,
+        benchmark_code: Optional[str],
+        train_bars: int,
+        test_bars: int,
+        step_bars: int,
+        max_windows: int,
+    ) -> Dict[str, Any]:
+        del benchmark_mode, benchmark_code
+        ordered_bars = list(bars or [])
+        if len(ordered_bars) < max(2, int(train_bars) + int(test_bars)):
+            return {
+                "state": "insufficient_history",
+                "window_count": 0,
+                "windows": [],
+                "aggregate_metrics": {},
+                "diagnostics": ["insufficient_history_for_walk_forward"],
+            }
+
+        windows: List[Dict[str, Any]] = []
+        max_start = len(ordered_bars) - int(train_bars) - int(test_bars)
+        for index, start_index in enumerate(range(0, max_start + 1, max(1, int(step_bars)))):
+            if index >= max(1, int(max_windows)):
+                break
+            train_slice = ordered_bars[start_index:start_index + int(train_bars)]
+            combined_slice = ordered_bars[start_index:start_index + int(train_bars) + int(test_bars)]
+            test_slice = combined_slice[int(train_bars):]
+            if not train_slice or not test_slice:
+                continue
+            result = self._run_robustness_backtest(
+                code=code,
+                parsed=parsed,
+                bars=combined_slice,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                lookback_bars=lookback_bars,
+                start_date=self._bar_date(test_slice[0]),
+                end_date=self._bar_date(test_slice[-1]),
+            )
+            windows.append(
+                {
+                    "window_index": index + 1,
+                    "state": "completed" if not result.no_result_reason else "no_result",
+                    "train_start": self._bar_date(train_slice[0]).isoformat() if train_slice else None,
+                    "train_end": self._bar_date(train_slice[-1]).isoformat() if train_slice else None,
+                    "test_start": self._bar_date(test_slice[0]).isoformat() if test_slice else None,
+                    "test_end": self._bar_date(test_slice[-1]).isoformat() if test_slice else None,
+                    "trade_count": int(result.metrics.get("trade_count") or 0),
+                    "metrics": self._extract_robustness_metric_snapshot(result.metrics),
+                }
+            )
+
+        return {
+            "state": "available" if windows else "insufficient_history",
+            "window_count": len(windows),
+            "windows": windows,
+            "aggregate_metrics": self._aggregate_robustness_metric_snapshots(
+                [dict(item.get("metrics") or {}) for item in windows]
+            ),
+            "diagnostics": [] if windows else ["walk_forward_windows_unavailable"],
+        }
+
+    def _build_monte_carlo_analysis(
+        self,
+        *,
+        code: str,
+        parsed: ParsedStrategy,
+        bars: List[Any],
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        lookback_bars: int,
+        benchmark_mode: str,
+        benchmark_code: Optional[str],
+        simulation_count: int,
+        noise_scale: float,
+        seed: int,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> Dict[str, Any]:
+        del benchmark_mode, benchmark_code
+        ordered_bars = list(bars or [])
+        original_closes = self._extract_close_series(ordered_bars)
+        if len(original_closes) < 3:
+            return {
+                "state": "insufficient_history",
+                "simulation_count": 0,
+                "paths": [],
+                "aggregate_metrics": {},
+                "diagnostics": ["insufficient_history_for_monte_carlo"],
+            }
+
+        rng = random.Random(int(seed))
+        observed_returns = [
+            (current / previous) - 1.0
+            for previous, current in zip(original_closes, original_closes[1:])
+            if previous > 0
+        ]
+        volatility = pstdev(observed_returns) if len(observed_returns) >= 2 else 0.0
+        paths: List[Dict[str, Any]] = []
+        for index in range(max(1, int(simulation_count))):
+            simulated_closes = [original_closes[0]]
+            previous_close = float(original_closes[0])
+            for base_return in observed_returns:
+                simulated_return = max(-0.95, float(base_return) + rng.gauss(0.0, volatility * float(noise_scale)))
+                previous_close = max(0.01, previous_close * (1.0 + simulated_return))
+                simulated_closes.append(previous_close)
+            simulated_bars = self._reprice_bars(ordered_bars, simulated_closes)
+            result = self._run_robustness_backtest(
+                code=code,
+                parsed=parsed,
+                bars=simulated_bars,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                lookback_bars=lookback_bars,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            paths.append(
+                {
+                    "simulation_index": index + 1,
+                    "state": "completed" if not result.no_result_reason else "no_result",
+                    "metrics": self._extract_robustness_metric_snapshot(result.metrics),
+                }
+            )
+
+        return {
+            "state": "available" if paths else "insufficient_history",
+            "simulation_count": len(paths),
+            "paths": paths,
+            "aggregate_metrics": self._aggregate_robustness_metric_snapshots(
+                [dict(item.get("metrics") or {}) for item in paths]
+            ),
+            "diagnostics": [] if paths else ["monte_carlo_paths_unavailable"],
+        }
+
+    def _build_stress_test_analysis(
+        self,
+        *,
+        code: str,
+        parsed: ParsedStrategy,
+        bars: List[Any],
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        lookback_bars: int,
+        benchmark_mode: str,
+        benchmark_code: Optional[str],
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> Dict[str, Any]:
+        del benchmark_mode, benchmark_code
+        ordered_bars = list(bars or [])
+        original_closes = self._extract_close_series(ordered_bars)
+        if len(original_closes) < 3:
+            return {
+                "state": "insufficient_history",
+                "scenario_count": 0,
+                "scenarios": [],
+                "worst_scenario": {},
+                "diagnostics": ["insufficient_history_for_stress_tests"],
+            }
+
+        scenarios: List[Dict[str, Any]] = []
+        for scenario_key, label, scenario_closes in [
+            (
+                "single_day_shock_down_15",
+                "Single-day shock down 15%",
+                self._build_single_day_shock_series(original_closes, shock_pct=0.15),
+            ),
+            (
+                "volatility_whipsaw",
+                "Volatility whipsaw regime",
+                self._build_volatility_whipsaw_series(original_closes),
+            ),
+        ]:
+            stressed_bars = self._reprice_bars(ordered_bars, scenario_closes)
+            result = self._run_robustness_backtest(
+                code=code,
+                parsed=parsed,
+                bars=stressed_bars,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                lookback_bars=lookback_bars,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            scenarios.append(
+                {
+                    "scenario_key": scenario_key,
+                    "label": label,
+                    "state": "completed" if not result.no_result_reason else "no_result",
+                    "metrics": self._extract_robustness_metric_snapshot(result.metrics),
+                }
+            )
+
+        worst_scenario = max(
+            scenarios,
+            key=lambda item: float((item.get("metrics") or {}).get("max_drawdown_pct") or 0.0),
+            default={},
+        )
+        return {
+            "state": "available" if scenarios else "insufficient_history",
+            "scenario_count": len(scenarios),
+            "scenarios": scenarios,
+            "worst_scenario": worst_scenario,
+            "diagnostics": [] if scenarios else ["stress_scenarios_unavailable"],
+        }
+
+    def _run_robustness_backtest(
+        self,
+        *,
+        code: str,
+        parsed: ParsedStrategy,
+        bars: List[Any],
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        lookback_bars: int,
+        start_date: Optional[date],
+        end_date: Optional[date],
+    ):
+        return self.engine.run(
+            code=code,
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=initial_capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            lookback_bars=lookback_bars,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    @staticmethod
+    def _extract_robustness_metric_snapshot(metrics: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "total_return_pct": RuleBacktestService._round_optional_metric(metrics.get("total_return_pct")),
+            "sharpe_ratio": RuleBacktestService._round_optional_metric(metrics.get("sharpe_ratio")),
+            "max_drawdown_pct": RuleBacktestService._round_optional_metric(metrics.get("max_drawdown_pct")),
+        }
+
+    @staticmethod
+    def _round_optional_metric(value: Any, digits: int = 4) -> Optional[float]:
+        numeric = _safe_float(value)
+        if numeric is None:
+            return None
+        return round(float(numeric), int(digits))
+
+    @classmethod
+    def _aggregate_robustness_metric_snapshots(cls, snapshots: List[Dict[str, Any]]) -> Dict[str, Any]:
+        total_returns = [float(item["total_return_pct"]) for item in snapshots if item.get("total_return_pct") is not None]
+        sharpe_values = [float(item["sharpe_ratio"]) for item in snapshots if item.get("sharpe_ratio") is not None]
+        drawdowns = [float(item["max_drawdown_pct"]) for item in snapshots if item.get("max_drawdown_pct") is not None]
+        if not total_returns and not sharpe_values and not drawdowns:
+            return {}
+        return {
+            "mean_total_return_pct": cls._round_optional_metric(mean(total_returns)) if total_returns else None,
+            "median_total_return_pct": cls._round_optional_metric(cls._median(total_returns)) if total_returns else None,
+            "p05_total_return_pct": cls._round_optional_metric(cls._percentile(total_returns, 0.05)) if total_returns else None,
+            "p95_total_return_pct": cls._round_optional_metric(cls._percentile(total_returns, 0.95)) if total_returns else None,
+            "mean_sharpe_ratio": cls._round_optional_metric(mean(sharpe_values)) if sharpe_values else None,
+            "worst_max_drawdown_pct": cls._round_optional_metric(max(drawdowns)) if drawdowns else None,
+        }
+
+    @staticmethod
+    def _median(values: List[float]) -> Optional[float]:
+        if not values:
+            return None
+        ordered = sorted(float(item) for item in values)
+        mid = len(ordered) // 2
+        if len(ordered) % 2 == 1:
+            return ordered[mid]
+        return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+    @staticmethod
+    def _percentile(values: List[float], percentile: float) -> Optional[float]:
+        if not values:
+            return None
+        ordered = sorted(float(item) for item in values)
+        if len(ordered) == 1:
+            return ordered[0]
+        normalized = min(max(float(percentile), 0.0), 1.0)
+        position = normalized * float(len(ordered) - 1)
+        lower_index = int(position)
+        upper_index = min(lower_index + 1, len(ordered) - 1)
+        fraction = position - float(lower_index)
+        return ordered[lower_index] + (ordered[upper_index] - ordered[lower_index]) * fraction
+
+    @staticmethod
+    def _extract_close_series(bars: List[Any]) -> List[float]:
+        closes: List[float] = []
+        for bar in bars or []:
+            close_value = _safe_float(getattr(bar, "close", None))
+            if close_value is None or close_value <= 0:
+                continue
+            closes.append(float(close_value))
+        return closes
+
+    @staticmethod
+    def _bar_date(bar: Any) -> date:
+        bar_date = getattr(bar, "date", None)
+        if not isinstance(bar_date, date):
+            raise ValueError("bar.date is required")
+        return bar_date
+
+    @classmethod
+    def _reprice_bars(cls, bars: List[Any], closes: List[float]) -> List[Any]:
+        repriced: List[Any] = []
+        for bar, simulated_close in zip(bars or [], closes or []):
+            original_close = _safe_float(getattr(bar, "close", None)) or float(simulated_close)
+            scale = float(simulated_close) / float(original_close) if original_close else 1.0
+            simulated_open = max(0.01, (_safe_float(getattr(bar, "open", None)) or float(simulated_close)) * scale)
+            simulated_high = max(0.01, (_safe_float(getattr(bar, "high", None)) or float(simulated_close)) * scale)
+            simulated_low = max(0.01, (_safe_float(getattr(bar, "low", None)) or float(simulated_close)) * scale)
+            normalized_high = max(simulated_high, simulated_open, float(simulated_close))
+            normalized_low = min(simulated_low, simulated_open, float(simulated_close))
+            repriced.append(
+                SimpleNamespace(
+                    code=getattr(bar, "code", None),
+                    date=cls._bar_date(bar),
+                    open=round(simulated_open, 6),
+                    high=round(normalized_high, 6),
+                    low=round(max(0.01, normalized_low), 6),
+                    close=round(max(0.01, float(simulated_close)), 6),
+                )
+            )
+        return repriced
+
+    @staticmethod
+    def _build_single_day_shock_series(closes: List[float], *, shock_pct: float) -> List[float]:
+        if not closes:
+            return []
+        adjusted = [float(item) for item in closes]
+        shock_index = min(len(adjusted) - 1, max(1, len(adjusted) // 2))
+        shock_factor = max(0.01, 1.0 - float(shock_pct))
+        adjusted[shock_index] = max(0.01, adjusted[shock_index] * shock_factor)
+        for index in range(shock_index + 1, len(adjusted)):
+            base_return = (float(closes[index]) / float(closes[index - 1])) - 1.0 if closes[index - 1] else 0.0
+            adjusted[index] = max(0.01, adjusted[index - 1] * (1.0 + base_return))
+        return adjusted
+
+    @staticmethod
+    def _build_volatility_whipsaw_series(closes: List[float]) -> List[float]:
+        if not closes:
+            return []
+        adjusted = [float(closes[0])]
+        start_index = max(1, len(closes) // 2)
+        for index in range(1, len(closes)):
+            previous_original = float(closes[index - 1])
+            current_original = float(closes[index])
+            base_return = (current_original / previous_original) - 1.0 if previous_original else 0.0
+            shock = 0.0
+            if index >= start_index:
+                shock = -0.06 if (index - start_index) % 2 == 0 else 0.04
+            adjusted_return = max(-0.95, base_return + shock)
+            adjusted.append(max(0.01, adjusted[-1] * (1.0 + adjusted_return)))
+        return adjusted
+
+    @staticmethod
+    def _build_robustness_seed(
+        *,
+        code: str,
+        parsed: ParsedStrategy,
+        start_date: Optional[date],
+        end_date: Optional[date],
+        lookback_bars: int,
+        initial_capital: float,
+    ) -> int:
+        seed_text = "|".join(
+            [
+                str(code or "").upper(),
+                str(getattr(parsed, "source_text", "") or ""),
+                start_date.isoformat() if start_date is not None else "",
+                end_date.isoformat() if end_date is not None else "",
+                str(int(lookback_bars)),
+                f"{float(initial_capital):.4f}",
+            ]
+        )
+        return int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:12], 16)
 
     def _ensure_market_history(
         self,
@@ -1487,6 +2026,7 @@ class RuleBacktestService:
             source="stored_execution_trace",
             trace_rebuilt=False,
         )
+        robustness_analysis_payload = dict(getattr(result, "robustness_analysis", {}) or {})
         summary_patch = self._update_summary_payload(
             {},
             request_payload=self._build_request_payload(
@@ -1507,6 +2047,7 @@ class RuleBacktestService:
             execution_assumptions=execution_assumptions_payload,
             visualization=visualization_payload,
             execution_trace=execution_trace_payload,
+            robustness_analysis=robustness_analysis_payload,
             no_result_reason=result.no_result_reason,
             no_result_message=result.no_result_message,
             ai_summary=ai_summary,
@@ -1561,6 +2102,7 @@ class RuleBacktestService:
                 execution_assumptions=summary_patch.get("execution_assumptions"),
                 visualization=summary_patch.get("visualization"),
                 execution_trace=summary_patch.get("execution_trace"),
+                robustness_analysis=summary_patch.get("robustness_analysis"),
                 no_result_reason=result.no_result_reason,
                 no_result_message=result.no_result_message,
                 ai_summary=ai_summary,
@@ -4816,6 +5358,7 @@ class RuleBacktestService:
         execution_assumptions: Any = _UNSET,
         visualization: Any = _UNSET,
         execution_trace: Any = _UNSET,
+        robustness_analysis: Any = _UNSET,
         no_result_reason: Any = _UNSET,
         no_result_message: Any = _UNSET,
         ai_summary: Any = _UNSET,
@@ -4848,6 +5391,8 @@ class RuleBacktestService:
             payload["visualization"] = visualization
         if execution_trace is not _UNSET:
             payload["execution_trace"] = execution_trace
+        if robustness_analysis is not _UNSET:
+            payload["robustness_analysis"] = robustness_analysis
         if no_result_reason is not _UNSET:
             payload["no_result_reason"] = no_result_reason
         if no_result_message is not _UNSET:
@@ -6979,6 +7524,7 @@ class RuleBacktestService:
             exposure_curve=exposure_curve,
         )
         resolved_payload["execution_trace"] = dict(execution_trace or {})
+        resolved_payload["robustness_analysis"] = dict(stored_payload.get("robustness_analysis") or {})
         resolved_payload["no_result_reason"] = stored_payload.get("no_result_reason", row.no_result_reason)
         resolved_payload["no_result_message"] = stored_payload.get("no_result_message", row.no_result_message)
         resolved_payload["ai_summary"] = stored_payload.get("ai_summary", ai_summary)
@@ -7409,6 +7955,7 @@ class RuleBacktestService:
             "avg_holding_calendar_days": metrics.get("avg_holding_calendar_days"),
             "final_equity": metrics.get("final_equity"),
             "summary": summary,
+            "robustness_analysis": dict(summary.get("robustness_analysis") or {}),
             "artifact_availability": artifact_availability,
             "readback_integrity": readback_integrity,
             "execution_model": execution_model,

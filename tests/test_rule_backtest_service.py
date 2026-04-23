@@ -99,6 +99,21 @@ class RuleBacktestTestCase(unittest.TestCase):
             for index, close in enumerate(closes)
         ]
 
+    def _seed_history(self, code: str, closes: list[float], *, start: date = date(2024, 1, 1)) -> None:
+        with self.db.get_session() as session:
+            for index, close in enumerate(closes):
+                session.add(
+                    StockDaily(
+                        code=code,
+                        date=start + timedelta(days=index),
+                        open=float(close) - 0.1,
+                        high=float(close) + 0.2,
+                        low=max(0.01, float(close) - 0.3),
+                        close=float(close),
+                    )
+                )
+            session.commit()
+
     @staticmethod
     def _compare_run_payload(
         *,
@@ -819,6 +834,158 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(all((point.get("date") or "") <= "2024-01-18" for point in result.benchmark_curve))
         self.assertTrue(all(trade.entry_date >= date(2024, 1, 8) for trade in result.trades))
         self.assertTrue(all(trade.exit_date <= date(2024, 1, 18) for trade in result.trades))
+
+    def test_build_walk_forward_analysis_splits_rolling_windows_and_aggregates_metrics(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service._dict_to_parsed_strategy(
+            service.parse_strategy(
+                "Buy when Close > MA3. Sell when Close < MA3.",
+                code="TEST",
+                start_date="2024-01-01",
+                end_date="2024-05-31",
+                initial_capital=100000.0,
+            ),
+            "Buy when Close > MA3. Sell when Close < MA3.",
+        )
+        bars = self._make_bars(
+            [100.0 + (index * 0.35) + ((-1) ** index) * 1.25 for index in range(72)],
+            start=date(2024, 1, 1),
+        )
+
+        payload = service._build_walk_forward_analysis(
+            code="TEST",
+            parsed=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            slippage_bps=0.0,
+            lookback_bars=20,
+            benchmark_mode="auto",
+            benchmark_code=None,
+            train_bars=24,
+            test_bars=12,
+            step_bars=12,
+            max_windows=4,
+        )
+
+        self.assertEqual(payload["state"], "available")
+        self.assertEqual(payload["window_count"], 4)
+        self.assertEqual(len(payload["windows"]), 4)
+        self.assertEqual(payload["windows"][0]["train_start"], "2024-01-01")
+        self.assertEqual(payload["windows"][0]["test_start"], "2024-01-25")
+        self.assertEqual(payload["windows"][0]["test_end"], "2024-02-05")
+        self.assertIn("mean_total_return_pct", payload["aggregate_metrics"])
+        self.assertIn("worst_max_drawdown_pct", payload["aggregate_metrics"])
+        self.assertTrue(all(item["state"] == "completed" for item in payload["windows"]))
+
+    def test_build_monte_carlo_analysis_runs_multiple_simulations_and_reports_distribution(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service._dict_to_parsed_strategy(
+            service.parse_strategy(
+                "Buy when Close > MA3. Sell when Close < MA3.",
+                code="TEST",
+                start_date="2024-01-01",
+                end_date="2024-05-31",
+                initial_capital=100000.0,
+            ),
+            "Buy when Close > MA3. Sell when Close < MA3.",
+        )
+        bars = self._make_bars(
+            [100.0 + (index * 0.4) + ((-1) ** index) * 0.9 for index in range(80)],
+            start=date(2024, 1, 1),
+        )
+
+        payload = service._build_monte_carlo_analysis(
+            code="TEST",
+            parsed=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            slippage_bps=0.0,
+            lookback_bars=20,
+            benchmark_mode="auto",
+            benchmark_code=None,
+            start_date=None,
+            end_date=None,
+            simulation_count=8,
+            noise_scale=0.75,
+            seed=20260423,
+        )
+
+        self.assertEqual(payload["state"], "available")
+        self.assertEqual(payload["simulation_count"], 8)
+        self.assertEqual(len(payload["paths"]), 8)
+        self.assertEqual(payload["paths"][0]["simulation_index"], 1)
+        self.assertIn("total_return_pct", payload["paths"][0]["metrics"])
+        self.assertIn("p05_total_return_pct", payload["aggregate_metrics"])
+        self.assertIn("p95_total_return_pct", payload["aggregate_metrics"])
+        self.assertLessEqual(
+            payload["aggregate_metrics"]["p05_total_return_pct"],
+            payload["aggregate_metrics"]["p95_total_return_pct"],
+        )
+
+    def test_build_stress_test_analysis_reports_worst_scenario_metrics(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service._dict_to_parsed_strategy(
+            service.parse_strategy(
+                "Buy when Close > MA3. Sell when Close < MA3.",
+                code="TEST",
+                start_date="2024-01-01",
+                end_date="2024-05-31",
+                initial_capital=100000.0,
+            ),
+            "Buy when Close > MA3. Sell when Close < MA3.",
+        )
+        bars = self._make_bars(
+            [100.0 + (index * 0.5) + ((-1) ** index) * 0.75 for index in range(80)],
+            start=date(2024, 1, 1),
+        )
+
+        payload = service._build_stress_test_analysis(
+            code="TEST",
+            parsed=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            slippage_bps=0.0,
+            lookback_bars=20,
+            benchmark_mode="auto",
+            benchmark_code=None,
+            start_date=None,
+            end_date=None,
+        )
+
+        self.assertEqual(payload["state"], "available")
+        self.assertEqual(len(payload["scenarios"]), 2)
+        self.assertEqual(payload["scenarios"][0]["scenario_key"], "single_day_shock_down_15")
+        self.assertIn("max_drawdown_pct", payload["scenarios"][0]["metrics"])
+        self.assertEqual(payload["worst_scenario"]["scenario_key"], "single_day_shock_down_15")
+
+    def test_service_persists_robustness_analysis_through_run_detail_and_history(self) -> None:
+        service = RuleBacktestService(self.db)
+        self._seed_history(
+            "000001",
+            [100.0 + (index * 0.3) + ((-1) ** index) * 1.1 for index in range(96)],
+            start=date(2024, 1, 1),
+        )
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="000001",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        detail = service.get_run(response["id"])
+        history = service.list_runs(code="000001", page=1, limit=10)
+
+        self.assertIn("robustness_analysis", response)
+        self.assertEqual(response["robustness_analysis"]["state"], "available")
+        self.assertGreater(response["robustness_analysis"]["walk_forward"]["window_count"], 0)
+        self.assertEqual(detail["robustness_analysis"]["state"], "available")
+        self.assertEqual(history["items"][0]["robustness_analysis"]["state"], "available")
+        self.assertEqual(detail["summary"]["robustness_analysis"], detail["robustness_analysis"])
 
     def test_auto_benchmark_falls_back_to_same_symbol_when_external_series_unavailable(self) -> None:
         service = RuleBacktestService(self.db)
