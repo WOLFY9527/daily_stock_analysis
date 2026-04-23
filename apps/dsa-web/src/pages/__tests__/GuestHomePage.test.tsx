@@ -3,9 +3,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GuestHomePage from '../GuestHomePage';
 
-const { previewMock, languageState } = vi.hoisted(() => ({
+const { previewMock, languageState, translationKeyCalls } = vi.hoisted(() => ({
   previewMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
+  translationKeyCalls: [] as string[],
 }));
 
 const guestHomeMessages = {
@@ -112,7 +113,10 @@ vi.mock('../../api/publicAnalysis', () => ({
 vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
     language: languageState.value,
-    t: (key: string) => guestHomeMessages[languageState.value][key as keyof typeof guestHomeMessages.zh] ?? key,
+    t: (key: string) => {
+      translationKeyCalls.push(key);
+      return guestHomeMessages[languageState.value][key as keyof typeof guestHomeMessages.zh] ?? key;
+    },
   }),
 }));
 
@@ -139,6 +143,7 @@ describe('GuestHomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     languageState.value = 'zh';
+    translationKeyCalls.length = 0;
     window.history.replaceState(window.history.state, '', '/zh');
   });
 
@@ -217,5 +222,16 @@ describe('GuestHomePage', () => {
     expect(screen.getByText('Unlock saved reports, chat, portfolio, and backtests')).toBeInTheDocument();
     expect(screen.getByText('Guest limits')).toBeInTheDocument();
     expect(screen.getByText('Guest previews do not create an account record and do not unlock saved cross-page features.')).toBeInTheDocument();
+  });
+
+  it('keeps static guest shell copy on the canonical guestHome namespace', () => {
+    render(
+      <MemoryRouter>
+        <GuestHomePage />
+      </MemoryRouter>,
+    );
+
+    expect(translationKeyCalls.length).toBeGreaterThan(0);
+    expect([...new Set(translationKeyCalls)].every((key) => key.startsWith('guestHome.'))).toBe(true);
   });
 });
