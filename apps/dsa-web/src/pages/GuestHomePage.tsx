@@ -11,92 +11,19 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLoginPath, buildRegistrationPath } from '../hooks/useProductSurface';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 
-type GuestHomeCopy = {
-  title: string;
-  description: string;
-  inputLabel: string;
-  inputPlaceholder: string;
-  submit: string;
-  submitting: string;
-  helper: string;
-  previewTitle: string;
-  previewNote: string;
-  unlockTitle: string;
-  unlockBody: string;
-  decision: string;
-  trend: string;
-  score: string;
-  entry: string;
-  stopLoss: string;
-  target: string;
-  noValue: string;
-  signIn: string;
-  createAccount: string;
-  unlockPrimary: string;
-};
-
-const COPY: Record<'zh' | 'en', GuestHomeCopy> = {
-  zh: {
-    title: '游客预览模式',
-    description: '先看一份简版分析，再决定是否登录继续。游客预览不会保存历史，也不会创建个人数据。',
-    inputLabel: '输入标的',
-    inputPlaceholder: '输入股票代码或名称，如 600519、贵州茅台、AAPL',
-    submit: '生成简版判断',
-    submitting: '生成中...',
-    helper: '游客可以先查看一份简版分析；完整报告、后续交流、回测、持仓和历史记录需要登录后使用。',
-    previewTitle: '即时分析预览',
-    previewNote: '该结果仅用于游客预览，不写入历史记录，也不开放后续交流。',
-    unlockTitle: '登录后继续完整功能',
-    unlockBody: '登录后，你的分析结果、交流记录、持仓、回测和历史都会保存在你自己的账户下。',
-    decision: '动作建议',
-    trend: '趋势判断',
-    score: '情绪分数',
-    entry: '理想介入',
-    stopLoss: '止损位',
-    target: '目标位',
-    noValue: '待生成',
-    signIn: '登录解锁',
-    createAccount: '创建账户',
-    unlockPrimary: '登录后继续完整使用',
-  },
-  en: {
-    title: 'Guest Preview Mode',
-    description: 'Start with a lightweight analysis snapshot, then sign in if you want to keep going. Guest previews are never saved to an account.',
-    inputLabel: 'Enter a symbol',
-    inputPlaceholder: 'Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL',
-    submit: 'Generate snapshot',
-    submitting: 'Generating...',
-    helper: 'Guests can generate one lightweight analysis snapshot. Full reports, follow-up chat, backtests, portfolio tools, and saved history unlock after sign-in.',
-    previewTitle: 'Instant Analysis Snapshot',
-    previewNote: 'This preview is intentionally limited. It is not saved and does not unlock follow-up chat.',
-    unlockTitle: 'Sign in for the full app',
-    unlockBody: 'Once you sign in, your analysis, chat history, portfolio, backtests, and saved history stay attached to your own account.',
-    decision: 'Action',
-    trend: 'Trend',
-    score: 'Sentiment',
-    entry: 'Entry',
-    stopLoss: 'Stop loss',
-    target: 'Target',
-    noValue: 'Waiting',
-    signIn: 'Sign in',
-    createAccount: 'Create account',
-    unlockPrimary: 'Unlock saved reports, chat, portfolio, and backtests',
-  },
-};
-
 const GuestHomePage: React.FC = () => {
-  const { language } = useI18n();
-  const copy = COPY[language];
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const loginPath = useMemo(() => buildLoginPath('/'), []);
   const registrationPath = useMemo(() => buildRegistrationPath('/'), []);
+  const guestCopy = (key: string) => t(`guestHome.${key}`);
 
   useEffect(() => {
-    document.title = language === 'en' ? 'Guest Preview - WolfyStock' : '游客预览 - WolfyStock';
-  }, [language]);
+    document.title = guestCopy('documentTitle');
+  }, [guestCopy]);
 
   const handlePreview = async (stockCode?: string, stockName?: string) => {
     const nextCode = (stockCode || query).trim();
@@ -110,7 +37,7 @@ const GuestHomePage: React.FC = () => {
       const response = await publicAnalysisApi.preview({
         stockCode: nextCode,
         stockName,
-        reportType: 'brief',
+      reportType: 'brief',
       });
       setPreview(response);
       setQuery(stockName || nextCode);
@@ -128,25 +55,25 @@ const GuestHomePage: React.FC = () => {
   return (
     <div className="space-y-6">
       <WorkspacePageHeader
-        eyebrow={language === 'en' ? 'Guest Preview' : '游客预览'}
-        title={copy.title}
-        description={copy.description}
+        eyebrow={guestCopy('eyebrow')}
+        title={guestCopy('title')}
+        description={guestCopy('description')}
         actions={(
           <div className="flex flex-wrap items-center gap-3">
             <Link
               to={loginPath}
               className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
             >
-              {copy.signIn}
+              {guestCopy('signIn')}
             </Link>
           </div>
         )}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(22rem,0.82fr)]">
-          <Card title={copy.previewTitle} subtitle={language === 'en' ? 'Limited Value' : '受限价值'}>
+          <Card title={guestCopy('previewTitle')} subtitle={guestCopy('previewSubtitle')}>
             <div className="space-y-4">
               <label className="block">
-                <span className="theme-field-label">{copy.inputLabel}</span>
+                <span className="theme-field-label">{guestCopy('inputLabel')}</span>
                 <div className="mt-2 flex flex-col gap-3 md:flex-row">
                   <div className="min-w-0 flex-1">
                     <StockAutocomplete
@@ -155,7 +82,7 @@ const GuestHomePage: React.FC = () => {
                       onSubmit={(stockCode, stockName) => {
                         void handlePreview(stockCode, stockName);
                       }}
-                      placeholder={copy.inputPlaceholder}
+                      placeholder={guestCopy('inputPlaceholder')}
                       disabled={isLoading}
                     />
                   </div>
@@ -165,12 +92,12 @@ const GuestHomePage: React.FC = () => {
                     disabled={!query.trim() || isLoading}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)] disabled:pointer-events-none disabled:opacity-50"
                   >
-                    {isLoading ? copy.submitting : copy.submit}
+                    {isLoading ? guestCopy('submitting') : guestCopy('submit')}
                   </button>
                 </div>
               </label>
 
-              <p className="text-sm leading-6 text-secondary-text">{copy.helper}</p>
+              <p className="text-sm leading-6 text-secondary-text">{guestCopy('helper')}</p>
 
               {error ? <ApiErrorAlert error={error} /> : null}
 
@@ -178,75 +105,73 @@ const GuestHomePage: React.FC = () => {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.16em] text-secondary-text">
-                      {language === 'en' ? 'Decision Snapshot' : '决策快照'}
+                      {guestCopy('decisionSnapshot')}
                     </p>
                     <h2 className="mt-1 text-lg font-semibold text-foreground">
-                      {previewMeta?.stockName || preview?.stockName || copy.previewTitle}
+                      {previewMeta?.stockName || preview?.stockName || guestCopy('previewTitle')}
                       {previewMeta?.stockCode ? (
                         <span className="ml-2 font-mono text-sm text-muted-text">{previewMeta.stockCode}</span>
                       ) : null}
                     </h2>
                   </div>
                   <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]">
-                    {language === 'en' ? 'Guest Preview' : '游客预览'}
+                    {guestCopy('eyebrow')}
                   </span>
                 </div>
 
                 <p className="mt-4 text-sm leading-6 text-secondary-text">
-                  {previewSummary?.analysisSummary || copy.previewNote}
+                  {previewSummary?.analysisSummary || guestCopy('previewNote')}
                 </p>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.decision}</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.operationAdvice || copy.noValue}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('decision')}</p>
+                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.operationAdvice || guestCopy('noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.trend}</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.trendPrediction || copy.noValue}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('trend')}</p>
+                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.trendPrediction || guestCopy('noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.score}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('score')}</p>
                     <p className="mt-2 text-base font-semibold text-foreground">
-                      {previewSummary?.sentimentScore != null ? `${previewSummary.sentimentScore}` : copy.noValue}
+                      {previewSummary?.sentimentScore != null ? `${previewSummary.sentimentScore}` : guestCopy('noValue')}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.entry}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.idealBuy || copy.noValue}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('entry')}</p>
+                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.idealBuy || guestCopy('noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.stopLoss}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.stopLoss || copy.noValue}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('stopLoss')}</p>
+                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.stopLoss || guestCopy('noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.target}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.takeProfit || copy.noValue}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('target')}</p>
+                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.takeProfit || guestCopy('noValue')}</p>
                   </div>
                 </div>
 
-                <p className="mt-4 text-xs leading-5 text-muted-text">{copy.previewNote}</p>
+                <p className="mt-4 text-xs leading-5 text-muted-text">{guestCopy('previewNote')}</p>
               </div>
             </div>
           </Card>
 
-          <Card title={copy.unlockTitle} subtitle={language === 'en' ? 'Next Step' : '继续深入'}>
+          <Card title={guestCopy('unlockTitle')} subtitle={guestCopy('unlockSubtitle')}>
             <div className="space-y-4">
-              <p className="text-sm leading-6 text-secondary-text">{copy.unlockBody}</p>
+              <p className="text-sm leading-6 text-secondary-text">{guestCopy('unlockBody')}</p>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/6 text-foreground">
                     <LockKeyhole className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{copy.unlockPrimary}</p>
+                    <p className="text-sm font-semibold text-foreground">{guestCopy('unlockPrimary')}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-text">
-                      {language === 'en'
-                        ? 'Create an account to save reports, chats, watchlists, backtests, and portfolio data under your own name.'
-                        : '创建账户后，完整报告、问股、观察名单、回测与持仓都会按你的身份保存。'}
+                      {guestCopy('unlockSecondary')}
                     </p>
                   </div>
                 </div>
@@ -255,13 +180,13 @@ const GuestHomePage: React.FC = () => {
                     to={loginPath}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                   >
-                    {copy.signIn}
+                    {guestCopy('signIn')}
                   </Link>
                   <Link
                     to={registrationPath}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
                   >
-                    {copy.createAccount}
+                    {guestCopy('createAccount')}
                   </Link>
                 </div>
               </div>
@@ -273,62 +198,56 @@ const GuestHomePage: React.FC = () => {
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-5">
         <LockedFeatureCard
           icon={BarChart3}
-          title={language === 'en' ? 'Full Analysis Reports' : '完整分析报告'}
-          body={language === 'en' ? 'Unlock full reports, supporting evidence, charts, and a detailed action plan.' : '登录后查看完整报告层级、证据链、图表与执行计划。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={copy.signIn}
+          title={guestCopy('cards.fullReports.title')}
+          body={guestCopy('cards.fullReports.body')}
+          lockedLabel={guestCopy('lockedLabel')}
+          ctaLabel={guestCopy('signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={MessageSquareText}
-          title={language === 'en' ? 'Follow-up Chat' : '后续交流'}
-          body={language === 'en' ? 'Continue from a saved report with follow-up chat and session memory under your own account.' : '从已保存报告继续交流，并把会话记录保存在你自己的账户下。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={copy.signIn}
+          title={guestCopy('cards.followUp.title')}
+          body={guestCopy('cards.followUp.body')}
+          lockedLabel={guestCopy('lockedLabel')}
+          ctaLabel={guestCopy('signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={BriefcaseBusiness}
-          title={language === 'en' ? 'Portfolio' : '持仓'}
-          body={language === 'en' ? 'Connect trades, positions, cash events, and portfolio risk to your own account.' : '将交易、仓位、资金流水与风险分析绑定到你的个人账户。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={copy.signIn}
+          title={guestCopy('cards.portfolio.title')}
+          body={guestCopy('cards.portfolio.body')}
+          lockedLabel={guestCopy('lockedLabel')}
+          ctaLabel={guestCopy('signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={TestTubeDiagonal}
-          title={language === 'en' ? 'Backtests' : '回测'}
-          body={language === 'en' ? 'Run deterministic and rule backtests, then save the results to your own account.' : '运行确定性回测与规则回测，并将结果保存到你自己的账户中。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={copy.signIn}
+          title={guestCopy('cards.backtests.title')}
+          body={guestCopy('cards.backtests.body')}
+          lockedLabel={guestCopy('lockedLabel')}
+          ctaLabel={guestCopy('signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={History}
-          title={language === 'en' ? 'Saved History and Reviews' : '历史与复盘'}
-          body={language === 'en' ? 'Review your own analysis history, scanner runs, and follow-up decisions without mixing with other accounts.' : '查看你自己的分析历史、扫描记录与后续复盘，不会和其他账户混在一起。'}
-          lockedLabel={language === 'en' ? 'Locked' : '已锁定'}
-          ctaLabel={language === 'en' ? 'Preview scanner' : '查看扫描器预告'}
+          title={guestCopy('cards.history.title')}
+          body={guestCopy('cards.history.body')}
+          lockedLabel={guestCopy('lockedLabel')}
+          ctaLabel={guestCopy('cards.history.cta')}
           ctaTo="/scanner"
         />
       </div>
 
-      <Card title={language === 'en' ? 'Guest limits' : '游客限制'} subtitle={language === 'en' ? 'Guest access stays limited' : '游客权限保持受限'}>
+      <Card title={guestCopy('limits.title')} subtitle={guestCopy('limits.subtitle')}>
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {language === 'en'
-              ? 'Guest previews do not create an account record and do not unlock saved cross-page features.'
-              : '游客预览不会创建账户记录，也不会解锁跨页面保存的功能。'}
+            {guestCopy('limits.accountIsolation')}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {language === 'en'
-              ? 'Portfolio, scanner, backtest, chat, and saved history remain tied to a signed-in account.'
-              : '持仓、扫描器、回测、问股与历史等持久化流程仍然严格绑定到已认证用户身份。'}
+            {guestCopy('limits.persistence')}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {language === 'en'
-              ? 'System settings, schedules, notification channels, and admin logs remain outside guest pages.'
-              : '系统配置、调度、通知通道与管理员日志仍然保留在游客页面之外。'}
+            {guestCopy('limits.admin')}
           </div>
         </div>
       </Card>
