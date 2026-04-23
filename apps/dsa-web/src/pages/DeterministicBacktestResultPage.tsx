@@ -66,6 +66,7 @@ import type {
   StatusHistoryItem,
 } from '../types/backtest';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { translate, type UiLanguage } from '../i18n/core';
 
 const RULE_POLL_INTERVAL_MS = 1800;
 const RESULT_HISTORY_PAGE_SIZE = 10;
@@ -86,22 +87,7 @@ type ScenarioRunState = {
 
 type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'history';
 
-const RESULT_PAGE_TABS: Record<'zh' | 'en', Array<{ key: ResultPageTabKey; label: string }>> = {
-  zh: [
-    { key: 'overview', label: '概览' },
-    { key: 'audit', label: '审计明细' },
-    { key: 'trades', label: '交易记录' },
-    { key: 'parameters', label: '参数与假设' },
-    { key: 'history', label: '历史结果' },
-  ],
-  en: [
-    { key: 'overview', label: 'Overview' },
-    { key: 'audit', label: 'Audit detail' },
-    { key: 'trades', label: 'Trades' },
-    { key: 'parameters', label: 'Parameters' },
-    { key: 'history', label: 'History' },
-  ],
-};
+const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
 
 type CoverageTrackItem = {
   key: string;
@@ -179,16 +165,21 @@ function clampRatio(value: number | null): number {
   return Math.min(1, Math.max(0, value));
 }
 
-function getRobustnessStateLabel(value: unknown): string {
+function btr(language: UiLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
+  return translate(language, `backtest.resultPage.${key}`, vars);
+}
+
+function getRobustnessStateLabel(value: unknown, language: UiLanguage): string {
   const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'available') return '可用';
-  if (normalized === 'partial') return '部分可用';
-  if (normalized === 'unavailable') return '不可用';
+  if (normalized === 'available') return btr(language, 'robustnessState.available');
+  if (normalized === 'partial') return btr(language, 'robustnessState.partial');
+  if (normalized === 'unavailable') return btr(language, 'robustnessState.unavailable');
   return normalized ? String(value) : '--';
 }
 
 function getRiskControlVisualRows(
   parsedStrategy: RuleBacktestRunResponse['parsedStrategy'] | null | undefined,
+  language: UiLanguage,
 ): RiskControlVisualRow[] {
   const directSpec = parsedStrategy?.strategySpec;
   const strategySpec = directSpec && typeof directSpec === 'object'
@@ -199,17 +190,17 @@ function getRiskControlVisualRows(
   const controls = [
     {
       key: 'stop-loss' as const,
-      label: '止损',
+      label: btr(language, 'riskControls.stopLoss'),
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'stop_loss_pct']),
     },
     {
       key: 'take-profit' as const,
-      label: '止盈',
+      label: btr(language, 'riskControls.takeProfit'),
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'take_profit_pct']),
     },
     {
       key: 'trailing-stop' as const,
-      label: '移动止损',
+      label: btr(language, 'riskControls.trailingStop'),
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'trailing_stop_pct']),
     },
   ];
@@ -229,6 +220,7 @@ function RobustnessCoverageTrack({
 }: {
   rows: CoverageTrackItem[];
 }) {
+  const { language } = useI18n();
   if (!rows.length) return null;
 
   const averageCoverage = rows.reduce((total, row) => total + row.ratio, 0) / rows.length;
@@ -237,10 +229,10 @@ function RobustnessCoverageTrack({
     <div className="summary-block mt-4" data-testid="robustness-coverage-overview">
       <div className="summary-block__header">
         <div>
-          <h3 className="summary-block__title">覆盖进度 / Coverage Track</h3>
+          <h3 className="summary-block__title">{btr(language, 'riskControls.coverageTrack')}</h3>
         </div>
         <div className="product-chip-list product-chip-list--tight">
-          <span className="product-chip">平均覆盖 {pct(averageCoverage * 100)}</span>
+          <span className="product-chip">{btr(language, 'riskControls.averageCoverage', { value: pct(averageCoverage * 100) })}</span>
         </div>
       </div>
       <div className="flex h-2.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
@@ -271,7 +263,7 @@ function RobustnessCoverageTrack({
             <p className="mt-1 preview-card__text">{row.summary}</p>
             <p className="mt-1 text-[11px] text-secondary">{row.detail}</p>
             <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-secondary">
-              <span>覆盖 {pct(row.ratio * 100)}</span>
+              <span>{btr(language, 'riskControls.coverage', { value: pct(row.ratio * 100) })}</span>
               <span className="product-chip">{row.state}</span>
             </div>
           </div>
@@ -288,6 +280,7 @@ function RiskControlsLadder({
   rows: RiskControlVisualRow[];
   activeRiskControlKey: RiskControlVisualRow['key'] | null;
 }) {
+  const { language } = useI18n();
   if (!rows.length) return null;
 
   const strongestRiskControl = rows.reduce((currentMax, row) => Math.max(currentMax, row.value), 0);
@@ -296,11 +289,11 @@ function RiskControlsLadder({
     <div className="summary-block mt-4" data-testid="result-risk-controls-visualization">
       <div className="summary-block__header">
         <div>
-          <h3 className="summary-block__title">保护梯度 / Protection Ladder</h3>
+          <h3 className="summary-block__title">{btr(language, 'riskControls.protectionLadder')}</h3>
         </div>
         <div className="product-chip-list product-chip-list--tight">
-          <span className="product-chip">已启用 {rows.length} 项</span>
-          <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+          <span className="product-chip">{btr(language, 'riskControls.enabledCount', { count: rows.length })}</span>
+          <span className="product-chip">{btr(language, 'riskControls.highestThreshold', { value: strongestRiskControl.toFixed(2) })}</span>
         </div>
       </div>
       <div className="space-y-3">
@@ -350,6 +343,7 @@ function AdditiveDashboardPanels({
   onActiveRobustnessChange: (key: string | null) => void;
   onActiveRiskControlChange: (key: RiskControlVisualRow['key'] | null) => void;
 }) {
+  const { language } = useI18n();
   const [hoveredRobustnessRow, setHoveredRobustnessRow] = useState<CoverageTrackItem | null>(null);
   const [hoveredRiskControlRow, setHoveredRiskControlRow] = useState<RiskControlVisualRow | null>(null);
   if (!hasRobustnessAnalysis && riskControlRows.length === 0) return null;
@@ -382,18 +376,18 @@ function AdditiveDashboardPanels({
           <div
             className="summary-block"
             data-testid="dashboard-robustness-panel"
-            title="查看回测鲁棒性 additive 摘要"
+            title={btr(language, 'riskControls.robustnessPanelTitle')}
           >
             <div className="summary-block__header">
               <div>
-                <h3 className="summary-block__title">鲁棒性分析卡片 / Robustness</h3>
+                <h3 className="summary-block__title">{btr(language, 'riskControls.robustnessCard')}</h3>
               </div>
               <div className="product-chip-list product-chip-list--tight">
                 <span
                   className="product-chip"
                   data-linked-highlight={activeRobustnessKey ? 'true' : undefined}
                 >
-                  平均覆盖 {pct(averageCoverage * 100)}
+                  {btr(language, 'riskControls.averageCoverage', { value: pct(averageCoverage * 100) })}
                 </span>
               </div>
             </div>
@@ -441,20 +435,20 @@ function AdditiveDashboardPanels({
           <div
             className="summary-block"
             data-testid="dashboard-risk-controls-panel"
-            title="查看策略风险控制 additive 摘要"
+            title={btr(language, 'riskControls.riskControlPanelTitle')}
           >
             <div className="summary-block__header">
               <div>
-                <h3 className="summary-block__title">风险控制卡片 / Risk Controls</h3>
+                <h3 className="summary-block__title">{btr(language, 'riskControls.riskControlCard')}</h3>
               </div>
               <div className="product-chip-list product-chip-list--tight">
-                <span className="product-chip">已启用 {riskControlRows.length} 项</span>
+                <span className="product-chip">{btr(language, 'riskControls.enabledCount', { count: riskControlRows.length })}</span>
                 <span
                   className="product-chip"
                   data-linked-highlight={activeRiskControlKey ? 'true' : undefined}
                   data-testid="dashboard-risk-controls-threshold-summary"
                 >
-                  最高阈值 {strongestRiskControl.toFixed(2)}%
+                  {btr(language, 'riskControls.highestThreshold', { value: strongestRiskControl.toFixed(2) })}
                 </span>
               </div>
             </div>
@@ -489,7 +483,7 @@ function AdditiveDashboardPanels({
                 id="dashboard-risk-controls-hover-tooltip"
                 role="tooltip"
               >
-                <span className="text-foreground">{hoveredRiskControlRow.label}阈值</span>
+                <span className="text-foreground">{btr(language, 'riskControls.threshold', { label: hoveredRiskControlRow.label })}</span>
                 <span className="ml-1 font-mono text-foreground">{hoveredRiskControlRow.valueLabel}</span>
               </div>
             ) : null}
@@ -513,7 +507,11 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
 const DeterministicBacktestResultPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { language } = useI18n();
+  const { language, t } = useI18n();
+  const backtestCopy = useCallback(
+    (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars),
+    [t],
+  );
   const { runId } = useParams<{ runId: string }>();
   const locationState = location.state as ResultPageLocationState | null;
   const initialRun = locationState?.initialRun || null;
@@ -579,25 +577,25 @@ const DeterministicBacktestResultPage: React.FC = () => {
       {
         key: 'walk-forward',
         label: 'Walk-forward',
-        summary: walkForwardCount == null ? '--' : `${formatNumber(walkForwardCount, 0)} 窗口`,
-        detail: `均值 ${pct(getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct')))} `,
-        state: getRobustnessStateLabel(getObjectField(walkForward, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        summary: walkForwardCount == null ? '--' : btr(language, 'riskControls.walkForwardWindows', { count: formatNumber(walkForwardCount, 0) }),
+        detail: btr(language, 'riskControls.mean', { value: pct(getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct'))) }),
+        state: getRobustnessStateLabel(getObjectField(walkForward, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
         ratio: clampRatio(walkForwardCount != null && walkForwardMax ? walkForwardCount / walkForwardMax : (hasObjectFields(walkForward) ? 1 : 0)),
       },
       {
         key: 'monte-carlo',
         label: 'Monte Carlo',
-        summary: monteCarloCount == null ? '--' : `${formatNumber(monteCarloCount, 0)} 路径`,
-        detail: `中位 ${pct(getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct')))} `,
-        state: getRobustnessStateLabel(getObjectField(monteCarlo, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        summary: monteCarloCount == null ? '--' : btr(language, 'riskControls.monteCarloPaths', { count: formatNumber(monteCarloCount, 0) }),
+        detail: btr(language, 'riskControls.median', { value: pct(getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct'))) }),
+        state: getRobustnessStateLabel(getObjectField(monteCarlo, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
         ratio: clampRatio(monteCarloCount != null && monteCarloMax ? monteCarloCount / monteCarloMax : (hasObjectFields(monteCarlo) ? 1 : 0)),
       },
       {
         key: 'stress-tests',
         label: 'Stress Tests',
-        summary: stressScenarioCount == null ? '--' : `${formatNumber(stressScenarioCount, 0)} 场景`,
-        detail: `最差 ${String(getObjectField(worstScenario, 'scenarioKey') || '--')}`,
-        state: getRobustnessStateLabel(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        summary: stressScenarioCount == null ? '--' : btr(language, 'riskControls.stressScenarios', { count: formatNumber(stressScenarioCount, 0) }),
+        detail: btr(language, 'riskControls.worst', { value: String(getObjectField(worstScenario, 'scenarioKey') || '--') }),
+        state: getRobustnessStateLabel(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
         ratio: clampRatio(stressScenarioCount != null && stressScenarioMax ? stressScenarioCount / stressScenarioMax : (hasObjectFields(stressTests) ? 1 : 0)),
       },
     ];
@@ -605,6 +603,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     monteCarlo,
     monteCarloAggregate,
     monteCarloConfig,
+    language,
     robustnessAnalysis,
     stressTests,
     stressTestsConfig,
@@ -613,7 +612,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
     walkForwardConfig,
     worstScenario,
   ]);
-  const tabs = RESULT_PAGE_TABS[language];
+  const tabs = RESULT_PAGE_TAB_KEYS.map((key) => ({
+    key,
+    label: backtestCopy(`resultPage.tabs.${key}`),
+  }));
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
@@ -724,9 +726,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   useEffect(() => {
     document.title = hasValidRunId
-      ? `${language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果'} #${parsedRunId} - WolfyStock`
-      : `${language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果'} - WolfyStock`;
-  }, [hasValidRunId, language, parsedRunId]);
+      ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId} - WolfyStock`
+      : `${backtestCopy('resultPage.documentTitle')} - WolfyStock`;
+  }, [backtestCopy, hasValidRunId, parsedRunId]);
 
   useEffect(() => {
     setAvailablePresets(loadRuleBacktestPresets());
@@ -909,8 +911,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
     [run, language],
   );
   const riskControlRows = useMemo(
-    () => getRiskControlVisualRows(run?.parsedStrategy),
-    [run?.parsedStrategy],
+    () => getRiskControlVisualRows(run?.parsedStrategy, language),
+    [language, run?.parsedStrategy],
   );
   const strategyWarningEntries = Array.from(
     new Set([
@@ -1347,34 +1349,34 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 </Disclosure>
 
                 {hasRobustnessAnalysis ? (
-                  <Disclosure summary="鲁棒性分析">
+                  <Disclosure summary={backtestCopy('resultPage.riskControls.robustnessDisclosure')}>
                     <div className="backtest-result-page__tab-stack">
                       <SummaryStrip
                         items={[
-                          { label: '状态', value: getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state')) },
-                          { label: 'Walk-forward 窗口', value: formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0) },
-                          { label: '蒙特卡洛模拟', value: formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0) },
-                          { label: '压力场景', value: formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0) },
+                          { label: backtestCopy('resultPage.riskControls.status'), value: getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language) },
+                          { label: backtestCopy('resultPage.riskControls.walkForwardWindow'), value: formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0) },
+                          { label: backtestCopy('resultPage.riskControls.monteCarloSimulation'), value: formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0) },
+                          { label: backtestCopy('resultPage.riskControls.stressScenario'), value: formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0) },
                         ]}
                       />
                       <div className="preview-grid">
                         <div className="preview-card">
-                          <p className="metric-card__label">Walk-forward 平均收益</p>
+                          <p className="metric-card__label">{backtestCopy('resultPage.riskControls.walkForwardMeanReturn')}</p>
                           <p className="preview-card__text">{pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}</p>
                         </div>
                         <div className="preview-card">
-                          <p className="metric-card__label">蒙特卡洛中位收益</p>
+                          <p className="metric-card__label">{backtestCopy('resultPage.riskControls.monteCarloMedianReturn')}</p>
                           <p className="preview-card__text">{pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}</p>
                         </div>
                         <div className="preview-card">
-                          <p className="metric-card__label">最差场景</p>
+                          <p className="metric-card__label">{backtestCopy('resultPage.riskControls.worstScenario')}</p>
                           <p className="preview-card__text">{String(getObjectField(worstScenario, 'scenarioKey') || '--')}</p>
                         </div>
                       </div>
                       <div className="summary-block mt-4" data-testid="robustness-lens">
                         <div className="summary-block__header">
                           <div>
-                            <h3 className="summary-block__title">鲁棒性概览 / Robustness Lens</h3>
+                            <h3 className="summary-block__title">{backtestCopy('resultPage.riskControls.robustnessLens')}</h3>
                           </div>
                         </div>
                         <div className="space-y-3">
@@ -1682,8 +1684,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
           <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
           <h1 className="backtest-result-page__hero-title">
             {hasValidRunId
-              ? `${language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果'} #${parsedRunId}`
-              : (language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果')}
+              ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
+              : backtestCopy('resultPage.documentTitle')}
           </h1>
           <p className="backtest-result-page__hero-meta">{headerDescription}</p>
         </div>
@@ -1737,7 +1739,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
           </section>
 
           <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
-            <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={language === 'en' ? 'Result detail tabs' : '结果详情标签'}>
+            <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={backtestCopy('resultPage.tabsAria')}>
               {tabs.map((tab) => (
                 <button
                   key={tab.key}

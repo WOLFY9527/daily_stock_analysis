@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { translate } from '../../i18n/core';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage';
 import RuleBacktestComparePage from '../RuleBacktestComparePage';
@@ -501,7 +502,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    expect(screen.getByText('鲁棒性分析')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessDisclosure'))).toBeInTheDocument();
     expect(screen.getAllByText('可用').length).toBeGreaterThan(0);
     expect(screen.getByText('Walk-forward 窗口')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
@@ -516,9 +517,9 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByText('最差场景')).toBeInTheDocument();
     expect(screen.getByText('single_day_shock_down_15')).toBeInTheDocument();
     expect(screen.getByTestId('robustness-lens')).toBeInTheDocument();
-    expect(screen.getByText('鲁棒性概览 / Robustness Lens')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessLens'))).toBeInTheDocument();
     expect(screen.getByTestId('robustness-coverage-overview')).toBeInTheDocument();
-    expect(screen.getByText('覆盖进度 / Coverage Track')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.coverageTrack'))).toBeInTheDocument();
     expect(screen.getByTestId('robustness-lens-row-walk-forward')).toHaveTextContent('4 窗口');
     expect(screen.getByTestId('robustness-lens-row-monte-carlo')).toHaveTextContent('200 路径');
     expect(screen.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
@@ -586,11 +587,11 @@ describe('DeterministicBacktestResultPage', () => {
 
     expect(screen.getByTestId('result-additive-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-robustness-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-robustness-panel')).toHaveAttribute('title', '查看回测鲁棒性 additive 摘要');
-    expect(screen.getByText('鲁棒性分析卡片 / Robustness')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-robustness-panel')).toHaveAttribute('title', translate('zh', 'backtest.resultPage.riskControls.robustnessPanelTitle'));
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessCard'))).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-risk-controls-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-risk-controls-panel')).toHaveAttribute('title', '查看策略风险控制 additive 摘要');
-    expect(screen.getByText('风险控制卡片 / Risk Controls')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-risk-controls-panel')).toHaveAttribute('title', translate('zh', 'backtest.resultPage.riskControls.riskControlPanelTitle'));
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.riskControlCard'))).toBeInTheDocument();
     expect(screen.getByText('已启用 3 项')).toBeInTheDocument();
   });
 
@@ -798,9 +799,9 @@ describe('DeterministicBacktestResultPage', () => {
 
     const riskControlsVisualization = screen.getByTestId('result-risk-controls-visualization');
     expect(riskControlsVisualization).toBeInTheDocument();
-    expect(within(riskControlsVisualization).getByText('保护梯度 / Protection Ladder')).toBeInTheDocument();
+    expect(within(riskControlsVisualization).getByText(translate('zh', 'backtest.resultPage.riskControls.protectionLadder'))).toBeInTheDocument();
     expect(within(riskControlsVisualization).getByText('已启用 3 项')).toBeInTheDocument();
-    expect(within(riskControlsVisualization).getByText('最高阈值 10.00%')).toBeInTheDocument();
+    expect(within(riskControlsVisualization).getByText(translate('zh', 'backtest.resultPage.riskControls.highestThreshold', { value: '10.00' }))).toBeInTheDocument();
     expect(screen.getByTestId('result-risk-controls-row-stop-loss')).toHaveTextContent('5.00%');
     expect(screen.getByTestId('result-risk-controls-row-take-profit')).toHaveTextContent('10.00%');
     expect(screen.getByTestId('result-risk-controls-row-trailing-stop')).toHaveTextContent('8.00%');
@@ -826,7 +827,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    expect(screen.queryByText('鲁棒性分析')).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'backtest.resultPage.riskControls.robustnessDisclosure'))).not.toBeInTheDocument();
   });
 
   it('lets users cancel active runs from the result page', async () => {
