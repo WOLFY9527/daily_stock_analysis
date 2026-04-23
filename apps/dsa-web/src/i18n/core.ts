@@ -120,6 +120,13 @@ const RESOURCES = {
 ### 5.2 风险提示
 本报告用于研究讨论，不构成投资建议。`,
     },
+    notFound: {
+      documentTitle: '页面未找到 - WolfyStock',
+      eyebrow: '页面状态',
+      title: '页面未找到',
+      body: '当前地址不存在或已经迁移。返回首页后，可以继续进入研究、持仓或回测区域。',
+      cta: '返回首页',
+    },
     language: {
       toggle: '切换语言',
       zh: '中文',
@@ -1880,6 +1887,13 @@ Technical indicators prioritize original API values. Conflicting fields are norm
 
 ### 5.2 Risk Notice
 This memo is for research discussion and does not constitute investment advice.`,
+    },
+    notFound: {
+      documentTitle: 'Page Not Found - WolfyStock',
+      eyebrow: 'Page State',
+      title: 'Page not found',
+      body: 'This address does not exist or has moved. Go back home to continue into research, portfolio, or backtest areas.',
+      cta: 'Back to home',
     },
     language: {
       toggle: 'Switch language',

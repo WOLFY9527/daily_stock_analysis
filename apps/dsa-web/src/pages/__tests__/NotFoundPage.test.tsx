@@ -2,6 +2,7 @@ import type React from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '../../i18n/core';
 import NotFoundPage from '../NotFoundPage';
 
 const navigate = vi.fn();
@@ -9,7 +10,7 @@ const navigate = vi.fn();
 vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
     language: window.location.pathname.startsWith('/en') ? 'en' : 'zh',
-    t: (key: string) => key,
+    t: (key: string) => translate(window.location.pathname.startsWith('/en') ? 'en' : 'zh', key),
   }),
 }));
 
@@ -41,9 +42,10 @@ describe('NotFoundPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: '页面未找到' })).toBeInTheDocument();
-    expect(screen.getByText('当前地址不存在或已经迁移。返回首页后，可以继续进入研究、持仓或回测区域。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '返回首页' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: translate('zh', 'notFound.title') })).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'notFound.body'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'notFound.cta') })).toBeInTheDocument();
+    expect(document.title).toBe(translate('zh', 'notFound.documentTitle'));
   });
 
   it('renders localized English copy on /en paths', () => {
@@ -55,8 +57,9 @@ describe('NotFoundPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
-    expect(screen.getByText('This address does not exist or has moved. Go back home to continue into research, portfolio, or backtest areas.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back to home' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: translate('en', 'notFound.title') })).toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'notFound.body'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'notFound.cta') })).toBeInTheDocument();
+    expect(document.title).toBe(translate('en', 'notFound.documentTitle'));
   });
 });
