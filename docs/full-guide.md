@@ -1041,6 +1041,7 @@ P6 手动验收建议：
 - `position_sizing`：有仓时使用 100% 资金，否则为空仓
 - `fee_bps_per_side` / `slippage_bps_per_side`：单边手续费与滑点
 - `benchmark_method`：与同窗口 buy-and-hold 对比
+- `parsed_strategy.strategy_spec.risk_controls.stop_loss_pct`：若自然语言里写出固定百分比止损（如 `止损5%`），会显式保留在结构化策略规格里，并按“收盘触发、下一根 bar 开盘离场”执行；`止盈` 与 `trailing stop` 当前仍不支持
 
 ---
 

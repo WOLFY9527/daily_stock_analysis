@@ -530,7 +530,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(normalized.strategy_spec["customThreshold"], 5)
         self.assertNotIn("signal", normalized.strategy_spec)
 
-    def test_parse_strategy_marks_strategy_combination_unsupported_with_rewrite(self) -> None:
+    def test_parse_strategy_supports_fixed_stop_loss_extension_for_indicator_strategy(self) -> None:
         service = RuleBacktestService(self.db)
         parsed = service.parse_strategy(
             "MACD金叉买入，止损5%，死叉卖出",
@@ -540,13 +540,29 @@ class RuleBacktestTestCase(unittest.TestCase):
             initial_capital=50000,
         )
 
-        self.assertFalse(parsed["executable"])
-        self.assertEqual(parsed["normalization_state"], "unsupported")
-        self.assertIn("止损", parsed["unsupported_reason"])
+        self.assertTrue(parsed["executable"])
+        self.assertNotEqual(parsed["normalization_state"], "unsupported")
         self.assertEqual(parsed["detected_strategy_family"], "macd_crossover")
         self.assertIn("MACD", parsed["core_intent_summary"])
-        self.assertEqual(parsed["unsupported_details"][0]["code"], "unsupported_strategy_combination")
-        self.assertIn("MACD", parsed["supported_portion_summary"])
+        self.assertEqual(parsed["strategy_spec"]["risk_controls"]["stop_loss_pct"], 5.0)
+        self.assertEqual(parsed["unsupported_details"], [])
+        self.assertEqual(parsed["unsupported_extensions"], [])
+
+    def test_parse_strategy_keeps_take_profit_extension_unsupported_with_rewrite(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service.parse_strategy(
+            "MACD金叉买入，止损5%，止盈10%，死叉卖出",
+            code="AAPL",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            initial_capital=50000,
+        )
+
+        self.assertFalse(parsed["executable"])
+        self.assertEqual(parsed["normalization_state"], "unsupported")
+        self.assertIn("止盈", parsed["unsupported_reason"])
+        self.assertEqual(parsed["detected_strategy_family"], "macd_crossover")
+        self.assertTrue(any(item["code"] == "unsupported_strategy_combination" for item in parsed["unsupported_details"]))
         self.assertTrue(any("MACD金叉买入，死叉卖出" in item["strategy_text"] for item in parsed["rewrite_suggestions"]))
 
     def test_parse_strategy_marks_scaling_request_unsupported_with_rsi_rewrite(self) -> None:
@@ -3330,6 +3346,34 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(result.metrics["trade_count"], 0)
         self.assertGreater(len(result.equity_curve), 0)
         self.assertEqual(result.parsed_strategy.strategy_spec["strategy_type"], "macd_crossover")
+
+    def test_engine_exits_indicator_position_when_fixed_stop_loss_triggers(self) -> None:
+        service = RuleBacktestService(self.db)
+        bars = self._make_bars([10.0, 9.0, 8.0, 7.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 10.0, 9.0, 8.0, 7.0], start=date(2024, 1, 1))
+        parsed_dict = service.parse_strategy(
+            "3日均线上穿5日均线买入，止损5%，下穿卖出",
+            code="TEST",
+            start_date="2024-01-01",
+            end_date="2024-01-14",
+            initial_capital=100000,
+        )
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        engine = RuleBacktestEngine()
+
+        result = engine.run(
+            code="TEST",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            lookback_bars=14,
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 14),
+        )
+
+        self.assertGreater(result.metrics["trade_count"], 0)
+        self.assertEqual(result.parsed_strategy.strategy_spec["risk_controls"]["stop_loss_pct"], 5.0)
+        self.assertEqual(result.trades[0].exit_trigger, "FIXED_STOP_LOSS_5%")
+        self.assertLess(result.trades[0].exit_date, date(2024, 1, 14))
 
     def test_engine_executes_rsi_threshold_from_normalized_spec(self) -> None:
         service = RuleBacktestService(self.db)

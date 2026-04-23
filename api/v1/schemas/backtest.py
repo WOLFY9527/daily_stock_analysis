@@ -291,6 +291,12 @@ class RuleBacktestIndicatorEndBehavior(BaseModel):
     price_basis: Optional[str] = None
 
 
+class RuleBacktestIndicatorRiskControls(BaseModel):
+    stop_loss_pct: Optional[float] = None
+    take_profit_pct: Optional[float] = None
+    trailing_stop_pct: Optional[float] = None
+
+
 class RuleBacktestMovingAverageCrossoverStrategySpec(RuleBacktestStrategySpecBase):
     strategy_type: Literal["moving_average_crossover"]
     strategy_family: Optional[Literal["moving_average_crossover"]] = "moving_average_crossover"
@@ -301,6 +307,7 @@ class RuleBacktestMovingAverageCrossoverStrategySpec(RuleBacktestStrategySpecBas
     execution: RuleBacktestIndicatorExecution
     position_behavior: RuleBacktestIndicatorPositionBehavior
     end_behavior: RuleBacktestIndicatorEndBehavior
+    risk_controls: Optional[RuleBacktestIndicatorRiskControls] = None
 
 
 class RuleBacktestMacdCrossoverStrategySpec(RuleBacktestStrategySpecBase):
@@ -313,6 +320,7 @@ class RuleBacktestMacdCrossoverStrategySpec(RuleBacktestStrategySpecBase):
     execution: RuleBacktestIndicatorExecution
     position_behavior: RuleBacktestIndicatorPositionBehavior
     end_behavior: RuleBacktestIndicatorEndBehavior
+    risk_controls: Optional[RuleBacktestIndicatorRiskControls] = None
 
 
 class RuleBacktestRsiThresholdStrategySpec(RuleBacktestStrategySpecBase):
@@ -325,6 +333,7 @@ class RuleBacktestRsiThresholdStrategySpec(RuleBacktestStrategySpecBase):
     execution: RuleBacktestIndicatorExecution
     position_behavior: RuleBacktestIndicatorPositionBehavior
     end_behavior: RuleBacktestIndicatorEndBehavior
+    risk_controls: Optional[RuleBacktestIndicatorRiskControls] = None
 
 
 class RuleBacktestGenericStrategySpec(RuleBacktestStrategySpecBase):

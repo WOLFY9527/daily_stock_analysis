@@ -7,7 +7,7 @@ import hashlib
 import json
 import logging
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -453,6 +453,13 @@ class _IndicatorEndBehaviorPayload:
 
 
 @dataclass
+class _IndicatorRiskControlsPayload:
+    stop_loss_pct: Optional[float] = None
+    take_profit_pct: Optional[float] = None
+    trailing_stop_pct: Optional[float] = None
+
+
+@dataclass
 class _IndicatorStrategySpecPayload:
     strategy_type: str
     version: str
@@ -465,6 +472,7 @@ class _IndicatorStrategySpecPayload:
     position_behavior: _IndicatorPositionBehaviorPayload
     costs: _StrategySpecCostsPayload
     end_behavior: _IndicatorEndBehaviorPayload
+    risk_controls: _IndicatorRiskControlsPayload = field(default_factory=_IndicatorRiskControlsPayload)
 
 
 class RuleBacktestService:
@@ -5124,6 +5132,9 @@ class RuleBacktestService:
                 "upper_threshold",
                 "fast_type",
                 "slow_type",
+                "stop_loss_pct",
+                "take_profit_pct",
+                "trailing_stop_pct",
             ],
         )
 
@@ -5148,6 +5159,7 @@ class RuleBacktestService:
                 "position_behavior": ["accumulate", "cash_policy", "direction", "entry_sizing", "max_positions", "pyramiding"],
                 "execution": ["frequency", "signal_timing", "fill_timing"],
                 "end_behavior": ["policy", "price_basis"],
+                "risk_controls": ["stop_loss_pct", "take_profit_pct", "trailing_stop_pct"],
                 "signal": [
                     "indicator_family",
                     "fast_period",
@@ -5387,6 +5399,9 @@ class RuleBacktestService:
         slippage_bps: float,
         end_policy: str,
         end_price_basis: str,
+        stop_loss_pct: Optional[float] = None,
+        take_profit_pct: Optional[float] = None,
+        trailing_stop_pct: Optional[float] = None,
     ) -> Dict[str, Any]:
         return asdict(
             _IndicatorStrategySpecPayload(
@@ -5410,6 +5425,11 @@ class RuleBacktestService:
                 ),
                 costs=_StrategySpecCostsPayload(fee_bps=fee_bps, slippage_bps=slippage_bps),
                 end_behavior=_IndicatorEndBehaviorPayload(policy=end_policy, price_basis=end_price_basis),
+                risk_controls=_IndicatorRiskControlsPayload(
+                    stop_loss_pct=stop_loss_pct,
+                    take_profit_pct=take_profit_pct,
+                    trailing_stop_pct=trailing_stop_pct,
+                ),
             )
         )
 
@@ -5555,6 +5575,7 @@ class RuleBacktestService:
         signal_spec, summary_entry, summary_exit = self._build_indicator_signal_spec(parsed, setup, existing_spec)
         resolved_fee_bps = _safe_float(self._nested_value(existing_spec, "costs", "fee_bps"))
         resolved_slippage_bps = _safe_float(self._nested_value(existing_spec, "costs", "slippage_bps"))
+        risk_controls = self._resolve_indicator_risk_controls(parsed, setup=setup, existing_spec=existing_spec)
         normalized_spec = self._indicator_strategy_spec_payload(
             strategy_type=parsed.strategy_kind,
             symbol=symbol,
@@ -5575,6 +5596,9 @@ class RuleBacktestService:
             slippage_bps=float(resolved_slippage_bps if resolved_slippage_bps is not None else slippage_bps),
             end_policy=str(self._nested_value(existing_spec, "end_behavior", "policy") or "liquidate_at_end"),
             end_price_basis=str(self._nested_value(existing_spec, "end_behavior", "price_basis") or "close"),
+            stop_loss_pct=_safe_float(risk_controls.get("stop_loss_pct")),
+            take_profit_pct=_safe_float(risk_controls.get("take_profit_pct")),
+            trailing_stop_pct=_safe_float(risk_controls.get("trailing_stop_pct")),
         )
         parsed.summary = {
             "entry": summary_entry,
@@ -5681,6 +5705,7 @@ class RuleBacktestService:
         execution = dict(self._nested_value(strategy_spec, "execution") or {})
         position_behavior = dict(self._nested_value(strategy_spec, "position_behavior") or {})
         end_behavior = dict(self._nested_value(strategy_spec, "end_behavior") or {})
+        risk_controls = dict(self._nested_value(strategy_spec, "risk_controls") or {})
 
         assumptions.extend(
             [
@@ -5709,6 +5734,18 @@ class RuleBacktestService:
 
         if position_behavior.get("entry_sizing") == "all_in":
             assumptions.append(self._build_assumption("entry_sizing", "入场仓位", "all_in", "入场时使用全部可用资金买入。", group="position_defaults", group_label="仓位默认值"))
+        stop_loss_pct = _safe_float(risk_controls.get("stop_loss_pct"))
+        if stop_loss_pct is not None and stop_loss_pct > 0:
+            assumptions.append(
+                self._build_assumption(
+                    "stop_loss_pct",
+                    "固定止损",
+                    f"{stop_loss_pct:g}%",
+                    "当收盘价相对入场成交价回撤达到该阈值时，下一根 bar 开盘触发离场。",
+                    group="risk_controls",
+                    group_label="风险控制",
+                )
+            )
 
         deduped: List[Dict[str, Any]] = []
         seen = set()
@@ -5816,7 +5853,11 @@ class RuleBacktestService:
         if self._contains_any(upper_text, ["分三批", "三批", "分批", "分三次", "三次", "HALF POSITION", "HALF-POSITION", "HALF POSITION", "半仓", "EACH HALF", "EACH 50%", "SCALE IN", "PYRAMID"]):
             details.append(self._build_unsupported_detail("unsupported_position_scaling", "分批建仓 / 仓位缩放", "当前只支持单次入场，不支持分批买入、半仓或逐级加仓。"))
 
-        if self._contains_any(upper_text, ["STOP LOSS", "STOP-LOSS", "止损", "TAKE PROFIT", "止盈", "TRAILING", "移动止损"]):
+        risk_controls = self._extract_risk_controls_from_text(raw_text)
+        has_stop_loss = self._contains_any(upper_text, ["STOP LOSS", "STOP-LOSS", "止损"])
+        has_take_profit = self._contains_any(upper_text, ["TAKE PROFIT", "止盈"])
+        has_trailing_stop = self._contains_any(upper_text, ["TRAILING", "移动止损"])
+        if has_take_profit or has_trailing_stop or (has_stop_loss and risk_controls.get("stop_loss_pct") is None):
             details.append(self._build_unsupported_detail("unsupported_strategy_combination", "组合执行语义", "当前已支持技术信号主规则，但不支持叠加固定止损 / 止盈 / trailing stop。"))
 
         if self._contains_any(upper_text, ["如果", "否则", "IF ", "THEN ", "ELSE ", "否则如果"]) and not self._is_supported_deterministic_strategy_family(parsed.strategy_kind):
@@ -6050,7 +6091,7 @@ class RuleBacktestService:
     @staticmethod
     def _extract_family_semantic_details(text: str, family: Optional[str]) -> Dict[str, Any]:
         raw_text = str(text or "")
-        details: Dict[str, Any] = {}
+        details: Dict[str, Any] = RuleBacktestService._extract_risk_controls_from_text(raw_text)
         if family == "moving_average_crossover":
             matches = re.findall(r"(\d+)\s*日?(?:均线|线|MA|EMA|SMA)", raw_text, flags=re.IGNORECASE)
             if matches:
@@ -6071,6 +6112,59 @@ class RuleBacktestService:
             if upper_match:
                 details["upper_threshold"] = float(upper_match.group(1))
         return details
+
+    @staticmethod
+    def _extract_risk_controls_from_text(text: str) -> Dict[str, Any]:
+        raw_text = str(text or "")
+        details: Dict[str, Any] = {}
+        stop_loss_match = re.search(
+            r"(?:STOP\s*LOSS|STOP-LOSS|止损)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*%",
+            raw_text,
+            flags=re.IGNORECASE,
+        )
+        if stop_loss_match:
+            details["stop_loss_pct"] = float(stop_loss_match.group(1))
+        take_profit_match = re.search(
+            r"(?:TAKE\s*PROFIT|止盈)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*%",
+            raw_text,
+            flags=re.IGNORECASE,
+        )
+        if take_profit_match:
+            details["take_profit_pct"] = float(take_profit_match.group(1))
+        trailing_stop_match = re.search(
+            r"(?:TRAILING(?:\s*STOP)?|移动止损)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*%",
+            raw_text,
+            flags=re.IGNORECASE,
+        )
+        if trailing_stop_match:
+            details["trailing_stop_pct"] = float(trailing_stop_match.group(1))
+        return details
+
+    def _resolve_indicator_risk_controls(
+        self,
+        parsed: ParsedStrategy,
+        *,
+        setup: Dict[str, Any],
+        existing_spec: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        extracted = self._extract_risk_controls_from_text(parsed.source_text or "")
+        return {
+            "stop_loss_pct": self._first_defined(
+                self._nested_value(existing_spec, "risk_controls", "stop_loss_pct"),
+                setup.get("stop_loss_pct"),
+                extracted.get("stop_loss_pct"),
+            ),
+            "take_profit_pct": self._first_defined(
+                self._nested_value(existing_spec, "risk_controls", "take_profit_pct"),
+                setup.get("take_profit_pct"),
+                extracted.get("take_profit_pct"),
+            ),
+            "trailing_stop_pct": self._first_defined(
+                self._nested_value(existing_spec, "risk_controls", "trailing_stop_pct"),
+                setup.get("trailing_stop_pct"),
+                extracted.get("trailing_stop_pct"),
+            ),
+        }
 
     def _build_parse_warnings(self, parsed: ParsedStrategy) -> List[Dict[str, Any]]:
         warnings: List[Dict[str, Any]] = []

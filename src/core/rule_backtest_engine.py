@@ -1658,6 +1658,7 @@ class RuleBacktestEngine:
 
         strategy_spec = parsed_strategy.strategy_spec or {}
         signal_spec = dict(strategy_spec.get("signal") or {})
+        risk_controls = dict(strategy_spec.get("risk_controls") or {})
         series_payload = self._build_strategy_signal_series(closes, strategy_spec)
         fee_rate = max(0.0, float(execution_model.fee_bps_per_side)) / 10000.0
         slippage_rate = max(0.0, float(execution_model.slippage_bps_per_side)) / 10000.0
@@ -1804,6 +1805,42 @@ class RuleBacktestEngine:
             )
 
             if idx >= execution_end_index:
+                continue
+
+            stop_loss_pct = _safe_float(risk_controls.get("stop_loss_pct"))
+            if (
+                position
+                and stop_loss_pct is not None
+                and stop_loss_pct > 0
+                and self._fixed_stop_loss_triggered(
+                    close_price=price,
+                    entry_price=active_position.get("entry_price"),
+                    stop_loss_pct=stop_loss_pct,
+                )
+            ):
+                trigger_label = f"FIXED_STOP_LOSS_{self._format_risk_control_pct(stop_loss_pct)}"
+                pending_exit = PendingOrder(
+                    signal_date=getattr(bar, "date"),
+                    trigger=trigger_label,
+                    rule_json={
+                        "risk_controls": {"stop_loss_pct": float(stop_loss_pct)},
+                        "condition": "fixed_stop_loss_pct",
+                    },
+                    indicators={
+                        **self._collect_signal_strategy_snapshot(strategy_spec, idx, series_payload, ordered_bars),
+                        "stop_loss_pct": float(stop_loss_pct),
+                        "stop_loss_threshold_price": round(
+                            float(active_position["entry_price"]) * (1.0 - (float(stop_loss_pct) / 100.0)),
+                            6,
+                        ),
+                        "close": round(float(price), 6),
+                    },
+                )
+                self._update_point_signal(
+                    equity_curve[-1],
+                    signal_summary=f"固定止损 {float(stop_loss_pct):g}%",
+                    target_position=0.0,
+                )
                 continue
 
             if position and self._signal_family_triggered("exit", idx, series_payload, signal_spec):
@@ -2547,6 +2584,27 @@ class RuleBacktestEngine:
             benchmark_method="buy_and_hold_same_window",
             benchmark_price_basis="close",
         )
+
+    @staticmethod
+    def _fixed_stop_loss_triggered(
+        *,
+        close_price: Optional[float],
+        entry_price: Any,
+        stop_loss_pct: float,
+    ) -> bool:
+        resolved_close = _safe_float(close_price)
+        resolved_entry = _safe_float(entry_price)
+        if resolved_close is None or resolved_entry is None or resolved_entry <= 0 or stop_loss_pct <= 0:
+            return False
+        threshold_price = resolved_entry * (1.0 - (float(stop_loss_pct) / 100.0))
+        return float(resolved_close) <= float(threshold_price)
+
+    @staticmethod
+    def _format_risk_control_pct(value: float) -> str:
+        numeric = float(value)
+        if numeric.is_integer():
+            return f"{int(numeric)}%"
+        return f"{numeric:g}%"
 
     def _resolve_fill_price(self, bar: Any, *, close_price: float, preferred: str) -> Tuple[float, str]:
         if preferred == "open":
