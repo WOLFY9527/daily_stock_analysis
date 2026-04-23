@@ -74,6 +74,10 @@ class PortfolioRiskService:
             report_currency=str(snapshot.get("currency") or "CNY"),
         )
         stop_loss = self._build_stop_loss(snapshot, thresholds)
+        account_attribution = self._build_account_attribution(
+            snapshot=snapshot,
+            as_of_date=as_of_date,
+        )
 
         return {
             "as_of": as_of_date.isoformat(),
@@ -85,6 +89,7 @@ class PortfolioRiskService:
             "sector_concentration": sector_concentration,
             "drawdown": drawdown,
             "stop_loss": stop_loss,
+            "account_attribution": account_attribution,
         }
 
     def _ensure_drawdown_snapshot_window(
@@ -406,6 +411,50 @@ class PortfolioRiskService:
             "current_drawdown_pct": round(current_drawdown, 4),
             "alert": bool(max_drawdown >= threshold_pct),
             "fx_stale": stale_flag,
+        }
+
+    def _build_account_attribution(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        as_of_date: date,
+    ) -> Dict[str, Any]:
+        report_currency = str(snapshot.get("currency") or "CNY")
+        total_equity = float(snapshot.get("total_equity", 0.0) or 0.0)
+        total_market_value = float(snapshot.get("total_market_value", 0.0) or 0.0)
+
+        rows: List[Dict[str, Any]] = []
+        for account in snapshot.get("accounts", []):
+            converted_equity, stale_equity, _ = self.portfolio_service.convert_amount(
+                amount=float(account.get("total_equity", 0.0) or 0.0),
+                from_currency=str(account.get("base_currency") or report_currency),
+                to_currency=report_currency,
+                as_of_date=as_of_date,
+            )
+            converted_market_value, stale_market_value, _ = self.portfolio_service.convert_amount(
+                amount=float(account.get("total_market_value", 0.0) or 0.0),
+                from_currency=str(account.get("base_currency") or report_currency),
+                to_currency=report_currency,
+                as_of_date=as_of_date,
+            )
+            rows.append(
+                {
+                    "account_id": int(account.get("account_id")),
+                    "account_name": str(account.get("account_name") or ""),
+                    "market": str(account.get("market") or "").lower(),
+                    "total_equity_base": round(float(converted_equity), 6),
+                    "equity_weight_pct": round((float(converted_equity) / total_equity) * 100.0, 4) if total_equity > 0 else 0.0,
+                    "total_market_value_base": round(float(converted_market_value), 6),
+                    "market_value_weight_pct": round((float(converted_market_value) / total_market_value) * 100.0, 4) if total_market_value > 0 else 0.0,
+                    "fx_stale": bool(account.get("fx_stale")) or stale_equity or stale_market_value,
+                }
+            )
+
+        rows.sort(key=lambda item: (-float(item["total_equity_base"]), int(item["account_id"])))
+        return {
+            "total_equity": round(total_equity, 6),
+            "total_market_value": round(total_market_value, 6),
+            "top_accounts": rows[:20],
         }
 
     @staticmethod

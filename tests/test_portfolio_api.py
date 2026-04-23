@@ -264,6 +264,49 @@ class PortfolioApiTestCase(unittest.TestCase):
         detail = resp.json()
         self.assertEqual(detail.get("error"), "validation_error")
 
+    def test_risk_api_returns_account_attribution_block(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": account_id,
+                "event_date": "2026-01-01",
+                "direction": "in",
+                "amount": 1000,
+                "currency": "CNY",
+            },
+        )
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        self._save_close("600519", date(2026, 1, 1), 100.0)
+
+        risk_resp = self.client.get(
+            "/api/v1/portfolio/risk",
+            params={"account_id": account_id, "as_of": "2026-01-01", "cost_method": "fifo"},
+        )
+        self.assertEqual(risk_resp.status_code, 200)
+        payload = risk_resp.json()
+        self.assertIn("account_attribution", payload)
+        self.assertEqual(payload["account_attribution"]["top_accounts"][0]["account_id"], account_id)
+        self.assertEqual(payload["account_attribution"]["top_accounts"][0]["equity_weight_pct"], 100.0)
+
     def test_broker_connection_api_flow(self) -> None:
         account_resp = self.client.post(
             "/api/v1/portfolio/accounts",

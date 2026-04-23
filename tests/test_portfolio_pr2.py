@@ -613,6 +613,89 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertIn("AAPL", positions)
         self.assertAlmostEqual(positions["AAPL"]["market_value_base"], 700.0, places=6)
 
+    def test_account_attribution_uses_normalized_total_equity_across_accounts(self) -> None:
+        cn_account = self.service.create_account(name="CN", broker="Demo", market="cn", base_currency="CNY")
+        us_account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="USD")
+        cn_id = cn_account["id"]
+        us_id = us_account["id"]
+
+        self.service.record_cash_ledger(
+            account_id=cn_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000.0,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=cn_id,
+            symbol="600519",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+
+        self.service.record_cash_ledger(
+            account_id=us_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=100.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=us_id,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+
+        report = self.risk_service.get_risk_report(as_of=date(2026, 1, 1), cost_method="fifo")
+
+        self.assertIn("account_attribution", report)
+        self.assertEqual(report["account_attribution"]["total_equity"], 1700.0)
+        self.assertEqual(report["account_attribution"]["total_market_value"], 1700.0)
+        self.assertEqual(
+            report["account_attribution"]["top_accounts"],
+            [
+                {
+                    "account_id": cn_id,
+                    "account_name": "CN",
+                    "market": "cn",
+                    "total_equity_base": 1000.0,
+                    "equity_weight_pct": 58.8235,
+                    "total_market_value_base": 1000.0,
+                    "market_value_weight_pct": 58.8235,
+                    "fx_stale": False,
+                },
+                {
+                    "account_id": us_id,
+                    "account_name": "US",
+                    "market": "us",
+                    "total_equity_base": 700.0,
+                    "equity_weight_pct": 41.1765,
+                    "total_market_value_base": 700.0,
+                    "market_value_weight_pct": 41.1765,
+                    "fx_stale": False,
+                },
+            ],
+        )
+
     def test_snapshot_exposes_market_breakdown_across_multi_account_portfolio(self) -> None:
         cn_account = self.service.create_account(name="CN", broker="Demo", market="cn", base_currency="CNY")
         us_account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="USD")

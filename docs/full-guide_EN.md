@@ -1071,6 +1071,7 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 - If upstream FX fetch fails, the page may still remain stale after refresh and will explain the fallback result inline.
 - When `PORTFOLIO_FX_UPDATE_ENABLED=false`, the refresh API returns an explicit disabled status and the page shows that online FX refresh is disabled instead of implying that no refreshable pairs exist.
 - `GET /api/v1/portfolio/snapshot` now also returns `market_breakdown`, aggregating normalized position market value across the selected account/portfolio scope by `cn` / `hk` / `us`.
+- `GET /api/v1/portfolio/risk` now also returns `account_attribution`, aggregating each account's normalized `total_equity` / `total_market_value` contribution in the report currency so multi-account portfolios can inspect which account is driving overall exposure.
 
 ### User-owned broker connections and IBKR import
 

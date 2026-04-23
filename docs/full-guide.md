@@ -1351,10 +1351,12 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
 
 ### Risk sector concentration semantics
 - Added `sector_concentration` in `GET /api/v1/portfolio/risk`.
+- Added `account_attribution` in `GET /api/v1/portfolio/risk`.
 - Mapping rules:
   - CN positions try board mapping from `get_belong_boards`.
   - Non-CN or mapping failure falls back to `UNCLASSIFIED`.
   - Uses single primary board per symbol to avoid duplicate weighting.
+- `account_attribution` aggregates each account's normalized `total_equity` / `total_market_value` contribution in the report currency, so multi-account portfolios can directly inspect which account is driving overall exposure.
 - Fail-open:
   - board lookup errors do not interrupt risk response.
   - response returns coverage/error details for explainability.
