@@ -14,13 +14,62 @@ vi.mock('../../api/adminLogs', () => ({
   },
 }));
 
+let mockLanguage: 'zh' | 'en' = 'zh';
+
+const translations: Record<'zh' | 'en', Record<string, string>> = {
+  zh: {
+    'adminLogs.activityType.all': '全部活动',
+    'adminLogs.activityType.admin_action': '管理员 / 系统动作',
+    'adminLogs.activityType.user_activity': '用户活动',
+    'adminLogs.allCategory': '全部类别',
+    'adminLogs.allStatus': '全部状态',
+    'adminLogs.category.ai_route': 'AI 路由',
+    'adminLogs.category.ai_model': 'AI 模型',
+    'adminLogs.category.data_market': '行情数据',
+    'adminLogs.category.data_fundamentals': '基本面数据',
+    'adminLogs.category.data_news': '新闻数据',
+    'adminLogs.category.data_sentiment': '情绪数据',
+    'adminLogs.category.notification': '通知',
+    'adminLogs.category.system': '系统',
+    'adminLogs.status.completed': '已完成',
+    'adminLogs.status.running': '运行中',
+    'adminLogs.status.failed': '失败',
+    'adminLogs.badge.aiFallback': 'AI fallback',
+    'adminLogs.badge.dataFallback': '数据 fallback',
+    'adminLogs.action.completed': '完成',
+    'adminLogs.outcomeState.completed': '已完成',
+  },
+  en: {
+    'adminLogs.activityType.all': 'All activity',
+    'adminLogs.activityType.admin_action': 'Admin / system actions',
+    'adminLogs.activityType.user_activity': 'User activity',
+    'adminLogs.allCategory': 'All categories',
+    'adminLogs.allStatus': 'All status',
+    'adminLogs.category.ai_route': 'AI routing',
+    'adminLogs.category.ai_model': 'AI model',
+    'adminLogs.category.data_market': 'Market data',
+    'adminLogs.category.data_fundamentals': 'Fundamentals',
+    'adminLogs.category.data_news': 'News',
+    'adminLogs.category.data_sentiment': 'Sentiment',
+    'adminLogs.category.notification': 'Notifications',
+    'adminLogs.category.system': 'System',
+    'adminLogs.status.completed': 'Completed',
+    'adminLogs.status.running': 'Running',
+    'adminLogs.status.failed': 'Failed',
+    'adminLogs.badge.aiFallback': 'AI fallback',
+    'adminLogs.badge.dataFallback': 'Data fallback',
+    'adminLogs.action.completed': 'Completed',
+    'adminLogs.outcomeState.completed': 'Completed',
+  },
+};
+
 vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
-    language: 'zh',
-    t: (key: string, params?: Record<string, unknown>) =>
-      key === 'adminLogs.filterHint'
-        ? `count:${String(params?.count ?? '')}`
-        : key,
+    language: mockLanguage,
+    t: (key: string, params?: Record<string, unknown>) => {
+      void params;
+      return translations[mockLanguage][key] || key;
+    },
   }),
 }));
 
@@ -31,6 +80,7 @@ vi.mock('../../components/common', () => ({
 describe('AdminLogsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLanguage = 'zh';
     listSessions.mockResolvedValue({
       total: 2,
       items: [
@@ -118,17 +168,19 @@ describe('AdminLogsPage', () => {
   it('renders global admin observability metadata for both admin actions and user activity', async () => {
     render(<AdminLogsPage />);
 
-    expect(await screen.findByText('adminLogs.globalScopeTitle')).toBeInTheDocument();
+    expect(await screen.findByText('全局管理员可观测性视图')).toBeInTheDocument();
+    expect(screen.getByText('会话列表')).toBeInTheDocument();
+    expect(screen.getByText('会话详情')).toBeInTheDocument();
     expect((await screen.findAllByText('Bootstrap Admin')).length).toBeGreaterThan(0);
     expect(screen.getByText('AAPL analysis')).toBeInTheDocument();
-    expect(screen.getAllByText(/system_control|analysis/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/系统控制|分析/).length).toBeGreaterThan(0);
   });
 
   it('filters between admin/system actions and user activity', async () => {
     render(<AdminLogsPage />);
 
     expect((await screen.findAllByText('Factory reset')).length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByLabelText('adminLogs.activityTypeFilter'), {
+    fireEvent.change(screen.getByLabelText('活动类型'), {
       target: { value: 'admin_action' },
     });
 
@@ -142,6 +194,8 @@ describe('AdminLogsPage', () => {
     render(<AdminLogsPage />);
 
     expect(await screen.findByText('Scanner run')).toBeInTheDocument();
+    expect(screen.getByText('运行 #88')).toBeInTheDocument();
+    expect(screen.getByText('候选 5')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Scanner run/ }));
 
     await waitFor(() => {
@@ -149,7 +203,7 @@ describe('AdminLogsPage', () => {
     });
     expect(screen.getByText(/alpaca/)).toBeInTheDocument();
     expect(screen.getByText(/twelve_data/)).toBeInTheDocument();
-    expect(screen.getByText(/fallback/i)).toBeInTheDocument();
+    expect(screen.getByText(/fallback 次数 1/)).toBeInTheDocument();
   });
 
   it('renders a visible empty timeline state instead of crashing when detail events are missing', async () => {
@@ -172,7 +226,40 @@ describe('AdminLogsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Factory reset/ }));
 
     await waitFor(() => {
-      expect(screen.getByText('adminLogs.emptyTimeline')).toBeInTheDocument();
+      expect(screen.getByText('暂无时间线事件')).toBeInTheDocument();
     });
+    expect(screen.getByText('本次会话没有记录可展示的事件明细。')).toBeInTheDocument();
+  });
+
+  it('formats detail summary values instead of exposing raw role and confirmation keys', async () => {
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByText('Factory reset')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Factory reset/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('角色:')).toBeInTheDocument();
+    });
+    expect(screen.getByText('管理员')).toBeInTheDocument();
+    expect(screen.getAllByText('管理员 / 系统动作').length).toBeGreaterThan(0);
+    expect(screen.getByText('系统控制')).toBeInTheDocument();
+    expect(screen.getByText('是')).toBeInTheDocument();
+    expect(screen.queryByText('common.confirm')).not.toBeInTheDocument();
+  });
+
+  it('renders English page-local copy on /en routes', async () => {
+    mockLanguage = 'en';
+
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByRole('heading', { name: 'Admin logs' })).toBeInTheDocument();
+    expect(screen.getByText('Global admin observability view')).toBeInTheDocument();
+    expect(screen.getByText('Sessions')).toBeInTheDocument();
+    expect(screen.getByText('Session detail')).toBeInTheDocument();
+    expect(screen.getByLabelText('Ticker')).toHaveAttribute('placeholder', 'Filter by ticker');
+    expect(screen.getByLabelText('Provider or keyword')).toHaveAttribute('placeholder', 'Filter by provider or keyword');
+    expect(screen.getByRole('button', { name: 'Refresh list' })).toBeInTheDocument();
+    expect(screen.getByText('Run #88')).toBeInTheDocument();
+    expect(screen.getByText('Shortlist 5')).toBeInTheDocument();
   });
 });
