@@ -140,7 +140,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
                       <td>{row.date || '--'}</td>
                       <td>
                         <div className="product-table__stack">
-                          <span>{row.actionDisplay || formatDeterministicActionLabel(row.action)}</span>
+                          <span>{formatDeterministicActionLabel(row.action || row.eventType, language)}</span>
                           <span>{row.fillPrice != null ? (language === 'en' ? `Filled ${formatNumber(row.fillPrice)}` : `成交 ${formatNumber(row.fillPrice)}`) : (language === 'en' ? 'No fill price' : '无成交价')}</span>
                         </div>
                       </td>

@@ -300,6 +300,59 @@ export function formatCashPolicy(source: Record<string, unknown> | undefined): s
   return '--';
 }
 
+export function formatDraftOrderLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
+  const orderMode = String(getStrategySpecValue(source, ['entry', 'order', 'mode']) || getSetupString(source, 'order_mode'));
+  if (orderMode === 'fixed_amount') {
+    const amount = getPeriodicNumber(source, 'amount_per_trade');
+    if (amount == null) return '--';
+    return language === 'en' ? `${amount} per trade` : `${amount} 元 / 次`;
+  }
+  const quantity = getPeriodicNumber(source, 'quantity_per_trade');
+  if (quantity == null) return '--';
+  return language === 'en' ? `${quantity} shares per trade` : `${quantity} 股 / 次`;
+}
+
+export function formatCashPolicyLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
+  const value = getPeriodicString(source, 'cash_policy');
+  if (value === 'stop_when_insufficient_cash') return language === 'en' ? 'Stop when cash is insufficient' : '现金不足时停止';
+  if (value === 'skip_when_insufficient_cash') return language === 'en' ? 'Skip when cash is insufficient' : '现金不足时跳过';
+  return '--';
+}
+
+export function formatExecutionPriceBasisLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
+  const value = getPeriodicString(source, 'execution_price_basis');
+  if (value === 'open') return language === 'en' ? 'Same-day open' : '当日开盘价';
+  if (value === 'next_bar_open') return language === 'en' ? 'Next-bar open' : '下一根开盘价';
+  if (value === 'close') return language === 'en' ? 'Close' : '收盘价';
+  return '--';
+}
+
+export function formatExitPolicyLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
+  const value = getPeriodicString(source, 'exit_policy');
+  if (value === 'close_at_end') return language === 'en' ? 'Close all positions at the end' : '到期统一平仓';
+  return '--';
+}
+
+export function buildPeriodicAssumptionLabels(
+  source: Record<string, unknown> | undefined,
+  language: BacktestLanguage = 'zh',
+): string[] {
+  const items: string[] = [];
+  if (getPeriodicString(source, 'execution_price_basis') === 'open') {
+    items.push(language === 'en' ? 'Open-price execution fills at the same-day market open.' : '“开市价 / 开盘价”按当日开盘价成交。');
+  }
+  if (getPeriodicString(source, 'execution_frequency') === 'daily') {
+    items.push(language === 'en' ? 'Daily accumulation attempts one buy on each trading day and keeps adding exposure.' : '“每天买入”按每个交易日尝试一次，并持续累积仓位。');
+  }
+  if (getPeriodicString(source, 'cash_policy') === 'stop_when_insufficient_cash') {
+    items.push(language === 'en' ? 'Once cash is no longer enough for one purchase, later buys stop.' : '现金不足以完成单次买入时，后续停止继续买入。');
+  }
+  if (getPeriodicString(source, 'exit_policy') === 'close_at_end') {
+    items.push(language === 'en' ? 'If no sell rule is defined, the position closes on the final backtest day.' : '未写卖出规则时，回测结束日统一平仓。');
+  }
+  return items;
+}
+
 export function formatExecutionPriceBasis(source: Record<string, unknown> | undefined): string {
   const value = getPeriodicString(source, 'execution_price_basis');
   if (value === 'open') return '当日开盘价';
@@ -626,6 +679,9 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
   const latestStatusAt = run.statusHistory?.[run.statusHistory.length - 1]?.at;
   const tone = getRuleRunStatusTone(run.status);
   const statusDescription = getRuleRunStatusDescription(run.status, language);
+  const localizedNoResultMessage = run.noResultMessage === '回测窗口内没有触发任何入场信号。'
+    ? (language === 'en' ? 'No entry signal was triggered during the backtest window.' : '回测窗口内没有触发任何入场信号。')
+    : run.noResultMessage;
 
   return (
     <Banner
@@ -640,11 +696,11 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
       )}
       body={(
         <>
-          {run.statusMessage || statusDescription}
+          {language === 'en' ? statusDescription : (run.statusMessage || statusDescription)}
           <span className="product-banner__meta">
-            {language === 'en' ? 'Run' : '运行'} #{run.id} · {run.code} · {latestStatusAt ? formatDateTime(latestStatusAt) : '--'}
+          {language === 'en' ? 'Run' : '运行'} #{run.id} · {run.code} · {latestStatusAt ? formatDateTime(latestStatusAt) : '--'}
           </span>
-          {run.noResultMessage ? <span className="product-banner__meta">{run.noResultMessage}</span> : null}
+          {localizedNoResultMessage ? <span className="product-banner__meta">{localizedNoResultMessage}</span> : null}
         </>
       )}
     />

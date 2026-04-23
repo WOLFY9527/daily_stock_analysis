@@ -382,6 +382,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
+  const buyAndHoldLabel = String(buyAndHoldSummary?.label || '').trim() === '当前标的买入并持有'
+    ? (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有')
+    : (buyAndHoldSummary?.label || (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有'));
   const selectedBenchmarkLabel = benchmarkSummary
     ? String(
       benchmarkSummary.label
@@ -403,8 +406,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
     )
     : (language === 'en' ? 'Benchmark notes appear after the result loads.' : '结果加载后显示基准说明。');
   const normalized = useMemo(
-    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run) : null),
-    [run],
+    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null),
+    [run, language],
   );
   const scenarioPlans = useMemo<RuleScenarioPlan[]>(
     () => (run?.status === 'completed' ? getRuleScenarioPlans(run) : []),
@@ -427,7 +430,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       if (!detail || detail.status !== 'completed') return;
       items.push({
         run: detail,
-        normalized: normalizeDeterministicBacktestResult(detail),
+        normalized: normalizeDeterministicBacktestResult(detail, language),
         label: language === 'en' ? `Compared run #${detail.id}` : `比较运行 #${detail.id}`,
       });
     });
@@ -440,7 +443,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       { run, normalized, label: language === 'en' ? `Current run #${run.id}` : `当前运行 #${run.id}`, badge: language === 'en' ? 'Baseline' : '基线' },
       ...completedScenarioRuns.map((item) => ({
         run: item.result as RuleBacktestRunResponse,
-        normalized: normalizeDeterministicBacktestResult(item.result as RuleBacktestRunResponse),
+        normalized: normalizeDeterministicBacktestResult(item.result as RuleBacktestRunResponse, language),
         label: item.label,
       })),
     ];
@@ -451,9 +454,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
         run,
         normalized,
         comparedRuns: comparisonItems.slice(1).map((item) => item.run),
+        language,
       })
       : ''),
-    [comparisonItems, normalized, run],
+    [comparisonItems, normalized, run, language],
   );
   const headerDescription = run
     ? `${run.code} · ${run.startDate || '--'} -> ${run.endDate || '--'} · ${language === 'en' ? 'Benchmark' : '基准'} ${selectedBenchmarkLabel}`
@@ -465,9 +469,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     .map(([key, value]) => ({ label: formatSummaryLabel(key), value: String(value) }));
   const strategySummaryRows = useMemo(
     () => (run
-      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '')
+      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
       : []),
-    [run],
+    [run, language],
   );
   const strategyWarningEntries = Array.from(
     new Set([
@@ -477,11 +481,16 @@ const DeterministicBacktestResultPage: React.FC = () => {
   );
   const canCancelCurrentRun = Boolean(run && canCancelRuleRun(run.status));
   const canExportTrace = Boolean(run && hasExecutionTraceRows(run));
+  const localizedNoResultMessage = run?.noResultMessage === '回测窗口内没有触发任何入场信号。'
+    ? (language === 'en' ? 'No entry signal was triggered during the backtest window.' : '回测窗口内没有触发任何入场信号。')
+    : (run?.noResultMessage || null);
   const statusSummaryItems = run ? [
     {
       label: language === 'en' ? 'Current stage' : '当前阶段',
-      value: getRuleRunStatusLabel(run.status),
-      note: run.statusMessage || getRuleRunStatusDescription(run.status),
+      value: getRuleRunStatusLabel(run.status, language),
+      note: language === 'en'
+        ? (localizedNoResultMessage || getRuleRunStatusDescription(run.status, language))
+        : (run.statusMessage || localizedNoResultMessage || getRuleRunStatusDescription(run.status, language)),
     },
     {
       label: language === 'en' ? 'Auto refresh' : '自动刷新',
@@ -517,7 +526,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const handleSavePreset = useCallback(() => {
     if (!run) return;
-    const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy)}`;
+    const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
     const name = window.prompt(language === 'en' ? 'Save preset as' : '保存预设名称', suggestedName);
     if (!name || !name.trim()) return;
     const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
@@ -764,7 +773,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">{language === 'en' ? 'Buy and hold' : '买入并持有'}</p>
-                      <p className="preview-card__text">{buyAndHoldSummary?.label || (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有')} · {pct(run.buyAndHoldReturnPct)}</p>
+                      <p className="preview-card__text">{buyAndHoldLabel} · {pct(run.buyAndHoldReturnPct)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">{language === 'en' ? 'Status timeline' : '状态轨迹'}</p>
@@ -872,7 +881,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">{language === 'en' ? 'Buy and hold' : '买入并持有'}</p>
-                      <p className="preview-card__text">{buyAndHoldSummary?.label || (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有')} · {pct(run.buyAndHoldReturnPct)}</p>
+                      <p className="preview-card__text">{buyAndHoldLabel} · {pct(run.buyAndHoldReturnPct)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">{language === 'en' ? 'Vs benchmark' : '相对基准'}</p>
@@ -896,9 +905,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
                       </div>
                       <p className="product-section-copy">{language === 'en' ? 'This section shows the canonical strategy spec that actually ran, aligned with the confirmation step.' : '这里展示的是本次回测实际使用的 canonical strategy_spec，和确认页中的“实际执行内容”保持同口径。'}</p>
                       <div className="product-chip-list mt-4">
-                        <span className="product-chip">{language === 'en' ? 'Strategy family' : '策略族'} · {getRuleStrategyTypeLabel(run.parsedStrategy)}</span>
-                        <span className="product-chip">{language === 'en' ? 'Spec source' : '规格来源'} · {getRuleStrategySpecSourceLabel(run.parsedStrategy)}</span>
-                        <span className="product-chip">{language === 'en' ? 'Normalization' : '归一化'} · {formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</span>
+                        <span className="product-chip">{language === 'en' ? 'Strategy family' : '策略族'} · {getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}</span>
+                        <span className="product-chip">{language === 'en' ? 'Spec source' : '规格来源'} · {getRuleStrategySpecSourceLabel(run.parsedStrategy, language)}</span>
+                        <span className="product-chip">{language === 'en' ? 'Normalization' : '归一化'} · {formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState, language)}</span>
                         <span className="product-chip">{language === 'en' ? 'Needs confirmation' : '需要确认'} · {run.needsConfirmation ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
                         <span className="product-chip">{language === 'en' ? 'Executable' : '可执行'} · {run.parsedStrategy.executable ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
                       </div>
@@ -932,15 +941,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
                       </div>
                       <div className="preview-card">
                         <p className="metric-card__label">{language === 'en' ? 'Spec source' : '规格来源'}</p>
-                        <p className="preview-card__text">{getRuleStrategySpecSourceLabel(run.parsedStrategy)}</p>
+                        <p className="preview-card__text">{getRuleStrategySpecSourceLabel(run.parsedStrategy, language)}</p>
                       </div>
                       <div className="preview-card">
                         <p className="metric-card__label">{language === 'en' ? 'Strategy family' : '策略族'}</p>
-                        <p className="preview-card__text">{getRuleStrategyTypeLabel(run.parsedStrategy)}</p>
+                        <p className="preview-card__text">{getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}</p>
                       </div>
                       <div className="preview-card">
                         <p className="metric-card__label">{language === 'en' ? 'Normalization state' : '归一化状态'}</p>
-                        <p className="preview-card__text">{formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</p>
+                        <p className="preview-card__text">{formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState, language)}</p>
                       </div>
                     </div>
                     {parsedSummaryEntries.length ? (

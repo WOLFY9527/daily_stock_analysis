@@ -8,6 +8,8 @@ import type { DeterministicBacktestNormalizedResult } from './normalizeDetermini
 import { getAutoBenchmarkMode, getBenchmarkModeLabel, getStrategySpecValue } from './shared';
 import { getRuleStrategyTypeLabel } from './strategyInspectability';
 
+type BacktestLanguage = 'zh' | 'en';
+
 export type RuleScenarioPlanId =
   | 'benchmark_modes'
   | 'cost_stress'
@@ -155,7 +157,10 @@ function getRsiSummary(spec: Record<string, unknown> | undefined): string | null
   return `RSI${period} ${lower}/${upper}`;
 }
 
-export function getRuleRunSetupHighlights(run: Pick<RuleBacktestRunResponse, 'code' | 'parsedStrategy' | 'lookbackBars' | 'feeBps' | 'slippageBps' | 'benchmarkMode' | 'benchmarkCode'>): string[] {
+export function getRuleRunSetupHighlights(
+  run: Pick<RuleBacktestRunResponse, 'code' | 'parsedStrategy' | 'lookbackBars' | 'feeBps' | 'slippageBps' | 'benchmarkMode' | 'benchmarkCode'>,
+  language: BacktestLanguage = 'zh',
+): string[] {
   const spec = getRuleStrategySpec(run.parsedStrategy);
   const family = getParsedStrategyFamily(run);
   const highlights: string[] = [];
@@ -173,84 +178,108 @@ export function getRuleRunSetupHighlights(run: Pick<RuleBacktestRunResponse, 'co
     const frequency = trimText(String(getStrategySpecValue(spec, ['schedule', 'frequency']) || ''));
     const quantity = asFiniteNumber(getStrategySpecValue(spec, ['entry', 'order', 'quantity']));
     const amount = asFiniteNumber(getStrategySpecValue(spec, ['entry', 'order', 'amount']));
-    if (frequency) highlights.push(`频率 ${frequency}`);
-    if (quantity != null) highlights.push(`${quantity} 股/次`);
-    if (amount != null) highlights.push(`${amount} 金额/次`);
+    if (frequency) highlights.push(language === 'en' ? `Frequency ${frequency}` : `频率 ${frequency}`);
+    if (quantity != null) highlights.push(language === 'en' ? `${quantity} shares/trade` : `${quantity} 股/次`);
+    if (amount != null) highlights.push(language === 'en' ? `${amount} amount/trade` : `${amount} 金额/次`);
   }
 
-  highlights.push(`回看 ${run.lookbackBars} bars`);
-  highlights.push(`费滑 ${Number(run.feeBps ?? 0).toFixed(1)}/${Number(run.slippageBps ?? 0).toFixed(1)}bp`);
-  highlights.push(getBenchmarkModeLabel((run.benchmarkMode as Parameters<typeof getBenchmarkModeLabel>[0]) || 'auto', run.code, run.benchmarkCode || undefined));
+  highlights.push(language === 'en' ? `Lookback ${run.lookbackBars} bars` : `回看 ${run.lookbackBars} bars`);
+  highlights.push(language === 'en' ? `Fees/slippage ${Number(run.feeBps ?? 0).toFixed(1)}/${Number(run.slippageBps ?? 0).toFixed(1)}bp` : `费滑 ${Number(run.feeBps ?? 0).toFixed(1)}/${Number(run.slippageBps ?? 0).toFixed(1)}bp`);
+  highlights.push(getBenchmarkModeLabel((run.benchmarkMode as Parameters<typeof getBenchmarkModeLabel>[0]) || 'auto', run.code, run.benchmarkCode || undefined, language));
   return highlights.slice(0, 4);
 }
 
-function getDrawdownLabel(value: number | null | undefined): string {
+function getDrawdownLabel(value: number | null | undefined, language: BacktestLanguage = 'zh'): string {
   const resolved = Math.abs(asFiniteNumber(value) ?? 0);
-  if (resolved < 4) return '轻微回撤';
-  if (resolved < 10) return '中等回撤';
-  return '较深回撤';
+  if (resolved < 4) return language === 'en' ? 'Light drawdown' : '轻微回撤';
+  if (resolved < 10) return language === 'en' ? 'Moderate drawdown' : '中等回撤';
+  return language === 'en' ? 'Deep drawdown' : '较深回撤';
 }
 
-function getTradeActivityLabel(tradeCount: number): string {
-  if (tradeCount <= 2) return '低频';
-  if (tradeCount <= 8) return '中频';
-  return '高频';
+function getTradeActivityLabel(tradeCount: number, language: BacktestLanguage = 'zh'): string {
+  if (tradeCount <= 2) return language === 'en' ? 'Low frequency' : '低频';
+  if (tradeCount <= 8) return language === 'en' ? 'Medium frequency' : '中频';
+  return language === 'en' ? 'High frequency' : '高频';
 }
 
-function getQualityLabel(run: Pick<RuleBacktestRunResponse, 'winRatePct' | 'avgTradeReturnPct'>): string {
+function getQualityLabel(
+  run: Pick<RuleBacktestRunResponse, 'winRatePct' | 'avgTradeReturnPct'>,
+  language: BacktestLanguage = 'zh',
+): string {
   const winRate = asFiniteNumber(run.winRatePct);
   const avgTradeReturn = asFiniteNumber(run.avgTradeReturnPct);
   if (winRate != null && avgTradeReturn != null) {
-    if (winRate >= 60 && avgTradeReturn >= 1) return '信号质量较稳';
-    if (winRate < 45 || avgTradeReturn < 0) return '信号质量偏弱';
+    if (winRate >= 60 && avgTradeReturn >= 1) return language === 'en' ? 'Signal quality looks steady' : '信号质量较稳';
+    if (winRate < 45 || avgTradeReturn < 0) return language === 'en' ? 'Signal quality looks weak' : '信号质量偏弱';
   }
   if (winRate != null) {
-    if (winRate >= 60) return '胜率较稳';
-    if (winRate < 45) return '胜率偏弱';
+    if (winRate >= 60) return language === 'en' ? 'Win rate looks steady' : '胜率较稳';
+    if (winRate < 45) return language === 'en' ? 'Win rate looks weak' : '胜率偏弱';
   }
-  return '质量待结合更多样本观察';
+  return language === 'en' ? 'Quality needs more samples' : '质量待结合更多样本观察';
 }
 
-export function describeRuleRunNarrative(run: Pick<RuleBacktestRunResponse, 'benchmarkMode' | 'benchmarkCode' | 'benchmarkReturnPct' | 'buyAndHoldReturnPct' | 'excessReturnVsBenchmarkPct' | 'excessReturnVsBuyAndHoldPct' | 'maxDrawdownPct' | 'tradeCount' | 'winRatePct' | 'avgTradeReturnPct' | 'code'>): RuleRunNarrative {
+export function describeRuleRunNarrative(
+  run: Pick<RuleBacktestRunResponse, 'benchmarkMode' | 'benchmarkCode' | 'benchmarkReturnPct' | 'buyAndHoldReturnPct' | 'excessReturnVsBenchmarkPct' | 'excessReturnVsBuyAndHoldPct' | 'maxDrawdownPct' | 'tradeCount' | 'winRatePct' | 'avgTradeReturnPct' | 'code'>,
+  language: BacktestLanguage = 'zh',
+): RuleRunNarrative {
   const benchmarkMode = (run.benchmarkMode as Parameters<typeof getBenchmarkModeLabel>[0]) || 'auto';
-  const benchmarkLabel = getBenchmarkModeLabel(benchmarkMode, run.code, run.benchmarkCode || undefined);
+  const benchmarkLabel = getBenchmarkModeLabel(benchmarkMode, run.code, run.benchmarkCode || undefined, language);
   const benchmarkDelta = asFiniteNumber(run.excessReturnVsBenchmarkPct);
   const buyHoldDelta = asFiniteNumber(run.excessReturnVsBuyAndHoldPct);
   const relativeDelta = benchmarkDelta ?? buyHoldDelta;
-  const relativeTarget = benchmarkDelta != null ? benchmarkLabel : '买入持有';
-  let verdict = '接近基准';
+  const relativeTarget = benchmarkDelta != null ? benchmarkLabel : (language === 'en' ? 'buy and hold' : '买入持有');
+  let verdict = language === 'en' ? 'Near the benchmark' : '接近基准';
   if (relativeDelta != null) {
-    if (relativeDelta >= 1) verdict = `跑赢 ${relativeTarget}`;
-    else if (relativeDelta <= -1) verdict = `落后于 ${relativeTarget}`;
+    if (relativeDelta >= 1) verdict = language === 'en' ? `Outperformed ${relativeTarget}` : `跑赢 ${relativeTarget}`;
+    else if (relativeDelta <= -1) verdict = language === 'en' ? `Lagged ${relativeTarget}` : `落后于 ${relativeTarget}`;
   }
 
-  const drawdownLabel = getDrawdownLabel(run.maxDrawdownPct);
-  const activityLabel = getTradeActivityLabel(Number(run.tradeCount ?? 0));
-  const qualityLabel = getQualityLabel(run);
-  const deltaLabel = relativeDelta == null ? '暂无可比较基准' : `${verdict} ${pctLabel(relativeDelta)}`;
+  const drawdownLabel = getDrawdownLabel(run.maxDrawdownPct, language);
+  const activityLabel = getTradeActivityLabel(Number(run.tradeCount ?? 0), language);
+  const qualityLabel = getQualityLabel(run, language);
+  const deltaLabel = relativeDelta == null
+    ? (language === 'en' ? 'No comparable benchmark is available yet' : '暂无可比较基准')
+    : `${verdict} ${pctLabel(relativeDelta)}`;
 
   return {
     verdict,
-    headline: `${deltaLabel}，${drawdownLabel}，${activityLabel}交易节奏。`,
+    headline: language === 'en'
+      ? `${deltaLabel}, with ${drawdownLabel.toLowerCase()} and a ${activityLabel.toLowerCase()} trading rhythm.`
+      : `${deltaLabel}，${drawdownLabel}，${activityLabel}交易节奏。`,
     benchmarkLabel,
     drawdownLabel,
     activityLabel,
     qualityLabel,
-    detail: [
-      `相对表现：${deltaLabel}`,
-      `风险：${drawdownLabel}（最大回撤 ${pctLabel(run.maxDrawdownPct)}）`,
-      `活跃度：${activityLabel}（交易 ${run.tradeCount || 0} 次）`,
-      `质量：${qualityLabel}`,
-    ].join(' '),
+    detail: language === 'en'
+      ? [
+        `Relative performance: ${deltaLabel}`,
+        `Risk: ${drawdownLabel} (max drawdown ${pctLabel(run.maxDrawdownPct)})`,
+        `Activity: ${activityLabel} (${run.tradeCount || 0} trades)`,
+        `Quality: ${qualityLabel}`,
+      ].join(' ')
+      : [
+        `相对表现：${deltaLabel}`,
+        `风险：${drawdownLabel}（最大回撤 ${pctLabel(run.maxDrawdownPct)}）`,
+        `活跃度：${activityLabel}（交易 ${run.tradeCount || 0} 次）`,
+        `质量：${qualityLabel}`,
+      ].join(' '),
   };
 }
 
-export function getRuleRunExecutionNotes(run: Pick<RuleBacktestRunResponse, 'executionTrace' | 'benchmarkSummary' | 'noResultMessage' | 'parsedStrategy' | 'warnings'>): string[] {
+export function getRuleRunExecutionNotes(
+  run: Pick<RuleBacktestRunResponse, 'executionTrace' | 'benchmarkSummary' | 'noResultMessage' | 'parsedStrategy' | 'warnings'>,
+  language: BacktestLanguage = 'zh',
+): string[] {
   const notes = [
-    trimText(run.executionTrace?.fallback?.note),
+    trimText(run.executionTrace?.fallback?.note) === '标准执行路径'
+      ? (language === 'en' ? 'Standard execution path' : '标准执行路径')
+      : trimText(run.executionTrace?.fallback?.note),
     trimText(run.executionTrace?.assumptionsDefaults?.summaryText),
     trimText(run.benchmarkSummary?.unavailableReason),
-    trimText(run.noResultMessage),
+    trimText(run.noResultMessage) === '回测窗口内没有触发任何入场信号。'
+      ? (language === 'en' ? 'No entry signal was triggered during the backtest window.' : '回测窗口内没有触发任何入场信号。')
+      : trimText(run.noResultMessage),
     ...((run.parsedStrategy.parseWarnings || []).map((item) => trimText(item.message || item.reason || item.code))),
     ...((run.warnings || []).map((item) => trimText(item.message || item.reason || item.code))),
   ].filter(Boolean);
@@ -258,7 +287,10 @@ export function getRuleRunExecutionNotes(run: Pick<RuleBacktestRunResponse, 'exe
   return Array.from(new Set(notes)).slice(0, 4);
 }
 
-export function buildRuleRunComparisonWarnings(runs: Array<Pick<RuleBacktestRunResponse, 'startDate' | 'endDate' | 'lookbackBars' | 'feeBps' | 'slippageBps' | 'benchmarkMode' | 'benchmarkCode' | 'code' | 'parsedStrategy'>>): string[] {
+export function buildRuleRunComparisonWarnings(
+  runs: Array<Pick<RuleBacktestRunResponse, 'startDate' | 'endDate' | 'lookbackBars' | 'feeBps' | 'slippageBps' | 'benchmarkMode' | 'benchmarkCode' | 'code' | 'parsedStrategy'>>,
+  language: BacktestLanguage = 'zh',
+): string[] {
   if (runs.length <= 1) return [];
   const warnings: string[] = [];
   const signatures = {
@@ -269,11 +301,11 @@ export function buildRuleRunComparisonWarnings(runs: Array<Pick<RuleBacktestRunR
     family: new Set(runs.map((run) => getParsedStrategyFamily(run))),
   };
 
-  if (signatures.dateRange.size > 1) warnings.push('比较项使用了不同日期区间，收益与回撤不完全可直接横比。');
-  if (signatures.costs.size > 1) warnings.push('比较项的手续费或滑点假设不同，净收益差异会放大。');
-  if (signatures.benchmark.size > 1) warnings.push('比较项使用了不同基准设置，超额收益只适合在相同基准下直接对照。');
-  if (signatures.lookback.size > 1) warnings.push('比较项的 lookback 初始化窗口不同，技术信号 warmup 结果可能不同。');
-  if (signatures.family.size > 1) warnings.push('比较项跨了不同策略族，更适合看风格差异而不是只看单一胜负。');
+  if (signatures.dateRange.size > 1) warnings.push(language === 'en' ? 'Compared runs use different date windows, so return and drawdown are not perfectly side-by-side comparable.' : '比较项使用了不同日期区间，收益与回撤不完全可直接横比。');
+  if (signatures.costs.size > 1) warnings.push(language === 'en' ? 'Compared runs use different fee or slippage assumptions, which can amplify net-return differences.' : '比较项的手续费或滑点假设不同，净收益差异会放大。');
+  if (signatures.benchmark.size > 1) warnings.push(language === 'en' ? 'Compared runs use different benchmark settings, so excess return is only directly comparable under the same benchmark basis.' : '比较项使用了不同基准设置，超额收益只适合在相同基准下直接对照。');
+  if (signatures.lookback.size > 1) warnings.push(language === 'en' ? 'Compared runs use different lookback warmup windows, which can change technical-signal initialization.' : '比较项的 lookback 初始化窗口不同，技术信号 warmup 结果可能不同。');
+  if (signatures.family.size > 1) warnings.push(language === 'en' ? 'Compared runs span different strategy families, so they are better for style comparison than simple winner/loser judgments.' : '比较项跨了不同策略族，更适合看风格差异而不是只看单一胜负。');
   return warnings;
 }
 
@@ -281,20 +313,65 @@ export function buildRuleRunReportMarkdown(args: {
   run: RuleBacktestRunResponse;
   normalized: DeterministicBacktestNormalizedResult;
   comparedRuns?: RuleBacktestRunResponse[];
+  language?: BacktestLanguage;
 }): string {
-  const { run, normalized, comparedRuns = [] } = args;
-  const narrative = describeRuleRunNarrative(run);
-  const setupHighlights = getRuleRunSetupHighlights(run);
-  const executionNotes = getRuleRunExecutionNotes(run);
-  const comparisonWarnings = buildRuleRunComparisonWarnings([run, ...comparedRuns]);
+  const { run, normalized, comparedRuns = [], language = 'zh' } = args;
+  const narrative = describeRuleRunNarrative(run, language);
+  const setupHighlights = getRuleRunSetupHighlights(run, language);
+  const executionNotes = getRuleRunExecutionNotes(run, language);
+  const comparisonWarnings = buildRuleRunComparisonWarnings([run, ...comparedRuns], language);
   const comparedSummary = comparedRuns.length > 0
     ? comparedRuns.map((item) => {
-      const label = `#${item.id} · ${getRuleStrategyTypeLabel(item.parsedStrategy)} · ${pctLabel(item.totalReturnPct)}`;
-      return `- ${label} · 超额 ${pctLabel(item.excessReturnVsBenchmarkPct ?? item.excessReturnVsBuyAndHoldPct)} · 回撤 ${pctLabel(item.maxDrawdownPct)}`;
+      const label = `#${item.id} · ${getRuleStrategyTypeLabel(item.parsedStrategy, undefined, language)} · ${pctLabel(item.totalReturnPct)}`;
+      return language === 'en'
+        ? `- ${label} · Excess ${pctLabel(item.excessReturnVsBenchmarkPct ?? item.excessReturnVsBuyAndHoldPct)} · Drawdown ${pctLabel(item.maxDrawdownPct)}`
+        : `- ${label} · 超额 ${pctLabel(item.excessReturnVsBenchmarkPct ?? item.excessReturnVsBuyAndHoldPct)} · 回撤 ${pctLabel(item.maxDrawdownPct)}`;
     }).join('\n')
-    : '- 暂未附加其他比较对象';
+    : (language === 'en' ? '- No additional comparison runs attached yet' : '- 暂未附加其他比较对象');
 
-  return [
+  return language === 'en' ? [
+    `# Deterministic Backtest Summary #${run.id}`,
+    '',
+    `- Ticker: ${run.code}`,
+    `- Strategy: ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`,
+    `- Window: ${run.startDate || '--'} -> ${run.endDate || '--'}`,
+    `- Benchmark: ${run.benchmarkSummary?.label || narrative.benchmarkLabel}`,
+    `- Conclusion: ${narrative.headline}`,
+    '',
+    '## Decision summary',
+    '',
+    `- Total return: ${pctLabel(normalized.metrics.totalReturnPct)}`,
+    `- Relative to benchmark: ${pctLabel(normalized.metrics.excessReturnVsBenchmarkPct ?? normalized.metrics.excessReturnVsBuyAndHoldPct)}`,
+    `- Max drawdown: ${pctLabel(normalized.metrics.maxDrawdownPct)} (${narrative.drawdownLabel})`,
+    `- Trades: ${normalized.metrics.tradeCount} (${narrative.activityLabel})`,
+    `- Win rate: ${pctLabel(normalized.metrics.winRatePct)}`,
+    `- Ending equity: ${moneyLabel(normalized.metrics.finalEquity)}`,
+    '',
+    '## Key setup',
+    '',
+    ...setupHighlights.map((item) => `- ${item}`),
+    '',
+    '## Execution and interpretation',
+    '',
+    ...(executionNotes.length > 0 ? executionNotes.map((item) => `- ${item}`) : ['- No extra execution notes']),
+    '',
+    '## Comparison reference',
+    '',
+    comparedSummary,
+    '',
+    ...(comparisonWarnings.length > 0
+      ? [
+        '## Comparison notes',
+        '',
+        ...comparisonWarnings.map((item) => `- ${item}`),
+        '',
+      ]
+      : []),
+    '## Deep data',
+    '',
+    '- The detailed execution trace still lives in CSV / JSON exports.',
+    '- For chart interpretation, start with cumulative return, drawdown, and benchmark comparison.',
+  ].join('\n') : [
     `# 确定性回测决策摘要 #${run.id}`,
     '',
     `- 标的：${run.code}`,

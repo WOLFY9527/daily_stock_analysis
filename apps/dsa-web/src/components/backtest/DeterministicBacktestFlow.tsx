@@ -15,7 +15,7 @@ import {
   RULE_BENCHMARK_OPTIONS,
   RuleRunsTable,
   SectionEyebrow,
-  buildPeriodicAssumptions,
+  buildPeriodicAssumptionLabels,
   getBenchmarkModeLabel,
   type RuleBenchmarkMode,
   getStrategyPreviewSpec,
@@ -23,6 +23,7 @@ import {
 } from './shared';
 import {
   buildRuleStrategySummaryRows,
+  formatRuleNormalizationStateLabel,
   getRuleStrategySpecSourceLabel,
   getRuleStrategyTypeLabel,
 } from './strategyInspectability';
@@ -74,12 +75,20 @@ const NORMAL_STEP_LABELS: Record<BacktestLanguage, Record<NormalStep, { title: s
   },
 };
 
-const STRATEGY_EXAMPLES = [
-  'MACD 金叉买入，死叉卖出',
-  '5日均线上穿20日均线买入，下穿卖出',
-  '从2025-01-01到2025-12-31，每月定投1000美元AAPL',
-  'RSI 小于 30 买入，大于 70 卖出',
-];
+const STRATEGY_EXAMPLES: Record<BacktestLanguage, string[]> = {
+  zh: [
+    'MACD 金叉买入，死叉卖出',
+    '5日均线上穿20日均线买入，下穿卖出',
+    '从2025-01-01到2025-12-31，每月定投1000美元AAPL',
+    'RSI 小于 30 买入，大于 70 卖出',
+  ],
+  en: [
+    'Buy on a MACD bullish crossover and sell on a bearish crossover',
+    'Buy when the 5-day moving average crosses above the 20-day average, and sell on the reverse crossover',
+    'Invest 1000 USD into AAPL every month from 2025-01-01 to 2025-12-31',
+    'Buy when RSI drops below 30 and sell when it rises above 70',
+  ],
+};
 
 const FLOW_PANEL_TRANSITION = {
   duration: 0.24,
@@ -183,19 +192,19 @@ function hasMeaningfulNode(node: unknown): boolean {
   return false;
 }
 
-function getStrategyTypeLabel(parsed: RuleBacktestParseResponse | null): string {
-  return getRuleStrategyTypeLabel(parsed?.parsedStrategy, getDetectedStrategyFamily(parsed));
+function getLocalizedStrategyTypeLabel(parsed: RuleBacktestParseResponse | null, language: BacktestLanguage): string {
+  return getRuleStrategyTypeLabel(parsed?.parsedStrategy, getDetectedStrategyFamily(parsed), language);
 }
 
-function getStrategySpecSourceLabel(parsed: RuleBacktestParseResponse | null): string {
-  return getRuleStrategySpecSourceLabel(parsed?.parsedStrategy);
+function getStrategySpecSourceLabel(parsed: RuleBacktestParseResponse | null, language: BacktestLanguage): string {
+  return getRuleStrategySpecSourceLabel(parsed?.parsedStrategy, language);
 }
 
-function formatAssumptionRecord(item: Record<string, unknown>): string {
-  const label = String(item.label || item.key || '假设');
-  const value = item.value == null || item.value === '' ? '' : `：${String(item.value)}`;
+function formatAssumptionRecord(item: Record<string, unknown>, language: BacktestLanguage): string {
+  const label = String(item.label || item.key || (language === 'en' ? 'Assumption' : '假设'));
+  const value = item.value == null || item.value === '' ? '' : `${language === 'en' ? ': ' : '：'}${String(item.value)}`;
   const reason = String(item.reason || '').trim();
-  return `${label}${value}${reason ? `。${reason}` : ''}`;
+  return `${label}${value}${reason ? `${language === 'en' ? '. ' : '。'}${reason}` : ''}`;
 }
 
 function hasMeaningfulValue(value: unknown): boolean {
@@ -217,6 +226,10 @@ function matchesKeyword(text: string, keywords: string[]): boolean {
   const normalized = text.trim().toLowerCase();
   if (!normalized) return false;
   return keywords.some((keyword) => normalized.includes(keyword.trim().toLowerCase()));
+}
+
+function containsCjk(value: string): boolean {
+  return /[\u4e00-\u9fff]/.test(value);
 }
 
 function resolveFieldSource(
@@ -288,6 +301,7 @@ function buildConfirmationRows(
   currentCode: string,
   startDate: string,
   endDate: string,
+  language: BacktestLanguage,
 ): StrategyPreviewRow[] {
   if (!parsed) return [];
   const sourceHints: Record<string, StrategyFieldSourceHint> = {
@@ -319,20 +333,22 @@ function buildConfirmationRows(
     costs: { specPaths: [['costs', 'fee_bps'], ['costs', 'slippage_bps']], setupKeys: ['fee_bps', 'slippage_bps'] },
   };
 
-  return buildRuleStrategySummaryRows(parsed.parsedStrategy, currentCode, startDate, endDate, getDetectedStrategyFamily(parsed))
+  return buildRuleStrategySummaryRows(parsed.parsedStrategy, currentCode, startDate, endDate, getDetectedStrategyFamily(parsed), language)
     .map((item) => row(item.label, item.value, parsed, sourceHints[item.key] || {}));
 }
 
-function getUnsupportedMessages(parsed: RuleBacktestParseResponse): string[] {
+function getUnsupportedMessages(parsed: RuleBacktestParseResponse, language: BacktestLanguage): string[] {
   const details = getUnsupportedDetails(parsed);
   if (details.length > 0) {
-    return details.slice(0, 3).map((item) => String(item.message || item.title || '当前不支持。'));
+    return details.slice(0, 3).map((item) => String(item.message || item.title || (language === 'en' ? 'This setup is not supported yet.' : '当前不支持。')));
   }
   const unsupportedReason = getUnsupportedReason(parsed);
   if (unsupportedReason) {
     return [
       unsupportedReason,
-      '请补齐关键字段，或改写成当前已支持的确定性单标的规则。',
+      language === 'en'
+        ? 'Add the missing fields or rewrite the setup into a supported deterministic single-instrument rule.'
+        : '请补齐关键字段，或改写成当前已支持的确定性单标的规则。',
     ];
   }
   const messages = parsed.ambiguities
@@ -341,7 +357,9 @@ function getUnsupportedMessages(parsed: RuleBacktestParseResponse): string[] {
     .filter(Boolean);
 
   if (messages.length > 0) return messages;
-  return ['当前输入还没有被归一化成可执行的确定性规则。', '请收紧表达，或改用当前已支持的单标的区间定投 / 简单条件规则。'];
+  return language === 'en'
+    ? ['The current input has not been normalized into an executable deterministic rule yet.', 'Tighten the wording, or switch to a supported single-instrument accumulation or simple rule-based strategy.']
+    : ['当前输入还没有被归一化成可执行的确定性规则。', '请收紧表达，或改用当前已支持的单标的区间定投 / 简单条件规则。'];
 }
 
 function getParseState(parsed: RuleBacktestParseResponse | null, parseStale: boolean): ParseState {
@@ -394,8 +412,8 @@ function StrategySpecSummaryCard({
   endDate: string;
 }) {
   const { language } = useI18n();
-  const rows = buildConfirmationRows(parsed, currentCode, startDate, endDate);
-  if (!rows.length) return <div className="product-empty-state product-empty-state--compact">暂无策略规格。</div>;
+  const rows = buildConfirmationRows(parsed, currentCode, startDate, endDate, language);
+  if (!rows.length) return <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No strategy spec is available yet.' : '暂无策略规格。'}</div>;
 
   return (
     <div className="preview-grid">
@@ -419,7 +437,8 @@ function StrategyParseDetails({
 }: {
   parsed: RuleBacktestParseResponse | null;
 }) {
-  if (!parsed) return <div className="product-empty-state product-empty-state--compact">暂无解析细节。</div>;
+  const { language } = useI18n();
+  if (!parsed) return <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No parse detail is available yet.' : '暂无解析细节。'}</div>;
 
   const normalizedText = String(parsed.parsedStrategy.normalizedText || '').trim();
   const sourceText = String(parsed.parsedStrategy.sourceText || parsed.strategyText || '').trim();
@@ -428,26 +447,26 @@ function StrategyParseDetails({
     <div className="summary-block">
       <div className="summary-block__header">
         <div>
-          <SectionEyebrow>解析细节</SectionEyebrow>
-          <h3 className="summary-block__title">原始输入与归一化表达</h3>
+          <SectionEyebrow>{language === 'en' ? 'Parse detail' : '解析细节'}</SectionEyebrow>
+          <h3 className="summary-block__title">{language === 'en' ? 'Source input and normalized expression' : '原始输入与归一化表达'}</h3>
         </div>
       </div>
       <div className="preview-grid">
         <div className="preview-card">
-          <p className="metric-card__label">规格来源</p>
-          <p className="preview-card__text">{getStrategySpecSourceLabel(parsed)}</p>
+          <p className="metric-card__label">{language === 'en' ? 'Spec source' : '规格来源'}</p>
+          <p className="preview-card__text">{getStrategySpecSourceLabel(parsed, language)}</p>
         </div>
         <div className="preview-card">
-          <p className="metric-card__label">需要确认</p>
-          <p className="preview-card__text">{parsed.needsConfirmation ? '是' : '否'}</p>
+          <p className="metric-card__label">{language === 'en' ? 'Needs confirmation' : '需要确认'}</p>
+          <p className="preview-card__text">{parsed.needsConfirmation ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</p>
         </div>
       </div>
       <div className="mt-4">
-        <p className="metric-card__label">原始输入</p>
+        <p className="metric-card__label">{language === 'en' ? 'Source input' : '原始输入'}</p>
         <p className="product-section-copy">{sourceText || '--'}</p>
       </div>
       <div className="mt-4">
-        <p className="metric-card__label">归一化表达</p>
+        <p className="metric-card__label">{language === 'en' ? 'Normalized expression' : '归一化表达'}</p>
         <p className="product-section-copy">{normalizedText || '--'}</p>
       </div>
     </div>
@@ -459,33 +478,34 @@ function buildAssumptionCards(
   assumptionItems: string[],
   parseWarnings: Array<Record<string, unknown>>,
   ambiguities: Array<Record<string, unknown>>,
+  language: BacktestLanguage,
 ): StrategyPreviewCardGroup[] {
   const cards: StrategyPreviewCardGroup[] = [];
 
   if (assumptionGroups.length > 0) {
     cards.push(
       ...assumptionGroups.map((group, index) => ({
-        label: String(group.label || `默认假设 ${index + 1}`),
+        label: String(group.label || (language === 'en' ? `Default assumption ${index + 1}` : `默认假设 ${index + 1}`)),
         items: (Array.isArray(group.items) ? group.items : [])
-          .map((item) => formatAssumptionRecord(item as Record<string, unknown>))
+          .map((item) => formatAssumptionRecord(item as Record<string, unknown>, language))
           .filter(Boolean),
       })),
     );
   } else if (assumptionItems.length > 0) {
     cards.push({
-      label: '默认假设',
+      label: language === 'en' ? 'Default assumptions' : '默认假设',
       items: assumptionItems,
     });
   }
 
   const warningItems = [
-    ...parseWarnings.slice(0, 4).map((item) => String(item.message || '请人工确认。')),
-    ...ambiguities.slice(0, 4).map((item) => String(item.message || item.suggestion || '请人工确认。')),
+    ...parseWarnings.slice(0, 4).map((item) => String(item.message || (language === 'en' ? 'Please review this manually.' : '请人工确认。'))),
+    ...ambiguities.slice(0, 4).map((item) => String(item.message || item.suggestion || (language === 'en' ? 'Please review this manually.' : '请人工确认。'))),
   ].filter(Boolean);
 
   if (warningItems.length > 0) {
     cards.push({
-      label: '推断与提醒',
+      label: language === 'en' ? 'Derived notes and warnings' : '推断与提醒',
       items: warningItems,
     });
   }
@@ -619,10 +639,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   const rewriteSuggestions = getRewriteSuggestions(parsedStrategy);
   const parseWarnings = getParseWarnings(parsedStrategy);
   const assumptionItems = getParsedAssumptionRecords(parsedStrategy).length > 0
-    ? getParsedAssumptionRecords(parsedStrategy).map((item) => formatAssumptionRecord(item))
+    ? getParsedAssumptionRecords(parsedStrategy).map((item) => formatAssumptionRecord(item, language))
     : (
       String(getStrategySpecValue(strategySpec, ['strategy_type']) || parsedStrategy?.parsedStrategy.strategyKind || '') === 'periodic_accumulation'
-        ? buildPeriodicAssumptions(strategySpec)
+        ? buildPeriodicAssumptionLabels(strategySpec, language)
         : []
     );
   const assumptionCards = buildAssumptionCards(
@@ -630,6 +650,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     assumptionItems,
     parseWarnings,
     parsedStrategy?.ambiguities || [],
+    language,
   );
   const canProceedFromBaseParams = Boolean(
     startDate
@@ -710,8 +731,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
               <div key={preset.id} className="comparison-card">
                 <div className="comparison-card__header">
                   <div>
-                    <p className="metric-card__label">{preset.kind === 'saved' ? 'Saved preset' : 'Recent draft'}</p>
-                    <h3 className="comparison-card__title">{preset.name}</h3>
+                    <p className="metric-card__label">{preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}</p>
+                    <h3 className="comparison-card__title">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</h3>
                   </div>
                   <span className="product-chip">{preset.code}</span>
                 </div>
@@ -831,7 +852,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <div className="product-chip-list">
           <span className="product-chip">{language === 'en' ? 'Instrument' : '当前标的'}: {code || '--'}</span>
           <span className="product-chip">{language === 'en' ? 'Benchmark' : '对比基准'}: {getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language)}</span>
-          <span className="product-chip">{language === 'en' ? 'Strategy type' : '策略类型'}: {parsedStrategy ? getStrategyTypeLabel(parsedStrategy) : (language === 'en' ? 'Pending parse' : '待解析')}</span>
+          <span className="product-chip">{language === 'en' ? 'Strategy type' : '策略类型'}: {parsedStrategy ? getLocalizedStrategyTypeLabel(parsedStrategy, language) : (language === 'en' ? 'Pending parse' : '待解析')}</span>
         </div>
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
           <Button onClick={() => handleStepSelect('setup')} disabled={!canProceedFromBaseParams}>
@@ -850,12 +871,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       data-testid="backtest-control-section-setup"
       data-active={currentStep === 'setup' ? 'true' : 'false'}
     >
-      <Card title="策略输入" subtitle="步骤 2" className="product-section-card product-section-card--backtest-flow">
+      <Card title={language === 'en' ? 'Strategy input' : '策略输入'} subtitle={language === 'en' ? 'Step 2' : '步骤 2'} className="product-section-card product-section-card--backtest-flow">
         {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">用自然语言描述规则，或直接点一个示例作为确定性起点。</p>
+          <p className="backtest-guided-step-helper">{language === 'en' ? 'Describe the rule in natural language, or start from one of the examples below.' : '用自然语言描述规则，或直接点一个示例作为确定性起点。'}</p>
         ) : null}
         <label className="product-field product-field--full">
-          <span className="theme-field-label">自然语言策略</span>
+          <span className="theme-field-label">{language === 'en' ? 'Natural-language strategy' : '自然语言策略'}</span>
           <AnimatePresence initial={false}>
             {appliedRewriteText ? (
               <motion.div
@@ -868,26 +889,26 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
               >
                 <Banner
                   tone="info"
-                  title="已应用建议改写"
-                  body="策略文本已替换为建议版本。请重新解析后继续。"
+                  title={language === 'en' ? 'Applied rewrite suggestion' : '已应用建议改写'}
+                  body={language === 'en' ? 'The strategy text has been replaced with the suggested version. Parse it again before continuing.' : '策略文本已替换为建议版本。请重新解析后继续。'}
                 />
               </motion.div>
             ) : null}
           </AnimatePresence>
           <textarea
-            aria-label="策略文本"
+            aria-label={language === 'en' ? 'Strategy text' : '策略文本'}
             value={strategyText}
             onChange={(event) => onStrategyTextChange(event.target.value)}
             onFocus={() => onStepChange('setup')}
             rows={7}
             autoFocus={Boolean(appliedRewriteText)}
             className="input-surface input-focus-glow product-command-input product-command-input--textarea"
-            placeholder="例如：资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止"
+            placeholder={language === 'en' ? 'For example: Start with 100000, buy 100 shares of ORCL every trading day from 2025-01-01 to 2025-12-31, and stop when cash runs out' : '例如：资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止'}
           />
         </label>
 
         <div className="product-chip-list wizard-example-chips">
-          {STRATEGY_EXAMPLES.map((example) => (
+          {STRATEGY_EXAMPLES[language].map((example) => (
             <button
               key={example}
               type="button"
@@ -903,15 +924,15 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         </div>
 
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button variant="ghost" onClick={() => handleStepSelect('symbol')}>返回</Button>
+          <Button variant="ghost" onClick={() => handleStepSelect('symbol')}>{language === 'en' ? 'Back' : '返回'}</Button>
           <Button
             variant="secondary"
             onClick={() => void onParse()}
             isLoading={isParsing}
-            loadingText="解析中…"
+            loadingText={language === 'en' ? 'Parsing…' : '解析中…'}
             disabled={!canProceedFromBaseParams || !strategyText.trim()}
           >
-            {appliedRewriteText ? '重新解析' : '解析策略'}
+            {appliedRewriteText ? (language === 'en' ? 'Parse again' : '重新解析') : (language === 'en' ? 'Parse strategy' : '解析策略')}
           </Button>
         </div>
         {parseError ? <ApiErrorAlert error={parseError} className="mt-4" /> : null}
@@ -922,7 +943,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   const executionSettingsFields = (
     <div className="product-field-grid backtest-control-grid">
       <label className="product-field">
-        <span className="theme-field-label">回看范围</span>
+        <span className="theme-field-label">{language === 'en' ? 'Lookback window' : '回看范围'}</span>
         <input
           type="number"
           min={10}
@@ -931,11 +952,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           onChange={(event) => onLookbackBarsChange(event.target.value)}
           onFocus={() => onStepChange(isProfessionalMode ? 'confirm' : 'strategy')}
           className="input-surface input-focus-glow product-command-input"
-          aria-label="回看范围"
+          aria-label={language === 'en' ? 'Lookback window' : '回看范围'}
         />
       </label>
       <label className="product-field">
-        <span className="theme-field-label">手续费 (bp)</span>
+        <span className="theme-field-label">{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
         <input
           type="number"
           min={0}
@@ -944,11 +965,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           onChange={(event) => onFeeBpsChange(event.target.value)}
           onFocus={() => onStepChange(isProfessionalMode ? 'confirm' : 'strategy')}
           className="input-surface input-focus-glow product-command-input"
-          aria-label="单边手续费 (bp)"
+          aria-label={language === 'en' ? 'Fee per side (bp)' : '单边手续费 (bp)'}
         />
       </label>
       <label className="product-field">
-        <span className="theme-field-label">滑点 (bp)</span>
+        <span className="theme-field-label">{language === 'en' ? 'Slippage (bp)' : '滑点 (bp)'}</span>
         <input
           type="number"
           min={0}
@@ -957,7 +978,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           onChange={(event) => onSlippageBpsChange(event.target.value)}
           onFocus={() => onStepChange(isProfessionalMode ? 'confirm' : 'strategy')}
           className="input-surface input-focus-glow product-command-input"
-          aria-label="单边滑点 (bp)"
+          aria-label={language === 'en' ? 'Slippage per side (bp)' : '单边滑点 (bp)'}
         />
       </label>
     </div>
@@ -971,9 +992,9 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       data-testid="backtest-control-section-strategy"
       data-active={currentStep === 'strategy' ? 'true' : 'false'}
     >
-      <Card title={isProfessionalMode ? '解析确认' : '策略确认'} subtitle="步骤 3" className="product-section-card product-section-card--backtest-standard">
+      <Card title={isProfessionalMode ? (language === 'en' ? 'Parse review' : '解析确认') : (language === 'en' ? 'Strategy review' : '策略确认')} subtitle={language === 'en' ? 'Step 3' : '步骤 3'} className="product-section-card product-section-card--backtest-standard">
         {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">确认归一化后的规则、默认假设和不支持项，再从这里进入结果页流转。</p>
+          <p className="backtest-guided-step-helper">{language === 'en' ? 'Review the normalized rule, defaults, and unsupported parts here before opening the result page.' : '确认归一化后的规则、默认假设和不支持项，再从这里进入结果页流转。'}</p>
         ) : null}
         <motion.div layout className="backtest-step-stage-shell">
           <AnimatePresence initial={false} mode="wait">
@@ -987,7 +1008,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                 transition={FLOW_PANEL_TRANSITION}
               >
                 <div className="product-empty-state product-empty-state--compact">
-                  先完成策略解析，再继续确认归一化结果和默认假设。
+                  {language === 'en' ? 'Parse the strategy first, then review the normalized rule and execution defaults.' : '先完成策略解析，再继续确认归一化结果和默认假设。'}
                 </div>
               </motion.div>
             ) : (
@@ -1002,8 +1023,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                 <div className="summary-block" data-testid="confirm-status-section">
                   <div className="summary-block__header">
                     <div>
-                      <SectionEyebrow>解析状态</SectionEyebrow>
-                      <h3 className="summary-block__title">确认当前解析</h3>
+                      <SectionEyebrow>{language === 'en' ? 'Parse status' : '解析状态'}</SectionEyebrow>
+                      <h3 className="summary-block__title">{language === 'en' ? 'Review the current parse' : '确认当前解析'}</h3>
                     </div>
                     <Badge variant={parseMeta.tone === 'success' ? 'success' : parseMeta.tone === 'danger' ? 'danger' : parseMeta.tone === 'warning' ? 'warning' : 'default'}>
                       {parseMeta.label}
@@ -1014,12 +1035,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                     title={parseMeta.title}
                     body={
                       parseState === 'unsupported'
-                        ? getUnsupportedMessages(parsedStrategy as RuleBacktestParseResponse)[0]
+                        ? getUnsupportedMessages(parsedStrategy as RuleBacktestParseResponse, language)[0]
                         : parseState === 'stale'
-                          ? '输入已变更。请重新解析后再继续。'
+                          ? (language === 'en' ? 'The inputs changed. Parse again before continuing.' : '输入已变更。请重新解析后再继续。')
                           : parseState === 'assumed'
-                            ? '策略可执行，但包含默认值或执行假设。'
-                            : '策略已归一化，可直接进入独立结果页流转。'
+                            ? (language === 'en' ? 'The strategy is executable, but it still contains derived defaults or execution assumptions.' : '策略可执行，但包含默认值或执行假设。')
+                            : (language === 'en' ? 'The strategy is normalized and ready to continue into the dedicated result page.' : '策略已归一化，可直接进入独立结果页流转。')
                     }
                   />
                 </div>
@@ -1027,20 +1048,20 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                 <div className="summary-block mt-4" data-testid="confirm-compact-summary-section">
                   <div className="preview-grid">
                     <div className="preview-card">
-                      <p className="metric-card__label">策略类型</p>
-                      <p className="preview-card__text">{getStrategyTypeLabel(parsedStrategy)}</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Strategy type' : '策略类型'}</p>
+                      <p className="preview-card__text">{getLocalizedStrategyTypeLabel(parsedStrategy, language)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">标的</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Ticker' : '标的'}</p>
                       <p className="preview-card__text">{code || '--'}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">区间</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Date range' : '区间'}</p>
                       <p className="preview-card__text">{startDate || '--'} {'->'} {endDate || '--'}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">核心意图</p>
-                      <p className="preview-card__text">{coreIntentSummary || supportedPortionSummary || '待确认'}</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Core intent' : '核心意图'}</p>
+                      <p className="preview-card__text">{coreIntentSummary || supportedPortionSummary || (language === 'en' ? 'Needs review' : '待确认')}</p>
                     </div>
                   </div>
                 </div>
@@ -1048,29 +1069,29 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                 <div className="summary-block mt-4" data-testid="confirm-executable-spec-section">
                   <div className="summary-block__header">
                     <div>
-                      <SectionEyebrow>可执行规格</SectionEyebrow>
-                      <h3 className="summary-block__title">实际执行内容</h3>
+                      <SectionEyebrow>{language === 'en' ? 'Executable spec' : '可执行规格'}</SectionEyebrow>
+                      <h3 className="summary-block__title">{language === 'en' ? 'What will actually run' : '实际执行内容'}</h3>
                     </div>
                   </div>
                   <p className="product-section-copy">
-                    以下字段来自当前 canonical <code>strategy_spec</code>，会直接驱动确定性回测执行。
+                    {language === 'en' ? <>The fields below come from the current canonical <code>strategy_spec</code> and directly drive the deterministic backtest.</> : <>以下字段来自当前 canonical <code>strategy_spec</code>，会直接驱动确定性回测执行。</>}
                   </p>
                   <div className="product-chip-list mb-4">
-                    <span className="product-chip">策略族 · {getStrategyTypeLabel(parsedStrategy)}</span>
-                    <span className="product-chip">规格来源 · {getStrategySpecSourceLabel(parsedStrategy)}</span>
-                    <span className="product-chip">归一化 · {getParsedNormalizationState(parsedStrategy)}</span>
-                    <span className="product-chip">需要确认 · {parsedStrategy?.needsConfirmation ? '是' : '否'}</span>
-                    <span className="product-chip">可执行 · {getParsedExecutable(parsedStrategy) ? '是' : '否'}</span>
+                    <span className="product-chip">{language === 'en' ? 'Strategy family' : '策略族'} · {getLocalizedStrategyTypeLabel(parsedStrategy, language)}</span>
+                    <span className="product-chip">{language === 'en' ? 'Spec source' : '规格来源'} · {getStrategySpecSourceLabel(parsedStrategy, language)}</span>
+                    <span className="product-chip">{language === 'en' ? 'Normalization' : '归一化'} · {formatRuleNormalizationStateLabel(getParsedNormalizationState(parsedStrategy), language)}</span>
+                    <span className="product-chip">{language === 'en' ? 'Needs confirmation' : '需要确认'} · {parsedStrategy?.needsConfirmation ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
+                    <span className="product-chip">{language === 'en' ? 'Executable' : '可执行'} · {getParsedExecutable(parsedStrategy) ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
                   </div>
                   <div className="product-chip-list product-chip-list--tight mb-4">
-                    <span className="product-chip">显式结构化</span>
-                    <span className="product-chip">默认/推断</span>
-                    <span className="product-chip">兼容 setup</span>
+                    <span className="product-chip">{language === 'en' ? 'Explicit spec' : '显式结构化'}</span>
+                    <span className="product-chip">{language === 'en' ? 'Derived / defaulted' : '默认/推断'}</span>
+                    <span className="product-chip">{language === 'en' ? 'Compat setup' : '兼容 setup'}</span>
                   </div>
                   <StrategySpecSummaryCard parsed={parsedStrategy} currentCode={code} startDate={startDate} endDate={endDate} />
                 </div>
 
-                <Disclosure summary="查看解析细节">
+                <Disclosure summary={language === 'en' ? 'View parse detail' : '查看解析细节'}>
                   <StrategyParseDetails parsed={parsedStrategy} />
                 </Disclosure>
 
@@ -1078,8 +1099,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                   <div className="summary-block mt-4" data-testid="confirm-guidance-section">
                     <div className="summary-block__header">
                       <div>
-                        <SectionEyebrow>限制与改写</SectionEyebrow>
-                        <h3 className="summary-block__title">改写建议与限制</h3>
+                        <SectionEyebrow>{language === 'en' ? 'Limits and rewrites' : '限制与改写'}</SectionEyebrow>
+                        <h3 className="summary-block__title">{language === 'en' ? 'Rewrite suggestions and limits' : '改写建议与限制'}</h3>
                       </div>
                     </div>
                     {supportedPortionSummary && supportedPortionSummary !== coreIntentSummary ? (
@@ -1089,7 +1110,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                       <div className="product-chip-list mb-4">
                         {unsupportedExtensions.slice(0, 3).map((item, index) => (
                           <span key={`${String(item.code || index)}-unsupported`} className="product-chip">
-                            {String(item.title || item.message || '当前不支持')}
+                            {String(item.title || item.message || (language === 'en' ? 'Not supported yet' : '当前不支持'))}
                           </span>
                         ))}
                       </div>
@@ -1098,7 +1119,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                       <div className="product-chip-list wizard-example-chips">
                         {rewriteSuggestions.slice(0, 3).map((item, index) => {
                           const text = String(item.strategyText || '');
-                          const label = String(item.label || text || `建议 ${index + 1}`);
+                          const label = String(item.label || text || (language === 'en' ? `Suggestion ${index + 1}` : `建议 ${index + 1}`));
                           if (!text) return null;
                           return (
                             <button
@@ -1120,11 +1141,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                   <div className="summary-block mt-4" data-testid="confirm-assumptions-section">
                     <div className="summary-block__header">
                       <div>
-                        <SectionEyebrow>默认与推断</SectionEyebrow>
-                        <h3 className="summary-block__title">默认补全与提醒</h3>
+                        <SectionEyebrow>{language === 'en' ? 'Defaults and assumptions' : '默认与推断'}</SectionEyebrow>
+                        <h3 className="summary-block__title">{language === 'en' ? 'Defaults and review notes' : '默认补全与提醒'}</h3>
                       </div>
                     </div>
-                    <p className="product-section-copy">这些内容不是用户显式写出的 canonical 执行字段，而是系统补全、默认或需要人工确认的部分。</p>
+                    <p className="product-section-copy">{language === 'en' ? 'These are not explicit canonical execution fields from the user. They are system-filled defaults, derived values, or items that still need manual review.' : '这些内容不是用户显式写出的 canonical 执行字段，而是系统补全、默认或需要人工确认的部分。'}</p>
                     <div className="preview-grid">
                       {assumptionCards.map((group, index) => {
                         return (
@@ -1143,10 +1164,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                 ) : null}
 
                 {!isProfessionalMode ? (
-                  <Disclosure summary="执行设置">
+                  <Disclosure summary={language === 'en' ? 'Execution settings' : '执行设置'}>
                     {executionSettingsFields}
                     <div className="mt-4">
-                      <AssumptionList assumptions={previewAssumptions} emptyText="暂无执行默认值。" />
+                      <AssumptionList assumptions={previewAssumptions} emptyText={language === 'en' ? 'No execution defaults are available yet.' : '暂无执行默认值。'} />
                     </div>
                   </Disclosure>
                 ) : null}
@@ -1161,21 +1182,21 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                       onToggleConfirmed(event.target.checked);
                     }}
                   />
-                  <span>我已确认当前解析结果与执行假设。</span>
+                  <span>{language === 'en' ? 'I reviewed the current parse result and execution assumptions.' : '我已确认当前解析结果与执行假设。'}</span>
                 </label>
 
                 <div className="product-action-row backtest-control-actions backtest-control-actions--footer mt-4">
-                  <Button variant="ghost" onClick={() => handleStepSelect('setup')}>返回修改</Button>
+                  <Button variant="ghost" onClick={() => handleStepSelect('setup')}>{language === 'en' ? 'Back to editing' : '返回修改'}</Button>
                   <Button variant="secondary" onClick={() => void onParse()} disabled={isParsing || !strategyText.trim()}>
-                    重新解析
+                    {language === 'en' ? 'Parse again' : '重新解析'}
                   </Button>
                   <Button
                     onClick={() => (isProfessionalMode ? handleStepSelect('confirm') : void handleNormalRun())}
                     disabled={!canProceedFromConfirm}
                     isLoading={!isProfessionalMode && isSubmitting}
-                    loadingText="正在打开结果页…"
+                    loadingText={language === 'en' ? 'Opening result page…' : '正在打开结果页…'}
                   >
-                    {isProfessionalMode ? '继续' : '确认并查看结果'}
+                    {isProfessionalMode ? (language === 'en' ? 'Continue' : '继续') : (language === 'en' ? 'Confirm and open result' : '确认并查看结果')}
                   </Button>
                 </div>
               </motion.div>
@@ -1194,15 +1215,15 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       data-testid="backtest-control-section-confirm"
       data-active={currentStep === 'confirm' ? 'true' : 'false'}
     >
-      <Card title="执行设置" subtitle="步骤 4" className="product-section-card product-section-card--backtest-standard">
-        <p className="backtest-guided-step-helper">这里调整执行默认值。提交后会直接进入独立结果页进行轮询和分析。</p>
+      <Card title={language === 'en' ? 'Execution settings' : '执行设置'} subtitle={language === 'en' ? 'Step 4' : '步骤 4'} className="product-section-card product-section-card--backtest-standard">
+        <p className="backtest-guided-step-helper">{language === 'en' ? 'Adjust execution defaults here. After submission, the dedicated result page will handle polling and analysis.' : '这里调整执行默认值。提交后会直接进入独立结果页进行轮询和分析。'}</p>
         {executionSettingsFields}
-        <Disclosure summary="执行默认值">
-          <AssumptionList assumptions={previewAssumptions} emptyText="暂无执行默认值。" />
+        <Disclosure summary={language === 'en' ? 'Execution defaults' : '执行默认值'}>
+          <AssumptionList assumptions={previewAssumptions} emptyText={language === 'en' ? 'No execution defaults are available yet.' : '暂无执行默认值。'} />
         </Disclosure>
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button variant="ghost" onClick={() => handleStepSelect('strategy')}>返回</Button>
-          <Button onClick={() => handleStepSelect('run')}>继续</Button>
+          <Button variant="ghost" onClick={() => handleStepSelect('strategy')}>{language === 'en' ? 'Back' : '返回'}</Button>
+          <Button onClick={() => handleStepSelect('run')}>{language === 'en' ? 'Continue' : '继续'}</Button>
         </div>
       </Card>
     </section>
@@ -1216,53 +1237,53 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       data-testid="backtest-control-section-run"
       data-active={currentStep === 'run' ? 'true' : 'false'}
     >
-      <Card title={isProfessionalMode ? '运行控制' : '开始运行'} subtitle={`步骤 ${isProfessionalMode ? '5' : '4'}`} className="product-section-card product-section-card--backtest-flow">
+      <Card title={isProfessionalMode ? (language === 'en' ? 'Run controls' : '运行控制') : (language === 'en' ? 'Run backtest' : '开始运行')} subtitle={language === 'en' ? `Step ${isProfessionalMode ? '5' : '4'}` : `步骤 ${isProfessionalMode ? '5' : '4'}`} className="product-section-card product-section-card--backtest-flow">
         <Banner
           tone={isSubmitting ? 'info' : 'default'}
-          title={isSubmitting ? '正在创建回测运行' : '提交后进入独立结果页'}
+          title={isSubmitting ? (language === 'en' ? 'Creating the backtest run' : '正在创建回测运行') : (language === 'en' ? 'Submission opens the dedicated result page' : '提交后进入独立结果页')}
           body={isSubmitting
-            ? '正在提交规则回测并跳转到结果页。结果页会负责轮询状态、显示 KPI 和全宽图表工作区。'
-            : '配置页只负责参数与策略确认。点击运行后会导航到 /backtest/results/:runId，由结果页承载完整分析。'}
+            ? (language === 'en' ? 'Submitting the deterministic backtest and redirecting to the result page. The result page handles status polling, KPI display, and the full-width chart workspace.' : '正在提交规则回测并跳转到结果页。结果页会负责轮询状态、显示 KPI 和全宽图表工作区。')
+            : (language === 'en' ? 'The config page only handles setup and strategy confirmation. After you run it, the app navigates to /backtest/results/:runId for the full analysis.' : '配置页只负责参数与策略确认。点击运行后会导航到 /backtest/results/:runId，由结果页承载完整分析。')}
         />
         <div className="backtest-inline-status mt-4" role="status" aria-live="polite">
-          <span className="backtest-inline-status__pill" data-tone={parseMeta.tone}>解析 · {parseMeta.label}</span>
-          <span className="backtest-inline-status__pill" data-tone="info">结果页 · KPI / 图表 / 审计 / 交易</span>
-          {parseStale ? <span className="backtest-inline-status__pill" data-tone="warning">预览已过期</span> : null}
-          {appliedRewriteText ? <span className="backtest-inline-status__pill" data-tone="info">已应用改写</span> : null}
+          <span className="backtest-inline-status__pill" data-tone={parseMeta.tone}>{language === 'en' ? 'Parse' : '解析'} · {parseMeta.label}</span>
+          <span className="backtest-inline-status__pill" data-tone="info">{language === 'en' ? 'Result page' : '结果页'} · KPI / {language === 'en' ? 'Charts / Audit / Trades' : '图表 / 审计 / 交易'}</span>
+          {parseStale ? <span className="backtest-inline-status__pill" data-tone="warning">{language === 'en' ? 'Preview is stale' : '预览已过期'}</span> : null}
+          {appliedRewriteText ? <span className="backtest-inline-status__pill" data-tone="info">{language === 'en' ? 'Rewrite applied' : '已应用改写'}</span> : null}
         </div>
         <div className="preview-grid mt-4">
           <div className="preview-card">
-            <p className="metric-card__label">标的</p>
+            <p className="metric-card__label">{language === 'en' ? 'Ticker' : '标的'}</p>
             <p className="preview-card__text">{code || '--'}</p>
           </div>
           <div className="preview-card">
-            <p className="metric-card__label">区间</p>
+            <p className="metric-card__label">{language === 'en' ? 'Date range' : '区间'}</p>
             <p className="preview-card__text">{startDate || '--'} {'->'} {endDate || '--'}</p>
           </div>
           <div className="preview-card">
-            <p className="metric-card__label">初始资金</p>
+            <p className="metric-card__label">{language === 'en' ? 'Initial capital' : '初始资金'}</p>
             <p className="preview-card__text">{initialCapital || '--'}</p>
           </div>
           <div className="preview-card">
-            <p className="metric-card__label">基准</p>
+            <p className="metric-card__label">{language === 'en' ? 'Benchmark' : '基准'}</p>
             <p className="preview-card__text">{getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language)}</p>
           </div>
         </div>
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer mt-4">
           <Button variant="ghost" onClick={() => handleStepSelect(isProfessionalMode ? 'confirm' : 'strategy')}>
-            返回
+            {language === 'en' ? 'Back' : '返回'}
           </Button>
           <Button
             onClick={() => void onRun()}
             isLoading={isSubmitting}
-            loadingText="正在打开结果页…"
+            loadingText={language === 'en' ? 'Opening result page…' : '正在打开结果页…'}
             disabled={!canProceedFromConfirm}
           >
-            运行回测并打开结果页
+            {language === 'en' ? 'Run backtest and open result' : '运行回测并打开结果页'}
           </Button>
-          <Button variant="ghost" onClick={onReset}>重置</Button>
+          <Button variant="ghost" onClick={onReset}>{language === 'en' ? 'Reset' : '重置'}</Button>
           <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
-            {isLoadingHistory ? '刷新中…' : '刷新历史'}
+            {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh history' : '刷新历史')}
           </Button>
         </div>
         {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}

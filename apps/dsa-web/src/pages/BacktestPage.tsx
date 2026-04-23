@@ -190,7 +190,9 @@ const BacktestPage: React.FC = () => {
   const [performanceNotice, setPerformanceNotice] = useState<PerformanceNotice | null>(null);
 
   const [ruleStrategyText, setRuleStrategyText] = useState(
-    '资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止',
+    language === 'en'
+      ? 'Start with 100000, buy 100 shares of ORCL every trading day from 2025-01-01 to 2025-12-31, and stop when cash runs out'
+      : '资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止',
   );
   const [ruleStartDate, setRuleStartDate] = useState(() => getDefaultRuleDateRange().startDate);
   const [ruleEndDate, setRuleEndDate] = useState(() => getDefaultRuleDateRange().endDate);

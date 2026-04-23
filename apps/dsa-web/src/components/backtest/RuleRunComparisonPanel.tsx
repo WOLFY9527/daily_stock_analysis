@@ -173,7 +173,7 @@ export const RuleRunComparisonPanel: React.FC<{
     );
   }
 
-  const warnings = buildRuleRunComparisonWarnings(items.map((item) => item.run));
+  const warnings = buildRuleRunComparisonWarnings(items.map((item) => item.run), language);
   const rankedByReturn = [...items].sort((left, right) => (right.run.totalReturnPct ?? Number.NEGATIVE_INFINITY) - (left.run.totalReturnPct ?? Number.NEGATIVE_INFINITY));
   const rankedByDrawdown = [...items].sort((left, right) => Math.abs(left.run.maxDrawdownPct ?? Number.POSITIVE_INFINITY) - Math.abs(right.run.maxDrawdownPct ?? Number.POSITIVE_INFINITY));
   const rankedByExcess = [...items].sort((left, right) => ((right.run.excessReturnVsBenchmarkPct ?? right.run.excessReturnVsBuyAndHoldPct) ?? Number.NEGATIVE_INFINITY) - ((left.run.excessReturnVsBenchmarkPct ?? left.run.excessReturnVsBuyAndHoldPct) ?? Number.NEGATIVE_INFINITY));
@@ -263,14 +263,14 @@ export const RuleRunComparisonPanel: React.FC<{
 
       <div className="comparison-card-grid mt-4">
         {items.map((item) => {
-          const narrative = describeRuleRunNarrative(item.run);
-          const executionNotes = getRuleRunExecutionNotes(item.run);
+          const narrative = describeRuleRunNarrative(item.run, language);
+          const executionNotes = getRuleRunExecutionNotes(item.run, language);
           return (
             <article key={item.run.id} className="comparison-card">
               <div className="comparison-card__header">
                 <div>
                   <p className="metric-card__label">{item.label || (language === 'en' ? `Run #${item.run.id}` : `运行 #${item.run.id}`)}</p>
-                  <h3 className="comparison-card__title">{getRuleStrategyTypeLabel(item.run.parsedStrategy)}</h3>
+                  <h3 className="comparison-card__title">{getRuleStrategyTypeLabel(item.run.parsedStrategy, undefined, language)}</h3>
                 </div>
                 {item.badge ? <span className="product-chip">{item.badge}</span> : null}
               </div>
@@ -279,7 +279,7 @@ export const RuleRunComparisonPanel: React.FC<{
               </p>
               <p className="comparison-card__narrative">{narrative.headline}</p>
               <div className="product-chip-list product-chip-list--tight">
-                {getRuleRunSetupHighlights(item.run).map((highlight) => (
+                {getRuleRunSetupHighlights(item.run, language).map((highlight) => (
                   <span key={`${item.run.id}-${highlight}`} className="product-chip">{highlight}</span>
                 ))}
               </div>
@@ -336,8 +336,8 @@ export const RuleRunComparisonPanel: React.FC<{
               {items.map((item) => (
                 <td key={`setup-${item.run.id}`}>
                   <div className="product-table__stack">
-                    <span>{getRuleStrategyTypeLabel(item.run.parsedStrategy)}</span>
-                    <span>{getRuleRunSetupHighlights(item.run).join(' · ')}</span>
+                    <span>{getRuleStrategyTypeLabel(item.run.parsedStrategy, undefined, language)}</span>
+                    <span>{getRuleRunSetupHighlights(item.run, language).join(' · ')}</span>
                   </div>
                 </td>
               ))}

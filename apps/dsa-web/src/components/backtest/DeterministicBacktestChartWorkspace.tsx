@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useMemo, useRef, useState } from 'react';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { useElementSize } from '../../hooks/useElementSize';
 import { formatNumber, pct } from './shared';
 import type { DeterministicResultDensityConfig, DeterministicResultDensityMode } from './deterministicResultDensity';
@@ -27,6 +28,7 @@ type SharedPanelProps = {
 };
 
 type SecondaryPanelMode = 'relative' | 'daily' | 'position';
+type BacktestLanguage = 'zh' | 'en';
 
 const CHART_BASE_WIDTH = 1180;
 const RANGE_BRUSH_WIDTH = 1000;
@@ -64,6 +66,15 @@ function formatCompactPnl(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(abs >= 100000 ? 0 : 1)}万`;
   if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`;
+  return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
+}
+
+function formatCompactPnlLabel(value: number, language: BacktestLanguage): string {
+  if (language === 'zh') return formatCompactPnl(value);
+  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}m`;
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}k`;
   return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
 }
 
@@ -142,10 +153,11 @@ function ReturnPanel({
   layout,
   surfaceTestId,
 }: SharedPanelProps) {
+  const { language } = useI18n();
   const strategyRows = visibleRows.filter((row) => row.strategyCumReturn != null);
   const strategySeriesLength = strategyRows.length;
   if (!visibleRows.length || !strategySeriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">暂无累计收益数据。</div></div>;
+    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No cumulative-return data is available yet.' : '暂无累计收益数据。'}</div></div>;
   }
 
   const { width, density, config } = layout;
@@ -205,7 +217,7 @@ function ReturnPanel({
       x: getX(index),
       y: getY(row.strategyCumReturn ?? 0),
       action: row.action === 'sell' || row.action === 'forced_close' ? 'sell' : 'buy',
-      label: `${formatDeterministicActionLabel(row.action)} · ${row.date}`,
+      label: `${formatDeterministicActionLabel(row.action, language)} · ${row.date}`,
     }));
   const safeHoverIndex = clampNumber(hoveredIndex, 0, visibleRows.length - 1);
   const hoveredRow = visibleRows[safeHoverIndex];
@@ -216,22 +228,22 @@ function ReturnPanel({
     <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={strategySeriesLength}>
       <div className="backtest-unified-chart-viewer__panel-header">
         <div>
-          <span className="product-kicker">主图</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">累计收益率</h3>
+          <span className="product-kicker">{language === 'en' ? 'Primary' : '主图'}</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">{language === 'en' ? 'Cumulative return' : '累计收益率'}</h3>
         </div>
       </div>
       <div className="chart-card__legend">
-        <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--strategy" />策略</span>
+        <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--strategy" />{language === 'en' ? 'Strategy' : '策略'}</span>
         {benchmarkMeta.showBenchmark ? (
           <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--benchmark" />{benchmarkMeta.benchmarkLabel}</span>
         ) : null}
         {benchmarkMeta.showBuyHold ? (
           <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--buy-hold" />{benchmarkMeta.buyHoldLabel}</span>
         ) : null}
-        <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--trades" />买卖点</span>
+        <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--trades" />{language === 'en' ? 'Trade markers' : '买卖点'}</span>
       </div>
       <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="累计收益率图">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={language === 'en' ? 'Cumulative return chart' : '累计收益率图'}>
           {yTicks.map((tick) => (
             <g key={`return-y-${tick.label}`}>
               <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
@@ -284,9 +296,10 @@ function DailyPnlPanel({
   layout,
   surfaceTestId,
 }: Omit<SharedPanelProps, 'benchmarkMeta'> & { benchmarkMeta?: DeterministicBacktestBenchmarkMeta }) {
+  const { language } = useI18n();
   const seriesLength = visibleRows.filter((row) => row.dailyPnl != null).length;
   if (!visibleRows.length || !seriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">暂无每日盈亏数据。</div></div>;
+    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No daily PnL data is available yet.' : '暂无每日盈亏数据。'}</div></div>;
   }
 
   const { width, density, config } = layout;
@@ -327,7 +340,7 @@ function DailyPnlPanel({
   const yTicks = Array.from({ length: config.subYTickCount + 1 }, (_, index) => {
     const ratio = config.subYTickCount === 0 ? 0 : index / config.subYTickCount;
     const value = amplitude - ratio * amplitude * 2;
-    return { value, y: getY(value), label: formatCompactPnl(value) };
+    return { value, y: getY(value), label: formatCompactPnlLabel(value, language) };
   });
   const hoverX = getX(clampNumber(hoveredIndex, 0, visibleRows.length - 1));
 
@@ -335,12 +348,12 @@ function DailyPnlPanel({
     <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
       <div className="backtest-unified-chart-viewer__panel-header">
         <div>
-          <span className="product-kicker">子图</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">每日盈亏</h3>
+          <span className="product-kicker">{language === 'en' ? 'Secondary' : '子图'}</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">{language === 'en' ? 'Daily PnL' : '每日盈亏'}</h3>
         </div>
       </div>
       <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="每日盈亏图">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={language === 'en' ? 'Daily PnL chart' : '每日盈亏图'}>
           {yTicks.map((tick) => (
             <g key={`daily-y-${tick.label}`}>
               <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
@@ -392,9 +405,10 @@ function DrawdownPanel({
   layout,
   surfaceTestId,
 }: Omit<SharedPanelProps, 'benchmarkMeta'> & { benchmarkMeta?: DeterministicBacktestBenchmarkMeta }) {
+  const { language } = useI18n();
   const seriesLength = visibleRows.filter((row) => row.drawdownPct != null).length;
   if (!visibleRows.length || !seriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">暂无回撤数据。</div></div>;
+    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No drawdown data is available yet.' : '暂无回撤数据。'}</div></div>;
   }
 
   const { width, density, config } = layout;
@@ -432,12 +446,12 @@ function DrawdownPanel({
     <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
       <div className="backtest-unified-chart-viewer__panel-header">
         <div>
-          <span className="product-kicker">风险</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">回撤曲线</h3>
+          <span className="product-kicker">{language === 'en' ? 'Risk' : '风险'}</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">{language === 'en' ? 'Drawdown curve' : '回撤曲线'}</h3>
         </div>
       </div>
       <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="回撤曲线图">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={language === 'en' ? 'Drawdown chart' : '回撤曲线图'}>
           {yTicks.map((tick) => (
             <g key={`drawdown-y-${tick.label}`}>
               <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
@@ -480,6 +494,7 @@ function RelativePerformancePanel({
   layout,
   surfaceTestId,
 }: SharedPanelProps) {
+  const { language } = useI18n();
   const comparatorLabel = benchmarkMeta.showBenchmark
     ? benchmarkMeta.benchmarkLabel
     : benchmarkMeta.showBuyHold
@@ -496,7 +511,7 @@ function RelativePerformancePanel({
   });
   const seriesLength = series.filter((value): value is number => value != null).length;
   if (!visibleRows.length || !seriesLength || !comparatorLabel) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">暂无相对基准对比曲线。</div></div>;
+    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No relative-comparison curve is available yet.' : '暂无相对基准对比曲线。'}</div></div>;
   }
 
   const { width, density, config } = layout;
@@ -532,12 +547,12 @@ function RelativePerformancePanel({
     <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
       <div className="backtest-unified-chart-viewer__panel-header">
         <div>
-          <span className="product-kicker">对照</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">相对 {comparatorLabel}</h3>
+          <span className="product-kicker">{language === 'en' ? 'Relative' : '对照'}</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">{language === 'en' ? `Relative to ${comparatorLabel}` : `相对 ${comparatorLabel}`}</h3>
         </div>
       </div>
       <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="相对基准曲线图">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={language === 'en' ? 'Relative comparison chart' : '相对基准曲线图'}>
           {yTicks.map((tick) => (
             <g key={`relative-y-${tick.label}`}>
               <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
@@ -578,9 +593,10 @@ function PositionPanel({
   layout,
   surfaceTestId,
 }: Omit<SharedPanelProps, 'benchmarkMeta'> & { benchmarkMeta?: DeterministicBacktestBenchmarkMeta }) {
+  const { language } = useI18n();
   const seriesLength = visibleRows.filter((row) => row.position != null).length;
   if (!visibleRows.length || !seriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">暂无仓位数据。</div></div>;
+    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No position data is available yet.' : '暂无仓位数据。'}</div></div>;
   }
 
   const { width, density, config } = layout;
@@ -626,16 +642,16 @@ function PositionPanel({
     <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
       <div className="backtest-unified-chart-viewer__panel-header">
         <div>
-          <span className="product-kicker">子图</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">仓位 / 买卖行为</h3>
+          <span className="product-kicker">{language === 'en' ? 'Secondary' : '子图'}</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">{language === 'en' ? 'Position and trading activity' : '仓位 / 买卖行为'}</h3>
         </div>
       </div>
       <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="仓位/买卖行为图">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={language === 'en' ? 'Position and trading activity chart' : '仓位/买卖行为图'}>
           <line x1={paddingLeft} y1={getY(0)} x2={plotRight} y2={getY(0)} className="chart-card__grid" />
           <line x1={paddingLeft} y1={getY(1)} x2={plotRight} y2={getY(1)} className="chart-card__grid" />
-          <text x={paddingLeft - 12} y={getY(1) + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>持仓</text>
-          <text x={paddingLeft - 12} y={getY(0) + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>空仓</text>
+          <text x={paddingLeft - 12} y={getY(1) + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>{language === 'en' ? 'Long' : '持仓'}</text>
+          <text x={paddingLeft - 12} y={getY(0) + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>{language === 'en' ? 'Flat' : '空仓'}</text>
           <polyline className="chart-card__area-line" points={area} />
           <polyline className="chart-card__line chart-card__line--exposure" points={line} />
           {markers.map((marker) => (
@@ -679,6 +695,7 @@ function RangeBrushPanel({
   onChange: (start: number, end: number) => void;
   height: number;
 }) {
+  const { language } = useI18n();
   if (!allRows.length) return null;
 
   const width = RANGE_BRUSH_WIDTH;
@@ -699,22 +716,22 @@ function RangeBrushPanel({
     <div className="backtest-range-brush backtest-unified-chart-viewer__panel backtest-unified-chart-viewer__panel--brush">
       <div className="backtest-unified-chart-viewer__panel-header">
         <div>
-          <span className="product-kicker">范围选择</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">联动时间窗口</h3>
+          <span className="product-kicker">{language === 'en' ? 'Range' : '范围选择'}</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">{language === 'en' ? 'Linked time window' : '联动时间窗口'}</h3>
         </div>
         <span className="product-inline-meta">{allRows[visibleStartIndex]?.date} {'->'} {allRows[visibleEndIndex]?.date}</span>
       </div>
       <div className="backtest-range-brush__overview">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="回测范围选择器">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={language === 'en' ? 'Backtest range selector' : '回测范围选择器'}>
           <polyline className="chart-card__line chart-card__line--strategy backtest-range-brush__line" points={points} />
         </svg>
         <div className="backtest-range-brush__selection" style={{ left: `${leftPct}%`, width: `${Math.max(rightPct - leftPct, 1)}%` }} />
       </div>
       <div className="backtest-range-brush__controls">
         <label className="backtest-range-brush__slider">
-          <span>开始</span>
+          <span>{language === 'en' ? 'Start' : '开始'}</span>
           <input
-            aria-label="开始"
+            aria-label={language === 'en' ? 'Start' : '开始'}
             type="range"
             min={0}
             max={Math.max(allRows.length - 1, 0)}
@@ -723,9 +740,9 @@ function RangeBrushPanel({
           />
         </label>
         <label className="backtest-range-brush__slider">
-          <span>结束</span>
+          <span>{language === 'en' ? 'End' : '结束'}</span>
           <input
-            aria-label="结束"
+            aria-label={language === 'en' ? 'End' : '结束'}
             type="range"
             min={0}
             max={Math.max(allRows.length - 1, 0)}
@@ -751,29 +768,30 @@ function HoverDetail({
   tooltipRef: React.RefObject<HTMLDivElement | null>;
   density: DeterministicResultDensityMode;
 }) {
+  const { language } = useI18n();
   const positionLabel = formatPosition(row?.position);
   const primaryFields = row ? [
-    { label: '日期', value: row.date },
-    { label: '策略累计收益', value: pct(row.strategyCumReturn) },
+    { label: language === 'en' ? 'Date' : '日期', value: row.date },
+    { label: language === 'en' ? 'Strategy cumulative return' : '策略累计收益', value: pct(row.strategyCumReturn) },
     ...(benchmarkMeta.showBenchmark && row.benchmarkCumReturn != null
       ? [{ label: benchmarkMeta.benchmarkLabel, value: pct(row.benchmarkCumReturn) }]
       : []),
     ...(benchmarkMeta.showBuyHold && row.buyHoldCumReturn != null
       ? [{ label: benchmarkMeta.buyHoldLabel, value: pct(row.buyHoldCumReturn) }]
       : []),
-    ...(row.dailyPnl != null ? [{ label: '当日盈亏', value: formatNumber(row.dailyPnl) }] : []),
-    ...(row.dailyReturn != null ? [{ label: '当日收益率', value: pct(row.dailyReturn) }] : []),
-    ...(positionLabel ? [{ label: '仓位', value: positionLabel }] : []),
-    ...(row.action != null ? [{ label: '动作', value: formatDeterministicActionLabel(row.action) }] : []),
-    ...(row.fillPrice != null ? [{ label: '成交价', value: formatNumber(row.fillPrice) }] : []),
-    ...(row.shares != null ? [{ label: '持仓股数', value: formatNumber(row.shares, 4) }] : []),
-    ...(row.cash != null ? [{ label: '现金', value: formatNumber(row.cash) }] : []),
-    ...(row.totalValue != null ? [{ label: '总资产', value: formatNumber(row.totalValue) }] : []),
+    ...(row.dailyPnl != null ? [{ label: language === 'en' ? 'Daily PnL' : '当日盈亏', value: formatNumber(row.dailyPnl) }] : []),
+    ...(row.dailyReturn != null ? [{ label: language === 'en' ? 'Daily return' : '当日收益率', value: pct(row.dailyReturn) }] : []),
+    ...(positionLabel ? [{ label: language === 'en' ? 'Position' : '仓位', value: positionLabel }] : []),
+    ...(row.action != null ? [{ label: language === 'en' ? 'Action' : '动作', value: formatDeterministicActionLabel(row.action, language) }] : []),
+    ...(row.fillPrice != null ? [{ label: language === 'en' ? 'Fill price' : '成交价', value: formatNumber(row.fillPrice) }] : []),
+    ...(row.shares != null ? [{ label: language === 'en' ? 'Shares held' : '持仓股数', value: formatNumber(row.shares, 4) }] : []),
+    ...(row.cash != null ? [{ label: language === 'en' ? 'Cash' : '现金', value: formatNumber(row.cash) }] : []),
+    ...(row.totalValue != null ? [{ label: language === 'en' ? 'Total equity' : '总资产', value: formatNumber(row.totalValue) }] : []),
   ] : [];
   const detailBlocks = row ? [
-    { label: '信号摘要', value: row.signalSummary || '--' },
-    ...(row.notes ? [{ label: '备注', value: row.notes }] : []),
-    ...(row.unavailableReason ? [{ label: '不可用说明', value: row.unavailableReason }] : []),
+    { label: language === 'en' ? 'Signal summary' : '信号摘要', value: row.signalSummary || '--' },
+    ...(row.notes ? [{ label: language === 'en' ? 'Notes' : '备注', value: row.notes }] : []),
+    ...(row.unavailableReason ? [{ label: language === 'en' ? 'Unavailable reason' : '不可用说明', value: row.unavailableReason }] : []),
   ] : [];
 
   return (
@@ -799,13 +817,13 @@ function HoverDetail({
     >
       <div className="backtest-unified-chart-viewer__hover-header">
         <div>
-          <span className="product-kicker">联动悬停</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">当日详情</h3>
+          <span className="product-kicker">{language === 'en' ? 'Hover detail' : '联动悬停'}</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">{language === 'en' ? 'Day detail' : '当日详情'}</h3>
         </div>
         {row ? <span className="product-inline-meta">{row.date}</span> : null}
       </div>
       {!row ? (
-        <p className="product-empty-note">将鼠标移到图表上即可查看某一交易日的审计详情。</p>
+        <p className="product-empty-note">{language === 'en' ? 'Move the pointer across the chart to inspect one trading day at a time.' : '将鼠标移到图表上即可查看某一交易日的审计详情。'}</p>
       ) : (
         <div className="backtest-tooltip">
           <dl className="backtest-tooltip__grid">
@@ -843,21 +861,22 @@ function ChartHeader({
   secondaryPanelMode: SecondaryPanelMode;
   onSecondaryPanelModeChange: (mode: SecondaryPanelMode) => void;
 }) {
+  const { language } = useI18n();
   return (
       <div className="backtest-result-viewer__toolbar">
         <div className="product-chip-list">
-          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange('all')}>全部</button>
-          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange(63)}>近3个月</button>
-          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange(21)}>近1个月</button>
-          <span className="product-chip">当前窗口: {visibleRowsLength} 天</span>
-          <span className="product-chip">全部区间: {totalRows} 天</span>
+          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange('all')}>{language === 'en' ? 'All' : '全部'}</button>
+          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange(63)}>{language === 'en' ? 'Last 3 months' : '近3个月'}</button>
+          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange(21)}>{language === 'en' ? 'Last month' : '近1个月'}</button>
+          <span className="product-chip">{language === 'en' ? `Visible window: ${visibleRowsLength} days` : `当前窗口: ${visibleRowsLength} 天`}</span>
+          <span className="product-chip">{language === 'en' ? `Full range: ${totalRows} days` : `全部区间: ${totalRows} 天`}</span>
         </div>
         <div className="product-chip-list product-chip-list--tight">
-          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'relative' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('relative')}>相对基准</button>
-          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'daily' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('daily')}>每日盈亏</button>
-          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'position' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('position')}>仓位行为</button>
+          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'relative' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('relative')}>{language === 'en' ? 'Relative comparison' : '相对基准'}</button>
+          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'daily' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('daily')}>{language === 'en' ? 'Daily PnL' : '每日盈亏'}</button>
+          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'position' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('position')}>{language === 'en' ? 'Position activity' : '仓位行为'}</button>
         </div>
-      <p className="backtest-result-viewer__toolbar-note">主图看收益，第二张优先看回撤，第三张可在相对基准 / 每日盈亏 / 仓位之间切换。</p>
+      <p className="backtest-result-viewer__toolbar-note">{language === 'en' ? 'Use the main chart for returns, the second panel for drawdown, and the third panel to switch between relative comparison, daily PnL, and position activity.' : '主图看收益，第二张优先看回撤，第三张可在相对基准 / 每日盈亏 / 仓位之间切换。'}</p>
     </div>
   );
 }

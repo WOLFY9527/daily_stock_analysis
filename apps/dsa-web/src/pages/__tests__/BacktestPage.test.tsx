@@ -1177,5 +1177,9 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: 'Deterministic backtest' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Historical evaluation' })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: 'Control panel mode' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Strategy input' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Strategy text')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Parse strategy' })).toBeInTheDocument();
   });
 });

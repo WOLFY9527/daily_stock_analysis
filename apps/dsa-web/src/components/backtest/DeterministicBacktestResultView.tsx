@@ -77,7 +77,7 @@ export function DeterministicAuditTable({
               {rows.map((row) => (
                 <tr key={`audit-${row.date}`}>
                   <td>{row.date}</td>
-                  <td>{formatDeterministicActionLabel(row.action)}</td>
+                  <td>{formatDeterministicActionLabel(row.action, language)}</td>
                   <td className="product-table__align-right">{formatNumber(row.symbolClose)}</td>
                   <td className="product-table__align-right">{formatNumber(row.benchmarkClose)}</td>
                   <td className="product-table__align-right">{formatNumber(row.fillPrice)}</td>
@@ -123,7 +123,7 @@ export function DeterministicTradeEventTable({ events }: { events: Deterministic
               {events.map((event) => (
                 <tr key={event.key}>
                   <td>{event.date}</td>
-                  <td>{formatDeterministicActionLabel(event.action)}</td>
+                  <td>{formatDeterministicActionLabel(event.action, language)}</td>
                   <td className="product-table__align-right">{formatNumber(event.fillPrice)}</td>
                   <td className="product-table__align-right">{formatNumber(event.shares, 4)}</td>
                   <td className="product-table__align-right">{formatNumber(event.cash)}</td>
@@ -150,8 +150,8 @@ export const DeterministicBacktestResultView: React.FC<{
   const fallbackDensityConfig = useDeterministicResultDensity();
   const resolvedDensity = densityConfig ?? fallbackDensityConfig;
   const normalized = useMemo(
-    () => providedNormalized ?? normalizeDeterministicBacktestResult(run),
-    [providedNormalized, run],
+    () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
+    [providedNormalized, run, language],
   );
   const { metrics, benchmarkMeta, viewerMeta } = normalized;
   const annualizedReturn = metrics.annualizedReturnPct != null ? pct(metrics.annualizedReturnPct) : '--';
@@ -172,8 +172,8 @@ export const DeterministicBacktestResultView: React.FC<{
       ? `${benchmarkMeta.buyHoldLabel} ${pct(metrics.buyAndHoldReturnPct)}`
       : (language === 'en' ? 'No comparable benchmark return is available.' : '当前没有可比较的基准收益');
   const workspaceKey = `${viewerMeta.runId}:${viewerMeta.rowCount}:${viewerMeta.firstDate ?? 'empty'}:${viewerMeta.lastDate ?? 'empty'}`;
-  const narrative = describeRuleRunNarrative(run);
-  const executionNotes = getRuleRunExecutionNotes(run);
+  const narrative = describeRuleRunNarrative(run, language);
+  const executionNotes = getRuleRunExecutionNotes(run, language);
 
   return (
     <div
