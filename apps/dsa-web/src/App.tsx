@@ -1,18 +1,11 @@
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import ScannerSurfacePage from './pages/ScannerSurfacePage';
-import BacktestPage from './pages/BacktestPage';
-import DeterministicBacktestResultPage from './pages/DeterministicBacktestResultPage';
-import RuleBacktestComparePage from './pages/RuleBacktestComparePage';
-import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
-import ChatPage from './pages/ChatPage';
-import PortfolioPage from './pages/PortfolioPage';
 import PreviewReportPage from './pages/PreviewReportPage';
 import PreviewFullReportDrawerPage from './pages/PreviewFullReportDrawerPage';
-import AdminLogsPage from './pages/AdminLogsPage';
 import { ApiErrorAlert, BrandedLoadingScreen, Shell } from './components/common';
 import { AccessGatePage } from './components/access/AccessGatePage';
 import { PreviewShell } from './components/layout/PreviewShell';
@@ -27,12 +20,20 @@ import {
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
 import HomeSurfacePage from './pages/HomeSurfacePage';
-import PersonalSettingsPage from './pages/PersonalSettingsPage';
 import { useAgentChatStore } from './stores/agentChatStore';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
 const APP_BOOT_SPLASH_FADE_MS = 380;
 const STATIC_BOOT_SPLASH_ID = 'boot-splash';
+
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
+const BacktestPage = lazy(() => import('./pages/BacktestPage'));
+const RuleBacktestComparePage = lazy(() => import('./pages/RuleBacktestComparePage'));
+const DeterministicBacktestResultPage = lazy(() => import('./pages/DeterministicBacktestResultPage'));
+const PersonalSettingsPage = lazy(() => import('./pages/PersonalSettingsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AdminLogsPage = lazy(() => import('./pages/AdminLogsPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -498,36 +499,38 @@ export const AppContent: React.FC = () => {
       }
     } else {
       content = (
-        <Routes>
-          <Route element={<Shell />}>
-            <Route path="/" element={<HomeSurfacePage />} />
-            <Route path="/scanner" element={<ScannerSurfacePage />} />
-            <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
-            <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-            <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
-            <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
-            <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-            <Route path="/settings" element={<PersonalSettingsPage />} />
-            <Route path="/settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
-            <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
-          <Route path="/:locale" element={<Shell />}>
-            <Route index element={<HomeSurfacePage />} />
-            <Route path="scanner" element={<ScannerSurfacePage />} />
-            <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
-            <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-            <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
-            <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
-            <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-            <Route path="settings" element={<PersonalSettingsPage />} />
-            <Route path="settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
-            <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/:locale/login" element={<LoginPage />} />
-        </Routes>
+        <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+          <Routes>
+            <Route element={<Shell />}>
+              <Route path="/" element={<HomeSurfacePage />} />
+              <Route path="/scanner" element={<ScannerSurfacePage />} />
+              <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
+              <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
+              <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+              <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
+              <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
+              <Route path="/settings" element={<PersonalSettingsPage />} />
+              <Route path="/settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
+              <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+            <Route path="/:locale" element={<Shell />}>
+              <Route index element={<HomeSurfacePage />} />
+              <Route path="scanner" element={<ScannerSurfacePage />} />
+              <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
+              <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
+              <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+              <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
+              <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
+              <Route path="settings" element={<PersonalSettingsPage />} />
+              <Route path="settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
+              <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/:locale/login" element={<LoginPage />} />
+          </Routes>
+        </Suspense>
       );
     }
   }
