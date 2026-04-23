@@ -796,7 +796,7 @@ class PortfolioService:
             "page": int((legacy_result or {}).get("page", legacy_context.get("page", 1)) or 1),
             "page_size": int((legacy_result or {}).get("page_size", legacy_context.get("page_size", 20)) or 20),
         }
-        legacy_summary = self._summarize_phase_f_trade_list_result(legacy_view)
+        legacy_summary = self._summarize_phase_f_result_view(legacy_view)
         comparison_source = "phase_f_pg_trade_list_candidate"
         can_compare, skip_reason = self._phase_f_trade_list_comparison_rollout_decision(
             request_context=legacy_context,
@@ -838,7 +838,7 @@ class PortfolioService:
             )
             return None
 
-        candidate_summary = self._summarize_phase_f_trade_list_result(candidate)
+        candidate_summary = self._summarize_phase_f_result_view(candidate)
         mismatch = self._compare_phase_f_trade_list_results(legacy_view=legacy_view, candidate_view=candidate)
         if mismatch is None:
             self._emit_phase_f_trade_list_comparison_report(
@@ -988,10 +988,10 @@ class PortfolioService:
             for field_name in contract_fields:
                 legacy_value = legacy_item.get(field_name)
                 candidate_value = candidate_item.get(field_name)
-                if self._normalize_phase_f_trade_list_compare_value(
+                if self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=legacy_value,
-                ) == self._normalize_phase_f_trade_list_compare_value(
+                ) == self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=candidate_value,
                 ):
@@ -1008,17 +1008,66 @@ class PortfolioService:
         return None
 
     @staticmethod
-    def _normalize_phase_f_trade_list_compare_value(
+    def _normalize_phase_f_compare_value(
         *,
         field_name: str,
         value: Any,
     ) -> Any:
+        """Normalize one Phase F comparison field before payload equality checks.
+
+        Purpose:
+            Keep comparison semantics aligned across the trade-list, cash-ledger,
+            and corporate-actions migration surfaces. The helper only normalizes
+            contract fields that are expected to drift in representation while
+            remaining semantically identical.
+
+        Parameters:
+            field_name (str): Contract field currently being compared between the
+                legacy payload and the Phase F candidate payload.
+            value (Any): Raw field value from either side of the comparison.
+                The helper accepts the original payload types and returns a value
+                suitable for equality checks.
+
+        Returns:
+            Any: The original value for all fields except ``created_at``. For
+            ``created_at``, the return value is a timezone-naive ISO-8601 string
+            when the input is a parseable ``datetime`` or datetime-like string.
+            Unparseable strings and unsupported objects are returned unchanged so
+            real payload drift remains visible to the caller.
+
+        Assumptions:
+            - Only ``created_at`` is allowed to normalize away representation-only
+              drift in this comparison contract.
+            - Other fields must preserve their original values because a mismatch
+              should remain blocking and visible in diagnostics.
+
+        Edge cases:
+            - ``None`` stays ``None``.
+            - Empty datetime strings normalize to ``None``.
+            - Timezone-aware datetimes drop ``tzinfo`` without converting clock
+              time because Phase F diagnostics care about payload-shape drift, not
+              cross-timezone instant equivalence.
+            - Invalid datetime strings are returned unchanged and will still
+              trigger a mismatch if the opposite side differs.
+
+        Example:
+            >>> PortfolioService._normalize_phase_f_compare_value(
+            ...     field_name="created_at",
+            ...     value="2026-04-21T00:49:23.107279+08:00",
+            ... )
+            '2026-04-21T00:49:23.107279'
+            >>> PortfolioService._normalize_phase_f_compare_value(
+            ...     field_name="symbol",
+            ...     value="AAPL",
+            ... )
+            'AAPL'
+        """
         if field_name != "created_at":
             return value
-        return PortfolioService._normalize_phase_f_trade_list_created_at_compare_value(value)
+        return PortfolioService._normalize_phase_f_created_at_compare_value(value)
 
     @staticmethod
-    def _normalize_phase_f_trade_list_created_at_compare_value(value: Any) -> Any:
+    def _normalize_phase_f_created_at_compare_value(value: Any) -> Any:
         if value is None:
             return None
         parsed: Optional[datetime] = None
@@ -1039,7 +1088,48 @@ class PortfolioService:
             parsed = parsed.replace(tzinfo=None)
         return parsed.isoformat()
 
-    def _summarize_phase_f_trade_list_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _summarize_phase_f_result_view(result_view: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a bounded diagnostic summary for a paginated Phase F payload.
+
+        Purpose:
+            Produce the compact summary block embedded in Phase F comparison
+            reports without leaking full payload rows into logs, evidence
+            collectors, or review artifacts.
+
+        Parameters:
+            result_view (Dict[str, Any]): Legacy or Phase F response payload that
+                may contain ``total``, ``page``, ``page_size``, and ``items``.
+                Missing keys are tolerated and normalized to stable defaults.
+
+        Returns:
+            Dict[str, Any]: A compact summary with the following shape:
+                - ``total`` (int): normalized total row count
+                - ``page`` (int): normalized page number, default ``1``
+                - ``page_size`` (int): normalized page size, default ``20``
+                - ``page_item_count`` (int): number of rows present in ``items``
+                - ``ordered_ids`` (List[Any]): ordered row identifiers preserved
+                  exactly as they appear in the payload
+
+        Assumptions:
+            - The caller has already bounded ``items`` through the underlying API
+              contract, so summarizing the ordered ids is safe for diagnostics.
+            - Consumers want shape-level evidence only; they do not need the full
+              row payload in comparison reports.
+
+        Edge cases:
+            - Non-numeric ``total`` / ``page`` / ``page_size`` values are coerced
+              through ``int(...)`` with existing service semantics.
+            - Missing or ``None`` pagination values fall back to ``0`` for
+              ``total`` and ``1`` / ``20`` for ``page`` / ``page_size``.
+            - Missing ``items`` behaves like an empty list.
+
+        Example:
+            >>> PortfolioService._summarize_phase_f_result_view(
+            ...     {"total": 2, "page": 1, "page_size": 20, "items": [{"id": 21}, {"id": 20}]}
+            ... )
+            {'total': 2, 'page': 1, 'page_size': 20, 'page_item_count': 2, 'ordered_ids': [21, 20]}
+        """
         items = list((result_view or {}).get("items", []) or [])
         return {
             "total": int((result_view or {}).get("total", 0) or 0),
@@ -1412,7 +1502,7 @@ class PortfolioService:
             "page": int((legacy_result or {}).get("page", legacy_context.get("page", 1)) or 1),
             "page_size": int((legacy_result or {}).get("page_size", legacy_context.get("page_size", 20)) or 20),
         }
-        legacy_summary = self._summarize_phase_f_cash_ledger_result(legacy_view)
+        legacy_summary = self._summarize_phase_f_result_view(legacy_view)
         comparison_source = "phase_f_pg_cash_ledger_candidate"
         can_compare, skip_reason = self._phase_f_cash_ledger_comparison_rollout_decision(
             request_context=legacy_context,
@@ -1454,7 +1544,7 @@ class PortfolioService:
             )
             return None
 
-        candidate_summary = self._summarize_phase_f_cash_ledger_result(candidate)
+        candidate_summary = self._summarize_phase_f_result_view(candidate)
         mismatch = self._compare_phase_f_cash_ledger_results(legacy_view=legacy_view, candidate_view=candidate)
         if mismatch is None:
             self._emit_phase_f_cash_ledger_comparison_report(
@@ -1588,10 +1678,10 @@ class PortfolioService:
             for field_name in contract_fields:
                 legacy_value = legacy_item.get(field_name)
                 candidate_value = candidate_item.get(field_name)
-                if self._normalize_phase_f_cash_ledger_compare_value(
+                if self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=legacy_value,
-                ) == self._normalize_phase_f_cash_ledger_compare_value(
+                ) == self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=candidate_value,
                 ):
@@ -1606,26 +1696,6 @@ class PortfolioService:
                     "first_pg_value": candidate_value,
                 }
         return None
-
-    @staticmethod
-    def _normalize_phase_f_cash_ledger_compare_value(
-        *,
-        field_name: str,
-        value: Any,
-    ) -> Any:
-        if field_name != "created_at":
-            return value
-        return PortfolioService._normalize_phase_f_trade_list_created_at_compare_value(value)
-
-    def _summarize_phase_f_cash_ledger_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
-        items = list((result_view or {}).get("items", []) or [])
-        return {
-            "total": int((result_view or {}).get("total", 0) or 0),
-            "page": int((result_view or {}).get("page", 1) or 1),
-            "page_size": int((result_view or {}).get("page_size", 20) or 20),
-            "page_item_count": len(items),
-            "ordered_ids": [item.get("id") for item in items],
-        }
 
     def _emit_phase_f_cash_ledger_comparison_report(self, report: Dict[str, Any]) -> None:
         self._collect_phase_f_cash_ledger_comparison_report(report)
@@ -1900,7 +1970,7 @@ class PortfolioService:
             "page": int((legacy_result or {}).get("page", legacy_context.get("page", 1)) or 1),
             "page_size": int((legacy_result or {}).get("page_size", legacy_context.get("page_size", 20)) or 20),
         }
-        legacy_summary = self._summarize_phase_f_corporate_actions_result(legacy_view)
+        legacy_summary = self._summarize_phase_f_result_view(legacy_view)
         comparison_source = "phase_f_pg_corporate_actions_candidate"
         can_compare, skip_reason = self._phase_f_corporate_actions_comparison_rollout_decision(
             request_context=legacy_context,
@@ -1980,7 +2050,7 @@ class PortfolioService:
             )
             return None
 
-        candidate_summary = self._summarize_phase_f_corporate_actions_result(candidate)
+        candidate_summary = self._summarize_phase_f_result_view(candidate)
         mismatch = self._compare_phase_f_corporate_actions_results(
             legacy_view=legacy_view,
             candidate_view=candidate,
@@ -2132,10 +2202,10 @@ class PortfolioService:
             for field_name in contract_fields:
                 legacy_value = legacy_item.get(field_name)
                 candidate_value = candidate_item.get(field_name)
-                if self._normalize_phase_f_corporate_actions_compare_value(
+                if self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=legacy_value,
-                ) == self._normalize_phase_f_corporate_actions_compare_value(
+                ) == self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=candidate_value,
                 ):
@@ -2150,26 +2220,6 @@ class PortfolioService:
                     "first_pg_value": candidate_value,
                 }
         return None
-
-    @staticmethod
-    def _normalize_phase_f_corporate_actions_compare_value(
-        *,
-        field_name: str,
-        value: Any,
-    ) -> Any:
-        if field_name != "created_at":
-            return value
-        return PortfolioService._normalize_phase_f_trade_list_created_at_compare_value(value)
-
-    def _summarize_phase_f_corporate_actions_result(self, result_view: Dict[str, Any]) -> Dict[str, Any]:
-        items = list((result_view or {}).get("items", []) or [])
-        return {
-            "total": int((result_view or {}).get("total", 0) or 0),
-            "page": int((result_view or {}).get("page", 1) or 1),
-            "page_size": int((result_view or {}).get("page_size", 20) or 20),
-            "page_item_count": len(items),
-            "ordered_ids": [item.get("id") for item in items],
-        }
 
     def _emit_phase_f_corporate_actions_comparison_report(self, report: Dict[str, Any]) -> None:
         self._collect_phase_f_corporate_actions_comparison_report(report)

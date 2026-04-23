@@ -168,9 +168,8 @@ class PostgresPhaseERealPgTestCase(unittest.TestCase):
             }
         )
         service = BacktestService(db, owner_id="real-pg-phase-e-user")
-        with patch.object(
-            service,
-            "_load_history_with_local_us_fallback",
+        with patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
             return_value=(fixture_df, LOCAL_US_PARQUET_SOURCE),
         ):
             stats = service.run_backtest(code="AAPL", force=False, eval_window_days=3, min_age_days=0, limit=10)

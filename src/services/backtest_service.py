@@ -776,23 +776,6 @@ class BacktestService:
             "fees_slippage": "not applied",
         }
 
-    def _load_history_with_local_us_fallback(
-        self,
-        *,
-        code: str,
-        start_date: date,
-        end_date: date,
-        days: int,
-        log_context: str,
-    ) -> tuple[Optional[Any], Optional[str]]:
-        return fetch_daily_history_with_local_us_fallback(
-            code,
-            start_date=start_date,
-            end_date=end_date,
-            days=days,
-            log_context=log_context,
-        )
-
     def _collect_market_data_sources(self, *, code: str, analysis_date: Optional[date], eval_window_days: int) -> List[str]:
         if analysis_date is None:
             return []
@@ -813,8 +796,8 @@ class BacktestService:
         try:
             # Fetch a window that covers the analysis bar plus the forward evaluation bars.
             end_date = analysis_date + timedelta(days=max(eval_window_days * 2, 30))
-            df, source = self._load_history_with_local_us_fallback(
-                code=code,
+            df, source = fetch_daily_history_with_local_us_fallback(
+                code,
                 start_date=analysis_date,
                 end_date=end_date,
                 days=eval_window_days * 2,
@@ -853,8 +836,8 @@ class BacktestService:
                 return 0, self._build_source_metadata_for_stock_rows(code=code, rows=rows, default_to_cache=True)
 
         try:
-            df, source = self._load_history_with_local_us_fallback(
-                code=code,
+            df, source = fetch_daily_history_with_local_us_fallback(
+                code,
                 start_date=start_date,
                 end_date=end_date,
                 days=lookback_days,

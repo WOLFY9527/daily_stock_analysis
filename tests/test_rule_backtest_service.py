@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pandas as pd
 from sqlalchemy import select
 
 from src.config import Config
@@ -754,6 +755,55 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(len(response["exposure_curve"]), 0)
         self.assertIn("execution_assumptions", response)
         self.assertIn("total_return_pct", response)
+
+    def test_service_run_backtest_fetches_missing_us_history_via_shared_local_first_helper(self) -> None:
+        service = RuleBacktestService(self.db)
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": current_date.isoformat(),
+                    "open": close - 0.1,
+                    "high": close + 0.2,
+                    "low": max(0.01, close - 0.3),
+                    "close": close,
+                    "volume": 1000,
+                }
+                for current_date, close in [
+                    (date(2024, 1, 1) + timedelta(days=index), 100.0 + index)
+                    for index in range(24)
+                ]
+            ]
+        )
+
+        with patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(frame, "local_us_parquet"),
+        ) as fetch_mock, patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="AAPL",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-05",
+                end_date="2024-01-24",
+                lookback_bars=10,
+                initial_capital=100000.0,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        fetch_mock.assert_called_once()
+        self.assertEqual(fetch_mock.call_args.args[0], "AAPL")
+        self.assertEqual(fetch_mock.call_args.kwargs["log_context"], "[rule-backtest date-range history]")
+        self.assertEqual(response["code"], "AAPL")
+        self.assertIsNone(response["no_result_reason"])
+        self.assertGreater(len(response["equity_curve"]), 0)
+        self.assertGreater(len(response["trades"]), 0)
+
+        with self.db.get_session() as session:
+            daily_rows = session.query(StockDaily).filter(StockDaily.code == "AAPL").order_by(StockDaily.date).all()
+
+        self.assertEqual(len(daily_rows), 24)
+        self.assertEqual(daily_rows[0].date.isoformat(), "2024-01-01")
+        self.assertEqual(daily_rows[-1].date.isoformat(), "2024-01-24")
 
     def test_service_uses_market_appropriate_auto_benchmark_defaults(self) -> None:
         service = RuleBacktestService(self.db)

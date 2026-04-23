@@ -8,7 +8,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -73,6 +73,313 @@ class PortfolioServiceTestCase(unittest.TestCase):
             ]
         )
         self.db.save_daily_data(df, code=symbol, data_source="unit-test")
+
+    def test_phase_f_compare_value_helper_normalizes_created_at_timezone_only_drift(self) -> None:
+        normalized = self.service._normalize_phase_f_compare_value(
+            field_name="created_at",
+            value=datetime(2026, 4, 21, 0, 49, 23, 107279, tzinfo=timezone(timedelta(hours=8))),
+        )
+
+        self.assertEqual(normalized, "2026-04-21T00:49:23.107279")
+        self.assertEqual(
+            self.service._normalize_phase_f_compare_value(field_name="symbol", value="AAPL"),
+            "AAPL",
+        )
+
+    def test_phase_f_result_view_summary_helper_returns_shared_shape(self) -> None:
+        summary = self.service._summarize_phase_f_result_view(
+            {
+                "total": "2",
+                "page": None,
+                "page_size": "50",
+                "items": [
+                    {"id": 21, "created_at": "2026-04-21T00:49:23.107279"},
+                    {"id": 20, "created_at": "2026-04-21T00:49:22.107279"},
+                ],
+            }
+        )
+
+        self.assertEqual(
+            summary,
+            {
+                "total": 2,
+                "page": 1,
+                "page_size": 50,
+                "page_item_count": 2,
+                "ordered_ids": [21, 20],
+            },
+        )
+
+    def test_phase_f_compare_methods_ignore_created_at_timezone_only_drift_across_surfaces(self) -> None:
+        cases = [
+            (
+                "trade_list",
+                self.service._compare_phase_f_trade_list_results,
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 11,
+                            "account_id": 1,
+                            "trade_uid": None,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "trade_date": "2026-04-21",
+                            "side": "buy",
+                            "quantity": 10.0,
+                            "price": 100.0,
+                            "fee": 0.0,
+                            "tax": 0.0,
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:23.107279",
+                        }
+                    ],
+                },
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 11,
+                            "account_id": 1,
+                            "trade_uid": None,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "trade_date": "2026-04-21",
+                            "side": "buy",
+                            "quantity": 10.0,
+                            "price": 100.0,
+                            "fee": 0.0,
+                            "tax": 0.0,
+                            "note": "seed",
+                            "created_at": datetime(2026, 4, 21, 0, 49, 23, 107279, tzinfo=timezone(timedelta(hours=8))).isoformat(),
+                        }
+                    ],
+                },
+            ),
+            (
+                "cash_ledger",
+                self.service._compare_phase_f_cash_ledger_results,
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 12,
+                            "account_id": 1,
+                            "event_date": "2026-04-21",
+                            "direction": "in",
+                            "amount": 1000.0,
+                            "currency": "USD",
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:23.107279",
+                        }
+                    ],
+                },
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 12,
+                            "account_id": 1,
+                            "event_date": "2026-04-21",
+                            "direction": "in",
+                            "amount": 1000.0,
+                            "currency": "USD",
+                            "note": "seed",
+                            "created_at": datetime(2026, 4, 21, 0, 49, 23, 107279, tzinfo=timezone(timedelta(hours=8))).isoformat(),
+                        }
+                    ],
+                },
+            ),
+            (
+                "corporate_actions",
+                self.service._compare_phase_f_corporate_actions_results,
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 13,
+                            "account_id": 1,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "effective_date": "2026-04-21",
+                            "action_type": "cash_dividend",
+                            "cash_dividend_per_share": 1.0,
+                            "split_ratio": None,
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:23.107279",
+                        }
+                    ],
+                },
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 13,
+                            "account_id": 1,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "effective_date": "2026-04-21",
+                            "action_type": "cash_dividend",
+                            "cash_dividend_per_share": 1.0,
+                            "split_ratio": None,
+                            "note": "seed",
+                            "created_at": datetime(2026, 4, 21, 0, 49, 23, 107279, tzinfo=timezone(timedelta(hours=8))).isoformat(),
+                        }
+                    ],
+                },
+            ),
+        ]
+
+        for label, comparer, legacy_view, candidate_view in cases:
+            with self.subTest(surface=label):
+                self.assertIsNone(comparer(legacy_view=legacy_view, candidate_view=candidate_view))
+
+    def test_phase_f_compare_methods_detect_real_created_at_drift_across_surfaces(self) -> None:
+        cases = [
+            (
+                "trade_list",
+                self.service._compare_phase_f_trade_list_results,
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 11,
+                            "account_id": 1,
+                            "trade_uid": None,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "trade_date": "2026-04-21",
+                            "side": "buy",
+                            "quantity": 10.0,
+                            "price": 100.0,
+                            "fee": 0.0,
+                            "tax": 0.0,
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:23.107279",
+                        }
+                    ],
+                },
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 11,
+                            "account_id": 1,
+                            "trade_uid": None,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "trade_date": "2026-04-21",
+                            "side": "buy",
+                            "quantity": 10.0,
+                            "price": 100.0,
+                            "fee": 0.0,
+                            "tax": 0.0,
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:24.107279+08:00",
+                        }
+                    ],
+                },
+            ),
+            (
+                "cash_ledger",
+                self.service._compare_phase_f_cash_ledger_results,
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 12,
+                            "account_id": 1,
+                            "event_date": "2026-04-21",
+                            "direction": "in",
+                            "amount": 1000.0,
+                            "currency": "USD",
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:23.107279",
+                        }
+                    ],
+                },
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 12,
+                            "account_id": 1,
+                            "event_date": "2026-04-21",
+                            "direction": "in",
+                            "amount": 1000.0,
+                            "currency": "USD",
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:24.107279+08:00",
+                        }
+                    ],
+                },
+            ),
+            (
+                "corporate_actions",
+                self.service._compare_phase_f_corporate_actions_results,
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 13,
+                            "account_id": 1,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "effective_date": "2026-04-21",
+                            "action_type": "cash_dividend",
+                            "cash_dividend_per_share": 1.0,
+                            "split_ratio": None,
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:23.107279",
+                        }
+                    ],
+                },
+                {
+                    "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+                    "total": 1,
+                    "items": [
+                        {
+                            "id": 13,
+                            "account_id": 1,
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "effective_date": "2026-04-21",
+                            "action_type": "cash_dividend",
+                            "cash_dividend_per_share": 1.0,
+                            "split_ratio": None,
+                            "note": "seed",
+                            "created_at": "2026-04-21T00:49:24.107279+08:00",
+                        }
+                    ],
+                },
+            ),
+        ]
+
+        for label, comparer, legacy_view, candidate_view in cases:
+            with self.subTest(surface=label):
+                mismatch = comparer(legacy_view=legacy_view, candidate_view=candidate_view)
+                self.assertIsNotNone(mismatch)
+                self.assertEqual(mismatch["mismatch_class"], "payload_field_mismatch")
+                self.assertEqual(mismatch["first_mismatch_field"], "created_at")
 
     def test_snapshot_fifo_vs_avg_on_partial_sell(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

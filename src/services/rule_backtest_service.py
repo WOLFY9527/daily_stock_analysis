@@ -1606,8 +1606,8 @@ class RuleBacktestService:
     ) -> int:
         if start_date is not None and end_date is not None:
             try:
-                df, source = self._load_history_with_local_us_fallback(
-                    code=code,
+                df, source = fetch_daily_history_with_local_us_fallback(
+                    code,
                     start_date=start_date,
                     end_date=end_date,
                     days=max(load_count, (end_date - start_date).days + 5),
@@ -1629,8 +1629,8 @@ class RuleBacktestService:
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=max(load_count * 2, 180))
         try:
-            df, source = self._load_history_with_local_us_fallback(
-                code=code,
+            df, source = fetch_daily_history_with_local_us_fallback(
+                code,
                 start_date=start_date,
                 end_date=end_date,
                 days=load_count,
@@ -1642,23 +1642,6 @@ class RuleBacktestService:
         except Exception as exc:
             logger.warning("Failed to ensure rule backtest history for %s: %s", code, exc)
             return 0
-
-    def _load_history_with_local_us_fallback(
-        self,
-        *,
-        code: str,
-        start_date: date,
-        end_date: date,
-        days: int,
-        log_context: str,
-    ) -> tuple[Optional[Any], Optional[str]]:
-        return fetch_daily_history_with_local_us_fallback(
-            code,
-            start_date=start_date,
-            end_date=end_date,
-            days=days,
-            log_context=log_context,
-        )
 
     @staticmethod
     def _is_a_share_like_code(code: str) -> bool:

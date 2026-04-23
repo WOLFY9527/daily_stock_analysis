@@ -144,7 +144,32 @@ def fetch_daily_history_with_local_us_fallback(
     manager: Optional[DataFetcherManager] = None,
     log_context: str = "[daily history]",
 ) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
-    """Fetch daily history with a local-US-parquet fast path when applicable."""
+    """Fetch daily bars with stored-first US parquet fallback semantics.
+
+    Parameters:
+        stock_code: Symbol requested by the caller.
+        start_date: Optional inclusive lower date bound.
+        end_date: Optional inclusive upper date bound.
+        days: Optional max number of rows to keep from the tail of the window.
+        manager: Optional fetch manager override for remote fallback reads.
+        log_context: Short label appended to local-hit and fallback log lines.
+
+    Returns:
+        A tuple of ``(dataframe, source_name)``. ``dataframe`` is ``None`` when
+        neither the local parquet fast path nor the fallback fetcher returns
+        data. ``source_name`` is the concrete source label used for persistence.
+
+    Example:
+        >>> df, source = fetch_daily_history_with_local_us_fallback(
+        ...     "AAPL",
+        ...     start_date="2024-01-01",
+        ...     end_date="2024-01-31",
+        ...     days=20,
+        ...     log_context="[rule-backtest history]",
+        ... )
+        >>> source in {"local_us_parquet", "yfinance", None}
+        True
+    """
 
     normalized_code = str(stock_code or "").strip().upper()
     start_date_str = _normalize_date_arg(start_date)
