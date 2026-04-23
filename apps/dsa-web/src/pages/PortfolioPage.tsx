@@ -5,6 +5,7 @@ import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Card, Badge, ConfirmDialog, Disclosure, WorkspacePageHeader } from '../components/common';
+import { useI18n } from '../contexts/UiLanguageContext';
 import { toDateInputValue } from '../utils/format';
 import { getMarketDirectionColor } from '../utils/marketColors';
 import type {
@@ -59,6 +60,520 @@ type FxRefreshContext = {
   requestId: number;
 };
 
+type PortfolioLanguage = 'zh' | 'en';
+
+const PORTFOLIO_COPY: Record<PortfolioLanguage, {
+  documentTitle: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  createAccount: string;
+  collapseCreate: string;
+  refreshData: string;
+  refreshingData: string;
+  noAccounts: string;
+  accountView: string;
+  allAccounts: string;
+  costMethod: string;
+  costFifo: string;
+  costAvg: string;
+  scopeHint: string;
+  fxState: string;
+  refreshFx: string;
+  refreshingFx: string;
+  emptyConcentration: string;
+  noBrokerConnections: string;
+  emptyEventsTitle: string;
+  emptyEventsBody: string;
+  prevPage: string;
+  nextPage: string;
+  pageLabel: string;
+  deleteTitle: string;
+  deleteMessage: string;
+  deleteConfirm: string;
+  deleteInProgress: string;
+  cancel: string;
+  accountNameRequired: string;
+  accountCreated: string;
+  accountCreateFailed: string;
+  riskFallback: string;
+  writeRequiresAccount: string;
+  syncRequiresAccount: string;
+  syncRequiresToken: string;
+  deleteRequiresAccount: string;
+  riskDegraded: string;
+  actionHint: string;
+  createAccountTitle: string;
+  createAccountHelp: string;
+  accountNamePlaceholder: string;
+  brokerPlaceholder: string;
+  baseCurrencyPlaceholder: string;
+  marketCn: string;
+  marketHk: string;
+  marketUs: string;
+  marketGlobal: string;
+  creatingAccount: string;
+  totalEquity: string;
+  totalMarketValue: string;
+  totalCash: string;
+  fxFresh: string;
+  fxStale: string;
+  drawdownTitle: string;
+  maxDrawdown: string;
+  currentDrawdown: string;
+  alert: string;
+  yes: string;
+  no: string;
+  stopLossTitle: string;
+  triggeredCount: string;
+  nearCount: string;
+  snapshotBasisTitle: string;
+  accountCount: string;
+  reportingCurrency: string;
+  costMethodLabel: string;
+  allAccountsWarning: string;
+  positionsTitle: string;
+  positionsCount: (count: number) => string;
+  noPositions: string;
+  positionAccount: string;
+  positionCode: string;
+  positionMarketCurrency: string;
+  positionQuantity: string;
+  positionAvgCost: string;
+  positionLastPrice: string;
+  positionMarketValue: string;
+  positionUnrealized: string;
+  sectorConcentration: string;
+  singleNameConcentration: string;
+  concentrationHint: string;
+  concentrationScope: string;
+  concentrationScopeSector: string;
+  concentrationScopeFallback: string;
+  sectorAlert: string;
+  topWeight: string;
+  dataSyncTitle: string;
+  brokerImport: string;
+  currentImportAccount: string;
+  brokerFallbackEmpty: string;
+  brokerFallbackUnavailable: string;
+  selectBrokerExport: string;
+  selectIbkrExport: string;
+  dryRun: string;
+  parsing: string;
+  parseFile: string;
+  committing: string;
+  commitImport: string;
+  brokerImportHint: string;
+  ibkrImportHint: string;
+  ibkrReadOnlyTitle: string;
+  ibkrReadOnlyBody: string;
+  readOnlyBadge: string;
+  ibkrApiBasePlaceholder: string;
+  ibkrAccountRefPlaceholder: string;
+  ibkrSessionTokenPlaceholder: string;
+  verifyIbkrSsl: string;
+  syncing: string;
+  syncIbkr: string;
+  syncResult: string;
+  positionsCountLabel: string;
+  cashCurrenciesLabel: string;
+  accountRef: string;
+  syncedAt: string;
+  syncOverlay: string;
+  syncSaved: string;
+  parseResult: string;
+  valid: string;
+  cash: string;
+  corporateActions: string;
+  skipped: string;
+  errors: string;
+  accountMapping: string;
+  commitResult: string;
+  inserted: string;
+  duplicates: string;
+  failed: string;
+  duplicateFingerprintHint: string;
+  manualAdjustments: string;
+  manualTrade: string;
+  symbolPlaceholder: string;
+  buy: string;
+  sell: string;
+  quantity: string;
+  price: string;
+  feeOptional: string;
+  taxOptional: string;
+  submitTrade: string;
+  manualCash: string;
+  cashIn: string;
+  cashOut: string;
+  amount: string;
+  currencyOptional: (currency: string) => string;
+  submitCash: string;
+  manualCorporate: string;
+  stockCode: string;
+  cashDividend: string;
+  splitAdjustment: string;
+  dividendPerShare: string;
+  splitRatio: string;
+  submitCorporate: string;
+  ledgerAudit: string;
+  tradeLedger: string;
+  cashLedger: string;
+  corporateLedger: string;
+  loading: string;
+  refreshLedger: string;
+  filterBySymbol: string;
+  allSides: string;
+  allDirections: string;
+  allActions: string;
+  deleteHintBlocked: string;
+  deleteHintReady: string;
+  tradeDeleteMessage: (item: PortfolioTradeListItem) => string;
+  cashDeleteMessage: (item: PortfolioCashLedgerListItem) => string;
+  corporateDeleteMessage: (item: PortfolioCorporateActionListItem) => string;
+}> = {
+  zh: {
+    documentTitle: '持仓分析 - WolfyStock',
+    eyebrow: 'WolfyStock 持仓工作区',
+    title: '持仓管理',
+    description: '组合快照与风险评估',
+    createAccount: '新建账户',
+    collapseCreate: '收起新建',
+    refreshData: '刷新数据',
+    refreshingData: '刷新中...',
+    noAccounts: '还没有可用账户，请先创建账户后再录入交易或导入券商文件。',
+    accountView: '账户视图',
+    allAccounts: '全部账户',
+    costMethod: '成本口径',
+    costFifo: '先进先出（FIFO）',
+    costAvg: '均价成本（AVG）',
+    scopeHint: '当前选择会一起刷新组合快照、风险指标和该账户下的持仓明细。',
+    fxState: '汇率状态',
+    refreshFx: '刷新汇率',
+    refreshingFx: '刷新中',
+    emptyConcentration: '暂无集中度数据',
+    noBrokerConnections: '该账户还没有已保存的券商连接，首次导入会自动创建用户自有连接。',
+    emptyEventsTitle: '暂无流水记录',
+    emptyEventsBody: '调整筛选条件，或先录入流水。',
+    prevPage: '上一页',
+    nextPage: '下一页',
+    pageLabel: '页码',
+    deleteTitle: '删除错误流水',
+    deleteMessage: '确认删除这条流水吗？',
+    deleteConfirm: '确认删除',
+    deleteInProgress: '删除中...',
+    cancel: '取消',
+    accountNameRequired: '账户名称不能为空。',
+    accountCreated: '账户创建成功，已自动切换到该账户。',
+    accountCreateFailed: '创建账户失败，请稍后重试。',
+    riskFallback: '风险数据获取失败，已降级为仅展示快照数据。',
+    writeRequiresAccount: '请先在右上角选择具体账户，再进行录入或导入提交。',
+    syncRequiresAccount: '请先在右上角选择具体账户，再触发 IBKR 只读同步。',
+    syncRequiresToken: '请提供当前有效的 IBKR 登录令牌，再执行只读同步。',
+    deleteRequiresAccount: '请先在右上角选择具体账户，再进行删除修正。',
+    riskDegraded: '风险模块降级',
+    actionHint: '操作提示',
+    createAccountTitle: '新建账户',
+    createAccountHelp: '创建后自动切换到该账户',
+    accountNamePlaceholder: '账户名称（必填）',
+    brokerPlaceholder: '券商（可选，如 Demo/华泰）',
+    baseCurrencyPlaceholder: '基准币（如 CNY/USD/HKD）',
+    marketCn: '市场：A 股（cn）',
+    marketHk: '市场：港股（hk）',
+    marketUs: '市场：美股（us）',
+    marketGlobal: '市场：全球账户（global）',
+    creatingAccount: '创建中...',
+    totalEquity: '总权益',
+    totalMarketValue: '总市值',
+    totalCash: '总现金',
+    fxFresh: '最新',
+    fxStale: '过期',
+    drawdownTitle: '回撤监控',
+    maxDrawdown: '最大回撤',
+    currentDrawdown: '当前回撤',
+    alert: '告警',
+    yes: '是',
+    no: '否',
+    stopLossTitle: '止损接近预警',
+    triggeredCount: '触发数',
+    nearCount: '接近数',
+    snapshotBasisTitle: '统计口径',
+    accountCount: '账户数',
+    reportingCurrency: '计价币种',
+    costMethodLabel: '成本法',
+    allAccountsWarning: '当前处于“全部账户”视图。为避免误写，请先选择一个具体账户后再进行手工录入或券商文件导入提交。',
+    positionsTitle: '持仓明细',
+    positionsCount: (count) => `共 ${count} 项`,
+    noPositions: '当前无持仓数据',
+    positionAccount: '账户',
+    positionCode: '代码',
+    positionMarketCurrency: '市场 / 币种',
+    positionQuantity: '数量',
+    positionAvgCost: '均价',
+    positionLastPrice: '现价',
+    positionMarketValue: '市值',
+    positionUnrealized: '未实现盈亏',
+    sectorConcentration: '行业集中度',
+    singleNameConcentration: '个股集中度（降级）',
+    concentrationHint: '补齐持仓市值后将显示集中度分布',
+    concentrationScope: '展示口径',
+    concentrationScopeSector: '行业维度',
+    concentrationScopeFallback: '个股维度（降级显示）',
+    sectorAlert: '板块告警',
+    topWeight: 'Top 1 权重',
+    dataSyncTitle: '数据同步',
+    brokerImport: '券商导入',
+    currentImportAccount: '当前导入账户',
+    brokerFallbackEmpty: '券商列表接口返回为空，已回退为内置券商列表（华泰/中信/招商/IBKR）。',
+    brokerFallbackUnavailable: '券商列表接口不可用，已回退为内置券商列表（华泰/中信/招商/IBKR）。',
+    selectBrokerExport: '选择券商导出文件...',
+    selectIbkrExport: '选择 IBKR Flex XML 导出文件...',
+    dryRun: '仅预演',
+    parsing: '解析中...',
+    parseFile: '解析文件',
+    committing: '提交中...',
+    commitImport: '提交导入',
+    brokerImportHint: '保留现有 A 股券商文件导入路径，兼容华泰 / 中信 / 招商 CSV。',
+    ibkrImportHint: 'IBKR 首版推荐使用 Flex Query XML 导出；系统会将导入记录绑定到当前用户自己的券商连接。',
+    ibkrReadOnlyTitle: 'IBKR 只读同步',
+    ibkrReadOnlyBody: '仅同步账户状态与持仓，不会开放任何交易或下单能力。登录令牌只用于本次同步，不会保存到系统。',
+    readOnlyBadge: '只读',
+    ibkrApiBasePlaceholder: 'IBKR API 地址（默认 https://localhost:5000/v1/api）',
+    ibkrAccountRefPlaceholder: 'IBKR 账户引用（可选，例如 U1234567）',
+    ibkrSessionTokenPlaceholder: 'IBKR 会话令牌（仅本次手动同步使用，不保存）',
+    verifyIbkrSsl: '校验 IBKR HTTPS 证书',
+    syncing: '同步中...',
+    syncIbkr: '只读同步 IBKR',
+    syncResult: '同步结果',
+    positionsCountLabel: '持仓',
+    cashCurrenciesLabel: '现金币种',
+    accountRef: '账户引用',
+    syncedAt: '同步时间',
+    syncOverlay: '当前日期快照已切换到 API 同步视图',
+    syncSaved: '已保存同步结果',
+    parseResult: '解析结果',
+    valid: '有效',
+    cash: '现金',
+    corporateActions: '公司行为',
+    skipped: '跳过',
+    errors: '错误',
+    accountMapping: '账户映射',
+    commitResult: '提交结果',
+    inserted: '写入',
+    duplicates: '重复',
+    failed: '失败',
+    duplicateFingerprintHint: '检测到同一券商连接的重复文件指纹，本次不会重复写入。',
+    manualAdjustments: '高级：手工录入与修正',
+    manualTrade: '手工录入：交易',
+    symbolPlaceholder: '股票代码（例如 600519）',
+    buy: '买入',
+    sell: '卖出',
+    quantity: '数量',
+    price: '成交价',
+    feeOptional: '手续费 (可选)',
+    taxOptional: '税费 (可选)',
+    submitTrade: '提交交易',
+    manualCash: '手工录入：资金',
+    cashIn: '流入',
+    cashOut: '流出',
+    amount: '金额',
+    currencyOptional: (currency) => `币种（可选，默认 ${currency || '账户基准币'}）`,
+    submitCash: '提交资金流水',
+    manualCorporate: '手工录入：公司行为',
+    stockCode: '股票代码',
+    cashDividend: '现金分红',
+    splitAdjustment: '拆并股调整',
+    dividendPerShare: '每股分红',
+    splitRatio: '拆并股比例',
+    submitCorporate: '提交公司行为',
+    ledgerAudit: '流水与审计',
+    tradeLedger: '交易流水',
+    cashLedger: '资金流水',
+    corporateLedger: '公司行为',
+    loading: '加载中...',
+    refreshLedger: '刷新流水',
+    filterBySymbol: '按股票代码筛选',
+    allSides: '全部买卖方向',
+    allDirections: '全部资金方向',
+    allActions: '全部公司行为',
+    deleteHintBlocked: '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。',
+    deleteHintReady: '如有错误流水，可直接删除后重新录入。',
+    tradeDeleteMessage: (item) => `确认删除 ${item.tradeDate} 的${item.side === 'buy' ? '买入' : '卖出'}流水 ${item.symbol}（数量 ${item.quantity}，价格 ${item.price}）吗？`,
+    cashDeleteMessage: (item) => `确认删除 ${item.eventDate} 的资金流水（${item.direction === 'in' ? '流入' : '流出'} ${item.amount} ${item.currency}）吗？`,
+    corporateDeleteMessage: (item) => `确认删除 ${item.effectiveDate} 的公司行为 ${item.actionType === 'cash_dividend' ? '现金分红' : '拆并股调整'}（${item.symbol}）吗？`,
+  },
+  en: {
+    documentTitle: 'Portfolio - WolfyStock',
+    eyebrow: 'WolfyStock Portfolio Workspace',
+    title: 'Portfolio management',
+    description: 'Portfolio snapshots and risk review',
+    createAccount: 'Create account',
+    collapseCreate: 'Hide create form',
+    refreshData: 'Refresh data',
+    refreshingData: 'Refreshing...',
+    noAccounts: 'No portfolio accounts are available yet. Create one before recording trades or importing broker files.',
+    accountView: 'Account scope',
+    allAccounts: 'All accounts',
+    costMethod: 'Cost method',
+    costFifo: 'First in, first out (FIFO)',
+    costAvg: 'Average cost (AVG)',
+    scopeHint: 'The current scope refreshes the portfolio snapshot, risk metrics, and position details together.',
+    fxState: 'FX status',
+    refreshFx: 'Refresh FX',
+    refreshingFx: 'Refreshing',
+    emptyConcentration: 'No concentration data yet',
+    noBrokerConnections: 'This account has no saved broker connections yet. The first import will create an account-owned connection automatically.',
+    emptyEventsTitle: 'No ledger events yet',
+    emptyEventsBody: 'Adjust the filters or record a new event first.',
+    prevPage: 'Previous',
+    nextPage: 'Next',
+    pageLabel: 'Page',
+    deleteTitle: 'Delete incorrect event',
+    deleteMessage: 'Delete this ledger event?',
+    deleteConfirm: 'Delete',
+    deleteInProgress: 'Deleting...',
+    cancel: 'Cancel',
+    accountNameRequired: 'Account name is required.',
+    accountCreated: 'Account created and switched automatically.',
+    accountCreateFailed: 'Failed to create the account. Try again later.',
+    riskFallback: 'Risk data could not be loaded, so the page fell back to snapshot-only mode.',
+    writeRequiresAccount: 'Select a specific account in the top-right scope switcher before recording or importing data.',
+    syncRequiresAccount: 'Select a specific account in the top-right scope switcher before starting IBKR read-only sync.',
+    syncRequiresToken: 'Provide a valid IBKR session token before running the read-only sync.',
+    deleteRequiresAccount: 'Select a specific account in the top-right scope switcher before deleting a ledger event.',
+    riskDegraded: 'Risk module degraded',
+    actionHint: 'Action hint',
+    createAccountTitle: 'Create account',
+    createAccountHelp: 'The page switches to the new account automatically after creation.',
+    accountNamePlaceholder: 'Account name (required)',
+    brokerPlaceholder: 'Broker (optional, for example Demo or Huatai)',
+    baseCurrencyPlaceholder: 'Base currency (for example CNY, USD, or HKD)',
+    marketCn: 'Market: A-share (cn)',
+    marketHk: 'Market: Hong Kong (hk)',
+    marketUs: 'Market: US (us)',
+    marketGlobal: 'Market: Global (global)',
+    creatingAccount: 'Creating...',
+    totalEquity: 'Total equity',
+    totalMarketValue: 'Total market value',
+    totalCash: 'Total cash',
+    fxFresh: 'Fresh',
+    fxStale: 'Stale',
+    drawdownTitle: 'Drawdown monitor',
+    maxDrawdown: 'Max drawdown',
+    currentDrawdown: 'Current drawdown',
+    alert: 'Alert',
+    yes: 'Yes',
+    no: 'No',
+    stopLossTitle: 'Stop-loss proximity',
+    triggeredCount: 'Triggered',
+    nearCount: 'Near',
+    snapshotBasisTitle: 'Snapshot basis',
+    accountCount: 'Accounts',
+    reportingCurrency: 'Reporting currency',
+    costMethodLabel: 'Cost method',
+    allAccountsWarning: 'You are in the all-accounts scope. Pick a specific account before recording or importing data to avoid writing to the wrong ledger.',
+    positionsTitle: 'Positions',
+    positionsCount: (count) => `${count} positions`,
+    noPositions: 'No positions are available yet.',
+    positionAccount: 'Account',
+    positionCode: 'Code',
+    positionMarketCurrency: 'Market / currency',
+    positionQuantity: 'Quantity',
+    positionAvgCost: 'Avg cost',
+    positionLastPrice: 'Last price',
+    positionMarketValue: 'Market value',
+    positionUnrealized: 'Unrealized PnL',
+    sectorConcentration: 'Sector concentration',
+    singleNameConcentration: 'Single-name concentration (fallback)',
+    concentrationHint: 'Concentration distribution appears after position market values are available.',
+    concentrationScope: 'Display mode',
+    concentrationScopeSector: 'Sector view',
+    concentrationScopeFallback: 'Single-name fallback view',
+    sectorAlert: 'Sector alert',
+    topWeight: 'Top 1 weight',
+    dataSyncTitle: 'Data sync',
+    brokerImport: 'Broker import',
+    currentImportAccount: 'Current import account',
+    brokerFallbackEmpty: 'The broker list API returned no items, so the page fell back to the built-in broker list (Huatai, Citic, CMB, IBKR).',
+    brokerFallbackUnavailable: 'The broker list API is unavailable, so the page fell back to the built-in broker list (Huatai, Citic, CMB, IBKR).',
+    selectBrokerExport: 'Choose a broker export file...',
+    selectIbkrExport: 'Choose an IBKR Flex XML export...',
+    dryRun: 'Dry run',
+    parsing: 'Parsing...',
+    parseFile: 'Parse file',
+    committing: 'Committing...',
+    commitImport: 'Commit import',
+    brokerImportHint: 'The existing A-share broker import flow remains in place for Huatai, Citic, and CMB CSV exports.',
+    ibkrImportHint: 'This IBKR import expects a Flex Query XML export and links imported records to the current user-owned broker connection.',
+    ibkrReadOnlyTitle: 'IBKR read-only sync',
+    ibkrReadOnlyBody: 'This sync imports account state and positions only. It never enables trading, and the session token is used only for this sync.',
+    readOnlyBadge: 'Read-only',
+    ibkrApiBasePlaceholder: 'IBKR API base URL (default: https://localhost:5000/v1/api)',
+    ibkrAccountRefPlaceholder: 'IBKR account ref (optional, for example U1234567)',
+    ibkrSessionTokenPlaceholder: 'IBKR session token (used only for this manual sync)',
+    verifyIbkrSsl: 'Verify the IBKR HTTPS certificate',
+    syncing: 'Syncing...',
+    syncIbkr: 'Run read-only IBKR sync',
+    syncResult: 'Sync result',
+    positionsCountLabel: 'Positions',
+    cashCurrenciesLabel: 'Cash currencies',
+    accountRef: 'Account ref',
+    syncedAt: 'Synced at',
+    syncOverlay: 'The current-date snapshot now reflects the API sync overlay',
+    syncSaved: 'Sync result saved',
+    parseResult: 'Parse result',
+    valid: 'Valid',
+    cash: 'Cash',
+    corporateActions: 'Corporate actions',
+    skipped: 'Skipped',
+    errors: 'Errors',
+    accountMapping: 'Account mapping',
+    commitResult: 'Commit result',
+    inserted: 'Inserted',
+    duplicates: 'Duplicates',
+    failed: 'Failed',
+    duplicateFingerprintHint: 'The same broker connection already imported this file fingerprint, so no duplicate records were written.',
+    manualAdjustments: 'Advanced: manual adjustments',
+    manualTrade: 'Manual entry: trades',
+    symbolPlaceholder: 'Ticker or symbol (for example 600519)',
+    buy: 'Buy',
+    sell: 'Sell',
+    quantity: 'Quantity',
+    price: 'Price',
+    feeOptional: 'Fee (optional)',
+    taxOptional: 'Tax (optional)',
+    submitTrade: 'Submit trade',
+    manualCash: 'Manual entry: cash',
+    cashIn: 'Cash in',
+    cashOut: 'Cash out',
+    amount: 'Amount',
+    currencyOptional: (currency) => `Currency (optional, default: ${currency || 'account base currency'})`,
+    submitCash: 'Submit cash ledger',
+    manualCorporate: 'Manual entry: corporate actions',
+    stockCode: 'Symbol',
+    cashDividend: 'Cash dividend',
+    splitAdjustment: 'Split adjustment',
+    dividendPerShare: 'Dividend per share',
+    splitRatio: 'Split ratio',
+    submitCorporate: 'Submit corporate action',
+    ledgerAudit: 'Ledger and audit',
+    tradeLedger: 'Trade ledger',
+    cashLedger: 'Cash ledger',
+    corporateLedger: 'Corporate actions',
+    loading: 'Loading...',
+    refreshLedger: 'Refresh ledger',
+    filterBySymbol: 'Filter by symbol',
+    allSides: 'All sides',
+    allDirections: 'All cash directions',
+    allActions: 'All action types',
+    deleteHintBlocked: 'Delete corrections are available only in a single-account scope. Pick a specific account first.',
+    deleteHintReady: 'Delete incorrect ledger items here, then record the corrected one.',
+    tradeDeleteMessage: (item) => `Delete the ${item.tradeDate} ${item.side === 'buy' ? 'buy' : 'sell'} trade for ${item.symbol} (${item.quantity} shares at ${item.price})?`,
+    cashDeleteMessage: (item) => `Delete the ${item.eventDate} cash event (${item.direction === 'in' ? 'cash in' : 'cash out'} ${item.amount} ${item.currency})?`,
+    corporateDeleteMessage: (item) => `Delete the ${item.effectiveDate} ${item.actionType === 'cash_dividend' ? 'cash dividend' : 'split adjustment'} event for ${item.symbol}?`,
+  },
+};
+
 function getTodayIso(): string {
   return toDateInputValue(new Date());
 }
@@ -76,32 +591,77 @@ function formatPct(value: number | undefined | null): string {
   return `${value.toFixed(2)}%`;
 }
 
-function formatSideLabel(value: PortfolioSide): string {
+function formatSideLabel(value: PortfolioSide, language: PortfolioLanguage): string {
+  if (language === 'en') {
+    return value === 'buy' ? 'Buy' : 'Sell';
+  }
   return value === 'buy' ? '买入' : '卖出';
 }
 
-function formatCashDirectionLabel(value: PortfolioCashDirection): string {
+function formatCashDirectionLabel(value: PortfolioCashDirection, language: PortfolioLanguage): string {
+  if (language === 'en') {
+    return value === 'in' ? 'Cash in' : 'Cash out';
+  }
   return value === 'in' ? '流入' : '流出';
 }
 
-function formatCorporateActionLabel(value: PortfolioCorporateActionType): string {
+function formatCorporateActionLabel(value: PortfolioCorporateActionType, language: PortfolioLanguage): string {
+  if (language === 'en') {
+    return value === 'cash_dividend' ? 'Cash dividend' : 'Split adjustment';
+  }
   return value === 'cash_dividend' ? '现金分红' : '拆并股调整';
 }
 
-function formatBrokerLabel(value: string, displayName?: string): string {
-  if (displayName && displayName.trim()) return `${value}（${displayName.trim()}）`;
-  if (value === 'huatai') return 'huatai（华泰）';
-  if (value === 'citic') return 'citic（中信）';
-  if (value === 'cmb') return 'cmb（招商）';
-  if (value === 'ibkr') return 'ibkr（Interactive Brokers）';
+function formatBrokerLabel(value: string, displayName: string | undefined, language: PortfolioLanguage): string {
+  const englishKnownName = value === 'huatai'
+    ? 'Huatai'
+    : value === 'citic'
+      ? 'Citic'
+      : value === 'cmb'
+        ? 'CMB'
+        : value === 'ibkr'
+          ? 'Interactive Brokers'
+          : null;
+  if (language === 'en' && englishKnownName) {
+    return `${value} (${englishKnownName})`;
+  }
+  if (displayName && displayName.trim()) {
+    return language === 'en' ? `${value} (${displayName.trim()})` : `${value}（${displayName.trim()}）`;
+  }
+  if (value === 'huatai') return language === 'en' ? 'huatai (Huatai)' : 'huatai（华泰）';
+  if (value === 'citic') return language === 'en' ? 'citic (Citic)' : 'citic（中信）';
+  if (value === 'cmb') return language === 'en' ? 'cmb (CMB)' : 'cmb（招商）';
+  if (value === 'ibkr') return language === 'en' ? 'ibkr (Interactive Brokers)' : 'ibkr（Interactive Brokers）';
   return value;
 }
 
-function formatAccountMarketLabel(value: string): string {
+function formatAccountMarketLabel(value: string, language: PortfolioLanguage): string {
+  if (language === 'en') {
+    if (value === 'global') return 'Global';
+    if (value === 'hk') return 'Hong Kong';
+    if (value === 'us') return 'US';
+    return 'A-share';
+  }
   if (value === 'global') return '全球市场';
   if (value === 'hk') return '港股';
   if (value === 'us') return '美股';
   return 'A 股';
+}
+
+function formatBrokerConnectionStatus(value: string, language: PortfolioLanguage): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (language === 'en') {
+    if (normalized === 'active') return 'Active';
+    if (normalized === 'inactive') return 'Inactive';
+    if (normalized === 'disabled') return 'Disabled';
+    if (normalized === 'error') return 'Error';
+    return value || '--';
+  }
+  if (normalized === 'active') return '已连接';
+  if (normalized === 'inactive') return '未启用';
+  if (normalized === 'disabled') return '已停用';
+  if (normalized === 'error') return '异常';
+  return value || '--';
 }
 
 function formatPositionContext(market: string, currency: string): string {
@@ -134,47 +694,54 @@ function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null
   };
 }
 
-function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse): FxRefreshFeedback {
+function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: PortfolioLanguage): FxRefreshFeedback {
+  const isEnglish = language === 'en';
   if (data.refreshEnabled === false) {
     return {
       tone: 'neutral',
-      text: '汇率在线刷新已被禁用。',
+      text: isEnglish ? 'Online FX refresh is disabled.' : '汇率在线刷新已被禁用。',
     };
   }
 
   if (data.pairCount === 0) {
     return {
       tone: 'neutral',
-      text: '当前范围无可刷新的汇率对。',
+      text: isEnglish ? 'No FX pairs are refreshable in the current scope.' : '当前范围无可刷新的汇率对。',
     };
   }
 
   if (data.updatedCount > 0 && data.staleCount === 0 && data.errorCount === 0) {
     return {
       tone: 'success',
-      text: `汇率已刷新，共更新 ${data.updatedCount} 对。`,
+      text: isEnglish ? `FX refresh completed. Updated ${data.updatedCount} pair(s).` : `汇率已刷新，共更新 ${data.updatedCount} 对。`,
     };
   }
 
-  const summary = `更新 ${data.updatedCount} 对，仍过期 ${data.staleCount} 对，失败 ${data.errorCount} 对。`;
+  const summary = isEnglish
+    ? `Updated ${data.updatedCount}, still stale ${data.staleCount}, failed ${data.errorCount}.`
+    : `更新 ${data.updatedCount} 对，仍过期 ${data.staleCount} 对，失败 ${data.errorCount} 对。`;
   if (data.staleCount > 0) {
     return {
       tone: 'warning',
-      text: `已尝试刷新，但仍有部分货币对使用旧汇率或备用汇率。${summary}`,
+      text: isEnglish
+        ? `Refresh finished with stale or fallback FX pairs still in use. ${summary}`
+        : `已尝试刷新，但仍有部分货币对使用旧汇率或备用汇率。${summary}`,
     };
   }
 
   return {
     tone: 'warning',
-    text: `在线刷新未完全成功。${summary}`,
+    text: isEnglish ? `FX refresh did not fully succeed. ${summary}` : `在线刷新未完全成功。${summary}`,
   };
 }
 
 const PortfolioPage: React.FC = () => {
-  // Set page title
+  const { language } = useI18n();
+  const copy = PORTFOLIO_COPY[language];
+
   useEffect(() => {
-    document.title = '持仓分析 - WolfyStock';
-  }, []);
+    document.title = copy.documentTitle;
+  }, [copy.documentTitle]);
 
   const [accounts, setAccounts] = useState<PortfolioAccountItem[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<AccountOption>('all');
@@ -313,7 +880,7 @@ const PortfolioPage: React.FC = () => {
       const brokerItems = response.brokers || [];
       if (brokerItems.length === 0) {
         setBrokers(FALLBACK_BROKERS);
-        setBrokerLoadWarning('券商列表接口返回为空，已回退为内置券商列表（华泰/中信/招商/IBKR）。');
+        setBrokerLoadWarning(copy.brokerFallbackEmpty);
         setSelectedBroker((prev) => (
           FALLBACK_BROKERS.some((item) => item.broker === prev)
             ? prev
@@ -330,7 +897,7 @@ const PortfolioPage: React.FC = () => {
       ));
     } catch {
       setBrokers(FALLBACK_BROKERS);
-      setBrokerLoadWarning('券商列表接口不可用，已回退为内置券商列表（华泰/中信/招商/IBKR）。');
+      setBrokerLoadWarning(copy.brokerFallbackUnavailable);
       setSelectedBroker((prev) => (
         FALLBACK_BROKERS.some((item) => item.broker === prev)
           ? prev
@@ -372,7 +939,7 @@ const PortfolioPage: React.FC = () => {
       } catch (riskErr) {
         setRisk(null);
         const parsed = getParsedApiError(riskErr);
-        setRiskWarning(parsed.message || '风险数据获取失败，已降级为仅展示快照数据。');
+        setRiskWarning(parsed.message || copy.riskFallback);
       }
     } catch (err) {
       setSnapshot(null);
@@ -542,7 +1109,7 @@ const PortfolioPage: React.FC = () => {
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -569,7 +1136,7 @@ const PortfolioPage: React.FC = () => {
   const handleCashSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -592,7 +1159,7 @@ const PortfolioPage: React.FC = () => {
   const handleCorporateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -630,7 +1197,7 @@ const PortfolioPage: React.FC = () => {
   const handleCommitCsv = async () => {
     if (!csvFile) return;
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -651,11 +1218,11 @@ const PortfolioPage: React.FC = () => {
 
   const handleSyncIbkr = async () => {
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再触发 IBKR 只读同步。');
+      setWriteWarning(copy.syncRequiresAccount);
       return;
     }
     if (!ibkrSessionToken.trim()) {
-      setWriteWarning('请提供当前有效的 IBKR 登录令牌，再执行只读同步。');
+      setWriteWarning(copy.syncRequiresToken);
       return;
     }
     try {
@@ -682,7 +1249,7 @@ const PortfolioPage: React.FC = () => {
 
   const openDeleteDialog = (item: PendingDelete) => {
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行删除修正。');
+      setWriteWarning(copy.deleteRequiresAccount);
       return;
     }
     setPendingDelete(item);
@@ -691,7 +1258,7 @@ const PortfolioPage: React.FC = () => {
   const handleConfirmDelete = async () => {
     if (!pendingDelete || deleteLoading) return;
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行删除修正。');
+      setWriteWarning(copy.deleteRequiresAccount);
       setPendingDelete(null);
       return;
     }
@@ -723,7 +1290,7 @@ const PortfolioPage: React.FC = () => {
     e.preventDefault();
     const name = accountForm.name.trim();
     if (!name) {
-      setAccountCreateError('账户名称不能为空。');
+      setAccountCreateError(copy.accountNameRequired);
       setAccountCreateSuccess(null);
       return;
     }
@@ -747,10 +1314,10 @@ const PortfolioPage: React.FC = () => {
         market: accountForm.market,
         baseCurrency: accountForm.baseCurrency,
       });
-      setAccountCreateSuccess('账户创建成功，已自动切换到该账户。');
+      setAccountCreateSuccess(copy.accountCreated);
     } catch (err) {
       const parsed = getParsedApiError(err);
-      setAccountCreateError(parsed.message || '创建账户失败，请稍后重试。');
+      setAccountCreateError(parsed.message || copy.accountCreateFailed);
       setAccountCreateSuccess(null);
     } finally {
       setAccountCreating(false);
@@ -800,7 +1367,7 @@ const PortfolioPage: React.FC = () => {
         }
         setRisk(null);
         const parsed = getParsedApiError(riskErr);
-        setRiskWarning(parsed.message || '风险数据获取失败，已降级为仅展示快照数据。');
+        setRiskWarning(parsed.message || copy.riskFallback);
       }
       return true;
     } catch (err) {
@@ -846,7 +1413,7 @@ const PortfolioPage: React.FC = () => {
       if (!reloaded || !isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
         return;
       }
-      setFxRefreshFeedback(buildFxRefreshFeedback(result));
+      setFxRefreshFeedback(buildFxRefreshFeedback(result, language));
     } catch (err) {
       if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
         return;
@@ -870,9 +1437,9 @@ const PortfolioPage: React.FC = () => {
   return (
     <div className="workspace-page workspace-page--portfolio">
       <WorkspacePageHeader
-        eyebrow="WolfyStock 持仓工作区"
-        title="持仓管理"
-        description="组合快照与风险评估"
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        description={copy.description}
         actions={hasAccounts ? (
           <>
             <button
@@ -884,7 +1451,7 @@ const PortfolioPage: React.FC = () => {
                 setAccountCreateSuccess(null);
               }}
             >
-              {showCreateAccount ? '收起新建' : '新建账户'}
+              {showCreateAccount ? copy.collapseCreate : copy.createAccount}
             </button>
             <button
               type="button"
@@ -892,12 +1459,12 @@ const PortfolioPage: React.FC = () => {
               disabled={isLoading || fxRefreshing}
               className="btn-secondary text-sm"
             >
-              {isLoading ? '刷新中...' : '刷新数据'}
+              {isLoading ? copy.refreshingData : copy.refreshData}
             </button>
           </>
         ) : (
           <p className="workspace-header-actions-note">
-            还没有可用账户，请先创建账户后再录入交易或导入券商文件。
+            {copy.noAccounts}
           </p>
         )}
       >
@@ -905,33 +1472,33 @@ const PortfolioPage: React.FC = () => {
           <div className="workspace-surface-muted p-3.5">
             <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_220px_minmax(0,260px)] xl:items-end">
               <div>
-                <p className="mb-1 text-xs text-secondary">账户视图</p>
+                <p className="mb-1 text-xs text-secondary">{copy.accountView}</p>
                 <select
                   value={String(selectedAccount)}
                   onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                   className="input-terminal w-full text-sm"
                 >
-                  <option value="all">全部账户</option>
+                  <option value="all">{copy.allAccounts}</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name} · {formatAccountMarketLabel(account.market)} · {account.baseCurrency} (#{account.id})
+                      {account.name} · {formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} (#{account.id})
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <p className="mb-1 text-xs text-secondary">成本口径</p>
+                <p className="mb-1 text-xs text-secondary">{copy.costMethod}</p>
                 <select
                   value={costMethod}
                   onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
                   className="input-terminal w-full text-sm"
                 >
-                  <option value="fifo">先进先出（FIFO）</option>
-                  <option value="avg">均价成本（AVG）</option>
+                  <option value="fifo">{copy.costFifo}</option>
+                  <option value="avg">{copy.costAvg}</option>
                 </select>
               </div>
               <p className="workspace-header-actions-note xl:text-right">
-                当前选择会一起刷新组合快照、风险指标和该账户下的持仓明细。
+                {copy.scopeHint}
               </p>
             </div>
           </div>
@@ -941,19 +1508,19 @@ const PortfolioPage: React.FC = () => {
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
       {riskWarning ? (
         <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
-          风险模块降级：{riskWarning}
+          {copy.riskDegraded}: {riskWarning}
         </div>
       ) : null}
       {writeWarning ? (
         <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
-          操作提示：{writeWarning}
+          {copy.actionHint}: {writeWarning}
         </div>
       ) : null}
 
       {(showCreateAccount || !hasAccounts) ? (
         <Card padding="md">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-foreground">新建账户</h2>
+            <h2 className="text-sm font-semibold text-foreground">{copy.createAccountTitle}</h2>
             {hasAccounts ? (
               <button
                 type="button"
@@ -964,10 +1531,10 @@ const PortfolioPage: React.FC = () => {
                   setAccountCreateSuccess(null);
                 }}
               >
-                收起
+                {copy.collapseCreate}
               </button>
             ) : (
-              <span className="text-xs text-secondary">创建后自动切换到该账户</span>
+              <span className="text-xs text-secondary">{copy.createAccountHelp}</span>
             )}
           </div>
           {accountCreateError ? (
@@ -983,19 +1550,19 @@ const PortfolioPage: React.FC = () => {
           <form className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2" onSubmit={handleCreateAccount}>
             <input
               className="input-terminal text-sm md:col-span-2"
-              placeholder="账户名称（必填）"
+              placeholder={copy.accountNamePlaceholder}
               value={accountForm.name}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))}
             />
             <input
               className="input-terminal text-sm"
-              placeholder="券商（可选，如 Demo/华泰）"
+              placeholder={copy.brokerPlaceholder}
               value={accountForm.broker}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))}
             />
             <input
               className="input-terminal text-sm"
-              placeholder="基准币（如 CNY/USD/HKD）"
+              placeholder={copy.baseCurrencyPlaceholder}
               value={accountForm.baseCurrency}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))}
             />
@@ -1004,13 +1571,13 @@ const PortfolioPage: React.FC = () => {
               value={accountForm.market}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}
             >
-              <option value="cn">市场：A 股（cn）</option>
-              <option value="hk">市场：港股（hk）</option>
-              <option value="us">市场：美股（us）</option>
-              <option value="global">市场：全球账户（global）</option>
+              <option value="cn">{copy.marketCn}</option>
+              <option value="hk">{copy.marketHk}</option>
+              <option value="us">{copy.marketUs}</option>
+              <option value="global">{copy.marketGlobal}</option>
             </select>
             <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>
-              {accountCreating ? '创建中...' : '创建账户'}
+              {accountCreating ? copy.creatingAccount : copy.createAccount}
             </button>
           </form>
         </Card>
@@ -1019,30 +1586,30 @@ const PortfolioPage: React.FC = () => {
       <div className="space-y-3">
         <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总权益</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalEquity}</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalEquity, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总市值</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalMarketValue}</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalMarketValue, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总现金</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalCash}</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalCash, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
             <div className="flex items-start justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">汇率状态</p>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.fxState}</p>
               <button
                 type="button"
                 className="btn-secondary !px-3 !py-1 !text-[11px] uppercase tracking-widest shrink-0"
                 onClick={() => void handleRefreshFx()}
                 disabled={!hasAccounts || isLoading || fxRefreshing}
               >
-                {fxRefreshing ? '刷新中' : '刷新汇率'}
+                {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
               </button>
             </div>
-            <div className="mt-2">{snapshot?.fxStale ? <Badge variant="warning">过期</Badge> : <Badge variant="success">最新</Badge>}</div>
+            <div className="mt-2">{snapshot?.fxStale ? <Badge variant="warning">{copy.fxStale}</Badge> : <Badge variant="success">{copy.fxFresh}</Badge>}</div>
             {fxRefreshFeedback ? (
               <p
                 className={`mt-2 text-xs ${
@@ -1061,58 +1628,58 @@ const PortfolioPage: React.FC = () => {
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">回撤监控</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.drawdownTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>最大回撤:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>当前回撤:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>告警:</span> <span className={risk?.drawdown?.alert ? 'text-danger font-medium' : 'text-success font-medium'}>{risk?.drawdown?.alert ? '是' : '否'}</span></div>
+              <div className="flex justify-between"><span>{copy.maxDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.currentDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.drawdown?.alert ? 'text-danger font-medium' : 'text-success font-medium'}>{risk?.drawdown?.alert ? copy.yes : copy.no}</span></div>
             </div>
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">止损接近预警</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.stopLossTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>触发数:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.triggeredCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>接近数:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.nearCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>告警:</span> <span className={risk?.stopLoss?.nearAlert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.stopLoss?.nearAlert ? '是' : '否'}</span></div>
+              <div className="flex justify-between"><span>{copy.triggeredCount}:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.triggeredCount ?? 0}</span></div>
+              <div className="flex justify-between"><span>{copy.nearCount}:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.nearCount ?? 0}</span></div>
+              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.stopLoss?.nearAlert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.stopLoss?.nearAlert ? copy.yes : copy.no}</span></div>
             </div>
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">统计口径</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.snapshotBasisTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>账户数:</span> <span className="text-foreground font-mono">{snapshot?.accountCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>计价币种:</span> <span className="text-foreground font-mono">{snapshot?.currency || 'CNY'}</span></div>
-              <div className="flex justify-between"><span>成本法:</span> <span className="text-foreground font-mono">{(snapshot?.costMethod || costMethod).toUpperCase()}</span></div>
+              <div className="flex justify-between"><span>{copy.accountCount}:</span> <span className="text-foreground font-mono">{snapshot?.accountCount ?? 0}</span></div>
+              <div className="flex justify-between"><span>{copy.reportingCurrency}:</span> <span className="text-foreground font-mono">{snapshot?.currency || 'CNY'}</span></div>
+              <div className="flex justify-between"><span>{copy.costMethodLabel}:</span> <span className="text-foreground font-mono">{(snapshot?.costMethod || costMethod).toUpperCase()}</span></div>
             </div>
           </Card>
         </section>
 
         {writeBlocked && hasAccounts ? (
           <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2">
-            当前处于“全部账户”视图。为避免误写，请先选择一个具体账户后再进行手工录入或券商文件导入提交。
+            {copy.allAccountsWarning}
           </div>
         ) : null}
 
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-3">
           <Card className="xl:col-span-2" padding="md">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">持仓明细</h2>
-              <span className="text-[11px] uppercase tracking-widest text-secondary">共 {positionRows.length} 项</span>
+              <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.positionsTitle}</h2>
+              <span className="text-[11px] uppercase tracking-widest text-secondary">{copy.positionsCount(positionRows.length)}</span>
             </div>
             {positionRows.length === 0 ? (
-              <p className="text-sm text-muted py-6 text-center">当前无持仓数据</p>
+              <p className="text-sm text-muted py-6 text-center">{copy.noPositions}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="text-[11px] uppercase tracking-[0.14em] text-secondary border-b border-[var(--border-muted)]">
                     <tr>
-                      <th className="text-left py-2 pr-2 font-medium">账户</th>
-                      <th className="text-left py-2 pr-2 font-medium">代码</th>
-                      <th className="text-left py-2 pr-2 font-medium">市场 / 币种</th>
-                      <th className="text-right py-2 pr-2 font-medium">数量</th>
-                      <th className="text-right py-2 pr-2 font-medium">均价</th>
-                      <th className="text-right py-2 pr-2 font-medium">现价</th>
-                      <th className="text-right py-2 pr-2 font-medium">市值</th>
-                      <th className="text-right py-2 font-medium">未实现盈亏</th>
+                      <th className="text-left py-2 pr-2 font-medium">{copy.positionAccount}</th>
+                      <th className="text-left py-2 pr-2 font-medium">{copy.positionCode}</th>
+                      <th className="text-left py-2 pr-2 font-medium">{copy.positionMarketCurrency}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionQuantity}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionAvgCost}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionLastPrice}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionMarketValue}</th>
+                      <th className="text-right py-2 font-medium">{copy.positionUnrealized}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1140,7 +1707,7 @@ const PortfolioPage: React.FC = () => {
           </Card>
 
           <Card padding="md">
-            <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? '行业集中度' : '个股集中度（降级）'}</h2>
+            <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? copy.sectorConcentration : copy.singleNameConcentration}</h2>
             {concentrationPieData.length > 0 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1157,16 +1724,16 @@ const PortfolioPage: React.FC = () => {
               </div>
             ) : (
               <div className="rounded-md border border-dashed border-[var(--border-muted)] bg-[var(--surface-1)] px-4 py-8 text-center h-64 flex flex-col items-center justify-center">
-                <p className="text-[11px] uppercase tracking-widest text-foreground">暂无集中度数据</p>
+                <p className="text-[11px] uppercase tracking-widest text-foreground">{copy.emptyConcentration}</p>
                 <p className="mt-2 text-xs leading-5 text-muted-text max-w-[20ch]">
-                  补齐持仓市值后将显示集中度分布
+                  {copy.concentrationHint}
                 </p>
               </div>
             )}
             <div className="mt-3 text-xs text-secondary space-y-1.5 border-t border-[var(--border-muted)] pt-3">
-              <div className="flex justify-between"><span>展示口径:</span> <span className="text-foreground">{concentrationMode === 'sector' ? '行业维度' : '个股维度（降级显示）'}</span></div>
-              <div className="flex justify-between"><span>板块告警:</span> <span className={risk?.sectorConcentration?.alert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.sectorConcentration?.alert ? '是' : '否'}</span></div>
-              <div className="flex justify-between"><span>Top1 权重:</span> <span className="text-foreground font-mono">{formatPct(risk?.sectorConcentration?.topWeightPct ?? risk?.concentration?.topWeightPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.concentrationScope}:</span> <span className="text-foreground">{concentrationMode === 'sector' ? copy.concentrationScopeSector : copy.concentrationScopeFallback}</span></div>
+              <div className="flex justify-between"><span>{copy.sectorAlert}:</span> <span className={risk?.sectorConcentration?.alert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.sectorConcentration?.alert ? copy.yes : copy.no}</span></div>
+              <div className="flex justify-between"><span>{copy.topWeight}:</span> <span className="text-foreground font-mono">{formatPct(risk?.sectorConcentration?.topWeightPct ?? risk?.concentration?.topWeightPct)}</span></div>
             </div>
           </Card>
         </section>
@@ -1174,8 +1741,8 @@ const PortfolioPage: React.FC = () => {
         <section>
           <Card padding="md" className="border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--glow-soft)]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[11px] uppercase tracking-[0.14em] text-foreground">数据同步</h3>
-              <span className="text-[10px] uppercase tracking-widest text-muted-text hidden sm:inline">券商导入</span>
+              <h3 className="text-[11px] uppercase tracking-[0.14em] text-foreground">{copy.dataSyncTitle}</h3>
+              <span className="text-[10px] uppercase tracking-widest text-muted-text hidden sm:inline">{copy.brokerImport}</span>
             </div>
             
             <div className="space-y-4">
@@ -1188,9 +1755,9 @@ const PortfolioPage: React.FC = () => {
               {writableAccount ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5 text-xs text-secondary-text">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-foreground">当前导入账户</span>
+                    <span className="font-semibold text-foreground">{copy.currentImportAccount}</span>
                     <span>{writableAccount.name}</span>
-                    <Badge>{formatAccountMarketLabel(writableAccount.market)}</Badge>
+                    <Badge>{formatAccountMarketLabel(writableAccount.market, language)}</Badge>
                     <Badge>{writableAccount.baseCurrency}</Badge>
                   </div>
                   {brokerConnections.length > 0 ? (
@@ -1202,12 +1769,12 @@ const PortfolioPage: React.FC = () => {
                         >
                           <span className="font-mono text-foreground">{connection.connectionName}</span>
                           {connection.brokerAccountRef ? <span>{connection.brokerAccountRef}</span> : null}
-                          <span className="text-muted-text">{connection.status}</span>
+                          <span className="text-muted-text">{formatBrokerConnectionStatus(connection.status, language)}</span>
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-2 text-[11px] text-muted-text">该账户还没有已保存的券商连接，首次导入会自动创建用户自有连接。</p>
+                    <p className="mt-2 text-[11px] text-muted-text">{copy.noBrokerConnections}</p>
                   )}
                 </div>
               ) : null}
@@ -1215,15 +1782,15 @@ const PortfolioPage: React.FC = () => {
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
                 <select className="input-terminal text-sm md:w-[160px] h-[2.6rem]" value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
                   {brokers.length > 0 ? (
-                    brokers.map((item) => <option key={item.broker} value={item.broker}>{formatBrokerLabel(item.broker, item.displayName)}</option>)
+                    brokers.map((item) => <option key={item.broker} value={item.broker}>{formatBrokerLabel(item.broker, item.displayName, language)}</option>)
                   ) : (
-                    <option value="huatai">huatai（华泰）</option>
+                    <option value="huatai">{formatBrokerLabel('huatai', undefined, language)}</option>
                   )}
                 </select>
                 
                 <label className="input-terminal text-sm flex-1 flex items-center justify-center cursor-pointer border-dashed hover:border-[var(--border-strong)] bg-[var(--surface-1)] transition-colors min-h-[2.6rem]">
                   <span className="truncate text-secondary-text">
-                    {csvFile ? csvFile.name : selectedBroker === 'ibkr' ? '选择 IBKR Flex XML 导出文件...' : '选择券商导出文件...'}
+                    {csvFile ? csvFile.name : selectedBroker === 'ibkr' ? copy.selectIbkrExport : copy.selectBrokerExport}
                   </span>
                   <input type="file" accept={importFileAccept} className="hidden"
                     onChange={(e) => setCsvFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
@@ -1231,53 +1798,51 @@ const PortfolioPage: React.FC = () => {
 
                 <div className="flex items-center justify-center gap-2 px-3 py-2 border border-[var(--input-border)] rounded-[var(--theme-control-radius)] bg-[var(--surface-1)] h-[2.6rem]">
                   <input id="csv-dry-run" type="checkbox" className="theme-checkbox" checked={csvDryRun} onChange={(e) => setCsvDryRun(e.target.checked)} />
-                  <label htmlFor="csv-dry-run" className="text-xs text-secondary-text cursor-pointer whitespace-nowrap">仅预演</label>
+                  <label htmlFor="csv-dry-run" className="text-xs text-secondary-text cursor-pointer whitespace-nowrap">{copy.dryRun}</label>
                 </div>
 
                 <div className="flex gap-2">
                   <button type="button" className="btn-secondary h-[2.6rem] px-4 whitespace-nowrap text-xs" disabled={!csvFile || csvParsing} onClick={() => void handleParseCsv()}>
-                    {csvParsing ? '解析中...' : '解析文件'}
+                    {csvParsing ? copy.parsing : copy.parseFile}
                   </button>
                   <button type="button" className="btn-primary h-[2.6rem] px-4 whitespace-nowrap text-xs shadow-[var(--glow-soft)]" disabled={!csvFile || !writableAccountId || csvCommitting} onClick={() => void handleCommitCsv()}>
-                    {csvCommitting ? '提交中...' : '提交导入'}
+                    {csvCommitting ? copy.committing : copy.commitImport}
                   </button>
                 </div>
               </div>
 
               <p className="text-[11px] text-muted-text">
-                {selectedBroker === 'ibkr'
-                  ? 'IBKR 首版推荐使用 Flex Query XML 导出；系统会将导入记录绑定到当前用户自己的 broker connection。'
-                  : '保留现有 A 股券商文件导入路径，兼容华泰 / 中信 / 招商 CSV。'}
+                {selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}
               </p>
 
               {selectedBroker === 'ibkr' ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-3 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-foreground">IBKR 只读同步 / Read-only Sync</p>
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-foreground">{copy.ibkrReadOnlyTitle}</p>
                       <p className="mt-1 text-[11px] text-muted-text">
-                        仅同步账户状态与持仓，不会开放任何交易或下单能力。登录令牌只用于本次同步，不会保存到系统。
+                        {copy.ibkrReadOnlyBody}
                       </p>
                     </div>
-                    <Badge>Read-only</Badge>
+                    <Badge>{copy.readOnlyBadge}</Badge>
                   </div>
                   <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_180px] gap-2">
                     <input
                       className="input-terminal text-sm"
-                      placeholder="IBKR API Base URL（默认 https://localhost:5000/v1/api）"
+                      placeholder={copy.ibkrApiBasePlaceholder}
                       value={ibkrApiBaseUrl}
                       onChange={(e) => setIbkrApiBaseUrl(e.target.value)}
                     />
                     <input
                       className="input-terminal text-sm"
-                      placeholder="IBKR Account Ref（可选，例 U1234567）"
+                      placeholder={copy.ibkrAccountRefPlaceholder}
                       value={ibkrBrokerAccountRef}
                       onChange={(e) => setIbkrBrokerAccountRef(e.target.value.toUpperCase())}
                     />
                     <input
                       className="input-terminal text-sm xl:col-span-2"
                       type="password"
-                      placeholder="IBKR Session Token（本次手动同步使用，不保存）"
+                      placeholder={copy.ibkrSessionTokenPlaceholder}
                       value={ibkrSessionToken}
                       onChange={(e) => setIbkrSessionToken(e.target.value)}
                     />
@@ -1290,7 +1855,7 @@ const PortfolioPage: React.FC = () => {
                         checked={ibkrVerifySsl}
                         onChange={(e) => setIbkrVerifySsl(e.target.checked)}
                       />
-                      <span>校验 IBKR HTTPS 证书</span>
+                      <span>{copy.verifyIbkrSsl}</span>
                     </label>
                     <button
                       type="button"
@@ -1298,19 +1863,19 @@ const PortfolioPage: React.FC = () => {
                       disabled={!writableAccountId || !ibkrSessionToken.trim() || ibkrSyncing}
                       onClick={() => void handleSyncIbkr()}
                     >
-                      {ibkrSyncing ? '同步中...' : '只读同步 IBKR'}
+                      {ibkrSyncing ? copy.syncing : copy.syncIbkr}
                     </button>
                   </div>
                   {ibkrSyncResult ? (
                     <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">同步结果</span>
-                      持仓 <span className="text-foreground font-mono">{ibkrSyncResult.positionCount}</span> ·
-                      现金币种 <span className="text-foreground font-mono">{ibkrSyncResult.cashBalanceCount}</span> ·
-                      总权益 <span className="text-success font-mono">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span>
+                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.syncResult}</span>
+                      {copy.positionsCountLabel} <span className="text-foreground font-mono">{ibkrSyncResult.positionCount}</span> ·
+                      {copy.cashCurrenciesLabel} <span className="text-foreground font-mono">{ibkrSyncResult.cashBalanceCount}</span> ·
+                      {copy.totalEquity} <span className="text-success font-mono">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span>
                       <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-text">
-                        <span>Ref: <span className="font-mono text-foreground">{ibkrSyncResult.brokerAccountRef}</span></span>
-                        <span>同步时间: <span className="text-foreground">{ibkrSyncResult.syncedAt.replace('T', ' ')}</span></span>
-                        <span>{ibkrSyncResult.snapshotOverlayActive ? '当前日期快照已切换到 API 同步视图' : '已保存同步结果'}</span>
+                        <span>{copy.accountRef}: <span className="font-mono text-foreground">{ibkrSyncResult.brokerAccountRef}</span></span>
+                        <span>{copy.syncedAt}: <span className="text-foreground">{ibkrSyncResult.syncedAt.replace('T', ' ')}</span></span>
+                        <span>{ibkrSyncResult.snapshotOverlayActive ? copy.syncOverlay : copy.syncSaved}</span>
                       </div>
                       {ibkrSyncResult.warnings.length > 0 ? (
                         <div className="mt-2 rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-2.5 py-2 text-[11px] text-[hsl(var(--accent-warning-hsl))]">
@@ -1330,30 +1895,30 @@ const PortfolioPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                   {csvParseResult ? (
                     <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">解析结果</span>
-                      有效 <span className="text-success font-mono">{csvParseResult.recordCount}</span> ·
-                      现金 <span className="text-foreground font-mono">{csvParseResult.cashRecordCount ?? 0}</span> ·
-                      公司行为 <span className="text-foreground font-mono">{csvParseResult.corporateActionCount ?? 0}</span> ·
-                      跳过 <span className="text-warning font-mono">{csvParseResult.skippedCount}</span> ·
-                      错误 <span className="text-danger font-mono">{csvParseResult.errorCount}</span>
+                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.parseResult}</span>
+                      {copy.valid} <span className="text-success font-mono">{csvParseResult.recordCount}</span> ·
+                      {copy.cash} <span className="text-foreground font-mono">{csvParseResult.cashRecordCount ?? 0}</span> ·
+                      {copy.corporateActions} <span className="text-foreground font-mono">{csvParseResult.corporateActionCount ?? 0}</span> ·
+                      {copy.skipped} <span className="text-warning font-mono">{csvParseResult.skippedCount}</span> ·
+                      {copy.errors} <span className="text-danger font-mono">{csvParseResult.errorCount}</span>
                       {csvParseResult.metadata?.brokerAccountRef ? (
                         <div className="mt-2 text-[11px] text-muted-text">
-                          账户映射: <span className="font-mono text-foreground">{String(csvParseResult.metadata.brokerAccountRef)}</span>
+                          {copy.accountMapping}: <span className="font-mono text-foreground">{String(csvParseResult.metadata.brokerAccountRef)}</span>
                         </div>
                       ) : null}
                     </div>
                   ) : null}
                   {csvCommitResult ? (
                     <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">提交结果</span>
-                      写入 <span className="text-success font-mono">{csvCommitResult.insertedCount}</span> ·
-                      现金 <span className="text-foreground font-mono">{csvCommitResult.cashInsertedCount ?? 0}</span> ·
-                      公司行为 <span className="text-foreground font-mono">{csvCommitResult.corporateActionInsertedCount ?? 0}</span> ·
-                      重复 <span className="text-warning font-mono">{csvCommitResult.duplicateCount}</span> ·
-                      失败 <span className="text-danger font-mono">{csvCommitResult.failedCount}</span>
+                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.commitResult}</span>
+                      {copy.inserted} <span className="text-success font-mono">{csvCommitResult.insertedCount}</span> ·
+                      {copy.cash} <span className="text-foreground font-mono">{csvCommitResult.cashInsertedCount ?? 0}</span> ·
+                      {copy.corporateActions} <span className="text-foreground font-mono">{csvCommitResult.corporateActionInsertedCount ?? 0}</span> ·
+                      {copy.duplicates} <span className="text-warning font-mono">{csvCommitResult.duplicateCount}</span> ·
+                      {copy.failed} <span className="text-danger font-mono">{csvCommitResult.failedCount}</span>
                       {csvCommitResult.duplicateImport ? (
                         <div className="mt-2 text-[11px] text-[hsl(var(--accent-warning-hsl))]">
-                          检测到同一 broker connection 的重复文件指纹，本次未重复写入。
+                          {copy.duplicateFingerprintHint}
                         </div>
                       ) : null}
                     </div>
@@ -1371,98 +1936,98 @@ const PortfolioPage: React.FC = () => {
         </section>
 
         <section className="space-y-3">
-          <Disclosure summary="高级：手工录入与修正" defaultOpen={false}>
+          <Disclosure summary={copy.manualAdjustments} defaultOpen={false}>
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：交易</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualTrade}</h3>
                 <form className="space-y-2" onSubmit={handleTradeSubmit}>
-                  <input className="input-terminal w-full text-sm" placeholder="股票代码（例如 600519）" value={tradeForm.symbol}
+                  <input className="input-terminal w-full text-sm" placeholder={copy.symbolPlaceholder} value={tradeForm.symbol}
                     onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input className="input-terminal text-sm" type="date" value={tradeForm.tradeDate}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
                     <select className="input-terminal text-sm" value={tradeForm.side}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
-                      <option value="buy">买入</option>
-                      <option value="sell">卖出</option>
+                      <option value="buy">{copy.buy}</option>
+                      <option value="sell">{copy.sell}</option>
                     </select>
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="数量" value={tradeForm.quantity}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="成交价" value={tradeForm.price}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="手续费 (可选)" value={tradeForm.fee}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="税费 (可选)" value={tradeForm.tax}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                   </div>
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>提交交易</button>
+                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitTrade}</button>
                 </form>
               </Card>
 
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：资金</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualCash}</h3>
                 <form className="space-y-2" onSubmit={handleCashSubmit}>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input className="input-terminal text-sm" type="date" value={cashForm.eventDate}
                       onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
                     <select className="input-terminal text-sm" value={cashForm.direction}
                       onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
-                      <option value="in">流入</option>
-                      <option value="out">流出</option>
+                      <option value="in">{copy.cashIn}</option>
+                      <option value="out">{copy.cashOut}</option>
                     </select>
                   </div>
-                  <input className="input-terminal w-full text-sm" type="number" min="0" step="0.0001" placeholder="金额"
+                  <input className="input-terminal w-full text-sm" type="number" min="0" step="0.0001" placeholder={copy.amount}
                     value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
-                  <input className="input-terminal w-full text-sm" placeholder={`币种（可选，默认 ${writableAccount?.baseCurrency || '账户基准币'}）`} value={cashForm.currency}
+                  <input className="input-terminal w-full text-sm" placeholder={copy.currencyOptional(writableAccount?.baseCurrency || '')} value={cashForm.currency}
                     onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))} />
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>提交资金流水</button>
+                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitCash}</button>
                 </form>
               </Card>
 
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：公司行为</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualCorporate}</h3>
                 <form className="space-y-2" onSubmit={handleCorporateSubmit}>
-                  <input className="input-terminal w-full text-sm" placeholder="股票代码" value={corpForm.symbol}
+                  <input className="input-terminal w-full text-sm" placeholder={copy.stockCode} value={corpForm.symbol}
                     onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input className="input-terminal text-sm" type="date" value={corpForm.effectiveDate}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
                     <select className="input-terminal text-sm" value={corpForm.actionType}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
-                      <option value="cash_dividend">现金分红</option>
-                      <option value="split_adjustment">拆并股调整</option>
+                      <option value="cash_dividend">{copy.cashDividend}</option>
+                      <option value="split_adjustment">{copy.splitAdjustment}</option>
                     </select>
                   </div>
                   {corpForm.actionType === 'cash_dividend' ? (
-                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="每股分红"
+                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder={copy.dividendPerShare}
                       value={corpForm.cashDividendPerShare}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value, splitRatio: '' }))} required />
                   ) : (
-                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="拆并股比例"
+                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder={copy.splitRatio}
                       value={corpForm.splitRatio}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value, cashDividendPerShare: '' }))} required />
                   )}
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>提交企业行为</button>
+                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitCorporate}</button>
                 </form>
               </Card>
             </div>
           </Disclosure>
 
-          <Disclosure summary="流水与审计" defaultOpen={showEventAuditDisclosureByDefault}>
+          <Disclosure summary={copy.ledgerAudit} defaultOpen={showEventAuditDisclosureByDefault}>
             <Card padding="md" className="border-0 bg-transparent">
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <select className="input-terminal text-sm" value={eventType} onChange={(e) => setEventType(e.target.value as EventType)}>
-                    <option value="trade">交易流水</option>
-                    <option value="cash">资金流水</option>
-                    <option value="corporate">公司行为</option>
+                    <option value="trade">{copy.tradeLedger}</option>
+                    <option value="cash">{copy.cashLedger}</option>
+                    <option value="corporate">{copy.corporateLedger}</option>
                   </select>
                   <button type="button" className="btn-secondary text-[11px] uppercase tracking-widest" onClick={() => void loadEvents()} disabled={eventLoading}>
-                    {eventLoading ? '加载中...' : '刷新流水'}
+                    {eventLoading ? copy.loading : copy.refreshLedger}
                   </button>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1470,44 +2035,44 @@ const PortfolioPage: React.FC = () => {
                   <input className="input-terminal text-sm" type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
                 </div>
                 {(eventType === 'trade' || eventType === 'corporate') ? (
-                  <input className="input-terminal text-sm w-full" placeholder="按股票代码筛选" value={eventSymbol}
+                  <input className="input-terminal text-sm w-full" placeholder={copy.filterBySymbol} value={eventSymbol}
                     onChange={(e) => setEventSymbol(e.target.value)} />
                 ) : null}
                 {eventType === 'trade' ? (
                   <select className="input-terminal text-sm w-full" value={eventSide} onChange={(e) => setEventSide(e.target.value as '' | PortfolioSide)}>
-                    <option value="">全部买卖方向</option>
-                    <option value="buy">买入</option>
-                    <option value="sell">卖出</option>
+                    <option value="">{copy.allSides}</option>
+                    <option value="buy">{copy.buy}</option>
+                    <option value="sell">{copy.sell}</option>
                   </select>
                 ) : null}
                 {eventType === 'cash' ? (
                   <select className="input-terminal text-sm w-full" value={eventDirection}
                     onChange={(e) => setEventDirection(e.target.value as '' | PortfolioCashDirection)}>
-                    <option value="">全部资金方向</option>
-                    <option value="in">流入</option>
-                    <option value="out">流出</option>
+                    <option value="">{copy.allDirections}</option>
+                    <option value="in">{copy.cashIn}</option>
+                    <option value="out">{copy.cashOut}</option>
                   </select>
                 ) : null}
                 {eventType === 'corporate' ? (
                   <select className="input-terminal text-sm w-full" value={eventActionType}
                     onChange={(e) => setEventActionType(e.target.value as '' | PortfolioCorporateActionType)}>
-                    <option value="">全部公司行为</option>
-                    <option value="cash_dividend">现金分红</option>
-                    <option value="split_adjustment">拆并股调整</option>
+                    <option value="">{copy.allActions}</option>
+                    <option value="cash_dividend">{copy.cashDividend}</option>
+                    <option value="split_adjustment">{copy.splitAdjustment}</option>
                   </select>
                 ) : null}
                 <div className="text-[11px] text-secondary-text">
-                  {writeBlocked ? '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。' : '如有错误流水，可直接删除后重新录入。'}
+                  {writeBlocked ? copy.deleteHintBlocked : copy.deleteHintReady}
                 </div>
                 <div className="rounded-md border border-[var(--border-muted)] bg-[var(--surface-1)] p-2 max-h-none overflow-visible lg:max-h-[400px] lg:overflow-auto">
                   {eventType === 'trade' && tradeEvents.map((item) => (
                     <div key={`t-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
                       <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
                         <span className="text-muted-text">{item.tradeDate}</span>
-                        <span className={item.side === 'buy' ? 'text-success' : 'text-warning'}>{formatSideLabel(item.side)}</span>
+                        <span className={item.side === 'buy' ? 'text-success' : 'text-warning'}>{formatSideLabel(item.side, language)}</span>
                         <span className="text-foreground font-semibold">{item.symbol}</span>
-                        <span>数量 <span className="text-foreground">{item.quantity}</span></span>
-                        <span>价格 <span className="text-foreground">{item.price}</span></span>
+                        <span>{copy.quantity} <span className="text-foreground">{item.quantity}</span></span>
+                        <span>{copy.price} <span className="text-foreground">{item.price}</span></span>
                       </div>
                       {!writeBlocked ? (
                         <button
@@ -1516,10 +2081,10 @@ const PortfolioPage: React.FC = () => {
                           onClick={() => openDeleteDialog({
                             eventType: 'trade',
                             id: item.id,
-                            message: `确认删除 ${item.tradeDate} 的${formatSideLabel(item.side)}流水 ${item.symbol}（数量 ${item.quantity}，价格 ${item.price}）吗？`,
+                            message: copy.tradeDeleteMessage(item),
                           })}
                         >
-                          删除
+                          {copy.deleteConfirm}
                         </button>
                       ) : null}
                     </div>
@@ -1528,7 +2093,7 @@ const PortfolioPage: React.FC = () => {
                     <div key={`c-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
                       <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
                         <span className="text-muted-text">{item.eventDate}</span>
-                        <span className={item.direction === 'in' ? 'text-success' : 'text-warning'}>{formatCashDirectionLabel(item.direction)}</span>
+                        <span className={item.direction === 'in' ? 'text-success' : 'text-warning'}>{formatCashDirectionLabel(item.direction, language)}</span>
                         <span className="text-foreground">{item.amount}</span>
                         <span className="text-foreground font-semibold">{item.currency}</span>
                       </div>
@@ -1539,10 +2104,10 @@ const PortfolioPage: React.FC = () => {
                           onClick={() => openDeleteDialog({
                             eventType: 'cash',
                             id: item.id,
-                            message: `确认删除 ${item.eventDate} 的资金流水（${formatCashDirectionLabel(item.direction)} ${item.amount} ${item.currency}）吗？`,
+                            message: copy.cashDeleteMessage(item),
                           })}
                         >
-                          删除
+                          {copy.deleteConfirm}
                         </button>
                       ) : null}
                     </div>
@@ -1551,7 +2116,7 @@ const PortfolioPage: React.FC = () => {
                     <div key={`ca-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
                       <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
                         <span className="text-muted-text">{item.effectiveDate}</span>
-                        <span className="text-info">{formatCorporateActionLabel(item.actionType)}</span>
+                        <span className="text-info">{formatCorporateActionLabel(item.actionType, language)}</span>
                         <span className="text-foreground font-semibold">{item.symbol}</span>
                       </div>
                       {!writeBlocked ? (
@@ -1561,10 +2126,10 @@ const PortfolioPage: React.FC = () => {
                           onClick={() => openDeleteDialog({
                             eventType: 'corporate',
                             id: item.id,
-                            message: `确认删除 ${item.effectiveDate} 的公司行为 ${formatCorporateActionLabel(item.actionType)}（${item.symbol}）吗？`,
+                            message: copy.corporateDeleteMessage(item),
                           })}
                         >
-                          删除
+                          {copy.deleteConfirm}
                         </button>
                       ) : null}
                     </div>
@@ -1574,23 +2139,23 @@ const PortfolioPage: React.FC = () => {
                       || (eventType === 'cash' && cashEvents.length === 0)
                       || (eventType === 'corporate' && corporateEvents.length === 0)) ? (
                         <div className="px-2 py-6 text-center">
-                          <p className="text-[11px] uppercase tracking-widest text-foreground">暂无流水记录</p>
+                          <p className="text-[11px] uppercase tracking-widest text-foreground">{copy.emptyEventsTitle}</p>
                           <p className="mt-1 text-xs leading-5 text-muted-text">
-                            调整筛选条件，或先录入流水。
+                            {copy.emptyEventsBody}
                           </p>
                         </div>
                       ) : null}
                 </div>
                 <div className="flex flex-col gap-2 text-[11px] uppercase tracking-widest text-secondary-text sm:flex-row sm:items-center sm:justify-between px-1">
-                  <span>页码 {eventPage} / {totalEventPages}</span>
+                  <span>{copy.pageLabel} {eventPage} / {totalEventPages}</span>
                   <div className="flex gap-2">
                     <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage <= 1}
                       onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>
-                      上一页
+                      {copy.prevPage}
                     </button>
                     <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage >= totalEventPages}
                       onClick={() => setEventPage((prev) => Math.min(totalEventPages, prev + 1))}>
-                      下一页
+                      {copy.nextPage}
                     </button>
                   </div>
                 </div>
@@ -1601,10 +2166,10 @@ const PortfolioPage: React.FC = () => {
       </div>
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}
-        title="删除错误流水"
-        message={pendingDelete?.message || '确认删除这条流水吗？'}
-        confirmText={deleteLoading ? '删除中...' : '确认删除'}
-        cancelText="取消"
+        title={copy.deleteTitle}
+        message={pendingDelete?.message || copy.deleteMessage}
+        confirmText={deleteLoading ? copy.deleteInProgress : copy.deleteConfirm}
+        cancelText={copy.cancel}
         isDanger
         onConfirm={() => void handleConfirmDelete()}
         onCancel={() => {

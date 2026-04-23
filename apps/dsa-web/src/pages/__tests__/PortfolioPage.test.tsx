@@ -2,6 +2,7 @@ import type React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import PortfolioPage from '../PortfolioPage';
 
 const {
@@ -316,7 +317,7 @@ describe('PortfolioPage FX refresh', () => {
         { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
       ],
     });
-    listBrokerConnections.mockResolvedValueOnce({
+    listBrokerConnections.mockResolvedValue({
       connections: [
         {
           id: 9,
@@ -345,7 +346,7 @@ describe('PortfolioPage FX refresh', () => {
     ) as HTMLSelectElement;
     fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
 
-    expect(screen.getByText('IBKR 首版推荐使用 Flex Query XML 导出；系统会将导入记录绑定到当前用户自己的 broker connection。')).toBeInTheDocument();
+    expect(screen.getByText('IBKR 首版推荐使用 Flex Query XML 导出；系统会将导入记录绑定到当前用户自己的券商连接。')).toBeInTheDocument();
     expect(screen.getByText('Primary IBKR')).toBeInTheDocument();
     expect(screen.getByText('U1234567')).toBeInTheDocument();
     expect(screen.getByText('当前导入账户')).toBeInTheDocument();
@@ -358,7 +359,7 @@ describe('PortfolioPage FX refresh', () => {
         { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
       ],
     });
-    listBrokerConnections.mockResolvedValueOnce({
+    listBrokerConnections.mockResolvedValue({
       connections: [
         {
           id: 9,
@@ -393,7 +394,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
 
     fireEvent.change(
-      screen.getByPlaceholderText('IBKR Session Token（本次手动同步使用，不保存）'),
+      screen.getByPlaceholderText('IBKR 会话令牌（仅本次手动同步使用，不保存）'),
       { target: { value: 'session-token-123' } },
     );
     fireEvent.click(screen.getByRole('button', { name: '只读同步 IBKR' }));
@@ -406,7 +407,7 @@ describe('PortfolioPage FX refresh', () => {
       apiBaseUrl: 'https://localhost:5000/v1/api',
       verifySsl: false,
     }));
-    expect(await screen.findByText(/Ref:/)).toBeInTheDocument();
+    expect(await screen.findByText(/账户引用:/)).toBeInTheDocument();
     expect(
       screen.getByText((_, element) =>
         element?.tagName.toLowerCase() === 'span'
@@ -527,7 +528,7 @@ describe('PortfolioPage FX refresh', () => {
     ) as HTMLSelectElement;
     fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
     fireEvent.change(
-      screen.getByPlaceholderText('IBKR Session Token（本次手动同步使用，不保存）'),
+      screen.getByPlaceholderText('IBKR 会话令牌（仅本次手动同步使用，不保存）'),
       { target: { value: 'session-token-123' } },
     );
 
@@ -540,7 +541,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(listBrokerConnections.mock.calls.length).toBeGreaterThan(brokerConnectionCallCount));
     await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallCount));
 
-    expect(await screen.findByText(/Ref:/)).toBeInTheDocument();
+    expect(await screen.findByText(/账户引用:/)).toBeInTheDocument();
     expect(screen.getByText('AAPL')).toBeInTheDocument();
     expect(brokerSelect.value).toBe('ibkr');
     const syncResultCard = screen.getByText('同步结果').closest('div');
@@ -839,5 +840,133 @@ describe('PortfolioPage FX refresh', () => {
     expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsAfterSwitch);
     expect(getRisk).toHaveBeenCalledTimes(riskCallsAfterSwitch);
     expect(screen.queryByText('汇率已刷新，共更新 1 对。')).not.toBeInTheDocument();
+  });
+
+  it('renders localized English portfolio shell copy on /en routes', async () => {
+    window.history.replaceState(window.history.state, '', '/en/portfolio');
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+
+    expect(screen.getByRole('heading', { name: 'Portfolio management' })).toBeInTheDocument();
+    expect(screen.getByText('Portfolio snapshots and risk review')).toBeInTheDocument();
+    expect(screen.getByText('Account scope')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument();
+    expect(screen.getByText('Total equity')).toBeInTheDocument();
+    expect(screen.getByText('Drawdown monitor')).toBeInTheDocument();
+    expect(screen.getByText('Positions')).toBeInTheDocument();
+    expect(screen.getByText('No positions are available yet.')).toBeInTheDocument();
+    expect(screen.getByText('Data sync')).toBeInTheDocument();
+    expect(screen.getByText('Broker import')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh data' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh FX' })).toBeInTheDocument();
+  });
+
+  it('renders localized English IBKR sync detail and broker connection labels on /en routes', async () => {
+    window.history.replaceState(window.history.state, '', '/en/portfolio');
+    listImportBrokers.mockResolvedValueOnce({
+      brokers: [
+        { broker: 'huatai', aliases: [], displayName: 'Huatai', fileExtensions: ['csv'] },
+        { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
+      ],
+    });
+    listBrokerConnections.mockResolvedValueOnce({
+      connections: [
+        {
+          id: 9,
+          portfolioAccountId: 1,
+          connectionName: 'Primary IBKR',
+          brokerType: 'ibkr',
+          brokerAccountRef: 'U1234567',
+          importMode: 'api',
+          status: 'active',
+          syncMetadata: {
+            ibkrApi: {
+              apiBaseUrl: 'https://localhost:5000/v1/api',
+              verifySsl: false,
+              brokerAccountRef: 'U1234567',
+            },
+          },
+        },
+      ],
+    });
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } });
+    await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
+    fireEvent.change(
+      screen.getAllByRole('combobox').find((element) => (element as HTMLSelectElement).value === 'huatai') as HTMLSelectElement,
+      { target: { value: 'ibkr' } },
+    );
+    fireEvent.change(screen.getByPlaceholderText('IBKR session token (used only for this manual sync)'), {
+      target: { value: 'session-token-123' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run read-only IBKR sync' }));
+
+    expect(await screen.findByText('Read-only')).toBeInTheDocument();
+    expect(screen.getByText('This IBKR import expects a Flex Query XML export and links imported records to the current user-owned broker connection.')).toBeInTheDocument();
+    expect(screen.getByText(/Account ref:/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Ref:/)).not.toBeInTheDocument();
+  });
+
+  it('keeps zh IBKR sync detail labels localized on default routes', async () => {
+    listImportBrokers.mockResolvedValueOnce({
+      brokers: [
+        { broker: 'huatai', aliases: [], displayName: '华泰', fileExtensions: ['csv'] },
+        { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
+      ],
+    });
+    listBrokerConnections.mockResolvedValueOnce({
+      connections: [
+        {
+          id: 9,
+          portfolioAccountId: 1,
+          connectionName: 'Primary IBKR',
+          brokerType: 'ibkr',
+          brokerAccountRef: 'U1234567',
+          importMode: 'api',
+          status: 'active',
+          syncMetadata: {
+            ibkrApi: {
+              apiBaseUrl: 'https://localhost:5000/v1/api',
+              verifySsl: false,
+              brokerAccountRef: 'U1234567',
+            },
+          },
+        },
+      ],
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } });
+    await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
+    fireEvent.change(
+      screen.getAllByRole('combobox').find((element) => (element as HTMLSelectElement).value === 'huatai') as HTMLSelectElement,
+      { target: { value: 'ibkr' } },
+    );
+    fireEvent.change(screen.getByPlaceholderText('IBKR 会话令牌（仅本次手动同步使用，不保存）'), {
+      target: { value: 'session-token-123' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '只读同步 IBKR' }));
+
+    expect(await screen.findByText('只读')).toBeInTheDocument();
+    expect(screen.getByText(/账户引用:/)).toBeInTheDocument();
+    expect(screen.queryByText('Read-only')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Ref:/)).not.toBeInTheDocument();
   });
 });
