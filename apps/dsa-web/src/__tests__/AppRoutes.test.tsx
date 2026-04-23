@@ -3,11 +3,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppContent } from '../App';
 
-const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock } = vi.hoisted(() => ({
+const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock, languageState } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
   setCurrentRouteMock: vi.fn(),
   setLanguageMock: vi.fn(),
+  languageState: { value: 'zh' as 'zh' | 'en' },
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -23,8 +24,11 @@ vi.mock('../hooks/useProductSurface', () => ({
 
 vi.mock('../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
-    language: 'en',
-    setLanguage: setLanguageMock,
+    language: languageState.value,
+    setLanguage: (language: 'zh' | 'en') => {
+      languageState.value = language;
+      setLanguageMock(language);
+    },
     t: (key: string) => key,
   }),
 }));
@@ -49,7 +53,11 @@ vi.mock('../components/common', async () => {
 });
 
 vi.mock('../pages/HomeSurfacePage', () => ({
-  default: () => <div>home-surface-page</div>,
+  default: () => (
+    <div>
+      {languageState.value === 'en' ? 'Guest Preview Mode' : '游客预览模式'}
+    </div>
+  ),
 }));
 
 vi.mock('../pages/ScannerSurfacePage', () => ({
@@ -119,11 +127,19 @@ describe('AppContent route flows', () => {
       isAdmin: false,
       isAdminMode: false,
     });
+    languageState.value = 'en';
   });
 
-  it('renders the guest homepage on the root route', async () => {
+  it('renders the Chinese guest homepage on the root route for an anonymous session', async () => {
+    languageState.value = 'zh';
     renderAt('/');
-    expect(await screen.findByText('home-surface-page')).toBeInTheDocument();
+    expect(await screen.findByText('游客预览模式')).toBeInTheDocument();
+  });
+
+  it('renders the English guest homepage on the /en route for an anonymous session', async () => {
+    languageState.value = 'en';
+    renderAt('/en');
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
 
   it('gates guest access to registered-user routes with a redirect-aware sign-in link', async () => {
