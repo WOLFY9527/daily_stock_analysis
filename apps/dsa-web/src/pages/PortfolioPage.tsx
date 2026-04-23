@@ -6,6 +6,7 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Card, Badge, ConfirmDialog, Disclosure, WorkspacePageHeader } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
 import { getMarketDirectionColor } from '../utils/marketColors';
 import type {
@@ -255,6 +256,30 @@ function getPortfolioCopy(
       actionLabel: formatCorporateActionLabel(item.actionType, language),
       symbol: item.symbol,
     }),
+    attributionHeroKicker: t('portfolio.attribution.heroKicker'),
+    attributionDistributionKicker: t('portfolio.attribution.distributionKicker'),
+    attributionCoverage: (coverage: string) => t('portfolio.attribution.coverage', { coverage }),
+    attributionTopSlice: t('portfolio.attribution.topSlice'),
+    attributionSecondarySignal: t('portfolio.attribution.secondarySignal'),
+    attributionAccountMeta: t('portfolio.attribution.accountMeta'),
+    attributionIndustryMeta: t('portfolio.attribution.industryMeta'),
+    attributionPortfolioTitle: t('portfolio.attribution.portfolioTitle'),
+    attributionAccountTitle: t('portfolio.attribution.accountTitle'),
+    attributionIndustryTitle: t('portfolio.attribution.industryTitle'),
+    attributionDominantMix: t('portfolio.attribution.dominantMix'),
+    attributionAccountTopList: t('portfolio.attribution.accountTopList'),
+    attributionIndustryTopList: t('portfolio.attribution.industryTopList'),
+    attributionTopAccount: t('portfolio.attribution.topAccount'),
+    attributionAccountWeight: t('portfolio.attribution.accountWeight'),
+    attributionTopIndustry: t('portfolio.attribution.topIndustry'),
+    attributionIndustryWeight: t('portfolio.attribution.industryWeight'),
+    attributionEquityWeight: t('portfolio.attribution.equityWeight'),
+    attributionAccountId: t('portfolio.attribution.accountId'),
+    attributionPositionCount: t('portfolio.attribution.positionCount'),
+    attributionPositionCountValue: (count: string) => t('portfolio.attribution.positionCountValue', { count }),
+    attributionPortfolioHeroTitle: t('portfolio.attribution.portfolioHeroTitle'),
+    attributionAccountDistributionTitle: (coverage: string) => t('portfolio.attribution.accountDistributionTitle', { coverage }),
+    attributionIndustryDistributionTitle: (coverage: string) => t('portfolio.attribution.industryDistributionTitle', { coverage }),
   };
 
   return copy;
@@ -286,75 +311,37 @@ function formatPct(value: number | undefined | null): string {
 }
 
 function formatSideLabel(value: PortfolioSide, language: PortfolioLanguage): string {
-  if (language === 'en') {
-    return value === 'buy' ? 'Buy' : 'Sell';
-  }
-  return value === 'buy' ? '买入' : '卖出';
+  return translate(language, `portfolio.side.${value}`);
 }
 
 function formatCashDirectionLabel(value: PortfolioCashDirection, language: PortfolioLanguage): string {
-  if (language === 'en') {
-    return value === 'in' ? 'Cash in' : 'Cash out';
-  }
-  return value === 'in' ? '流入' : '流出';
+  return translate(language, `portfolio.cashDirection.${value}`);
 }
 
 function formatCorporateActionLabel(value: PortfolioCorporateActionType, language: PortfolioLanguage): string {
-  if (language === 'en') {
-    return value === 'cash_dividend' ? 'Cash dividend' : 'Split adjustment';
-  }
-  return value === 'cash_dividend' ? '现金分红' : '拆并股调整';
+  return translate(language, `portfolio.corporateAction.${value}`);
 }
 
 function formatBrokerLabel(value: string, displayName: string | undefined, language: PortfolioLanguage): string {
-  const englishKnownName = value === 'huatai'
-    ? 'Huatai'
-    : value === 'citic'
-      ? 'Citic'
-      : value === 'cmb'
-        ? 'CMB'
-        : value === 'ibkr'
-          ? 'Interactive Brokers'
-          : null;
-  if (language === 'en' && englishKnownName) {
-    return `${value} (${englishKnownName})`;
+  const knownName = translate(language, `portfolio.brokerName.${value}`);
+  if (knownName !== `portfolio.brokerName.${value}`) {
+    return language === 'en' ? `${value} (${knownName})` : `${value}（${knownName}）`;
   }
   if (displayName && displayName.trim()) {
     return language === 'en' ? `${value} (${displayName.trim()})` : `${value}（${displayName.trim()}）`;
   }
-  if (value === 'huatai') return language === 'en' ? 'huatai (Huatai)' : 'huatai（华泰）';
-  if (value === 'citic') return language === 'en' ? 'citic (Citic)' : 'citic（中信）';
-  if (value === 'cmb') return language === 'en' ? 'cmb (CMB)' : 'cmb（招商）';
-  if (value === 'ibkr') return language === 'en' ? 'ibkr (Interactive Brokers)' : 'ibkr（Interactive Brokers）';
   return value;
 }
 
 function formatAccountMarketLabel(value: string, language: PortfolioLanguage): string {
-  if (language === 'en') {
-    if (value === 'global') return 'Global';
-    if (value === 'hk') return 'Hong Kong';
-    if (value === 'us') return 'US';
-    return 'A-share';
-  }
-  if (value === 'global') return '全球市场';
-  if (value === 'hk') return '港股';
-  if (value === 'us') return '美股';
-  return 'A 股';
+  const normalized = value === 'global' || value === 'hk' || value === 'us' ? value : 'cn';
+  return translate(language, `portfolio.marketLabel.${normalized}`);
 }
 
 function formatBrokerConnectionStatus(value: string, language: PortfolioLanguage): string {
   const normalized = String(value || '').trim().toLowerCase();
-  if (language === 'en') {
-    if (normalized === 'active') return 'Active';
-    if (normalized === 'inactive') return 'Inactive';
-    if (normalized === 'disabled') return 'Disabled';
-    if (normalized === 'error') return 'Error';
-    return value || '--';
-  }
-  if (normalized === 'active') return '已连接';
-  if (normalized === 'inactive') return '未启用';
-  if (normalized === 'disabled') return '已停用';
-  if (normalized === 'error') return '异常';
+  const label = translate(language, `portfolio.brokerStatus.${normalized}`);
+  if (label !== `portfolio.brokerStatus.${normalized}`) return label;
   return value || '--';
 }
 
@@ -454,10 +441,10 @@ function getAttributionIndustryLinkKey(entry: Record<string, unknown> | null): s
   return value ? `industry:${value}` : null;
 }
 
-function getAttributionHoverHeading(row: AttributionVisualRow): string {
-  if (row.meta === '账户') return 'Top account focus';
-  if (row.meta === '行业') return 'Top industry focus';
-  return 'Attribution focus';
+function getAttributionHoverHeading(row: AttributionVisualRow, language: PortfolioLanguage): string {
+  if (row.meta === translate(language, 'portfolio.attribution.accountMeta')) return translate(language, 'portfolio.attribution.accountHover');
+  if (row.meta === translate(language, 'portfolio.attribution.industryMeta')) return translate(language, 'portfolio.attribution.industryHover');
+  return translate(language, 'portfolio.attribution.focusHover');
 }
 
 function getAttributionCoverage(rows: AttributionVisualRow[]): number {
@@ -479,6 +466,7 @@ function AttributionHero({
   activeLinkKey: string | null;
   onActiveLinkChange: (linkKey: string | null) => void;
 }) {
+  const { language, t } = useI18n();
   const [isActive, setIsActive] = useState(false);
   if (!rows.length) return null;
 
@@ -513,7 +501,7 @@ function AttributionHero({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Attribution Highlight</p>
+          <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{t('portfolio.attribution.heroKicker')}</p>
           <p className="mt-1 text-sm font-semibold text-foreground">{leadRow.label}</p>
           <p className="text-xs text-secondary">{leadRow.meta ? `${leadRow.meta} · ` : ''}{leadRow.valueLabel}</p>
         </div>
@@ -528,7 +516,7 @@ function AttributionHero({
           id={tooltipTestId}
           role="tooltip"
         >
-          <span className="text-foreground">{getAttributionHoverHeading(leadRow)}</span>
+          <span className="text-foreground">{getAttributionHoverHeading(leadRow, language)}</span>
           <span className="ml-1">{leadRow.label}</span>
           <span className="ml-1 font-mono text-foreground">{leadRow.valueLabel}</span>
         </div>
@@ -541,7 +529,7 @@ function AttributionHero({
               className={`rounded-lg px-3 py-2 ${row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.22)]'}`}
               data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
             >
-              <p className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">{row.meta || 'Secondary signal'}</p>
+              <p className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">{row.meta || t('portfolio.attribution.secondarySignal')}</p>
               <p className="mt-1 text-xs font-medium text-foreground">{row.label}</p>
               <p className="text-[11px] font-mono text-secondary">{row.valueLabel}</p>
             </div>
@@ -567,6 +555,7 @@ function AttributionDistributionBand({
   activeLinkKey: string | null;
   onActiveLinkChange: (linkKey: string | null) => void;
 }) {
+  const { t } = useI18n();
   const [hoveredRow, setHoveredRow] = useState<AttributionVisualRow | null>(null);
   const segments = rows
     .filter((row) => row.percent > 0)
@@ -599,8 +588,8 @@ function AttributionDistributionBand({
       onMouseLeave={clearRow}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Distribution Band</p>
-        <span className="text-[11px] font-mono text-foreground">Top coverage {coverage.toFixed(2)}%</span>
+        <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{t('portfolio.attribution.distributionKicker')}</p>
+        <span className="text-[11px] font-mono text-foreground">{t('portfolio.attribution.coverage', { coverage: coverage.toFixed(2) })}</span>
       </div>
       {hoveredRow ? (
         <div
@@ -660,7 +649,7 @@ function AttributionDistributionBand({
             onBlur={clearRow}
           >
             <p className="truncate text-[11px] text-foreground">{row.label}</p>
-            <p className="text-[10px] text-secondary-text">{row.meta || 'Top slice'}</p>
+            <p className="text-[10px] text-secondary-text">{row.meta || t('portfolio.attribution.topSlice')}</p>
             <p className="mt-1 font-mono text-[11px] text-secondary">{row.valueLabel}</p>
           </div>
         ))}
@@ -1174,7 +1163,7 @@ const PortfolioPage: React.FC = () => {
     if (topAccountPercent != null) {
       rows.push({
         label: formatAttributionAccount(portfolioTopAccount),
-        meta: '账户',
+        meta: copy.attributionAccountMeta,
         percent: topAccountPercent,
         valueLabel: formatAttributionWeight(topAccountPercent),
         linkKey: getAttributionAccountLinkKey(portfolioTopAccount),
@@ -1184,14 +1173,14 @@ const PortfolioPage: React.FC = () => {
     if (topIndustryPercent != null) {
       rows.push({
         label: formatAttributionIndustry(portfolioTopIndustry),
-        meta: '行业',
+        meta: copy.attributionIndustryMeta,
         percent: topIndustryPercent,
         valueLabel: formatAttributionWeight(topIndustryPercent),
         linkKey: getAttributionIndustryLinkKey(portfolioTopIndustry),
       });
     }
     return rows;
-  }, [portfolioTopAccount, portfolioTopIndustry]);
+  }, [copy.attributionAccountMeta, copy.attributionIndustryMeta, portfolioTopAccount, portfolioTopIndustry]);
   const riskAccountRows = useMemo(
     () => getAttributionEntriesFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts')
       .flatMap((entry) => {
@@ -1214,13 +1203,13 @@ const PortfolioPage: React.FC = () => {
         if (percent == null) return [];
         return [{
           label: formatAttributionIndustry(entry),
-          meta: `${formatAttributionCount(entry.symbol_count ?? entry.symbolCount)} 持仓`,
+          meta: copy.attributionPositionCountValue(formatAttributionCount(entry.symbol_count ?? entry.symbolCount)),
           percent,
           valueLabel: formatAttributionWeight(percent),
           linkKey: getAttributionIndustryLinkKey(entry),
         } satisfies AttributionVisualRow];
       }),
-    [risk?.industryAttribution],
+    [copy, risk?.industryAttribution],
   );
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
@@ -1772,67 +1761,67 @@ const PortfolioPage: React.FC = () => {
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="portfolio-attribution-dashboard">
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">组合归因 / Portfolio Attribution</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionPortfolioTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>Top 账户:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount)}</span></div>
-              <div className="flex justify-between gap-3"><span>账户权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
-              <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionAccountWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
             </div>
             <AttributionHero
               rows={portfolioDominantRows}
               testId="portfolio-attribution-hero"
-              title="查看组合主导归因的聚合摘要"
+              title={copy.attributionPortfolioHeroTitle}
               tooltipTestId="portfolio-attribution-hover-tooltip"
               activeLinkKey={activeAttributionLinkKey}
               onActiveLinkChange={setActiveAttributionLinkKey}
             />
             <AttributionVisualList
-              title="主导分布 / Dominant Mix"
+              title={copy.attributionDominantMix}
               rows={portfolioDominantRows}
               testId="portfolio-attribution-visual-summary"
               activeLinkKey={activeAttributionLinkKey}
             />
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">账户归因 / Account Attribution</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionAccountTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>Top 账户:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount)}</span></div>
-              <div className="flex justify-between gap-3"><span>权益占比:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>账户 ID:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionEquityWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionAccountId}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
             </div>
             <AttributionDistributionBand
               rows={riskAccountRows}
               testId="account-attribution-distribution-band"
-              title={`账户归因 Top coverage ${getAttributionCoverage(riskAccountRows).toFixed(2)}%`}
+              title={copy.attributionAccountDistributionTitle(getAttributionCoverage(riskAccountRows).toFixed(2))}
               tooltipTestId="account-attribution-distribution-band-tooltip"
               activeLinkKey={activeAttributionLinkKey}
               onActiveLinkChange={setActiveAttributionLinkKey}
             />
             <AttributionVisualList
-              title="Top 账户分布"
+              title={copy.attributionAccountTopList}
               rows={riskAccountRows}
               testId="account-attribution-top-list"
               activeLinkKey={activeAttributionLinkKey}
             />
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">行业归因 / Industry Attribution</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionIndustryTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry)}</span></div>
-              <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>持仓数:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionPositionCount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
             </div>
             <AttributionDistributionBand
               rows={riskIndustryRows}
               testId="industry-attribution-distribution-band"
-              title={`行业归因 Top coverage ${getAttributionCoverage(riskIndustryRows).toFixed(2)}%`}
+              title={copy.attributionIndustryDistributionTitle(getAttributionCoverage(riskIndustryRows).toFixed(2))}
               tooltipTestId="industry-attribution-distribution-band-tooltip"
               activeLinkKey={activeAttributionLinkKey}
               onActiveLinkChange={setActiveAttributionLinkKey}
             />
             <AttributionVisualList
-              title="Top 行业分布"
+              title={copy.attributionIndustryTopList}
               rows={riskIndustryRows}
               testId="industry-attribution-top-list"
               activeLinkKey={activeAttributionLinkKey}

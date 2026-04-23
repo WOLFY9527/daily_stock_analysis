@@ -1018,9 +1018,9 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.getByText('组合归因 / Portfolio Attribution')).toBeInTheDocument();
-    expect(screen.getByText('账户归因 / Account Attribution')).toBeInTheDocument();
-    expect(screen.getByText('行业归因 / Industry Attribution')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.attribution.portfolioTitle'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.attribution.accountTitle'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.attribution.industryTitle'))).toBeInTheDocument();
     expect(screen.getAllByText('Account 1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Main').length).toBeGreaterThan(0);
     expect(screen.getAllByText('半导体').length).toBeGreaterThan(0);
@@ -1068,18 +1068,18 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(screen.getByTestId('portfolio-attribution-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-attribution-visual-summary')).toBeInTheDocument();
-    expect(screen.getByText('主导分布 / Dominant Mix')).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-attribution-hero')).toHaveAttribute('title', '查看组合主导归因的聚合摘要');
+    expect(screen.getByText(translate('zh', 'portfolio.attribution.dominantMix'))).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-attribution-hero')).toHaveAttribute('title', translate('zh', 'portfolio.attribution.portfolioHeroTitle'));
     expect(screen.getByTestId('account-attribution-top-list')).toBeInTheDocument();
-    expect(screen.getByText('Top 账户分布')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.attribution.accountTopList'))).toBeInTheDocument();
     expect(screen.getAllByText('Satellite').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveTextContent('Top coverage 100.00%');
-    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveAttribute('title', '账户归因 Top coverage 100.00%');
+    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveTextContent(translate('zh', 'portfolio.attribution.coverage', { coverage: '100.00' }));
+    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveAttribute('title', translate('zh', 'portfolio.attribution.accountDistributionTitle', { coverage: '100.00' }));
     expect(screen.getByTestId('industry-attribution-top-list')).toBeInTheDocument();
-    expect(screen.getByText('Top 行业分布')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.attribution.industryTopList'))).toBeInTheDocument();
     expect(screen.getAllByText('软件').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveTextContent('Top coverage 86.00%');
-    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveAttribute('title', '行业归因 Top coverage 86.00%');
+    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveTextContent(translate('zh', 'portfolio.attribution.coverage', { coverage: '86.00' }));
+    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveAttribute('title', translate('zh', 'portfolio.attribution.industryDistributionTitle', { coverage: '86.00' }));
   });
 
   it('shows attribution hover details and linked highlights across the additive dashboard panels', async () => {
@@ -1123,7 +1123,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
     fireEvent.mouseEnter(screen.getByTestId('portfolio-attribution-hero'));
 
-    expect(screen.getByTestId('portfolio-attribution-hover-tooltip')).toHaveTextContent('Top account focus');
+    expect(screen.getByTestId('portfolio-attribution-hover-tooltip')).toHaveTextContent(translate('zh', 'portfolio.attribution.accountHover'));
     expect(screen.getByTestId('account-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
 
     fireEvent.mouseLeave(screen.getByTestId('portfolio-attribution-hero'));
@@ -1177,7 +1177,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.focus(portfolioHero);
 
     const portfolioTooltip = screen.getByTestId('portfolio-attribution-hover-tooltip');
-    expect(portfolioTooltip).toHaveTextContent('Top account focus');
+    expect(portfolioTooltip).toHaveTextContent(translate('zh', 'portfolio.attribution.accountHover'));
     expect(portfolioTooltip).toHaveAttribute('role', 'tooltip');
     expect(portfolioTooltip).toHaveAttribute('id', 'portfolio-attribution-hover-tooltip');
     expect(portfolioHero).toHaveAttribute('aria-describedby', 'portfolio-attribution-hover-tooltip');
