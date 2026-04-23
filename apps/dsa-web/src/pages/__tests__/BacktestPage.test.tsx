@@ -986,6 +986,11 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
+    const additiveDashboard = screen.getByTestId('confirm-additive-dashboard');
+    expect(additiveDashboard).toBeInTheDocument();
+    expect(within(additiveDashboard).getByTestId('confirm-dashboard-risk-controls')).toBeInTheDocument();
+    expect(within(additiveDashboard).getByTestId('confirm-dashboard-risk-controls')).toHaveAttribute('title', '查看确认页风险控制 additive 摘要');
+    expect(within(additiveDashboard).getByText('风险控制卡片 / Risk Controls')).toBeInTheDocument();
     const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
     expect(within(executableSpecSection).getByText('风险控制 / Risk Controls')).toBeInTheDocument();
     expect(within(executableSpecSection).getAllByText('止损').length).toBeGreaterThan(0);

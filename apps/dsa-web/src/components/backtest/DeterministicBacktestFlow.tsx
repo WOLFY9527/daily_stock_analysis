@@ -1044,6 +1044,35 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                   </div>
                 </div>
 
+                {riskControlRows.length ? (
+                  <div className="summary-block mt-4" data-testid="confirm-additive-dashboard">
+                    <div
+                      className="summary-block"
+                      data-testid="confirm-dashboard-risk-controls"
+                      title="查看确认页风险控制 additive 摘要"
+                    >
+                      <div className="summary-block__header">
+                        <div>
+                          <SectionEyebrow>Dashboard</SectionEyebrow>
+                          <h3 className="summary-block__title">风险控制卡片 / Risk Controls</h3>
+                        </div>
+                        <div className="product-chip-list product-chip-list--tight">
+                          <span className="product-chip">已启用 {riskControlRows.length} 项</span>
+                          <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+                        </div>
+                      </div>
+                      <div className="preview-grid">
+                        {riskControlRows.map((row) => (
+                          <div key={`confirm-dashboard-risk-${row.label}`} className="preview-card">
+                            <p className="metric-card__label">{row.label}</p>
+                            <p className="preview-card__text">{row.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="summary-block mt-4" data-testid="confirm-executable-spec-section">
                   <div className="summary-block__header">
                     <div>

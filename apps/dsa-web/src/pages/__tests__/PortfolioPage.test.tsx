@@ -930,16 +930,19 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
+    expect(screen.getByTestId('portfolio-attribution-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-attribution-visual-summary')).toBeInTheDocument();
     expect(screen.getByText('主导分布 / Dominant Mix')).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-attribution-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-attribution-hero')).toHaveAttribute('title', '查看组合主导归因的聚合摘要');
     expect(screen.getByTestId('account-attribution-top-list')).toBeInTheDocument();
     expect(screen.getByText('Top 账户分布')).toBeInTheDocument();
     expect(screen.getAllByText('Satellite').length).toBeGreaterThan(0);
     expect(screen.getByTestId('account-attribution-distribution-band')).toHaveTextContent('Top coverage 100.00%');
+    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveAttribute('title', '账户归因 Top coverage 100.00%');
     expect(screen.getByTestId('industry-attribution-top-list')).toBeInTheDocument();
     expect(screen.getByText('Top 行业分布')).toBeInTheDocument();
     expect(screen.getAllByText('软件').length).toBeGreaterThan(0);
     expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveTextContent('Top coverage 86.00%');
+    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveAttribute('title', '行业归因 Top coverage 86.00%');
   });
 });

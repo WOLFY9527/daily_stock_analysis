@@ -314,6 +314,85 @@ function RiskControlsLadder({
   );
 }
 
+function AdditiveDashboardPanels({
+  hasRobustnessAnalysis,
+  robustnessLensRows,
+  riskControlRows,
+}: {
+  hasRobustnessAnalysis: boolean;
+  robustnessLensRows: CoverageTrackItem[];
+  riskControlRows: RiskControlVisualRow[];
+}) {
+  if (!hasRobustnessAnalysis && riskControlRows.length === 0) return null;
+
+  const averageCoverage = robustnessLensRows.length
+    ? robustnessLensRows.reduce((total, row) => total + row.ratio, 0) / robustnessLensRows.length
+    : 0;
+  const strongestRiskControl = riskControlRows.reduce((currentMax, row) => Math.max(currentMax, row.value), 0);
+
+  return (
+    <div className="backtest-display-section mt-3" data-testid="result-additive-dashboard">
+      <div className="preview-grid">
+        {hasRobustnessAnalysis ? (
+          <div
+            className="summary-block"
+            data-testid="dashboard-robustness-panel"
+            title="查看回测鲁棒性 additive 摘要"
+          >
+            <div className="summary-block__header">
+              <div>
+                <h3 className="summary-block__title">鲁棒性分析卡片 / Robustness</h3>
+              </div>
+              <div className="product-chip-list product-chip-list--tight">
+                <span className="product-chip">平均覆盖 {pct(averageCoverage * 100)}</span>
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              {robustnessLensRows.map((row) => (
+                <div key={`dashboard-${row.key}`} className="rounded-[1rem] bg-[rgba(15,23,42,0.18)] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="metric-card__label">{row.label}</p>
+                    <span className="product-chip">{row.state}</span>
+                  </div>
+                  <p className="mt-1 preview-card__text">{row.summary}</p>
+                  <p className="text-[11px] text-secondary">{row.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {riskControlRows.length ? (
+          <div
+            className="summary-block"
+            data-testid="dashboard-risk-controls-panel"
+            title="查看策略风险控制 additive 摘要"
+          >
+            <div className="summary-block__header">
+              <div>
+                <h3 className="summary-block__title">风险控制卡片 / Risk Controls</h3>
+              </div>
+              <div className="product-chip-list product-chip-list--tight">
+                <span className="product-chip">已启用 {riskControlRows.length} 项</span>
+                <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              {riskControlRows.map((row) => (
+                <div key={`dashboard-risk-${row.key}`} className="rounded-[1rem] bg-[rgba(15,23,42,0.18)] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="metric-card__label">{row.label}</p>
+                    <span className="preview-card__text">{row.valueLabel}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -1501,6 +1580,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
         <>
           <section className="backtest-display-section backtest-result-page__dashboard-stage" data-testid="deterministic-result-page-dashboard-stage">
             <DeterministicBacktestResultView run={run} normalized={normalized} densityConfig={density} />
+            <AdditiveDashboardPanels
+              hasRobustnessAnalysis={hasRobustnessAnalysis}
+              robustnessLensRows={robustnessLensRows}
+              riskControlRows={riskControlRows}
+            />
           </section>
 
           <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">

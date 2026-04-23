@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
@@ -515,6 +515,76 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
   });
 
+  it('surfaces additive robustness and risk-control panels in the unified dashboard stage', async () => {
+    const baselineRun = makeResultRun();
+    const currentRun = makeResultRun({
+      parsedStrategy: {
+        ...baselineRun.parsedStrategy,
+        strategySpec: {
+          ...(baselineRun.parsedStrategy?.strategySpec || {}),
+          riskControls: {
+            stopLossPct: 5,
+            takeProfitPct: 10,
+            trailingStopPct: 8,
+          },
+        },
+      },
+      robustnessAnalysis: {
+        state: 'available',
+        configuration: {
+          walkForward: {
+            maxWindows: 6,
+          },
+          monteCarlo: {
+            simulationCount: 250,
+          },
+          stressTests: {
+            scenarioKeys: ['single_day_shock_down_15', 'volatility_whipsaw', 'gap_down_open'],
+          },
+        },
+        walkForward: {
+          windowCount: 4,
+          aggregateMetrics: {
+            meanTotalReturnPct: 6.2,
+          },
+        },
+        monteCarlo: {
+          simulationCount: 200,
+          aggregateMetrics: {
+            medianTotalReturnPct: 8.4,
+          },
+        },
+        stressTests: {
+          scenarioCount: 3,
+          worstScenario: {
+            scenarioKey: 'single_day_shock_down_15',
+          },
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    expect(screen.getByTestId('result-additive-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-robustness-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-robustness-panel')).toHaveAttribute('title', '查看回测鲁棒性 additive 摘要');
+    expect(screen.getByText('鲁棒性分析卡片 / Robustness')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-risk-controls-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-risk-controls-panel')).toHaveAttribute('title', '查看策略风险控制 additive 摘要');
+    expect(screen.getByText('风险控制卡片 / Risk Controls')).toBeInTheDocument();
+    expect(screen.getByText('已启用 3 项')).toBeInTheDocument();
+  });
+
   it('renders indicator risk controls as a read-only protection ladder in the parameters tab', async () => {
     const baselineRun = makeResultRun();
     const currentRun = makeResultRun({
@@ -546,10 +616,11 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    expect(screen.getByTestId('result-risk-controls-visualization')).toBeInTheDocument();
-    expect(screen.getByText('保护梯度 / Protection Ladder')).toBeInTheDocument();
-    expect(screen.getByText('已启用 3 项')).toBeInTheDocument();
-    expect(screen.getByText('最高阈值 10.00%')).toBeInTheDocument();
+    const riskControlsVisualization = screen.getByTestId('result-risk-controls-visualization');
+    expect(riskControlsVisualization).toBeInTheDocument();
+    expect(within(riskControlsVisualization).getByText('保护梯度 / Protection Ladder')).toBeInTheDocument();
+    expect(within(riskControlsVisualization).getByText('已启用 3 项')).toBeInTheDocument();
+    expect(within(riskControlsVisualization).getByText('最高阈值 10.00%')).toBeInTheDocument();
     expect(screen.getByTestId('result-risk-controls-row-stop-loss')).toHaveTextContent('5.00%');
     expect(screen.getByTestId('result-risk-controls-row-take-profit')).toHaveTextContent('10.00%');
     expect(screen.getByTestId('result-risk-controls-row-trailing-stop')).toHaveTextContent('8.00%');

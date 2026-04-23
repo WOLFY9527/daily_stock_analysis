@@ -203,9 +203,11 @@ function getAttributionCoverage(rows: AttributionVisualRow[]): number {
 function AttributionHero({
   rows,
   testId,
+  title,
 }: {
   rows: AttributionVisualRow[];
   testId: string;
+  title?: string;
 }) {
   if (!rows.length) return null;
 
@@ -217,6 +219,7 @@ function AttributionHero({
     <div
       className="mt-4 rounded-[var(--theme-panel-radius-lg)] border border-[var(--border-muted)] bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(255,255,255,0.04))] p-3"
       data-testid={testId}
+      title={title}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -246,9 +249,11 @@ function AttributionHero({
 function AttributionDistributionBand({
   rows,
   testId,
+  title,
 }: {
   rows: AttributionVisualRow[];
   testId: string;
+  title?: string;
 }) {
   const segments = rows
     .filter((row) => row.percent > 0)
@@ -263,7 +268,7 @@ function AttributionDistributionBand({
   const remaining = Math.max(0, 100 - coverage);
 
   return (
-    <div className="mt-4 space-y-2.5" data-testid={testId}>
+    <div className="mt-4 space-y-2.5" data-testid={testId} title={title}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Distribution Band</p>
         <span className="text-[11px] font-mono text-foreground">Top coverage {coverage.toFixed(2)}%</span>
@@ -1381,7 +1386,7 @@ const PortfolioPage: React.FC = () => {
           </Card>
         </section>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="portfolio-attribution-dashboard">
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">组合归因 / Portfolio Attribution</h3>
             <div className="text-xs text-secondary space-y-1.5">
@@ -1390,7 +1395,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
               <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
             </div>
-            <AttributionHero rows={portfolioDominantRows} testId="portfolio-attribution-hero" />
+            <AttributionHero rows={portfolioDominantRows} testId="portfolio-attribution-hero" title="查看组合主导归因的聚合摘要" />
             <AttributionVisualList title="主导分布 / Dominant Mix" rows={portfolioDominantRows} testId="portfolio-attribution-visual-summary" />
           </Card>
           <Card padding="md">
@@ -1400,7 +1405,11 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>权益占比:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>账户 ID:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
             </div>
-            <AttributionDistributionBand rows={riskAccountRows} testId="account-attribution-distribution-band" />
+            <AttributionDistributionBand
+              rows={riskAccountRows}
+              testId="account-attribution-distribution-band"
+              title={`账户归因 Top coverage ${getAttributionCoverage(riskAccountRows).toFixed(2)}%`}
+            />
             <AttributionVisualList title="Top 账户分布" rows={riskAccountRows} testId="account-attribution-top-list" />
           </Card>
           <Card padding="md">
@@ -1410,7 +1419,11 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>持仓数:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
             </div>
-            <AttributionDistributionBand rows={riskIndustryRows} testId="industry-attribution-distribution-band" />
+            <AttributionDistributionBand
+              rows={riskIndustryRows}
+              testId="industry-attribution-distribution-band"
+              title={`行业归因 Top coverage ${getAttributionCoverage(riskIndustryRows).toFixed(2)}%`}
+            />
             <AttributionVisualList title="Top 行业分布" rows={riskIndustryRows} testId="industry-attribution-top-list" />
           </Card>
         </section>
