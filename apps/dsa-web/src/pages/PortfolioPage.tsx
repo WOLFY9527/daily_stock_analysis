@@ -33,10 +33,10 @@ const PIE_COLORS = ['#f0f0fa', '#d8d8e2', '#b5b5c1', '#8d8d98', '#6b6b74', '#4c4
 const ATTRIBUTION_VISUAL_COLORS = ['#7dd3fc', '#86efac', '#fbbf24'];
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
-  { broker: 'huatai', aliases: [], displayName: '华泰', fileExtensions: ['csv'] },
-  { broker: 'citic', aliases: ['zhongxin'], displayName: '中信', fileExtensions: ['csv'] },
-  { broker: 'cmb', aliases: ['cmbchina', 'zhaoshang'], displayName: '招商', fileExtensions: ['csv'] },
-  { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
+  { broker: 'huatai', aliases: [], displayName: translate('zh', 'portfolio.brokerName.huatai'), fileExtensions: ['csv'] },
+  { broker: 'citic', aliases: ['zhongxin'], displayName: translate('zh', 'portfolio.brokerName.citic'), fileExtensions: ['csv'] },
+  { broker: 'cmb', aliases: ['cmbchina', 'zhaoshang'], displayName: translate('zh', 'portfolio.brokerName.cmb'), fileExtensions: ['csv'] },
+  { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: translate('zh', 'portfolio.brokerName.ibkr'), fileExtensions: ['xml'] },
 ];
 
 type AccountOption = 'all' | number;
@@ -325,10 +325,10 @@ function formatCorporateActionLabel(value: PortfolioCorporateActionType, languag
 function formatBrokerLabel(value: string, displayName: string | undefined, language: PortfolioLanguage): string {
   const knownName = translate(language, `portfolio.brokerName.${value}`);
   if (knownName !== `portfolio.brokerName.${value}`) {
-    return language === 'en' ? `${value} (${knownName})` : `${value}（${knownName}）`;
+    return translate(language, 'portfolio.labelWithKnownName', { value, name: knownName });
   }
   if (displayName && displayName.trim()) {
-    return language === 'en' ? `${value} (${displayName.trim()})` : `${value}（${displayName.trim()}）`;
+    return translate(language, 'portfolio.labelWithKnownName', { value, name: displayName.trim() });
   }
   return value;
 }
@@ -345,9 +345,12 @@ function formatBrokerConnectionStatus(value: string, language: PortfolioLanguage
   return value || '--';
 }
 
-function formatPositionContext(market: string, currency: string): string {
-  const marketLabel = market === 'hk' ? 'HK' : market === 'us' ? 'US' : market === 'cn' ? 'CN' : market.toUpperCase();
-  return `${marketLabel} / ${currency || '--'}`;
+function formatPositionContext(market: string, currency: string, language: PortfolioLanguage): string {
+  const marketLabel = formatAccountMarketLabel(market, language);
+  return translate(language, 'portfolio.positionContext', {
+    market: marketLabel,
+    currency: currency || '--',
+  });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -402,18 +405,20 @@ function parseAttributionPercent(value: unknown): number | null {
   return Math.min(100, Math.max(0, numeric));
 }
 
-function formatAttributionAccount(entry: Record<string, unknown> | null): string {
+function formatAttributionAccount(entry: Record<string, unknown> | null, language: PortfolioLanguage): string {
   if (!entry) return '--';
   const accountName = String(entry.account_name || entry.accountName || '').trim();
   if (accountName) return accountName;
   const accountId = entry.account_id ?? entry.accountId;
-  return accountId == null ? '--' : `#${String(accountId)}`;
+  return accountId == null
+    ? '--'
+    : translate(language, 'portfolio.attribution.accountFallback', { id: String(accountId) });
 }
 
-function formatAttributionIndustry(entry: Record<string, unknown> | null): string {
+function formatAttributionIndustry(entry: Record<string, unknown> | null, language: PortfolioLanguage): string {
   if (!entry) return '--';
   const value = String(entry.industry || entry.name || '').trim();
-  return value || '--';
+  return value || translate(language, 'portfolio.attribution.unclassifiedIndustry');
 }
 
 function formatAttributionWeight(value: unknown): string {
@@ -1163,7 +1168,7 @@ const PortfolioPage: React.FC = () => {
     const topAccountPercent = parseAttributionPercent(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct);
     if (topAccountPercent != null) {
       rows.push({
-        label: formatAttributionAccount(portfolioTopAccount),
+        label: formatAttributionAccount(portfolioTopAccount, language),
         meta: copy.attributionAccountMeta,
         percent: topAccountPercent,
         valueLabel: formatAttributionWeight(topAccountPercent),
@@ -1173,7 +1178,7 @@ const PortfolioPage: React.FC = () => {
     const topIndustryPercent = parseAttributionPercent(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct);
     if (topIndustryPercent != null) {
       rows.push({
-        label: formatAttributionIndustry(portfolioTopIndustry),
+        label: formatAttributionIndustry(portfolioTopIndustry, language),
         meta: copy.attributionIndustryMeta,
         percent: topIndustryPercent,
         valueLabel: formatAttributionWeight(topIndustryPercent),
@@ -1181,21 +1186,23 @@ const PortfolioPage: React.FC = () => {
       });
     }
     return rows;
-  }, [copy.attributionAccountMeta, copy.attributionIndustryMeta, portfolioTopAccount, portfolioTopIndustry]);
+  }, [copy.attributionAccountMeta, copy.attributionIndustryMeta, language, portfolioTopAccount, portfolioTopIndustry]);
   const riskAccountRows = useMemo(
     () => getAttributionEntriesFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts')
       .flatMap((entry) => {
         const percent = parseAttributionPercent(entry.equity_weight_pct ?? entry.equityWeightPct);
         if (percent == null) return [];
         return [{
-          label: formatAttributionAccount(entry),
-          meta: `#${formatAttributionCount(entry.account_id ?? entry.accountId)}`,
+          label: formatAttributionAccount(entry, language),
+          meta: translate(language, 'portfolio.attribution.accountFallback', {
+            id: formatAttributionCount(entry.account_id ?? entry.accountId),
+          }),
           percent,
           valueLabel: formatAttributionWeight(percent),
           linkKey: getAttributionAccountLinkKey(entry),
         } satisfies AttributionVisualRow];
       }),
-    [risk?.accountAttribution],
+    [language, risk?.accountAttribution],
   );
   const riskIndustryRows = useMemo(
     () => getAttributionEntriesFromBlock(risk?.industryAttribution as Record<string, unknown> | null, 'top_industries', 'topIndustries')
@@ -1203,14 +1210,14 @@ const PortfolioPage: React.FC = () => {
         const percent = parseAttributionPercent(entry.weight_pct ?? entry.weightPct);
         if (percent == null) return [];
         return [{
-          label: formatAttributionIndustry(entry),
+          label: formatAttributionIndustry(entry, language),
           meta: copy.attributionPositionCountValue(formatAttributionCount(entry.symbol_count ?? entry.symbolCount)),
           percent,
           valueLabel: formatAttributionWeight(percent),
           linkKey: getAttributionIndustryLinkKey(entry),
         } satisfies AttributionVisualRow];
       }),
-    [copy, risk?.industryAttribution],
+    [copy, language, risk?.industryAttribution],
   );
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
@@ -1764,9 +1771,9 @@ const PortfolioPage: React.FC = () => {
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionPortfolioTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount, language)}</span></div>
               <div className="flex justify-between gap-3"><span>{copy.attributionAccountWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry, language)}</span></div>
               <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
             </div>
             <AttributionHero
@@ -1787,7 +1794,7 @@ const PortfolioPage: React.FC = () => {
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionAccountTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount, language)}</span></div>
               <div className="flex justify-between gap-3"><span>{copy.attributionEquityWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>{copy.attributionAccountId}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
             </div>
@@ -1809,7 +1816,7 @@ const PortfolioPage: React.FC = () => {
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionIndustryTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry, language)}</span></div>
               <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>{copy.attributionPositionCount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
             </div>
@@ -1864,7 +1871,7 @@ const PortfolioPage: React.FC = () => {
                       <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-[var(--border-muted)] hover:bg-[var(--overlay-hover)] transition-colors">
                         <td className="py-2.5 pr-2 text-secondary-text text-xs">{row.accountName}</td>
                         <td className="py-2.5 pr-2 font-mono text-foreground text-xs">{row.symbol}</td>
-                        <td className="py-2.5 pr-2 text-secondary-text text-xs">{formatPositionContext(row.market, row.currency)}</td>
+                        <td className="py-2.5 pr-2 text-secondary-text text-xs">{formatPositionContext(row.market, row.currency, language)}</td>
                         <td className="py-2.5 pr-2 text-right font-mono text-secondary-text text-xs">{row.quantity.toFixed(2)}</td>
                         <td className="py-2.5 pr-2 text-right font-mono text-secondary-text text-xs">{row.avgCost.toFixed(4)}</td>
                         <td className="py-2.5 pr-2 text-right font-mono text-secondary-text text-xs">{row.lastPrice.toFixed(4)}</td>

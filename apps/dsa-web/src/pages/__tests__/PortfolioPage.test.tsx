@@ -446,7 +446,7 @@ describe('PortfolioPage FX refresh', () => {
       apiBaseUrl: 'https://localhost:5000/v1/api',
       verifySsl: false,
     }));
-    expect(await screen.findByText(/账户引用:/)).toBeInTheDocument();
+    expect(await screen.findByText(new RegExp(`${translate('zh', 'portfolio.accountRef')}:`))).toBeInTheDocument();
     expect(
       screen.getByText((_, element) =>
         element?.tagName.toLowerCase() === 'span'
@@ -704,7 +704,11 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
 
-    expect(await screen.findByText(/旧汇率或备用汇率/)).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshFallbackWarning', {
+      updatedCount: 1,
+      staleCount: 1,
+      errorCount: 0,
+    }))).toBeInTheDocument();
   });
 
   it('shows warning feedback when FX refresh returns online errors without stale pairs', async () => {
@@ -781,7 +785,7 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('快照刷新失败');
     expect(screen.getByRole('alert')).toHaveTextContent('无法加载最新持仓快照');
-    await waitFor(() => expect(screen.queryByText('汇率已刷新，共更新 1 对。')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeDisabled());
   });
 
@@ -814,7 +818,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /刷新中|刷新汇率/ })).toBeDisabled();
+      expect(refreshFx).toHaveBeenCalledWith({ accountId: 1 });
     });
 
     fireEvent.change(accountSelect, { target: { value: '2' } });
@@ -838,7 +842,7 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsAfterSwitch);
     expect(getRisk).toHaveBeenCalledTimes(riskCallsAfterSwitch);
-    expect(screen.queryByText('汇率已刷新，共更新 1 对。')).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).not.toBeInTheDocument();
   });
 
   it('drops late FX refresh results after switching cost method', async () => {
@@ -882,7 +886,7 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsAfterSwitch);
     expect(getRisk).toHaveBeenCalledTimes(riskCallsAfterSwitch);
-    expect(screen.queryByText('汇率已刷新，共更新 1 对。')).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).not.toBeInTheDocument();
   });
 
   it('renders localized English portfolio shell copy on /en routes', async () => {

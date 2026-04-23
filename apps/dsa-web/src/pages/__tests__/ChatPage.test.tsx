@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { historyApi } from '../../api/history';
+import { translate } from '../../i18n/core';
 import type { Message, ProgressStep } from '../../stores/agentChatStore';
 import { ShellRailHarness } from '../../test-utils/ShellRailHarness';
 import ChatPage from '../ChatPage';
@@ -67,6 +68,8 @@ const mockStoreState: {
   startStream: mockStartStream,
   clearCompletionBadge: mockClearCompletionBadge,
 };
+
+const canonicalBullTrendLabel = (language: 'zh' | 'en') => translate(language, 'chat.skills.labels.bull_trend');
 
 vi.mock('../../api/agent', () => ({
   agentApi: {
@@ -189,11 +192,11 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('先提一个具体问题')).toBeInTheDocument();
-    expect(screen.getByText('开仓执行判断')).toBeInTheDocument();
-    expect(screen.getByText('持仓风控复盘')).toBeInTheDocument();
-    expect(screen.getByText('事件驱动跟踪')).toBeInTheDocument();
-    expect(screen.getAllByText(/先提一个明确问题，再继续拆解风险、催化、仓位和执行/).length).toBeGreaterThan(0);
+    expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'chat.starterCards.entryDecision.title'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'chat.starterCards.positionReview.title'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'chat.starterCards.eventFollowUp.title'))).toBeInTheDocument();
+    expect(screen.getAllByText(translate('zh', 'chat.description')).length).toBeGreaterThan(0);
   });
 
   it('switches session when clicking anywhere on the session card', async () => {
@@ -206,7 +209,7 @@ describe('ChatPage', () => {
     );
 
     const sessionCard = await screen.findByRole('button', {
-      name: /切换到对话 请简要分析 600519/,
+      name: translate('zh', 'chat.switchToConversation', { title: '请简要分析 600519' }),
     });
 
     fireEvent.click(sessionCard);
@@ -228,9 +231,11 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
-    const sendButton = screen.getByRole('button', { name: /发送|处理中\.\.\./ });
+    const sendButton = screen.getByRole('button', {
+      name: new RegExp(`${translate('zh', 'chat.notifyAction')}|${translate('zh', 'chat.notifySending').replace(/\./g, '\\.')}`),
+    });
     expect(sendButton).not.toBeDisabled();
-    expect(screen.getByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'chat.followUpContextLoading'))).toBeInTheDocument();
 
     fireEvent.click(sendButton);
 
@@ -245,7 +250,7 @@ describe('ChatPage', () => {
           skills: ['bull_trend'],
         }),
         expect.objectContaining({
-          skillName: '默认多头趋势',
+          skillName: canonicalBullTrendLabel('zh'),
         }),
       );
     });
@@ -273,13 +278,13 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
+      expect(screen.queryByText(translate('zh', 'chat.followUpContextLoading'))).not.toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
       target: { value: '继续分析成交量' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
@@ -288,7 +293,7 @@ describe('ChatPage', () => {
           context: undefined,
         }),
         expect.objectContaining({
-          skillName: '默认多头趋势',
+          skillName: canonicalBullTrendLabel('zh'),
         }),
       );
     });
@@ -328,10 +333,10 @@ describe('ChatPage', () => {
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
+      expect(screen.queryByText(translate('zh', 'chat.followUpContextLoading'))).not.toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
@@ -348,7 +353,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: '默认多头趋势',
+          skillName: canonicalBullTrendLabel('zh'),
         }),
       );
     });
@@ -365,7 +370,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByDisplayValue('请深入分析 AAPL')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
@@ -377,7 +382,7 @@ describe('ChatPage', () => {
           },
         }),
         expect.objectContaining({
-          skillName: '默认多头趋势',
+          skillName: canonicalBullTrendLabel('zh'),
         }),
       );
     });
@@ -402,7 +407,7 @@ describe('ChatPage', () => {
     render(<RouterProvider router={router} />);
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
-    expect(screen.getByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'chat.followUpContextLoading'))).toBeInTheDocument();
 
     await router.navigate('/chat?stock=AAPL&name=Apple&recordId=2');
 
@@ -453,10 +458,10 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
+      expect(screen.queryByText(translate('zh', 'chat.followUpContextLoading'))).not.toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
@@ -473,7 +478,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: '默认多头趋势',
+          skillName: canonicalBullTrendLabel('zh'),
         }),
       );
     });
@@ -518,10 +523,12 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('Conversation history')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Switch to conversation 请简要分析 600519/ })).toBeInTheDocument();
-    expect(screen.getByTitle('Delete conversation')).toBeInTheDocument();
-    expect(screen.getByText('2 messages')).toBeInTheDocument();
+    expect(await screen.findByText(translate('en', 'chat.historyTitle'))).toBeInTheDocument();
+    expect(screen.getByRole('button', {
+      name: translate('en', 'chat.switchToConversation', { title: '请简要分析 600519' }),
+    })).toBeInTheDocument();
+    expect(screen.getByTitle(translate('en', 'chat.deleteConversationAction'))).toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'chat.messageCount', { count: 2 }))).toBeInTheDocument();
   });
 
   it('localizes assistant thinking labels in english mode', async () => {
@@ -531,7 +538,7 @@ describe('ChatPage', () => {
         id: 'assistant-1',
         role: 'assistant',
         content: 'Here is the analysis.',
-        skillName: '默认多头趋势',
+        skillName: canonicalBullTrendLabel('zh'),
         thinkingSteps: [
           { type: 'thinking', step: 1, message: 'Reviewing the setup' },
           { type: 'tool_done', tool: 'quote_fetch', display_name: 'Quote fetch', duration: 1.2, success: true },

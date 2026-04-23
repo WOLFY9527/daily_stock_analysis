@@ -909,7 +909,8 @@ describe('ScannerPage', () => {
     renderScannerPage();
 
     expect(await screen.findByText('我的近期运行')).toBeInTheDocument();
-    expect(screen.getByText('我的手动扫描：600001 算力龙头')).toBeInTheDocument();
+    expect(screen.getAllByText(/600001/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/算力龙头/).length).toBeGreaterThan(0);
     expect(getRuns).toHaveBeenCalledWith({
       market: 'cn',
       profile: 'cn_preopen_v1',

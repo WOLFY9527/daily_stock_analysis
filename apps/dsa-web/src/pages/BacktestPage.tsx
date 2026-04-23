@@ -952,7 +952,7 @@ const BacktestPage: React.FC = () => {
   return (
     <div className="theme-page-transition backtest-v1-page workspace-page--backtest" data-testid="backtest-v1-page">
       <WorkspacePageHeader
-        eyebrow="WolfyStock"
+        eyebrow={bt(language, 'page.headerEyebrow')}
         title={bt(language, 'page.headerTitle')}
         description={bt(language, 'page.headerDescription', {
           benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
