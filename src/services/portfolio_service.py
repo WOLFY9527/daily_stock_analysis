@@ -2376,7 +2376,7 @@ class PortfolioService:
                 ]
             )
 
-        return {
+        snapshot_payload = {
             "as_of": as_of_date.isoformat(),
             "cost_method": method,
             "currency": aggregate_currency,
@@ -2395,6 +2395,11 @@ class PortfolioService:
             ),
             "accounts": accounts_payload,
         }
+        snapshot_payload["portfolio_attribution"] = self._build_portfolio_attribution(
+            snapshot=snapshot_payload,
+            as_of_date=as_of_date,
+        )
+        return snapshot_payload
 
     def refresh_fx_rates(
         self,
@@ -2761,6 +2766,10 @@ class PortfolioService:
             "fx_stale": fx_stale,
             "positions": position_rows,
         }
+        account_payload["industry_attribution"] = self._build_snapshot_industry_attribution(
+            snapshot=self._wrap_account_snapshot_payload(account_payload),
+            as_of_date=as_of_date,
+        )
 
         cache_payload = dict(account_payload)
         cache_payload["_cache_meta"] = {
@@ -2848,6 +2857,10 @@ class PortfolioService:
             "fx_stale": bool(sync_state.get("fx_stale")),
             "positions": positions,
         }
+        payload["industry_attribution"] = self._build_snapshot_industry_attribution(
+            snapshot=self._wrap_account_snapshot_payload(payload),
+            as_of_date=as_of_date,
+        )
         return {
             "public": payload,
             "payload": {
@@ -3507,6 +3520,48 @@ class PortfolioService:
             }
         )
         return public_payload
+
+    @staticmethod
+    def _wrap_account_snapshot_payload(account_payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "currency": account_payload.get("base_currency") or "CNY",
+            "total_market_value": account_payload.get("total_market_value", 0.0),
+            "total_equity": account_payload.get("total_equity", 0.0),
+            "accounts": [dict(account_payload)],
+        }
+
+    def _build_snapshot_industry_attribution(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        as_of_date: date,
+    ) -> Dict[str, Any]:
+        from src.services.portfolio_risk_service import PortfolioRiskService
+
+        return PortfolioRiskService(repo=self.repo, portfolio_service=self)._build_industry_attribution(
+            snapshot=snapshot,
+            as_of_date=as_of_date,
+        )
+
+    def _build_portfolio_attribution(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        as_of_date: date,
+    ) -> Dict[str, Any]:
+        from src.services.portfolio_risk_service import PortfolioRiskService
+
+        risk_service = PortfolioRiskService(repo=self.repo, portfolio_service=self)
+        return {
+            "account_attribution": risk_service._build_account_attribution(
+                snapshot=snapshot,
+                as_of_date=as_of_date,
+            ),
+            "industry_attribution": risk_service._build_industry_attribution(
+                snapshot=snapshot,
+                as_of_date=as_of_date,
+            ),
+        }
 
     @staticmethod
     def _extract_cached_fx_currencies(payload: Optional[Dict[str, Any]]) -> List[str]:

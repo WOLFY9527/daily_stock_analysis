@@ -279,6 +279,7 @@ class PortfolioSnapshotResponse(BaseModel):
     tax_total: float
     fx_stale: bool
     market_breakdown: List[PortfolioMarketBreakdownItem] = Field(default_factory=list)
+    portfolio_attribution: Dict[str, Any] = Field(default_factory=dict)
     accounts: List[PortfolioAccountSnapshot] = Field(default_factory=list)
 
 
@@ -381,6 +382,7 @@ class PortfolioRiskResponse(BaseModel):
     thresholds: Dict[str, Any] = Field(default_factory=dict)
     concentration: Dict[str, Any] = Field(default_factory=dict)
     sector_concentration: Dict[str, Any] = Field(default_factory=dict)
+    industry_attribution: Dict[str, Any] = Field(default_factory=dict)
     drawdown: Dict[str, Any] = Field(default_factory=dict)
     stop_loss: Dict[str, Any] = Field(default_factory=dict)
     account_attribution: Dict[str, Any] = Field(default_factory=dict)

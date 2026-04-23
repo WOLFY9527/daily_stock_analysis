@@ -304,8 +304,53 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(risk_resp.status_code, 200)
         payload = risk_resp.json()
         self.assertIn("account_attribution", payload)
+        self.assertIn("industry_attribution", payload)
         self.assertEqual(payload["account_attribution"]["top_accounts"][0]["account_id"], account_id)
         self.assertEqual(payload["account_attribution"]["top_accounts"][0]["equity_weight_pct"], 100.0)
+        self.assertEqual(payload["industry_attribution"]["top_industries"][0]["weight_pct"], 100.0)
+
+    def test_snapshot_api_returns_portfolio_attribution_block(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": account_id,
+                "event_date": "2026-01-01",
+                "direction": "in",
+                "amount": 1000,
+                "currency": "CNY",
+            },
+        )
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        self._save_close("600519", date(2026, 1, 1), 100.0)
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"as_of": "2026-01-01", "cost_method": "fifo"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        payload = snapshot_resp.json()
+        self.assertIn("portfolio_attribution", payload)
+        self.assertEqual(payload["portfolio_attribution"]["account_attribution"]["top_accounts"][0]["account_id"], account_id)
+        self.assertEqual(payload["portfolio_attribution"]["industry_attribution"]["top_industries"][0]["weight_pct"], 100.0)
 
     def test_broker_connection_api_flow(self) -> None:
         account_resp = self.client.post(

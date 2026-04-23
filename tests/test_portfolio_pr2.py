@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+import json
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -693,6 +694,171 @@ class PortfolioPr2TestCase(unittest.TestCase):
                     "market_value_weight_pct": 41.1765,
                     "fx_stale": False,
                 },
+            ],
+        )
+
+    @patch.object(PortfolioRiskService, "_fetch_belong_boards", return_value=[{"name": "白酒", "type": "行业"}])
+    def test_risk_report_exposes_industry_attribution_without_changing_existing_blocks(self, _mock_fetch) -> None:
+        cn_account = self.service.create_account(name="CN", broker="Demo", market="cn", base_currency="CNY")
+        us_account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="USD")
+        cn_id = cn_account["id"]
+        us_id = us_account["id"]
+
+        self.service.record_cash_ledger(
+            account_id=cn_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000.0,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=cn_id,
+            symbol="600519",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100.0,
+            market="cn",
+            currency="CNY",
+        )
+        self.service.record_cash_ledger(
+            account_id=us_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=100.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=us_id,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1,
+            price=100.0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+
+        report = self.risk_service.get_risk_report(as_of=date(2026, 1, 1), cost_method="fifo")
+
+        self.assertEqual(report["concentration"]["top_weight_pct"], 58.8235)
+        self.assertFalse(report["stop_loss"]["near_alert"])
+        self.assertEqual(
+            report["industry_attribution"]["top_industries"],
+            [
+                {
+                    "industry": "白酒",
+                    "market_value_base": 1000.0,
+                    "weight_pct": 58.8235,
+                    "symbol_count": 1,
+                },
+                {
+                    "industry": "UNCLASSIFIED",
+                    "market_value_base": 700.0,
+                    "weight_pct": 41.1765,
+                    "symbol_count": 1,
+                },
+            ],
+        )
+
+    @patch.object(PortfolioRiskService, "_fetch_belong_boards", return_value=[{"name": "白酒", "type": "行业"}])
+    def test_snapshot_persists_and_exposes_portfolio_attribution(self, _mock_fetch) -> None:
+        cn_account = self.service.create_account(name="CN", broker="Demo", market="cn", base_currency="CNY")
+        us_account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="USD")
+        cn_id = cn_account["id"]
+        us_id = us_account["id"]
+
+        self.service.record_cash_ledger(
+            account_id=cn_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000.0,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=cn_id,
+            symbol="600519",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100.0,
+            market="cn",
+            currency="CNY",
+        )
+        self.service.record_cash_ledger(
+            account_id=us_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=100.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=us_id,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1,
+            price=100.0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+
+        snapshot = self.service.get_portfolio_snapshot(as_of=date(2026, 1, 1), cost_method="fifo")
+        cached_cn = self.service.repo.get_cached_snapshot_bundle(
+            account_id=cn_id,
+            snapshot_date=date(2026, 1, 1),
+            cost_method="fifo",
+        )
+
+        self.assertEqual(snapshot["portfolio_attribution"]["account_attribution"]["top_accounts"][0]["account_id"], cn_id)
+        self.assertEqual(
+            snapshot["portfolio_attribution"]["industry_attribution"]["top_industries"],
+            [
+                {
+                    "industry": "白酒",
+                    "market_value_base": 1000.0,
+                    "weight_pct": 58.8235,
+                    "symbol_count": 1,
+                },
+                {
+                    "industry": "UNCLASSIFIED",
+                    "market_value_base": 700.0,
+                    "weight_pct": 41.1765,
+                    "symbol_count": 1,
+                },
+            ],
+        )
+        self.assertIsNotNone(cached_cn)
+        cached_payload = json.loads(cached_cn["snapshot"].payload)
+        self.assertEqual(
+            cached_payload["industry_attribution"]["top_industries"],
+            [
+                {
+                    "industry": "白酒",
+                    "market_value_base": 1000.0,
+                    "weight_pct": 100.0,
+                    "symbol_count": 1,
+                }
             ],
         )
 

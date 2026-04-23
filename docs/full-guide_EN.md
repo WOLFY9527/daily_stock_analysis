@@ -1073,6 +1073,8 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 - When `PORTFOLIO_FX_UPDATE_ENABLED=false`, the refresh API returns an explicit disabled status and the page shows that online FX refresh is disabled instead of implying that no refreshable pairs exist.
 - `GET /api/v1/portfolio/snapshot` now also returns `market_breakdown`, aggregating normalized position market value across the selected account/portfolio scope by `cn` / `hk` / `us`.
 - `GET /api/v1/portfolio/risk` now also returns `account_attribution`, aggregating each account's normalized `total_equity` / `total_market_value` contribution in the report currency so multi-account portfolios can inspect which account is driving overall exposure.
+- `GET /api/v1/portfolio/risk` now also returns additive `industry_attribution`, using the same normalized market-value basis and board-mapping fallback rules as sector concentration while keeping the existing alert contract unchanged.
+- `GET /api/v1/portfolio/snapshot` now also returns additive `portfolio_attribution`, combining `account_attribution` and `industry_attribution`; per-account snapshot payloads persist the minimal industry-attribution summary so cached Phase G snapshot reads stay stored-first.
 
 ### User-owned broker connections and IBKR import
 

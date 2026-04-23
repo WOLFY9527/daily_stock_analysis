@@ -59,6 +59,10 @@ class PortfolioRiskService:
             thresholds["concentration_alert_pct"],
             as_of_date=as_of_date,
         )
+        industry_attribution = self._build_industry_attribution(
+            snapshot=snapshot,
+            as_of_date=as_of_date,
+        )
         self._ensure_drawdown_snapshot_window(
             account_id=account_id,
             as_of_date=as_of_date,
@@ -87,6 +91,7 @@ class PortfolioRiskService:
             "thresholds": thresholds,
             "concentration": concentration,
             "sector_concentration": sector_concentration,
+            "industry_attribution": industry_attribution,
             "drawdown": drawdown,
             "stop_loss": stop_loss,
             "account_attribution": account_attribution,
@@ -215,10 +220,59 @@ class PortfolioRiskService:
         *,
         as_of_date: date,
     ) -> Dict[str, Any]:
+        total_mv, industry_rows, coverage, errors = self._collect_industry_rows(
+            snapshot=snapshot,
+            as_of_date=as_of_date,
+        )
+        rows = []
+        for item in industry_rows:
+            rows.append(
+                {
+                    "sector": item["industry"],
+                    "market_value_base": item["market_value_base"],
+                    "weight_pct": item["weight_pct"],
+                    "symbol_count": item["symbol_count"],
+                    "is_alert": bool(float(item["weight_pct"]) >= threshold_pct),
+                }
+            )
+        top_weight = rows[0]["weight_pct"] if rows else 0.0
+
+        return {
+            "total_market_value": round(total_mv, 6),
+            "top_weight_pct": round(float(top_weight), 4),
+            "alert": bool(top_weight >= threshold_pct),
+            "top_sectors": rows[:10],
+            "coverage": coverage,
+            "errors": errors[:20],
+        }
+
+    def _build_industry_attribution(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        as_of_date: date,
+    ) -> Dict[str, Any]:
+        total_mv, rows, coverage, errors = self._collect_industry_rows(
+            snapshot=snapshot,
+            as_of_date=as_of_date,
+        )
+        return {
+            "total_market_value": round(total_mv, 6),
+            "top_industries": rows[:10],
+            "coverage": coverage,
+            "errors": errors[:20],
+        }
+
+    def _collect_industry_rows(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        as_of_date: date,
+    ) -> Tuple[float, List[Dict[str, Any]], Dict[str, int], List[str]]:
         total_mv = float(snapshot.get("total_market_value", 0.0) or 0.0)
         report_currency = str(snapshot.get("currency") or "CNY")
-        sector_exposure: Dict[str, float] = {}
-        sector_symbols: Dict[str, set] = {}
+        industry_exposure: Dict[str, float] = {}
+        industry_symbols: Dict[str, set] = {}
         coverage = {
             "classified_count": 0,
             "unclassified_count": 0,
@@ -243,39 +297,29 @@ class PortfolioRiskService:
                     as_of_date=as_of_date,
                 )
 
-                sector = self._resolve_primary_sector(
+                industry = self._resolve_primary_sector(
                     symbol=symbol,
                     market=market,
                     board_cache=board_cache,
                     coverage=coverage,
                     errors=errors,
                 )
-                sector_exposure[sector] = sector_exposure.get(sector, 0.0) + converted
-                sector_symbols.setdefault(sector, set()).add(symbol)
+                industry_exposure[industry] = industry_exposure.get(industry, 0.0) + converted
+                industry_symbols.setdefault(industry, set()).add(symbol)
 
-        rows = []
-        for sector, exposure in sector_exposure.items():
+        rows: List[Dict[str, Any]] = []
+        for industry, exposure in industry_exposure.items():
             weight = (exposure / total_mv * 100.0) if total_mv > 0 else 0.0
             rows.append(
                 {
-                    "sector": sector,
+                    "industry": industry,
                     "market_value_base": round(exposure, 6),
                     "weight_pct": round(weight, 4),
-                    "symbol_count": len(sector_symbols.get(sector, set())),
-                    "is_alert": bool(weight >= threshold_pct),
+                    "symbol_count": len(industry_symbols.get(industry, set())),
                 }
             )
         rows.sort(key=lambda item: item["market_value_base"], reverse=True)
-        top_weight = rows[0]["weight_pct"] if rows else 0.0
-
-        return {
-            "total_market_value": round(total_mv, 6),
-            "top_weight_pct": round(float(top_weight), 4),
-            "alert": bool(top_weight >= threshold_pct),
-            "top_sectors": rows[:10],
-            "coverage": coverage,
-            "errors": errors[:20],
-        }
+        return total_mv, rows, coverage, errors
 
     def _resolve_primary_sector(
         self,
