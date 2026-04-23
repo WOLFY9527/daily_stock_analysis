@@ -52,16 +52,12 @@ export const TaskQueue: React.FC<TaskQueueProps> = ({
   viewedStockCode = null,
   onTaskSelect,
 }) => {
-  const { language, t } = useI18n();
+  const { t } = useI18n();
   const queueTasks = useMemo(() => sortTasksByPriority(tasks), [tasks]);
   const visibleTasks = queueTasks.slice(0, MAX_VISIBLE_TASKS);
   const overflowCount = Math.max(0, queueTasks.length - visibleTasks.length);
-  const queueSubtitle = language === 'en'
-    ? 'Recent and active tasks for quick switching.'
-    : t('tasks.queueSubtitle');
-  const queueKeepCopy = language === 'en'
-    ? 'Completed tasks stay here for follow-up and tracking.'
-    : t('tasks.keep');
+  const queueSubtitle = t('tasks.queueSubtitle');
+  const queueKeepCopy = t('tasks.keep');
 
   return (
     <section className="home-task-queue theme-panel-solid rounded-[var(--cohere-radius-signature)]" data-testid="home-task-queue">

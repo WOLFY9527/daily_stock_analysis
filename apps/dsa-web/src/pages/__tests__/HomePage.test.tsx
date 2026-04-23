@@ -175,7 +175,34 @@ describe('HomePage', () => {
     expect(screen.getByText('Research Status')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL')).toBeInTheDocument();
     expect(screen.getByText('No analysis history yet')).toBeInTheDocument();
+    expect(screen.getByText('Recent and active tasks. Fast context switching.')).toBeInTheDocument();
+    expect(screen.getByText('Retain completed tasks for tracking.')).toBeInTheDocument();
     expect(screen.queryByText('Research dashboard')).not.toBeInTheDocument();
+  });
+
+  it('uses canonical English status copy when a report is already loaded', async () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(historyReport);
+
+    render(
+      <MemoryRouter>
+        <UiLanguageProvider>
+          <ShellRailHarness>
+            <HomePage />
+          </ShellRailHarness>
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
+
+    const statusBoard = await screen.findByTestId('analysis-status-strip');
+    expect(within(statusBoard).getByText('The analysis for 贵州茅台 has finished')).toBeInTheDocument();
+    expect(within(statusBoard).queryByText('Report ready for 贵州茅台')).not.toBeInTheDocument();
   });
 
   it('shows multiple active tasks in the queue below the decision summary', async () => {

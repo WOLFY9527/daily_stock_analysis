@@ -19,11 +19,10 @@ const GuestHomePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const loginPath = useMemo(() => buildLoginPath('/'), []);
   const registrationPath = useMemo(() => buildRegistrationPath('/'), []);
-  const guestCopy = (key: string) => t(`guestHome.${key}`);
 
   useEffect(() => {
-    document.title = guestCopy('documentTitle');
-  }, [guestCopy]);
+    document.title = t('guestHome.documentTitle');
+  }, [t]);
 
   const handlePreview = async (stockCode?: string, stockName?: string) => {
     const nextCode = (stockCode || query).trim();
@@ -37,7 +36,7 @@ const GuestHomePage: React.FC = () => {
       const response = await publicAnalysisApi.preview({
         stockCode: nextCode,
         stockName,
-      reportType: 'brief',
+        reportType: 'brief',
       });
       setPreview(response);
       setQuery(stockName || nextCode);
@@ -55,25 +54,25 @@ const GuestHomePage: React.FC = () => {
   return (
     <div className="space-y-6">
       <WorkspacePageHeader
-        eyebrow={guestCopy('eyebrow')}
-        title={guestCopy('title')}
-        description={guestCopy('description')}
+        eyebrow={t('guestHome.eyebrow')}
+        title={t('guestHome.title')}
+        description={t('guestHome.description')}
         actions={(
           <div className="flex flex-wrap items-center gap-3">
             <Link
               to={loginPath}
               className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
             >
-              {guestCopy('signIn')}
+              {t('guestHome.signIn')}
             </Link>
           </div>
         )}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(22rem,0.82fr)]">
-          <Card title={guestCopy('previewTitle')} subtitle={guestCopy('previewSubtitle')}>
+          <Card title={t('guestHome.previewTitle')} subtitle={t('guestHome.previewSubtitle')}>
             <div className="space-y-4">
               <label className="block">
-                <span className="theme-field-label">{guestCopy('inputLabel')}</span>
+                <span className="theme-field-label">{t('guestHome.inputLabel')}</span>
                 <div className="mt-2 flex flex-col gap-3 md:flex-row">
                   <div className="min-w-0 flex-1">
                     <StockAutocomplete
@@ -82,7 +81,7 @@ const GuestHomePage: React.FC = () => {
                       onSubmit={(stockCode, stockName) => {
                         void handlePreview(stockCode, stockName);
                       }}
-                      placeholder={guestCopy('inputPlaceholder')}
+                      placeholder={t('guestHome.inputPlaceholder')}
                       disabled={isLoading}
                     />
                   </div>
@@ -92,12 +91,12 @@ const GuestHomePage: React.FC = () => {
                     disabled={!query.trim() || isLoading}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)] disabled:pointer-events-none disabled:opacity-50"
                   >
-                    {isLoading ? guestCopy('submitting') : guestCopy('submit')}
+                    {isLoading ? t('guestHome.submitting') : t('guestHome.submit')}
                   </button>
                 </div>
               </label>
 
-              <p className="text-sm leading-6 text-secondary-text">{guestCopy('helper')}</p>
+              <p className="text-sm leading-6 text-secondary-text">{t('guestHome.helper')}</p>
 
               {error ? <ApiErrorAlert error={error} /> : null}
 
@@ -105,73 +104,73 @@ const GuestHomePage: React.FC = () => {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.16em] text-secondary-text">
-                      {guestCopy('decisionSnapshot')}
+                      {t('guestHome.decisionSnapshot')}
                     </p>
                     <h2 className="mt-1 text-lg font-semibold text-foreground">
-                      {previewMeta?.stockName || preview?.stockName || guestCopy('previewTitle')}
+                      {previewMeta?.stockName || preview?.stockName || t('guestHome.previewTitle')}
                       {previewMeta?.stockCode ? (
                         <span className="ml-2 font-mono text-sm text-muted-text">{previewMeta.stockCode}</span>
                       ) : null}
                     </h2>
                   </div>
                   <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]">
-                    {guestCopy('eyebrow')}
+                    {t('guestHome.eyebrow')}
                   </span>
                 </div>
 
                 <p className="mt-4 text-sm leading-6 text-secondary-text">
-                  {previewSummary?.analysisSummary || guestCopy('previewNote')}
+                  {previewSummary?.analysisSummary || t('guestHome.previewNote')}
                 </p>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('decision')}</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.operationAdvice || guestCopy('noValue')}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.decision')}</p>
+                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.operationAdvice || t('guestHome.noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('trend')}</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.trendPrediction || guestCopy('noValue')}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.trend')}</p>
+                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.trendPrediction || t('guestHome.noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('score')}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.score')}</p>
                     <p className="mt-2 text-base font-semibold text-foreground">
-                      {previewSummary?.sentimentScore != null ? `${previewSummary.sentimentScore}` : guestCopy('noValue')}
+                      {previewSummary?.sentimentScore != null ? `${previewSummary.sentimentScore}` : t('guestHome.noValue')}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('entry')}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.idealBuy || guestCopy('noValue')}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.entry')}</p>
+                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.idealBuy || t('guestHome.noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('stopLoss')}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.stopLoss || guestCopy('noValue')}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.stopLoss')}</p>
+                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.stopLoss || t('guestHome.noValue')}</p>
                   </div>
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{guestCopy('target')}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.takeProfit || guestCopy('noValue')}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.target')}</p>
+                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.takeProfit || t('guestHome.noValue')}</p>
                   </div>
                 </div>
 
-                <p className="mt-4 text-xs leading-5 text-muted-text">{guestCopy('previewNote')}</p>
+                <p className="mt-4 text-xs leading-5 text-muted-text">{t('guestHome.previewNote')}</p>
               </div>
             </div>
           </Card>
 
-          <Card title={guestCopy('unlockTitle')} subtitle={guestCopy('unlockSubtitle')}>
+          <Card title={t('guestHome.unlockTitle')} subtitle={t('guestHome.unlockSubtitle')}>
             <div className="space-y-4">
-              <p className="text-sm leading-6 text-secondary-text">{guestCopy('unlockBody')}</p>
+              <p className="text-sm leading-6 text-secondary-text">{t('guestHome.unlockBody')}</p>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/6 text-foreground">
                     <LockKeyhole className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{guestCopy('unlockPrimary')}</p>
+                    <p className="text-sm font-semibold text-foreground">{t('guestHome.unlockPrimary')}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-text">
-                      {guestCopy('unlockSecondary')}
+                      {t('guestHome.unlockSecondary')}
                     </p>
                   </div>
                 </div>
@@ -180,13 +179,13 @@ const GuestHomePage: React.FC = () => {
                     to={loginPath}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                   >
-                    {guestCopy('signIn')}
+                    {t('guestHome.signIn')}
                   </Link>
                   <Link
                     to={registrationPath}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
                   >
-                    {guestCopy('createAccount')}
+                    {t('guestHome.createAccount')}
                   </Link>
                 </div>
               </div>
@@ -198,56 +197,56 @@ const GuestHomePage: React.FC = () => {
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-5">
         <LockedFeatureCard
           icon={BarChart3}
-          title={guestCopy('cards.fullReports.title')}
-          body={guestCopy('cards.fullReports.body')}
-          lockedLabel={guestCopy('lockedLabel')}
-          ctaLabel={guestCopy('signIn')}
+          title={t('guestHome.cards.fullReports.title')}
+          body={t('guestHome.cards.fullReports.body')}
+          lockedLabel={t('guestHome.lockedLabel')}
+          ctaLabel={t('guestHome.signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={MessageSquareText}
-          title={guestCopy('cards.followUp.title')}
-          body={guestCopy('cards.followUp.body')}
-          lockedLabel={guestCopy('lockedLabel')}
-          ctaLabel={guestCopy('signIn')}
+          title={t('guestHome.cards.followUp.title')}
+          body={t('guestHome.cards.followUp.body')}
+          lockedLabel={t('guestHome.lockedLabel')}
+          ctaLabel={t('guestHome.signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={BriefcaseBusiness}
-          title={guestCopy('cards.portfolio.title')}
-          body={guestCopy('cards.portfolio.body')}
-          lockedLabel={guestCopy('lockedLabel')}
-          ctaLabel={guestCopy('signIn')}
+          title={t('guestHome.cards.portfolio.title')}
+          body={t('guestHome.cards.portfolio.body')}
+          lockedLabel={t('guestHome.lockedLabel')}
+          ctaLabel={t('guestHome.signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={TestTubeDiagonal}
-          title={guestCopy('cards.backtests.title')}
-          body={guestCopy('cards.backtests.body')}
-          lockedLabel={guestCopy('lockedLabel')}
-          ctaLabel={guestCopy('signIn')}
+          title={t('guestHome.cards.backtests.title')}
+          body={t('guestHome.cards.backtests.body')}
+          lockedLabel={t('guestHome.lockedLabel')}
+          ctaLabel={t('guestHome.signIn')}
           ctaTo={loginPath}
         />
         <LockedFeatureCard
           icon={History}
-          title={guestCopy('cards.history.title')}
-          body={guestCopy('cards.history.body')}
-          lockedLabel={guestCopy('lockedLabel')}
-          ctaLabel={guestCopy('cards.history.cta')}
+          title={t('guestHome.cards.history.title')}
+          body={t('guestHome.cards.history.body')}
+          lockedLabel={t('guestHome.lockedLabel')}
+          ctaLabel={t('guestHome.cards.history.cta')}
           ctaTo="/scanner"
         />
       </div>
 
-      <Card title={guestCopy('limits.title')} subtitle={guestCopy('limits.subtitle')}>
+      <Card title={t('guestHome.limits.title')} subtitle={t('guestHome.limits.subtitle')}>
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {guestCopy('limits.accountIsolation')}
+            {t('guestHome.limits.accountIsolation')}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {guestCopy('limits.persistence')}
+            {t('guestHome.limits.persistence')}
           </div>
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {guestCopy('limits.admin')}
+            {t('guestHome.limits.admin')}
           </div>
         </div>
       </Card>
