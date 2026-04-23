@@ -62,517 +62,202 @@ type FxRefreshContext = {
 
 type PortfolioLanguage = 'zh' | 'en';
 
-const PORTFOLIO_COPY: Record<PortfolioLanguage, {
-  documentTitle: string;
-  eyebrow: string;
-  title: string;
-  description: string;
-  createAccount: string;
-  collapseCreate: string;
-  refreshData: string;
-  refreshingData: string;
-  noAccounts: string;
-  accountView: string;
-  allAccounts: string;
-  costMethod: string;
-  costFifo: string;
-  costAvg: string;
-  scopeHint: string;
-  fxState: string;
-  refreshFx: string;
-  refreshingFx: string;
-  emptyConcentration: string;
-  noBrokerConnections: string;
-  emptyEventsTitle: string;
-  emptyEventsBody: string;
-  prevPage: string;
-  nextPage: string;
-  pageLabel: string;
-  deleteTitle: string;
-  deleteMessage: string;
-  deleteConfirm: string;
-  deleteInProgress: string;
-  cancel: string;
-  accountNameRequired: string;
-  accountCreated: string;
-  accountCreateFailed: string;
-  riskFallback: string;
-  writeRequiresAccount: string;
-  syncRequiresAccount: string;
-  syncRequiresToken: string;
-  deleteRequiresAccount: string;
-  riskDegraded: string;
-  actionHint: string;
-  createAccountTitle: string;
-  createAccountHelp: string;
-  accountNamePlaceholder: string;
-  brokerPlaceholder: string;
-  baseCurrencyPlaceholder: string;
-  marketCn: string;
-  marketHk: string;
-  marketUs: string;
-  marketGlobal: string;
-  creatingAccount: string;
-  totalEquity: string;
-  totalMarketValue: string;
-  totalCash: string;
-  fxFresh: string;
-  fxStale: string;
-  drawdownTitle: string;
-  maxDrawdown: string;
-  currentDrawdown: string;
-  alert: string;
-  yes: string;
-  no: string;
-  stopLossTitle: string;
-  triggeredCount: string;
-  nearCount: string;
-  snapshotBasisTitle: string;
-  accountCount: string;
-  reportingCurrency: string;
-  costMethodLabel: string;
-  allAccountsWarning: string;
-  positionsTitle: string;
-  positionsCount: (count: number) => string;
-  noPositions: string;
-  positionAccount: string;
-  positionCode: string;
-  positionMarketCurrency: string;
-  positionQuantity: string;
-  positionAvgCost: string;
-  positionLastPrice: string;
-  positionMarketValue: string;
-  positionUnrealized: string;
-  sectorConcentration: string;
-  singleNameConcentration: string;
-  concentrationHint: string;
-  concentrationScope: string;
-  concentrationScopeSector: string;
-  concentrationScopeFallback: string;
-  sectorAlert: string;
-  topWeight: string;
-  dataSyncTitle: string;
-  brokerImport: string;
-  currentImportAccount: string;
-  brokerFallbackEmpty: string;
-  brokerFallbackUnavailable: string;
-  selectBrokerExport: string;
-  selectIbkrExport: string;
-  dryRun: string;
-  parsing: string;
-  parseFile: string;
-  committing: string;
-  commitImport: string;
-  brokerImportHint: string;
-  ibkrImportHint: string;
-  ibkrReadOnlyTitle: string;
-  ibkrReadOnlyBody: string;
-  readOnlyBadge: string;
-  ibkrApiBasePlaceholder: string;
-  ibkrAccountRefPlaceholder: string;
-  ibkrSessionTokenPlaceholder: string;
-  verifyIbkrSsl: string;
-  syncing: string;
-  syncIbkr: string;
-  syncResult: string;
-  positionsCountLabel: string;
-  cashCurrenciesLabel: string;
-  accountRef: string;
-  syncedAt: string;
-  syncOverlay: string;
-  syncSaved: string;
-  parseResult: string;
-  valid: string;
-  cash: string;
-  corporateActions: string;
-  skipped: string;
-  errors: string;
-  accountMapping: string;
-  commitResult: string;
-  inserted: string;
-  duplicates: string;
-  failed: string;
-  duplicateFingerprintHint: string;
-  manualAdjustments: string;
-  manualTrade: string;
-  symbolPlaceholder: string;
-  buy: string;
-  sell: string;
-  quantity: string;
-  price: string;
-  feeOptional: string;
-  taxOptional: string;
-  submitTrade: string;
-  manualCash: string;
-  cashIn: string;
-  cashOut: string;
-  amount: string;
-  currencyOptional: (currency: string) => string;
-  submitCash: string;
-  manualCorporate: string;
-  stockCode: string;
-  cashDividend: string;
-  splitAdjustment: string;
-  dividendPerShare: string;
-  splitRatio: string;
-  submitCorporate: string;
-  ledgerAudit: string;
-  tradeLedger: string;
-  cashLedger: string;
-  corporateLedger: string;
-  loading: string;
-  refreshLedger: string;
-  filterBySymbol: string;
-  allSides: string;
-  allDirections: string;
-  allActions: string;
-  deleteHintBlocked: string;
-  deleteHintReady: string;
-  tradeDeleteMessage: (item: PortfolioTradeListItem) => string;
-  cashDeleteMessage: (item: PortfolioCashLedgerListItem) => string;
-  corporateDeleteMessage: (item: PortfolioCorporateActionListItem) => string;
-}> = {
-  zh: {
-    documentTitle: '持仓分析 - WolfyStock',
-    eyebrow: 'WolfyStock 持仓工作区',
-    title: '持仓管理',
-    description: '组合快照与风险评估',
-    createAccount: '新建账户',
-    collapseCreate: '收起新建',
-    refreshData: '刷新数据',
-    refreshingData: '刷新中...',
-    noAccounts: '还没有可用账户，请先创建账户后再录入交易或导入券商文件。',
-    accountView: '账户视图',
-    allAccounts: '全部账户',
-    costMethod: '成本口径',
-    costFifo: '先进先出（FIFO）',
-    costAvg: '均价成本（AVG）',
-    scopeHint: '当前选择会一起刷新组合快照、风险指标和该账户下的持仓明细。',
-    fxState: '汇率状态',
-    refreshFx: '刷新汇率',
-    refreshingFx: '刷新中',
-    emptyConcentration: '暂无集中度数据',
-    noBrokerConnections: '该账户还没有已保存的券商连接，首次导入会自动创建用户自有连接。',
-    emptyEventsTitle: '暂无流水记录',
-    emptyEventsBody: '调整筛选条件，或先录入流水。',
-    prevPage: '上一页',
-    nextPage: '下一页',
-    pageLabel: '页码',
-    deleteTitle: '删除错误流水',
-    deleteMessage: '确认删除这条流水吗？',
-    deleteConfirm: '确认删除',
-    deleteInProgress: '删除中...',
-    cancel: '取消',
-    accountNameRequired: '账户名称不能为空。',
-    accountCreated: '账户创建成功，已自动切换到该账户。',
-    accountCreateFailed: '创建账户失败，请稍后重试。',
-    riskFallback: '风险数据获取失败，已降级为仅展示快照数据。',
-    writeRequiresAccount: '请先在右上角选择具体账户，再进行录入或导入提交。',
-    syncRequiresAccount: '请先在右上角选择具体账户，再触发 IBKR 只读同步。',
-    syncRequiresToken: '请提供当前有效的 IBKR 登录令牌，再执行只读同步。',
-    deleteRequiresAccount: '请先在右上角选择具体账户，再进行删除修正。',
-    riskDegraded: '风险模块降级',
-    actionHint: '操作提示',
-    createAccountTitle: '新建账户',
-    createAccountHelp: '创建后自动切换到该账户',
-    accountNamePlaceholder: '账户名称（必填）',
-    brokerPlaceholder: '券商（可选，如 Demo/华泰）',
-    baseCurrencyPlaceholder: '基准币（如 CNY/USD/HKD）',
-    marketCn: '市场：A 股（cn）',
-    marketHk: '市场：港股（hk）',
-    marketUs: '市场：美股（us）',
-    marketGlobal: '市场：全球账户（global）',
-    creatingAccount: '创建中...',
-    totalEquity: '总权益',
-    totalMarketValue: '总市值',
-    totalCash: '总现金',
-    fxFresh: '最新',
-    fxStale: '过期',
-    drawdownTitle: '回撤监控',
-    maxDrawdown: '最大回撤',
-    currentDrawdown: '当前回撤',
-    alert: '告警',
-    yes: '是',
-    no: '否',
-    stopLossTitle: '止损接近预警',
-    triggeredCount: '触发数',
-    nearCount: '接近数',
-    snapshotBasisTitle: '统计口径',
-    accountCount: '账户数',
-    reportingCurrency: '计价币种',
-    costMethodLabel: '成本法',
-    allAccountsWarning: '当前处于“全部账户”视图。为避免误写，请先选择一个具体账户后再进行手工录入或券商文件导入提交。',
-    positionsTitle: '持仓明细',
-    positionsCount: (count) => `共 ${count} 项`,
-    noPositions: '当前无持仓数据',
-    positionAccount: '账户',
-    positionCode: '代码',
-    positionMarketCurrency: '市场 / 币种',
-    positionQuantity: '数量',
-    positionAvgCost: '均价',
-    positionLastPrice: '现价',
-    positionMarketValue: '市值',
-    positionUnrealized: '未实现盈亏',
-    sectorConcentration: '行业集中度',
-    singleNameConcentration: '个股集中度（降级）',
-    concentrationHint: '补齐持仓市值后将显示集中度分布',
-    concentrationScope: '展示口径',
-    concentrationScopeSector: '行业维度',
-    concentrationScopeFallback: '个股维度（降级显示）',
-    sectorAlert: '板块告警',
-    topWeight: 'Top 1 权重',
-    dataSyncTitle: '数据同步',
-    brokerImport: '券商导入',
-    currentImportAccount: '当前导入账户',
-    brokerFallbackEmpty: '券商列表接口返回为空，已回退为内置券商列表（华泰/中信/招商/IBKR）。',
-    brokerFallbackUnavailable: '券商列表接口不可用，已回退为内置券商列表（华泰/中信/招商/IBKR）。',
-    selectBrokerExport: '选择券商导出文件...',
-    selectIbkrExport: '选择 IBKR Flex XML 导出文件...',
-    dryRun: '仅预演',
-    parsing: '解析中...',
-    parseFile: '解析文件',
-    committing: '提交中...',
-    commitImport: '提交导入',
-    brokerImportHint: '保留现有 A 股券商文件导入路径，兼容华泰 / 中信 / 招商 CSV。',
-    ibkrImportHint: 'IBKR 首版推荐使用 Flex Query XML 导出；系统会将导入记录绑定到当前用户自己的券商连接。',
-    ibkrReadOnlyTitle: 'IBKR 只读同步',
-    ibkrReadOnlyBody: '仅同步账户状态与持仓，不会开放任何交易或下单能力。登录令牌只用于本次同步，不会保存到系统。',
-    readOnlyBadge: '只读',
-    ibkrApiBasePlaceholder: 'IBKR API 地址（默认 https://localhost:5000/v1/api）',
-    ibkrAccountRefPlaceholder: 'IBKR 账户引用（可选，例如 U1234567）',
-    ibkrSessionTokenPlaceholder: 'IBKR 会话令牌（仅本次手动同步使用，不保存）',
-    verifyIbkrSsl: '校验 IBKR HTTPS 证书',
-    syncing: '同步中...',
-    syncIbkr: '只读同步 IBKR',
-    syncResult: '同步结果',
-    positionsCountLabel: '持仓',
-    cashCurrenciesLabel: '现金币种',
-    accountRef: '账户引用',
-    syncedAt: '同步时间',
-    syncOverlay: '当前日期快照已切换到 API 同步视图',
-    syncSaved: '已保存同步结果',
-    parseResult: '解析结果',
-    valid: '有效',
-    cash: '现金',
-    corporateActions: '公司行为',
-    skipped: '跳过',
-    errors: '错误',
-    accountMapping: '账户映射',
-    commitResult: '提交结果',
-    inserted: '写入',
-    duplicates: '重复',
-    failed: '失败',
-    duplicateFingerprintHint: '检测到同一券商连接的重复文件指纹，本次不会重复写入。',
-    manualAdjustments: '高级：手工录入与修正',
-    manualTrade: '手工录入：交易',
-    symbolPlaceholder: '股票代码（例如 600519）',
-    buy: '买入',
-    sell: '卖出',
-    quantity: '数量',
-    price: '成交价',
-    feeOptional: '手续费 (可选)',
-    taxOptional: '税费 (可选)',
-    submitTrade: '提交交易',
-    manualCash: '手工录入：资金',
-    cashIn: '流入',
-    cashOut: '流出',
-    amount: '金额',
-    currencyOptional: (currency) => `币种（可选，默认 ${currency || '账户基准币'}）`,
-    submitCash: '提交资金流水',
-    manualCorporate: '手工录入：公司行为',
-    stockCode: '股票代码',
-    cashDividend: '现金分红',
-    splitAdjustment: '拆并股调整',
-    dividendPerShare: '每股分红',
-    splitRatio: '拆并股比例',
-    submitCorporate: '提交公司行为',
-    ledgerAudit: '流水与审计',
-    tradeLedger: '交易流水',
-    cashLedger: '资金流水',
-    corporateLedger: '公司行为',
-    loading: '加载中...',
-    refreshLedger: '刷新流水',
-    filterBySymbol: '按股票代码筛选',
-    allSides: '全部买卖方向',
-    allDirections: '全部资金方向',
-    allActions: '全部公司行为',
-    deleteHintBlocked: '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。',
-    deleteHintReady: '如有错误流水，可直接删除后重新录入。',
-    tradeDeleteMessage: (item) => `确认删除 ${item.tradeDate} 的${item.side === 'buy' ? '买入' : '卖出'}流水 ${item.symbol}（数量 ${item.quantity}，价格 ${item.price}）吗？`,
-    cashDeleteMessage: (item) => `确认删除 ${item.eventDate} 的资金流水（${item.direction === 'in' ? '流入' : '流出'} ${item.amount} ${item.currency}）吗？`,
-    corporateDeleteMessage: (item) => `确认删除 ${item.effectiveDate} 的公司行为 ${item.actionType === 'cash_dividend' ? '现金分红' : '拆并股调整'}（${item.symbol}）吗？`,
-  },
-  en: {
-    documentTitle: 'Portfolio - WolfyStock',
-    eyebrow: 'WolfyStock Portfolio Workspace',
-    title: 'Portfolio management',
-    description: 'Portfolio snapshots and risk review',
-    createAccount: 'Create account',
-    collapseCreate: 'Hide create form',
-    refreshData: 'Refresh data',
-    refreshingData: 'Refreshing...',
-    noAccounts: 'No portfolio accounts are available yet. Create one before recording trades or importing broker files.',
-    accountView: 'Account scope',
-    allAccounts: 'All accounts',
-    costMethod: 'Cost method',
-    costFifo: 'First in, first out (FIFO)',
-    costAvg: 'Average cost (AVG)',
-    scopeHint: 'The current scope refreshes the portfolio snapshot, risk metrics, and position details together.',
-    fxState: 'FX status',
-    refreshFx: 'Refresh FX',
-    refreshingFx: 'Refreshing',
-    emptyConcentration: 'No concentration data yet',
-    noBrokerConnections: 'This account has no saved broker connections yet. The first import will create an account-owned connection automatically.',
-    emptyEventsTitle: 'No ledger events yet',
-    emptyEventsBody: 'Adjust the filters or record a new event first.',
-    prevPage: 'Previous',
-    nextPage: 'Next',
-    pageLabel: 'Page',
-    deleteTitle: 'Delete incorrect event',
-    deleteMessage: 'Delete this ledger event?',
-    deleteConfirm: 'Delete',
-    deleteInProgress: 'Deleting...',
-    cancel: 'Cancel',
-    accountNameRequired: 'Account name is required.',
-    accountCreated: 'Account created and switched automatically.',
-    accountCreateFailed: 'Failed to create the account. Try again later.',
-    riskFallback: 'Risk data could not be loaded, so the page fell back to snapshot-only mode.',
-    writeRequiresAccount: 'Select a specific account in the top-right scope switcher before recording or importing data.',
-    syncRequiresAccount: 'Select a specific account in the top-right scope switcher before starting IBKR read-only sync.',
-    syncRequiresToken: 'Provide a valid IBKR session token before running the read-only sync.',
-    deleteRequiresAccount: 'Select a specific account in the top-right scope switcher before deleting a ledger event.',
-    riskDegraded: 'Risk module degraded',
-    actionHint: 'Action hint',
-    createAccountTitle: 'Create account',
-    createAccountHelp: 'The page switches to the new account automatically after creation.',
-    accountNamePlaceholder: 'Account name (required)',
-    brokerPlaceholder: 'Broker (optional, for example Demo or Huatai)',
-    baseCurrencyPlaceholder: 'Base currency (for example CNY, USD, or HKD)',
-    marketCn: 'Market: A-share (cn)',
-    marketHk: 'Market: Hong Kong (hk)',
-    marketUs: 'Market: US (us)',
-    marketGlobal: 'Market: Global (global)',
-    creatingAccount: 'Creating...',
-    totalEquity: 'Total equity',
-    totalMarketValue: 'Total market value',
-    totalCash: 'Total cash',
-    fxFresh: 'Fresh',
-    fxStale: 'Stale',
-    drawdownTitle: 'Drawdown monitor',
-    maxDrawdown: 'Max drawdown',
-    currentDrawdown: 'Current drawdown',
-    alert: 'Alert',
-    yes: 'Yes',
-    no: 'No',
-    stopLossTitle: 'Stop-loss proximity',
-    triggeredCount: 'Triggered',
-    nearCount: 'Near',
-    snapshotBasisTitle: 'Snapshot basis',
-    accountCount: 'Accounts',
-    reportingCurrency: 'Reporting currency',
-    costMethodLabel: 'Cost method',
-    allAccountsWarning: 'You are in the all-accounts scope. Pick a specific account before recording or importing data to avoid writing to the wrong ledger.',
-    positionsTitle: 'Positions',
-    positionsCount: (count) => `${count} positions`,
-    noPositions: 'No positions are available yet.',
-    positionAccount: 'Account',
-    positionCode: 'Code',
-    positionMarketCurrency: 'Market / currency',
-    positionQuantity: 'Quantity',
-    positionAvgCost: 'Avg cost',
-    positionLastPrice: 'Last price',
-    positionMarketValue: 'Market value',
-    positionUnrealized: 'Unrealized PnL',
-    sectorConcentration: 'Sector concentration',
-    singleNameConcentration: 'Single-name concentration (fallback)',
-    concentrationHint: 'Concentration distribution appears after position market values are available.',
-    concentrationScope: 'Display mode',
-    concentrationScopeSector: 'Sector view',
-    concentrationScopeFallback: 'Single-name fallback view',
-    sectorAlert: 'Sector alert',
-    topWeight: 'Top 1 weight',
-    dataSyncTitle: 'Data sync',
-    brokerImport: 'Broker import',
-    currentImportAccount: 'Import target',
-    brokerFallbackEmpty: 'The broker list API returned no items, so the page is using the built-in broker list (Huatai, Citic, CMB, IBKR).',
-    brokerFallbackUnavailable: 'The broker list API is unavailable, so the page is using the built-in broker list (Huatai, Citic, CMB, IBKR).',
-    selectBrokerExport: 'Choose a broker export file...',
-    selectIbkrExport: 'Choose an IBKR Flex XML export...',
-    dryRun: 'Dry run',
-    parsing: 'Parsing...',
-    parseFile: 'Parse file',
-    committing: 'Committing...',
-    commitImport: 'Commit import',
-    brokerImportHint: 'The existing A-share broker import flow remains in place for Huatai, Citic, and CMB CSV exports.',
-    ibkrImportHint: 'Use an IBKR Flex Query XML export. Imported records stay attached to the current account-owned broker connection.',
-    ibkrReadOnlyTitle: 'IBKR read-only sync',
-    ibkrReadOnlyBody: 'This sync imports account state and positions only. Trading stays disabled, and the session token is used only for this sync.',
-    readOnlyBadge: 'Read-only',
-    ibkrApiBasePlaceholder: 'IBKR API base URL (default: https://localhost:5000/v1/api)',
-    ibkrAccountRefPlaceholder: 'IBKR account ref (optional, for example U1234567)',
-    ibkrSessionTokenPlaceholder: 'IBKR session token (used only for this manual sync)',
-    verifyIbkrSsl: 'Verify the IBKR HTTPS certificate',
-    syncing: 'Syncing...',
-    syncIbkr: 'Run IBKR read-only sync',
-    syncResult: 'Sync result',
-    positionsCountLabel: 'Positions',
-    cashCurrenciesLabel: 'Cash currencies',
-    accountRef: 'Account ref',
-    syncedAt: 'Synced at',
-    syncOverlay: 'The current-date snapshot is showing the API sync overlay',
-    syncSaved: 'Sync result saved',
-    parseResult: 'Parse result',
-    valid: 'Valid',
-    cash: 'Cash',
-    corporateActions: 'Corporate actions',
-    skipped: 'Skipped',
-    errors: 'Errors',
-    accountMapping: 'Account mapping',
-    commitResult: 'Commit result',
-    inserted: 'Inserted',
-    duplicates: 'Duplicates',
-    failed: 'Failed',
-    duplicateFingerprintHint: 'The same broker connection already imported this file fingerprint, so no duplicate records were written.',
-    manualAdjustments: 'Advanced: manual adjustments and corrections',
-    manualTrade: 'Manual entry: trade',
-    symbolPlaceholder: 'Ticker or symbol (for example 600519)',
-    buy: 'Buy',
-    sell: 'Sell',
-    quantity: 'Quantity',
-    price: 'Price',
-    feeOptional: 'Fee (optional)',
-    taxOptional: 'Tax (optional)',
-    submitTrade: 'Submit trade',
-    manualCash: 'Manual entry: cash',
-    cashIn: 'Cash in',
-    cashOut: 'Cash out',
-    amount: 'Amount',
-    currencyOptional: (currency) => `Currency (optional, default: ${currency || 'account base currency'})`,
-    submitCash: 'Submit cash ledger',
-    manualCorporate: 'Manual entry: corporate actions',
-    stockCode: 'Symbol',
-    cashDividend: 'Cash dividend',
-    splitAdjustment: 'Split adjustment',
-    dividendPerShare: 'Dividend per share',
-    splitRatio: 'Split ratio',
-    submitCorporate: 'Submit corporate action',
-    ledgerAudit: 'Ledger and audit',
-    tradeLedger: 'Trade ledger',
-    cashLedger: 'Cash ledger',
-    corporateLedger: 'Corporate actions',
-    loading: 'Loading...',
-    refreshLedger: 'Refresh ledger',
-    filterBySymbol: 'Filter by symbol',
-    allSides: 'All sides',
-    allDirections: 'All cash directions',
-    allActions: 'All action types',
-    deleteHintBlocked: 'Delete corrections are available only in a single-account scope. Pick a specific account first.',
-    deleteHintReady: 'Delete incorrect ledger items here, then record the corrected one.',
-    tradeDeleteMessage: (item) => `Delete the ${item.tradeDate} ${item.side === 'buy' ? 'buy' : 'sell'} trade for ${item.symbol} (${item.quantity} shares at ${item.price})?`,
-    cashDeleteMessage: (item) => `Delete the ${item.eventDate} cash event (${item.direction === 'in' ? 'cash in' : 'cash out'} ${item.amount} ${item.currency})?`,
-    corporateDeleteMessage: (item) => `Delete the ${item.effectiveDate} ${item.actionType === 'cash_dividend' ? 'cash dividend' : 'split adjustment'} event for ${item.symbol}?`,
-  },
-};
+type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
+
+function getPortfolioCopy(
+  t: TranslateFn,
+  language: PortfolioLanguage,
+){
+  const copy = {
+    documentTitle: t('portfolio.documentTitle'),
+    eyebrow: t('portfolio.eyebrow'),
+    title: t('portfolio.title'),
+    description: t('portfolio.description'),
+    createAccount: t('portfolio.createAccount'),
+    collapseCreate: t('portfolio.collapseCreate'),
+    refreshData: t('portfolio.refreshData'),
+    refreshingData: t('portfolio.refreshingData'),
+    noAccounts: t('portfolio.noAccounts'),
+    accountView: t('portfolio.accountView'),
+    allAccounts: t('portfolio.allAccounts'),
+    costMethod: t('portfolio.costMethod'),
+    costFifo: t('portfolio.costFifo'),
+    costAvg: t('portfolio.costAvg'),
+    scopeHint: t('portfolio.scopeHint'),
+    fxState: t('portfolio.fxState'),
+    refreshFx: t('portfolio.refreshFx'),
+    refreshingFx: t('portfolio.refreshingFx'),
+    emptyConcentration: t('portfolio.emptyConcentration'),
+    noBrokerConnections: t('portfolio.noBrokerConnections'),
+    emptyEventsTitle: t('portfolio.emptyEventsTitle'),
+    emptyEventsBody: t('portfolio.emptyEventsBody'),
+    prevPage: t('portfolio.prevPage'),
+    nextPage: t('portfolio.nextPage'),
+    pageLabel: t('portfolio.pageLabel'),
+    deleteTitle: t('portfolio.deleteTitle'),
+    deleteMessage: t('portfolio.deleteMessage'),
+    deleteConfirm: t('portfolio.deleteConfirm'),
+    deleteInProgress: t('portfolio.deleteInProgress'),
+    cancel: t('portfolio.cancel'),
+    accountNameRequired: t('portfolio.accountNameRequired'),
+    accountCreated: t('portfolio.accountCreated'),
+    accountCreateFailed: t('portfolio.accountCreateFailed'),
+    riskFallback: t('portfolio.riskFallback'),
+    writeRequiresAccount: t('portfolio.writeRequiresAccount'),
+    syncRequiresAccount: t('portfolio.syncRequiresAccount'),
+    syncRequiresToken: t('portfolio.syncRequiresToken'),
+    deleteRequiresAccount: t('portfolio.deleteRequiresAccount'),
+    riskDegraded: t('portfolio.riskDegraded'),
+    actionHint: t('portfolio.actionHint'),
+    createAccountTitle: t('portfolio.createAccountTitle'),
+    createAccountHelp: t('portfolio.createAccountHelp'),
+    accountNamePlaceholder: t('portfolio.accountNamePlaceholder'),
+    brokerPlaceholder: t('portfolio.brokerPlaceholder'),
+    baseCurrencyPlaceholder: t('portfolio.baseCurrencyPlaceholder'),
+    marketCn: t('portfolio.marketCn'),
+    marketHk: t('portfolio.marketHk'),
+    marketUs: t('portfolio.marketUs'),
+    marketGlobal: t('portfolio.marketGlobal'),
+    creatingAccount: t('portfolio.creatingAccount'),
+    totalEquity: t('portfolio.totalEquity'),
+    totalMarketValue: t('portfolio.totalMarketValue'),
+    totalCash: t('portfolio.totalCash'),
+    fxFresh: t('portfolio.fxFresh'),
+    fxStale: t('portfolio.fxStale'),
+    drawdownTitle: t('portfolio.drawdownTitle'),
+    maxDrawdown: t('portfolio.maxDrawdown'),
+    currentDrawdown: t('portfolio.currentDrawdown'),
+    alert: t('portfolio.alert'),
+    yes: t('portfolio.yes'),
+    no: t('portfolio.no'),
+    stopLossTitle: t('portfolio.stopLossTitle'),
+    triggeredCount: t('portfolio.triggeredCount'),
+    nearCount: t('portfolio.nearCount'),
+    snapshotBasisTitle: t('portfolio.snapshotBasisTitle'),
+    accountCount: t('portfolio.accountCount'),
+    reportingCurrency: t('portfolio.reportingCurrency'),
+    costMethodLabel: t('portfolio.costMethodLabel'),
+    allAccountsWarning: t('portfolio.allAccountsWarning'),
+    positionsTitle: t('portfolio.positionsTitle'),
+    positionsCount: (count: number) => t('portfolio.positionsCount', { count }),
+    noPositions: t('portfolio.noPositions'),
+    positionAccount: t('portfolio.positionAccount'),
+    positionCode: t('portfolio.positionCode'),
+    positionMarketCurrency: t('portfolio.positionMarketCurrency'),
+    positionQuantity: t('portfolio.positionQuantity'),
+    positionAvgCost: t('portfolio.positionAvgCost'),
+    positionLastPrice: t('portfolio.positionLastPrice'),
+    positionMarketValue: t('portfolio.positionMarketValue'),
+    positionUnrealized: t('portfolio.positionUnrealized'),
+    sectorConcentration: t('portfolio.sectorConcentration'),
+    singleNameConcentration: t('portfolio.singleNameConcentration'),
+    concentrationHint: t('portfolio.concentrationHint'),
+    concentrationScope: t('portfolio.concentrationScope'),
+    concentrationScopeSector: t('portfolio.concentrationScopeSector'),
+    concentrationScopeFallback: t('portfolio.concentrationScopeFallback'),
+    sectorAlert: t('portfolio.sectorAlert'),
+    topWeight: t('portfolio.topWeight'),
+    dataSyncTitle: t('portfolio.dataSyncTitle'),
+    brokerImport: t('portfolio.brokerImport'),
+    currentImportAccount: t('portfolio.currentImportAccount'),
+    brokerFallbackEmpty: t('portfolio.brokerFallbackEmpty'),
+    brokerFallbackUnavailable: t('portfolio.brokerFallbackUnavailable'),
+    selectBrokerExport: t('portfolio.selectBrokerExport'),
+    selectIbkrExport: t('portfolio.selectIbkrExport'),
+    dryRun: t('portfolio.dryRun'),
+    parsing: t('portfolio.parsing'),
+    parseFile: t('portfolio.parseFile'),
+    committing: t('portfolio.committing'),
+    commitImport: t('portfolio.commitImport'),
+    brokerImportHint: t('portfolio.brokerImportHint'),
+    ibkrImportHint: t('portfolio.ibkrImportHint'),
+    ibkrReadOnlyTitle: t('portfolio.ibkrReadOnlyTitle'),
+    ibkrReadOnlyBody: t('portfolio.ibkrReadOnlyBody'),
+    readOnlyBadge: t('portfolio.readOnlyBadge'),
+    ibkrApiBasePlaceholder: t('portfolio.ibkrApiBasePlaceholder'),
+    ibkrAccountRefPlaceholder: t('portfolio.ibkrAccountRefPlaceholder'),
+    ibkrSessionTokenPlaceholder: t('portfolio.ibkrSessionTokenPlaceholder'),
+    verifyIbkrSsl: t('portfolio.verifyIbkrSsl'),
+    syncing: t('portfolio.syncing'),
+    syncIbkr: t('portfolio.syncIbkr'),
+    syncResult: t('portfolio.syncResult'),
+    positionsCountLabel: t('portfolio.positionsCountLabel'),
+    cashCurrenciesLabel: t('portfolio.cashCurrenciesLabel'),
+    accountRef: t('portfolio.accountRef'),
+    syncedAt: t('portfolio.syncedAt'),
+    syncOverlay: t('portfolio.syncOverlay'),
+    syncSaved: t('portfolio.syncSaved'),
+    parseResult: t('portfolio.parseResult'),
+    valid: t('portfolio.valid'),
+    cash: t('portfolio.cash'),
+    corporateActions: t('portfolio.corporateActions'),
+    skipped: t('portfolio.skipped'),
+    errors: t('portfolio.errors'),
+    accountMapping: t('portfolio.accountMapping'),
+    commitResult: t('portfolio.commitResult'),
+    inserted: t('portfolio.inserted'),
+    duplicates: t('portfolio.duplicates'),
+    failed: t('portfolio.failed'),
+    duplicateFingerprintHint: t('portfolio.duplicateFingerprintHint'),
+    manualAdjustments: t('portfolio.manualAdjustments'),
+    manualTrade: t('portfolio.manualTrade'),
+    symbolPlaceholder: t('portfolio.symbolPlaceholder'),
+    buy: t('portfolio.buy'),
+    sell: t('portfolio.sell'),
+    quantity: t('portfolio.quantity'),
+    price: t('portfolio.price'),
+    feeOptional: t('portfolio.feeOptional'),
+    taxOptional: t('portfolio.taxOptional'),
+    submitTrade: t('portfolio.submitTrade'),
+    manualCash: t('portfolio.manualCash'),
+    cashIn: t('portfolio.cashIn'),
+    cashOut: t('portfolio.cashOut'),
+    amount: t('portfolio.amount'),
+    currencyOptional: (currency: string) => t('portfolio.currencyOptional', {
+      currency: currency || t('portfolio.accountBaseCurrencyFallback'),
+    }),
+    submitCash: t('portfolio.submitCash'),
+    manualCorporate: t('portfolio.manualCorporate'),
+    stockCode: t('portfolio.stockCode'),
+    cashDividend: t('portfolio.cashDividend'),
+    splitAdjustment: t('portfolio.splitAdjustment'),
+    dividendPerShare: t('portfolio.dividendPerShare'),
+    splitRatio: t('portfolio.splitRatio'),
+    submitCorporate: t('portfolio.submitCorporate'),
+    ledgerAudit: t('portfolio.ledgerAudit'),
+    tradeLedger: t('portfolio.tradeLedger'),
+    cashLedger: t('portfolio.cashLedger'),
+    corporateLedger: t('portfolio.corporateLedger'),
+    loading: t('portfolio.loading'),
+    refreshLedger: t('portfolio.refreshLedger'),
+    filterBySymbol: t('portfolio.filterBySymbol'),
+    allSides: t('portfolio.allSides'),
+    allDirections: t('portfolio.allDirections'),
+    allActions: t('portfolio.allActions'),
+    deleteHintBlocked: t('portfolio.deleteHintBlocked'),
+    deleteHintReady: t('portfolio.deleteHintReady'),
+    tradeDeleteMessage: (item: PortfolioTradeListItem) => t('portfolio.tradeDeleteMessage', {
+      tradeDate: item.tradeDate,
+      sideLabel: formatSideLabel(item.side, language),
+      symbol: item.symbol,
+      quantity: item.quantity,
+      price: item.price,
+    }),
+    cashDeleteMessage: (item: PortfolioCashLedgerListItem) => t('portfolio.cashDeleteMessage', {
+      eventDate: item.eventDate,
+      directionLabel: formatCashDirectionLabel(item.direction, language),
+      amount: item.amount,
+      currency: item.currency,
+    }),
+    corporateDeleteMessage: (item: PortfolioCorporateActionListItem) => t('portfolio.corporateDeleteMessage', {
+      effectiveDate: item.effectiveDate,
+      actionLabel: formatCorporateActionLabel(item.actionType, language),
+      symbol: item.symbol,
+    }),
+  };
+
+  return copy;
+}
 
 function getTodayIso(): string {
   return toDateInputValue(new Date());
@@ -737,8 +422,8 @@ function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: Port
 }
 
 const PortfolioPage: React.FC = () => {
-  const { language } = useI18n();
-  const copy = PORTFOLIO_COPY[language];
+  const { language, t } = useI18n();
+  const copy = useMemo(() => getPortfolioCopy(t, language), [language, t]);
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -873,7 +558,7 @@ const PortfolioPage: React.FC = () => {
     } catch (err) {
       setError(getParsedApiError(err));
     }
-  }, []);
+  }, [copy.brokerFallbackEmpty, copy.brokerFallbackUnavailable]);
 
   const loadBrokers = useCallback(async () => {
     try {
@@ -949,7 +634,7 @@ const PortfolioPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [queryAccountId, costMethod]);
+  }, [copy.riskFallback, costMethod, queryAccountId]);
 
   const loadEventsPage = useCallback(async (page: number) => {
     setEventLoading(true);
