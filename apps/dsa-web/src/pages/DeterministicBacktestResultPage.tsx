@@ -132,6 +132,10 @@ function getObjectField(record: Record<string, unknown> | null, key: string): un
   return record ? record[key] : undefined;
 }
 
+function hasObjectFields(record: Record<string, unknown> | null): boolean {
+  return Boolean(record && Object.keys(record).length > 0);
+}
+
 function getRobustnessStateLabel(value: unknown): string {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'available') return '可用';
@@ -185,9 +189,20 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const density = useDeterministicResultDensity();
   const robustnessAnalysis = useMemo(() => asObjectRecord(run?.robustnessAnalysis), [run?.robustnessAnalysis]);
   const walkForward = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward')), [robustnessAnalysis]);
+  const walkForwardAggregate = useMemo(() => asObjectRecord(getObjectField(walkForward, 'aggregateMetrics')), [walkForward]);
   const monteCarlo = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo')), [robustnessAnalysis]);
-  const stressTest = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'stressTest')), [robustnessAnalysis]);
-  const worstScenario = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'worstScenario')), [robustnessAnalysis]);
+  const monteCarloAggregate = useMemo(() => asObjectRecord(getObjectField(monteCarlo, 'aggregateMetrics')), [monteCarlo]);
+  const stressTests = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests')), [robustnessAnalysis]);
+  const worstScenario = useMemo(() => asObjectRecord(getObjectField(stressTests, 'worstScenario')), [stressTests]);
+  const hasRobustnessAnalysis = useMemo(
+    () => Boolean(
+      getObjectField(robustnessAnalysis, 'state')
+      || hasObjectFields(walkForward)
+      || hasObjectFields(monteCarlo)
+      || hasObjectFields(stressTests)
+    ),
+    [monteCarlo, robustnessAnalysis, stressTests, walkForward],
+  );
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
@@ -891,7 +906,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
                 </Disclosure>
 
-                {robustnessAnalysis ? (
+                {hasRobustnessAnalysis ? (
                   <Disclosure summary="鲁棒性分析">
                     <div className="backtest-result-page__tab-stack">
                       <SummaryStrip
@@ -899,17 +914,17 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           { label: '状态', value: getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state')) },
                           { label: 'Walk-forward 窗口', value: formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0) },
                           { label: '蒙特卡洛模拟', value: formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0) },
-                          { label: '压力场景', value: formatNumber(getObjectField(stressTest, 'scenarioCount') as number | null | undefined, 0) },
+                          { label: '压力场景', value: formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0) },
                         ]}
                       />
                       <div className="preview-grid">
                         <div className="preview-card">
-                          <p className="metric-card__label">Walk-forward 通过率</p>
-                          <p className="preview-card__text">{pct(getObjectField(walkForward, 'passRatePct') as number | null | undefined)}</p>
+                          <p className="metric-card__label">Walk-forward 平均收益</p>
+                          <p className="preview-card__text">{pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}</p>
                         </div>
                         <div className="preview-card">
                           <p className="metric-card__label">蒙特卡洛中位收益</p>
-                          <p className="preview-card__text">{pct(getObjectField(monteCarlo, 'medianReturnPct') as number | null | undefined)}</p>
+                          <p className="preview-card__text">{pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}</p>
                         </div>
                         <div className="preview-card">
                           <p className="metric-card__label">最差场景</p>
