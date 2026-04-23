@@ -976,6 +976,7 @@ Web 结果页现在也统一按一条确定的数据链路展示：
 - compare workbench 现在也对较低优先级的 sections 提供轻量 collapse/expand 控件：`comparison_highlights / market / period context / parameter + metrics / 参与运行` 默认仍然展开，但用户可以临时收起它们来压缩页面长度，而不用改变 route、刷新 compare 或保存额外偏好。
 - compare workbench 的比较摘要区现在也有一组轻量 share/export controls：用户可以直接复制当前 compare 链接、当前 `runIds` 选择，或者复制一段基于当前 baseline / overall_state / primary_profile / comparable count 生成的短摘要文本，方便把当前比较快速发给别人或贴回自己的工作流。
 - 规则回测结果现在还会稳定暴露一个 additive `robustness_analysis` block：detail/history 读面会返回最小版 `walk_forward`、`monte_carlo` 与 `stress_tests` 摘要，其中 walk-forward 只把 rolling train/test window 当作执行上下文而不做参数再优化，Monte Carlo 用 deterministic seed 对历史收益做轻量扰动，stress 则提供少量固定冲击场景；三者都只返回紧凑 metrics/aggregate diagnostics，不覆盖原有 baseline metrics、benchmark 或 execution trace contract。
+- Web 前端现已把这批 additive backtest 字段接到只读 UI：`/backtest` 配置页的 `解析确认` 区会在 `strategy_spec.risk_controls` 存在时展示最小版止损 / 止盈 / 移动止损摘要；`/backtest/results/:runId` 的 `参数与假设` tab 会在 run payload 含有 `robustness_analysis` 时展示状态、walk-forward 窗口数、Monte Carlo 次数、压力场景数和最差场景键值。该展示仍是 additive read-only，不改变既有配置流、执行语义或结果页主图结构。
 - 规则回测的 failed / cancelled runs 现在也有一份更稳定的 stored-first 诊断摘要：status/detail/history 读面除了原有的 `no_result_reason`、`no_result_message` 与 `status_history` 外，还会统一返回结构化 `run_diagnostics`，直接指出终态、reason code、最近状态迁移时间，以及终态前停留的最后一个非终态 stage，方便 reopen 和 AI/debug 工具做一致判断。
 - 规则回测的 lifecycle 时间线现在也有一份 stored-first `run_timing` 摘要：status/detail/history 会统一返回 `created_at`、`started_at`、`finished_at`、`failed_at`、`cancelled_at`、`last_updated_at` 以及队列/执行时长。这样在 reopen 时不必再从 `run_at`、`completed_at` 和零散 `status_history` 自己反推“是否真正开始执行、卡在排队还是执行、终态时间是否一致”。
 - support export index 里原本已经声明的 `execution_trace_json` 现在也有了真实的只读 API export：单条规则回测可直接拿到 execution-trace JSON 载荷，而不必再走 service-file-only 导出路径。这个接口仍然只复用当前 stored-first execution trace 读回逻辑，不会重建新 trace，也会在 trace rows 缺失时明确返回 unavailable，而不是假装可导出。
@@ -1362,6 +1363,7 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
 - `account_attribution` aggregates each account's normalized `total_equity` / `total_market_value` contribution in the report currency, so multi-account portfolios can directly inspect which account is driving overall exposure.
 - `industry_attribution` reuses the same normalized market-value basis and board mapping semantics, but returns an additive contribution view by industry instead of replacing existing `sector_concentration` alerts.
 - `portfolio_attribution` is stored-first on account snapshot payloads for per-account `industry_attribution`, and the aggregate snapshot read surface combines `account_attribution + industry_attribution` into one additive portfolio summary block.
+- Web `/portfolio` 页面现在会把 `portfolio_attribution`、`account_attribution`、`industry_attribution` 直接接成只读摘要卡，让 top account / top industry / weight 在快照与风险摘要区可见，同时不改变原有持仓表、集中度图、风险告警或写入流程。
 - Fail-open:
   - board lookup errors do not interrupt risk response.
   - response returns coverage/error details for explainability.

@@ -117,6 +117,26 @@ function makeSnapshot(options: { accountId?: number; fxStale?: boolean; accountC
     feeTotal: 0,
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
+    portfolioAttribution: {
+      accountAttribution: {
+        topAccounts: [
+          {
+            accountId,
+            accountName: `Account ${accountId}`,
+            equityWeightPct: 100,
+          },
+        ],
+      },
+      industryAttribution: {
+        topIndustries: [
+          {
+            industry: '半导体',
+            weightPct: 61.2,
+            symbolCount: 2,
+          },
+        ],
+      },
+    },
     accounts: [
       {
         accountId,
@@ -161,6 +181,24 @@ function makeRisk() {
       topSectors: [],
       coverage: {},
       errors: [],
+    },
+    industryAttribution: {
+      topIndustries: [
+        {
+          industry: '半导体',
+          weightPct: 61.2,
+          symbolCount: 2,
+        },
+      ],
+    },
+    accountAttribution: {
+      topAccounts: [
+        {
+          accountId: 1,
+          accountName: 'Main',
+          equityWeightPct: 100,
+        },
+      ],
     },
     drawdown: {
       seriesPoints: 0,
@@ -837,5 +875,20 @@ describe('PortfolioPage FX refresh', () => {
     expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsAfterSwitch);
     expect(getRisk).toHaveBeenCalledTimes(riskCallsAfterSwitch);
     expect(screen.queryByText('汇率已刷新，共更新 1 对。')).not.toBeInTheDocument();
+  });
+
+  it('renders additive portfolio attribution blocks without changing the existing snapshot flow', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByText('组合归因 / Portfolio Attribution')).toBeInTheDocument();
+    expect(screen.getByText('账户归因 / Account Attribution')).toBeInTheDocument();
+    expect(screen.getByText('行业归因 / Industry Attribution')).toBeInTheDocument();
+    expect(screen.getByText('Account 1')).toBeInTheDocument();
+    expect(screen.getByText('Main')).toBeInTheDocument();
+    expect(screen.getAllByText('半导体').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('61.20%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('100.00%').length).toBeGreaterThan(0);
   });
 });

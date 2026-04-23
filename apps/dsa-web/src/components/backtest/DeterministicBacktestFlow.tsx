@@ -387,6 +387,32 @@ function StrategySpecSummaryCard({
   );
 }
 
+function getRiskControlRows(parsed: RuleBacktestParseResponse | null): StrategyPreviewRow[] {
+  const strategySpec = getStrategyPreviewSpec(parsed);
+  const controls = [
+    {
+      label: '止损',
+      value: getStrategySpecValue(strategySpec, ['risk_controls', 'stop_loss_pct']),
+    },
+    {
+      label: '止盈',
+      value: getStrategySpecValue(strategySpec, ['risk_controls', 'take_profit_pct']),
+    },
+    {
+      label: '移动止损',
+      value: getStrategySpecValue(strategySpec, ['risk_controls', 'trailing_stop_pct']),
+    },
+  ];
+
+  return controls
+    .filter((item) => typeof item.value === 'number' && Number.isFinite(item.value))
+    .map((item) => ({
+      label: item.label,
+      value: `${Number(item.value).toFixed(2)}%`,
+      source: 'explicit',
+    }));
+}
+
 function StrategyParseDetails({
   parsed,
 }: {
@@ -584,6 +610,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   const parseState = getParseState(parsedStrategy, parseStale);
   const parseMeta = getParseStateMeta(parseState);
   const strategySpec = getStrategyPreviewSpec(parsedStrategy);
+  const riskControlRows = getRiskControlRows(parsedStrategy);
   const assumptionGroups = getParsedAssumptionGroups(parsedStrategy);
   const coreIntentSummary = getCoreIntentSummary(parsedStrategy);
   const supportedPortionSummary = getSupportedPortionSummary(parsedStrategy);
@@ -1038,6 +1065,27 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                     <span className="product-chip">兼容 setup</span>
                   </div>
                   <StrategySpecSummaryCard parsed={parsedStrategy} currentCode={code} startDate={startDate} endDate={endDate} />
+                  {riskControlRows.length ? (
+                    <div className="summary-block mt-4">
+                      <div className="summary-block__header">
+                        <div>
+                          <SectionEyebrow>风险控制</SectionEyebrow>
+                          <h3 className="summary-block__title">风险控制 / Risk Controls</h3>
+                        </div>
+                      </div>
+                      <div className="preview-grid">
+                        {riskControlRows.map((row) => (
+                          <div key={`${row.label}-${row.value}`} className="preview-card">
+                            <p className="metric-card__label">{row.label}</p>
+                            <div className="product-chip-list product-chip-list--tight">
+                              <span className="product-chip">{getFieldSourceLabel(row.source)}</span>
+                            </div>
+                            <p className="preview-card__text">{row.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <Disclosure summary="查看解析细节">

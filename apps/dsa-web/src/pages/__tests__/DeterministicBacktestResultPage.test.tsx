@@ -441,6 +441,54 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getAllByText('已完成归一化').length).toBeGreaterThan(0);
   });
 
+  it('renders robustness analysis in the parameters tab when the run payload exposes it', async () => {
+    const currentRun = makeResultRun({
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: {
+          windowCount: 4,
+          passRatePct: 75,
+        },
+        monteCarlo: {
+          simulationCount: 200,
+          medianReturnPct: 8.4,
+        },
+        stressTest: {
+          scenarioCount: 3,
+        },
+        worstScenario: {
+          scenarioKey: 'single_day_shock_down_15',
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
+    expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
+
+    expect(screen.getByText('鲁棒性分析')).toBeInTheDocument();
+    expect(screen.getByText('可用')).toBeInTheDocument();
+    expect(screen.getByText('Walk-forward 窗口')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('蒙特卡洛模拟')).toBeInTheDocument();
+    expect(screen.getByText('200')).toBeInTheDocument();
+    expect(screen.getByText('压力场景')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('最差场景')).toBeInTheDocument();
+    expect(screen.getByText('single_day_shock_down_15')).toBeInTheDocument();
+  });
+
   it('lets users cancel active runs from the result page', async () => {
     const queuedRun = makeResultRun({
       status: 'queued',

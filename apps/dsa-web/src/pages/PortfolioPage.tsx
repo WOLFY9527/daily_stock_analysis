@@ -109,6 +109,65 @@ function formatPositionContext(market: string, currency: string): string {
   return `${marketLabel} / ${currency || '--'}`;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function getObjectValue(record: Record<string, unknown> | null, snakeKey: string, camelKey: string): unknown {
+  if (!record) return undefined;
+  if (snakeKey in record) return record[snakeKey];
+  if (camelKey in record) return record[camelKey];
+  return undefined;
+}
+
+function getTopAttributionEntry(
+  payload: Record<string, unknown> | null,
+  blockSnakeKey: string,
+  blockCamelKey: string,
+  listSnakeKey: string,
+  listCamelKey: string,
+): Record<string, unknown> | null {
+  const block = asRecord(getObjectValue(payload, blockSnakeKey, blockCamelKey));
+  return getTopAttributionEntryFromBlock(block, listSnakeKey, listCamelKey);
+}
+
+function getTopAttributionEntryFromBlock(
+  block: Record<string, unknown> | null,
+  listSnakeKey: string,
+  listCamelKey: string,
+): Record<string, unknown> | null {
+  const items = getObjectValue(block, listSnakeKey, listCamelKey);
+  if (!Array.isArray(items) || !items.length) return null;
+  return asRecord(items[0]);
+}
+
+function formatAttributionAccount(entry: Record<string, unknown> | null): string {
+  if (!entry) return '--';
+  const accountName = String(entry.account_name || entry.accountName || '').trim();
+  if (accountName) return accountName;
+  const accountId = entry.account_id ?? entry.accountId;
+  return accountId == null ? '--' : `#${String(accountId)}`;
+}
+
+function formatAttributionIndustry(entry: Record<string, unknown> | null): string {
+  if (!entry) return '--';
+  const value = String(entry.industry || entry.name || '').trim();
+  return value || '--';
+}
+
+function formatAttributionWeight(value: unknown): string {
+  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+  if (!Number.isFinite(numeric)) return '--';
+  return `${numeric.toFixed(2)}%`;
+}
+
+function formatAttributionCount(value: unknown): string {
+  if (value == null) return '--';
+  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
+  if (!Number.isFinite(numeric)) return '--';
+  return `${numeric.toFixed(0)}`;
+}
+
 function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null): {
   apiBaseUrl?: string;
   verifySsl?: boolean;
@@ -538,6 +597,23 @@ const PortfolioPage: React.FC = () => {
 
   const concentrationPieData = sectorPieData.length > 0 ? sectorPieData : positionFallbackPieData;
   const concentrationMode = sectorPieData.length > 0 ? 'sector' : 'position';
+
+  const portfolioTopAccount = useMemo(
+    () => getTopAttributionEntry(snapshot?.portfolioAttribution as Record<string, unknown> | null, 'account_attribution', 'accountAttribution', 'top_accounts', 'topAccounts'),
+    [snapshot?.portfolioAttribution],
+  );
+  const portfolioTopIndustry = useMemo(
+    () => getTopAttributionEntry(snapshot?.portfolioAttribution as Record<string, unknown> | null, 'industry_attribution', 'industryAttribution', 'top_industries', 'topIndustries'),
+    [snapshot?.portfolioAttribution],
+  );
+  const riskTopIndustry = useMemo(
+    () => getTopAttributionEntryFromBlock(risk?.industryAttribution as Record<string, unknown> | null, 'top_industries', 'topIndustries'),
+    [risk?.industryAttribution],
+  );
+  const riskTopAccount = useMemo(
+    () => getTopAttributionEntryFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts'),
+    [risk?.accountAttribution],
+  );
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1082,6 +1158,34 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between"><span>账户数:</span> <span className="text-foreground font-mono">{snapshot?.accountCount ?? 0}</span></div>
               <div className="flex justify-between"><span>计价币种:</span> <span className="text-foreground font-mono">{snapshot?.currency || 'CNY'}</span></div>
               <div className="flex justify-between"><span>成本法:</span> <span className="text-foreground font-mono">{(snapshot?.costMethod || costMethod).toUpperCase()}</span></div>
+            </div>
+          </Card>
+        </section>
+
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Card padding="md">
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">组合归因 / Portfolio Attribution</h3>
+            <div className="text-xs text-secondary space-y-1.5">
+              <div className="flex justify-between gap-3"><span>Top 账户:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>账户权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
+            </div>
+          </Card>
+          <Card padding="md">
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">账户归因 / Account Attribution</h3>
+            <div className="text-xs text-secondary space-y-1.5">
+              <div className="flex justify-between gap-3"><span>Top 账户:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>权益占比:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>账户 ID:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
+            </div>
+          </Card>
+          <Card padding="md">
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">行业归因 / Industry Attribution</h3>
+            <div className="text-xs text-secondary space-y-1.5">
+              <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>持仓数:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
             </div>
           </Card>
         </section>

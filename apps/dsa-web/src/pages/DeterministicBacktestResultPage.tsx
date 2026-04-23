@@ -124,6 +124,22 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
+function asObjectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function getObjectField(record: Record<string, unknown> | null, key: string): unknown {
+  return record ? record[key] : undefined;
+}
+
+function getRobustnessStateLabel(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'available') return '可用';
+  if (normalized === 'partial') return '部分可用';
+  if (normalized === 'unavailable') return '不可用';
+  return normalized ? String(value) : '--';
+}
+
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -167,6 +183,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [presetNotice, setPresetNotice] = useState<string | null>(null);
   const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>([]);
   const density = useDeterministicResultDensity();
+  const robustnessAnalysis = useMemo(() => asObjectRecord(run?.robustnessAnalysis), [run?.robustnessAnalysis]);
+  const walkForward = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward')), [robustnessAnalysis]);
+  const monteCarlo = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo')), [robustnessAnalysis]);
+  const stressTest = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'stressTest')), [robustnessAnalysis]);
+  const worstScenario = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'worstScenario')), [robustnessAnalysis]);
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
@@ -869,6 +890,35 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 <Disclosure summary="执行假设">
                   <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
                 </Disclosure>
+
+                {robustnessAnalysis ? (
+                  <Disclosure summary="鲁棒性分析">
+                    <div className="backtest-result-page__tab-stack">
+                      <SummaryStrip
+                        items={[
+                          { label: '状态', value: getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state')) },
+                          { label: 'Walk-forward 窗口', value: formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0) },
+                          { label: '蒙特卡洛模拟', value: formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0) },
+                          { label: '压力场景', value: formatNumber(getObjectField(stressTest, 'scenarioCount') as number | null | undefined, 0) },
+                        ]}
+                      />
+                      <div className="preview-grid">
+                        <div className="preview-card">
+                          <p className="metric-card__label">Walk-forward 通过率</p>
+                          <p className="preview-card__text">{pct(getObjectField(walkForward, 'passRatePct') as number | null | undefined)}</p>
+                        </div>
+                        <div className="preview-card">
+                          <p className="metric-card__label">蒙特卡洛中位收益</p>
+                          <p className="preview-card__text">{pct(getObjectField(monteCarlo, 'medianReturnPct') as number | null | undefined)}</p>
+                        </div>
+                        <div className="preview-card">
+                          <p className="metric-card__label">最差场景</p>
+                          <p className="preview-card__text">{String(getObjectField(worstScenario, 'scenarioKey') || '--')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </Disclosure>
+                ) : null}
 
                 <Disclosure summary="实际执行内容">
                   <div className="backtest-result-page__tab-stack">

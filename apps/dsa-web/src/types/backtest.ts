@@ -361,6 +361,12 @@ export interface RuleBacktestIndicatorEndBehaviorSpec {
   priceBasis?: string | null;
 }
 
+export interface RuleBacktestIndicatorRiskControls {
+  stopLossPct?: number | null;
+  takeProfitPct?: number | null;
+  trailingStopPct?: number | null;
+}
+
 export interface RuleBacktestMovingAverageCrossoverStrategySpec extends RuleBacktestStrategySpecBase {
   strategyType: 'moving_average_crossover';
   strategyFamily?: 'moving_average_crossover';
@@ -368,6 +374,7 @@ export interface RuleBacktestMovingAverageCrossoverStrategySpec extends RuleBack
   execution?: RuleBacktestIndicatorExecutionSpec;
   positionBehavior?: RuleBacktestIndicatorPositionBehaviorSpec;
   endBehavior?: RuleBacktestIndicatorEndBehaviorSpec;
+  riskControls?: RuleBacktestIndicatorRiskControls;
 }
 
 export interface RuleBacktestMacdCrossoverStrategySpec extends RuleBacktestStrategySpecBase {
@@ -377,6 +384,7 @@ export interface RuleBacktestMacdCrossoverStrategySpec extends RuleBacktestStrat
   execution?: RuleBacktestIndicatorExecutionSpec;
   positionBehavior?: RuleBacktestIndicatorPositionBehaviorSpec;
   endBehavior?: RuleBacktestIndicatorEndBehaviorSpec;
+  riskControls?: RuleBacktestIndicatorRiskControls;
 }
 
 export interface RuleBacktestRsiThresholdStrategySpec extends RuleBacktestStrategySpecBase {
@@ -386,6 +394,7 @@ export interface RuleBacktestRsiThresholdStrategySpec extends RuleBacktestStrate
   execution?: RuleBacktestIndicatorExecutionSpec;
   positionBehavior?: RuleBacktestIndicatorPositionBehaviorSpec;
   endBehavior?: RuleBacktestIndicatorEndBehaviorSpec;
+  riskControls?: RuleBacktestIndicatorRiskControls;
 }
 
 export interface RuleBacktestGenericStrategySpec extends RuleBacktestStrategySpecBase {
@@ -945,6 +954,7 @@ export interface RuleBacktestRunResponse {
   avgHoldingCalendarDays?: number | null;
   finalEquity?: number | null;
   summary: Record<string, unknown>;
+  robustnessAnalysis?: Record<string, unknown>;
   executionModel?: RuleBacktestExecutionModel;
   executionAssumptions: AssumptionMap;
   benchmarkCurve: RuleBacktestBenchmarkPointItem[];

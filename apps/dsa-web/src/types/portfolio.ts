@@ -128,6 +128,7 @@ export interface PortfolioSnapshotResponse {
   feeTotal: number;
   taxTotal: number;
   fxStale: boolean;
+  portfolioAttribution?: Record<string, unknown>;
   accounts: PortfolioAccountSnapshot[];
 }
 
@@ -185,6 +186,8 @@ export interface PortfolioRiskResponse {
     errors: string[];
   };
   drawdown: PortfolioDrawdownBlock;
+  industryAttribution?: Record<string, unknown>;
+  accountAttribution?: Record<string, unknown>;
   stopLoss: {
     nearAlert: boolean;
     triggeredCount: number;

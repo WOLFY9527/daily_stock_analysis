@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 新功能
 
+- 🖥️ **Slice 9 frontend exposure for additive portfolio/backtest fields** — Web `/portfolio` 现已把 additive 的 `portfolio_attribution`、`account_attribution`、`industry_attribution` 接成只读摘要卡；`/backtest` 配置页的 `解析确认` 区会在 `strategy_spec.risk_controls` 存在时展示止损 / 止盈 / 移动止损；`/backtest/results/:runId` 的 `参数与假设` tab 会在 run payload 含有 `robustness_analysis` 时展示最小版状态与摘要指标。此次改动只做前端可见性补齐，不改变后端 contract、deterministic engine 或既有主交互。
 - 🛑 **Deterministic indicator strategies now support fixed advanced-order risk controls** — `moving_average_crossover / macd_crossover / rsi_threshold` 这三类已支持的 deterministic indicator strategy 现在进一步支持最小版 `fixed stop-loss / take-profit / trailing stop` 扩展。像 `MACD金叉买入，止盈10%，移动止损8%，死叉卖出` 这类输入不再被整体判成 unsupported；解析结果会把阈值保留到 `parsed_strategy.strategy_spec.risk_controls.{stop_loss_pct,take_profit_pct,trailing_stop_pct}`，执行时统一按既有 bar-close signal / next-bar-open exit 语义触发离场。范围仍继续保持最小：单仓位、单标的、百分比阈值，不扩展到参数优化或多资产语义。
 - 🌐 **Portfolio snapshot market breakdown aggregation** — `GET /api/v1/portfolio/snapshot` 现在新增 `market_breakdown`，会按 `cn` / `hk` / `us` 聚合当前账户或整组 portfolio 的持仓市值，并统一换算到 snapshot 的聚合货币。这样在多账户、多市场、多币种组合下，后端可以直接给出一个最小但稳定的 multi-asset 聚合摘要，而不需要客户端自己重扫所有 positions 做二次归并。
 - 🧾 **Portfolio risk report now exposes account attribution** — `GET /api/v1/portfolio/risk` 现在新增 `account_attribution`，会按当前 risk report 的聚合货币，把每个账户的 `total_equity` / `total_market_value` 贡献统一换算并计算权重。这样在多账户、多币种组合下，后端可以直接指出“是哪一个账户在主导整体风险暴露”，而不需要客户端先拉 snapshot 再自己做二次归并。

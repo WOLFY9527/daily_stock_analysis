@@ -305,6 +305,11 @@ function makeRuleParseResponse(): RuleBacktestParseResponse {
           accumulate: true,
           cashPolicy: 'stop_when_insufficient_cash',
         },
+        riskControls: {
+          stopLossPct: 5,
+          takeProfitPct: 10,
+          trailingStopPct: 8,
+        },
         costs: {
           feeBps: 0,
           slippageBps: 0,
@@ -974,6 +979,21 @@ describe('BacktestPage', () => {
     expect(screen.getAllByLabelText(/我已确认当前解析结果与执行假设/i)).toHaveLength(1);
     expect(screen.getByTestId('backtest-display-section-history')).toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
+  });
+
+  it('renders indicator risk controls in the confirmation panel when strategy_spec exposes them', async () => {
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
+    expect(within(executableSpecSection).getByText('风险控制 / Risk Controls')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('止损')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('5.00%')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('止盈')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('10.00%')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('移动止损')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('8.00%')).toBeInTheDocument();
   });
 
   it('marks executable spec fields as compatibility-derived when only legacy setup is available', async () => {
