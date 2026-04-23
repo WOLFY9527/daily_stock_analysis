@@ -23,6 +23,11 @@ function bt(language: BacktestLanguage, key: string, vars?: Record<string, strin
   return translate(language, `backtest.${key}`, vars);
 }
 
+export function isCanonicalNoEntrySignalMessage(message?: string | null): boolean {
+  if (!message) return false;
+  return message === bt('zh', 'runStatusBanner.noEntrySignal') || message === bt('en', 'runStatusBanner.noEntrySignal');
+}
+
 function getRuleStatusText(status?: string, language: BacktestLanguage = 'zh'): string {
   const normalized = String(status || 'queued').trim().toLowerCase();
   const label = bt(language, `ruleStatus.${normalized}`);
@@ -542,7 +547,7 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
   const latestStatusAt = run.statusHistory?.[run.statusHistory.length - 1]?.at;
   const tone = getRuleRunStatusTone(run.status);
   const statusDescription = getRuleRunStatusDescription(run.status, language);
-  const localizedNoResultMessage = run.noResultMessage === '回测窗口内没有触发任何入场信号。'
+  const localizedNoResultMessage = isCanonicalNoEntrySignalMessage(run.noResultMessage)
     ? bt(language, 'runStatusBanner.noEntrySignal')
     : run.noResultMessage;
 

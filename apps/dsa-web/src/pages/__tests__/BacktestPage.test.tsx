@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { translate } from '../../i18n/core';
 import type {
   BacktestRunHistoryItem,
   BacktestRunResponse,
@@ -12,6 +13,10 @@ import type {
 import { RULE_BACKTEST_PRESET_STORAGE_KEY } from '../../components/backtest/ruleBacktestP6';
 import BacktestPage from '../BacktestPage';
 import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage';
+
+function bt(language: 'zh' | 'en', key: string, vars?: Record<string, string | number | undefined>) {
+  return translate(language, `backtest.${key}`, vars);
+}
 
 const {
   runBacktest,
@@ -879,11 +884,11 @@ describe('BacktestPage', () => {
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
     expect(screen.getByTestId('backtest-v1-page')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '回测' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '确定性回测' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '历史评估' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '普通' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '专业' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('zh', 'page.normalMode') })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'false');
 
     expect(screen.getByTestId('backtest-normal-wizard')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-unified-shell')).not.toBeInTheDocument();
@@ -1031,7 +1036,7 @@ describe('BacktestPage', () => {
 
     const unifiedShell = await screen.findByTestId('backtest-unified-shell');
     expect(unifiedShell).toHaveAttribute('data-module', 'historical');
-    expect(screen.getByRole('tab', { name: '普通' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: bt('zh', 'page.normalMode') })).toHaveAttribute('aria-selected', 'true');
 
     const controlPanel = screen.getByTestId('backtest-control-panel');
     const displayBoard = screen.getByTestId('backtest-display-board');
@@ -1047,7 +1052,7 @@ describe('BacktestPage', () => {
     expect(within(displayBoard).getByText('历史记录')).toBeInTheDocument();
     expect(within(displayBoard).queryByRole('button', { name: '运行历史评估' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: '专业' }));
+    fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') }));
     expect(screen.getByTestId('backtest-control-panel-expanded')).toBeInTheDocument();
     expect(within(controlPanel).getByTestId('historical-control-section-scope-samples')).toBeInTheDocument();
     expect(within(controlPanel).getByTestId('historical-control-section-params')).toBeInTheDocument();
@@ -1060,9 +1065,9 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole('tab', { name: '专业' }));
+    fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') }));
 
-    expect(screen.getByRole('tab', { name: '专业' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('backtest-unified-shell')).toHaveAttribute('data-module', 'rule');
     expect(screen.getByTestId('backtest-control-panel-expanded')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
@@ -1099,7 +1104,7 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('heading', { name: '确定性回测结果 #99' })).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
-    expect(screen.getByLabelText('累计收益率图')).toBeInTheDocument();
+    expect(screen.getByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();
     expect(screen.getByLabelText('回测范围选择器')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: '审计明细' })).toBeInTheDocument();
@@ -1201,11 +1206,11 @@ describe('BacktestPage', () => {
     window.history.replaceState(window.history.state, '', '/en/backtest');
     renderBacktestRoutes(['/en/backtest']);
 
-    expect(await screen.findByRole('heading', { name: 'Backtest' })).toBeInTheDocument();
-    expect(screen.getByRole('tablist', { name: 'Backtest mode' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Deterministic backtest' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Historical evaluation' })).toBeInTheDocument();
-    expect(screen.getByRole('tablist', { name: 'Control panel mode' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: bt('en', 'page.headerTitle') })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: bt('en', 'page.moduleTabsLabel') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('en', 'page.ruleTab') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('en', 'page.historicalTab') })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: bt('en', 'page.controlModeLabel') })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('heading', { name: 'Strategy input' })).toBeInTheDocument();
     expect(screen.getByLabelText('Strategy text')).toBeInTheDocument();

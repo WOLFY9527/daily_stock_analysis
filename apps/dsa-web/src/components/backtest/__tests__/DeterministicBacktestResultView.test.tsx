@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { UiLanguageProvider } from '../../../contexts/UiLanguageContext';
+import { translate } from '../../../i18n/core';
 import type { RuleBacktestRunResponse } from '../../../types/backtest';
 import { DeterministicAuditTable, DeterministicBacktestResultView } from '../DeterministicBacktestResultView';
 import { normalizeDeterministicBacktestResult } from '../normalizeDeterministicBacktestResult';
@@ -118,9 +119,9 @@ describe('DeterministicBacktestResultView', () => {
     const resultView = screen.getByTestId('deterministic-backtest-result-view');
     const dashboard = screen.getByTestId('deterministic-result-dashboard');
     const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
-    const returnSvg = screen.getByLabelText('累计收益率图');
-    const drawdownSvg = screen.getByLabelText('回撤曲线图');
-    const relativeSvg = screen.getByLabelText('相对基准曲线图');
+    const returnSvg = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.cumulativeReturnChartAria'));
+    const drawdownSvg = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.drawdownChartAria'));
+    const relativeSvg = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.relativeComparisonChartAria'));
 
     expect(resultView).toHaveAttribute('data-row-count', '70');
     expect(resultView).toHaveAttribute('data-main-series-length', '70');
@@ -129,10 +130,10 @@ describe('DeterministicBacktestResultView', () => {
     expect(resultView).toHaveAttribute('data-kpi-count', '6');
     expect(resultView).toHaveAttribute('data-density', 'dense');
     expect(dashboard).toBeInTheDocument();
-    expect(screen.getByText('关键指标')).toBeInTheDocument();
-    expect(screen.getByText('夏普')).toBeInTheDocument();
-    expect(screen.queryByText('日级审计 / 对账')).not.toBeInTheDocument();
-    expect(screen.queryByText('交易 / 事件日志')).not.toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.resultView.keyMetrics'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.resultView.sharpe'))).toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'backtest.resultPage.auditTable.title'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'backtest.resultPage.tradeEventTable.title'))).not.toBeInTheDocument();
     expect(screen.queryByText('结果指标')).not.toBeInTheDocument();
     expect(screen.queryByText('联动结果图表')).not.toBeInTheDocument();
     expect(workspace).toHaveAttribute('data-row-count', '70');
@@ -179,11 +180,11 @@ describe('DeterministicBacktestResultView', () => {
 
     const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
 
-    fireEvent.click(screen.getByRole('button', { name: '近1个月' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'backtest.resultPage.chartWorkspace.lastMonth') }));
     expect(workspace).toHaveAttribute('data-visible-rows', '21');
 
-    fireEvent.change(screen.getByLabelText('开始'), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText('结束'), { target: { value: '39' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.start')), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.end')), { target: { value: '39' } });
 
     expect(workspace).toHaveAttribute('data-visible-start-index', '20');
     expect(workspace).toHaveAttribute('data-visible-end-index', '39');
@@ -221,7 +222,7 @@ describe('DeterministicBacktestResultView', () => {
     const hoverDetail = screen.getByTestId('deterministic-chart-hover-card');
     expect(workspace).toHaveAttribute('data-tooltip-visible', 'true');
     expect(hoverDetail).toHaveAttribute('data-visible', 'true');
-    expect(within(hoverDetail).getByText('当日详情')).toBeInTheDocument();
+    expect(within(hoverDetail).getByText(translate('zh', 'backtest.resultPage.chartWorkspace.dayDetail'))).toBeInTheDocument();
     expect(within(hoverDetail).getAllByText('2026-03-27')).toHaveLength(2);
     const firstTooltipLeft = hoverDetail.getAttribute('data-tooltip-left');
     const firstTooltipTop = hoverDetail.getAttribute('data-tooltip-top');
@@ -276,7 +277,7 @@ describe('DeterministicBacktestResultView', () => {
 
     render(<DeterministicAuditTable run={run} rows={normalized.rows} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'backtest.resultPage.statusCard.exportCsv') }));
 
     const blob = createObjectUrlMock.mock.calls[0]?.[0] as Blob;
     const content = await blob.text();
@@ -299,14 +300,14 @@ describe('DeterministicBacktestResultView', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Last month' }));
-    fireEvent.change(screen.getByLabelText('Start'), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText('End'), { target: { value: '39' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.lastMonth') }));
+    fireEvent.change(screen.getByLabelText(translate('en', 'backtest.resultPage.chartWorkspace.start')), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText(translate('en', 'backtest.resultPage.chartWorkspace.end')), { target: { value: '39' } });
 
-    expect(screen.getByRole('button', { name: 'Relative comparison' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Daily PnL' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Position activity' })).toBeInTheDocument();
-    expect(screen.getByText('Visible window: 20 days')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.relativeComparison') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.dailyPnl') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.positionActivity') })).toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'backtest.resultPage.chartWorkspace.visibleWindow', { count: 20 }))).toBeInTheDocument();
 
     const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
     const workspaceShell = workspace.querySelector('.backtest-unified-chart-viewer__workspace-shell') as HTMLElement;

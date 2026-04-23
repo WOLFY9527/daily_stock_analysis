@@ -32,6 +32,7 @@ import type {
   RuleBacktestRunResponse,
 } from '../types/backtest';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { translate } from '../i18n/core';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
@@ -49,6 +50,12 @@ type PerformanceNotice = {
   tone: 'warning' | 'danger';
   message: string;
 };
+
+type BacktestLanguage = 'zh' | 'en';
+
+function bt(language: BacktestLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
+  return translate(language, `backtest.${key}`, vars);
+}
 
 function buildRuleParseSignature(payload: {
   code: string;
@@ -75,80 +82,14 @@ const WORKBENCH_PANEL_TRANSITION = {
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
-const BACKTEST_COPY = {
-  zh: {
-    documentTitle: '回测 - WolfyStock',
-    headerTitle: '回测',
-    headerDescription: (benchmark: string) => `配置确定性规则与评估参数。运行后进入独立控制台查看图表、审计与表现对比。当前基准: ${benchmark}`,
-    moduleTabsLabel: '回测模式',
-    ruleTab: '确定性回测',
-    historicalTab: '历史评估',
-    controlModeLabel: '控制面板模式',
-    normalMode: '普通',
-    professionalMode: '专业',
-    missingCodeTitle: '缺少股票代码',
-    missingPrepareSamples: '请先输入股票代码，再准备历史分析评估样本。',
-    missingRebuildSamples: '请先输入股票代码，再重建历史分析评估样本。',
-    missingClearSamples: '请先输入股票代码，再清理历史分析评估样本。',
-    missingClearResults: '请先输入股票代码，再清理历史分析评估结果。',
-    missingStrategyTitle: '缺少策略文本',
-    missingStrategyText: '请输入规则策略文本后再解析。',
-    missingRunCode: '请输入股票代码后再提交规则回测。',
-    needParsedStrategyTitle: '需要先解析策略',
-    needParsedStrategy: '请先解析并确认规则结构，再提交确定性规则回测。',
-    staleParseTitle: '解析结果已过期',
-    staleParse: '当前输入已经变更。请重新解析后再提交回测。',
-    needConfirmTitle: '需要确认解析结果',
-    needConfirm: '请确认归一化规则后再提交回测。',
-    missingRangeTitle: '缺少回测区间',
-    missingRange: '请填写开始日期和结束日期后再提交回测。',
-    invalidRangeTitle: '日期区间无效',
-    invalidRange: '开始日期不能晚于结束日期。',
-    missingBenchmarkTitle: '缺少自定义基准代码',
-    missingBenchmark: '选择自定义代码后，请先填写基准代码。',
-  },
-  en: {
-    documentTitle: 'Backtest - WolfyStock',
-    headerTitle: 'Backtest',
-    headerDescription: (benchmark: string) => `Configure deterministic rules and evaluation parameters. Runs open in a dedicated console for charts, audit detail, and performance comparison. Current benchmark: ${benchmark}`,
-    moduleTabsLabel: 'Backtest mode',
-    ruleTab: 'Deterministic backtest',
-    historicalTab: 'Historical evaluation',
-    controlModeLabel: 'Control panel mode',
-    normalMode: 'Normal',
-    professionalMode: 'Professional',
-    missingCodeTitle: 'Missing stock code',
-    missingPrepareSamples: 'Enter a stock code before preparing historical evaluation samples.',
-    missingRebuildSamples: 'Enter a stock code before rebuilding historical evaluation samples.',
-    missingClearSamples: 'Enter a stock code before clearing historical evaluation samples.',
-    missingClearResults: 'Enter a stock code before clearing historical evaluation results.',
-    missingStrategyTitle: 'Missing strategy text',
-    missingStrategyText: 'Enter a rule strategy before parsing it.',
-    missingRunCode: 'Enter a stock code before submitting the rule backtest.',
-    needParsedStrategyTitle: 'Parse the strategy first',
-    needParsedStrategy: 'Parse and confirm the rule structure before submitting the deterministic backtest.',
-    staleParseTitle: 'Parse result is stale',
-    staleParse: 'The current inputs changed. Parse the strategy again before submitting the backtest.',
-    needConfirmTitle: 'Confirmation required',
-    needConfirm: 'Confirm the normalized rule before submitting the backtest.',
-    missingRangeTitle: 'Missing backtest range',
-    missingRange: 'Fill in both the start and end date before submitting the backtest.',
-    invalidRangeTitle: 'Invalid date range',
-    invalidRange: 'The start date cannot be later than the end date.',
-    missingBenchmarkTitle: 'Missing custom benchmark code',
-    missingBenchmark: 'Fill in the benchmark code after selecting custom benchmark mode.',
-  },
-} as const;
-
 const BacktestPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { language } = useI18n();
-  const copy = BACKTEST_COPY[language];
 
   useEffect(() => {
-    document.title = copy.documentTitle;
-  }, [copy.documentTitle]);
+    document.title = bt(language, 'page.documentTitle');
+  }, [language]);
 
   const [activeModule, setActiveModule] = useState<ActiveModule>('rule');
   const [controlPanelMode, setControlPanelMode] = useState<ControlPanelMode>('normal');
@@ -190,9 +131,7 @@ const BacktestPage: React.FC = () => {
   const [performanceNotice, setPerformanceNotice] = useState<PerformanceNotice | null>(null);
 
   const [ruleStrategyText, setRuleStrategyText] = useState(
-    language === 'en'
-      ? 'Start with 100000, buy 100 shares of ORCL every trading day from 2025-01-01 to 2025-12-31, and stop when cash runs out'
-      : '资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止',
+    bt(language, 'page.defaultStrategyText'),
   );
   const [ruleStartDate, setRuleStartDate] = useState(() => getDefaultRuleDateRange().startDate);
   const [ruleEndDate, setRuleEndDate] = useState(() => getDefaultRuleDateRange().endDate);
@@ -281,38 +220,38 @@ const BacktestPage: React.FC = () => {
 
   const historicalSummaryItems = useMemo(() => ([
     {
-      label: language === 'en' ? 'Prepared samples' : '已准备样本',
+      label: bt(language, 'page.historicalSummary.preparedSamplesLabel'),
       value: sampleStatus?.preparedCount != null ? String(sampleStatus.preparedCount) : '--',
       note: sampleStatus?.preparedStartDate && sampleStatus?.preparedEndDate
         ? `${sampleStatus.preparedStartDate} -> ${sampleStatus.preparedEndDate}`
-        : (language === 'en' ? 'Historical analysis samples' : '历史分析样本'),
+        : bt(language, 'page.historicalSummary.preparedSamplesNoteFallback'),
     },
     {
-      label: language === 'en' ? 'Completed evaluations' : '有效评估',
+      label: bt(language, 'page.historicalSummary.completedEvaluationsLabel'),
       value: historicalPerfSnapshot?.completedCount != null ? String(historicalPerfSnapshot.completedCount) : '--',
       note: historicalPerfSnapshot?.totalEvaluations != null
-        ? (language === 'en' ? `Total samples ${historicalPerfSnapshot.totalEvaluations}` : `总样本 ${historicalPerfSnapshot.totalEvaluations}`)
-        : (language === 'en' ? 'Samples completed and included in the aggregate.' : '完成并纳入统计的样本数'),
+        ? bt(language, 'page.historicalSummary.completedEvaluationsTotalSamples', { count: historicalPerfSnapshot.totalEvaluations })
+        : bt(language, 'page.historicalSummary.completedEvaluationsNoteFallback'),
     },
     {
-      label: language === 'en' ? 'Direction accuracy' : '方向准确率',
+      label: bt(language, 'page.historicalSummary.directionAccuracyLabel'),
       value: historicalPerfSnapshot?.directionAccuracyPct != null ? `${historicalPerfSnapshot.directionAccuracyPct.toFixed(2)}%` : '--',
-      note: language === 'en' ? 'Whether the signal direction matched the later move.' : '信号方向与后续走势是否一致',
+      note: bt(language, 'page.historicalSummary.directionAccuracyNote'),
     },
     {
-      label: language === 'en' ? 'Win rate' : '胜率',
+      label: bt(language, 'page.historicalSummary.winRateLabel'),
       value: historicalPerfSnapshot?.winRatePct != null ? `${historicalPerfSnapshot.winRatePct.toFixed(2)}%` : '--',
-      note: language === 'en' ? 'Whether the forward window closed positive.' : '未来窗口最终是否为正收益',
+      note: bt(language, 'page.historicalSummary.winRateNote'),
     },
     {
-      label: language === 'en' ? 'Average forward return' : '平均远期收益',
+      label: bt(language, 'page.historicalSummary.averageForwardReturnLabel'),
       value: historicalPerfSnapshot?.avgSimulatedReturnPct != null ? `${historicalPerfSnapshot.avgSimulatedReturnPct.toFixed(2)}%` : '--',
-      note: language === 'en' ? 'Forward-window return at the sample level.' : '样本级未来窗口收益',
+      note: bt(language, 'page.historicalSummary.averageForwardReturnNote'),
     },
     {
-      label: language === 'en' ? 'Average instrument return' : '平均标的收益',
+      label: bt(language, 'page.historicalSummary.averageInstrumentReturnLabel'),
       value: historicalPerfSnapshot?.avgStockReturnPct != null ? `${historicalPerfSnapshot.avgStockReturnPct.toFixed(2)}%` : '--',
-      note: language === 'en' ? 'Raw instrument return inside the same window.' : '同一窗口内标的原始涨跌幅',
+      note: bt(language, 'page.historicalSummary.averageInstrumentReturnNote'),
     },
   ]), [
     language,
@@ -352,15 +291,25 @@ const BacktestPage: React.FC = () => {
       ?? null;
 
     const parts = [
-      language === 'en' ? `Latest prepared sample: ${latestPreparedSampleDate || '--'}` : `最新已准备样本: ${latestPreparedSampleDate || '--'}`,
-      language === 'en' ? `Latest evaluable sample: ${latestEligibleSampleDate || '--'}` : `最新可评估样本: ${latestEligibleSampleDate || '--'}`,
+      bt(language, 'page.historicalTransparency.latestPreparedSample', { date: latestPreparedSampleDate || '--' }),
+      bt(language, 'page.historicalTransparency.latestEvaluableSample', { date: latestEligibleSampleDate || '--' }),
     ];
-    if (excludedRecentMessage) parts.push(language === 'en' ? `Newer dates excluded because: ${excludedRecentMessage}` : `较新日期未纳入原因: ${excludedRecentMessage}`);
+    if (excludedRecentMessage) {
+      parts.push(bt(language, 'page.historicalTransparency.excludedRecent', { message: excludedRecentMessage }));
+    }
     if (pricingResolvedSource) {
       parts.push(
-        language === 'en'
-          ? `Pricing source for this run: ${pricingResolvedSource}${pricingFallbackUsed == null ? '' : ` (${pricingFallbackUsed ? 'fallback source used' : 'no fallback source used'})`}`
-          : `本次使用的价格来源: ${pricingResolvedSource}${pricingFallbackUsed == null ? '' : `（${pricingFallbackUsed ? '已切换到备用数据源' : '未切换备用数据源'}）`}`,
+        bt(language, 'page.historicalTransparency.pricingSource', {
+          source: pricingResolvedSource,
+          detail: pricingFallbackUsed == null
+            ? ''
+            : bt(
+              language,
+              pricingFallbackUsed
+                ? 'page.historicalTransparency.pricingFallbackUsedDetail'
+                : 'page.historicalTransparency.pricingFallbackNotUsedDetail',
+            ),
+        }),
       );
     }
     return parts.join(' · ');
@@ -555,7 +504,7 @@ const BacktestPage: React.FC = () => {
     try {
       const overall = await backtestApi.getOverallPerformance(windowBars);
       setOverallPerf(overall);
-      if (overall == null && showNotice) notices.push(language === 'en' ? 'No aggregate historical evaluation summary is available yet.' : '暂无整体历史分析评估汇总。');
+      if (overall == null && showNotice) notices.push(bt(language, 'page.performanceNotice.noAggregateSummary'));
     } catch (error) {
       setOverallPerf(null);
       hasDanger = true;
@@ -566,7 +515,7 @@ const BacktestPage: React.FC = () => {
       try {
         const stock = await backtestApi.getStockPerformance(code, windowBars);
         setStockPerf(stock);
-        if (stock == null && showNotice) notices.push(language === 'en' ? `No historical single-instrument evaluation summary is available for ${code}.` : `暂无 ${code} 的单股历史分析评估汇总。`);
+        if (stock == null && showNotice) notices.push(bt(language, 'page.performanceNotice.noInstrumentSummary', { code }));
       } catch (error) {
         setStockPerf(null);
         hasDanger = true;
@@ -656,9 +605,9 @@ const BacktestPage: React.FC = () => {
   const handlePrepareSamples = async (options: { forceRefresh?: boolean } = {}) => {
     if (!normalizedCode) {
       setPrepareError({
-        title: copy.missingCodeTitle,
-        message: copy.missingPrepareSamples,
-        rawMessage: copy.missingPrepareSamples,
+        title: bt(language, 'page.errors.missingCodeTitle'),
+        message: bt(language, 'page.errors.missingPrepareSamples'),
+        rawMessage: bt(language, 'page.errors.missingPrepareSamples'),
         category: 'missing_params',
       });
       return;
@@ -690,9 +639,9 @@ const BacktestPage: React.FC = () => {
   const handleRebuildSamples = async () => {
     if (!normalizedCode) {
       setPrepareError({
-        title: copy.missingCodeTitle,
-        message: copy.missingRebuildSamples,
-        rawMessage: copy.missingRebuildSamples,
+        title: bt(language, 'page.errors.missingCodeTitle'),
+        message: bt(language, 'page.errors.missingRebuildSamples'),
+        rawMessage: bt(language, 'page.errors.missingRebuildSamples'),
         category: 'missing_params',
       });
       return;
@@ -714,9 +663,9 @@ const BacktestPage: React.FC = () => {
   const handleClearSamples = async () => {
     if (!normalizedCode) {
       setPrepareError({
-        title: copy.missingCodeTitle,
-        message: copy.missingClearSamples,
-        rawMessage: copy.missingClearSamples,
+        title: bt(language, 'page.errors.missingCodeTitle'),
+        message: bt(language, 'page.errors.missingClearSamples'),
+        rawMessage: bt(language, 'page.errors.missingClearSamples'),
         category: 'missing_params',
       });
       return;
@@ -749,9 +698,9 @@ const BacktestPage: React.FC = () => {
   const handleClearResults = async () => {
     if (!normalizedCode) {
       setRunError({
-        title: copy.missingCodeTitle,
-        message: copy.missingClearResults,
-        rawMessage: copy.missingClearResults,
+        title: bt(language, 'page.errors.missingCodeTitle'),
+        message: bt(language, 'page.errors.missingClearResults'),
+        rawMessage: bt(language, 'page.errors.missingClearResults'),
         category: 'missing_params',
       });
       return;
@@ -795,9 +744,9 @@ const BacktestPage: React.FC = () => {
   const handleParseRuleStrategy = async () => {
     if (!ruleStrategyText.trim()) {
       setRuleParseError({
-        title: copy.missingStrategyTitle,
-        message: copy.missingStrategyText,
-        rawMessage: copy.missingStrategyText,
+        title: bt(language, 'page.errors.missingStrategyTitle'),
+        message: bt(language, 'page.errors.missingStrategyText'),
+        rawMessage: bt(language, 'page.errors.missingStrategyText'),
         category: 'missing_params',
       });
       return;
@@ -875,63 +824,63 @@ const BacktestPage: React.FC = () => {
     const resolvedCode = normalizedCode || (parsedSymbol !== '--' ? parsedSymbol.toUpperCase() : '');
     if (!resolvedCode) {
       setRuleRunError({
-        title: copy.missingCodeTitle,
-        message: copy.missingRunCode,
-        rawMessage: copy.missingRunCode,
+        title: bt(language, 'page.errors.missingCodeTitle'),
+        message: bt(language, 'page.errors.missingRunCode'),
+        rawMessage: bt(language, 'page.errors.missingRunCode'),
         category: 'missing_params',
       });
       return;
     }
     if (!ruleParsedStrategy) {
       setRuleRunError({
-        title: copy.needParsedStrategyTitle,
-        message: copy.needParsedStrategy,
-        rawMessage: copy.needParsedStrategy,
+        title: bt(language, 'page.errors.needParsedStrategyTitle'),
+        message: bt(language, 'page.errors.needParsedStrategy'),
+        rawMessage: bt(language, 'page.errors.needParsedStrategy'),
         category: 'validation_error',
       });
       return;
     }
     if (isRuleParseStale) {
       setRuleRunError({
-        title: copy.staleParseTitle,
-        message: copy.staleParse,
-        rawMessage: copy.staleParse,
+        title: bt(language, 'page.errors.staleParseTitle'),
+        message: bt(language, 'page.errors.staleParse'),
+        rawMessage: bt(language, 'page.errors.staleParse'),
         category: 'validation_error',
       });
       return;
     }
     if (!ruleConfirmed) {
       setRuleRunError({
-        title: copy.needConfirmTitle,
-        message: copy.needConfirm,
-        rawMessage: copy.needConfirm,
+        title: bt(language, 'page.errors.needConfirmTitle'),
+        message: bt(language, 'page.errors.needConfirm'),
+        rawMessage: bt(language, 'page.errors.needConfirm'),
         category: 'validation_error',
       });
       return;
     }
     if (!ruleStartDate || !ruleEndDate) {
       setRuleRunError({
-        title: copy.missingRangeTitle,
-        message: copy.missingRange,
-        rawMessage: copy.missingRange,
+        title: bt(language, 'page.errors.missingRangeTitle'),
+        message: bt(language, 'page.errors.missingRange'),
+        rawMessage: bt(language, 'page.errors.missingRange'),
         category: 'validation_error',
       });
       return;
     }
     if (ruleStartDate > ruleEndDate) {
       setRuleRunError({
-        title: copy.invalidRangeTitle,
-        message: copy.invalidRange,
-        rawMessage: copy.invalidRange,
+        title: bt(language, 'page.errors.invalidRangeTitle'),
+        message: bt(language, 'page.errors.invalidRange'),
+        rawMessage: bt(language, 'page.errors.invalidRange'),
         category: 'validation_error',
       });
       return;
     }
     if (ruleBenchmarkMode === 'custom_code' && !ruleBenchmarkCode.trim()) {
       setRuleRunError({
-        title: copy.missingBenchmarkTitle,
-        message: copy.missingBenchmark,
-        rawMessage: copy.missingBenchmark,
+        title: bt(language, 'page.errors.missingBenchmarkTitle'),
+        message: bt(language, 'page.errors.missingBenchmark'),
+        rawMessage: bt(language, 'page.errors.missingBenchmark'),
         category: 'validation_error',
       });
       return;
@@ -1004,14 +953,16 @@ const BacktestPage: React.FC = () => {
     <div className="theme-page-transition backtest-v1-page workspace-page--backtest" data-testid="backtest-v1-page">
       <WorkspacePageHeader
         eyebrow="WolfyStock"
-        title={copy.headerTitle}
-        description={copy.headerDescription(getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language))}
+        title={bt(language, 'page.headerTitle')}
+        description={bt(language, 'page.headerDescription', {
+          benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
+        })}
         className="backtest-v1-header"
         contentClassName="backtest-v1-header__layout"
         descriptionClassName="backtest-v1-header__description"
         actions={(
           <div className="backtest-header-toggles">
-            <div className="backtest-mode-toggle" role="tablist" aria-label={copy.moduleTabsLabel}>
+            <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
               <button
                 type="button"
                 role="tab"
@@ -1019,7 +970,7 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
                 onClick={() => setActiveModule('rule')}
               >
-                {copy.ruleTab}
+                {bt(language, 'page.ruleTab')}
               </button>
               <button
                 type="button"
@@ -1028,10 +979,10 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
                 onClick={() => setActiveModule('historical')}
               >
-                {copy.historicalTab}
+                {bt(language, 'page.historicalTab')}
               </button>
             </div>
-            <div className="backtest-mode-toggle" role="tablist" aria-label={copy.controlModeLabel}>
+            <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
               <button
                 type="button"
                 role="tab"
@@ -1039,7 +990,7 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
                 onClick={() => setControlPanelMode('normal')}
               >
-                {copy.normalMode}
+                {bt(language, 'page.normalMode')}
               </button>
               <button
                 type="button"
@@ -1048,7 +999,7 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
                 onClick={() => setControlPanelMode('professional')}
               >
-                {copy.professionalMode}
+                {bt(language, 'page.professionalMode')}
               </button>
             </div>
           </div>
