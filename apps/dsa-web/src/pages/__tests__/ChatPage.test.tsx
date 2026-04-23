@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { historyApi } from '../../api/history';
+import type { Message, ProgressStep } from '../../stores/agentChatStore';
 import { ShellRailHarness } from '../../test-utils/ShellRailHarness';
 import ChatPage from '../ChatPage';
 
@@ -23,7 +24,27 @@ const mockClearCompletionBadge = vi.fn();
 const mockStartNewChat = vi.fn();
 let currentLanguage: 'zh' | 'en' = 'zh';
 
-const mockStoreState = {
+const mockStoreState: {
+  messages: Message[];
+  loading: boolean;
+  progressSteps: ProgressStep[];
+  sessionId: string;
+  sessions: Array<{
+    session_id: string;
+    title: string;
+    message_count: number;
+    created_at: string;
+    last_active: string;
+  }>;
+  sessionsLoading: boolean;
+  sessionLoadError: null;
+  chatError: null;
+  loadSessions: typeof mockLoadSessions;
+  loadInitialSession: typeof mockLoadInitialSession;
+  switchSession: typeof mockSwitchSession;
+  startStream: typeof mockStartStream;
+  clearCompletionBadge: typeof mockClearCompletionBadge;
+} = {
   messages: [],
   loading: false,
   progressSteps: [],
@@ -78,14 +99,17 @@ vi.mock('../../stores/agentChatStore', () => {
   return { useAgentChatStore };
 });
 
-vi.mock('../../contexts/UiLanguageContext', () => ({
-  useI18n: () => ({
-    language: currentLanguage,
-    t: (key: string) => key,
-    setLanguage: vi.fn(),
-    toggleLanguage: vi.fn(),
-  }),
-}));
+vi.mock('../../contexts/UiLanguageContext', async () => {
+  const actual = await vi.importActual<typeof import('../../i18n/core')>('../../i18n/core');
+  return {
+    useI18n: () => ({
+      language: currentLanguage,
+      t: (key: string, vars?: Record<string, string | number | undefined>) => actual.translate(currentLanguage, key, vars),
+      setLanguage: vi.fn(),
+      toggleLanguage: vi.fn(),
+    }),
+  };
+});
 
 beforeAll(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -121,6 +145,22 @@ beforeAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   currentLanguage = 'zh';
+  mockStoreState.messages = [];
+  mockStoreState.loading = false;
+  mockStoreState.progressSteps = [];
+  mockStoreState.sessionId = 'session-1';
+  mockStoreState.sessions = [
+    {
+      session_id: 'session-1',
+      title: '请简要分析 600519',
+      message_count: 2,
+      created_at: '2026-03-15T09:00:00Z',
+      last_active: '2026-03-15T09:05:00Z',
+    },
+  ];
+  mockStoreState.sessionsLoading = false;
+  mockStoreState.sessionLoadError = null;
+  mockStoreState.chatError = null;
 });
 
 describe('ChatPage', () => {
@@ -465,5 +505,52 @@ describe('ChatPage', () => {
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByText('Start with a concrete question')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Example: Is 600519 / Kweichow Moutai a buy right now? (Enter to send, Shift+Enter for newline)')).toBeInTheDocument();
+  });
+
+  it('localizes session actions in english mode', async () => {
+    currentLanguage = 'en';
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Conversation history')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Switch to conversation 请简要分析 600519/ })).toBeInTheDocument();
+    expect(screen.getByTitle('Delete conversation')).toBeInTheDocument();
+    expect(screen.getByText('2 messages')).toBeInTheDocument();
+  });
+
+  it('localizes assistant thinking labels in english mode', async () => {
+    currentLanguage = 'en';
+    mockStoreState.messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Here is the analysis.',
+        skillName: '趋势分析',
+        thinkingSteps: [
+          { type: 'thinking', step: 1, message: 'Reviewing the setup' },
+          { type: 'tool_done', tool: 'quote_fetch', display_name: 'Quote fetch', duration: 1.2, success: true },
+        ],
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('button', { name: /Thinking process/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Thinking process/i }));
+
+    expect(screen.getByText('Reviewing the setup')).toBeInTheDocument();
+    expect(screen.getByText('Quote fetch (1.2s)')).toBeInTheDocument();
   });
 });
