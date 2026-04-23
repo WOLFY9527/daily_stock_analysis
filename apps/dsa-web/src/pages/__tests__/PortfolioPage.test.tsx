@@ -913,11 +913,11 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(screen.getByPlaceholderText('IBKR session token (used only for this manual sync)'), {
       target: { value: 'session-token-123' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Run read-only IBKR sync' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run IBKR read-only sync' }));
 
     expect(await screen.findByText('Read-only')).toBeInTheDocument();
-    expect(screen.getByText('This IBKR import expects a Flex Query XML export and links imported records to the current user-owned broker connection.')).toBeInTheDocument();
-    expect(screen.getByText(/Account ref:/)).toBeInTheDocument();
+    expect(screen.getByText('Use an IBKR Flex Query XML export. Imported records stay attached to the current account-owned broker connection.')).toBeInTheDocument();
+    expect(screen.getAllByText((_, element) => (element?.textContent || '').includes('Account ref:')).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^Ref:/)).not.toBeInTheDocument();
   });
 

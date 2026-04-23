@@ -493,9 +493,9 @@ const PORTFOLIO_COPY: Record<PortfolioLanguage, {
     topWeight: 'Top 1 weight',
     dataSyncTitle: 'Data sync',
     brokerImport: 'Broker import',
-    currentImportAccount: 'Current import account',
-    brokerFallbackEmpty: 'The broker list API returned no items, so the page fell back to the built-in broker list (Huatai, Citic, CMB, IBKR).',
-    brokerFallbackUnavailable: 'The broker list API is unavailable, so the page fell back to the built-in broker list (Huatai, Citic, CMB, IBKR).',
+    currentImportAccount: 'Import target',
+    brokerFallbackEmpty: 'The broker list API returned no items, so the page is using the built-in broker list (Huatai, Citic, CMB, IBKR).',
+    brokerFallbackUnavailable: 'The broker list API is unavailable, so the page is using the built-in broker list (Huatai, Citic, CMB, IBKR).',
     selectBrokerExport: 'Choose a broker export file...',
     selectIbkrExport: 'Choose an IBKR Flex XML export...',
     dryRun: 'Dry run',
@@ -504,22 +504,22 @@ const PORTFOLIO_COPY: Record<PortfolioLanguage, {
     committing: 'Committing...',
     commitImport: 'Commit import',
     brokerImportHint: 'The existing A-share broker import flow remains in place for Huatai, Citic, and CMB CSV exports.',
-    ibkrImportHint: 'This IBKR import expects a Flex Query XML export and links imported records to the current user-owned broker connection.',
+    ibkrImportHint: 'Use an IBKR Flex Query XML export. Imported records stay attached to the current account-owned broker connection.',
     ibkrReadOnlyTitle: 'IBKR read-only sync',
-    ibkrReadOnlyBody: 'This sync imports account state and positions only. It never enables trading, and the session token is used only for this sync.',
+    ibkrReadOnlyBody: 'This sync imports account state and positions only. Trading stays disabled, and the session token is used only for this sync.',
     readOnlyBadge: 'Read-only',
     ibkrApiBasePlaceholder: 'IBKR API base URL (default: https://localhost:5000/v1/api)',
     ibkrAccountRefPlaceholder: 'IBKR account ref (optional, for example U1234567)',
     ibkrSessionTokenPlaceholder: 'IBKR session token (used only for this manual sync)',
     verifyIbkrSsl: 'Verify the IBKR HTTPS certificate',
     syncing: 'Syncing...',
-    syncIbkr: 'Run read-only IBKR sync',
+    syncIbkr: 'Run IBKR read-only sync',
     syncResult: 'Sync result',
     positionsCountLabel: 'Positions',
     cashCurrenciesLabel: 'Cash currencies',
     accountRef: 'Account ref',
     syncedAt: 'Synced at',
-    syncOverlay: 'The current-date snapshot now reflects the API sync overlay',
+    syncOverlay: 'The current-date snapshot is showing the API sync overlay',
     syncSaved: 'Sync result saved',
     parseResult: 'Parse result',
     valid: 'Valid',
@@ -533,8 +533,8 @@ const PORTFOLIO_COPY: Record<PortfolioLanguage, {
     duplicates: 'Duplicates',
     failed: 'Failed',
     duplicateFingerprintHint: 'The same broker connection already imported this file fingerprint, so no duplicate records were written.',
-    manualAdjustments: 'Advanced: manual adjustments',
-    manualTrade: 'Manual entry: trades',
+    manualAdjustments: 'Advanced: manual adjustments and corrections',
+    manualTrade: 'Manual entry: trade',
     symbolPlaceholder: 'Ticker or symbol (for example 600519)',
     buy: 'Buy',
     sell: 'Sell',
@@ -696,6 +696,7 @@ function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null
 
 function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: PortfolioLanguage): FxRefreshFeedback {
   const isEnglish = language === 'en';
+  const pairLabel = (count: number) => `${count} FX ${count === 1 ? 'pair' : 'pairs'}`;
   if (data.refreshEnabled === false) {
     return {
       tone: 'neutral',
@@ -713,12 +714,12 @@ function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: Port
   if (data.updatedCount > 0 && data.staleCount === 0 && data.errorCount === 0) {
     return {
       tone: 'success',
-      text: isEnglish ? `FX refresh completed. Updated ${data.updatedCount} pair(s).` : `汇率已刷新，共更新 ${data.updatedCount} 对。`,
+      text: isEnglish ? `FX refresh completed. Updated ${pairLabel(data.updatedCount)}.` : `汇率已刷新，共更新 ${data.updatedCount} 对。`,
     };
   }
 
   const summary = isEnglish
-    ? `Updated ${data.updatedCount}, still stale ${data.staleCount}, failed ${data.errorCount}.`
+    ? `Updated ${pairLabel(data.updatedCount)}, still stale ${pairLabel(data.staleCount)}, failed ${pairLabel(data.errorCount)}.`
     : `更新 ${data.updatedCount} 对，仍过期 ${data.staleCount} 对，失败 ${data.errorCount} 对。`;
   if (data.staleCount > 0) {
     return {
