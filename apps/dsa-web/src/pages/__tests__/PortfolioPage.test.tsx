@@ -956,7 +956,11 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(await screen.findByText(translate('en', 'portfolio.readOnlyBadge'))).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'portfolio.ibkrImportHint'))).toBeInTheDocument();
-    expect(screen.getAllByText((_, element) => (element?.textContent || '').includes(`${translate('en', 'portfolio.accountRef')}:`)).length).toBeGreaterThan(0);
+    expect(
+      await screen.findAllByText((_, element) => (
+        element?.textContent || ''
+      ).includes(`${translate('en', 'portfolio.accountRef')}:`)),
+    ).not.toHaveLength(0);
     expect(screen.queryByText(/^Ref:/)).not.toBeInTheDocument();
   });
 
