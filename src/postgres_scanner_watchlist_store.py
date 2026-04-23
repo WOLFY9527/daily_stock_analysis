@@ -29,7 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session
 
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normalize_scope
-from src.postgres_phase_a import PhaseABase
+from src.postgres_identity_store import PhaseABase
 from src.postgres_store_utils import (
     apply_baseline_schema,
     baseline_sql_doc_path,

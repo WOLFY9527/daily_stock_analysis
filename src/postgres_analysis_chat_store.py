@@ -26,7 +26,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
-from src.postgres_phase_a import PhaseABase
+from src.postgres_identity_store import PhaseABase
 from src.postgres_store_utils import (
     apply_baseline_schema,
     baseline_sql_doc_path,

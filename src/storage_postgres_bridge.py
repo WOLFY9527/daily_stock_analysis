@@ -7,13 +7,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from src.postgres_phase_a import PostgresPhaseAStore
-from src.postgres_phase_b import PostgresPhaseBStore
-from src.postgres_phase_c import PostgresPhaseCStore
-from src.postgres_phase_d import PostgresPhaseDStore
-from src.postgres_phase_e import PostgresPhaseEStore
-from src.postgres_phase_f import PostgresPhaseFStore
-from src.postgres_phase_g import PostgresPhaseGStore
+from src.postgres_identity_store import PostgresPhaseAStore
+from src.postgres_analysis_chat_store import PostgresPhaseBStore
+from src.postgres_market_metadata_store import PostgresPhaseCStore
+from src.postgres_scanner_watchlist_store import PostgresPhaseDStore
+from src.postgres_backtest_store import PostgresPhaseEStore
+from src.postgres_portfolio_coexistence_store import PostgresPhaseFStore
+from src.postgres_control_plane_store import PostgresPhaseGStore
 
 logger = logging.getLogger(__name__)
 
@@ -130,4 +130,3 @@ def dispose_postgres_phase_stores(manager: Any) -> None:
                 logger.warning("清理 PostgreSQL store %s 失败: %s", spec.store_attr, exc)
         setattr(manager, spec.store_attr, None)
         setattr(manager, spec.enabled_attr, False)
-

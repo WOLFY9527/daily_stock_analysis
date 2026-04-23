@@ -347,7 +347,7 @@ Run:
 
 ```bash
 python3 - <<'PY'
-from src.postgres_phase_a import PostgresPhaseAStore
+from src.postgres_identity_store import PostgresPhaseAStore
 import json
 
 store = PostgresPhaseAStore("sqlite:///./tmp-phase-a.sqlite", auto_apply_schema=False)

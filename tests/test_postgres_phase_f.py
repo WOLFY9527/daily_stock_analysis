@@ -152,6 +152,35 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             [active_account["id"], inactive_account["id"], other_account["id"]],
         )
 
+    def test_phase_f_account_metadata_surface_batches_authority_materialization(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-batch-accounts", username="phase-f-batch-accounts")
+        service = PortfolioService(owner_id="phase-f-batch-accounts")
+
+        first = service.create_account(name="First", broker="IBKR", market="us", base_currency="USD")
+        second = service.create_account(name="Second", broker="Demo", market="cn", base_currency="CNY")
+
+        with patch.object(
+            db._phase_f_store,
+            "get_account_shadow_bundles",
+            wraps=db._phase_f_store.get_account_shadow_bundles,
+        ) as batch_shadow_bundles, patch.object(
+            db,
+            "get_phase_f_portfolio_shadow_authority_state",
+            side_effect=AssertionError("single-account authority path should not run inside account metadata listing"),
+        ):
+            rows = db.list_phase_f_portfolio_account_metadata_rows(
+                include_inactive=True,
+                owner_id="phase-f-batch-accounts",
+            )
+
+        self.assertEqual([row.id for row in rows], [first["id"], second["id"]])
+        self.assertEqual(batch_shadow_bundles.call_count, 1)
+        self.assertEqual(
+            batch_shadow_bundles.call_args.kwargs["account_ids"],
+            [first["id"], second["id"]],
+        )
+
     def test_phase_f_portfolio_shadow_bundle_surface_returns_serialized_bundle(self) -> None:
         db = self._db()
         db.create_or_update_app_user(user_id="phase-f-shadow-surface", username="phase-f-shadow-surface")
@@ -215,6 +244,52 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(rows[0].import_mode, "api")
         self.assertEqual(rows[0].status, "active")
         self.assertEqual(rows[0].sync_metadata_json, '{"source": "api"}')
+
+    def test_phase_f_broker_connection_metadata_surface_batches_authority_materialization(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-batch-bridge", username="phase-f-batch-bridge")
+        service = PortfolioService(owner_id="phase-f-batch-bridge")
+
+        first = service.create_account(name="First", broker="IBKR", market="us", base_currency="USD")
+        second = service.create_account(name="Second", broker="Demo", market="cn", base_currency="CNY")
+        service.create_broker_connection(
+            portfolio_account_id=first["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="First IBKR",
+            broker_account_ref="BATCH-1",
+            import_mode="api",
+            sync_metadata={"source": "api"},
+        )
+        service.create_broker_connection(
+            portfolio_account_id=second["id"],
+            broker_type="demo",
+            broker_name="Demo",
+            connection_name="Second Demo",
+            broker_account_ref="BATCH-2",
+            import_mode="file",
+            sync_metadata={"source": "csv"},
+        )
+
+        with patch.object(
+            db._phase_f_store,
+            "get_account_shadow_bundles",
+            wraps=db._phase_f_store.get_account_shadow_bundles,
+        ) as batch_shadow_bundles, patch.object(
+            db,
+            "get_phase_f_portfolio_shadow_authority_state",
+            side_effect=AssertionError("single-account authority path should not run inside broker metadata listing"),
+        ):
+            rows = db.list_phase_f_portfolio_broker_connection_metadata_rows(
+                owner_id="phase-f-batch-bridge",
+            )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(batch_shadow_bundles.call_count, 1)
+        self.assertEqual(
+            batch_shadow_bundles.call_args.kwargs["account_ids"],
+            [first["id"], second["id"]],
+        )
 
     def test_phase_f_broker_connection_metadata_surface_returns_none_on_authority_drift(self) -> None:
         db = self._db()
@@ -308,6 +383,60 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(bundle["state_row"].payload_json, '{"slice": "sync-surface"}')
         self.assertEqual([item.symbol for item in bundle["positions"]], ["AAPL"])
         self.assertEqual([item.currency for item in bundle["cash_balances"]], ["USD"])
+
+    def test_phase_f_latest_sync_bundle_uses_batched_authority_materialization(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-batch-sync", username="phase-f-batch-sync")
+        service = PortfolioService(owner_id="phase-f-batch-sync")
+
+        account = service.create_account(name="Sync", broker="IBKR", market="us", base_currency="USD")
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Sync IBKR",
+            broker_account_ref="BATCH-SYNC-1",
+            import_mode="api",
+        )
+        service.replace_broker_sync_state(
+            broker_connection_id=connection["id"],
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_account_ref="BATCH-SYNC-1",
+            sync_source="api",
+            sync_status="success",
+            snapshot_date=date(2026, 4, 20),
+            synced_at=datetime(2026, 4, 20, 10, 30, 0),
+            base_currency="USD",
+            total_cash=1000.0,
+            total_market_value=1200.0,
+            total_equity=2200.0,
+            realized_pnl=10.0,
+            unrealized_pnl=15.0,
+            fx_stale=False,
+            payload={"slice": "batched-sync"},
+            positions=[],
+            cash_balances=[{"currency": "USD", "amount": 1000.0, "amount_base": 1000.0}],
+        )
+
+        with patch.object(
+            db._phase_f_store,
+            "get_account_shadow_bundles",
+            wraps=db._phase_f_store.get_account_shadow_bundles,
+        ) as batch_shadow_bundles, patch.object(
+            db,
+            "get_phase_f_portfolio_shadow_authority_state",
+            side_effect=AssertionError("single-account authority path should not run inside latest sync bundle lookup"),
+        ):
+            bundle = db.get_phase_f_latest_broker_sync_state_bundle(
+                portfolio_account_id=account["id"],
+                owner_id="phase-f-batch-sync",
+            )
+
+        self.assertIsNotNone(bundle)
+        self.assertEqual(bundle["state_row"].portfolio_account_id, account["id"])
+        self.assertEqual(batch_shadow_bundles.call_count, 1)
+        self.assertEqual(batch_shadow_bundles.call_args.kwargs["account_ids"], [account["id"]])
 
     def test_phase_f_latest_broker_sync_state_bundle_surface_returns_none_on_authority_drift(self) -> None:
         db = self._db()

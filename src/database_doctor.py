@@ -31,6 +31,8 @@ _DEFAULT_MARKDOWN_OUTPUT = _ROOT_DIR / "tmp" / "database-doctor-report.md"
 _DEFAULT_JSON_OUTPUT = _ROOT_DIR / "tmp" / "database-doctor-report.json"
 _DEFAULT_REAL_PG_MARKDOWN_OUTPUT = _ROOT_DIR / "tmp" / "database-real-pg-bundle.md"
 _DEFAULT_REAL_PG_JSON_OUTPUT = _ROOT_DIR / "tmp" / "database-real-pg-bundle.json"
+_REAL_PG_TEMP_SQLITE_PLACEHOLDER = "<temporary>/database-real-pg-bundle.sqlite"
+_REAL_PG_PROBE_SESSION_PLACEHOLDER = "<latest_probe_session_id>"
 
 _URL_TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s]+")
 _SECRET_ASSIGNMENT_PATTERN = re.compile(
@@ -930,7 +932,7 @@ def _build_real_pg_bundle_ai_handoff(
     *,
     report: dict[str, Any],
     disposable_dsn_summary: str,
-    isolated_sqlite_path: Path,
+    isolated_sqlite_path: str,
 ) -> dict[str, Any]:
     checks = report["real_pg_bundle"]["verification_checks"]
     lines = [
@@ -969,6 +971,31 @@ def _build_real_pg_bundle_ai_handoff(
         "files_to_read_first": list(report["ai_handoff"]["files_to_read_first"]),
         "paste_block": "\n".join(lines),
     }
+
+
+def _normalize_real_pg_bundle_report(
+    *,
+    report: dict[str, Any],
+    isolated_sqlite_path: Path,
+) -> dict[str, Any]:
+    actual_sqlite_path = str(isolated_sqlite_path)
+    report["sqlite_primary"]["configured_path"] = _REAL_PG_TEMP_SQLITE_PLACEHOLDER
+    report["sqlite_primary"]["resolved_path"] = _REAL_PG_TEMP_SQLITE_PLACEHOLDER
+    report["topology_summary"]["config_layer"]["sqlite_database_path"] = _REAL_PG_TEMP_SQLITE_PLACEHOLDER
+    report["real_pg_bundle"]["isolated_sqlite_path"] = _REAL_PG_TEMP_SQLITE_PLACEHOLDER
+    report["real_pg_bundle"]["verification_checks"]["phase_g_execution_log_shadow"][
+        "probe_session_id"
+    ] = _REAL_PG_PROBE_SESSION_PLACEHOLDER
+    report["ai_handoff"]["paste_block"] = str(report["ai_handoff"]["paste_block"]).replace(
+        actual_sqlite_path,
+        _REAL_PG_TEMP_SQLITE_PLACEHOLDER,
+    )
+    report["real_pg_bundle"]["ai_handoff_sample"] = _build_real_pg_bundle_ai_handoff(
+        report=report,
+        disposable_dsn_summary=report["real_pg_bundle"]["disposable_dsn_summary"],
+        isolated_sqlite_path=_REAL_PG_TEMP_SQLITE_PLACEHOLDER,
+    )
+    return report
 
 
 def build_database_doctor_report() -> dict[str, Any]:
@@ -1105,9 +1132,14 @@ def build_database_real_pg_bundle_report(*, real_pg_dsn: str | None = None) -> d
         report["real_pg_bundle"]["ai_handoff_sample"] = _build_real_pg_bundle_ai_handoff(
             report=report,
             disposable_dsn_summary=disposable_dsn_summary,
-            isolated_sqlite_path=isolated_sqlite_path,
+            isolated_sqlite_path=str(isolated_sqlite_path),
         )
-        return _sanitize_value(report)
+        return _sanitize_value(
+            _normalize_real_pg_bundle_report(
+                report=report,
+                isolated_sqlite_path=isolated_sqlite_path,
+            )
+        )
 
 
 def _store_table_rows(stores: dict[str, Any]) -> list[str]:

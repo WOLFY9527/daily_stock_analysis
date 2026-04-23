@@ -66,13 +66,13 @@ from src.multi_user import (
     normalize_scope,
 )
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
-from src.postgres_phase_a import PostgresPhaseAStore
-from src.postgres_phase_b import PostgresPhaseBStore
-from src.postgres_phase_c import PostgresPhaseCStore
-from src.postgres_phase_d import PostgresPhaseDStore
-from src.postgres_phase_e import PostgresPhaseEStore
-from src.postgres_phase_f import PostgresPhaseFStore, phase_f_ledger_shadow_id
-from src.postgres_phase_g import PostgresPhaseGStore
+from src.postgres_identity_store import PostgresPhaseAStore
+from src.postgres_analysis_chat_store import PostgresPhaseBStore
+from src.postgres_market_metadata_store import PostgresPhaseCStore
+from src.postgres_scanner_watchlist_store import PostgresPhaseDStore
+from src.postgres_backtest_store import PostgresPhaseEStore
+from src.postgres_portfolio_coexistence_store import PostgresPhaseFStore, phase_f_ledger_shadow_id
+from src.postgres_control_plane_store import PostgresPhaseGStore
 import src.storage_phase_g_observability as storage_phase_g_observability
 import src.storage_postgres_bridge as storage_postgres_bridge
 import src.storage_topology_report as storage_topology_report
@@ -3065,51 +3065,17 @@ class DatabaseManager:
             amount_base=float(row.get("amount_base", 0.0) or 0.0),
         )
 
-    def get_phase_f_portfolio_shadow_authority_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
-        if not self._phase_f_enabled or self._phase_f_store is None:
-            return None
-
-        resolved_account_id = int(account_id)
-        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=resolved_account_id)
-        if shadow_bundle is None:
-            return None
-
-        with self.get_session() as session:
-            legacy_account_row = session.execute(
-                select(PortfolioAccount).where(PortfolioAccount.id == resolved_account_id).limit(1)
-            ).scalar_one_or_none()
-            legacy_broker_connection_rows = session.execute(
-                select(PortfolioBrokerConnection)
-                .where(PortfolioBrokerConnection.portfolio_account_id == resolved_account_id)
-                .order_by(PortfolioBrokerConnection.id.asc())
-            ).scalars().all()
-            legacy_sync_state_row = session.execute(
-                select(PortfolioBrokerSyncState)
-                .where(PortfolioBrokerSyncState.portfolio_account_id == resolved_account_id)
-                .order_by(PortfolioBrokerSyncState.synced_at.desc(), PortfolioBrokerSyncState.id.desc())
-                .limit(1)
-            ).scalar_one_or_none()
-
-            legacy_sync_position_rows: List[Any] = []
-            legacy_sync_cash_balance_rows: List[Any] = []
-            if legacy_sync_state_row is not None:
-                legacy_sync_position_rows = session.execute(
-                    select(PortfolioBrokerSyncPosition)
-                    .where(
-                        PortfolioBrokerSyncPosition.broker_connection_id
-                        == int(legacy_sync_state_row.broker_connection_id)
-                    )
-                    .order_by(PortfolioBrokerSyncPosition.symbol.asc(), PortfolioBrokerSyncPosition.id.asc())
-                ).scalars().all()
-                legacy_sync_cash_balance_rows = session.execute(
-                    select(PortfolioBrokerSyncCashBalance)
-                    .where(
-                        PortfolioBrokerSyncCashBalance.broker_connection_id
-                        == int(legacy_sync_state_row.broker_connection_id)
-                    )
-                    .order_by(PortfolioBrokerSyncCashBalance.currency.asc(), PortfolioBrokerSyncCashBalance.id.asc())
-                ).scalars().all()
-
+    def _build_phase_f_portfolio_shadow_authority_state(
+        self,
+        *,
+        resolved_account_id: int,
+        shadow_bundle: Dict[str, Any],
+        legacy_account_row: Any,
+        legacy_broker_connection_rows: List[Any],
+        legacy_sync_state_row: Any,
+        legacy_sync_position_rows: List[Any],
+        legacy_sync_cash_balance_rows: List[Any],
+    ) -> Dict[str, Any]:
         shadow_account_payload = self._phase_f_normalize_compare_time_fields(
             dict(shadow_bundle.get("account") or {}),
             fields=("created_at", "updated_at"),
@@ -3238,6 +3204,139 @@ class DatabaseManager:
             "drift_reasons": drift_reasons,
         }
 
+    def _collect_phase_f_portfolio_shadow_authority_states(
+        self,
+        *,
+        account_ids: Iterable[int],
+        shadow_bundles_by_id: Optional[Dict[int, Dict[str, Any]]] = None,
+    ) -> Dict[int, Optional[Dict[str, Any]]]:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return {}
+
+        resolved_account_ids = sorted({int(account_id) for account_id in account_ids if account_id is not None})
+        if not resolved_account_ids:
+            return {}
+
+        if shadow_bundles_by_id is None:
+            shadow_bundles_by_id = self._phase_f_store.get_account_shadow_bundles(account_ids=resolved_account_ids)
+        authority_by_account_id: Dict[int, Optional[Dict[str, Any]]] = {
+            account_id: None for account_id in resolved_account_ids
+        }
+        available_account_ids = [
+            account_id for account_id in resolved_account_ids if shadow_bundles_by_id.get(account_id) is not None
+        ]
+        if not available_account_ids:
+            return authority_by_account_id
+
+        with self.get_session() as session:
+            legacy_account_rows = session.execute(
+                select(PortfolioAccount)
+                .where(PortfolioAccount.id.in_(available_account_ids))
+                .order_by(PortfolioAccount.id.asc())
+            ).scalars().all()
+            legacy_account_by_id = {int(row.id): row for row in legacy_account_rows}
+
+            legacy_broker_connection_rows = session.execute(
+                select(PortfolioBrokerConnection)
+                .where(PortfolioBrokerConnection.portfolio_account_id.in_(available_account_ids))
+                .order_by(
+                    PortfolioBrokerConnection.portfolio_account_id.asc(),
+                    PortfolioBrokerConnection.id.asc(),
+                )
+            ).scalars().all()
+            legacy_broker_connections_by_account: Dict[int, List[Any]] = {
+                account_id: [] for account_id in available_account_ids
+            }
+            for row in legacy_broker_connection_rows:
+                legacy_broker_connections_by_account.setdefault(int(row.portfolio_account_id), []).append(row)
+
+            legacy_sync_state_candidates = session.execute(
+                select(PortfolioBrokerSyncState)
+                .where(PortfolioBrokerSyncState.portfolio_account_id.in_(available_account_ids))
+                .order_by(
+                    PortfolioBrokerSyncState.portfolio_account_id.asc(),
+                    PortfolioBrokerSyncState.synced_at.desc(),
+                    PortfolioBrokerSyncState.id.desc(),
+                )
+            ).scalars().all()
+            legacy_sync_state_by_account: Dict[int, Any] = {}
+            for row in legacy_sync_state_candidates:
+                account_id = int(row.portfolio_account_id)
+                if account_id not in legacy_sync_state_by_account:
+                    legacy_sync_state_by_account[account_id] = row
+
+            broker_connection_ids = sorted(
+                {
+                    int(row.broker_connection_id)
+                    for row in legacy_sync_state_by_account.values()
+                    if getattr(row, "broker_connection_id", None) is not None
+                }
+            )
+            legacy_sync_positions_by_broker_connection: Dict[int, List[Any]] = {
+                connection_id: [] for connection_id in broker_connection_ids
+            }
+            legacy_sync_cash_balances_by_broker_connection: Dict[int, List[Any]] = {
+                connection_id: [] for connection_id in broker_connection_ids
+            }
+            if broker_connection_ids:
+                legacy_sync_position_rows = session.execute(
+                    select(PortfolioBrokerSyncPosition)
+                    .where(PortfolioBrokerSyncPosition.broker_connection_id.in_(broker_connection_ids))
+                    .order_by(
+                        PortfolioBrokerSyncPosition.broker_connection_id.asc(),
+                        PortfolioBrokerSyncPosition.symbol.asc(),
+                        PortfolioBrokerSyncPosition.id.asc(),
+                    )
+                ).scalars().all()
+                for row in legacy_sync_position_rows:
+                    legacy_sync_positions_by_broker_connection.setdefault(
+                        int(row.broker_connection_id),
+                    ).append(row)
+
+                legacy_sync_cash_balance_rows = session.execute(
+                    select(PortfolioBrokerSyncCashBalance)
+                    .where(PortfolioBrokerSyncCashBalance.broker_connection_id.in_(broker_connection_ids))
+                    .order_by(
+                        PortfolioBrokerSyncCashBalance.broker_connection_id.asc(),
+                        PortfolioBrokerSyncCashBalance.currency.asc(),
+                        PortfolioBrokerSyncCashBalance.id.asc(),
+                    )
+                ).scalars().all()
+                for row in legacy_sync_cash_balance_rows:
+                    legacy_sync_cash_balances_by_broker_connection.setdefault(
+                        int(row.broker_connection_id),
+                    ).append(row)
+
+        for account_id in available_account_ids:
+            legacy_sync_state_row = legacy_sync_state_by_account.get(account_id)
+            broker_connection_id = (
+                int(legacy_sync_state_row.broker_connection_id)
+                if legacy_sync_state_row is not None and getattr(legacy_sync_state_row, "broker_connection_id", None) is not None
+                else None
+            )
+            authority_by_account_id[account_id] = self._build_phase_f_portfolio_shadow_authority_state(
+                resolved_account_id=account_id,
+                shadow_bundle=dict(shadow_bundles_by_id.get(account_id) or {}),
+                legacy_account_row=legacy_account_by_id.get(account_id),
+                legacy_broker_connection_rows=list(legacy_broker_connections_by_account.get(account_id, [])),
+                legacy_sync_state_row=legacy_sync_state_row,
+                legacy_sync_position_rows=(
+                    list(legacy_sync_positions_by_broker_connection.get(broker_connection_id, []))
+                    if broker_connection_id is not None
+                    else []
+                ),
+                legacy_sync_cash_balance_rows=(
+                    list(legacy_sync_cash_balances_by_broker_connection.get(broker_connection_id, []))
+                    if broker_connection_id is not None
+                    else []
+                ),
+            )
+
+        return authority_by_account_id
+
+    def get_phase_f_portfolio_shadow_authority_state(self, *, account_id: int) -> Optional[Dict[str, Any]]:
+        return self._collect_phase_f_portfolio_shadow_authority_states(account_ids=[account_id]).get(int(account_id))
+
     def list_phase_f_portfolio_account_metadata_rows(
         self,
         *,
@@ -3253,9 +3352,12 @@ class DatabaseManager:
             owner_user_id=resolved_owner_id,
             include_inactive=include_inactive,
         )
+        authority_by_account_id = self._collect_phase_f_portfolio_shadow_authority_states(
+            account_ids=[int(row.id) for row in rows]
+        )
         for row in rows:
             current_account_id = int(row.id)
-            authority = self.get_phase_f_portfolio_shadow_authority_state(account_id=current_account_id)
+            authority = authority_by_account_id.get(current_account_id)
             if authority is None:
                 return None
             if not authority["effective_readiness"].get("account_metadata"):
@@ -3299,9 +3401,12 @@ class DatabaseManager:
         )
         account_name_by_id = {int(row.id): str(getattr(row, "name", "") or "") for row in account_rows}
         account_owner_by_id = {int(row.id): str(getattr(row, "owner_user_id", "") or "") for row in account_rows}
+        authority_by_account_id = self._collect_phase_f_portfolio_shadow_authority_states(
+            account_ids=account_ids
+        )
 
         for current_account_id in account_ids:
-            authority = self.get_phase_f_portfolio_shadow_authority_state(account_id=current_account_id)
+            authority = authority_by_account_id.get(current_account_id)
             if authority is None:
                 return None
             if not authority["effective_readiness"].get("account_metadata"):
@@ -3330,7 +3435,13 @@ class DatabaseManager:
             return None
 
         resolved_owner_id = None if include_all_owners or owner_id is None else self.require_user_id(owner_id)
-        authority = self.get_phase_f_portfolio_shadow_authority_state(account_id=int(portfolio_account_id))
+        shadow_bundles_by_id = self._phase_f_store.get_account_shadow_bundles(
+            account_ids=[int(portfolio_account_id)]
+        )
+        authority = self._collect_phase_f_portfolio_shadow_authority_states(
+            account_ids=[int(portfolio_account_id)],
+            shadow_bundles_by_id=shadow_bundles_by_id,
+        ).get(int(portfolio_account_id))
         if authority is None:
             return None
         if not authority["effective_readiness"].get("account_metadata"):
@@ -3338,7 +3449,7 @@ class DatabaseManager:
         if not authority["effective_readiness"].get("latest_sync_overlay"):
             return None
 
-        shadow_bundle = self._phase_f_store.get_account_shadow_bundle(account_id=int(portfolio_account_id))
+        shadow_bundle = shadow_bundles_by_id.get(int(portfolio_account_id))
         if shadow_bundle is None:
             return None
         shadow_account = dict(shadow_bundle.get("account") or {})

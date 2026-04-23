@@ -288,6 +288,54 @@ class DatabaseDoctorReportTestCase(unittest.TestCase):
         self.assertIn("Real-PG Bundle Verification", markdown)
         self.assertIn("Real-PG Bundle AI Handoff", markdown)
 
+    def test_real_pg_bundle_report_normalizes_transient_fields_for_deterministic_comparison(self) -> None:
+        from src.database_doctor import build_database_real_pg_bundle_report
+
+        self._configure_environment(postgres_url=None)
+
+        report = build_database_real_pg_bundle_report(
+            real_pg_dsn=f"sqlite:///{self.phase_db_path}",
+        )
+
+        normalized_sqlite_path = "<temporary>/database-real-pg-bundle.sqlite"
+        self.assertEqual(report["real_pg_bundle"]["isolated_sqlite_path"], normalized_sqlite_path)
+        self.assertEqual(report["sqlite_primary"]["configured_path"], normalized_sqlite_path)
+        self.assertEqual(report["sqlite_primary"]["resolved_path"], normalized_sqlite_path)
+        self.assertEqual(
+            report["topology_summary"]["config_layer"]["sqlite_database_path"],
+            normalized_sqlite_path,
+        )
+        self.assertEqual(
+            report["real_pg_bundle"]["verification_checks"]["phase_g_execution_log_shadow"]["probe_session_id"],
+            "<latest_probe_session_id>",
+        )
+        self.assertIn(
+            f"- isolated_sqlite_path={normalized_sqlite_path}",
+            report["real_pg_bundle"]["ai_handoff_sample"]["paste_block"],
+        )
+        self.assertIn(
+            f"- sqlite_primary: path={normalized_sqlite_path} exists=yes reachable=yes",
+            report["ai_handoff"]["paste_block"],
+        )
+
+    def test_real_pg_bundle_smoke_matches_primary_report_after_removing_generated_at(self) -> None:
+        from src.database_doctor import build_database_real_pg_bundle_report
+        from src.database_doctor_smoke import build_database_real_pg_bundle_smoke_report
+
+        self._configure_environment(postgres_url=None)
+
+        report = build_database_real_pg_bundle_report(
+            real_pg_dsn=f"sqlite:///{self.phase_db_path}",
+        )
+        smoke_report = build_database_real_pg_bundle_smoke_report(
+            real_pg_dsn=f"sqlite:///{self.phase_db_path}",
+        )
+
+        report.pop("generated_at", None)
+        smoke_report.pop("generated_at", None)
+
+        self.assertEqual(report, smoke_report)
+
     def test_real_pg_bundle_probe_creates_phase_g_bundle_actor_before_logging(self) -> None:
         from src.database_doctor import build_database_real_pg_bundle_report
         from src.services.execution_log_service import ExecutionLogService

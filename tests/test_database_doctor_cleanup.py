@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Cleanup coverage for the final database doctor shim removal slice."""
+"""Cleanup coverage for the formal database doctor integration with retained compatibility shims."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import src.database_doctor_smoke as database_doctor_smoke
 
 
 class DatabaseDoctorCleanupTestCase(unittest.TestCase):
-    def test_legacy_shim_paths_are_removed(self) -> None:
+    def test_legacy_experimental_paths_are_removed(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
 
         self.assertFalse((repo_root / "src" / "experimental").exists())

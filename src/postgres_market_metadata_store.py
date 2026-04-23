@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from src.core.trading_calendar import get_market_for_stock
 from src.data.stock_mapping import STOCK_NAME_MAP
-from src.postgres_phase_a import PhaseABase
+from src.postgres_identity_store import PhaseABase
 from src.postgres_store_utils import (
     apply_baseline_schema,
     baseline_sql_doc_path,

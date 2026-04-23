@@ -31,7 +31,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
-from src.postgres_phase_a import PhaseABase
+from src.postgres_identity_store import PhaseABase
 from src.postgres_store_utils import (
     apply_baseline_schema,
     baseline_sql_doc_path,
@@ -1234,81 +1234,159 @@ class PostgresPhaseFStore:
                 )
 
     def get_account_shadow_bundle(self, *, account_id: int) -> Optional[dict[str, Any]]:
-        resolved_account_id = int(account_id)
+        return self.get_account_shadow_bundles(account_ids=[account_id]).get(int(account_id))
+
+    def get_account_shadow_bundles(self, *, account_ids: Iterable[int]) -> dict[int, dict[str, Any]]:
+        resolved_account_ids = sorted(
+            {int(account_id) for account_id in account_ids if account_id is not None}
+        )
+        if not resolved_account_ids:
+            return {}
+
         with self.get_session() as session:
             existing_tables = self._existing_phase_f_tables(session)
             if "portfolio_accounts" not in existing_tables:
-                return None
-            account_row = session.execute(
-                select(PhaseFPortfolioAccount)
-                .where(PhaseFPortfolioAccount.id == resolved_account_id)
-                .limit(1)
-            ).scalar_one_or_none()
-            if account_row is None:
-                return None
+                return {}
 
-            broker_connection_rows: list[Any] = []
+            account_rows = session.execute(
+                select(PhaseFPortfolioAccount)
+                .where(PhaseFPortfolioAccount.id.in_(resolved_account_ids))
+                .order_by(PhaseFPortfolioAccount.id.asc())
+            ).scalars().all()
+            if not account_rows:
+                return {}
+
+            present_account_ids = [int(row.id) for row in account_rows]
+            broker_connections_by_account: dict[int, list[Any]] = {
+                account_id: [] for account_id in present_account_ids
+            }
+            ledger_by_account: dict[int, list[Any]] = {
+                account_id: [] for account_id in present_account_ids
+            }
+            positions_by_account: dict[int, list[Any]] = {
+                account_id: [] for account_id in present_account_ids
+            }
+            latest_sync_state_by_account: dict[int, Any] = {}
+            sync_positions_by_account: dict[int, list[Any]] = {
+                account_id: [] for account_id in present_account_ids
+            }
+            sync_cash_balances_by_account: dict[int, list[Any]] = {
+                account_id: [] for account_id in present_account_ids
+            }
+
             if "broker_connections" in existing_tables:
                 broker_connection_rows = session.execute(
                     select(PhaseFBrokerConnection)
-                    .where(PhaseFBrokerConnection.portfolio_account_id == resolved_account_id)
-                    .order_by(PhaseFBrokerConnection.id.asc())
+                    .where(PhaseFBrokerConnection.portfolio_account_id.in_(present_account_ids))
+                    .order_by(
+                        PhaseFBrokerConnection.portfolio_account_id.asc(),
+                        PhaseFBrokerConnection.id.asc(),
+                    )
                 ).scalars().all()
-            ledger_rows: list[Any] = []
+                for row in broker_connection_rows:
+                    broker_connections_by_account.setdefault(int(row.portfolio_account_id), []).append(row)
+
             if "portfolio_ledger" in existing_tables:
                 ledger_rows = session.execute(
                     select(PhaseFPortfolioLedger)
-                    .where(PhaseFPortfolioLedger.portfolio_account_id == resolved_account_id)
-                    .order_by(PhaseFPortfolioLedger.event_time.asc(), PhaseFPortfolioLedger.id.asc())
+                    .where(PhaseFPortfolioLedger.portfolio_account_id.in_(present_account_ids))
+                    .order_by(
+                        PhaseFPortfolioLedger.portfolio_account_id.asc(),
+                        PhaseFPortfolioLedger.event_time.asc(),
+                        PhaseFPortfolioLedger.id.asc(),
+                    )
                 ).scalars().all()
-            position_rows: list[Any] = []
+                for row in ledger_rows:
+                    ledger_by_account.setdefault(int(row.portfolio_account_id), []).append(row)
+
             if "portfolio_positions" in existing_tables:
                 position_rows = session.execute(
                     select(PhaseFPortfolioPosition)
-                    .where(PhaseFPortfolioPosition.portfolio_account_id == resolved_account_id)
+                    .where(PhaseFPortfolioPosition.portfolio_account_id.in_(present_account_ids))
                     .order_by(
+                        PhaseFPortfolioPosition.portfolio_account_id.asc(),
                         PhaseFPortfolioPosition.source_kind.asc(),
                         PhaseFPortfolioPosition.cost_method.asc(),
                         PhaseFPortfolioPosition.canonical_symbol.asc(),
                         PhaseFPortfolioPosition.id.asc(),
                     )
                 ).scalars().all()
-            sync_state_row = None
-            if "portfolio_sync_states" in existing_tables:
-                sync_state_row = session.execute(
-                    select(PhaseFPortfolioSyncState)
-                    .where(PhaseFPortfolioSyncState.portfolio_account_id == resolved_account_id)
-                    .order_by(PhaseFPortfolioSyncState.synced_at.desc(), PhaseFPortfolioSyncState.id.desc())
-                    .limit(1)
-                ).scalar_one_or_none()
+                for row in position_rows:
+                    positions_by_account.setdefault(int(row.portfolio_account_id), []).append(row)
 
-            sync_position_rows: list[Any] = []
-            sync_cash_balance_rows: list[Any] = []
-            if sync_state_row is not None:
-                if "portfolio_sync_positions" in existing_tables:
-                    sync_position_rows = session.execute(
-                        select(PhaseFPortfolioSyncPosition)
-                        .where(PhaseFPortfolioSyncPosition.portfolio_sync_state_id == int(sync_state_row.id))
-                        .order_by(PhaseFPortfolioSyncPosition.canonical_symbol.asc(), PhaseFPortfolioSyncPosition.id.asc())
-                    ).scalars().all()
-                if "portfolio_sync_cash_balances" in existing_tables:
-                    sync_cash_balance_rows = session.execute(
-                        select(PhaseFPortfolioSyncCashBalance)
-                        .where(PhaseFPortfolioSyncCashBalance.portfolio_sync_state_id == int(sync_state_row.id))
-                        .order_by(PhaseFPortfolioSyncCashBalance.currency.asc(), PhaseFPortfolioSyncCashBalance.id.asc())
-                    ).scalars().all()
+            latest_sync_state_ids: list[int] = []
+            if "portfolio_sync_states" in existing_tables:
+                sync_state_rows = session.execute(
+                    select(PhaseFPortfolioSyncState)
+                    .where(PhaseFPortfolioSyncState.portfolio_account_id.in_(present_account_ids))
+                    .order_by(
+                        PhaseFPortfolioSyncState.portfolio_account_id.asc(),
+                        PhaseFPortfolioSyncState.synced_at.desc(),
+                        PhaseFPortfolioSyncState.id.desc(),
+                    )
+                ).scalars().all()
+                for row in sync_state_rows:
+                    account_id = int(row.portfolio_account_id)
+                    if account_id not in latest_sync_state_by_account:
+                        latest_sync_state_by_account[account_id] = row
+                        latest_sync_state_ids.append(int(row.id))
+
+            if latest_sync_state_ids and "portfolio_sync_positions" in existing_tables:
+                sync_position_rows = session.execute(
+                    select(PhaseFPortfolioSyncPosition)
+                    .where(PhaseFPortfolioSyncPosition.portfolio_sync_state_id.in_(latest_sync_state_ids))
+                    .order_by(
+                        PhaseFPortfolioSyncPosition.portfolio_account_id.asc(),
+                        PhaseFPortfolioSyncPosition.canonical_symbol.asc(),
+                        PhaseFPortfolioSyncPosition.id.asc(),
+                    )
+                ).scalars().all()
+                for row in sync_position_rows:
+                    sync_positions_by_account.setdefault(int(row.portfolio_account_id), []).append(row)
+
+            if latest_sync_state_ids and "portfolio_sync_cash_balances" in existing_tables:
+                sync_cash_balance_rows = session.execute(
+                    select(PhaseFPortfolioSyncCashBalance)
+                    .where(PhaseFPortfolioSyncCashBalance.portfolio_sync_state_id.in_(latest_sync_state_ids))
+                    .order_by(
+                        PhaseFPortfolioSyncCashBalance.portfolio_account_id.asc(),
+                        PhaseFPortfolioSyncCashBalance.currency.asc(),
+                        PhaseFPortfolioSyncCashBalance.id.asc(),
+                    )
+                ).scalars().all()
+                for row in sync_cash_balance_rows:
+                    sync_cash_balances_by_account.setdefault(int(row.portfolio_account_id), []).append(row)
 
             return {
-                "account": self._serialize_account_row(account_row),
-                "broker_connections": [self._serialize_broker_connection_row(row) for row in broker_connection_rows],
-                "ledger": [self._serialize_ledger_row(row) for row in ledger_rows],
-                "positions": [self._serialize_position_row(row) for row in position_rows],
-                "sync_state": self._serialize_sync_state_row(sync_state_row) if sync_state_row is not None else None,
-                "sync_positions": [self._serialize_sync_position_row(row) for row in sync_position_rows],
-                "sync_cash_balances": [
-                    self._serialize_sync_cash_balance_row(row)
-                    for row in sync_cash_balance_rows
-                ],
+                int(account_row.id): {
+                    "account": self._serialize_account_row(account_row),
+                    "broker_connections": [
+                        self._serialize_broker_connection_row(row)
+                        for row in broker_connections_by_account.get(int(account_row.id), [])
+                    ],
+                    "ledger": [
+                        self._serialize_ledger_row(row)
+                        for row in ledger_by_account.get(int(account_row.id), [])
+                    ],
+                    "positions": [
+                        self._serialize_position_row(row)
+                        for row in positions_by_account.get(int(account_row.id), [])
+                    ],
+                    "sync_state": (
+                        self._serialize_sync_state_row(latest_sync_state_by_account[int(account_row.id)])
+                        if int(account_row.id) in latest_sync_state_by_account
+                        else None
+                    ),
+                    "sync_positions": [
+                        self._serialize_sync_position_row(row)
+                        for row in sync_positions_by_account.get(int(account_row.id), [])
+                    ],
+                    "sync_cash_balances": [
+                        self._serialize_sync_cash_balance_row(row)
+                        for row in sync_cash_balances_by_account.get(int(account_row.id), [])
+                    ],
+                }
+                for account_row in account_rows
             }
 
     def clear_non_bootstrap_state(self, user_ids: Iterable[str]) -> dict[str, int]:
