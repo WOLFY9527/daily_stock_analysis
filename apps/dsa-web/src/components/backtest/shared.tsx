@@ -218,20 +218,11 @@ export function getPeriodicNumber(source: Record<string, unknown> | undefined, k
 }
 
 export function formatDraftOrder(source: Record<string, unknown> | undefined): string {
-  const orderMode = String(getStrategySpecValue(source, ['entry', 'order', 'mode']) || getSetupString(source, 'order_mode'));
-  if (orderMode === 'fixed_amount') {
-    const amount = getPeriodicNumber(source, 'amount_per_trade');
-    return amount != null ? bt('zh', 'periodic.fixedAmountOrder', { amount }) : '--';
-  }
-  const quantity = getPeriodicNumber(source, 'quantity_per_trade');
-  return quantity != null ? bt('zh', 'periodic.fixedShareOrder', { quantity }) : '--';
+  return formatDraftOrderLabel(source, 'zh');
 }
 
 export function formatCashPolicy(source: Record<string, unknown> | undefined): string {
-  const value = getPeriodicString(source, 'cash_policy');
-  if (value === 'stop_when_insufficient_cash') return bt('zh', 'periodic.stopWhenCashInsufficient');
-  if (value === 'skip_when_insufficient_cash') return bt('zh', 'periodic.skipWhenCashInsufficient');
-  return '--';
+  return formatCashPolicyLabel(source, 'zh');
 }
 
 export function formatDraftOrderLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
@@ -288,34 +279,15 @@ export function buildPeriodicAssumptionLabels(
 }
 
 export function formatExecutionPriceBasis(source: Record<string, unknown> | undefined): string {
-  const value = getPeriodicString(source, 'execution_price_basis');
-  if (value === 'open') return bt('zh', 'periodic.sameDayOpen');
-  if (value === 'next_bar_open') return bt('zh', 'periodic.nextBarOpen');
-  if (value === 'close') return bt('zh', 'periodic.close');
-  return '--';
+  return formatExecutionPriceBasisLabel(source, 'zh');
 }
 
 export function formatExitPolicy(source: Record<string, unknown> | undefined): string {
-  const value = getPeriodicString(source, 'exit_policy');
-  if (value === 'close_at_end') return bt('zh', 'periodic.closeAtEnd');
-  return '--';
+  return formatExitPolicyLabel(source, 'zh');
 }
 
 export function buildPeriodicAssumptions(source: Record<string, unknown> | undefined): string[] {
-  const items: string[] = [];
-  if (getPeriodicString(source, 'execution_price_basis') === 'open') {
-    items.push(bt('zh', 'periodic.openExecutionAssumption'));
-  }
-  if (getPeriodicString(source, 'execution_frequency') === 'daily') {
-    items.push(bt('zh', 'periodic.dailyAccumulationAssumption'));
-  }
-  if (getPeriodicString(source, 'cash_policy') === 'stop_when_insufficient_cash') {
-    items.push(bt('zh', 'periodic.cashStopAssumption'));
-  }
-  if (getPeriodicString(source, 'exit_policy') === 'close_at_end') {
-    items.push(bt('zh', 'periodic.closeAtEndAssumption'));
-  }
-  return items;
+  return buildPeriodicAssumptionLabels(source, 'zh');
 }
 
 function formatIndicatorEntries(snapshot?: Record<string, unknown>): Array<{ key: string; value: string }> {

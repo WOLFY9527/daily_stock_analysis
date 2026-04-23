@@ -1331,11 +1331,12 @@ describe('DeterministicBacktestResultPage', () => {
     window.history.replaceState(window.history.state, '', '/en/backtest/results/99');
     renderResultPage(['/en/backtest/results/99']);
 
-    expect(await screen.findByRole('heading', { name: 'Deterministic Backtest Result #99' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back to config' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Refresh result' })).toBeInTheDocument();
-    expect(await screen.findByRole('tablist', { name: 'Result detail tabs' })).toBeInTheDocument();
-    expect(await screen.findByRole('tab', { name: 'Overview' })).toBeInTheDocument();
-    expect(await screen.findByRole('tab', { name: 'History' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: `${translate('en', 'backtest.resultPage.documentTitle')} #99` })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.hero.backToConfig') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.hero.refreshResult') })).toBeInTheDocument();
+    expect(await screen.findByRole('tablist', { name: translate('en', 'backtest.resultPage.tabsAria') })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: translate('en', 'backtest.resultPage.tabs.overview') })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: translate('en', 'backtest.resultPage.tabs.history') })).toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'backtest.resultPage.overview.exportSummaryDisclosure'))).toBeInTheDocument();
   });
 });

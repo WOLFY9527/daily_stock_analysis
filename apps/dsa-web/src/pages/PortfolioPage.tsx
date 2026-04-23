@@ -728,44 +728,45 @@ function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null
 }
 
 function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: PortfolioLanguage): FxRefreshFeedback {
-  const isEnglish = language === 'en';
-  const pairLabel = (count: number) => `${count} FX ${count === 1 ? 'pair' : 'pairs'}`;
   if (data.refreshEnabled === false) {
     return {
       tone: 'neutral',
-      text: isEnglish ? 'Online FX refresh is disabled.' : '汇率在线刷新已被禁用。',
+      text: translate(language, 'portfolio.fxRefreshDisabled'),
     };
   }
 
   if (data.pairCount === 0) {
     return {
       tone: 'neutral',
-      text: isEnglish ? 'No FX pairs are refreshable in the current scope.' : '当前范围无可刷新的汇率对。',
+      text: translate(language, 'portfolio.fxRefreshNoPairs'),
     };
   }
 
   if (data.updatedCount > 0 && data.staleCount === 0 && data.errorCount === 0) {
     return {
       tone: 'success',
-      text: isEnglish ? `FX refresh completed. Updated ${pairLabel(data.updatedCount)}.` : `汇率已刷新，共更新 ${data.updatedCount} 对。`,
+      text: translate(language, 'portfolio.fxRefreshUpdated', { count: data.updatedCount }),
     };
   }
 
-  const summary = isEnglish
-    ? `Updated ${pairLabel(data.updatedCount)}, still stale ${pairLabel(data.staleCount)}, failed ${pairLabel(data.errorCount)}.`
-    : `更新 ${data.updatedCount} 对，仍过期 ${data.staleCount} 对，失败 ${data.errorCount} 对。`;
   if (data.staleCount > 0) {
     return {
       tone: 'warning',
-      text: isEnglish
-        ? `Refresh finished with stale or fallback FX pairs still in use. ${summary}`
-        : `已尝试刷新，但仍有部分货币对使用旧汇率或备用汇率。${summary}`,
+      text: translate(language, 'portfolio.fxRefreshFallbackWarning', {
+        updatedCount: data.updatedCount,
+        staleCount: data.staleCount,
+        errorCount: data.errorCount,
+      }),
     };
   }
 
   return {
     tone: 'warning',
-    text: isEnglish ? `FX refresh did not fully succeed. ${summary}` : `在线刷新未完全成功。${summary}`,
+    text: translate(language, 'portfolio.fxRefreshPartialFailure', {
+      updatedCount: data.updatedCount,
+      staleCount: data.staleCount,
+      errorCount: data.errorCount,
+    }),
   };
 }
 

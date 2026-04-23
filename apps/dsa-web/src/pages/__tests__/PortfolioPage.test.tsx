@@ -615,7 +615,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(refreshFxButton);
 
     await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: 1 }));
-    expect(await screen.findByText(/汇率已刷新，共更新 1 对。/)).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsBeforeRefresh + 1));
     await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(riskCallsBeforeRefresh + 1));
     expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
@@ -643,7 +643,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
 
     await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: undefined }));
-    expect(await screen.findByText('当前范围无可刷新的汇率对。')).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshNoPairs'))).toBeInTheDocument();
   });
 
   it('shows disabled feedback when FX online refresh is disabled even without a disabled reason', async () => {
@@ -663,7 +663,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
 
-    expect(await screen.findByText('汇率在线刷新已被禁用。')).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshDisabled'))).toBeInTheDocument();
   });
 
   it('prefers disabled feedback over empty-pair feedback when refresh is disabled', async () => {
@@ -684,8 +684,8 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
 
-    expect(await screen.findByText('汇率在线刷新已被禁用。')).toBeInTheDocument();
-    expect(screen.queryByText('当前范围无可刷新的汇率对。')).not.toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshDisabled'))).toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshNoPairs'))).not.toBeInTheDocument();
   });
 
   it('shows warning feedback when FX refresh still falls back to stale rates', async () => {
@@ -727,7 +727,11 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
 
-    expect(await screen.findByText(/在线刷新未完全成功/)).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshPartialFailure', {
+      updatedCount: 0,
+      staleCount: 0,
+      errorCount: 1,
+    }))).toBeInTheDocument();
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsBeforeRefresh + 1));
     await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(riskCallsBeforeRefresh + 1));
     expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
@@ -904,6 +908,22 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText(translate('en', 'portfolio.brokerImport'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'portfolio.refreshData') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'portfolio.refreshFx') })).toBeInTheDocument();
+  });
+
+  it('renders localized English FX refresh feedback on /en routes', async () => {
+    window.history.replaceState(window.history.state, '', '/en/portfolio');
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+
+    fireEvent.click(screen.getByRole('button', { name: translate('en', 'portfolio.refreshFx') }));
+
+    expect(await screen.findByText(translate('en', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
   });
 
   it('renders localized English IBKR sync detail and broker connection labels on /en routes', async () => {
