@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type {
   BacktestRunHistoryItem,
   BacktestRunResponse,
@@ -110,10 +111,14 @@ function renderBacktestRoutes(
 ) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/backtest" element={<BacktestPage />} />
-        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
-      </Routes>
+      <UiLanguageProvider>
+        <Routes>
+          <Route path="/backtest" element={<BacktestPage />} />
+          <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/:locale/backtest" element={<BacktestPage />} />
+          <Route path="/:locale/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+        </Routes>
+      </UiLanguageProvider>
     </MemoryRouter>,
   );
 }
@@ -1161,5 +1166,16 @@ describe('BacktestPage', () => {
 
     expect((screen.getByLabelText('股票代码') as HTMLInputElement).value).toBe('ORCL');
     expect((screen.getByLabelText('初始资金') as HTMLInputElement).value).toBe('150000');
+  });
+
+  it('renders English shell copy on localized routes', async () => {
+    window.history.replaceState(window.history.state, '', '/en/backtest');
+    renderBacktestRoutes(['/en/backtest']);
+
+    expect(await screen.findByRole('heading', { name: 'Backtest' })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Backtest mode' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Deterministic backtest' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Historical evaluation' })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Control panel mode' })).toBeInTheDocument();
   });
 });

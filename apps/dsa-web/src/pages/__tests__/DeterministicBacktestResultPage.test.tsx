@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage';
 
@@ -31,9 +32,12 @@ vi.mock('../../api/backtest', () => ({
 function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
-      </Routes>
+      <UiLanguageProvider>
+        <Routes>
+          <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/:locale/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+        </Routes>
+      </UiLanguageProvider>
     </MemoryRouter>,
   );
 }
@@ -606,5 +610,26 @@ describe('DeterministicBacktestResultPage', () => {
       expect(clickMock).toHaveBeenCalled();
       expect(revokeObjectUrlMock).toHaveBeenCalled();
     });
+  });
+
+  it('renders localized English result-shell actions and tabs', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    window.history.replaceState(window.history.state, '', '/en/backtest/results/99');
+    renderResultPage(['/en/backtest/results/99']);
+
+    expect(await screen.findByRole('heading', { name: 'Deterministic Backtest Result #99' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to config' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh result' })).toBeInTheDocument();
+    expect(await screen.findByRole('tablist', { name: 'Result detail tabs' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Overview' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'History' })).toBeInTheDocument();
   });
 });

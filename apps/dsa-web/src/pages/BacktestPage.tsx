@@ -31,6 +31,7 @@ import type {
   RuleBacktestParseResponse,
   RuleBacktestRunResponse,
 } from '../types/backtest';
+import { useI18n } from '../contexts/UiLanguageContext';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
@@ -74,13 +75,80 @@ const WORKBENCH_PANEL_TRANSITION = {
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
+const BACKTEST_COPY = {
+  zh: {
+    documentTitle: '回测 - WolfyStock',
+    headerTitle: '回测',
+    headerDescription: (benchmark: string) => `配置确定性规则与评估参数。运行后进入独立控制台查看图表、审计与表现对比。当前基准: ${benchmark}`,
+    moduleTabsLabel: '回测模式',
+    ruleTab: '确定性回测',
+    historicalTab: '历史评估',
+    controlModeLabel: '控制面板模式',
+    normalMode: '普通',
+    professionalMode: '专业',
+    missingCodeTitle: '缺少股票代码',
+    missingPrepareSamples: '请先输入股票代码，再准备历史分析评估样本。',
+    missingRebuildSamples: '请先输入股票代码，再重建历史分析评估样本。',
+    missingClearSamples: '请先输入股票代码，再清理历史分析评估样本。',
+    missingClearResults: '请先输入股票代码，再清理历史分析评估结果。',
+    missingStrategyTitle: '缺少策略文本',
+    missingStrategyText: '请输入规则策略文本后再解析。',
+    missingRunCode: '请输入股票代码后再提交规则回测。',
+    needParsedStrategyTitle: '需要先解析策略',
+    needParsedStrategy: '请先解析并确认规则结构，再提交确定性规则回测。',
+    staleParseTitle: '解析结果已过期',
+    staleParse: '当前输入已经变更。请重新解析后再提交回测。',
+    needConfirmTitle: '需要确认解析结果',
+    needConfirm: '请确认归一化规则后再提交回测。',
+    missingRangeTitle: '缺少回测区间',
+    missingRange: '请填写开始日期和结束日期后再提交回测。',
+    invalidRangeTitle: '日期区间无效',
+    invalidRange: '开始日期不能晚于结束日期。',
+    missingBenchmarkTitle: '缺少自定义基准代码',
+    missingBenchmark: '选择自定义代码后，请先填写基准代码。',
+  },
+  en: {
+    documentTitle: 'Backtest - WolfyStock',
+    headerTitle: 'Backtest',
+    headerDescription: (benchmark: string) => `Configure deterministic rules and evaluation parameters. Runs open in a dedicated console for charts, audit detail, and performance comparison. Current benchmark: ${benchmark}`,
+    moduleTabsLabel: 'Backtest mode',
+    ruleTab: 'Deterministic backtest',
+    historicalTab: 'Historical evaluation',
+    controlModeLabel: 'Control panel mode',
+    normalMode: 'Normal',
+    professionalMode: 'Professional',
+    missingCodeTitle: 'Missing stock code',
+    missingPrepareSamples: 'Enter a stock code before preparing historical evaluation samples.',
+    missingRebuildSamples: 'Enter a stock code before rebuilding historical evaluation samples.',
+    missingClearSamples: 'Enter a stock code before clearing historical evaluation samples.',
+    missingClearResults: 'Enter a stock code before clearing historical evaluation results.',
+    missingStrategyTitle: 'Missing strategy text',
+    missingStrategyText: 'Enter a rule strategy before parsing it.',
+    missingRunCode: 'Enter a stock code before submitting the rule backtest.',
+    needParsedStrategyTitle: 'Parse the strategy first',
+    needParsedStrategy: 'Parse and confirm the rule structure before submitting the deterministic backtest.',
+    staleParseTitle: 'Parse result is stale',
+    staleParse: 'The current inputs changed. Parse the strategy again before submitting the backtest.',
+    needConfirmTitle: 'Confirmation required',
+    needConfirm: 'Confirm the normalized rule before submitting the backtest.',
+    missingRangeTitle: 'Missing backtest range',
+    missingRange: 'Fill in both the start and end date before submitting the backtest.',
+    invalidRangeTitle: 'Invalid date range',
+    invalidRange: 'The start date cannot be later than the end date.',
+    missingBenchmarkTitle: 'Missing custom benchmark code',
+    missingBenchmark: 'Fill in the benchmark code after selecting custom benchmark mode.',
+  },
+} as const;
+
 const BacktestPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { language } = useI18n();
+  const copy = BACKTEST_COPY[language];
 
   useEffect(() => {
-    document.title = '回测 - WolfyStock';
-  }, []);
+    document.title = copy.documentTitle;
+  }, [copy.documentTitle]);
 
   const [activeModule, setActiveModule] = useState<ActiveModule>('rule');
   const [controlPanelMode, setControlPanelMode] = useState<ControlPanelMode>('normal');
@@ -211,40 +279,41 @@ const BacktestPage: React.FC = () => {
 
   const historicalSummaryItems = useMemo(() => ([
     {
-      label: '已准备样本',
+      label: language === 'en' ? 'Prepared samples' : '已准备样本',
       value: sampleStatus?.preparedCount != null ? String(sampleStatus.preparedCount) : '--',
       note: sampleStatus?.preparedStartDate && sampleStatus?.preparedEndDate
         ? `${sampleStatus.preparedStartDate} -> ${sampleStatus.preparedEndDate}`
-        : '历史分析样本',
+        : (language === 'en' ? 'Historical analysis samples' : '历史分析样本'),
     },
     {
-      label: '有效评估',
+      label: language === 'en' ? 'Completed evaluations' : '有效评估',
       value: historicalPerfSnapshot?.completedCount != null ? String(historicalPerfSnapshot.completedCount) : '--',
       note: historicalPerfSnapshot?.totalEvaluations != null
-        ? `总样本 ${historicalPerfSnapshot.totalEvaluations}`
-        : '完成并纳入统计的样本数',
+        ? (language === 'en' ? `Total samples ${historicalPerfSnapshot.totalEvaluations}` : `总样本 ${historicalPerfSnapshot.totalEvaluations}`)
+        : (language === 'en' ? 'Samples completed and included in the aggregate.' : '完成并纳入统计的样本数'),
     },
     {
-      label: '方向准确率',
+      label: language === 'en' ? 'Direction accuracy' : '方向准确率',
       value: historicalPerfSnapshot?.directionAccuracyPct != null ? `${historicalPerfSnapshot.directionAccuracyPct.toFixed(2)}%` : '--',
-      note: '信号方向与后续走势是否一致',
+      note: language === 'en' ? 'Whether the signal direction matched the later move.' : '信号方向与后续走势是否一致',
     },
     {
-      label: '胜率',
+      label: language === 'en' ? 'Win rate' : '胜率',
       value: historicalPerfSnapshot?.winRatePct != null ? `${historicalPerfSnapshot.winRatePct.toFixed(2)}%` : '--',
-      note: '未来窗口最终是否为正收益',
+      note: language === 'en' ? 'Whether the forward window closed positive.' : '未来窗口最终是否为正收益',
     },
     {
-      label: '平均远期收益',
+      label: language === 'en' ? 'Average forward return' : '平均远期收益',
       value: historicalPerfSnapshot?.avgSimulatedReturnPct != null ? `${historicalPerfSnapshot.avgSimulatedReturnPct.toFixed(2)}%` : '--',
-      note: '样本级未来窗口收益',
+      note: language === 'en' ? 'Forward-window return at the sample level.' : '样本级未来窗口收益',
     },
     {
-      label: '平均标的收益',
+      label: language === 'en' ? 'Average instrument return' : '平均标的收益',
       value: historicalPerfSnapshot?.avgStockReturnPct != null ? `${historicalPerfSnapshot.avgStockReturnPct.toFixed(2)}%` : '--',
-      note: '同一窗口内标的原始涨跌幅',
+      note: language === 'en' ? 'Raw instrument return inside the same window.' : '同一窗口内标的原始涨跌幅',
     },
   ]), [
+    language,
     historicalPerfSnapshot?.completedCount,
     historicalPerfSnapshot?.directionAccuracyPct,
     historicalPerfSnapshot?.avgSimulatedReturnPct,
@@ -281,15 +350,20 @@ const BacktestPage: React.FC = () => {
       ?? null;
 
     const parts = [
-      `最新已准备样本: ${latestPreparedSampleDate || '--'}`,
-      `最新可评估样本: ${latestEligibleSampleDate || '--'}`,
+      language === 'en' ? `Latest prepared sample: ${latestPreparedSampleDate || '--'}` : `最新已准备样本: ${latestPreparedSampleDate || '--'}`,
+      language === 'en' ? `Latest evaluable sample: ${latestEligibleSampleDate || '--'}` : `最新可评估样本: ${latestEligibleSampleDate || '--'}`,
     ];
-    if (excludedRecentMessage) parts.push(`较新日期未纳入原因: ${excludedRecentMessage}`);
+    if (excludedRecentMessage) parts.push(language === 'en' ? `Newer dates excluded because: ${excludedRecentMessage}` : `较新日期未纳入原因: ${excludedRecentMessage}`);
     if (pricingResolvedSource) {
-      parts.push(`本次使用的价格来源: ${pricingResolvedSource}${pricingFallbackUsed == null ? '' : `（${pricingFallbackUsed ? '已切换到备用数据源' : '未切换备用数据源'}）`}`);
+      parts.push(
+        language === 'en'
+          ? `Pricing source for this run: ${pricingResolvedSource}${pricingFallbackUsed == null ? '' : ` (${pricingFallbackUsed ? 'fallback source used' : 'no fallback source used'})`}`
+          : `本次使用的价格来源: ${pricingResolvedSource}${pricingFallbackUsed == null ? '' : `（${pricingFallbackUsed ? '已切换到备用数据源' : '未切换备用数据源'}）`}`,
+      );
     }
     return parts.join(' · ');
   }, [
+    language,
     historicalSourceMetadata.fallbackUsed,
     historicalSourceMetadata.resolvedSource,
     prepareResult?.excludedRecentMessage,
@@ -479,7 +553,7 @@ const BacktestPage: React.FC = () => {
     try {
       const overall = await backtestApi.getOverallPerformance(windowBars);
       setOverallPerf(overall);
-      if (overall == null && showNotice) notices.push('暂无整体历史分析评估汇总。');
+      if (overall == null && showNotice) notices.push(language === 'en' ? 'No aggregate historical evaluation summary is available yet.' : '暂无整体历史分析评估汇总。');
     } catch (error) {
       setOverallPerf(null);
       hasDanger = true;
@@ -490,7 +564,7 @@ const BacktestPage: React.FC = () => {
       try {
         const stock = await backtestApi.getStockPerformance(code, windowBars);
         setStockPerf(stock);
-        if (stock == null && showNotice) notices.push(`暂无 ${code} 的单股历史分析评估汇总。`);
+        if (stock == null && showNotice) notices.push(language === 'en' ? `No historical single-instrument evaluation summary is available for ${code}.` : `暂无 ${code} 的单股历史分析评估汇总。`);
       } catch (error) {
         setStockPerf(null);
         hasDanger = true;
@@ -507,7 +581,7 @@ const BacktestPage: React.FC = () => {
     }
 
     setIsLoadingPerf(false);
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     const init = async () => {
@@ -580,9 +654,9 @@ const BacktestPage: React.FC = () => {
   const handlePrepareSamples = async (options: { forceRefresh?: boolean } = {}) => {
     if (!normalizedCode) {
       setPrepareError({
-        title: '缺少股票代码',
-        message: '请先输入股票代码，再准备历史分析评估样本。',
-        rawMessage: '请先输入股票代码，再准备历史分析评估样本。',
+        title: copy.missingCodeTitle,
+        message: copy.missingPrepareSamples,
+        rawMessage: copy.missingPrepareSamples,
         category: 'missing_params',
       });
       return;
@@ -614,9 +688,9 @@ const BacktestPage: React.FC = () => {
   const handleRebuildSamples = async () => {
     if (!normalizedCode) {
       setPrepareError({
-        title: '缺少股票代码',
-        message: '请先输入股票代码，再重建历史分析评估样本。',
-        rawMessage: '请先输入股票代码，再重建历史分析评估样本。',
+        title: copy.missingCodeTitle,
+        message: copy.missingRebuildSamples,
+        rawMessage: copy.missingRebuildSamples,
         category: 'missing_params',
       });
       return;
@@ -638,9 +712,9 @@ const BacktestPage: React.FC = () => {
   const handleClearSamples = async () => {
     if (!normalizedCode) {
       setPrepareError({
-        title: '缺少股票代码',
-        message: '请先输入股票代码，再清理历史分析评估样本。',
-        rawMessage: '请先输入股票代码，再清理历史分析评估样本。',
+        title: copy.missingCodeTitle,
+        message: copy.missingClearSamples,
+        rawMessage: copy.missingClearSamples,
         category: 'missing_params',
       });
       return;
@@ -673,9 +747,9 @@ const BacktestPage: React.FC = () => {
   const handleClearResults = async () => {
     if (!normalizedCode) {
       setRunError({
-        title: '缺少股票代码',
-        message: '请先输入股票代码，再清理历史分析评估结果。',
-        rawMessage: '请先输入股票代码，再清理历史分析评估结果。',
+        title: copy.missingCodeTitle,
+        message: copy.missingClearResults,
+        rawMessage: copy.missingClearResults,
         category: 'missing_params',
       });
       return;
@@ -719,9 +793,9 @@ const BacktestPage: React.FC = () => {
   const handleParseRuleStrategy = async () => {
     if (!ruleStrategyText.trim()) {
       setRuleParseError({
-        title: '缺少策略文本',
-        message: '请输入规则策略文本后再解析。',
-        rawMessage: '请输入规则策略文本后再解析。',
+        title: copy.missingStrategyTitle,
+        message: copy.missingStrategyText,
+        rawMessage: copy.missingStrategyText,
         category: 'missing_params',
       });
       return;
@@ -799,63 +873,63 @@ const BacktestPage: React.FC = () => {
     const resolvedCode = normalizedCode || (parsedSymbol !== '--' ? parsedSymbol.toUpperCase() : '');
     if (!resolvedCode) {
       setRuleRunError({
-        title: '缺少股票代码',
-        message: '请输入股票代码后再提交规则回测。',
-        rawMessage: '请输入股票代码后再提交规则回测。',
+        title: copy.missingCodeTitle,
+        message: copy.missingRunCode,
+        rawMessage: copy.missingRunCode,
         category: 'missing_params',
       });
       return;
     }
     if (!ruleParsedStrategy) {
       setRuleRunError({
-        title: '需要先解析策略',
-        message: '请先解析并确认规则结构，再提交确定性规则回测。',
-        rawMessage: '请先解析并确认规则结构，再提交确定性规则回测。',
+        title: copy.needParsedStrategyTitle,
+        message: copy.needParsedStrategy,
+        rawMessage: copy.needParsedStrategy,
         category: 'validation_error',
       });
       return;
     }
     if (isRuleParseStale) {
       setRuleRunError({
-        title: '解析结果已过期',
-        message: '当前输入已经变更。请重新解析后再提交回测。',
-        rawMessage: '当前输入已经变更。请重新解析后再提交回测。',
+        title: copy.staleParseTitle,
+        message: copy.staleParse,
+        rawMessage: copy.staleParse,
         category: 'validation_error',
       });
       return;
     }
     if (!ruleConfirmed) {
       setRuleRunError({
-        title: '需要确认解析结果',
-        message: '请确认归一化规则后再提交回测。',
-        rawMessage: '请确认归一化规则后再提交回测。',
+        title: copy.needConfirmTitle,
+        message: copy.needConfirm,
+        rawMessage: copy.needConfirm,
         category: 'validation_error',
       });
       return;
     }
     if (!ruleStartDate || !ruleEndDate) {
       setRuleRunError({
-        title: '缺少回测区间',
-        message: '请填写开始日期和结束日期后再提交回测。',
-        rawMessage: '请填写开始日期和结束日期后再提交回测。',
+        title: copy.missingRangeTitle,
+        message: copy.missingRange,
+        rawMessage: copy.missingRange,
         category: 'validation_error',
       });
       return;
     }
     if (ruleStartDate > ruleEndDate) {
       setRuleRunError({
-        title: '日期区间无效',
-        message: '开始日期不能晚于结束日期。',
-        rawMessage: '开始日期不能晚于结束日期。',
+        title: copy.invalidRangeTitle,
+        message: copy.invalidRange,
+        rawMessage: copy.invalidRange,
         category: 'validation_error',
       });
       return;
     }
     if (ruleBenchmarkMode === 'custom_code' && !ruleBenchmarkCode.trim()) {
       setRuleRunError({
-        title: '缺少自定义基准代码',
-        message: '选择自定义代码后，请先填写基准代码。',
-        rawMessage: '选择自定义代码后，请先填写基准代码。',
+        title: copy.missingBenchmarkTitle,
+        message: copy.missingBenchmark,
+        rawMessage: copy.missingBenchmark,
         category: 'validation_error',
       });
       return;
@@ -928,14 +1002,14 @@ const BacktestPage: React.FC = () => {
     <div className="theme-page-transition backtest-v1-page workspace-page--backtest" data-testid="backtest-v1-page">
       <WorkspacePageHeader
         eyebrow="WolfyStock"
-        title="回测"
-        description={`配置确定性规则与评估参数。运行后进入独立控制台查看图表、审计与表现对比。当前基准: ${getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode)}`}
+        title={copy.headerTitle}
+        description={copy.headerDescription(getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language))}
         className="backtest-v1-header"
         contentClassName="backtest-v1-header__layout"
         descriptionClassName="backtest-v1-header__description"
         actions={(
           <div className="backtest-header-toggles">
-            <div className="backtest-mode-toggle" role="tablist" aria-label="回测模式">
+            <div className="backtest-mode-toggle" role="tablist" aria-label={copy.moduleTabsLabel}>
               <button
                 type="button"
                 role="tab"
@@ -943,7 +1017,7 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
                 onClick={() => setActiveModule('rule')}
               >
-                确定性回测
+                {copy.ruleTab}
               </button>
               <button
                 type="button"
@@ -952,10 +1026,10 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
                 onClick={() => setActiveModule('historical')}
               >
-                历史评估
+                {copy.historicalTab}
               </button>
             </div>
-            <div className="backtest-mode-toggle" role="tablist" aria-label="控制面板模式">
+            <div className="backtest-mode-toggle" role="tablist" aria-label={copy.controlModeLabel}>
               <button
                 type="button"
                 role="tab"
@@ -963,7 +1037,7 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
                 onClick={() => setControlPanelMode('normal')}
               >
-                普通
+                {copy.normalMode}
               </button>
               <button
                 type="button"
@@ -972,7 +1046,7 @@ const BacktestPage: React.FC = () => {
                 className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
                 onClick={() => setControlPanelMode('professional')}
               >
-                专业
+                {copy.professionalMode}
               </button>
             </div>
           </div>

@@ -30,6 +30,7 @@ import {
   describeRuleRunNarrative,
   getRuleRunExecutionNotes,
 } from './ruleBacktestP6';
+import { useI18n } from '../../contexts/UiLanguageContext';
 
 export function DeterministicAuditTable({
   run,
@@ -38,37 +39,38 @@ export function DeterministicAuditTable({
   run: RuleBacktestRunResponse;
   rows: DeterministicBacktestNormalizedRow[];
 }) {
+  const { language } = useI18n();
   return (
     <Card
-      title="日级审计 / 对账"
-      subtitle="表格读取已持久化审计账本；导出优先复用执行轨迹"
+      title={language === 'en' ? 'Daily audit ledger' : '日级审计 / 对账'}
+      subtitle={language === 'en' ? 'The table reads from the persisted audit ledger and reuses execution-trace exports first.' : '表格读取已持久化审计账本；导出优先复用执行轨迹'}
       className="product-section-card product-section-card--backtest-standard"
     >
       <div className="backtest-audit-table__header">
-        <p className="product-section-copy">当运行结果已持久化审计账本后，结果页会优先复用执行轨迹和 auditRows，不再临时重算。</p>
+        <p className="product-section-copy">{language === 'en' ? 'Once the run persists its audit ledger, the result page reuses execution traces and audit rows instead of recalculating them on the fly.' : '当运行结果已持久化审计账本后，结果页会优先复用执行轨迹和 auditRows，不再临时重算。'}</p>
         <div className="product-action-row">
-          <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)} disabled={!hasExecutionTraceRows(run)}>导出 CSV</Button>
-          <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)} disabled={!hasExecutionTraceRows(run)}>导出 JSON</Button>
+          <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)} disabled={!hasExecutionTraceRows(run)}>{language === 'en' ? 'Export CSV' : '导出 CSV'}</Button>
+          <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)} disabled={!hasExecutionTraceRows(run)}>{language === 'en' ? 'Export JSON' : '导出 JSON'}</Button>
         </div>
       </div>
       {rows.length === 0 ? (
-        <div className="product-empty-state product-empty-state--compact">暂无可导出的日级审计数据。</div>
+        <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No exportable daily audit data is available yet.' : '暂无可导出的日级审计数据。'}</div>
       ) : (
         <div className="product-table-shell">
           <table className="product-table product-table--audit">
             <thead>
               <tr>
-                <th>日期</th>
-                <th>动作</th>
-                <th className="product-table__align-right">标的收盘</th>
-                <th className="product-table__align-right">基准收盘</th>
-                <th className="product-table__align-right">成交价</th>
-                <th className="product-table__align-right">持股数</th>
-                <th className="product-table__align-right">现金</th>
-                <th className="product-table__align-right">总资产</th>
-                <th className="product-table__align-right">当日盈亏</th>
-                <th className="product-table__align-right">当日收益</th>
-                <th className="product-table__align-right">策略累计</th>
+                <th>{language === 'en' ? 'Date' : '日期'}</th>
+                <th>{language === 'en' ? 'Action' : '动作'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Close' : '标的收盘'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Benchmark close' : '基准收盘'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Fill price' : '成交价'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Shares' : '持股数'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Cash' : '现金'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Total equity' : '总资产'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Daily PnL' : '当日盈亏'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Daily return' : '当日收益'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Strategy cumulative' : '策略累计'}</th>
               </tr>
             </thead>
             <tbody>
@@ -96,24 +98,25 @@ export function DeterministicAuditTable({
 }
 
 export function DeterministicTradeEventTable({ events }: { events: DeterministicBacktestTradeEvent[] }) {
+  const { language } = useI18n();
   return (
-    <Card title="交易 / 事件日志" subtitle="交易表同样只读 normalized tradeEvents" className="product-section-card product-section-card--backtest-standard">
+    <Card title={language === 'en' ? 'Trades and events' : '交易 / 事件日志'} subtitle={language === 'en' ? 'This table also stays read-only against normalized trade events.' : '交易表同样只读 normalized tradeEvents'} className="product-section-card product-section-card--backtest-standard">
       {events.length === 0 ? (
-        <div className="product-empty-state product-empty-state--compact">暂无交易或执行事件。</div>
+        <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No trade or execution events are available yet.' : '暂无交易或执行事件。'}</div>
       ) : (
         <div className="product-table-shell">
           <table className="product-table product-table--audit">
             <thead>
               <tr>
-                <th>日期</th>
-                <th>动作</th>
-                <th className="product-table__align-right">成交价</th>
-                <th className="product-table__align-right">持股数</th>
-                <th className="product-table__align-right">现金</th>
-                <th className="product-table__align-right">总资产</th>
-                <th>信号 / 触发</th>
-                <th className="product-table__align-right">收益</th>
-                <th>来源</th>
+                <th>{language === 'en' ? 'Date' : '日期'}</th>
+                <th>{language === 'en' ? 'Action' : '动作'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Fill price' : '成交价'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Shares' : '持股数'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Cash' : '现金'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Total equity' : '总资产'}</th>
+                <th>{language === 'en' ? 'Signal / trigger' : '信号 / 触发'}</th>
+                <th className="product-table__align-right">{language === 'en' ? 'Return' : '收益'}</th>
+                <th>{language === 'en' ? 'Source' : '来源'}</th>
               </tr>
             </thead>
             <tbody>
@@ -127,7 +130,7 @@ export function DeterministicTradeEventTable({ events }: { events: Deterministic
                   <td className="product-table__align-right">{formatNumber(event.totalValue)}</td>
                   <td>{event.signalSummary || event.trigger || '--'}</td>
                   <td className="product-table__align-right">{pct(event.returnPct)}</td>
-                  <td>{event.source === 'row' ? 'audit row' : 'trade log'}</td>
+                  <td>{event.source === 'row' ? (language === 'en' ? 'Audit row' : '审计行') : (language === 'en' ? 'Trade log' : '交易日志')}</td>
                 </tr>
               ))}
             </tbody>
@@ -143,6 +146,7 @@ export const DeterministicBacktestResultView: React.FC<{
   normalized?: DeterministicBacktestNormalizedResult;
   densityConfig?: DeterministicResultDensityConfig;
 }> = ({ run, normalized: providedNormalized, densityConfig }) => {
+  const { language } = useI18n();
   const fallbackDensityConfig = useDeterministicResultDensity();
   const resolvedDensity = densityConfig ?? fallbackDensityConfig;
   const normalized = useMemo(
@@ -153,20 +157,20 @@ export const DeterministicBacktestResultView: React.FC<{
   const annualizedReturn = metrics.annualizedReturnPct != null ? pct(metrics.annualizedReturnPct) : '--';
   const sharpeRatio = metrics.sharpeRatio != null ? formatNumber(metrics.sharpeRatio, 2) : '--';
   const comparisonLabel = benchmarkMeta.showBenchmark
-    ? `相对 ${benchmarkMeta.benchmarkLabel}`
+    ? (language === 'en' ? `Vs ${benchmarkMeta.benchmarkLabel}` : `相对 ${benchmarkMeta.benchmarkLabel}`)
     : benchmarkMeta.showBuyHold
-      ? `相对 ${benchmarkMeta.buyHoldLabel}`
-      : '相对比较';
+      ? (language === 'en' ? `Vs ${benchmarkMeta.buyHoldLabel}` : `相对 ${benchmarkMeta.buyHoldLabel}`)
+      : (language === 'en' ? 'Relative comparison' : '相对比较');
   const comparisonValue = benchmarkMeta.showBenchmark
     ? metrics.excessReturnVsBenchmarkPct
     : benchmarkMeta.showBuyHold
       ? metrics.excessReturnVsBuyAndHoldPct
       : null;
   const comparisonNote = benchmarkMeta.showBenchmark
-    ? `基准收益 ${pct(metrics.benchmarkReturnPct)}`
+    ? (language === 'en' ? `Benchmark return ${pct(metrics.benchmarkReturnPct)}` : `基准收益 ${pct(metrics.benchmarkReturnPct)}`)
     : benchmarkMeta.showBuyHold
       ? `${benchmarkMeta.buyHoldLabel} ${pct(metrics.buyAndHoldReturnPct)}`
-      : '当前没有可比较的基准收益';
+      : (language === 'en' ? 'No comparable benchmark return is available.' : '当前没有可比较的基准收益');
   const workspaceKey = `${viewerMeta.runId}:${viewerMeta.rowCount}:${viewerMeta.firstDate ?? 'empty'}:${viewerMeta.lastDate ?? 'empty'}`;
   const narrative = describeRuleRunNarrative(run);
   const executionNotes = getRuleRunExecutionNotes(run);
@@ -193,34 +197,34 @@ export const DeterministicBacktestResultView: React.FC<{
             <div className="backtest-result-viewer__metric-stage" data-testid="deterministic-result-kpi-row">
               <div className="backtest-result-viewer__metric-stage-header">
                 <div>
-                  <span className="product-kicker">结果摘要</span>
-                  <h2 className="backtest-result-viewer__metric-stage-title">关键指标</h2>
+                  <span className="product-kicker">{language === 'en' ? 'Summary' : '结果摘要'}</span>
+                  <h2 className="backtest-result-viewer__metric-stage-title">{language === 'en' ? 'Key metrics' : '关键指标'}</h2>
                 </div>
                 <div className="product-chip-list product-chip-list--tight">
-                  <span className="product-chip">样本 {viewerMeta.rowCount} 天</span>
-                  <span className="product-chip">交易 {metrics.tradeCount}</span>
-                  <span className="product-chip">权益 {formatNumber(metrics.finalEquity)}</span>
+                  <span className="product-chip">{language === 'en' ? `Sample ${viewerMeta.rowCount} days` : `样本 ${viewerMeta.rowCount} 天`}</span>
+                  <span className="product-chip">{language === 'en' ? `Trades ${metrics.tradeCount}` : `交易 ${metrics.tradeCount}`}</span>
+                  <span className="product-chip">{language === 'en' ? `Equity ${formatNumber(metrics.finalEquity)}` : `权益 ${formatNumber(metrics.finalEquity)}`}</span>
                 </div>
               </div>
               <SummaryStrip
                 items={[
                   {
-                    label: '决策判断',
+                    label: language === 'en' ? 'Verdict' : '决策判断',
                     value: narrative.verdict,
                     note: benchmarkMeta.showBenchmark ? benchmarkMeta.benchmarkLabel : benchmarkMeta.buyHoldLabel,
                   },
                   {
-                    label: '回撤体感',
+                    label: language === 'en' ? 'Drawdown feel' : '回撤体感',
                     value: narrative.drawdownLabel,
                     note: pct(metrics.maxDrawdownPct),
                   },
                   {
-                    label: '交易活跃度',
+                    label: language === 'en' ? 'Trading activity' : '交易活跃度',
                     value: narrative.activityLabel,
-                    note: `${metrics.tradeCount} 次交易`,
+                    note: language === 'en' ? `${metrics.tradeCount} trades` : `${metrics.tradeCount} 次交易`,
                   },
                   {
-                    label: '信号质量',
+                    label: language === 'en' ? 'Signal quality' : '信号质量',
                     value: narrative.qualityLabel,
                     note: pct(metrics.winRatePct),
                   },
@@ -231,7 +235,7 @@ export const DeterministicBacktestResultView: React.FC<{
               ) : null}
               <div className="metric-grid backtest-result-viewer__metric-grid">
                 <MetricCard
-                  label="总收益"
+                  label={language === 'en' ? 'Total return' : '总收益'}
                   value={pct(metrics.totalReturnPct)}
                   tone="accent"
                   note={comparisonNote}
@@ -243,29 +247,29 @@ export const DeterministicBacktestResultView: React.FC<{
                     ? (comparisonValue >= 0 ? 'positive' : 'negative')
                     : 'default'}
                   note={benchmarkMeta.showBenchmark
-                    ? `买入持有 ${pct(metrics.buyAndHoldReturnPct)}`
+                    ? (language === 'en' ? `Buy and hold ${pct(metrics.buyAndHoldReturnPct)}` : `买入持有 ${pct(metrics.buyAndHoldReturnPct)}`)
                     : comparisonNote}
                 />
                 <MetricCard
-                  label="最大回撤"
+                  label={language === 'en' ? 'Max drawdown' : '最大回撤'}
                   value={pct(metrics.maxDrawdownPct)}
                   tone="negative"
-                  note={`年化收益 ${annualizedReturn}`}
+                  note={language === 'en' ? `Annualized return ${annualizedReturn}` : `年化收益 ${annualizedReturn}`}
                 />
                 <MetricCard
-                  label="交易次数"
+                  label={language === 'en' ? 'Trades' : '交易次数'}
                   value={String(metrics.tradeCount)}
-                  note={metrics.tradeCount > 0 ? `${metrics.winCount} 胜 / ${metrics.lossCount} 负` : '暂无成交交易'}
+                  note={metrics.tradeCount > 0 ? (language === 'en' ? `${metrics.winCount} wins / ${metrics.lossCount} losses` : `${metrics.winCount} 胜 / ${metrics.lossCount} 负`) : (language === 'en' ? 'No filled trades yet' : '暂无成交交易')}
                 />
                 <MetricCard
-                  label="胜率"
+                  label={language === 'en' ? 'Win rate' : '胜率'}
                   value={pct(metrics.winRatePct)}
-                  note={metrics.avgTradeReturnPct != null ? `平均每笔 ${pct(metrics.avgTradeReturnPct)}` : '按已成交交易统计'}
+                  note={metrics.avgTradeReturnPct != null ? (language === 'en' ? `Average trade ${pct(metrics.avgTradeReturnPct)}` : `平均每笔 ${pct(metrics.avgTradeReturnPct)}`) : (language === 'en' ? 'Based on filled trades' : '按已成交交易统计')}
                 />
                 <MetricCard
-                  label="期末权益"
+                  label={language === 'en' ? 'Ending equity' : '期末权益'}
                   value={formatNumber(metrics.finalEquity)}
-                  note={`初始资金 ${formatNumber(run.initialCapital)}`}
+                  note={language === 'en' ? `Initial capital ${formatNumber(run.initialCapital)}` : `初始资金 ${formatNumber(run.initialCapital)}`}
                 />
               </div>
               <SummaryStrip
@@ -273,22 +277,22 @@ export const DeterministicBacktestResultView: React.FC<{
                   {
                     label: benchmarkMeta.benchmarkLabel,
                     value: benchmarkMeta.showBenchmark ? pct(metrics.benchmarkReturnPct) : '--',
-                    note: '与策略使用同一回测窗口',
+                    note: language === 'en' ? 'Uses the same backtest window as the strategy.' : '与策略使用同一回测窗口',
                   },
                   {
                     label: benchmarkMeta.buyHoldLabel,
                     value: pct(metrics.buyAndHoldReturnPct),
-                    note: '当前标的买入并持有',
+                    note: language === 'en' ? 'Current instrument buy and hold.' : '当前标的买入并持有',
                   },
                   {
-                    label: '夏普',
+                    label: language === 'en' ? 'Sharpe' : '夏普',
                     value: sharpeRatio,
-                    note: `年化 ${annualizedReturn}`,
+                    note: language === 'en' ? `Annualized ${annualizedReturn}` : `年化 ${annualizedReturn}`,
                   },
                   {
-                    label: '平均持有',
-                    value: metrics.avgHoldingBars == null ? '--' : `${formatNumber(metrics.avgHoldingBars, 1)} 根K线`,
-                    note: metrics.avgHoldingCalendarDays == null ? '按交易日统计' : `${formatNumber(metrics.avgHoldingCalendarDays, 1)} 天`,
+                    label: language === 'en' ? 'Average holding' : '平均持有',
+                    value: metrics.avgHoldingBars == null ? '--' : (language === 'en' ? `${formatNumber(metrics.avgHoldingBars, 1)} bars` : `${formatNumber(metrics.avgHoldingBars, 1)} 根K线`),
+                    note: metrics.avgHoldingCalendarDays == null ? (language === 'en' ? 'Measured in trading days' : '按交易日统计') : (language === 'en' ? `${formatNumber(metrics.avgHoldingCalendarDays, 1)} days` : `${formatNumber(metrics.avgHoldingCalendarDays, 1)} 天`),
                   },
                 ]}
               />
