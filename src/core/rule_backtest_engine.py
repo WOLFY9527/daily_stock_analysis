@@ -1429,6 +1429,7 @@ class RuleBacktestEngine:
                         "entry_indicators": pending_entry.indicators,
                         "entry_fill_basis": fill_basis,
                         "cash_buffer": float(entry_execution["cash_remaining"]),
+                        "peak_close_price": float(max(entry_execution["effective_price"], float(price))),
                     }
                     executed_action = "buy"
                     executed_fill_price = float(entry_execution["effective_price"])
@@ -1807,6 +1808,12 @@ class RuleBacktestEngine:
             if idx >= execution_end_index:
                 continue
 
+            if position and active_position:
+                active_position["peak_close_price"] = max(
+                    float(active_position.get("peak_close_price") or active_position.get("entry_price") or float(price)),
+                    float(price),
+                )
+
             stop_loss_pct = _safe_float(risk_controls.get("stop_loss_pct"))
             if (
                 position
@@ -1839,6 +1846,80 @@ class RuleBacktestEngine:
                 self._update_point_signal(
                     equity_curve[-1],
                     signal_summary=f"固定止损 {float(stop_loss_pct):g}%",
+                    target_position=0.0,
+                )
+                continue
+
+            take_profit_pct = _safe_float(risk_controls.get("take_profit_pct"))
+            if (
+                position
+                and take_profit_pct is not None
+                and take_profit_pct > 0
+                and self._fixed_take_profit_triggered(
+                    close_price=price,
+                    entry_price=active_position.get("entry_price"),
+                    take_profit_pct=take_profit_pct,
+                )
+            ):
+                trigger_label = f"TAKE_PROFIT_{self._format_risk_control_pct(take_profit_pct)}"
+                pending_exit = PendingOrder(
+                    signal_date=getattr(bar, "date"),
+                    trigger=trigger_label,
+                    rule_json={
+                        "risk_controls": {"take_profit_pct": float(take_profit_pct)},
+                        "condition": "fixed_take_profit_pct",
+                    },
+                    indicators={
+                        **self._collect_signal_strategy_snapshot(strategy_spec, idx, series_payload, ordered_bars),
+                        "take_profit_pct": float(take_profit_pct),
+                        "take_profit_threshold_price": round(
+                            float(active_position["entry_price"]) * (1.0 + (float(take_profit_pct) / 100.0)),
+                            6,
+                        ),
+                        "close": round(float(price), 6),
+                    },
+                )
+                self._update_point_signal(
+                    equity_curve[-1],
+                    signal_summary=f"固定止盈 {float(take_profit_pct):g}%",
+                    target_position=0.0,
+                )
+                continue
+
+            trailing_stop_pct = _safe_float(risk_controls.get("trailing_stop_pct"))
+            trailing_peak_close = _safe_float(active_position.get("peak_close_price"))
+            if (
+                position
+                and trailing_stop_pct is not None
+                and trailing_stop_pct > 0
+                and self._trailing_stop_triggered(
+                    close_price=price,
+                    peak_close_price=trailing_peak_close,
+                    trailing_stop_pct=trailing_stop_pct,
+                )
+            ):
+                trigger_label = f"TRAILING_STOP_{self._format_risk_control_pct(trailing_stop_pct)}"
+                pending_exit = PendingOrder(
+                    signal_date=getattr(bar, "date"),
+                    trigger=trigger_label,
+                    rule_json={
+                        "risk_controls": {"trailing_stop_pct": float(trailing_stop_pct)},
+                        "condition": "trailing_stop_pct",
+                    },
+                    indicators={
+                        **self._collect_signal_strategy_snapshot(strategy_spec, idx, series_payload, ordered_bars),
+                        "trailing_stop_pct": float(trailing_stop_pct),
+                        "trailing_peak_close_price": round(float(trailing_peak_close or price), 6),
+                        "trailing_stop_threshold_price": round(
+                            float(trailing_peak_close or price) * (1.0 - (float(trailing_stop_pct) / 100.0)),
+                            6,
+                        ),
+                        "close": round(float(price), 6),
+                    },
+                )
+                self._update_point_signal(
+                    equity_curve[-1],
+                    signal_summary=f"移动止损 {float(trailing_stop_pct):g}%",
                     target_position=0.0,
                 )
                 continue
@@ -2597,6 +2678,34 @@ class RuleBacktestEngine:
         if resolved_close is None or resolved_entry is None or resolved_entry <= 0 or stop_loss_pct <= 0:
             return False
         threshold_price = resolved_entry * (1.0 - (float(stop_loss_pct) / 100.0))
+        return float(resolved_close) <= float(threshold_price)
+
+    @staticmethod
+    def _fixed_take_profit_triggered(
+        *,
+        close_price: Optional[float],
+        entry_price: Any,
+        take_profit_pct: float,
+    ) -> bool:
+        resolved_close = _safe_float(close_price)
+        resolved_entry = _safe_float(entry_price)
+        if resolved_close is None or resolved_entry is None or resolved_entry <= 0 or take_profit_pct <= 0:
+            return False
+        threshold_price = resolved_entry * (1.0 + (float(take_profit_pct) / 100.0))
+        return float(resolved_close) >= float(threshold_price)
+
+    @staticmethod
+    def _trailing_stop_triggered(
+        *,
+        close_price: Optional[float],
+        peak_close_price: Any,
+        trailing_stop_pct: float,
+    ) -> bool:
+        resolved_close = _safe_float(close_price)
+        resolved_peak = _safe_float(peak_close_price)
+        if resolved_close is None or resolved_peak is None or resolved_peak <= 0 or trailing_stop_pct <= 0:
+            return False
+        threshold_price = resolved_peak * (1.0 - (float(trailing_stop_pct) / 100.0))
         return float(resolved_close) <= float(threshold_price)
 
     @staticmethod

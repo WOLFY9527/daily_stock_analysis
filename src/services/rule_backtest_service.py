@@ -6291,6 +6291,30 @@ class RuleBacktestService:
                     group_label="风险控制",
                 )
             )
+        take_profit_pct = _safe_float(risk_controls.get("take_profit_pct"))
+        if take_profit_pct is not None and take_profit_pct > 0:
+            assumptions.append(
+                self._build_assumption(
+                    "take_profit_pct",
+                    "固定止盈",
+                    f"{take_profit_pct:g}%",
+                    "当收盘价相对入场成交价上涨达到该阈值时，下一根 bar 开盘触发离场。",
+                    group="risk_controls",
+                    group_label="风险控制",
+                )
+            )
+        trailing_stop_pct = _safe_float(risk_controls.get("trailing_stop_pct"))
+        if trailing_stop_pct is not None and trailing_stop_pct > 0:
+            assumptions.append(
+                self._build_assumption(
+                    "trailing_stop_pct",
+                    "移动止损",
+                    f"{trailing_stop_pct:g}%",
+                    "当收盘价较持仓期间最高收盘价回撤达到该阈值时，下一根 bar 开盘触发离场。",
+                    group="risk_controls",
+                    group_label="风险控制",
+                )
+            )
 
         deduped: List[Dict[str, Any]] = []
         seen = set()
@@ -6402,8 +6426,12 @@ class RuleBacktestService:
         has_stop_loss = self._contains_any(upper_text, ["STOP LOSS", "STOP-LOSS", "止损"])
         has_take_profit = self._contains_any(upper_text, ["TAKE PROFIT", "止盈"])
         has_trailing_stop = self._contains_any(upper_text, ["TRAILING", "移动止损"])
-        if has_take_profit or has_trailing_stop or (has_stop_loss and risk_controls.get("stop_loss_pct") is None):
-            details.append(self._build_unsupported_detail("unsupported_strategy_combination", "组合执行语义", "当前已支持技术信号主规则，但不支持叠加固定止损 / 止盈 / trailing stop。"))
+        if (
+            (has_stop_loss and risk_controls.get("stop_loss_pct") is None)
+            or (has_take_profit and risk_controls.get("take_profit_pct") is None)
+            or (has_trailing_stop and risk_controls.get("trailing_stop_pct") is None)
+        ):
+            details.append(self._build_unsupported_detail("unsupported_strategy_combination", "组合执行语义", "当前已支持技术信号主规则与百分比风控扩展，但仍只支持固定百分比止损 / 止盈 / trailing stop。"))
 
         if self._contains_any(upper_text, ["如果", "否则", "IF ", "THEN ", "ELSE ", "否则如果"]) and not self._is_supported_deterministic_strategy_family(parsed.strategy_kind):
             details.append(self._build_unsupported_detail("unsupported_nested_logic", "嵌套条件", "当前不支持带 if/else 分支的策略逻辑，请改写成单一入场条件 + 单一离场条件。"))

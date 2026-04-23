@@ -886,7 +886,7 @@ Deterministic rule backtests return the following assumptions explicitly so the 
 - `position_sizing`: 100% capital when long, otherwise cash
 - `fee_bps_per_side` / `slippage_bps_per_side`: per-side fee and slippage
 - `benchmark_method`: benchmarked against buy-and-hold over the same window
-- `parsed_strategy.strategy_spec.risk_controls.stop_loss_pct`: when the natural-language strategy includes a fixed percentage stop-loss such as `stop loss 5%`, the normalized strategy spec preserves that value and executes it with the existing semantics of “trigger on close, exit on the next bar open”; `take profit` and `trailing stop` remain unsupported for now
+- `parsed_strategy.strategy_spec.risk_controls.{stop_loss_pct,take_profit_pct,trailing_stop_pct}`: when the natural-language strategy includes a fixed percentage stop-loss / take-profit / trailing stop such as `stop loss 5%`, `take profit 10%`, or `trailing stop 8%`, the normalized strategy spec preserves those values and executes them with the existing semantics of “trigger on close, exit on the next bar open”; the scope still stays minimal: single-position, single-instrument, percentage-threshold only
 
 ---
 
