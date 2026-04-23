@@ -245,7 +245,7 @@ describe('ChatPage', () => {
           skills: ['bull_trend'],
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -288,7 +288,7 @@ describe('ChatPage', () => {
           context: undefined,
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -348,7 +348,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -377,7 +377,7 @@ describe('ChatPage', () => {
           },
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -473,7 +473,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -531,7 +531,7 @@ describe('ChatPage', () => {
         id: 'assistant-1',
         role: 'assistant',
         content: 'Here is the analysis.',
-        skillName: '趋势分析',
+        skillName: '默认多头趋势',
         thinkingSteps: [
           { type: 'thinking', step: 1, message: 'Reviewing the setup' },
           { type: 'tool_done', tool: 'quote_fetch', display_name: 'Quote fetch', duration: 1.2, success: true },

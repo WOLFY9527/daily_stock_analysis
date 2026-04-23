@@ -18,6 +18,7 @@ import { isNearBottom } from '../utils/chatScroll';
 import { useShellRail } from '../components/layout/ShellRailContext';
 import { useShellRailSlot } from '../components/layout/useShellRailSlot';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { translate } from '../i18n/core';
 
 type QuickQuestion = {
   id: string;
@@ -44,36 +45,35 @@ const STARTER_PROMPT_CARDS: StarterPromptCard[] = [
   { id: 'eventFollowUp', skill: 'bull_trend' },
 ];
 
-const SKILL_LABELS_BY_ID: Record<string, { zh: string; en: string }> = {
-  bull_trend: { zh: '默认多头趋势', en: 'Default bull trend' },
-  ma_cross: { zh: '均线金叉', en: 'Moving-average golden cross' },
-  volume_breakout: { zh: '放量突破', en: 'Volume breakout' },
-  volume_pullback: { zh: '缩量回踩', en: 'Low-volume pullback' },
-  box_oscillation: { zh: '箱体震荡', en: 'Range oscillation' },
-  bottom_rebound: { zh: '底部放量', en: 'Bottom-volume rebound' },
-  chan_theory: { zh: '缠论', en: 'Chan theory' },
-  wave_theory: { zh: '波浪理论', en: 'Wave theory' },
-  leader_strategy: { zh: '龙头策略', en: 'Leader strategy' },
-  emotion_cycle: { zh: '情绪周期', en: 'Sentiment cycle' },
-  one_rise_three_fall: { zh: '一阳夹三阴', en: 'One-rise three-fall' },
-};
+const CANONICAL_SKILL_IDS = [
+  'bull_trend',
+  'ma_cross',
+  'volume_breakout',
+  'volume_pullback',
+  'box_oscillation',
+  'bottom_rebound',
+  'chan_theory',
+  'wave_theory',
+  'leader_strategy',
+  'emotion_cycle',
+  'one_rise_three_fall',
+] as const;
 
-const SKILL_TEXT_ALIASES: Record<string, { zh: string; en: string }> = Object.values(SKILL_LABELS_BY_ID).reduce(
-  (acc, item) => {
-    acc[item.zh] = item;
-    acc[item.en] = item;
+const CANONICAL_SKILL_ID_SET = new Set<string>(CANONICAL_SKILL_IDS);
+
+const SKILL_TEXT_ALIAS_TO_ID: Record<string, string> = CANONICAL_SKILL_IDS.reduce(
+  (acc, skillId) => {
+    acc[translate('zh', `chat.skills.labels.${skillId}`)] = skillId;
+    acc[translate('en', `chat.skills.labels.${skillId}`)] = skillId;
     return acc;
   },
-  {} as Record<string, { zh: string; en: string }>,
+  {} as Record<string, string>,
 );
 
 function getLocalizedSkillLabel(rawLabel: string, t: (key: string, vars?: Record<string, string | number | undefined>) => string): string {
-  const alias = SKILL_TEXT_ALIASES[rawLabel];
-  if (alias) {
-    const matchedSkillId = Object.entries(SKILL_LABELS_BY_ID).find(([, value]) => value === alias)?.[0];
-    if (matchedSkillId) {
-      return t(`chat.skills.labels.${matchedSkillId}`);
-    }
+  const matchedSkillId = SKILL_TEXT_ALIAS_TO_ID[rawLabel];
+  if (matchedSkillId) {
+    return t(`chat.skills.labels.${matchedSkillId}`);
   }
   return rawLabel;
 }
@@ -83,8 +83,7 @@ function getLocalizedSkillNameById(
   fallbackName: string,
   t: (key: string, vars?: Record<string, string | number | undefined>) => string,
 ): string {
-  const entry = SKILL_LABELS_BY_ID[skillId];
-  if (entry) return t(`chat.skills.labels.${skillId}`);
+  if (CANONICAL_SKILL_ID_SET.has(skillId)) return t(`chat.skills.labels.${skillId}`);
   return getLocalizedSkillLabel(fallbackName, t);
 }
 
@@ -289,9 +288,10 @@ const ChatPage: React.FC = () => {
       const msgText = overrideMessage || input.trim();
       if (!msgText || loading) return;
       const usedSkill = overrideSkill || selectedSkill;
-      const usedSkillName =
-        skills.find((s) => s.id === usedSkill)?.name ||
-        (usedSkill ? usedSkill : chat('skills.general'));
+      const skill = skills.find((s) => s.id === usedSkill);
+      const usedSkillName = skill
+        ? getLocalizedSkillNameById(skill.id, skill.name, t)
+        : (usedSkill ? getLocalizedSkillLabel(usedSkill, t) : chat('skills.general'));
 
       const payload = {
         message: msgText,
@@ -307,7 +307,7 @@ const ChatPage: React.FC = () => {
       requestScrollToBottom('smooth');
       await startStream(payload, { skillName: usedSkillName });
     },
-    [chat, input, loading, requestScrollToBottom, selectedSkill, skills, sessionId, startStream],
+    [chat, input, loading, requestScrollToBottom, selectedSkill, skills, sessionId, startStream, t],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
