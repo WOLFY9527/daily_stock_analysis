@@ -117,7 +117,7 @@ const ADMIN_LOGS_COPY: Record<AdminLogsLanguage, {
     sessionKind: '活动类型',
     subsystem: '子系统',
     actionName: '动作',
-    destructive: '危险级别',
+    destructive: '破坏性动作',
     finalAiModel: '最终 AI 模型',
     aiAttempts: 'AI 尝试次数',
     finalMarketSource: '最终行情源',
@@ -159,7 +159,7 @@ const ADMIN_LOGS_COPY: Record<AdminLogsLanguage, {
     sessionListHint: 'Choose a session on the left to inspect its summary and timeline.',
     noSessionsTitle: 'No sessions match these filters',
     noSessionsBody: 'Adjust the filters or wait for a new admin action or user activity to be recorded.',
-    sessionDetailTitle: 'Session detail',
+    sessionDetailTitle: 'Session details',
     sessionDetailHint: 'The selected session shows its summary, key fields, and timeline here.',
     selectSessionTitle: 'Select a session',
     selectSessionBody: 'Pick a session from the list to inspect its execution summary and event timeline.',
@@ -175,7 +175,7 @@ const ADMIN_LOGS_COPY: Record<AdminLogsLanguage, {
     sessionKind: 'Activity type',
     subsystem: 'Subsystem',
     actionName: 'Action',
-    destructive: 'Destructive',
+    destructive: 'Destructive action',
     finalAiModel: 'Final AI model',
     aiAttempts: 'AI attempts',
     finalMarketSource: 'Final market source',
@@ -306,6 +306,11 @@ function formatScannerShortlistMeta(count: number, copy: (typeof ADMIN_LOGS_COPY
 function formatBooleanState(value: boolean | undefined, copy: (typeof ADMIN_LOGS_COPY)[AdminLogsLanguage]): string {
   if (value == null) return copy.unavailable;
   return value ? copy.yes : copy.no;
+}
+
+function formatOptionalCount(value: number | null | undefined, copy: (typeof ADMIN_LOGS_COPY)[AdminLogsLanguage]): string {
+  if (value == null) return copy.unavailable;
+  return String(value);
 }
 
 function formatScannerCoverageMeta(
@@ -524,8 +529,8 @@ const AdminLogsPage: React.FC = () => {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">{item.name || item.code || copy.unavailable}</p>
-                        <p className="truncate text-xs text-muted-text">{item.sessionId}</p>
+                        <p className="break-words text-sm font-medium text-foreground">{item.name || item.code || copy.unavailable}</p>
+                        <p className="break-all text-xs text-muted-text">{item.sessionId}</p>
                       </div>
                       <span className={`rounded-full px-2 py-0.5 text-[11px] ${cls}`}>
                         {resolveStatusLabel(item.overallStatus, t)}
@@ -534,7 +539,7 @@ const AdminLogsPage: React.FC = () => {
                     <p className="mt-1 text-xs text-secondary-text">
                       {(item.startedAt && new Date(item.startedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')) || copy.unavailable}
                     </p>
-                    <p className="mt-1 text-xs text-secondary-text">
+                    <p className="mt-1 break-words text-xs text-secondary-text">
                       {summary.actorDisplay || copy.unavailable} · {resolveRoleLabel(String(summary.actorRole || ''), copy)} · {resolveSubsystemLabel(String(summary.subsystem || ''), copy)}
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-secondary-text">
@@ -583,26 +588,32 @@ const AdminLogsPage: React.FC = () => {
                 const notificationState = String(readable.notificationClassification || '').trim();
                 return (
                   <>
+                    <div>
+                      <h2 className="break-words text-base font-semibold text-foreground">
+                        {detail.name || detail.code || copy.unavailable}
+                      </h2>
+                      <p className="mt-1 break-all text-xs text-muted-text">{detail.sessionId}</p>
+                    </div>
                     <section className="rounded-lg border border-border/60 bg-muted/10 p-3">
                       <h3 className="text-sm font-semibold text-foreground">{copy.executiveSummary}</h3>
                       <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
-                      <p className="text-secondary-text">{copy.actor}: <span className="text-foreground">{sourceText(readable.actorDisplay, copy.unavailable)}</span></p>
-                      <p className="text-secondary-text">{copy.actorRole}: <span className="text-foreground">{resolveRoleLabel(sourceText(readable.actorRole, copy.unavailable), copy)}</span></p>
-                      <p className="text-secondary-text">{copy.sessionKind}: <span className="text-foreground">{resolveSessionKindLabel(sourceText(readable.sessionKind, copy.unavailable), t)}</span></p>
-                      <p className="text-secondary-text">{copy.subsystem}: <span className="text-foreground">{resolveSubsystemLabel(sourceText(readable.subsystem, copy.unavailable), copy)}</span></p>
-                      <p className="text-secondary-text">{copy.actionName}: <span className="text-foreground">{sourceText(readable.actionName, copy.unavailable)}</span></p>
-                      <p className="text-secondary-text">{copy.destructive}: <span className="text-foreground">{formatBooleanState(readable.destructive, copy)}</span></p>
-                      <p className="text-secondary-text">{copy.finalAiModel}: <span className="text-foreground">{sourceText(readable.finalAiModel, copy.unavailable)}</span></p>
-                      <p className="text-secondary-text">{copy.aiAttempts}: <span className="text-foreground">{String(readable.aiAttemptsCount || 0)}</span></p>
-                      <p className="text-secondary-text">{copy.finalMarketSource}: <span className="text-foreground">{sourceText(readable.finalMarketSource, copy.unavailable)}</span></p>
-                      <p className="text-secondary-text">{copy.finalFundamentalSource}: <span className="text-foreground">{sourceText(readable.finalFundamentalSource, copy.unavailable)}</span></p>
-                      <p className="text-secondary-text">{copy.finalNewsSource}: <span className="text-foreground">{sourceText(readable.finalNewsSource, copy.unavailable)}</span></p>
-                      <p className="text-secondary-text">{copy.finalSentimentSource}: <span className="text-foreground">{sourceText(readable.finalSentimentSource, copy.unavailable)}</span></p>
-                      <p className="text-secondary-text">
-                        {copy.notification}: <span className="text-foreground">{notificationState ? resolveStatusLabel(notificationState, t) : copy.unavailable}</span>
+                      <p className="break-words text-secondary-text">{copy.actor}: <span className="break-words text-foreground">{sourceText(readable.actorDisplay, copy.unavailable)}</span></p>
+                      <p className="break-words text-secondary-text">{copy.actorRole}: <span className="break-words text-foreground">{resolveRoleLabel(sourceText(readable.actorRole, copy.unavailable), copy)}</span></p>
+                      <p className="break-words text-secondary-text">{copy.sessionKind}: <span className="break-words text-foreground">{resolveSessionKindLabel(sourceText(readable.sessionKind, copy.unavailable), t)}</span></p>
+                      <p className="break-words text-secondary-text">{copy.subsystem}: <span className="break-words text-foreground">{resolveSubsystemLabel(sourceText(readable.subsystem, copy.unavailable), copy)}</span></p>
+                      <p className="break-all text-secondary-text">{copy.actionName}: <span className="break-all text-foreground">{sourceText(readable.actionName, copy.unavailable)}</span></p>
+                      <p className="break-words text-secondary-text">{copy.destructive}: <span className="break-words text-foreground">{formatBooleanState(readable.destructive, copy)}</span></p>
+                      <p className="break-all text-secondary-text">{copy.finalAiModel}: <span className="break-all text-foreground">{sourceText(readable.finalAiModel, copy.unavailable)}</span></p>
+                      <p className="break-words text-secondary-text">{copy.aiAttempts}: <span className="break-words text-foreground">{formatOptionalCount(readable.aiAttemptsCount, copy)}</span></p>
+                      <p className="break-all text-secondary-text">{copy.finalMarketSource}: <span className="break-all text-foreground">{sourceText(readable.finalMarketSource, copy.unavailable)}</span></p>
+                      <p className="break-all text-secondary-text">{copy.finalFundamentalSource}: <span className="break-all text-foreground">{sourceText(readable.finalFundamentalSource, copy.unavailable)}</span></p>
+                      <p className="break-all text-secondary-text">{copy.finalNewsSource}: <span className="break-all text-foreground">{sourceText(readable.finalNewsSource, copy.unavailable)}</span></p>
+                      <p className="break-all text-secondary-text">{copy.finalSentimentSource}: <span className="break-all text-foreground">{sourceText(readable.finalSentimentSource, copy.unavailable)}</span></p>
+                      <p className="break-words text-secondary-text">
+                        {copy.notification}: <span className="break-words text-foreground">{notificationState ? resolveStatusLabel(notificationState, t) : copy.unavailable}</span>
                       </p>
-                      <p className="text-secondary-text">
-                        {copy.topFailureReason}: <span className="text-foreground">{sourceText(readable.topFailureReason, copy.unavailable)}</span>
+                      <p className="break-words text-secondary-text">
+                        {copy.topFailureReason}: <span className="break-words text-foreground">{sourceText(readable.topFailureReason, copy.unavailable)}</span>
                       </p>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -636,15 +647,9 @@ const AdminLogsPage: React.FC = () => {
                       </div>
                     ) : null}
                     </section>
-                    <div>
-                      <h2 className="text-base font-semibold text-foreground">
-                        {detail.name || detail.code || copy.unavailable}
-                      </h2>
-                      <p className="mt-1 text-xs text-muted-text">{detail.sessionId}</p>
-                    </div>
                     <div className="grid gap-2 md:grid-cols-2">
-                      <p className="text-xs text-secondary-text">{copy.queryId}: <span className="text-foreground">{detail.queryId || copy.unavailable}</span></p>
-                      <p className="text-xs text-secondary-text">{copy.taskId}: <span className="text-foreground">{detail.taskId || copy.unavailable}</span></p>
+                      <p className="break-all text-xs text-secondary-text">{copy.queryId}: <span className="break-all text-foreground">{detail.queryId || copy.unavailable}</span></p>
+                      <p className="break-all text-xs text-secondary-text">{copy.taskId}: <span className="break-all text-foreground">{detail.taskId || copy.unavailable}</span></p>
                     </div>
                     <h3 className="text-sm font-semibold text-foreground">{copy.timelineTitle}</h3>
                     <div className="space-y-2">
@@ -665,7 +670,7 @@ const AdminLogsPage: React.FC = () => {
                               <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] font-medium text-foreground">
                                 {resolveCategoryLabel(category, t, copy)}
                               </span>
-                              <span className="rounded-full border border-border/50 px-2 py-0.5 text-[11px] text-secondary-text">
+                              <span className="break-all rounded-full border border-border/50 px-2 py-0.5 text-[11px] text-secondary-text">
                                 {resolveActionLabel(action, t)}
                               </span>
                               <span className={`rounded-full px-2 py-0.5 text-[11px] ${STATUS_CLASS[statusKey]}`}>
@@ -676,7 +681,7 @@ const AdminLogsPage: React.FC = () => {
                                   {copy.outcome}: {t(`adminLogs.outcomeState.${outcome}`)}
                                 </span>
                               ) : null}
-                              <span className="text-xs text-muted-text">{event.target || copy.unavailable}</span>
+                              <span className="break-all text-xs text-muted-text">{event.target || copy.unavailable}</span>
                             </div>
                             {event.message ? (
                               <p className="mt-1 break-words text-xs text-secondary-text">{event.message}</p>

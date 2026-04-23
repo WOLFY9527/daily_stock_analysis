@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLogsPage from '../AdminLogsPage';
 
@@ -255,11 +255,96 @@ describe('AdminLogsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Admin logs' })).toBeInTheDocument();
     expect(screen.getByText('Global admin observability view')).toBeInTheDocument();
     expect(screen.getByText('Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Session detail')).toBeInTheDocument();
+    expect(screen.getByText('Session details')).toBeInTheDocument();
     expect(screen.getByLabelText('Ticker')).toHaveAttribute('placeholder', 'Filter by ticker');
     expect(screen.getByLabelText('Provider or keyword')).toHaveAttribute('placeholder', 'Filter by provider or keyword');
     expect(screen.getByRole('button', { name: 'Refresh list' })).toBeInTheDocument();
     expect(screen.getByText('Run #88')).toBeInTheDocument();
     expect(screen.getByText('Shortlist 5')).toBeInTheDocument();
+  });
+
+  it('keeps long values readable and shows page-local placeholders for missing detail fields', async () => {
+    const longSessionId = 'session-with-an-extremely-long-identifier-that-should-wrap-instead-of-being-cut-off-0123456789';
+    const longName = 'Very long admin log title that should stay readable in the list instead of truncating the only visible copy';
+    const longTarget = 'provider/fallback/target/with/a/very/long/path/that/should-wrap-cleanly/without-breaking-the-detail-layout';
+    const longMessage = 'A very long timeline message that should remain fully visible to operators while wrapping inside the card instead of forcing horizontal overflow in the detail column.';
+
+    listSessions.mockResolvedValueOnce({
+      total: 1,
+      items: [
+        {
+          sessionId: longSessionId,
+          name: longName,
+          overallStatus: 'completed',
+          startedAt: '2026-04-15T10:00:00Z',
+          readableSummary: {
+            actorDisplay: 'Bootstrap Admin',
+            actorRole: 'admin',
+            sessionKind: 'admin_action',
+            subsystem: 'system_control',
+            actionName: 'factory_reset_system',
+            finalAiModel: null,
+          },
+        },
+      ],
+    });
+    getSessionDetail.mockResolvedValueOnce({
+      sessionId: longSessionId,
+      name: longName,
+      overallStatus: 'completed',
+      queryId: null,
+      taskId: null,
+      readableSummary: {
+        actorDisplay: 'Bootstrap Admin',
+        actorRole: 'admin',
+        sessionKind: 'admin_action',
+        subsystem: 'system_control',
+        actionName: 'factory_reset_system',
+        destructive: false,
+        finalAiModel: null,
+        finalMarketSource: null,
+        finalFundamentalSource: null,
+        finalNewsSource: null,
+        finalSentimentSource: null,
+        topFailureReason: null,
+      },
+      events: [
+        {
+          id: 7,
+          phase: 'system',
+          category: 'system',
+          action: 'completed',
+          outcome: 'completed',
+          target: longTarget,
+          status: 'completed',
+          truthLevel: 'confirmed',
+          message: longMessage,
+          eventAt: null,
+        },
+      ],
+    });
+
+    render(<AdminLogsPage />);
+
+    const listButton = await screen.findByRole('button', { name: new RegExp(longName) });
+    expect(listButton).toBeInTheDocument();
+
+    const listName = within(listButton).getByText(longName);
+    expect(listName.className).toContain('break-words');
+    expect(listName.className).not.toContain('truncate');
+
+    const listSessionId = within(listButton).getByText(longSessionId);
+    expect(listSessionId.className).toContain('break-all');
+    expect(listSessionId.className).not.toContain('truncate');
+
+    fireEvent.click(listButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('系统动作时间线')).toBeInTheDocument();
+    });
+    expect(screen.getByText('结果: 已完成')).toBeInTheDocument();
+    expect(screen.getByText(longTarget).className).toContain('break-all');
+    expect(screen.getByText(longMessage).className).toContain('break-words');
+    expect(screen.getAllByText('--').length).toBeGreaterThan(0);
   });
 });
