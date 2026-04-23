@@ -1,13 +1,9 @@
 import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import ScannerSurfacePage from './pages/ScannerSurfacePage';
-import LoginPage from './pages/LoginPage';
-import NotFoundPage from './pages/NotFoundPage';
-import PreviewReportPage from './pages/PreviewReportPage';
-import PreviewFullReportDrawerPage from './pages/PreviewFullReportDrawerPage';
-import { ApiErrorAlert, BrandedLoadingScreen, Shell } from './components/common';
-import { AccessGatePage } from './components/access/AccessGatePage';
+import { ApiErrorAlert } from './components/common/ApiErrorAlert';
+import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
+import { Shell } from './components/layout/Shell';
 import { PreviewShell } from './components/layout/PreviewShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useI18n } from './contexts/UiLanguageContext';
@@ -19,13 +15,21 @@ import {
 } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
-import HomeSurfacePage from './pages/HomeSurfacePage';
 import { useAgentChatStore } from './stores/agentChatStore';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
 const APP_BOOT_SPLASH_FADE_MS = 380;
 const STATIC_BOOT_SPLASH_ID = 'boot-splash';
 
+const AccessGatePage = lazy(() => import('./components/access/AccessGatePage').then((module) => ({
+  default: module.AccessGatePage,
+})));
+const HomeSurfacePage = lazy(() => import('./pages/HomeSurfacePage'));
+const ScannerSurfacePage = lazy(() => import('./pages/ScannerSurfacePage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const PreviewReportPage = lazy(() => import('./pages/PreviewReportPage'));
+const PreviewFullReportDrawerPage = lazy(() => import('./pages/PreviewFullReportDrawerPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
@@ -495,7 +499,11 @@ export const AppContent: React.FC = () => {
       if (!authEnabled || loggedIn) {
         content = <Navigate to={redirectTarget} replace />;
       } else {
-        content = <LoginPage />;
+        content = (
+          <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+            <LoginPage />
+          </Suspense>
+        );
       }
     } else {
       content = (
@@ -549,15 +557,21 @@ export const AppContent: React.FC = () => {
   );
 };
 
-const PreviewRoutes: React.FC = () => (
-  <PreviewShell>
-    <Routes>
-      <Route path="/__preview/report" element={<PreviewReportPage />} />
-      <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
-  </PreviewShell>
-);
+const PreviewRoutes: React.FC = () => {
+  const { t } = useI18n();
+
+  return (
+    <PreviewShell>
+      <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+        <Routes>
+          <Route path="/__preview/report" element={<PreviewReportPage />} />
+          <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
+    </PreviewShell>
+  );
+};
 
 const AppBody: React.FC = () => {
   const location = useLocation();

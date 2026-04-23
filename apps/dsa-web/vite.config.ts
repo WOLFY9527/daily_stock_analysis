@@ -2,6 +2,24 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+function getManualChunk(id: string) {
+  const normalizedId = id.replace(/\\/g, '/')
+  if (!normalizedId.includes('/node_modules/')) {
+    return undefined
+  }
+  if (
+    normalizedId.includes('/node_modules/react/') ||
+    normalizedId.includes('/node_modules/react-dom/') ||
+    normalizedId.includes('/node_modules/scheduler/')
+  ) {
+    return 'vendor-react'
+  }
+  if (normalizedId.includes('/node_modules/react-router')) {
+    return 'vendor-router'
+  }
+  return undefined
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -25,5 +43,10 @@ export default defineConfig({
     // 打包输出到项目根目录的 static 文件夹
     outDir: path.resolve(__dirname, '../../static'),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: getManualChunk,
+      },
+    },
   },
 })
