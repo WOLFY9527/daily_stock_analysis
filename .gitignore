@@ -86,6 +86,10 @@ static/
 .cache/
 .codex-artifacts/
 
+# local agent workspaces and slice handoff artifacts
+.agents/
+slice_report_*.json
+
 # local market data cache
 local_market_data/
 
