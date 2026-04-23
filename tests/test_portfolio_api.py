@@ -24,6 +24,7 @@ import src.auth as auth
 from api.app import create_app
 from src.config import Config
 from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError
+from src.services.portfolio_service import PortfolioService
 from src.services.portfolio_service import PortfolioBusyError
 from src.storage import DatabaseManager
 
@@ -160,6 +161,102 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(account_snapshot["total_cash"], 0.0, places=6)
         self.assertAlmostEqual(account_snapshot["total_market_value"], 11000.0, places=6)
         self.assertAlmostEqual(account_snapshot["total_equity"], 11000.0, places=6)
+
+    def test_snapshot_api_returns_market_breakdown_for_multi_account_portfolio(self) -> None:
+        cn_account = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "CN", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(cn_account.status_code, 200)
+        us_account = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "US", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(us_account.status_code, 200)
+        cn_id = cn_account.json()["id"]
+        us_id = us_account.json()["id"]
+
+        self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": cn_id,
+                "event_date": "2026-01-01",
+                "direction": "in",
+                "amount": 1000.0,
+                "currency": "CNY",
+            },
+        )
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": cn_id,
+                "symbol": "600519",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100.0,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": us_id,
+                "event_date": "2026-01-01",
+                "direction": "in",
+                "amount": 100.0,
+                "currency": "USD",
+            },
+        )
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": us_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 1,
+                "price": 100.0,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        PortfolioService().repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"as_of": "2026-01-01"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        payload = snapshot_resp.json()
+        self.assertEqual(payload["currency"], "CNY")
+        self.assertEqual(
+            payload["market_breakdown"],
+            [
+                {
+                    "market": "cn",
+                    "position_count": 1,
+                    "total_market_value": 1000.0,
+                    "weight_pct": 58.8235,
+                },
+                {
+                    "market": "us",
+                    "position_count": 1,
+                    "total_market_value": 700.0,
+                    "weight_pct": 41.1765,
+                },
+            ],
+        )
 
     def test_snapshot_invalid_cost_method_returns_400(self) -> None:
         resp = self.client.get("/api/v1/portfolio/snapshot", params={"cost_method": "bad"})

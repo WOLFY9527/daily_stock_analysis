@@ -2272,6 +2272,7 @@ class PortfolioService:
             "tax_total": 0.0,
             "fx_stale": False,
         }
+        market_breakdown: Dict[str, Dict[str, float]] = {}
 
         for account in account_rows:
             account_snapshot = self._load_cached_account_snapshot(
@@ -2306,6 +2307,12 @@ class PortfolioService:
                 )
 
             accounts_payload.append(account_snapshot["public"])
+            self._accumulate_market_breakdown(
+                market_breakdown=market_breakdown,
+                account_snapshot=account_snapshot["public"],
+                aggregate_currency=aggregate_currency,
+                as_of_date=as_of_date,
+            )
 
             cash_cny, stale_cash, _ = self._convert_amount(
                 amount=account_snapshot["total_cash"],
@@ -2382,6 +2389,10 @@ class PortfolioService:
             "fee_total": round(aggregate["fee_total"], 6),
             "tax_total": round(aggregate["tax_total"], 6),
             "fx_stale": aggregate["fx_stale"],
+            "market_breakdown": self._build_market_breakdown_payload(
+                market_breakdown=market_breakdown,
+                total_market_value=aggregate["total_market_value"],
+            ),
             "accounts": accounts_payload,
         }
 
@@ -3606,6 +3617,67 @@ class PortfolioService:
         if len(currencies) == 1:
             return next(iter(currencies))
         return "CNY"
+
+    def _accumulate_market_breakdown(
+        self,
+        *,
+        market_breakdown: Dict[str, Dict[str, float]],
+        account_snapshot: Dict[str, Any],
+        aggregate_currency: str,
+        as_of_date: date,
+    ) -> None:
+        for position in list(account_snapshot.get("positions") or []):
+            market = self._normalize_snapshot_position_market(
+                position.get("market"),
+                fallback_market=account_snapshot.get("market"),
+            )
+            if market is None:
+                continue
+            converted_market_value, _stale, _ = self._convert_amount(
+                amount=float(position.get("market_value_base") or 0.0),
+                from_currency=position.get("valuation_currency") or account_snapshot.get("base_currency"),
+                to_currency=aggregate_currency,
+                as_of_date=as_of_date,
+            )
+            bucket = market_breakdown.setdefault(
+                market,
+                {
+                    "position_count": 0.0,
+                    "total_market_value": 0.0,
+                },
+            )
+            bucket["position_count"] += 1.0
+            bucket["total_market_value"] += float(converted_market_value)
+
+    @staticmethod
+    def _build_market_breakdown_payload(
+        *,
+        market_breakdown: Dict[str, Dict[str, float]],
+        total_market_value: float,
+    ) -> List[Dict[str, Any]]:
+        if not market_breakdown:
+            return []
+        rows: List[Dict[str, Any]] = []
+        denominator = float(total_market_value or 0.0)
+        for market, bucket in market_breakdown.items():
+            market_value = float(bucket.get("total_market_value") or 0.0)
+            rows.append(
+                {
+                    "market": market,
+                    "position_count": int(bucket.get("position_count") or 0),
+                    "total_market_value": round(market_value, 6),
+                    "weight_pct": round((market_value / denominator) * 100.0, 4) if denominator > 0 else 0.0,
+                }
+            )
+        rows.sort(key=lambda item: (-float(item["total_market_value"]), str(item["market"])))
+        return rows
+
+    @staticmethod
+    def _normalize_snapshot_position_market(value: Any, *, fallback_market: Any = None) -> Optional[str]:
+        normalized = str(value or fallback_market or "").strip().lower()
+        if normalized in VALID_EVENT_MARKETS:
+            return normalized
+        return None
 
     @staticmethod
     def _normalize_broker_type(value: str) -> str:

@@ -1290,6 +1290,7 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
   - cost method switch (`fifo` / `avg`)
   - concentration pie chart (Top Positions) with Recharts
   - snapshot KPI cards and risk summary cards
+  - snapshot payload now includes `market_breakdown`, which aggregates normalized position market value across the whole selected portfolio/account scope by `cn` / `hk` / `us`
 
 ### Agent tool
 - Added `get_portfolio_snapshot` data tool for account-aware LLM suggestions.

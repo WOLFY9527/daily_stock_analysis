@@ -258,6 +258,13 @@ class PortfolioAccountSnapshot(BaseModel):
     positions: List[PortfolioPositionItem] = Field(default_factory=list)
 
 
+class PortfolioMarketBreakdownItem(BaseModel):
+    market: str
+    position_count: int
+    total_market_value: float
+    weight_pct: float
+
+
 class PortfolioSnapshotResponse(BaseModel):
     as_of: str
     cost_method: str
@@ -271,6 +278,7 @@ class PortfolioSnapshotResponse(BaseModel):
     fee_total: float
     tax_total: float
     fx_stale: bool
+    market_breakdown: List[PortfolioMarketBreakdownItem] = Field(default_factory=list)
     accounts: List[PortfolioAccountSnapshot] = Field(default_factory=list)
 
 
