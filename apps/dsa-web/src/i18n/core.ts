@@ -52,6 +52,12 @@ const RESOURCES = {
       openChinese: '打开中文完整报告',
       openEnglish: '打开英文完整报告',
     },
+    previewReport: {
+      documentTitle: '报告预览 - WolfyStock',
+      eyebrow: 'WolfyStock 预览工作区',
+      title: '报告预览',
+      description: '响应式预览页，校验桌面与移动端的层级、结构和主题表现。',
+    },
     language: {
       toggle: '切换语言',
       zh: '中文',
@@ -1744,6 +1750,12 @@ const RESOURCES = {
       fullModeBody: 'Open full report drawer to verify document presentation in unified container strategy.',
       openChinese: 'Open Chinese full report',
       openEnglish: 'Open English full report',
+    },
+    previewReport: {
+      documentTitle: 'Report Preview - WolfyStock',
+      eyebrow: 'WolfyStock Preview Workspace',
+      title: 'Report preview',
+      description: 'Responsive preview page for validating hierarchy, chart structure, and theme behavior.',
     },
     language: {
       toggle: 'Switch language',
