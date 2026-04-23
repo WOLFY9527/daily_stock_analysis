@@ -122,13 +122,14 @@ describe('PersonalSettingsPage', () => {
     );
 
     expect(screen.getByText('当前仅为游客偏好')).toBeInTheDocument();
+    expect(screen.getByText('你的外观偏好会保存在本地，但个人历史、问答、持仓和扫描器数据仍然需要登录后才会拥有。')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '登录后解锁个人数据' })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
     expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
     expect(screen.queryByText('Operator 入口')).not.toBeInTheDocument();
     expect(getNotificationPreferences).not.toHaveBeenCalled();
   });
 
-  it('keeps admins in User Mode by default and hides operator links until Admin Mode is enabled', async () => {
+  it('keeps admins on regular pages by default and hides admin links until admin tools are opened', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       passwordChangeable: true,
@@ -164,8 +165,8 @@ describe('PersonalSettingsPage', () => {
     );
 
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
-    expect(screen.getByText('Admin 模式分层')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '进入 Admin Mode' })).toBeInTheDocument();
+    expect(screen.getByText('管理员工具分层')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开管理工具' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '进入系统设置' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '查看管理员日志' })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument();
@@ -175,7 +176,7 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByText('font-size-card')).toBeInTheDocument();
   });
 
-  it('shows operator entry points after Admin Mode is enabled', async () => {
+  it('shows admin entry points after admin tools are opened', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       passwordChangeable: false,
@@ -201,7 +202,8 @@ describe('PersonalSettingsPage', () => {
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('link', { name: '进入系统设置' })).toHaveAttribute('href', '/settings/system');
     expect(screen.getByRole('link', { name: '查看管理员日志' })).toHaveAttribute('href', '/admin/logs');
-    expect(screen.getByRole('button', { name: '返回 User Mode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '返回普通页面' })).toBeInTheDocument();
+    expect(screen.getByText('分析历史、问答会话、持仓数据、扫描器运行结果与回测现在都会按你的已认证身份解析。')).toBeInTheDocument();
   });
 
   it('saves email and Discord notification targets together for signed-in users', async () => {

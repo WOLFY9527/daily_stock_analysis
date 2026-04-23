@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { translate } from '../../i18n/core';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage';
 import RuleBacktestComparePage from '../RuleBacktestComparePage';
@@ -39,10 +41,14 @@ vi.mock('../../api/backtest', () => ({
 function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
-        <Route path="/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
-      </Routes>
+      <UiLanguageProvider>
+        <Routes>
+          <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/:locale/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
+          <Route path="/:locale/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
+        </Routes>
+      </UiLanguageProvider>
     </MemoryRouter>,
   );
 }
@@ -50,11 +56,15 @@ function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
 function renderResultPageWithCompareWorkbench(initialEntries: string[] = ['/backtest/results/99']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
-        <Route path="/backtest/compare" element={<RuleBacktestComparePage />} />
-      </Routes>
-    </MemoryRouter>,
+      <UiLanguageProvider>
+        <Routes>
+          <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/:locale/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/backtest/compare" element={<RuleBacktestComparePage />} />
+          <Route path="/:locale/backtest/compare" element={<RuleBacktestComparePage />} />
+        </Routes>
+      </UiLanguageProvider>
+    </MemoryRouter>
   );
 }
 
@@ -492,7 +502,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    expect(screen.getByText('鲁棒性分析')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessDisclosure'))).toBeInTheDocument();
     expect(screen.getAllByText('可用').length).toBeGreaterThan(0);
     expect(screen.getByText('Walk-forward 窗口')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
@@ -507,9 +517,9 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByText('最差场景')).toBeInTheDocument();
     expect(screen.getByText('single_day_shock_down_15')).toBeInTheDocument();
     expect(screen.getByTestId('robustness-lens')).toBeInTheDocument();
-    expect(screen.getByText('鲁棒性概览 / Robustness Lens')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessLens'))).toBeInTheDocument();
     expect(screen.getByTestId('robustness-coverage-overview')).toBeInTheDocument();
-    expect(screen.getByText('覆盖进度 / Coverage Track')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.coverageTrack'))).toBeInTheDocument();
     expect(screen.getByTestId('robustness-lens-row-walk-forward')).toHaveTextContent('4 窗口');
     expect(screen.getByTestId('robustness-lens-row-monte-carlo')).toHaveTextContent('200 路径');
     expect(screen.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
@@ -577,11 +587,11 @@ describe('DeterministicBacktestResultPage', () => {
 
     expect(screen.getByTestId('result-additive-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-robustness-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-robustness-panel')).toHaveAttribute('title', '查看回测鲁棒性 additive 摘要');
-    expect(screen.getByText('鲁棒性分析卡片 / Robustness')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-robustness-panel')).toHaveAttribute('title', translate('zh', 'backtest.resultPage.riskControls.robustnessPanelTitle'));
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessCard'))).toBeInTheDocument();
     expect(screen.getByTestId('dashboard-risk-controls-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-risk-controls-panel')).toHaveAttribute('title', '查看策略风险控制 additive 摘要');
-    expect(screen.getByText('风险控制卡片 / Risk Controls')).toBeInTheDocument();
+    expect(screen.getByTestId('dashboard-risk-controls-panel')).toHaveAttribute('title', translate('zh', 'backtest.resultPage.riskControls.riskControlPanelTitle'));
+    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.riskControlCard'))).toBeInTheDocument();
     expect(screen.getByText('已启用 3 项')).toBeInTheDocument();
   });
 
@@ -789,9 +799,9 @@ describe('DeterministicBacktestResultPage', () => {
 
     const riskControlsVisualization = screen.getByTestId('result-risk-controls-visualization');
     expect(riskControlsVisualization).toBeInTheDocument();
-    expect(within(riskControlsVisualization).getByText('保护梯度 / Protection Ladder')).toBeInTheDocument();
+    expect(within(riskControlsVisualization).getByText(translate('zh', 'backtest.resultPage.riskControls.protectionLadder'))).toBeInTheDocument();
     expect(within(riskControlsVisualization).getByText('已启用 3 项')).toBeInTheDocument();
-    expect(within(riskControlsVisualization).getByText('最高阈值 10.00%')).toBeInTheDocument();
+    expect(within(riskControlsVisualization).getByText(translate('zh', 'backtest.resultPage.riskControls.highestThreshold', { value: '10.00' }))).toBeInTheDocument();
     expect(screen.getByTestId('result-risk-controls-row-stop-loss')).toHaveTextContent('5.00%');
     expect(screen.getByTestId('result-risk-controls-row-take-profit')).toHaveTextContent('10.00%');
     expect(screen.getByTestId('result-risk-controls-row-trailing-stop')).toHaveTextContent('8.00%');
@@ -817,7 +827,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    expect(screen.queryByText('鲁棒性分析')).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'backtest.resultPage.riskControls.robustnessDisclosure'))).not.toBeInTheDocument();
   });
 
   it('lets users cancel active runs from the result page', async () => {
@@ -1289,7 +1299,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('参数迭代 / Scenario Lab'));
+    fireEvent.click(screen.getByText('参数变体比较'));
     fireEvent.click(screen.getByRole('button', { name: '运行当前场景组' }));
 
     await waitFor(() => {
@@ -1298,7 +1308,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByText('场景结果比较')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '概览' }));
-    fireEvent.click(screen.getByText('查看可导出的决策摘要'));
+    fireEvent.click(screen.getByText('查看可导出的结果摘要'));
     fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
 
     await waitFor(() => {
@@ -1306,5 +1316,27 @@ describe('DeterministicBacktestResultPage', () => {
       expect(clickMock).toHaveBeenCalled();
       expect(revokeObjectUrlMock).toHaveBeenCalled();
     });
+  });
+
+  it('renders localized English result-shell actions and tabs', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    window.history.replaceState(window.history.state, '', '/en/backtest/results/99');
+    renderResultPage(['/en/backtest/results/99']);
+
+    expect(await screen.findByRole('heading', { name: `${translate('en', 'backtest.resultPage.documentTitle')} #99` })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.hero.backToConfig') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.hero.refreshResult') })).toBeInTheDocument();
+    expect(await screen.findByRole('tablist', { name: translate('en', 'backtest.resultPage.tabsAria') })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: translate('en', 'backtest.resultPage.tabs.overview') })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: translate('en', 'backtest.resultPage.tabs.history') })).toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'backtest.resultPage.overview.exportSummaryDisclosure'))).toBeInTheDocument();
   });
 });

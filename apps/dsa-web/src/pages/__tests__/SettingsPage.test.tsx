@@ -698,7 +698,7 @@ describe('SettingsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'merge stock list' }));
 
-    expect(saveExternalItems).toHaveBeenCalledWith([{ key: 'STOCK_LIST', value: 'SZ000001,SZ000002' }], '自选股配置已更新');
+    expect(saveExternalItems).toHaveBeenCalledWith([{ key: 'STOCK_LIST', value: 'SZ000001,SZ000002' }], '操作成功');
     expect(load).toHaveBeenCalledTimes(1);
   });
 

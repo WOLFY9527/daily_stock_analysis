@@ -1,9 +1,3 @@
-/**
- * SpaceX live refactor: keeps the existing dashboard task/SSE/report behavior intact
- * while rebuilding the homepage into a top-only 2/3 + 1/3 workspace split.
- * The upper desktop region now holds workflow + decision summary on the left and
- * history on the right, with every lower report module returning to full-width flow.
- */
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';

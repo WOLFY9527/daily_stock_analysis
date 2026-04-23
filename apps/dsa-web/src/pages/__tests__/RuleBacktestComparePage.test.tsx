@@ -551,7 +551,7 @@ describe('RuleBacktestComparePage', () => {
 
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '打开结果页 202' }));
+    fireEvent.click(await screen.findByRole('button', { name: '打开结果页 202' }));
 
     expect(await screen.findByTestId('rule-backtest-result-route')).toBeInTheDocument();
   });
@@ -955,7 +955,7 @@ describe('RuleBacktestComparePage', () => {
 
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '移除运行 202' }));
+    fireEvent.click(await screen.findByRole('button', { name: '移除运行 202' }));
 
     expect(await screen.findByText('至少需要 2 条已完成运行才能打开比较工作台。')).toBeInTheDocument();
     expect(compareRuleBacktestRuns).toHaveBeenCalledTimes(1);

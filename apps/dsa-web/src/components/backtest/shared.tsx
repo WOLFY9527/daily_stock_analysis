@@ -1,6 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
 import { Badge, Button, Checkbox, Disclosure } from '../../components/common';
+import { useI18n } from '../../contexts/UiLanguageContext';
+import { translate } from '../../i18n/core';
 import type {
   AssumptionMap,
   BacktestResultItem,
@@ -12,46 +14,26 @@ import type {
   RuleBacktestTradeItem,
 } from '../../types/backtest';
 
-const ASSUMPTION_LABELS: Record<string, string> = {
-  module_type: '模块语义',
-  evaluation_window_unit: '评估窗口单位',
-  maturity_unit: '成熟期单位',
-  price_basis: '价格口径',
-  analysis_signal_timing: '分析信号时点',
-  simulated_entry_timing: '模拟入场时点',
-  simulated_exit_timing: '模拟离场时点',
-  position_sizing: '仓位假设',
-  fees_slippage: '费用与滑点',
-  timeframe: '时间周期',
-  signal_evaluation_timing: '信号评估时点',
-  entry_fill_timing: '入场成交时点',
-  exit_fill_timing: '离场成交时点',
-  position_sizing_model: '仓位模型',
-  fee_model: '手续费模型',
-  fee_bps_per_side: '单边手续费',
-  slippage_model: '滑点模型',
-  slippage_bps_per_side: '单边滑点',
-  benchmark_method: '基准比较',
-};
-
-const RULE_STATUS_LABELS: Record<string, string> = {
-  parsing: '解析中',
-  queued: '排队中',
-  running: '运行中',
-  summarizing: '整理摘要',
-  completed: '已完成',
-  cancelled: '已取消',
-  failed: '失败',
-};
-
 const TERMINAL_RULE_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 const CANCELLABLE_RULE_STATUSES = new Set(['queued', 'parsing', 'running', 'summarizing']);
 
-const HISTORICAL_STATUS_LABELS: Record<string, string> = {
-  completed: '已完成',
-  error: '执行异常',
-  insufficient_data: '样本不足',
-};
+type BacktestLanguage = 'zh' | 'en';
+
+function bt(language: BacktestLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
+  return translate(language, `backtest.${key}`, vars);
+}
+
+function getRuleStatusText(status?: string, language: BacktestLanguage = 'zh'): string {
+  const normalized = String(status || 'queued').trim().toLowerCase();
+  const label = bt(language, `ruleStatus.${normalized}`);
+  return label === `backtest.ruleStatus.${normalized}` ? normalized : label;
+}
+
+function getHistoricalStatusText(status?: string, language: BacktestLanguage = 'zh'): string {
+  const normalized = String(status || 'completed').trim().toLowerCase();
+  const label = bt(language, `historicalStatus.${normalized}`);
+  return label === `backtest.historicalStatus.${normalized}` ? normalized : label;
+}
 
 export { Disclosure };
 
@@ -97,16 +79,16 @@ export type RuleBenchmarkMode =
   | 'custom_code';
 
 export const RULE_BENCHMARK_OPTIONS: Array<{ value: RuleBenchmarkMode; label: string }> = [
-  { value: 'auto', label: '自动' },
-  { value: 'none', label: '无基准' },
-  { value: 'same_symbol_buy_and_hold', label: '当前标的买入并持有' },
-  { value: 'index_hs300', label: '沪深300' },
-  { value: 'index_csi500', label: '中证500' },
-  { value: 'index_ndx100', label: '纳指100' },
+  { value: 'auto', label: translate('zh', 'backtest.benchmarkMode.auto') },
+  { value: 'none', label: translate('zh', 'backtest.benchmarkMode.none') },
+  { value: 'same_symbol_buy_and_hold', label: translate('zh', 'backtest.benchmarkMode.same_symbol_buy_and_hold') },
+  { value: 'index_hs300', label: translate('zh', 'backtest.benchmarkMode.index_hs300') },
+  { value: 'index_csi500', label: translate('zh', 'backtest.benchmarkMode.index_csi500') },
+  { value: 'index_ndx100', label: translate('zh', 'backtest.benchmarkMode.index_ndx100') },
   { value: 'etf_qqq', label: 'QQQ' },
-  { value: 'index_sp500', label: '标普500' },
+  { value: 'index_sp500', label: translate('zh', 'backtest.benchmarkMode.index_sp500') },
   { value: 'etf_spy', label: 'SPY' },
-  { value: 'custom_code', label: '自定义代码' },
+  { value: 'custom_code', label: translate('zh', 'backtest.benchmarkMode.custom_code') },
 ];
 
 function isAshareLikeCode(code: string): boolean {
@@ -125,30 +107,26 @@ export function getAutoBenchmarkMode(code: string): RuleBenchmarkMode {
   return 'same_symbol_buy_and_hold';
 }
 
-export function getBenchmarkModeLabel(mode: RuleBenchmarkMode, code?: string, customCode?: string): string {
+export function getBenchmarkModeLabel(mode: RuleBenchmarkMode, code?: string, customCode?: string, language: BacktestLanguage = 'zh'): string {
   if (mode === 'auto') {
-    return `自动 · ${getBenchmarkModeLabel(getAutoBenchmarkMode(code || ''), code, customCode)}`;
+    return bt(language, 'benchmarkMode.autoResolved', {
+      label: getBenchmarkModeLabel(getAutoBenchmarkMode(code || ''), code, customCode, language),
+    });
   }
   if (mode === 'custom_code') {
     const normalizedCustomCode = String(customCode || '').trim().toUpperCase();
-    return normalizedCustomCode ? `自定义 · ${normalizedCustomCode}` : '自定义代码';
+    return normalizedCustomCode
+      ? bt(language, 'benchmarkMode.customResolved', { code: normalizedCustomCode })
+      : bt(language, 'benchmarkMode.custom_code');
   }
-  const matched = RULE_BENCHMARK_OPTIONS.find((item) => item.value === mode);
-  return matched?.label || '基准';
+  const label = bt(language, `benchmarkMode.${mode}`);
+  return label === `backtest.benchmarkMode.${mode}` ? bt(language, 'benchmarkMode.fallback') : label;
 }
 
 export function parsePositiveInt(value: string, fallback: number, minimum = 1): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(minimum, parsed);
-}
-
-function formatAssumptionValue(value: unknown): string {
-  if (value == null) return '--';
-  if (typeof value === 'number') return String(value);
-  if (typeof value === 'boolean') return value ? '是' : '否';
-  if (Array.isArray(value)) return value.join(', ');
-  return String(value);
 }
 
 function getSetupValue(setup: Record<string, unknown> | undefined, key: string): unknown {
@@ -240,61 +218,76 @@ export function getPeriodicNumber(source: Record<string, unknown> | undefined, k
 }
 
 export function formatDraftOrder(source: Record<string, unknown> | undefined): string {
-  const orderMode = String(getStrategySpecValue(source, ['entry', 'order', 'mode']) || getSetupString(source, 'order_mode'));
-  if (orderMode === 'fixed_amount') {
-    const amount = getPeriodicNumber(source, 'amount_per_trade');
-    return amount != null ? `${amount} 元 / 次` : '--';
-  }
-  const quantity = getPeriodicNumber(source, 'quantity_per_trade');
-  return quantity != null ? `${quantity} 股 / 次` : '--';
+  return formatDraftOrderLabel(source, 'zh');
 }
 
 export function formatCashPolicy(source: Record<string, unknown> | undefined): string {
+  return formatCashPolicyLabel(source, 'zh');
+}
+
+export function formatDraftOrderLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
+  const orderMode = String(getStrategySpecValue(source, ['entry', 'order', 'mode']) || getSetupString(source, 'order_mode'));
+  if (orderMode === 'fixed_amount') {
+    const amount = getPeriodicNumber(source, 'amount_per_trade');
+    if (amount == null) return '--';
+    return bt(language, 'periodic.fixedAmountOrder', { amount });
+  }
+  const quantity = getPeriodicNumber(source, 'quantity_per_trade');
+  if (quantity == null) return '--';
+  return bt(language, 'periodic.fixedShareOrder', { quantity });
+}
+
+export function formatCashPolicyLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
   const value = getPeriodicString(source, 'cash_policy');
-  if (value === 'stop_when_insufficient_cash') return '现金不足时停止';
-  if (value === 'skip_when_insufficient_cash') return '现金不足时跳过';
+  if (value === 'stop_when_insufficient_cash') return bt(language, 'periodic.stopWhenCashInsufficient');
+  if (value === 'skip_when_insufficient_cash') return bt(language, 'periodic.skipWhenCashInsufficient');
   return '--';
 }
 
-export function formatExecutionPriceBasis(source: Record<string, unknown> | undefined): string {
+export function formatExecutionPriceBasisLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
   const value = getPeriodicString(source, 'execution_price_basis');
-  if (value === 'open') return '当日开盘价';
-  if (value === 'next_bar_open') return '下一根开盘价';
-  if (value === 'close') return '收盘价';
+  if (value === 'open') return bt(language, 'periodic.sameDayOpen');
+  if (value === 'next_bar_open') return bt(language, 'periodic.nextBarOpen');
+  if (value === 'close') return bt(language, 'periodic.close');
   return '--';
 }
 
-export function formatExitPolicy(source: Record<string, unknown> | undefined): string {
+export function formatExitPolicyLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
   const value = getPeriodicString(source, 'exit_policy');
-  if (value === 'close_at_end') return '到期统一平仓';
+  if (value === 'close_at_end') return bt(language, 'periodic.closeAtEnd');
   return '--';
 }
 
-export function buildPeriodicAssumptions(source: Record<string, unknown> | undefined): string[] {
+export function buildPeriodicAssumptionLabels(
+  source: Record<string, unknown> | undefined,
+  language: BacktestLanguage = 'zh',
+): string[] {
   const items: string[] = [];
   if (getPeriodicString(source, 'execution_price_basis') === 'open') {
-    items.push('“开市价 / 开盘价”按当日开盘价成交。');
+    items.push(bt(language, 'periodic.openExecutionAssumption'));
   }
   if (getPeriodicString(source, 'execution_frequency') === 'daily') {
-    items.push('“每天买入”按每个交易日尝试一次，并持续累积仓位。');
+    items.push(bt(language, 'periodic.dailyAccumulationAssumption'));
   }
   if (getPeriodicString(source, 'cash_policy') === 'stop_when_insufficient_cash') {
-    items.push('现金不足以完成单次买入时，后续停止继续买入。');
+    items.push(bt(language, 'periodic.cashStopAssumption'));
   }
   if (getPeriodicString(source, 'exit_policy') === 'close_at_end') {
-    items.push('未写卖出规则时，回测结束日统一平仓。');
+    items.push(bt(language, 'periodic.closeAtEndAssumption'));
   }
   return items;
 }
 
-function getAssumptionEntries(assumptions?: AssumptionMap): Array<{ key: string; label: string; value: string }> {
-  return Object.entries(assumptions || {})
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => ({
-      key,
-      label: ASSUMPTION_LABELS[key] || key.replace(/_/g, ' '),
-      value: formatAssumptionValue(value),
-    }));
+export function formatExecutionPriceBasis(source: Record<string, unknown> | undefined): string {
+  return formatExecutionPriceBasisLabel(source, 'zh');
+}
+
+export function formatExitPolicy(source: Record<string, unknown> | undefined): string {
+  return formatExitPolicyLabel(source, 'zh');
+}
+
+export function buildPeriodicAssumptions(source: Record<string, unknown> | undefined): string[] {
+  return buildPeriodicAssumptionLabels(source, 'zh');
 }
 
 function formatIndicatorEntries(snapshot?: Record<string, unknown>): Array<{ key: string; value: string }> {
@@ -315,16 +308,11 @@ export function canCancelRuleRun(status?: string): boolean {
   return CANCELLABLE_RULE_STATUSES.has(String(status || '').trim().toLowerCase());
 }
 
-export function getRuleRunStatusDescription(status?: string): string {
+export function getRuleRunStatusDescription(status?: string, language: BacktestLanguage = 'zh'): string {
   const normalized = String(status || '').trim().toLowerCase();
-  if (normalized === 'parsing') return '正在解析策略文本并整理可执行规则。';
-  if (normalized === 'queued') return '任务已入队，等待后台开始执行。';
-  if (normalized === 'running') return '后台正在执行回测，会持续刷新状态。';
-  if (normalized === 'summarizing') return '回测已算完，正在整理摘要、交易和执行轨迹。';
-  if (normalized === 'completed') return '回测已完成，可以查看结果摘要、交易和执行轨迹。';
-  if (normalized === 'cancelled') return '回测已取消，当前运行不会继续推进。';
-  if (normalized === 'failed') return '回测执行失败，可以返回配置页调整后重试。';
-  return '规则回测已提交。';
+  const key = normalized ? `ruleRunStatusDescription.${normalized}` : 'ruleRunStatusDescription.default';
+  const description = bt(language, key);
+  return description === `backtest.${key}` ? bt(language, 'ruleRunStatusDescription.default') : description;
 }
 
 export function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning' | 'danger' | 'info' {
@@ -339,7 +327,7 @@ export function getRuleRunStatusTone(status?: string): 'default' | 'success' | '
 
 export function getHistoricalStatusBadge(status?: string) {
   const normalized = status || 'completed';
-  const label = HISTORICAL_STATUS_LABELS[normalized] || normalized;
+  const label = getHistoricalStatusText(normalized);
   if (normalized === 'completed') return <Badge variant="success">{label}</Badge>;
   if (normalized === 'insufficient_data') return <Badge variant="warning">{label}</Badge>;
   if (normalized === 'error') return <Badge variant="danger">{label}</Badge>;
@@ -348,7 +336,7 @@ export function getHistoricalStatusBadge(status?: string) {
 
 export function getRuleStatusBadge(status?: string) {
   const normalized = status || 'queued';
-  const label = RULE_STATUS_LABELS[normalized] || normalized;
+  const label = getRuleStatusText(normalized);
   if (normalized === 'completed') return <Badge variant="success">{label}</Badge>;
   if (normalized === 'failed') return <Badge variant="danger">{label}</Badge>;
   if (normalized === 'summarizing') return <Badge variant="info">{label}</Badge>;
@@ -357,87 +345,86 @@ export function getRuleStatusBadge(status?: string) {
   return <Badge variant="default">{label}</Badge>;
 }
 
-export function getRuleRunStatusLabel(status?: string): string {
-  const normalized = String(status || 'queued').trim().toLowerCase();
-  return RULE_STATUS_LABELS[normalized] || normalized;
+export function getRuleRunStatusLabel(status?: string, language: BacktestLanguage = 'zh'): string {
+  return getRuleStatusText(status, language);
 }
 
-export function getHistoricalRequestedModeLabel(mode?: string | null): string {
+export function getHistoricalRequestedModeLabel(mode?: string | null, language: BacktestLanguage = 'zh'): string {
   const normalized = String(mode || '').trim().toLowerCase();
   if (!normalized) return '--';
-  if (normalized === 'local_first') return '本地优先（优先读 LocalParquet）';
-  if (normalized === 'api_first') return '远端优先';
-  if (normalized === 'auto') return '自动选择';
+  if (normalized === 'local_first') return bt(language, 'historicalSource.requestedLocalFirst');
+  if (normalized === 'api_first') return bt(language, 'historicalSource.requestedApiFirst');
+  if (normalized === 'auto') return bt(language, 'historicalSource.requestedAuto');
   return String(mode);
 }
 
-export function getHistoricalResolvedSourceLabel(source?: string | null): string {
+export function getHistoricalResolvedSourceLabel(source?: string | null, language: BacktestLanguage = 'zh'): string {
   const normalized = String(source || '').trim();
-  if (normalized === 'LocalParquet') return 'LocalParquet 本地文件';
-  if (normalized === 'DatabaseCache') return '数据库缓存';
-  if (normalized === 'YfinanceFetcher') return 'Yfinance 在线回退';
-  if (normalized === 'MixedFallback') return '混合回退路径';
-  if (normalized === 'Unknown') return '未知来源';
+  if (normalized === 'LocalParquet') return bt(language, 'historicalSource.localParquet');
+  if (normalized === 'DatabaseCache') return bt(language, 'historicalSource.databaseCache');
+  if (normalized === 'YfinanceFetcher') return bt(language, 'historicalSource.yfinanceFetcher');
+  if (normalized === 'MixedFallback') return bt(language, 'historicalSource.mixedFallback');
+  if (normalized === 'Unknown') return bt(language, 'historicalSource.unknown');
   return normalized || '--';
 }
 
-export function getHistoricalFallbackLabel(value?: boolean | null): string {
+export function getHistoricalFallbackLabel(value?: boolean | null, language: BacktestLanguage = 'zh'): string {
   if (value == null) return '--';
-  return value ? '已回退' : '未回退';
+  return value ? bt(language, 'historicalSource.fallbackUsed') : bt(language, 'historicalSource.fallbackNotUsed');
 }
 
 export function describeHistoricalDataSource(meta: {
   requestedMode?: string | null;
   resolvedSource?: string | null;
   fallbackUsed?: boolean | null;
-}): {
+}, language: BacktestLanguage = 'zh'): {
   tone: 'success' | 'warning' | 'info';
   title: string;
   body: string;
   detail: string;
 } {
-  const requestedLabel = getHistoricalRequestedModeLabel(meta.requestedMode);
-  const resolvedLabel = getHistoricalResolvedSourceLabel(meta.resolvedSource);
-  const fallbackLabel = getHistoricalFallbackLabel(meta.fallbackUsed);
+  const requestedLabel = getHistoricalRequestedModeLabel(meta.requestedMode, language);
+  const resolvedLabel = getHistoricalResolvedSourceLabel(meta.resolvedSource, language);
+  const fallbackLabel = getHistoricalFallbackLabel(meta.fallbackUsed, language);
 
   if (meta.resolvedSource === 'LocalParquet' && meta.fallbackUsed === false) {
     return {
       tone: 'success',
-      title: '已命中 LocalParquet',
-      body: '本次样本与评估优先读取本地 Parquet，没有走回退路径。',
-      detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+      title: bt(language, 'historicalSource.localHitTitle'),
+      body: bt(language, 'historicalSource.localHitBody'),
+      detail: bt(language, 'historicalSource.detail', { requested: requestedLabel, resolved: resolvedLabel, fallback: fallbackLabel }),
     };
   }
 
   if (meta.fallbackUsed) {
     return {
       tone: 'warning',
-      title: `已回退到 ${resolvedLabel}`,
-      body: '系统仍按本地优先发起，但本次实际使用了回退路径。通常表示本地数据缺失、不可用，或覆盖范围不足。',
-      detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+      title: bt(language, 'historicalSource.fallbackTitle', { source: resolvedLabel }),
+      body: bt(language, 'historicalSource.fallbackBody'),
+      detail: bt(language, 'historicalSource.detail', { requested: requestedLabel, resolved: resolvedLabel, fallback: fallbackLabel }),
     };
   }
 
   if (meta.resolvedSource) {
     return {
       tone: 'info',
-      title: `当前使用 ${resolvedLabel}`,
-      body: '这里显示的是本次实际命中的数据路径，便于确认是否按预期读取。',
-      detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+      title: bt(language, 'historicalSource.usingTitle', { source: resolvedLabel }),
+      body: bt(language, 'historicalSource.usingBody'),
+      detail: bt(language, 'historicalSource.detail', { requested: requestedLabel, resolved: resolvedLabel, fallback: fallbackLabel }),
     };
   }
 
   return {
     tone: 'info',
-    title: '等待生成数据源诊断',
-    body: '准备样本或运行评估后，这里会显示本次请求的实际数据路径。',
-    detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+    title: bt(language, 'historicalSource.waitingTitle'),
+    body: bt(language, 'historicalSource.waitingBody'),
+    detail: bt(language, 'historicalSource.detail', { requested: requestedLabel, resolved: resolvedLabel, fallback: fallbackLabel }),
   };
 }
 
-function renderDirectionBadge(correct?: boolean | null, expected?: string | null) {
-  if (correct === true) return <span className="product-direction product-direction--positive">✓ {expected || '匹配'}</span>;
-  if (correct === false) return <span className="product-direction product-direction--negative">✕ {expected || '偏离'}</span>;
+function renderDirectionBadge(correct?: boolean | null, expected?: string | null, language: BacktestLanguage = 'zh') {
+  if (correct === true) return <span className="product-direction product-direction--positive">✓ {expected || bt(language, 'direction.matched')}</span>;
+  if (correct === false) return <span className="product-direction product-direction--negative">✕ {expected || bt(language, 'direction.missed')}</span>;
   return <span className="product-direction">--</span>;
 }
 
@@ -492,7 +479,19 @@ export const AssumptionList: React.FC<{
   assumptions?: AssumptionMap;
   emptyText: string;
 }> = ({ assumptions, emptyText }) => {
-  const entries = getAssumptionEntries(assumptions);
+  const { language } = useI18n();
+  const entries = Object.entries(assumptions || {})
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => ({
+      key,
+      label: (() => {
+        const label = bt(language, `assumptionLabels.${key}`);
+        return label === `backtest.assumptionLabels.${key}` ? key.replace(/_/g, ' ') : label;
+      })(),
+      value: typeof value === 'boolean'
+        ? (value ? bt(language, 'common.yes') : bt(language, 'common.no'))
+        : Array.isArray(value) ? value.join(', ') : String(value),
+    }));
 
   if (entries.length === 0) {
     return <p className="product-empty-note">{emptyText}</p>;
@@ -510,43 +509,61 @@ export const AssumptionList: React.FC<{
   );
 };
 
-export const HistoricalRunSummary: React.FC<{ data: BacktestRunResponse }> = ({ data }) => (
-  <Banner
-    tone="info"
-    title="历史评估已更新"
-    body={(
-      <>
-        已处理 {data.processed} 条候选，写入 {data.saved} 条结果，完成 {data.completed} 条评估。
-        <span className="product-banner__meta">
-          样本不足 {data.insufficient} 条，异常 {data.errors} 条，候选 {data.candidateCount} 条。
-        </span>
-        {data.noResultMessage ? <span className="product-banner__meta">{data.noResultMessage}</span> : null}
-      </>
-    )}
-  />
-);
+export const HistoricalRunSummary: React.FC<{ data: BacktestRunResponse }> = ({ data }) => {
+  const { language } = useI18n();
+
+  return (
+    <Banner
+      tone="info"
+      title={bt(language, 'historicalRunSummary.title')}
+      body={(
+        <>
+          {bt(language, 'historicalRunSummary.body', {
+            processed: data.processed,
+            saved: data.saved,
+            completed: data.completed,
+          })}
+          <span className="product-banner__meta">
+            {bt(language, 'historicalRunSummary.meta', {
+              insufficient: data.insufficient,
+              errors: data.errors,
+              candidateCount: data.candidateCount,
+            })}
+          </span>
+          {data.noResultMessage ? <span className="product-banner__meta">{data.noResultMessage}</span> : null}
+        </>
+      )}
+    />
+  );
+};
 
 export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }) => {
+  const { language } = useI18n();
   const latestStatusAt = run.statusHistory?.[run.statusHistory.length - 1]?.at;
   const tone = getRuleRunStatusTone(run.status);
-  const statusDescription = getRuleRunStatusDescription(run.status);
+  const statusDescription = getRuleRunStatusDescription(run.status, language);
+  const localizedNoResultMessage = run.noResultMessage === '回测窗口内没有触发任何入场信号。'
+    ? bt(language, 'runStatusBanner.noEntrySignal')
+    : run.noResultMessage;
 
   return (
     <Banner
       tone={tone}
       title={(
         <span className="flex flex-wrap items-center gap-2">
-          规则任务状态
-          {getRuleStatusBadge(run.status)}
+          {bt(language, 'runStatusBanner.title')}
+          <Badge variant={tone === 'success' ? 'success' : tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : tone === 'info' ? 'info' : 'default'}>
+            {getRuleStatusText(run.status, language)}
+          </Badge>
         </span>
       )}
       body={(
         <>
-          {run.statusMessage || statusDescription}
+          {language === 'en' ? statusDescription : (run.statusMessage || statusDescription)}
           <span className="product-banner__meta">
-            运行 #{run.id} · {run.code} · {latestStatusAt ? formatDateTime(latestStatusAt) : '--'}
+          {bt(language, 'runStatusBanner.run')} #{run.id} · {run.code} · {latestStatusAt ? formatDateTime(latestStatusAt) : '--'}
           </span>
-          {run.noResultMessage ? <span className="product-banner__meta">{run.noResultMessage}</span> : null}
+          {localizedNoResultMessage ? <span className="product-banner__meta">{localizedNoResultMessage}</span> : null}
         </>
       )}
     />
@@ -554,8 +571,9 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
 };
 
 export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = ({ rows }) => {
+  const { language } = useI18n();
   if (rows.length === 0) {
-    return <div className="product-empty-state">暂无历史分析评估结果。先准备样本或运行一次评估。</div>;
+    return <div className="product-empty-state">{bt(language, 'tables.noHistoricalResults')}</div>;
   }
 
   return (
@@ -563,14 +581,14 @@ export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = 
       <table className="product-table">
         <thead>
           <tr>
-            <th>日期</th>
-            <th>代码</th>
-            <th>建议</th>
-            <th>方向</th>
-            <th className="product-table__align-right">模拟收益</th>
-            <th className="product-table__align-right">标的收益</th>
-            <th>实际数据源</th>
-            <th>状态</th>
+            <th>{bt(language, 'tables.date')}</th>
+            <th>{bt(language, 'tables.code')}</th>
+            <th>{bt(language, 'tables.advice')}</th>
+            <th>{bt(language, 'tables.direction')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.simulatedReturn')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.instrumentReturn')}</th>
+            <th>{bt(language, 'tables.marketSource')}</th>
+            <th>{bt(language, 'common.status')}</th>
           </tr>
         </thead>
         <tbody>
@@ -579,11 +597,11 @@ export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = 
               <td>{row.analysisDate || '--'}</td>
               <td className="product-table__mono">{row.code}</td>
               <td>{row.operationAdvice || '--'}</td>
-              <td>{renderDirectionBadge(row.directionCorrect, row.directionExpected)}</td>
+              <td>{renderDirectionBadge(row.directionCorrect, row.directionExpected, language)}</td>
               <td className="product-table__align-right">{pct(row.simulatedReturnPct)}</td>
               <td className="product-table__align-right">{pct(row.stockReturnPct)}</td>
               <td>{row.marketDataSources.length > 0 ? row.marketDataSources.join(', ') : '--'}</td>
-              <td>{getHistoricalStatusBadge(row.evalStatus)}</td>
+              <td><Badge variant={row.evalStatus === 'completed' ? 'success' : row.evalStatus === 'insufficient_data' ? 'warning' : row.evalStatus === 'error' ? 'danger' : 'default'}>{getHistoricalStatusText(row.evalStatus, language)}</Badge></td>
             </tr>
           ))}
         </tbody>
@@ -597,8 +615,9 @@ export const HistoricalRunsTable: React.FC<{
   selectedRunId: number | null;
   onOpen: (run: BacktestRunHistoryItem) => void;
 }> = ({ rows, selectedRunId, onOpen }) => {
+  const { language } = useI18n();
   if (rows.length === 0) {
-    return <div className="product-empty-state">暂无历史分析评估运行记录。</div>;
+    return <div className="product-empty-state">{bt(language, 'tables.noHistoricalRuns')}</div>;
   }
 
   return (
@@ -606,14 +625,14 @@ export const HistoricalRunsTable: React.FC<{
       <table className="product-table">
         <thead>
           <tr>
-            <th>运行时间</th>
-            <th>代码</th>
-            <th>窗口定义</th>
-            <th className="product-table__align-right">候选</th>
-            <th className="product-table__align-right">胜率</th>
-            <th className="product-table__align-right">平均模拟收益</th>
-            <th>状态</th>
-            <th className="product-table__align-right">操作</th>
+            <th>{bt(language, 'tables.runTime')}</th>
+            <th>{bt(language, 'tables.code')}</th>
+            <th>{bt(language, 'tables.window')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.candidates')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.winRate')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.averageSimulatedReturn')}</th>
+            <th>{bt(language, 'common.status')}</th>
+            <th className="product-table__align-right">{bt(language, 'common.action')}</th>
           </tr>
         </thead>
         <tbody>
@@ -621,14 +640,14 @@ export const HistoricalRunsTable: React.FC<{
             <tr key={row.id} data-active={selectedRunId === row.id ? 'true' : 'false'}>
               <td>{formatDateTime(row.runAt)}</td>
               <td className="product-table__mono">{row.code || '--'}</td>
-              <td>{row.evaluationWindowTradingBars || row.evalWindowDays} bars / {row.maturityCalendarDays || row.minAgeDays} 天</td>
+              <td>{row.evaluationWindowTradingBars || row.evalWindowDays} {bt(language, 'common.bars')} / {row.maturityCalendarDays || row.minAgeDays} {bt(language, 'common.days')}</td>
               <td className="product-table__align-right">{row.candidateCount}</td>
               <td className="product-table__align-right">{pct(row.winRatePct)}</td>
               <td className="product-table__align-right">{pct(row.avgSimulatedReturnPct)}</td>
-              <td>{getHistoricalStatusBadge(row.status)}</td>
+              <td><Badge variant={row.status === 'completed' ? 'success' : row.status === 'insufficient_data' ? 'warning' : row.status === 'error' ? 'danger' : 'default'}>{getHistoricalStatusText(row.status, language)}</Badge></td>
               <td className="product-table__align-right">
                 <Button size="sm" variant="ghost" onClick={() => onOpen(row)}>
-                  查看
+                  {bt(language, 'common.open')}
                 </Button>
               </td>
             </tr>
@@ -640,8 +659,9 @@ export const HistoricalRunsTable: React.FC<{
 };
 
 export const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestTradeItem[] }> = ({ trades }) => {
+  const { language } = useI18n();
   if (trades.length === 0) {
-    return <div className="product-empty-state">暂无交易明细。</div>;
+    return <div className="product-empty-state">{bt(language, 'tables.noTradeDetail')}</div>;
   }
 
   return (
@@ -649,13 +669,13 @@ export const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestTradeItem[] 
       <table className="product-table product-table--wide">
         <thead>
           <tr>
-            <th>信号与成交</th>
-            <th>入场触发</th>
-            <th>离场触发</th>
-            <th>指标快照</th>
-            <th className="product-table__align-right">收益</th>
-            <th className="product-table__align-right">持有</th>
-            <th>执行审计</th>
+            <th>{bt(language, 'tables.signalAndFills')}</th>
+            <th>{bt(language, 'tables.entryTrigger')}</th>
+            <th>{bt(language, 'tables.exitTrigger')}</th>
+            <th>{bt(language, 'tables.indicatorSnapshot')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.return')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.holding')}</th>
+            <th>{bt(language, 'tables.executionAudit')}</th>
           </tr>
         </thead>
         <tbody>
@@ -677,7 +697,7 @@ export const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestTradeItem[] 
                   <div className="indicator-stack">
                     {entryIndicators.length > 0 ? (
                       <div>
-                        <p className="metric-card__label">Entry</p>
+                        <p className="metric-card__label">{bt(language, 'tables.entry')}</p>
                         <div className="product-chip-list product-chip-list--tight">
                           {entryIndicators.map((item) => (
                             <span key={`entry-${item.key}`} className="product-chip">
@@ -689,7 +709,7 @@ export const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestTradeItem[] 
                     ) : null}
                     {exitIndicators.length > 0 ? (
                       <div>
-                        <p className="metric-card__label">Exit</p>
+                        <p className="metric-card__label">{bt(language, 'tables.exit')}</p>
                         <div className="product-chip-list product-chip-list--tight">
                           {exitIndicators.map((item) => (
                             <span key={`exit-${item.key}`} className="product-chip">
@@ -705,14 +725,14 @@ export const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestTradeItem[] 
                 <td className="product-table__align-right">
                   <div className="product-table__stack">
                     <span>{trade.holdingBars ?? trade.holdingDays ?? '--'} bars</span>
-                    <span>{trade.holdingCalendarDays ?? '--'} 天</span>
+                    <span>{trade.holdingCalendarDays ?? '--'} {bt(language, 'common.days')}</span>
                   </div>
                 </td>
                 <td>
                   <div className="product-table__stack">
-                    <span>信号价口径: {trade.signalPriceBasis || '--'}</span>
-                    <span>成交价口径: {trade.priceBasis || '--'}</span>
-                    <span>手续费 / 滑点: {formatNumber(trade.feeBps, 1)}bp / {formatNumber(trade.slippageBps, 1)}bp</span>
+                    <span>{bt(language, 'tables.signalPriceBasis')}: {trade.signalPriceBasis || '--'}</span>
+                    <span>{bt(language, 'tables.fillPriceBasis')}: {trade.priceBasis || '--'}</span>
+                    <span>{bt(language, 'tables.feeSlippage')}: {formatNumber(trade.feeBps, 1)}bp / {formatNumber(trade.slippageBps, 1)}bp</span>
                   </div>
                 </td>
               </tr>
@@ -734,8 +754,9 @@ export const RuleRunsTable: React.FC<{
     maxSelections?: number;
   };
 }> = ({ rows, selectedRunId, onOpen, compareSelection }) => {
+  const { language } = useI18n();
   if (rows.length === 0) {
-    return <div className="product-empty-state">暂无确定性规则回测历史。</div>;
+    return <div className="product-empty-state">{bt(language, 'tables.noRuleRuns')}</div>;
   }
 
   return (
@@ -743,15 +764,15 @@ export const RuleRunsTable: React.FC<{
       <table className="product-table">
         <thead>
           <tr>
-            <th>运行时间</th>
-            <th>代码</th>
-            <th>状态</th>
-            <th className="product-table__align-right">回看范围</th>
-            <th className="product-table__align-right">交易</th>
-            <th className="product-table__align-right">总收益</th>
-            <th className="product-table__align-right">超额收益</th>
-            {compareSelection ? <th className="product-table__align-right">比较</th> : null}
-            <th className="product-table__align-right">操作</th>
+            <th>{bt(language, 'tables.runTime')}</th>
+            <th>{bt(language, 'tables.code')}</th>
+            <th>{bt(language, 'common.status')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.lookback')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.trades')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.totalReturn')}</th>
+            <th className="product-table__align-right">{bt(language, 'tables.excessReturn')}</th>
+            {compareSelection ? <th className="product-table__align-right">{bt(language, 'common.compare')}</th> : null}
+            <th className="product-table__align-right">{bt(language, 'common.action')}</th>
           </tr>
         </thead>
         <tbody>
@@ -761,8 +782,10 @@ export const RuleRunsTable: React.FC<{
               <td className="product-table__mono">{row.code}</td>
               <td>
                 <div className="product-table__stack">
-                  {getRuleStatusBadge(row.status)}
-                  <span>{row.statusMessage || '--'}</span>
+                  <Badge variant={row.status === 'completed' ? 'success' : row.status === 'failed' ? 'danger' : row.status === 'summarizing' ? 'info' : row.status === 'cancelled' || row.status === 'running' ? 'warning' : 'default'}>
+                    {getRuleStatusText(row.status, language)}
+                  </Badge>
+                  <span>{language === 'en' ? (getRuleRunStatusDescription(row.status, language) || '--') : (row.statusMessage || getRuleRunStatusDescription(row.status, language) || '--')}</span>
                 </div>
               </td>
               <td className="product-table__align-right">{row.lookbackBars}</td>
@@ -772,12 +795,12 @@ export const RuleRunsTable: React.FC<{
               {compareSelection ? (
                 <td className="product-table__align-right">
                   {row.id === selectedRunId ? (
-                    <span className="product-chip">当前</span>
+                    <span className="product-chip">{bt(language, 'common.current')}</span>
                   ) : row.status !== 'completed' ? (
-                    <span className="product-footnote">仅已完成</span>
+                    <span className="product-footnote">{bt(language, 'common.completedOnly')}</span>
                   ) : (
                     <Checkbox
-                      aria-label={`比较运行 ${row.id}`}
+                      aria-label={bt(language, 'tables.compareRunAria', { id: row.id })}
                       checked={compareSelection.selectedIds.includes(row.id)}
                       disabled={
                         !compareSelection.selectedIds.includes(row.id)
@@ -790,7 +813,7 @@ export const RuleRunsTable: React.FC<{
               ) : null}
               <td className="product-table__align-right">
                 <Button size="sm" variant="ghost" onClick={() => onOpen(row)}>
-                  查看
+                  {bt(language, 'common.open')}
                 </Button>
               </td>
             </tr>

@@ -23,38 +23,35 @@ import type {
   ScannerRunDetail,
   ScannerRunHistoryItem,
 } from '../types/scanner';
+import {
+  getScannerDetailOptions,
+  getScannerProfileOptions,
+  getScannerUniverseOptions,
+  SCANNER_PROFILE_DEFAULTS,
+} from './scannerPageShared';
 
 const HISTORY_PAGE_SIZE = 6;
-const PROFILE_DEFAULTS = {
-  cn: {
-    profile: 'cn_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '300',
-    detailLimit: '60',
-  },
-  us: {
-    profile: 'us_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '180',
-    detailLimit: '40',
-  },
-  hk: {
-    profile: 'hk_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '120',
-    detailLimit: '30',
-  },
-} as const;
 
-function formatTimestamp(value?: string | null): string {
+function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+  }).format(date);
+}
+
+function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
   }).format(date);
 }
 
@@ -189,53 +186,9 @@ const ScannerPage: React.FC = () => {
     document.title = t('scanner.documentTitle');
   }, [t]);
 
-  const profileOptions = useMemo(() => (
-    market === 'us'
-      ? [{ value: 'us_preopen_v1', label: t('scanner.profileOptionUs') }]
-      : market === 'hk'
-        ? [{ value: 'hk_preopen_v1', label: t('scanner.profileOptionHk') }]
-        : [{ value: 'cn_preopen_v1', label: t('scanner.profileOptionCn') }]
-  ), [market, t]);
-
-  const universeOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '120', label: '120' },
-        { value: '180', label: '180' },
-        { value: '240', label: '240' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '80', label: '80' },
-          { value: '120', label: '120' },
-          { value: '180', label: '180' },
-        ]
-      : [
-        { value: '200', label: '200 只' },
-        { value: '300', label: '300 只' },
-        { value: '500', label: '500 只' },
-      ]
-  ), [market]);
-
-  const detailOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '30', label: '30' },
-        { value: '40', label: '40' },
-        { value: '60', label: '60' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '20', label: '20' },
-          { value: '30', label: '30' },
-          { value: '40', label: '40' },
-        ]
-      : [
-        { value: '40', label: '40 只' },
-        { value: '60', label: '60 只' },
-        { value: '80', label: '80 只' },
-      ]
-  ), [market]);
+  const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
+  const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
+  const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
 
   const selectedMarketCopy = useMemo(() => (
     market === 'us'
@@ -265,7 +218,7 @@ const ScannerPage: React.FC = () => {
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
-    const defaults = PROFILE_DEFAULTS[normalizedMarket];
+    const defaults = SCANNER_PROFILE_DEFAULTS[normalizedMarket];
     setMarket(normalizedMarket);
     setProfile(defaults.profile);
     setShortlistSize(defaults.shortlistSize);
@@ -471,6 +424,43 @@ const ScannerPage: React.FC = () => {
   const comparisonToPrevious = runDetail?.comparisonToPrevious;
   const currentReviewSummary = runDetail?.reviewSummary;
   const recentQualitySummary = statusSummary?.qualitySummary;
+  const diagnosticsCopy = language === 'en' ? {
+    title: 'Run Diagnostics',
+    subtitle: 'Coverage and provider observability',
+    inputUniverse: 'Input Universe',
+    universeFetched: 'Fetched Universe',
+    liquidityPassed: 'Passed Liquidity Filters',
+    dataAvailable: 'Passed Data Availability',
+    rankedPool: 'Ranked Pool',
+    shortlisted: 'Shortlisted',
+    bottleneckHeading: 'Why the shortlist is small',
+    bottleneckSummary: `Filtered ${coverageSummary.excludedTotal ?? 0}, missing data ${missingDataSymbolCount}, shortlisted ${coverageSummary.shortlistedCount ?? 0}.`,
+    exclusionHeading: 'Top Exclusion Reasons',
+    providersHeading: 'Providers',
+    snapshotLabel: 'Snapshot',
+    historyLabel: 'History',
+    fallbackSummary: `${fallbackCount} fallback`,
+    failureSummary: `${providerFailureCount} failures`,
+    historyMetricValue: `${historyStats.localHits ?? 0} local / ${historyStats.networkFetches ?? 0} network`,
+  } : {
+    title: '本次扫描诊断',
+    subtitle: '覆盖率与数据源可观测性',
+    inputUniverse: '输入池',
+    universeFetched: '完成候选池获取',
+    liquidityPassed: '通过流动性/约束',
+    dataAvailable: '通过数据可用性',
+    rankedPool: '进入排名池',
+    shortlisted: '进入最终候选名单',
+    bottleneckHeading: '为何候选名单偏少',
+    bottleneckSummary: `过滤 ${coverageSummary.excludedTotal ?? 0} 只，缺数 ${missingDataSymbolCount} 只，最终候选名单 ${coverageSummary.shortlistedCount ?? 0} 只。`,
+    exclusionHeading: '主要排除原因',
+    providersHeading: '数据源',
+    snapshotLabel: '快照',
+    historyLabel: '历史',
+    fallbackSummary: `发生 ${fallbackCount} 次 fallback`,
+    failureSummary: `失败 ${providerFailureCount} 次`,
+    historyMetricValue: `${historyStats.localHits ?? 0} 本地 / ${historyStats.networkFetches ?? 0} 在线`,
+  };
 
   const handleExportSummary = useCallback(() => {
     if (!runDetail) return;
@@ -553,7 +543,7 @@ const ScannerPage: React.FC = () => {
       <div className="space-y-6">
         <WorkspacePageHeader
           eyebrow={t('scanner.eyebrow')}
-          title={t('scanner.title')}
+          title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
           description={selectedMarketCopy.subtitle}
         >
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
@@ -584,9 +574,9 @@ const ScannerPage: React.FC = () => {
                   value={shortlistSize}
                   onChange={setShortlistSize}
                   options={[
-                    { value: '5', label: 'Top 5' },
-                    { value: '8', label: 'Top 8' },
-                    { value: '10', label: 'Top 10' },
+                    { value: '5', label: language === 'en' ? 'Top 5' : '前 5' },
+                    { value: '8', label: language === 'en' ? 'Top 8' : '前 8' },
+                    { value: '10', label: language === 'en' ? 'Top 10' : '前 10' },
                   ]}
                 />
                 <Select
@@ -638,9 +628,9 @@ const ScannerPage: React.FC = () => {
                         </Badge>
                       ) : null}
                       {runDetail.watchlistDate ? (
-                        <Badge variant="history">{runDetail.watchlistDate}</Badge>
+                        <Badge variant="history">{formatDateOnly(runDetail.watchlistDate, language)}</Badge>
                       ) : null}
-                      <Badge variant="history">{formatTimestamp(runDetail.runAt)}</Badge>
+                      <Badge variant="history">{formatTimestamp(runDetail.runAt, language)}</Badge>
                       <Badge variant={notificationVariant(runNotificationStatus)}>{`${t('scanner.notificationLabel')} ${t(`scanner.notificationStatus.${runNotificationStatus}`)}`}</Badge>
                     </div>
                     <h2 className="text-[1.05rem] text-foreground md:text-[1.15rem]">
@@ -659,12 +649,12 @@ const ScannerPage: React.FC = () => {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <MetricPair label={t('scanner.metricUniverse')} value={`${runDetail.universeSize}`} />
                     <MetricPair label={t('scanner.metricDetail')} value={`${runDetail.evaluatedSize}`} />
-                    <MetricPair label={t('scanner.metricHistory')} value={`${historyStats.localHits ?? 0} 本地 / ${historyStats.networkFetches ?? 0} 在线`} />
+                    <MetricPair label={t('scanner.metricHistory')} value={diagnosticsCopy.historyMetricValue} />
                     <MetricPair label={t('scanner.metricShortlist')} value={`${runDetail.shortlistSize}`} />
-                    <MetricPair label={t('scanner.metricWatchlistDate')} value={runDetail.watchlistDate || '--'} />
+                    <MetricPair label={t('scanner.metricWatchlistDate')} value={formatDateOnly(runDetail.watchlistDate, language)} />
                     <MetricPair label={t('scanner.metricNotification')} value={t(`scanner.notificationStatus.${runNotificationStatus}`)} />
                     <MetricPair label={t('scanner.metricSchedule')} value={statusSummary?.scheduleEnabled ? (statusSummary.scheduleTime || '--') : t('scanner.scheduleDisabled')} />
-                    <MetricPair label={t('scanner.metricLastScheduled')} value={lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt) : '--'} />
+                    <MetricPair label={t('scanner.metricLastScheduled')} value={lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt, language) : '--'} />
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -678,7 +668,7 @@ const ScannerPage: React.FC = () => {
                     </Button>
                     {!isViewingTodayWatchlist && runDetail.watchlistDate ? (
                       <span className="text-xs leading-5 text-secondary-text">
-                        {t('scanner.viewingHistoricalRun', { date: runDetail.watchlistDate })}
+                        {t('scanner.viewingHistoricalRun', { date: formatDateOnly(runDetail.watchlistDate, language) })}
                       </span>
                     ) : null}
                   </div>
@@ -855,7 +845,7 @@ const ScannerPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="w-full sm:w-auto sm:min-w-[88px] text-left sm:text-right">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Scanner Score</p>
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{language === 'en' ? 'Scanner Score' : '扫描评分'}</p>
                           <p className="mt-1 text-3xl leading-none text-foreground">{candidate.score.toFixed(1)}</p>
                         </div>
                       </div>
@@ -983,8 +973,12 @@ const ScannerPage: React.FC = () => {
 
               {!isLoadingRun && !runDetail?.shortlist?.length ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-6 text-sm leading-6 text-secondary-text">
-                  <p className="text-base text-foreground">{t('scanner.emptyTitle')}</p>
-                  <p className="mt-2">{t('scanner.emptyBody')}</p>
+                  <p className="text-base text-foreground">{language === 'en' ? 'No shortlist yet' : '尚未生成候选名单'}</p>
+                  <p className="mt-2">
+                    {language === 'en'
+                      ? 'Run a scanner pass to generate shortlist candidates.'
+                      : '运行一次扫描即可生成候选名单。'}
+                  </p>
                 </div>
               ) : null}
             </Card>
@@ -993,32 +987,30 @@ const ScannerPage: React.FC = () => {
           <section className="space-y-4">
             {showRunDiagnosticsPanel ? (
               <Card
-                title="本次扫描诊断"
-                subtitle="Coverage / provider observability"
+                title={diagnosticsCopy.title}
+                subtitle={diagnosticsCopy.subtitle}
                 className="space-y-4"
               >
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <MetricPair label="输入池" value={String(coverageSummary.inputUniverseSize ?? '--')} />
-                  <MetricPair label="完成 universe 获取" value={String(coverageSummary.eligibleAfterUniverseFetch ?? '--')} />
-                  <MetricPair label="通过流动性/约束" value={String(coverageSummary.eligibleAfterLiquidityFilter ?? '--')} />
-                  <MetricPair label="通过数据可用性" value={String(coverageSummary.eligibleAfterDataAvailabilityFilter ?? '--')} />
-                  <MetricPair label="进入排名池" value={String(coverageSummary.rankedCandidateCount ?? '--')} />
-                  <MetricPair label="进入最终 shortlist" value={String(coverageSummary.shortlistedCount ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.inputUniverse} value={String(coverageSummary.inputUniverseSize ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.universeFetched} value={String(coverageSummary.eligibleAfterUniverseFetch ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.liquidityPassed} value={String(coverageSummary.eligibleAfterLiquidityFilter ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.dataAvailable} value={String(coverageSummary.eligibleAfterDataAvailabilityFilter ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.rankedPool} value={String(coverageSummary.rankedCandidateCount ?? '--')} />
+                  <MetricPair label={diagnosticsCopy.shortlisted} value={String(coverageSummary.shortlistedCount ?? '--')} />
                 </div>
 
                 {coverageSummary.likelyBottleneckLabel ? (
                   <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3 text-sm leading-6 text-secondary-text">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">为何 shortlist 偏小</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.bottleneckHeading}</p>
                     <p className="mt-1 text-foreground">{String(coverageSummary.likelyBottleneckLabel)}</p>
-                    <p className="mt-1 text-xs text-secondary-text">
-                      {`过滤 ${coverageSummary.excludedTotal ?? 0} 只，缺数 ${missingDataSymbolCount} 只，最终 shortlist ${coverageSummary.shortlistedCount ?? 0} 只。`}
-                    </p>
+                    <p className="mt-1 text-xs text-secondary-text">{diagnosticsCopy.bottleneckSummary}</p>
                   </div>
                 ) : null}
 
                 {coverageReasons.length ? (
                   <div className="space-y-2">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">主要排除原因</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.exclusionHeading}</p>
                     <div className="flex flex-wrap gap-2">
                       {coverageReasons.slice(0, 4).map((item) => (
                         <Badge key={`${item.reason}-${item.count}`} variant="history">
@@ -1030,19 +1022,19 @@ const ScannerPage: React.FC = () => {
                 ) : null}
 
                 <div className="space-y-2 rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Providers</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.providersHeading}</p>
                   <p className="text-sm text-foreground">
                     {providerList.length ? providerList.join(' -> ') : String(providerDiagnostics.configuredPrimaryProvider || '--')}
                   </p>
                   <div className="flex flex-wrap gap-2 text-xs text-secondary-text">
                     {providerDiagnostics.snapshotSourceUsed ? (
-                      <span>{`Snapshot: ${String(providerDiagnostics.snapshotSourceUsed)}`}</span>
+                      <span>{`${diagnosticsCopy.snapshotLabel}: ${String(providerDiagnostics.snapshotSourceUsed)}`}</span>
                     ) : null}
                     {providerDiagnostics.historySourceUsed ? (
-                      <span>{`History: ${String(providerDiagnostics.historySourceUsed)}`}</span>
+                      <span>{`${diagnosticsCopy.historyLabel}: ${String(providerDiagnostics.historySourceUsed)}`}</span>
                     ) : null}
-                    <span>{`发生 ${fallbackCount} 次 fallback`}</span>
-                    <span>{`失败 ${providerFailureCount} 次`}</span>
+                    <span>{diagnosticsCopy.fallbackSummary}</span>
+                    <span>{diagnosticsCopy.failureSummary}</span>
                   </div>
                   {providerWarnings.length ? (
                     <div className="flex flex-wrap gap-2">
@@ -1120,7 +1112,7 @@ const ScannerPage: React.FC = () => {
                               <Badge variant={marketBadgeVariant(item.market)}>
                                 {item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}
                               </Badge>
-                              {item.watchlistDate ? <Badge variant="history">{item.watchlistDate}</Badge> : null}
+                              {item.watchlistDate ? <Badge variant="history">{formatDateOnly(item.watchlistDate, language)}</Badge> : null}
                               {item.triggerMode ? (
                                 <Badge variant={item.triggerMode === 'scheduled' ? 'info' : 'history'}>
                                   {item.triggerMode === 'scheduled' ? t('scanner.triggerScheduled') : t('scanner.triggerManual')}
@@ -1132,7 +1124,7 @@ const ScannerPage: React.FC = () => {
                                   {t(`scanner.notificationStatus.${item.notificationStatus}`)}
                                 </Badge>
                               ) : null}
-                              <Badge variant="history">{formatTimestamp(item.runAt)}</Badge>
+                              <Badge variant="history">{formatTimestamp(item.runAt, language)}</Badge>
                             </div>
                             <p className="text-sm leading-6 text-foreground">
                               {item.headline || (item.market === 'us'
@@ -1190,8 +1182,8 @@ const ScannerPage: React.FC = () => {
             </Card>
 
             <Card
-              title={language === 'en' ? 'My recent runs' : '我的近期 runs'}
-              subtitle={language === 'en' ? 'Personal history remains visible in Admin Mode' : 'Admin Mode 下也保留个人历史可见'}
+              title={language === 'en' ? 'My recent runs' : '我的近期运行'}
+              subtitle={language === 'en' ? 'Personal history remains visible in Admin Mode' : '管理员模式下也保留个人历史可见'}
               className="space-y-4"
             >
               {personalHistoryError ? <ApiErrorAlert error={personalHistoryError} /> : null}
@@ -1224,7 +1216,7 @@ const ScannerPage: React.FC = () => {
                               </Badge>
                             ) : null}
                             <Badge variant={runStatusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
-                            <Badge variant="history">{formatTimestamp(item.runAt)}</Badge>
+                            <Badge variant="history">{formatTimestamp(item.runAt, language)}</Badge>
                           </div>
                           <p className="text-sm leading-6 text-foreground">{item.headline || '--'}</p>
                           <p className="text-xs leading-5 text-secondary-text">
@@ -1244,7 +1236,7 @@ const ScannerPage: React.FC = () => {
 
               {!isLoadingPersonalHistory && !personalHistoryItems.length ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
-                  {language === 'en' ? 'No personal scanner history yet.' : '当前管理员账户下还没有个人 scanner 历史。'}
+                  {language === 'en' ? 'No scanner history yet.' : '当前还没有扫描历史。'}
                 </div>
               ) : null}
             </Card>
@@ -1263,7 +1255,7 @@ const ScannerPage: React.FC = () => {
                         {`${t('scanner.scheduleLabel')} ${statusSummary.scheduleEnabled ? (statusSummary.scheduleTime || '--') : t('scanner.scheduleDisabled')}`}
                       </div>
                       <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
-                        {`${t('scanner.lastScheduledLabel')} ${lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt) : '--'} · ${lastScheduledRun ? t(`scanner.status.${lastScheduledRun.status}`) : '--'}`}
+                        {`${t('scanner.lastScheduledLabel')} ${lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt, language) : '--'} · ${lastScheduledRun ? t(`scanner.status.${lastScheduledRun.status}`) : '--'}`}
                       </div>
                       <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
                         {`${t('scanner.notificationLabel')} ${lastScheduledRun?.notificationStatus ? t(`scanner.notificationStatus.${lastScheduledRun.notificationStatus}`) : '--'}`}
@@ -1377,7 +1369,7 @@ const ScannerPage: React.FC = () => {
             <div className="space-y-2">
               <p className="text-sm leading-6 text-secondary-text">{selectedCandidate.reasonSummary}</p>
               <p className="text-xs leading-5 text-secondary-text">
-                {`${t('scanner.lastTradeDate')} ${selectedCandidate.lastTradeDate || '--'} · ${t('scanner.scanTime')} ${formatTimestamp(selectedCandidate.scanTimestamp)}`}
+                {`${t('scanner.lastTradeDate')} ${selectedCandidate.lastTradeDate || '--'} · ${t('scanner.scanTime')} ${formatTimestamp(selectedCandidate.scanTimestamp, language)}`}
               </p>
             </div>
 

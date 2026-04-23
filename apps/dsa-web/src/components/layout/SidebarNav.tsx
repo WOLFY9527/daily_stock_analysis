@@ -108,7 +108,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { authEnabled, loggedIn, logout } = useAuth();
+  const { authEnabled, logout } = useAuth();
   const { isGuest, isAdminAccount, isAdminMode, toggleAdminSurfaceMode } = useProductSurface();
   const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
@@ -118,11 +118,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const signInLabel = language === 'en' ? 'Sign in' : '登录';
   const systemLabel = language === 'en' ? 'System settings' : '系统设置';
   const adminModeActionLabel = isAdminMode
-    ? (language === 'en' ? 'Return to User Mode' : '返回 User Mode')
-    : (language === 'en' ? 'Enter Admin Mode' : '进入 Admin Mode');
+    ? (language === 'en' ? 'Return to User Mode' : '返回用户模式')
+    : (language === 'en' ? 'Enter Admin Mode' : '进入管理员模式');
   const adminModeStatusLabel = isAdminMode
-    ? (language === 'en' ? 'Admin Mode' : 'Admin Mode')
-    : (language === 'en' ? 'User Mode' : 'User Mode');
+    ? (language === 'en' ? 'Admin Mode' : '管理员模式')
+    : (language === 'en' ? 'User Mode' : '用户模式');
   const isAdminOnlyRoute = location.pathname.startsWith('/settings/system') || location.pathname.startsWith('/admin/logs');
   const signInPath = buildLoginPath(location.pathname + location.search);
 
@@ -336,7 +336,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const logoutAction = authEnabled && loggedIn ? (
+  const logoutAction = !isGuest ? (
     <button
       type="button"
       onClick={() => setShowLogoutConfirm(true)}

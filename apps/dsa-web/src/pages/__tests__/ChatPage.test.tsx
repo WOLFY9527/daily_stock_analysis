@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { historyApi } from '../../api/history';
+import type { Message, ProgressStep } from '../../stores/agentChatStore';
 import { ShellRailHarness } from '../../test-utils/ShellRailHarness';
 import ChatPage from '../ChatPage';
 
@@ -21,8 +22,29 @@ const mockSwitchSession = vi.fn();
 const mockStartStream = vi.fn();
 const mockClearCompletionBadge = vi.fn();
 const mockStartNewChat = vi.fn();
+let currentLanguage: 'zh' | 'en' = 'zh';
 
-const mockStoreState = {
+const mockStoreState: {
+  messages: Message[];
+  loading: boolean;
+  progressSteps: ProgressStep[];
+  sessionId: string;
+  sessions: Array<{
+    session_id: string;
+    title: string;
+    message_count: number;
+    created_at: string;
+    last_active: string;
+  }>;
+  sessionsLoading: boolean;
+  sessionLoadError: null;
+  chatError: null;
+  loadSessions: typeof mockLoadSessions;
+  loadInitialSession: typeof mockLoadInitialSession;
+  switchSession: typeof mockSwitchSession;
+  startStream: typeof mockStartStream;
+  clearCompletionBadge: typeof mockClearCompletionBadge;
+} = {
   messages: [],
   loading: false,
   progressSteps: [],
@@ -77,6 +99,18 @@ vi.mock('../../stores/agentChatStore', () => {
   return { useAgentChatStore };
 });
 
+vi.mock('../../contexts/UiLanguageContext', async () => {
+  const actual = await vi.importActual<typeof import('../../i18n/core')>('../../i18n/core');
+  return {
+    useI18n: () => ({
+      language: currentLanguage,
+      t: (key: string, vars?: Record<string, string | number | undefined>) => actual.translate(currentLanguage, key, vars),
+      setLanguage: vi.fn(),
+      toggleLanguage: vi.fn(),
+    }),
+  };
+});
+
 beforeAll(() => {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -110,6 +144,23 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  currentLanguage = 'zh';
+  mockStoreState.messages = [];
+  mockStoreState.loading = false;
+  mockStoreState.progressSteps = [];
+  mockStoreState.sessionId = 'session-1';
+  mockStoreState.sessions = [
+    {
+      session_id: 'session-1',
+      title: '请简要分析 600519',
+      message_count: 2,
+      created_at: '2026-03-15T09:00:00Z',
+      last_active: '2026-03-15T09:05:00Z',
+    },
+  ];
+  mockStoreState.sessionsLoading = false;
+  mockStoreState.sessionLoadError = null;
+  mockStoreState.chatError = null;
 });
 
 describe('ChatPage', () => {
@@ -138,11 +189,11 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('从一个高价值问题开始')).toBeInTheDocument();
+    expect(await screen.findByText('先提一个具体问题')).toBeInTheDocument();
     expect(screen.getByText('开仓执行判断')).toBeInTheDocument();
     expect(screen.getByText('持仓风控复盘')).toBeInTheDocument();
     expect(screen.getByText('事件驱动跟踪')).toBeInTheDocument();
-    expect(screen.getAllByText(/研究助手工作台/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/先提一个明确问题，再继续拆解风险、催化、仓位和执行/).length).toBeGreaterThan(0);
   });
 
   it('switches session when clicking anywhere on the session card', async () => {
@@ -179,7 +230,7 @@ describe('ChatPage', () => {
 
     const sendButton = screen.getByRole('button', { name: /发送|处理中\.\.\./ });
     expect(sendButton).not.toBeDisabled();
-    expect(screen.getByText('正在加载历史分析上下文；现在可直接发送追问。')).toBeInTheDocument();
+    expect(screen.getByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).toBeInTheDocument();
 
     fireEvent.click(sendButton);
 
@@ -191,9 +242,10 @@ describe('ChatPage', () => {
             stock_code: '600519',
             stock_name: '贵州茅台',
           },
+          skills: ['bull_trend'],
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -221,7 +273,7 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('正在加载历史分析上下文；现在可直接发送追问。')).not.toBeInTheDocument();
+      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
     });
 
     fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
@@ -236,7 +288,7 @@ describe('ChatPage', () => {
           context: undefined,
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -276,7 +328,7 @@ describe('ChatPage', () => {
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.queryByText('正在加载历史分析上下文；现在可直接发送追问。')).not.toBeInTheDocument();
+      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -296,7 +348,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -325,7 +377,7 @@ describe('ChatPage', () => {
           },
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
@@ -350,7 +402,7 @@ describe('ChatPage', () => {
     render(<RouterProvider router={router} />);
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
-    expect(screen.getByText('正在加载历史分析上下文；现在可直接发送追问。')).toBeInTheDocument();
+    expect(screen.getByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).toBeInTheDocument();
 
     await router.navigate('/chat?stock=AAPL&name=Apple&recordId=2');
 
@@ -401,7 +453,7 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('正在加载历史分析上下文；现在可直接发送追问。')).not.toBeInTheDocument();
+      expect(screen.queryByText('正在补齐上一次报告的上下文；你现在就可以继续提问。')).not.toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -421,9 +473,85 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: '趋势分析',
+          skillName: '默认多头趋势',
         }),
       );
     });
+  });
+
+  it('updates document title when language is english', async () => {
+    currentLanguage = 'en';
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
+    expect(document.title).toBe('Ask Stock - WolfyStock');
+  });
+
+  it('updates hero and input copy immediately when language switches to english', async () => {
+    currentLanguage = 'en';
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
+    expect(screen.getByText('Start with a concrete question')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Example: Is 600519 / Kweichow Moutai a buy right now? (Enter to send, Shift+Enter for newline)')).toBeInTheDocument();
+  });
+
+  it('localizes session actions in english mode', async () => {
+    currentLanguage = 'en';
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Conversation history')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Switch to conversation 请简要分析 600519/ })).toBeInTheDocument();
+    expect(screen.getByTitle('Delete conversation')).toBeInTheDocument();
+    expect(screen.getByText('2 messages')).toBeInTheDocument();
+  });
+
+  it('localizes assistant thinking labels in english mode', async () => {
+    currentLanguage = 'en';
+    mockStoreState.messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Here is the analysis.',
+        skillName: '默认多头趋势',
+        thinkingSteps: [
+          { type: 'thinking', step: 1, message: 'Reviewing the setup' },
+          { type: 'tool_done', tool: 'quote_fetch', display_name: 'Quote fetch', duration: 1.2, success: true },
+        ],
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('button', { name: /Thinking process/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Thinking process/i }));
+
+    expect(screen.getByText('Reviewing the setup')).toBeInTheDocument();
+    expect(screen.getByText('Quote fetch (1.2s)')).toBeInTheDocument();
   });
 });

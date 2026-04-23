@@ -7,38 +7,35 @@ import { scannerApi } from '../api/scanner';
 import { ApiErrorAlert, Badge, Button, Card, Pagination, Select, WorkspacePageHeader } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerCandidate, ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
+import {
+  getScannerDetailOptions,
+  getScannerProfileOptions,
+  getScannerUniverseOptions,
+  SCANNER_PROFILE_DEFAULTS,
+} from './scannerPageShared';
 
 const HISTORY_PAGE_SIZE = 8;
-const PROFILE_DEFAULTS = {
-  cn: {
-    profile: 'cn_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '300',
-    detailLimit: '60',
-  },
-  us: {
-    profile: 'us_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '180',
-    detailLimit: '40',
-  },
-  hk: {
-    profile: 'hk_preopen_v1',
-    shortlistSize: '5',
-    universeLimit: '120',
-    detailLimit: '30',
-  },
-} as const;
 
-function formatTimestamp(value?: string | null): string {
+function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+  }).format(date);
+}
+
+function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
   }).format(date);
 }
 
@@ -119,75 +116,31 @@ const UserScannerPage: React.FC = () => {
     document.title = t('scanner.documentTitle');
   }, [t]);
 
-  const profileOptions = useMemo(() => (
-    market === 'us'
-      ? [{ value: 'us_preopen_v1', label: t('scanner.profileOptionUs') }]
-      : market === 'hk'
-        ? [{ value: 'hk_preopen_v1', label: t('scanner.profileOptionHk') }]
-        : [{ value: 'cn_preopen_v1', label: t('scanner.profileOptionCn') }]
-  ), [market, t]);
-
-  const universeOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '120', label: '120' },
-        { value: '180', label: '180' },
-        { value: '240', label: '240' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '80', label: '80' },
-          { value: '120', label: '120' },
-          { value: '180', label: '180' },
-        ]
-      : [
-        { value: '200', label: '200 只' },
-        { value: '300', label: '300 只' },
-        { value: '500', label: '500 只' },
-      ]
-  ), [market]);
-
-  const detailOptions = useMemo(() => (
-    market === 'us'
-      ? [
-        { value: '30', label: '30' },
-        { value: '40', label: '40' },
-        { value: '60', label: '60' },
-      ]
-      : market === 'hk'
-        ? [
-          { value: '20', label: '20' },
-          { value: '30', label: '30' },
-          { value: '40', label: '40' },
-        ]
-      : [
-        { value: '40', label: '40 只' },
-        { value: '60', label: '60 只' },
-        { value: '80', label: '80 只' },
-      ]
-  ), [market]);
+  const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
+  const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
+  const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
 
   const selectedMarketCopy = useMemo(() => (
     market === 'us'
       ? {
         subtitle: language === 'en'
-          ? 'Run manual scanner sessions under your own account. System watchlists and schedules stay in admin-only operator space.'
-          : '以你的个人账户执行手动扫描。系统 watchlist 与调度留在 admin-only operator 空间。',
+          ? 'Run manual scanner sessions in your own account. System watchlists and schedules stay in admin-only pages.'
+          : '以你的个人账户执行手动扫描。系统观察名单和调度仍只在管理员页面中可见。',
         runHint: t('scanner.runHintUs'),
         currentRunFallback: t('scanner.currentRunFallbackUs'),
       }
       : market === 'hk'
         ? {
           subtitle: language === 'en'
-            ? 'Run personal Hong Kong scanner sessions under your own account. Operator watchlists and schedules remain admin-only.'
-            : '以你的个人账户执行港股手动扫描。系统 watchlist 与调度继续保留在 admin-only operator 空间。',
+            ? 'Run personal Hong Kong scanner sessions in your own account. System watchlists and schedules remain admin-only.'
+            : '以你的个人账户执行港股手动扫描。系统观察名单和调度继续保留在仅管理员可见的页面中。',
           runHint: t('scanner.runHintHk'),
           currentRunFallback: t('scanner.currentRunFallbackHk'),
         }
       : {
         subtitle: language === 'en'
-          ? 'Generate personal scanner runs and keep shortlist history scoped to your own account.'
-          : '生成个人扫描结果，并将 shortlist 历史限制在你自己的账户范围内。',
+          ? 'Generate personal scanner runs and keep your shortlist history in your own account.'
+          : '生成个人扫描结果，并将候选名单历史限制在你自己的账户范围内。',
         runHint: t('scanner.runHintCn'),
         currentRunFallback: t('scanner.currentRunFallbackCn'),
       }
@@ -195,7 +148,7 @@ const UserScannerPage: React.FC = () => {
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
-    const defaults = PROFILE_DEFAULTS[normalizedMarket];
+    const defaults = SCANNER_PROFILE_DEFAULTS[normalizedMarket];
     setMarket(normalizedMarket);
     setProfile(defaults.profile);
     setShortlistSize(defaults.shortlistSize);
@@ -306,11 +259,11 @@ const UserScannerPage: React.FC = () => {
     <div className="space-y-6">
       <WorkspacePageHeader
         eyebrow={t('scanner.eyebrow')}
-        title={t('scanner.title')}
+        title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
         description={selectedMarketCopy.subtitle}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-          <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'My Scanner Run' : '我的扫描运行'}>
+          <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'My scanner run' : '我的扫描运行'}>
             <div className="space-y-5">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Select
@@ -334,9 +287,9 @@ const UserScannerPage: React.FC = () => {
                   value={shortlistSize}
                   onChange={setShortlistSize}
                   options={[
-                    { value: '5', label: 'Top 5' },
-                    { value: '8', label: 'Top 8' },
-                    { value: '10', label: 'Top 10' },
+                    { value: '5', label: language === 'en' ? 'Top 5' : '前 5' },
+                    { value: '8', label: language === 'en' ? 'Top 8' : '前 8' },
+                    { value: '10', label: language === 'en' ? 'Top 10' : '前 10' },
                   ]}
                 />
                 <Select
@@ -361,7 +314,7 @@ const UserScannerPage: React.FC = () => {
             </div>
           </Card>
 
-          <Card title={language === 'en' ? 'Current personal run' : '当前个人 run'} subtitle={language === 'en' ? 'Owner-scoped detail' : '个人范围详情'}>
+          <Card title={language === 'en' ? 'Current personal run' : '当前个人运行'} subtitle={language === 'en' ? 'Your run details' : '个人范围详情'}>
             {runDetail ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -370,8 +323,8 @@ const UserScannerPage: React.FC = () => {
                   </Badge>
                   <Badge variant="info">{runDetail.profileLabel || runDetail.profile}</Badge>
                   <Badge variant={statusVariant(runDetail.status)}>{t(`scanner.status.${runDetail.status}`)}</Badge>
-                  {runDetail.watchlistDate ? <Badge variant="history">{runDetail.watchlistDate}</Badge> : null}
-                  {runDetail.runAt ? <Badge variant="history">{formatTimestamp(runDetail.runAt)}</Badge> : null}
+                  {runDetail.watchlistDate ? <Badge variant="history">{formatDateOnly(runDetail.watchlistDate, language)}</Badge> : null}
+                  {runDetail.runAt ? <Badge variant="history">{formatTimestamp(runDetail.runAt, language)}</Badge> : null}
                 </div>
                 <div>
                   <h2 className="text-[1.05rem] text-foreground md:text-[1.15rem]">
@@ -379,7 +332,7 @@ const UserScannerPage: React.FC = () => {
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-secondary-text">
                     {runDetail.sourceSummary || (language === 'en'
-                      ? 'Manual scanner output scoped to the current signed-in user.'
+                      ? 'Manual scanner results for the current signed-in account.'
                       : '手动扫描结果已限制在当前登录用户范围内。')}
                   </p>
                 </div>
@@ -397,8 +350,8 @@ const UserScannerPage: React.FC = () => {
             ) : (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
                 {language === 'en'
-                  ? 'No personal scanner run yet. Run the scanner to create an owner-scoped shortlist.'
-                  : '你还没有个人扫描结果。运行扫描后即可生成 owner-scoped shortlist。'}
+                  ? 'No personal scanner run yet. Run the scanner to create your shortlist.'
+                  : '你还没有个人扫描结果。运行扫描后即可生成仅属于你账户的候选名单。'}
               </div>
             )}
           </Card>
@@ -478,11 +431,11 @@ const UserScannerPage: React.FC = () => {
 
             {!isLoadingRun && !runDetail?.shortlist?.length ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-6 text-sm leading-6 text-secondary-text">
-                <p className="text-base text-foreground">{t('scanner.emptyTitle')}</p>
+                <p className="text-base text-foreground">{language === 'en' ? t('scanner.emptyTitle') : '准备生成今日候选名单'}</p>
                 <p className="mt-2">
                   {language === 'en'
-                    ? 'Run a manual scan to generate a shortlist that belongs to your own account.'
-                    : '运行一次手动扫描，生成只属于你自己账户的 shortlist。'}
+                    ? 'Run a manual scan to generate a shortlist for your account.'
+                    : '运行一次手动扫描，生成只属于你自己账户的候选名单。'}
                 </p>
               </div>
             ) : null}
@@ -490,7 +443,7 @@ const UserScannerPage: React.FC = () => {
         </section>
 
         <section className="space-y-4">
-          <Card title={language === 'en' ? 'My recent runs' : '我的近期 runs'} subtitle={language === 'en' ? 'Owner-scoped history' : '个人范围历史'}>
+          <Card title={language === 'en' ? 'My recent runs' : '我的近期运行'} subtitle={language === 'en' ? 'Your run history' : '个人范围历史'}>
             {historyError ? <ApiErrorAlert error={historyError} /> : null}
             {isLoadingHistory ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
@@ -516,7 +469,7 @@ const UserScannerPage: React.FC = () => {
                         {item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}
                       </Badge>
                       <Badge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
-                      {item.watchlistDate ? <Badge variant="history">{item.watchlistDate}</Badge> : null}
+                      {item.watchlistDate ? <Badge variant="history">{formatDateOnly(item.watchlistDate, language)}</Badge> : null}
                     </div>
                     <p className="mt-3 text-sm font-semibold text-foreground">
                       {item.headline || (item.market === 'us'
@@ -528,7 +481,7 @@ const UserScannerPage: React.FC = () => {
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
                       <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
                       <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
-                      <span>{formatTimestamp(item.runAt)}</span>
+                      <span>{formatTimestamp(item.runAt, language)}</span>
                     </div>
                   </button>
                 ))}
@@ -554,17 +507,17 @@ const UserScannerPage: React.FC = () => {
             ) : null}
           </Card>
 
-          <Card title={language === 'en' ? 'Why the user surface is different' : '为什么用户界面与 admin 不同'} subtitle={language === 'en' ? 'Surface split' : '界面分层'}>
+          <Card title={language === 'en' ? 'Why this page is different' : '为什么用户界面与管理员不同'} subtitle={language === 'en' ? 'User and admin views' : '界面分层'}>
             <div className="space-y-3 text-sm leading-6 text-secondary-text">
               <p>
                 {language === 'en'
-                  ? 'This page keeps manual runs, shortlist detail, and cross-feature handoff inside the standard signed-in product.'
-                  : '这个页面只保留手动运行、shortlist 详情和跨功能联动，作为标准登录用户的产品面。'}
+                  ? 'This page focuses on manual runs, shortlist details, and links into other signed-in product features.'
+                  : '这个页面只保留手动运行、候选名单详情和登录后功能跳转，面向普通登录用户。'}
               </p>
               <p>
                 {language === 'en'
-                  ? 'Operational status, system watchlists, schedules, and channel internals remain in admin-only operator surfaces.'
-                  : '运营状态、系统 watchlist、调度和通道内部配置继续保留在 admin-only 的 operator 界面。'}
+                  ? 'Run status, system watchlists, schedules, and channel settings stay in admin-only pages.'
+                  : '运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。'}
               </p>
             </div>
           </Card>

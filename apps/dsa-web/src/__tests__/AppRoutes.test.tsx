@@ -3,11 +3,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppContent } from '../App';
 
-const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock } = vi.hoisted(() => ({
+const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock, languageState } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
   setCurrentRouteMock: vi.fn(),
   setLanguageMock: vi.fn(),
+  languageState: { value: 'zh' as 'zh' | 'en' },
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -23,8 +24,11 @@ vi.mock('../hooks/useProductSurface', () => ({
 
 vi.mock('../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
-    language: 'en',
-    setLanguage: setLanguageMock,
+    language: languageState.value,
+    setLanguage: (language: 'zh' | 'en') => {
+      languageState.value = language;
+      setLanguageMock(language);
+    },
     t: (key: string) => key,
   }),
 }));
@@ -49,7 +53,11 @@ vi.mock('../components/common', async () => {
 });
 
 vi.mock('../pages/HomeSurfacePage', () => ({
-  default: () => <div>home-surface-page</div>,
+  default: () => (
+    <div>
+      {languageState.value === 'en' ? 'Guest Preview Mode' : '游客预览模式'}
+    </div>
+  ),
 }));
 
 vi.mock('../pages/ScannerSurfacePage', () => ({
@@ -119,11 +127,19 @@ describe('AppContent route flows', () => {
       isAdmin: false,
       isAdminMode: false,
     });
+    languageState.value = 'en';
   });
 
-  it('renders the guest homepage on the root route', async () => {
+  it('renders the Chinese guest homepage on the root route for an anonymous session', async () => {
+    languageState.value = 'zh';
     renderAt('/');
-    expect(await screen.findByText('home-surface-page')).toBeInTheDocument();
+    expect(await screen.findByText('游客预览模式')).toBeInTheDocument();
+  });
+
+  it('renders the English guest homepage on the /en route for an anonymous session', async () => {
+    languageState.value = 'en';
+    renderAt('/en');
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
 
   it('gates guest access to registered-user routes with a redirect-aware sign-in link', async () => {
@@ -168,11 +184,11 @@ describe('AppContent route flows', () => {
 
     renderAt('/settings/system');
 
-    expect(await screen.findByRole('heading', { name: 'This operator surface requires an admin account' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'This page requires an admin account' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open personal settings' })).toHaveAttribute('href', '/settings');
   });
 
-  it('shows the admin-mode gate when an admin account stays in User Mode', async () => {
+  it('shows the admin-tools gate when an admin account stays in regular mode', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -188,11 +204,11 @@ describe('AppContent route flows', () => {
 
     renderAt('/settings/system');
 
-    expect(await screen.findByRole('heading', { name: 'Turn on Admin Mode to open operator tools' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Turn on admin tools to open this page' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open personal settings' })).toHaveAttribute('href', '/settings');
   });
 
-  it('renders admin routes once Admin Mode is enabled', async () => {
+  it('renders admin routes once admin tools are enabled', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -235,5 +251,19 @@ describe('AppContent route flows', () => {
     renderAt('/backtest/compare?runIds=101,202');
 
     expect(await screen.findByText('backtest-compare-page')).toBeInTheDocument();
+  });
+
+  it('redirects legacy locale guest scanner path to the scanner surface', async () => {
+    renderAt('/en/guest/scanner');
+
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+  });
+
+  it('redirects legacy locale user scanner path to the scanner surface', async () => {
+    renderAt('/zh/user/scanner');
+
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 });

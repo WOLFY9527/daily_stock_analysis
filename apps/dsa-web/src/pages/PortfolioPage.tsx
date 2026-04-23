@@ -5,6 +5,8 @@ import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Card, Badge, ConfirmDialog, Disclosure, WorkspacePageHeader } from '../components/common';
+import { useI18n } from '../contexts/UiLanguageContext';
+import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
 import { getMarketDirectionColor } from '../utils/marketColors';
 import type {
@@ -60,6 +62,229 @@ type FxRefreshContext = {
   requestId: number;
 };
 
+type PortfolioLanguage = 'zh' | 'en';
+
+type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
+
+function getPortfolioCopy(
+  t: TranslateFn,
+  language: PortfolioLanguage,
+){
+  const copy = {
+    documentTitle: t('portfolio.documentTitle'),
+    eyebrow: t('portfolio.eyebrow'),
+    title: t('portfolio.title'),
+    description: t('portfolio.description'),
+    createAccount: t('portfolio.createAccount'),
+    collapseCreate: t('portfolio.collapseCreate'),
+    refreshData: t('portfolio.refreshData'),
+    refreshingData: t('portfolio.refreshingData'),
+    noAccounts: t('portfolio.noAccounts'),
+    accountView: t('portfolio.accountView'),
+    allAccounts: t('portfolio.allAccounts'),
+    costMethod: t('portfolio.costMethod'),
+    costFifo: t('portfolio.costFifo'),
+    costAvg: t('portfolio.costAvg'),
+    scopeHint: t('portfolio.scopeHint'),
+    fxState: t('portfolio.fxState'),
+    refreshFx: t('portfolio.refreshFx'),
+    refreshingFx: t('portfolio.refreshingFx'),
+    emptyConcentration: t('portfolio.emptyConcentration'),
+    noBrokerConnections: t('portfolio.noBrokerConnections'),
+    emptyEventsTitle: t('portfolio.emptyEventsTitle'),
+    emptyEventsBody: t('portfolio.emptyEventsBody'),
+    prevPage: t('portfolio.prevPage'),
+    nextPage: t('portfolio.nextPage'),
+    pageLabel: t('portfolio.pageLabel'),
+    deleteTitle: t('portfolio.deleteTitle'),
+    deleteMessage: t('portfolio.deleteMessage'),
+    deleteConfirm: t('portfolio.deleteConfirm'),
+    deleteInProgress: t('portfolio.deleteInProgress'),
+    cancel: t('portfolio.cancel'),
+    accountNameRequired: t('portfolio.accountNameRequired'),
+    accountCreated: t('portfolio.accountCreated'),
+    accountCreateFailed: t('portfolio.accountCreateFailed'),
+    riskFallback: t('portfolio.riskFallback'),
+    writeRequiresAccount: t('portfolio.writeRequiresAccount'),
+    syncRequiresAccount: t('portfolio.syncRequiresAccount'),
+    syncRequiresToken: t('portfolio.syncRequiresToken'),
+    deleteRequiresAccount: t('portfolio.deleteRequiresAccount'),
+    riskDegraded: t('portfolio.riskDegraded'),
+    actionHint: t('portfolio.actionHint'),
+    createAccountTitle: t('portfolio.createAccountTitle'),
+    createAccountHelp: t('portfolio.createAccountHelp'),
+    accountNamePlaceholder: t('portfolio.accountNamePlaceholder'),
+    brokerPlaceholder: t('portfolio.brokerPlaceholder'),
+    baseCurrencyPlaceholder: t('portfolio.baseCurrencyPlaceholder'),
+    marketCn: t('portfolio.marketCn'),
+    marketHk: t('portfolio.marketHk'),
+    marketUs: t('portfolio.marketUs'),
+    marketGlobal: t('portfolio.marketGlobal'),
+    creatingAccount: t('portfolio.creatingAccount'),
+    totalEquity: t('portfolio.totalEquity'),
+    totalMarketValue: t('portfolio.totalMarketValue'),
+    totalCash: t('portfolio.totalCash'),
+    fxFresh: t('portfolio.fxFresh'),
+    fxStale: t('portfolio.fxStale'),
+    drawdownTitle: t('portfolio.drawdownTitle'),
+    maxDrawdown: t('portfolio.maxDrawdown'),
+    currentDrawdown: t('portfolio.currentDrawdown'),
+    alert: t('portfolio.alert'),
+    yes: t('portfolio.yes'),
+    no: t('portfolio.no'),
+    stopLossTitle: t('portfolio.stopLossTitle'),
+    triggeredCount: t('portfolio.triggeredCount'),
+    nearCount: t('portfolio.nearCount'),
+    snapshotBasisTitle: t('portfolio.snapshotBasisTitle'),
+    accountCount: t('portfolio.accountCount'),
+    reportingCurrency: t('portfolio.reportingCurrency'),
+    costMethodLabel: t('portfolio.costMethodLabel'),
+    allAccountsWarning: t('portfolio.allAccountsWarning'),
+    positionsTitle: t('portfolio.positionsTitle'),
+    positionsCount: (count: number) => t('portfolio.positionsCount', { count }),
+    noPositions: t('portfolio.noPositions'),
+    positionAccount: t('portfolio.positionAccount'),
+    positionCode: t('portfolio.positionCode'),
+    positionMarketCurrency: t('portfolio.positionMarketCurrency'),
+    positionQuantity: t('portfolio.positionQuantity'),
+    positionAvgCost: t('portfolio.positionAvgCost'),
+    positionLastPrice: t('portfolio.positionLastPrice'),
+    positionMarketValue: t('portfolio.positionMarketValue'),
+    positionUnrealized: t('portfolio.positionUnrealized'),
+    sectorConcentration: t('portfolio.sectorConcentration'),
+    singleNameConcentration: t('portfolio.singleNameConcentration'),
+    concentrationHint: t('portfolio.concentrationHint'),
+    concentrationScope: t('portfolio.concentrationScope'),
+    concentrationScopeSector: t('portfolio.concentrationScopeSector'),
+    concentrationScopeFallback: t('portfolio.concentrationScopeFallback'),
+    sectorAlert: t('portfolio.sectorAlert'),
+    topWeight: t('portfolio.topWeight'),
+    dataSyncTitle: t('portfolio.dataSyncTitle'),
+    brokerImport: t('portfolio.brokerImport'),
+    currentImportAccount: t('portfolio.currentImportAccount'),
+    brokerFallbackEmpty: t('portfolio.brokerFallbackEmpty'),
+    brokerFallbackUnavailable: t('portfolio.brokerFallbackUnavailable'),
+    selectBrokerExport: t('portfolio.selectBrokerExport'),
+    selectIbkrExport: t('portfolio.selectIbkrExport'),
+    dryRun: t('portfolio.dryRun'),
+    parsing: t('portfolio.parsing'),
+    parseFile: t('portfolio.parseFile'),
+    committing: t('portfolio.committing'),
+    commitImport: t('portfolio.commitImport'),
+    brokerImportHint: t('portfolio.brokerImportHint'),
+    ibkrImportHint: t('portfolio.ibkrImportHint'),
+    ibkrReadOnlyTitle: t('portfolio.ibkrReadOnlyTitle'),
+    ibkrReadOnlyBody: t('portfolio.ibkrReadOnlyBody'),
+    readOnlyBadge: t('portfolio.readOnlyBadge'),
+    ibkrApiBasePlaceholder: t('portfolio.ibkrApiBasePlaceholder'),
+    ibkrAccountRefPlaceholder: t('portfolio.ibkrAccountRefPlaceholder'),
+    ibkrSessionTokenPlaceholder: t('portfolio.ibkrSessionTokenPlaceholder'),
+    verifyIbkrSsl: t('portfolio.verifyIbkrSsl'),
+    syncing: t('portfolio.syncing'),
+    syncIbkr: t('portfolio.syncIbkr'),
+    syncResult: t('portfolio.syncResult'),
+    positionsCountLabel: t('portfolio.positionsCountLabel'),
+    cashCurrenciesLabel: t('portfolio.cashCurrenciesLabel'),
+    accountRef: t('portfolio.accountRef'),
+    syncedAt: t('portfolio.syncedAt'),
+    syncOverlay: t('portfolio.syncOverlay'),
+    syncSaved: t('portfolio.syncSaved'),
+    parseResult: t('portfolio.parseResult'),
+    valid: t('portfolio.valid'),
+    cash: t('portfolio.cash'),
+    corporateActions: t('portfolio.corporateActions'),
+    skipped: t('portfolio.skipped'),
+    errors: t('portfolio.errors'),
+    accountMapping: t('portfolio.accountMapping'),
+    commitResult: t('portfolio.commitResult'),
+    inserted: t('portfolio.inserted'),
+    duplicates: t('portfolio.duplicates'),
+    failed: t('portfolio.failed'),
+    duplicateFingerprintHint: t('portfolio.duplicateFingerprintHint'),
+    manualAdjustments: t('portfolio.manualAdjustments'),
+    manualTrade: t('portfolio.manualTrade'),
+    symbolPlaceholder: t('portfolio.symbolPlaceholder'),
+    buy: t('portfolio.buy'),
+    sell: t('portfolio.sell'),
+    quantity: t('portfolio.quantity'),
+    price: t('portfolio.price'),
+    feeOptional: t('portfolio.feeOptional'),
+    taxOptional: t('portfolio.taxOptional'),
+    submitTrade: t('portfolio.submitTrade'),
+    manualCash: t('portfolio.manualCash'),
+    cashIn: t('portfolio.cashIn'),
+    cashOut: t('portfolio.cashOut'),
+    amount: t('portfolio.amount'),
+    currencyOptional: (currency: string) => t('portfolio.currencyOptional', {
+      currency: currency || t('portfolio.accountBaseCurrencyFallback'),
+    }),
+    submitCash: t('portfolio.submitCash'),
+    manualCorporate: t('portfolio.manualCorporate'),
+    stockCode: t('portfolio.stockCode'),
+    cashDividend: t('portfolio.cashDividend'),
+    splitAdjustment: t('portfolio.splitAdjustment'),
+    dividendPerShare: t('portfolio.dividendPerShare'),
+    splitRatio: t('portfolio.splitRatio'),
+    submitCorporate: t('portfolio.submitCorporate'),
+    ledgerAudit: t('portfolio.ledgerAudit'),
+    tradeLedger: t('portfolio.tradeLedger'),
+    cashLedger: t('portfolio.cashLedger'),
+    corporateLedger: t('portfolio.corporateLedger'),
+    loading: t('portfolio.loading'),
+    refreshLedger: t('portfolio.refreshLedger'),
+    filterBySymbol: t('portfolio.filterBySymbol'),
+    allSides: t('portfolio.allSides'),
+    allDirections: t('portfolio.allDirections'),
+    allActions: t('portfolio.allActions'),
+    deleteHintBlocked: t('portfolio.deleteHintBlocked'),
+    deleteHintReady: t('portfolio.deleteHintReady'),
+    tradeDeleteMessage: (item: PortfolioTradeListItem) => t('portfolio.tradeDeleteMessage', {
+      tradeDate: item.tradeDate,
+      sideLabel: formatSideLabel(item.side, language),
+      symbol: item.symbol,
+      quantity: item.quantity,
+      price: item.price,
+    }),
+    cashDeleteMessage: (item: PortfolioCashLedgerListItem) => t('portfolio.cashDeleteMessage', {
+      eventDate: item.eventDate,
+      directionLabel: formatCashDirectionLabel(item.direction, language),
+      amount: item.amount,
+      currency: item.currency,
+    }),
+    corporateDeleteMessage: (item: PortfolioCorporateActionListItem) => t('portfolio.corporateDeleteMessage', {
+      effectiveDate: item.effectiveDate,
+      actionLabel: formatCorporateActionLabel(item.actionType, language),
+      symbol: item.symbol,
+    }),
+    attributionHeroKicker: t('portfolio.attribution.heroKicker'),
+    attributionDistributionKicker: t('portfolio.attribution.distributionKicker'),
+    attributionCoverage: (coverage: string) => t('portfolio.attribution.coverage', { coverage }),
+    attributionTopSlice: t('portfolio.attribution.topSlice'),
+    attributionSecondarySignal: t('portfolio.attribution.secondarySignal'),
+    attributionAccountMeta: t('portfolio.attribution.accountMeta'),
+    attributionIndustryMeta: t('portfolio.attribution.industryMeta'),
+    attributionPortfolioTitle: t('portfolio.attribution.portfolioTitle'),
+    attributionAccountTitle: t('portfolio.attribution.accountTitle'),
+    attributionIndustryTitle: t('portfolio.attribution.industryTitle'),
+    attributionDominantMix: t('portfolio.attribution.dominantMix'),
+    attributionAccountTopList: t('portfolio.attribution.accountTopList'),
+    attributionIndustryTopList: t('portfolio.attribution.industryTopList'),
+    attributionTopAccount: t('portfolio.attribution.topAccount'),
+    attributionAccountWeight: t('portfolio.attribution.accountWeight'),
+    attributionTopIndustry: t('portfolio.attribution.topIndustry'),
+    attributionIndustryWeight: t('portfolio.attribution.industryWeight'),
+    attributionEquityWeight: t('portfolio.attribution.equityWeight'),
+    attributionAccountId: t('portfolio.attribution.accountId'),
+    attributionPositionCount: t('portfolio.attribution.positionCount'),
+    attributionPositionCountValue: (count: string) => t('portfolio.attribution.positionCountValue', { count }),
+    attributionPortfolioHeroTitle: t('portfolio.attribution.portfolioHeroTitle'),
+    attributionAccountDistributionTitle: (coverage: string) => t('portfolio.attribution.accountDistributionTitle', { coverage }),
+    attributionIndustryDistributionTitle: (coverage: string) => t('portfolio.attribution.industryDistributionTitle', { coverage }),
+  };
+
+  return copy;
+}
+
 type AttributionVisualRow = {
   label: string;
   valueLabel: string;
@@ -74,7 +299,7 @@ function getTodayIso(): string {
 
 function formatMoney(value: number | undefined | null, currency = 'CNY'): string {
   if (value == null || Number.isNaN(value)) return '--';
-  return `${currency} ${Number(value).toLocaleString('zh-CN', {
+  return `${currency} ${Number(value).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -85,32 +310,39 @@ function formatPct(value: number | undefined | null): string {
   return `${value.toFixed(2)}%`;
 }
 
-function formatSideLabel(value: PortfolioSide): string {
-  return value === 'buy' ? '买入' : '卖出';
+function formatSideLabel(value: PortfolioSide, language: PortfolioLanguage): string {
+  return translate(language, `portfolio.side.${value}`);
 }
 
-function formatCashDirectionLabel(value: PortfolioCashDirection): string {
-  return value === 'in' ? '流入' : '流出';
+function formatCashDirectionLabel(value: PortfolioCashDirection, language: PortfolioLanguage): string {
+  return translate(language, `portfolio.cashDirection.${value}`);
 }
 
-function formatCorporateActionLabel(value: PortfolioCorporateActionType): string {
-  return value === 'cash_dividend' ? '现金分红' : '拆并股调整';
+function formatCorporateActionLabel(value: PortfolioCorporateActionType, language: PortfolioLanguage): string {
+  return translate(language, `portfolio.corporateAction.${value}`);
 }
 
-function formatBrokerLabel(value: string, displayName?: string): string {
-  if (displayName && displayName.trim()) return `${value}（${displayName.trim()}）`;
-  if (value === 'huatai') return 'huatai（华泰）';
-  if (value === 'citic') return 'citic（中信）';
-  if (value === 'cmb') return 'cmb（招商）';
-  if (value === 'ibkr') return 'ibkr（Interactive Brokers）';
+function formatBrokerLabel(value: string, displayName: string | undefined, language: PortfolioLanguage): string {
+  const knownName = translate(language, `portfolio.brokerName.${value}`);
+  if (knownName !== `portfolio.brokerName.${value}`) {
+    return language === 'en' ? `${value} (${knownName})` : `${value}（${knownName}）`;
+  }
+  if (displayName && displayName.trim()) {
+    return language === 'en' ? `${value} (${displayName.trim()})` : `${value}（${displayName.trim()}）`;
+  }
   return value;
 }
 
-function formatAccountMarketLabel(value: string): string {
-  if (value === 'global') return '全球市场';
-  if (value === 'hk') return '港股';
-  if (value === 'us') return '美股';
-  return 'A 股';
+function formatAccountMarketLabel(value: string, language: PortfolioLanguage): string {
+  const normalized = value === 'global' || value === 'hk' || value === 'us' ? value : 'cn';
+  return translate(language, `portfolio.marketLabel.${normalized}`);
+}
+
+function formatBrokerConnectionStatus(value: string, language: PortfolioLanguage): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  const label = translate(language, `portfolio.brokerStatus.${normalized}`);
+  if (label !== `portfolio.brokerStatus.${normalized}`) return label;
+  return value || '--';
 }
 
 function formatPositionContext(market: string, currency: string): string {
@@ -209,10 +441,10 @@ function getAttributionIndustryLinkKey(entry: Record<string, unknown> | null): s
   return value ? `industry:${value}` : null;
 }
 
-function getAttributionHoverHeading(row: AttributionVisualRow): string {
-  if (row.meta === '账户') return 'Top account focus';
-  if (row.meta === '行业') return 'Top industry focus';
-  return 'Attribution focus';
+function getAttributionHoverHeading(row: AttributionVisualRow, language: PortfolioLanguage): string {
+  if (row.meta === translate(language, 'portfolio.attribution.accountMeta')) return translate(language, 'portfolio.attribution.accountHover');
+  if (row.meta === translate(language, 'portfolio.attribution.industryMeta')) return translate(language, 'portfolio.attribution.industryHover');
+  return translate(language, 'portfolio.attribution.focusHover');
 }
 
 function getAttributionCoverage(rows: AttributionVisualRow[]): number {
@@ -234,6 +466,7 @@ function AttributionHero({
   activeLinkKey: string | null;
   onActiveLinkChange: (linkKey: string | null) => void;
 }) {
+  const { language, t } = useI18n();
   const [isActive, setIsActive] = useState(false);
   if (!rows.length) return null;
 
@@ -268,7 +501,7 @@ function AttributionHero({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Attribution Highlight</p>
+          <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{t('portfolio.attribution.heroKicker')}</p>
           <p className="mt-1 text-sm font-semibold text-foreground">{leadRow.label}</p>
           <p className="text-xs text-secondary">{leadRow.meta ? `${leadRow.meta} · ` : ''}{leadRow.valueLabel}</p>
         </div>
@@ -283,7 +516,7 @@ function AttributionHero({
           id={tooltipTestId}
           role="tooltip"
         >
-          <span className="text-foreground">{getAttributionHoverHeading(leadRow)}</span>
+          <span className="text-foreground">{getAttributionHoverHeading(leadRow, language)}</span>
           <span className="ml-1">{leadRow.label}</span>
           <span className="ml-1 font-mono text-foreground">{leadRow.valueLabel}</span>
         </div>
@@ -296,7 +529,7 @@ function AttributionHero({
               className={`rounded-lg px-3 py-2 ${row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.22)]'}`}
               data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
             >
-              <p className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">{row.meta || 'Secondary signal'}</p>
+              <p className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">{row.meta || t('portfolio.attribution.secondarySignal')}</p>
               <p className="mt-1 text-xs font-medium text-foreground">{row.label}</p>
               <p className="text-[11px] font-mono text-secondary">{row.valueLabel}</p>
             </div>
@@ -322,6 +555,7 @@ function AttributionDistributionBand({
   activeLinkKey: string | null;
   onActiveLinkChange: (linkKey: string | null) => void;
 }) {
+  const { t } = useI18n();
   const [hoveredRow, setHoveredRow] = useState<AttributionVisualRow | null>(null);
   const segments = rows
     .filter((row) => row.percent > 0)
@@ -354,8 +588,8 @@ function AttributionDistributionBand({
       onMouseLeave={clearRow}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">Distribution Band</p>
-        <span className="text-[11px] font-mono text-foreground">Top coverage {coverage.toFixed(2)}%</span>
+        <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{t('portfolio.attribution.distributionKicker')}</p>
+        <span className="text-[11px] font-mono text-foreground">{t('portfolio.attribution.coverage', { coverage: coverage.toFixed(2) })}</span>
       </div>
       {hoveredRow ? (
         <div
@@ -415,7 +649,7 @@ function AttributionDistributionBand({
             onBlur={clearRow}
           >
             <p className="truncate text-[11px] text-foreground">{row.label}</p>
-            <p className="text-[10px] text-secondary-text">{row.meta || 'Top slice'}</p>
+            <p className="text-[10px] text-secondary-text">{row.meta || t('portfolio.attribution.topSlice')}</p>
             <p className="mt-1 font-mono text-[11px] text-secondary">{row.valueLabel}</p>
           </div>
         ))}
@@ -493,47 +727,56 @@ function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null
   };
 }
 
-function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse): FxRefreshFeedback {
+function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: PortfolioLanguage): FxRefreshFeedback {
   if (data.refreshEnabled === false) {
     return {
       tone: 'neutral',
-      text: '汇率在线刷新已被禁用。',
+      text: translate(language, 'portfolio.fxRefreshDisabled'),
     };
   }
 
   if (data.pairCount === 0) {
     return {
       tone: 'neutral',
-      text: '当前范围无可刷新的汇率对。',
+      text: translate(language, 'portfolio.fxRefreshNoPairs'),
     };
   }
 
   if (data.updatedCount > 0 && data.staleCount === 0 && data.errorCount === 0) {
     return {
       tone: 'success',
-      text: `汇率已刷新，共更新 ${data.updatedCount} 对。`,
+      text: translate(language, 'portfolio.fxRefreshUpdated', { count: data.updatedCount }),
     };
   }
 
-  const summary = `更新 ${data.updatedCount} 对，仍过期 ${data.staleCount} 对，失败 ${data.errorCount} 对。`;
   if (data.staleCount > 0) {
     return {
       tone: 'warning',
-      text: `已尝试刷新，但仍有部分货币对使用 stale/fallback 汇率。${summary}`,
+      text: translate(language, 'portfolio.fxRefreshFallbackWarning', {
+        updatedCount: data.updatedCount,
+        staleCount: data.staleCount,
+        errorCount: data.errorCount,
+      }),
     };
   }
 
   return {
     tone: 'warning',
-    text: `在线刷新未完全成功。${summary}`,
+    text: translate(language, 'portfolio.fxRefreshPartialFailure', {
+      updatedCount: data.updatedCount,
+      staleCount: data.staleCount,
+      errorCount: data.errorCount,
+    }),
   };
 }
 
 const PortfolioPage: React.FC = () => {
-  // Set page title
+  const { language, t } = useI18n();
+  const copy = useMemo(() => getPortfolioCopy(t, language), [language, t]);
+
   useEffect(() => {
-    document.title = '持仓分析 - WolfyStock';
-  }, []);
+    document.title = copy.documentTitle;
+  }, [copy.documentTitle]);
 
   const [accounts, setAccounts] = useState<PortfolioAccountItem[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<AccountOption>('all');
@@ -673,7 +916,7 @@ const PortfolioPage: React.FC = () => {
       const brokerItems = response.brokers || [];
       if (brokerItems.length === 0) {
         setBrokers(FALLBACK_BROKERS);
-        setBrokerLoadWarning('券商列表接口返回为空，已回退为内置券商列表（华泰/中信/招商/IBKR）。');
+        setBrokerLoadWarning(copy.brokerFallbackEmpty);
         setSelectedBroker((prev) => (
           FALLBACK_BROKERS.some((item) => item.broker === prev)
             ? prev
@@ -690,14 +933,14 @@ const PortfolioPage: React.FC = () => {
       ));
     } catch {
       setBrokers(FALLBACK_BROKERS);
-      setBrokerLoadWarning('券商列表接口不可用，已回退为内置券商列表（华泰/中信/招商/IBKR）。');
+      setBrokerLoadWarning(copy.brokerFallbackUnavailable);
       setSelectedBroker((prev) => (
         FALLBACK_BROKERS.some((item) => item.broker === prev)
           ? prev
           : FALLBACK_BROKERS[0].broker
       ));
     }
-  }, []);
+  }, [copy.brokerFallbackEmpty, copy.brokerFallbackUnavailable]);
 
   const loadBrokerConnections = useCallback(async (accountId?: number) => {
     if (!accountId) {
@@ -732,7 +975,7 @@ const PortfolioPage: React.FC = () => {
       } catch (riskErr) {
         setRisk(null);
         const parsed = getParsedApiError(riskErr);
-        setRiskWarning(parsed.message || '风险数据获取失败，已降级为仅展示快照数据。');
+        setRiskWarning(parsed.message || copy.riskFallback);
       }
     } catch (err) {
       setSnapshot(null);
@@ -741,7 +984,7 @@ const PortfolioPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [queryAccountId, costMethod]);
+  }, [copy.riskFallback, costMethod, queryAccountId]);
 
   const loadEventsPage = useCallback(async (page: number) => {
     setEventLoading(true);
@@ -921,7 +1164,7 @@ const PortfolioPage: React.FC = () => {
     if (topAccountPercent != null) {
       rows.push({
         label: formatAttributionAccount(portfolioTopAccount),
-        meta: '账户',
+        meta: copy.attributionAccountMeta,
         percent: topAccountPercent,
         valueLabel: formatAttributionWeight(topAccountPercent),
         linkKey: getAttributionAccountLinkKey(portfolioTopAccount),
@@ -931,14 +1174,14 @@ const PortfolioPage: React.FC = () => {
     if (topIndustryPercent != null) {
       rows.push({
         label: formatAttributionIndustry(portfolioTopIndustry),
-        meta: '行业',
+        meta: copy.attributionIndustryMeta,
         percent: topIndustryPercent,
         valueLabel: formatAttributionWeight(topIndustryPercent),
         linkKey: getAttributionIndustryLinkKey(portfolioTopIndustry),
       });
     }
     return rows;
-  }, [portfolioTopAccount, portfolioTopIndustry]);
+  }, [copy.attributionAccountMeta, copy.attributionIndustryMeta, portfolioTopAccount, portfolioTopIndustry]);
   const riskAccountRows = useMemo(
     () => getAttributionEntriesFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts')
       .flatMap((entry) => {
@@ -961,19 +1204,19 @@ const PortfolioPage: React.FC = () => {
         if (percent == null) return [];
         return [{
           label: formatAttributionIndustry(entry),
-          meta: `${formatAttributionCount(entry.symbol_count ?? entry.symbolCount)} 持仓`,
+          meta: copy.attributionPositionCountValue(formatAttributionCount(entry.symbol_count ?? entry.symbolCount)),
           percent,
           valueLabel: formatAttributionWeight(percent),
           linkKey: getAttributionIndustryLinkKey(entry),
         } satisfies AttributionVisualRow];
       }),
-    [risk?.industryAttribution],
+    [copy, risk?.industryAttribution],
   );
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -1000,7 +1243,7 @@ const PortfolioPage: React.FC = () => {
   const handleCashSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -1023,7 +1266,7 @@ const PortfolioPage: React.FC = () => {
   const handleCorporateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -1061,7 +1304,7 @@ const PortfolioPage: React.FC = () => {
   const handleCommitCsv = async () => {
     if (!csvFile) return;
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行录入或导入提交。');
+      setWriteWarning(copy.writeRequiresAccount);
       return;
     }
     try {
@@ -1082,11 +1325,11 @@ const PortfolioPage: React.FC = () => {
 
   const handleSyncIbkr = async () => {
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再触发 IBKR 只读同步。');
+      setWriteWarning(copy.syncRequiresAccount);
       return;
     }
     if (!ibkrSessionToken.trim()) {
-      setWriteWarning('请提供当前有效的 IBKR session token，再执行只读同步。');
+      setWriteWarning(copy.syncRequiresToken);
       return;
     }
     try {
@@ -1113,7 +1356,7 @@ const PortfolioPage: React.FC = () => {
 
   const openDeleteDialog = (item: PendingDelete) => {
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行删除修正。');
+      setWriteWarning(copy.deleteRequiresAccount);
       return;
     }
     setPendingDelete(item);
@@ -1122,7 +1365,7 @@ const PortfolioPage: React.FC = () => {
   const handleConfirmDelete = async () => {
     if (!pendingDelete || deleteLoading) return;
     if (!writableAccountId) {
-      setWriteWarning('请先在右上角选择具体账户，再进行删除修正。');
+      setWriteWarning(copy.deleteRequiresAccount);
       setPendingDelete(null);
       return;
     }
@@ -1154,7 +1397,7 @@ const PortfolioPage: React.FC = () => {
     e.preventDefault();
     const name = accountForm.name.trim();
     if (!name) {
-      setAccountCreateError('账户名称不能为空。');
+      setAccountCreateError(copy.accountNameRequired);
       setAccountCreateSuccess(null);
       return;
     }
@@ -1178,10 +1421,10 @@ const PortfolioPage: React.FC = () => {
         market: accountForm.market,
         baseCurrency: accountForm.baseCurrency,
       });
-      setAccountCreateSuccess('账户创建成功，已自动切换到该账户。');
+      setAccountCreateSuccess(copy.accountCreated);
     } catch (err) {
       const parsed = getParsedApiError(err);
-      setAccountCreateError(parsed.message || '创建账户失败，请稍后重试。');
+      setAccountCreateError(parsed.message || copy.accountCreateFailed);
       setAccountCreateSuccess(null);
     } finally {
       setAccountCreating(false);
@@ -1231,7 +1474,7 @@ const PortfolioPage: React.FC = () => {
         }
         setRisk(null);
         const parsed = getParsedApiError(riskErr);
-        setRiskWarning(parsed.message || '风险数据获取失败，已降级为仅展示快照数据。');
+        setRiskWarning(parsed.message || copy.riskFallback);
       }
       return true;
     } catch (err) {
@@ -1243,7 +1486,7 @@ const PortfolioPage: React.FC = () => {
       setError(getParsedApiError(err));
       return false;
     }
-  }, []);
+  }, [copy.riskFallback]);
 
   const handleRefreshFx = async () => {
     if (!hasAccounts || isLoading || fxRefreshing) {
@@ -1277,7 +1520,7 @@ const PortfolioPage: React.FC = () => {
       if (!reloaded || !isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
         return;
       }
-      setFxRefreshFeedback(buildFxRefreshFeedback(result));
+      setFxRefreshFeedback(buildFxRefreshFeedback(result, language));
     } catch (err) {
       if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
         return;
@@ -1301,9 +1544,9 @@ const PortfolioPage: React.FC = () => {
   return (
     <div className="workspace-page workspace-page--portfolio">
       <WorkspacePageHeader
-        eyebrow="WolfyStock Portfolio Desk"
-        title="持仓管理"
-        description="组合快照与风险评估"
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        description={copy.description}
         actions={hasAccounts ? (
           <>
             <button
@@ -1315,7 +1558,7 @@ const PortfolioPage: React.FC = () => {
                 setAccountCreateSuccess(null);
               }}
             >
-              {showCreateAccount ? '收起新建' : '新建账户'}
+              {showCreateAccount ? copy.collapseCreate : copy.createAccount}
             </button>
             <button
               type="button"
@@ -1323,12 +1566,12 @@ const PortfolioPage: React.FC = () => {
               disabled={isLoading || fxRefreshing}
               className="btn-secondary text-sm"
             >
-              {isLoading ? '刷新中...' : '刷新数据'}
+              {isLoading ? copy.refreshingData : copy.refreshData}
             </button>
           </>
         ) : (
           <p className="workspace-header-actions-note">
-            还没有可用账户，请先创建账户后再录入交易或导入券商文件。
+            {copy.noAccounts}
           </p>
         )}
       >
@@ -1336,33 +1579,33 @@ const PortfolioPage: React.FC = () => {
           <div className="workspace-surface-muted p-3.5">
             <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_220px_minmax(0,260px)] xl:items-end">
               <div>
-                <p className="mb-1 text-xs text-secondary">账户视图</p>
+                <p className="mb-1 text-xs text-secondary">{copy.accountView}</p>
                 <select
                   value={String(selectedAccount)}
                   onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                   className="input-terminal w-full text-sm"
                 >
-                  <option value="all">全部账户</option>
+                  <option value="all">{copy.allAccounts}</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name} · {formatAccountMarketLabel(account.market)} · {account.baseCurrency} (#{account.id})
+                      {account.name} · {formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} (#{account.id})
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <p className="mb-1 text-xs text-secondary">成本口径</p>
+                <p className="mb-1 text-xs text-secondary">{copy.costMethod}</p>
                 <select
                   value={costMethod}
                   onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
                   className="input-terminal w-full text-sm"
                 >
-                  <option value="fifo">先进先出（FIFO）</option>
-                  <option value="avg">均价成本（AVG）</option>
+                  <option value="fifo">{copy.costFifo}</option>
+                  <option value="avg">{copy.costAvg}</option>
                 </select>
               </div>
               <p className="workspace-header-actions-note xl:text-right">
-                当前视图会同步刷新组合快照、风险指标与账户维度的持仓明细。
+                {copy.scopeHint}
               </p>
             </div>
           </div>
@@ -1372,19 +1615,19 @@ const PortfolioPage: React.FC = () => {
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
       {riskWarning ? (
         <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
-          风险模块降级：{riskWarning}
+          {copy.riskDegraded}: {riskWarning}
         </div>
       ) : null}
       {writeWarning ? (
         <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
-          操作提示：{writeWarning}
+          {copy.actionHint}: {writeWarning}
         </div>
       ) : null}
 
       {(showCreateAccount || !hasAccounts) ? (
         <Card padding="md">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-foreground">新建账户</h2>
+            <h2 className="text-sm font-semibold text-foreground">{copy.createAccountTitle}</h2>
             {hasAccounts ? (
               <button
                 type="button"
@@ -1395,10 +1638,10 @@ const PortfolioPage: React.FC = () => {
                   setAccountCreateSuccess(null);
                 }}
               >
-                收起
+                {copy.collapseCreate}
               </button>
             ) : (
-              <span className="text-xs text-secondary">创建后自动切换到该账户</span>
+              <span className="text-xs text-secondary">{copy.createAccountHelp}</span>
             )}
           </div>
           {accountCreateError ? (
@@ -1414,19 +1657,19 @@ const PortfolioPage: React.FC = () => {
           <form className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2" onSubmit={handleCreateAccount}>
             <input
               className="input-terminal text-sm md:col-span-2"
-              placeholder="账户名称（必填）"
+              placeholder={copy.accountNamePlaceholder}
               value={accountForm.name}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))}
             />
             <input
               className="input-terminal text-sm"
-              placeholder="券商（可选，如 Demo/华泰）"
+              placeholder={copy.brokerPlaceholder}
               value={accountForm.broker}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))}
             />
             <input
               className="input-terminal text-sm"
-              placeholder="基准币（如 CNY/USD/HKD）"
+              placeholder={copy.baseCurrencyPlaceholder}
               value={accountForm.baseCurrency}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))}
             />
@@ -1435,13 +1678,13 @@ const PortfolioPage: React.FC = () => {
               value={accountForm.market}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}
             >
-              <option value="cn">市场：A 股（cn）</option>
-              <option value="hk">市场：港股（hk）</option>
-              <option value="us">市场：美股（us）</option>
-              <option value="global">市场：全球账户（global）</option>
+              <option value="cn">{copy.marketCn}</option>
+              <option value="hk">{copy.marketHk}</option>
+              <option value="us">{copy.marketUs}</option>
+              <option value="global">{copy.marketGlobal}</option>
             </select>
             <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>
-              {accountCreating ? '创建中...' : '创建账户'}
+              {accountCreating ? copy.creatingAccount : copy.createAccount}
             </button>
           </form>
         </Card>
@@ -1450,30 +1693,30 @@ const PortfolioPage: React.FC = () => {
       <div className="space-y-3">
         <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总权益 / Total Equity</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalEquity}</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalEquity, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总市值 / Market Value</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalMarketValue}</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalMarketValue, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">总现金 / Cash Balance</p>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalCash}</p>
             <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalCash, snapshot?.currency || 'CNY')}</p>
           </Card>
           <Card variant="gradient" padding="md">
             <div className="flex items-start justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">汇率状态 / FX Status</p>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.fxState}</p>
               <button
                 type="button"
                 className="btn-secondary !px-3 !py-1 !text-[11px] uppercase tracking-widest shrink-0"
                 onClick={() => void handleRefreshFx()}
                 disabled={!hasAccounts || isLoading || fxRefreshing}
               >
-                {fxRefreshing ? '刷新中' : '刷新汇率'}
+                {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
               </button>
             </div>
-            <div className="mt-2">{snapshot?.fxStale ? <Badge variant="warning">过期</Badge> : <Badge variant="success">最新</Badge>}</div>
+            <div className="mt-2">{snapshot?.fxStale ? <Badge variant="warning">{copy.fxStale}</Badge> : <Badge variant="success">{copy.fxFresh}</Badge>}</div>
             {fxRefreshFeedback ? (
               <p
                 className={`mt-2 text-xs ${
@@ -1492,94 +1735,94 @@ const PortfolioPage: React.FC = () => {
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">回撤监控 / Drawdown</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.drawdownTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>最大回撤:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>当前回撤:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>告警:</span> <span className={risk?.drawdown?.alert ? 'text-danger font-medium' : 'text-success font-medium'}>{risk?.drawdown?.alert ? '是' : '否'}</span></div>
+              <div className="flex justify-between"><span>{copy.maxDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.currentDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.drawdown?.alert ? 'text-danger font-medium' : 'text-success font-medium'}>{risk?.drawdown?.alert ? copy.yes : copy.no}</span></div>
             </div>
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">止损接近预警 / Stop Loss</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.stopLossTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>触发数:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.triggeredCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>接近数:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.nearCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>告警:</span> <span className={risk?.stopLoss?.nearAlert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.stopLoss?.nearAlert ? '是' : '否'}</span></div>
+              <div className="flex justify-between"><span>{copy.triggeredCount}:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.triggeredCount ?? 0}</span></div>
+              <div className="flex justify-between"><span>{copy.nearCount}:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.nearCount ?? 0}</span></div>
+              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.stopLoss?.nearAlert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.stopLoss?.nearAlert ? copy.yes : copy.no}</span></div>
             </div>
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">口径 / Scope</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.snapshotBasisTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>账户数:</span> <span className="text-foreground font-mono">{snapshot?.accountCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>计价币种:</span> <span className="text-foreground font-mono">{snapshot?.currency || 'CNY'}</span></div>
-              <div className="flex justify-between"><span>成本法:</span> <span className="text-foreground font-mono">{(snapshot?.costMethod || costMethod).toUpperCase()}</span></div>
+              <div className="flex justify-between"><span>{copy.accountCount}:</span> <span className="text-foreground font-mono">{snapshot?.accountCount ?? 0}</span></div>
+              <div className="flex justify-between"><span>{copy.reportingCurrency}:</span> <span className="text-foreground font-mono">{snapshot?.currency || 'CNY'}</span></div>
+              <div className="flex justify-between"><span>{copy.costMethodLabel}:</span> <span className="text-foreground font-mono">{(snapshot?.costMethod || costMethod).toUpperCase()}</span></div>
             </div>
           </Card>
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="portfolio-attribution-dashboard">
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">组合归因 / Portfolio Attribution</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionPortfolioTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>Top 账户:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount)}</span></div>
-              <div className="flex justify-between gap-3"><span>账户权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
-              <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionAccountWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
             </div>
             <AttributionHero
               rows={portfolioDominantRows}
               testId="portfolio-attribution-hero"
-              title="查看组合主导归因的聚合摘要"
+              title={copy.attributionPortfolioHeroTitle}
               tooltipTestId="portfolio-attribution-hover-tooltip"
               activeLinkKey={activeAttributionLinkKey}
               onActiveLinkChange={setActiveAttributionLinkKey}
             />
             <AttributionVisualList
-              title="主导分布 / Dominant Mix"
+              title={copy.attributionDominantMix}
               rows={portfolioDominantRows}
               testId="portfolio-attribution-visual-summary"
               activeLinkKey={activeAttributionLinkKey}
             />
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">账户归因 / Account Attribution</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionAccountTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>Top 账户:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount)}</span></div>
-              <div className="flex justify-between gap-3"><span>权益占比:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>账户 ID:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionEquityWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionAccountId}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
             </div>
             <AttributionDistributionBand
               rows={riskAccountRows}
               testId="account-attribution-distribution-band"
-              title={`账户归因 Top coverage ${getAttributionCoverage(riskAccountRows).toFixed(2)}%`}
+              title={copy.attributionAccountDistributionTitle(getAttributionCoverage(riskAccountRows).toFixed(2))}
               tooltipTestId="account-attribution-distribution-band-tooltip"
               activeLinkKey={activeAttributionLinkKey}
               onActiveLinkChange={setActiveAttributionLinkKey}
             />
             <AttributionVisualList
-              title="Top 账户分布"
+              title={copy.attributionAccountTopList}
               rows={riskAccountRows}
               testId="account-attribution-top-list"
               activeLinkKey={activeAttributionLinkKey}
             />
           </Card>
           <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">行业归因 / Industry Attribution</h3>
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionIndustryTitle}</h3>
             <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry)}</span></div>
-              <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>持仓数:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
+              <div className="flex justify-between gap-3"><span>{copy.attributionPositionCount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
             </div>
             <AttributionDistributionBand
               rows={riskIndustryRows}
               testId="industry-attribution-distribution-band"
-              title={`行业归因 Top coverage ${getAttributionCoverage(riskIndustryRows).toFixed(2)}%`}
+              title={copy.attributionIndustryDistributionTitle(getAttributionCoverage(riskIndustryRows).toFixed(2))}
               tooltipTestId="industry-attribution-distribution-band-tooltip"
               activeLinkKey={activeAttributionLinkKey}
               onActiveLinkChange={setActiveAttributionLinkKey}
             />
             <AttributionVisualList
-              title="Top 行业分布"
+              title={copy.attributionIndustryTopList}
               rows={riskIndustryRows}
               testId="industry-attribution-top-list"
               activeLinkKey={activeAttributionLinkKey}
@@ -1589,31 +1832,31 @@ const PortfolioPage: React.FC = () => {
 
         {writeBlocked && hasAccounts ? (
           <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2">
-            当前处于“全部账户”视图。为避免误写，请先选择一个具体账户后再进行手工录入或券商文件导入提交。
+            {copy.allAccountsWarning}
           </div>
         ) : null}
 
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-3">
           <Card className="xl:col-span-2" padding="md">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">持仓明细 / Positions</h2>
-              <span className="text-[11px] uppercase tracking-widest text-secondary">共 {positionRows.length} 项</span>
+              <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.positionsTitle}</h2>
+              <span className="text-[11px] uppercase tracking-widest text-secondary">{copy.positionsCount(positionRows.length)}</span>
             </div>
             {positionRows.length === 0 ? (
-              <p className="text-sm text-muted py-6 text-center">当前无持仓数据</p>
+              <p className="text-sm text-muted py-6 text-center">{copy.noPositions}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="text-[11px] uppercase tracking-[0.14em] text-secondary border-b border-[var(--border-muted)]">
                     <tr>
-                      <th className="text-left py-2 pr-2 font-medium">账户</th>
-                      <th className="text-left py-2 pr-2 font-medium">代码</th>
-                      <th className="text-left py-2 pr-2 font-medium">市场 / 币种</th>
-                      <th className="text-right py-2 pr-2 font-medium">数量</th>
-                      <th className="text-right py-2 pr-2 font-medium">均价</th>
-                      <th className="text-right py-2 pr-2 font-medium">现价</th>
-                      <th className="text-right py-2 pr-2 font-medium">市值</th>
-                      <th className="text-right py-2 font-medium">未实现盈亏</th>
+                      <th className="text-left py-2 pr-2 font-medium">{copy.positionAccount}</th>
+                      <th className="text-left py-2 pr-2 font-medium">{copy.positionCode}</th>
+                      <th className="text-left py-2 pr-2 font-medium">{copy.positionMarketCurrency}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionQuantity}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionAvgCost}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionLastPrice}</th>
+                      <th className="text-right py-2 pr-2 font-medium">{copy.positionMarketValue}</th>
+                      <th className="text-right py-2 font-medium">{copy.positionUnrealized}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1641,7 +1884,7 @@ const PortfolioPage: React.FC = () => {
           </Card>
 
           <Card padding="md">
-            <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? '行业集中度 / Sectors' : '个股集中度 / Symbols (Fallback)'}</h2>
+            <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? copy.sectorConcentration : copy.singleNameConcentration}</h2>
             {concentrationPieData.length > 0 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1658,16 +1901,16 @@ const PortfolioPage: React.FC = () => {
               </div>
             ) : (
               <div className="rounded-md border border-dashed border-[var(--border-muted)] bg-[var(--surface-1)] px-4 py-8 text-center h-64 flex flex-col items-center justify-center">
-                <p className="text-[11px] uppercase tracking-widest text-foreground">暂无集中度数据</p>
+                <p className="text-[11px] uppercase tracking-widest text-foreground">{copy.emptyConcentration}</p>
                 <p className="mt-2 text-xs leading-5 text-muted-text max-w-[20ch]">
-                  补齐持仓市值后将显示集中度分布
+                  {copy.concentrationHint}
                 </p>
               </div>
             )}
             <div className="mt-3 text-xs text-secondary space-y-1.5 border-t border-[var(--border-muted)] pt-3">
-              <div className="flex justify-between"><span>展示口径:</span> <span className="text-foreground">{concentrationMode === 'sector' ? '行业维度' : '个股维度（降级显示）'}</span></div>
-              <div className="flex justify-between"><span>板块告警:</span> <span className={risk?.sectorConcentration?.alert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.sectorConcentration?.alert ? '是' : '否'}</span></div>
-              <div className="flex justify-between"><span>Top1 权重:</span> <span className="text-foreground font-mono">{formatPct(risk?.sectorConcentration?.topWeightPct ?? risk?.concentration?.topWeightPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.concentrationScope}:</span> <span className="text-foreground">{concentrationMode === 'sector' ? copy.concentrationScopeSector : copy.concentrationScopeFallback}</span></div>
+              <div className="flex justify-between"><span>{copy.sectorAlert}:</span> <span className={risk?.sectorConcentration?.alert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.sectorConcentration?.alert ? copy.yes : copy.no}</span></div>
+              <div className="flex justify-between"><span>{copy.topWeight}:</span> <span className="text-foreground font-mono">{formatPct(risk?.sectorConcentration?.topWeightPct ?? risk?.concentration?.topWeightPct)}</span></div>
             </div>
           </Card>
         </section>
@@ -1675,8 +1918,8 @@ const PortfolioPage: React.FC = () => {
         <section>
           <Card padding="md" className="border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--glow-soft)]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[11px] uppercase tracking-[0.14em] text-foreground">数据同步 / Data Sync</h3>
-              <span className="text-[10px] uppercase tracking-widest text-muted-text hidden sm:inline">Broker Import</span>
+              <h3 className="text-[11px] uppercase tracking-[0.14em] text-foreground">{copy.dataSyncTitle}</h3>
+              <span className="text-[10px] uppercase tracking-widest text-muted-text hidden sm:inline">{copy.brokerImport}</span>
             </div>
             
             <div className="space-y-4">
@@ -1689,9 +1932,9 @@ const PortfolioPage: React.FC = () => {
               {writableAccount ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5 text-xs text-secondary-text">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-foreground">当前导入账户</span>
+                    <span className="font-semibold text-foreground">{copy.currentImportAccount}</span>
                     <span>{writableAccount.name}</span>
-                    <Badge>{formatAccountMarketLabel(writableAccount.market)}</Badge>
+                    <Badge>{formatAccountMarketLabel(writableAccount.market, language)}</Badge>
                     <Badge>{writableAccount.baseCurrency}</Badge>
                   </div>
                   {brokerConnections.length > 0 ? (
@@ -1703,12 +1946,12 @@ const PortfolioPage: React.FC = () => {
                         >
                           <span className="font-mono text-foreground">{connection.connectionName}</span>
                           {connection.brokerAccountRef ? <span>{connection.brokerAccountRef}</span> : null}
-                          <span className="text-muted-text">{connection.status}</span>
+                          <span className="text-muted-text">{formatBrokerConnectionStatus(connection.status, language)}</span>
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-2 text-[11px] text-muted-text">该账户还没有已保存的券商连接，首次导入会自动创建用户自有连接。</p>
+                    <p className="mt-2 text-[11px] text-muted-text">{copy.noBrokerConnections}</p>
                   )}
                 </div>
               ) : null}
@@ -1716,15 +1959,15 @@ const PortfolioPage: React.FC = () => {
               <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
                 <select className="input-terminal text-sm md:w-[160px] h-[2.6rem]" value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
                   {brokers.length > 0 ? (
-                    brokers.map((item) => <option key={item.broker} value={item.broker}>{formatBrokerLabel(item.broker, item.displayName)}</option>)
+                    brokers.map((item) => <option key={item.broker} value={item.broker}>{formatBrokerLabel(item.broker, item.displayName, language)}</option>)
                   ) : (
-                    <option value="huatai">huatai（华泰）</option>
+                    <option value="huatai">{formatBrokerLabel('huatai', undefined, language)}</option>
                   )}
                 </select>
                 
                 <label className="input-terminal text-sm flex-1 flex items-center justify-center cursor-pointer border-dashed hover:border-[var(--border-strong)] bg-[var(--surface-1)] transition-colors min-h-[2.6rem]">
                   <span className="truncate text-secondary-text">
-                    {csvFile ? csvFile.name : selectedBroker === 'ibkr' ? '选择 IBKR Flex XML 导出文件...' : '选择券商导出文件...'}
+                    {csvFile ? csvFile.name : selectedBroker === 'ibkr' ? copy.selectIbkrExport : copy.selectBrokerExport}
                   </span>
                   <input type="file" accept={importFileAccept} className="hidden"
                     onChange={(e) => setCsvFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
@@ -1732,53 +1975,51 @@ const PortfolioPage: React.FC = () => {
 
                 <div className="flex items-center justify-center gap-2 px-3 py-2 border border-[var(--input-border)] rounded-[var(--theme-control-radius)] bg-[var(--surface-1)] h-[2.6rem]">
                   <input id="csv-dry-run" type="checkbox" className="theme-checkbox" checked={csvDryRun} onChange={(e) => setCsvDryRun(e.target.checked)} />
-                  <label htmlFor="csv-dry-run" className="text-xs text-secondary-text cursor-pointer whitespace-nowrap">仅预演</label>
+                  <label htmlFor="csv-dry-run" className="text-xs text-secondary-text cursor-pointer whitespace-nowrap">{copy.dryRun}</label>
                 </div>
 
                 <div className="flex gap-2">
                   <button type="button" className="btn-secondary h-[2.6rem] px-4 whitespace-nowrap text-xs" disabled={!csvFile || csvParsing} onClick={() => void handleParseCsv()}>
-                    {csvParsing ? '解析中...' : '解析文件'}
+                    {csvParsing ? copy.parsing : copy.parseFile}
                   </button>
                   <button type="button" className="btn-primary h-[2.6rem] px-4 whitespace-nowrap text-xs shadow-[var(--glow-soft)]" disabled={!csvFile || !writableAccountId || csvCommitting} onClick={() => void handleCommitCsv()}>
-                    {csvCommitting ? '提交中...' : '提交导入'}
+                    {csvCommitting ? copy.committing : copy.commitImport}
                   </button>
                 </div>
               </div>
 
               <p className="text-[11px] text-muted-text">
-                {selectedBroker === 'ibkr'
-                  ? 'IBKR 首版推荐使用 Flex Query XML 导出；系统会将导入记录绑定到当前用户自己的 broker connection。'
-                  : '保留现有 A 股券商文件导入路径，兼容华泰 / 中信 / 招商 CSV。'}
+                {selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}
               </p>
 
               {selectedBroker === 'ibkr' ? (
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-3 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-foreground">IBKR 只读同步 / Read-only Sync</p>
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-foreground">{copy.ibkrReadOnlyTitle}</p>
                       <p className="mt-1 text-[11px] text-muted-text">
-                        仅同步账户状态与持仓，不会暴露任何交易 / 下单能力。session token 只用于本次同步，不会保存到系统。
+                        {copy.ibkrReadOnlyBody}
                       </p>
                     </div>
-                    <Badge>Read-only</Badge>
+                    <Badge>{copy.readOnlyBadge}</Badge>
                   </div>
                   <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_180px] gap-2">
                     <input
                       className="input-terminal text-sm"
-                      placeholder="IBKR API Base URL（默认 https://localhost:5000/v1/api）"
+                      placeholder={copy.ibkrApiBasePlaceholder}
                       value={ibkrApiBaseUrl}
                       onChange={(e) => setIbkrApiBaseUrl(e.target.value)}
                     />
                     <input
                       className="input-terminal text-sm"
-                      placeholder="IBKR Account Ref（可选，例 U1234567）"
+                      placeholder={copy.ibkrAccountRefPlaceholder}
                       value={ibkrBrokerAccountRef}
                       onChange={(e) => setIbkrBrokerAccountRef(e.target.value.toUpperCase())}
                     />
                     <input
                       className="input-terminal text-sm xl:col-span-2"
                       type="password"
-                      placeholder="IBKR Session Token（本次手动同步使用，不保存）"
+                      placeholder={copy.ibkrSessionTokenPlaceholder}
                       value={ibkrSessionToken}
                       onChange={(e) => setIbkrSessionToken(e.target.value)}
                     />
@@ -1791,7 +2032,7 @@ const PortfolioPage: React.FC = () => {
                         checked={ibkrVerifySsl}
                         onChange={(e) => setIbkrVerifySsl(e.target.checked)}
                       />
-                      <span>校验 IBKR HTTPS 证书</span>
+                      <span>{copy.verifyIbkrSsl}</span>
                     </label>
                     <button
                       type="button"
@@ -1799,19 +2040,19 @@ const PortfolioPage: React.FC = () => {
                       disabled={!writableAccountId || !ibkrSessionToken.trim() || ibkrSyncing}
                       onClick={() => void handleSyncIbkr()}
                     >
-                      {ibkrSyncing ? '同步中...' : '只读同步 IBKR'}
+                      {ibkrSyncing ? copy.syncing : copy.syncIbkr}
                     </button>
                   </div>
                   {ibkrSyncResult ? (
                     <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">同步结果</span>
-                      持仓 <span className="text-foreground font-mono">{ibkrSyncResult.positionCount}</span> ·
-                      现金币种 <span className="text-foreground font-mono">{ibkrSyncResult.cashBalanceCount}</span> ·
-                      总权益 <span className="text-success font-mono">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span>
+                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.syncResult}</span>
+                      {copy.positionsCountLabel} <span className="text-foreground font-mono">{ibkrSyncResult.positionCount}</span> ·
+                      {copy.cashCurrenciesLabel} <span className="text-foreground font-mono">{ibkrSyncResult.cashBalanceCount}</span> ·
+                      {copy.totalEquity} <span className="text-success font-mono">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span>
                       <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-text">
-                        <span>Ref: <span className="font-mono text-foreground">{ibkrSyncResult.brokerAccountRef}</span></span>
-                        <span>同步时间: <span className="text-foreground">{ibkrSyncResult.syncedAt.replace('T', ' ')}</span></span>
-                        <span>{ibkrSyncResult.snapshotOverlayActive ? '当前日期快照已切换到 API 同步视图' : '已保存同步结果'}</span>
+                        <span>{copy.accountRef}: <span className="font-mono text-foreground">{ibkrSyncResult.brokerAccountRef}</span></span>
+                        <span>{copy.syncedAt}: <span className="text-foreground">{ibkrSyncResult.syncedAt.replace('T', ' ')}</span></span>
+                        <span>{ibkrSyncResult.snapshotOverlayActive ? copy.syncOverlay : copy.syncSaved}</span>
                       </div>
                       {ibkrSyncResult.warnings.length > 0 ? (
                         <div className="mt-2 rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-2.5 py-2 text-[11px] text-[hsl(var(--accent-warning-hsl))]">
@@ -1831,30 +2072,30 @@ const PortfolioPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                   {csvParseResult ? (
                     <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">解析结果</span>
-                      有效 <span className="text-success font-mono">{csvParseResult.recordCount}</span> ·
-                      现金 <span className="text-foreground font-mono">{csvParseResult.cashRecordCount ?? 0}</span> ·
-                      公司行为 <span className="text-foreground font-mono">{csvParseResult.corporateActionCount ?? 0}</span> ·
-                      跳过 <span className="text-warning font-mono">{csvParseResult.skippedCount}</span> ·
-                      错误 <span className="text-danger font-mono">{csvParseResult.errorCount}</span>
+                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.parseResult}</span>
+                      {copy.valid} <span className="text-success font-mono">{csvParseResult.recordCount}</span> ·
+                      {copy.cash} <span className="text-foreground font-mono">{csvParseResult.cashRecordCount ?? 0}</span> ·
+                      {copy.corporateActions} <span className="text-foreground font-mono">{csvParseResult.corporateActionCount ?? 0}</span> ·
+                      {copy.skipped} <span className="text-warning font-mono">{csvParseResult.skippedCount}</span> ·
+                      {copy.errors} <span className="text-danger font-mono">{csvParseResult.errorCount}</span>
                       {csvParseResult.metadata?.brokerAccountRef ? (
                         <div className="mt-2 text-[11px] text-muted-text">
-                          账户映射: <span className="font-mono text-foreground">{String(csvParseResult.metadata.brokerAccountRef)}</span>
+                          {copy.accountMapping}: <span className="font-mono text-foreground">{String(csvParseResult.metadata.brokerAccountRef)}</span>
                         </div>
                       ) : null}
                     </div>
                   ) : null}
                   {csvCommitResult ? (
                     <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">提交结果</span>
-                      写入 <span className="text-success font-mono">{csvCommitResult.insertedCount}</span> ·
-                      现金 <span className="text-foreground font-mono">{csvCommitResult.cashInsertedCount ?? 0}</span> ·
-                      公司行为 <span className="text-foreground font-mono">{csvCommitResult.corporateActionInsertedCount ?? 0}</span> ·
-                      重复 <span className="text-warning font-mono">{csvCommitResult.duplicateCount}</span> ·
-                      失败 <span className="text-danger font-mono">{csvCommitResult.failedCount}</span>
+                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.commitResult}</span>
+                      {copy.inserted} <span className="text-success font-mono">{csvCommitResult.insertedCount}</span> ·
+                      {copy.cash} <span className="text-foreground font-mono">{csvCommitResult.cashInsertedCount ?? 0}</span> ·
+                      {copy.corporateActions} <span className="text-foreground font-mono">{csvCommitResult.corporateActionInsertedCount ?? 0}</span> ·
+                      {copy.duplicates} <span className="text-warning font-mono">{csvCommitResult.duplicateCount}</span> ·
+                      {copy.failed} <span className="text-danger font-mono">{csvCommitResult.failedCount}</span>
                       {csvCommitResult.duplicateImport ? (
                         <div className="mt-2 text-[11px] text-[hsl(var(--accent-warning-hsl))]">
-                          检测到同一 broker connection 的重复文件指纹，本次未重复写入。
+                          {copy.duplicateFingerprintHint}
                         </div>
                       ) : null}
                     </div>
@@ -1872,98 +2113,98 @@ const PortfolioPage: React.FC = () => {
         </section>
 
         <section className="space-y-3">
-          <Disclosure summary="高级：手工录入与修正 / Manual Entry" defaultOpen={false}>
+          <Disclosure summary={copy.manualAdjustments} defaultOpen={false}>
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：交易 / Trade</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualTrade}</h3>
                 <form className="space-y-2" onSubmit={handleTradeSubmit}>
-                  <input className="input-terminal w-full text-sm" placeholder="股票代码（例如 600519）" value={tradeForm.symbol}
+                  <input className="input-terminal w-full text-sm" placeholder={copy.symbolPlaceholder} value={tradeForm.symbol}
                     onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input className="input-terminal text-sm" type="date" value={tradeForm.tradeDate}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
                     <select className="input-terminal text-sm" value={tradeForm.side}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
-                      <option value="buy">买入</option>
-                      <option value="sell">卖出</option>
+                      <option value="buy">{copy.buy}</option>
+                      <option value="sell">{copy.sell}</option>
                     </select>
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="数量" value={tradeForm.quantity}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="成交价" value={tradeForm.price}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="手续费 (可选)" value={tradeForm.fee}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="税费 (可选)" value={tradeForm.tax}
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax}
                       onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                   </div>
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>提交交易</button>
+                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitTrade}</button>
                 </form>
               </Card>
 
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：资金 / Cash</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualCash}</h3>
                 <form className="space-y-2" onSubmit={handleCashSubmit}>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input className="input-terminal text-sm" type="date" value={cashForm.eventDate}
                       onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
                     <select className="input-terminal text-sm" value={cashForm.direction}
                       onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
-                      <option value="in">流入</option>
-                      <option value="out">流出</option>
+                      <option value="in">{copy.cashIn}</option>
+                      <option value="out">{copy.cashOut}</option>
                     </select>
                   </div>
-                  <input className="input-terminal w-full text-sm" type="number" min="0" step="0.0001" placeholder="金额"
+                  <input className="input-terminal w-full text-sm" type="number" min="0" step="0.0001" placeholder={copy.amount}
                     value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
-                  <input className="input-terminal w-full text-sm" placeholder={`币种（可选，默认 ${writableAccount?.baseCurrency || '账户基准币'}）`} value={cashForm.currency}
+                  <input className="input-terminal w-full text-sm" placeholder={copy.currencyOptional(writableAccount?.baseCurrency || '')} value={cashForm.currency}
                     onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))} />
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>提交资金流水</button>
+                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitCash}</button>
                 </form>
               </Card>
 
               <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">手工录入：公司行为 / Corp</h3>
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualCorporate}</h3>
                 <form className="space-y-2" onSubmit={handleCorporateSubmit}>
-                  <input className="input-terminal w-full text-sm" placeholder="股票代码" value={corpForm.symbol}
+                  <input className="input-terminal w-full text-sm" placeholder={copy.stockCode} value={corpForm.symbol}
                     onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input className="input-terminal text-sm" type="date" value={corpForm.effectiveDate}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
                     <select className="input-terminal text-sm" value={corpForm.actionType}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
-                      <option value="cash_dividend">现金分红</option>
-                      <option value="split_adjustment">拆并股调整</option>
+                      <option value="cash_dividend">{copy.cashDividend}</option>
+                      <option value="split_adjustment">{copy.splitAdjustment}</option>
                     </select>
                   </div>
                   {corpForm.actionType === 'cash_dividend' ? (
-                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="每股分红"
+                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder={copy.dividendPerShare}
                       value={corpForm.cashDividendPerShare}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value, splitRatio: '' }))} required />
                   ) : (
-                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="拆并股比例"
+                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder={copy.splitRatio}
                       value={corpForm.splitRatio}
                       onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value, cashDividendPerShare: '' }))} required />
                   )}
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>提交企业行为</button>
+                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitCorporate}</button>
                 </form>
               </Card>
             </div>
           </Disclosure>
 
-          <Disclosure summary="流水与审计 / Audit & Ledger" defaultOpen={showEventAuditDisclosureByDefault}>
+          <Disclosure summary={copy.ledgerAudit} defaultOpen={showEventAuditDisclosureByDefault}>
             <Card padding="md" className="border-0 bg-transparent">
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <select className="input-terminal text-sm" value={eventType} onChange={(e) => setEventType(e.target.value as EventType)}>
-                    <option value="trade">交易流水</option>
-                    <option value="cash">资金流水</option>
-                    <option value="corporate">公司行为</option>
+                    <option value="trade">{copy.tradeLedger}</option>
+                    <option value="cash">{copy.cashLedger}</option>
+                    <option value="corporate">{copy.corporateLedger}</option>
                   </select>
                   <button type="button" className="btn-secondary text-[11px] uppercase tracking-widest" onClick={() => void loadEvents()} disabled={eventLoading}>
-                    {eventLoading ? '加载中...' : '刷新流水'}
+                    {eventLoading ? copy.loading : copy.refreshLedger}
                   </button>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1971,44 +2212,44 @@ const PortfolioPage: React.FC = () => {
                   <input className="input-terminal text-sm" type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
                 </div>
                 {(eventType === 'trade' || eventType === 'corporate') ? (
-                  <input className="input-terminal text-sm w-full" placeholder="按股票代码筛选" value={eventSymbol}
+                  <input className="input-terminal text-sm w-full" placeholder={copy.filterBySymbol} value={eventSymbol}
                     onChange={(e) => setEventSymbol(e.target.value)} />
                 ) : null}
                 {eventType === 'trade' ? (
                   <select className="input-terminal text-sm w-full" value={eventSide} onChange={(e) => setEventSide(e.target.value as '' | PortfolioSide)}>
-                    <option value="">全部买卖方向</option>
-                    <option value="buy">买入</option>
-                    <option value="sell">卖出</option>
+                    <option value="">{copy.allSides}</option>
+                    <option value="buy">{copy.buy}</option>
+                    <option value="sell">{copy.sell}</option>
                   </select>
                 ) : null}
                 {eventType === 'cash' ? (
                   <select className="input-terminal text-sm w-full" value={eventDirection}
                     onChange={(e) => setEventDirection(e.target.value as '' | PortfolioCashDirection)}>
-                    <option value="">全部资金方向</option>
-                    <option value="in">流入</option>
-                    <option value="out">流出</option>
+                    <option value="">{copy.allDirections}</option>
+                    <option value="in">{copy.cashIn}</option>
+                    <option value="out">{copy.cashOut}</option>
                   </select>
                 ) : null}
                 {eventType === 'corporate' ? (
                   <select className="input-terminal text-sm w-full" value={eventActionType}
                     onChange={(e) => setEventActionType(e.target.value as '' | PortfolioCorporateActionType)}>
-                    <option value="">全部公司行为</option>
-                    <option value="cash_dividend">现金分红</option>
-                    <option value="split_adjustment">拆并股调整</option>
+                    <option value="">{copy.allActions}</option>
+                    <option value="cash_dividend">{copy.cashDividend}</option>
+                    <option value="split_adjustment">{copy.splitAdjustment}</option>
                   </select>
                 ) : null}
                 <div className="text-[11px] text-secondary-text">
-                  {writeBlocked ? '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。' : '如有错误流水，可直接删除后重新录入。'}
+                  {writeBlocked ? copy.deleteHintBlocked : copy.deleteHintReady}
                 </div>
                 <div className="rounded-md border border-[var(--border-muted)] bg-[var(--surface-1)] p-2 max-h-none overflow-visible lg:max-h-[400px] lg:overflow-auto">
                   {eventType === 'trade' && tradeEvents.map((item) => (
                     <div key={`t-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
                       <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
                         <span className="text-muted-text">{item.tradeDate}</span>
-                        <span className={item.side === 'buy' ? 'text-success' : 'text-warning'}>{formatSideLabel(item.side)}</span>
+                        <span className={item.side === 'buy' ? 'text-success' : 'text-warning'}>{formatSideLabel(item.side, language)}</span>
                         <span className="text-foreground font-semibold">{item.symbol}</span>
-                        <span>数量 <span className="text-foreground">{item.quantity}</span></span>
-                        <span>价格 <span className="text-foreground">{item.price}</span></span>
+                        <span>{copy.quantity} <span className="text-foreground">{item.quantity}</span></span>
+                        <span>{copy.price} <span className="text-foreground">{item.price}</span></span>
                       </div>
                       {!writeBlocked ? (
                         <button
@@ -2017,10 +2258,10 @@ const PortfolioPage: React.FC = () => {
                           onClick={() => openDeleteDialog({
                             eventType: 'trade',
                             id: item.id,
-                            message: `确认删除 ${item.tradeDate} 的${formatSideLabel(item.side)}流水 ${item.symbol}（数量 ${item.quantity}，价格 ${item.price}）吗？`,
+                            message: copy.tradeDeleteMessage(item),
                           })}
                         >
-                          删除
+                          {copy.deleteConfirm}
                         </button>
                       ) : null}
                     </div>
@@ -2029,7 +2270,7 @@ const PortfolioPage: React.FC = () => {
                     <div key={`c-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
                       <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
                         <span className="text-muted-text">{item.eventDate}</span>
-                        <span className={item.direction === 'in' ? 'text-success' : 'text-warning'}>{formatCashDirectionLabel(item.direction)}</span>
+                        <span className={item.direction === 'in' ? 'text-success' : 'text-warning'}>{formatCashDirectionLabel(item.direction, language)}</span>
                         <span className="text-foreground">{item.amount}</span>
                         <span className="text-foreground font-semibold">{item.currency}</span>
                       </div>
@@ -2040,10 +2281,10 @@ const PortfolioPage: React.FC = () => {
                           onClick={() => openDeleteDialog({
                             eventType: 'cash',
                             id: item.id,
-                            message: `确认删除 ${item.eventDate} 的资金流水（${formatCashDirectionLabel(item.direction)} ${item.amount} ${item.currency}）吗？`,
+                            message: copy.cashDeleteMessage(item),
                           })}
                         >
-                          删除
+                          {copy.deleteConfirm}
                         </button>
                       ) : null}
                     </div>
@@ -2052,7 +2293,7 @@ const PortfolioPage: React.FC = () => {
                     <div key={`ca-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
                       <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
                         <span className="text-muted-text">{item.effectiveDate}</span>
-                        <span className="text-info">{formatCorporateActionLabel(item.actionType)}</span>
+                        <span className="text-info">{formatCorporateActionLabel(item.actionType, language)}</span>
                         <span className="text-foreground font-semibold">{item.symbol}</span>
                       </div>
                       {!writeBlocked ? (
@@ -2062,10 +2303,10 @@ const PortfolioPage: React.FC = () => {
                           onClick={() => openDeleteDialog({
                             eventType: 'corporate',
                             id: item.id,
-                            message: `确认删除 ${item.effectiveDate} 的公司行为 ${formatCorporateActionLabel(item.actionType)}（${item.symbol}）吗？`,
+                            message: copy.corporateDeleteMessage(item),
                           })}
                         >
-                          删除
+                          {copy.deleteConfirm}
                         </button>
                       ) : null}
                     </div>
@@ -2075,23 +2316,23 @@ const PortfolioPage: React.FC = () => {
                       || (eventType === 'cash' && cashEvents.length === 0)
                       || (eventType === 'corporate' && corporateEvents.length === 0)) ? (
                         <div className="px-2 py-6 text-center">
-                          <p className="text-[11px] uppercase tracking-widest text-foreground">暂无流水记录</p>
+                          <p className="text-[11px] uppercase tracking-widest text-foreground">{copy.emptyEventsTitle}</p>
                           <p className="mt-1 text-xs leading-5 text-muted-text">
-                            调整筛选条件，或先录入流水。
+                            {copy.emptyEventsBody}
                           </p>
                         </div>
                       ) : null}
                 </div>
                 <div className="flex flex-col gap-2 text-[11px] uppercase tracking-widest text-secondary-text sm:flex-row sm:items-center sm:justify-between px-1">
-                  <span>PAGE {eventPage} / {totalEventPages}</span>
+                  <span>{copy.pageLabel} {eventPage} / {totalEventPages}</span>
                   <div className="flex gap-2">
                     <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage <= 1}
                       onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>
-                      PREV
+                      {copy.prevPage}
                     </button>
                     <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage >= totalEventPages}
                       onClick={() => setEventPage((prev) => Math.min(totalEventPages, prev + 1))}>
-                      NEXT
+                      {copy.nextPage}
                     </button>
                   </div>
                 </div>
@@ -2102,10 +2343,10 @@ const PortfolioPage: React.FC = () => {
       </div>
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}
-        title="删除错误流水"
-        message={pendingDelete?.message || '确认删除这条流水吗？'}
-        confirmText={deleteLoading ? '删除中...' : '确认删除'}
-        cancelText="取消"
+        title={copy.deleteTitle}
+        message={pendingDelete?.message || copy.deleteMessage}
+        confirmText={deleteLoading ? copy.deleteInProgress : copy.deleteConfirm}
+        cancelText={copy.cancel}
         isDanger
         onConfirm={() => void handleConfirmDelete()}
         onCancel={() => {

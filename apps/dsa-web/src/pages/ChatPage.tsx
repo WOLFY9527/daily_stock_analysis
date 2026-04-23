@@ -17,39 +17,78 @@ import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFo
 import { isNearBottom } from '../utils/chatScroll';
 import { useShellRail } from '../components/layout/ShellRailContext';
 import { useShellRailSlot } from '../components/layout/useShellRailSlot';
+import { useI18n } from '../contexts/UiLanguageContext';
+import { translate } from '../i18n/core';
 
-// Quick question examples shown on empty state
-const QUICK_QUESTIONS = [
-  { label: '用缠论分析茅台', skill: 'chan_theory' },
-  { label: '波浪理论看宁德时代', skill: 'wave_theory' },
-  { label: '分析比亚迪趋势', skill: 'bull_trend' },
-  { label: '箱体震荡技能看中芯国际', skill: 'box_oscillation' },
-  { label: '分析腾讯 hk00700', skill: 'bull_trend' },
-  { label: '用情绪周期分析东方财富', skill: 'emotion_cycle' },
+type QuickQuestion = {
+  id: string;
+  skill: string;
+};
+
+type StarterPromptCard = {
+  id: string;
+  skill: string;
+};
+
+const QUICK_QUESTIONS: QuickQuestion[] = [
+  { id: 'q1', skill: 'chan_theory' },
+  { id: 'q2', skill: 'wave_theory' },
+  { id: 'q3', skill: 'bull_trend' },
+  { id: 'q4', skill: 'box_oscillation' },
+  { id: 'q5', skill: 'bull_trend' },
+  { id: 'q6', skill: 'emotion_cycle' },
 ];
 
-const STARTER_PROMPT_CARDS = [
-  {
-    title: '开仓执行判断',
-    description: '快速判断现在能不能介入，并直接给出买点、止损和目标位。',
-    prompt: '请判断 NVDA 现在是否适合介入，并给出买点、止损和目标位',
-    skill: 'bull_trend',
-  },
-  {
-    title: '持仓风控复盘',
-    description: '适合已有仓位时判断继续持有、减仓还是等待反弹。',
-    prompt: '我持有 TSLA，接下来该持有、减仓还是等待回踩确认？请给出风控建议',
-    skill: 'bull_trend',
-  },
-  {
-    title: '事件驱动跟踪',
-    description: '聚焦财报、催化、风险与情绪，不只停留在泛泛聊天。',
-    prompt: 'ORCL 财报后还值得继续跟踪吗？请列出催化、风险和执行计划',
-    skill: 'bull_trend',
-  },
+const STARTER_PROMPT_CARDS: StarterPromptCard[] = [
+  { id: 'entryDecision', skill: 'bull_trend' },
+  { id: 'positionReview', skill: 'bull_trend' },
+  { id: 'eventFollowUp', skill: 'bull_trend' },
 ];
+
+const CANONICAL_SKILL_IDS = [
+  'bull_trend',
+  'ma_cross',
+  'volume_breakout',
+  'volume_pullback',
+  'box_oscillation',
+  'bottom_rebound',
+  'chan_theory',
+  'wave_theory',
+  'leader_strategy',
+  'emotion_cycle',
+  'one_rise_three_fall',
+] as const;
+
+const CANONICAL_SKILL_ID_SET = new Set<string>(CANONICAL_SKILL_IDS);
+
+const SKILL_TEXT_ALIAS_TO_ID: Record<string, string> = CANONICAL_SKILL_IDS.reduce(
+  (acc, skillId) => {
+    acc[translate('zh', `chat.skills.labels.${skillId}`)] = skillId;
+    acc[translate('en', `chat.skills.labels.${skillId}`)] = skillId;
+    return acc;
+  },
+  {} as Record<string, string>,
+);
+
+function getLocalizedSkillLabel(rawLabel: string, t: (key: string, vars?: Record<string, string | number | undefined>) => string): string {
+  const matchedSkillId = SKILL_TEXT_ALIAS_TO_ID[rawLabel];
+  if (matchedSkillId) {
+    return t(`chat.skills.labels.${matchedSkillId}`);
+  }
+  return rawLabel;
+}
+
+function getLocalizedSkillNameById(
+  skillId: string,
+  fallbackName: string,
+  t: (key: string, vars?: Record<string, string | number | undefined>) => string,
+): string {
+  if (CANONICAL_SKILL_ID_SET.has(skillId)) return t(`chat.skills.labels.${skillId}`);
+  return getLocalizedSkillLabel(fallbackName, t);
+}
 
 const ChatPage: React.FC = () => {
+  const { language, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState('');
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -72,11 +111,15 @@ const ChatPage: React.FC = () => {
   const shouldStickToBottomRef = useRef(true);
   const pendingScrollBehaviorRef = useRef<ScrollBehavior>('auto');
   const { closeMobileRail } = useShellRail();
+  const chat = useCallback(
+    (key: string, vars?: Record<string, string | number | undefined>) => t(`chat.${key}`, vars),
+    [t],
+  );
 
   // Set page title
   useEffect(() => {
-    document.title = '问股 - WolfyStock';
-  }, []);
+    document.title = chat('documentTitle');
+  }, [chat]);
 
   useEffect(() => () => {
     isMountedRef.current = false;
@@ -174,7 +217,9 @@ const ChatPage: React.FC = () => {
   }, [loadSkills]);
 
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
-  const quickQuestions = QUICK_QUESTIONS.filter((question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill));
+  const quickQuestions = QUICK_QUESTIONS.filter(
+    (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
+  );
   const starterPromptCards = STARTER_PROMPT_CARDS.filter(
     (card) => availableSkillIds.size === 0 || availableSkillIds.has(card.skill),
   );
@@ -243,9 +288,10 @@ const ChatPage: React.FC = () => {
       const msgText = overrideMessage || input.trim();
       if (!msgText || loading) return;
       const usedSkill = overrideSkill || selectedSkill;
-      const usedSkillName =
-        skills.find((s) => s.id === usedSkill)?.name ||
-        (usedSkill ? usedSkill : '通用');
+      const skill = skills.find((s) => s.id === usedSkill);
+      const usedSkillName = skill
+        ? getLocalizedSkillNameById(skill.id, skill.name, t)
+        : (usedSkill ? getLocalizedSkillLabel(usedSkill, t) : chat('skills.general'));
 
       const payload = {
         message: msgText,
@@ -261,7 +307,7 @@ const ChatPage: React.FC = () => {
       requestScrollToBottom('smooth');
       await startStream(payload, { skillName: usedSkillName });
     },
-    [input, loading, requestScrollToBottom, selectedSkill, skills, sessionId, startStream],
+    [chat, input, loading, requestScrollToBottom, selectedSkill, skills, sessionId, startStream, t],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -271,9 +317,9 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  const handleQuickQuestion = (q: (typeof QUICK_QUESTIONS)[0]) => {
+  const handleQuickQuestion = (q: QuickQuestion) => {
     setSelectedSkill(q.skill);
-    handleSend(q.label, q.skill);
+    handleSend(chat(`quickQuestions.${q.id}`), q.skill);
   };
 
   const toggleThinking = (msgId: string) => {
@@ -286,16 +332,16 @@ const ChatPage: React.FC = () => {
   };
 
   const getCurrentStage = (steps: ProgressStep[]): string => {
-    if (steps.length === 0) return '正在连接...';
+    if (steps.length === 0) return chat('stage.connecting');
     const last = steps[steps.length - 1];
-    if (last.type === 'thinking') return last.message || 'AI 正在思考...';
+    if (last.type === 'thinking') return last.message || chat('stage.thinking');
     if (last.type === 'tool_start')
-      return `${last.display_name || last.tool}...`;
+      return chat('stage.toolRunning', { tool: last.display_name || last.tool });
     if (last.type === 'tool_done')
-      return `${last.display_name || last.tool} 完成`;
+      return chat('stage.toolDone', { tool: last.display_name || last.tool });
     if (last.type === 'generating')
-      return last.message || '正在生成最终分析...';
-    return '处理中...';
+      return last.message || chat('stage.generating');
+    return chat('stage.processing');
   };
 
   const renderThinkingBlock = (msg: Message) => {
@@ -306,10 +352,12 @@ const ChatPage: React.FC = () => {
       (sum, s) => sum + (s.duration || 0),
       0,
     );
-    const summary = `${toolSteps.length} 个工具调用 · ${totalDuration.toFixed(1)}s`;
+    const summary = chat('thinking.summary', { count: toolSteps.length, duration: totalDuration.toFixed(1) });
 
     return (
       <button
+        type="button"
+        aria-label={chat('thinking.toggleLabel')}
         onClick={() => toggleThinking(msg.id)}
         className="flex items-center gap-2 text-xs text-muted-text hover:text-secondary-text transition-colors mb-2 w-full text-left"
       >
@@ -327,7 +375,7 @@ const ChatPage: React.FC = () => {
           />
         </svg>
         <span className="flex items-center gap-1.5">
-          <span className="opacity-60">思考过程</span>
+          <span className="opacity-60">{chat('thinking.toggleLabel')}</span>
           <span className="text-muted-text/50">·</span>
           <span className="opacity-50">{summary}</span>
         </span>
@@ -343,11 +391,11 @@ const ChatPage: React.FC = () => {
         let colorClass = 'text-muted-text';
         if (step.type === 'thinking') {
           icon = '🤔';
-          text = step.message || `第 ${step.step} 步：思考`;
+          text = step.message || chat('thinking.stepDefault', { step: step.step });
           colorClass = 'text-secondary-text';
         } else if (step.type === 'tool_start') {
           icon = '⚙️';
-          text = `${step.display_name || step.tool}...`;
+          text = chat('stage.toolRunning', { tool: step.display_name || step.tool });
           colorClass = 'text-secondary-text';
         } else if (step.type === 'tool_done') {
           icon = step.success ? '✅' : '❌';
@@ -355,7 +403,7 @@ const ChatPage: React.FC = () => {
           colorClass = step.success ? 'text-success' : 'text-danger';
         } else if (step.type === 'generating') {
           icon = '✍️';
-          text = step.message || '生成分析';
+          text = step.message || chat('thinking.generatingDefault');
           colorClass = 'text-[hsl(var(--accent-primary-hsl))]';
         }
         return (
@@ -378,12 +426,13 @@ const ChatPage: React.FC = () => {
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          历史对话
+          {chat('historyTitle')}
         </h2>
         <button
+          type="button"
           onClick={handleStartNewChat}
           className="theme-panel-subtle rounded-lg p-1.5 text-muted-text transition-all duration-200 ease-out hover:text-foreground"
-          title="开启新对话"
+          title={chat('newChatTitle')}
         >
           <svg
             className="w-4 h-4"
@@ -404,7 +453,7 @@ const ChatPage: React.FC = () => {
         <ApiErrorAlert
           error={sessionLoadError}
           className="m-3"
-          actionLabel="重试加载会话"
+          actionLabel={chat('retryLoadSessions')}
           onAction={() => {
             void loadSessions();
           }}
@@ -412,9 +461,9 @@ const ChatPage: React.FC = () => {
       ) : null}
       <ScrollArea testId="chat-session-list-scroll" viewportClassName="p-3">
         {sessionsLoading ? (
-          <div className="p-4 text-center text-xs text-muted-text">加载中...</div>
+          <div className="p-4 text-center text-xs text-muted-text">{chat('loadingSessions')}</div>
         ) : sessions.length === 0 ? (
-          <div className="p-4 text-center text-xs text-muted-text">暂无历史对话</div>
+          <div className="p-4 text-center text-xs text-muted-text">{chat('emptySessions')}</div>
         ) : (
           <div className="space-y-2">
             {sessions.map((s) => (
@@ -431,7 +480,7 @@ const ChatPage: React.FC = () => {
                 }}
                 data-active={s.session_id === sessionId}
                 className="theme-list-item group relative flex w-full cursor-pointer items-start gap-3 overflow-hidden rounded-xl border p-2.5 transition-all duration-200 ease-out"
-                aria-label={`切换到对话 ${s.title}`}
+                aria-label={chat('switchToConversation', { title: s.title })}
               >
                 {/* 装饰条 */}
                 <div
@@ -456,7 +505,7 @@ const ChatPage: React.FC = () => {
                         setDeleteConfirmId(s.session_id);
                       }}
                       className="flex-shrink-0 rounded p-1 text-muted-text opacity-0 transition-all hover:bg-white/10 hover:text-danger group-hover:opacity-100"
-                      title="删除"
+                      title={chat('deleteConversationAction')}
                     >
                       <svg
                         className="w-3.5 h-3.5"
@@ -475,13 +524,16 @@ const ChatPage: React.FC = () => {
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="text-[11px] text-muted-text">
-                      {s.message_count} 条对话
+                      {chat('messageCount', { count: s.message_count })}
                     </span>
                     {s.last_active && (
                       <>
                         <span className="h-1 w-1 rounded-full bg-white/10" />
                         <span className="text-[11px] text-muted-text">
-                          {new Date(s.last_active).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                          {new Date(s.last_active).toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
                         </span>
                       </>
                     )}
@@ -493,7 +545,7 @@ const ChatPage: React.FC = () => {
         )}
       </ScrollArea>
     </div>
-  ), [handleStartNewChat, handleSwitchSession, loadSessions, sessionId, sessionLoadError, sessions, sessionsLoading]);
+  ), [chat, handleStartNewChat, handleSwitchSession, language, loadSessions, sessionId, sessionLoadError, sessions, sessionsLoading]);
 
   useShellRailSlot(sidebarContent);
 
@@ -502,10 +554,10 @@ const ChatPage: React.FC = () => {
       <div className="workspace-chat-layout">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
-          title="删除对话"
-          message="删除后，该对话将不可恢复，确认删除吗？"
-          confirmText="删除"
-          cancelText="取消"
+          title={chat('deleteConversationTitle')}
+          message={chat('deleteConversationMessage')}
+          confirmText={chat('deleteConversationConfirm')}
+          cancelText={chat('deleteConversationCancel')}
           isDanger
           onConfirm={confirmDelete}
           onCancel={() => setDeleteConfirmId(null)}
@@ -514,7 +566,7 @@ const ChatPage: React.FC = () => {
         <div className="workspace-chat-main">
           <WorkspacePageHeader
             className="mb-4 flex-shrink-0"
-            eyebrow="WolfyStock Quant Research"
+            eyebrow={chat('eyebrow')}
             title={(
               <span className="mb-2 mt-2 flex items-center gap-2">
                 <svg
@@ -530,18 +582,18 @@ const ChatPage: React.FC = () => {
                     d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
                   />
                 </svg>
-                <span>问股</span>
+                <span>{chat('title')}</span>
               </span>
             )}
             titleClassName="text-2xl font-bold"
-            description="把这里当成股票研究助手工作台来用：先问结论，再追问风险、催化、仓位和执行计划。"
+            description={chat('description')}
             actions={messages.length > 0 ? (
               <>
                 <button
                   type="button"
                   onClick={() => downloadSession(messages)}
                   className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
-                  title="导出会话为 Markdown 文件"
+                  title={chat('exportTitle')}
                 >
                   <svg
                     className="h-4 w-4"
@@ -556,7 +608,7 @@ const ChatPage: React.FC = () => {
                       d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     />
                   </svg>
-                  导出会话
+                  {chat('exportAction')}
                 </button>
                 <button
                   type="button"
@@ -567,13 +619,13 @@ const ChatPage: React.FC = () => {
                     try {
                       const content = formatSessionAsMarkdown(messages);
                       await agentApi.sendChat(content);
-                      setSendToast({ type: 'success', message: '已发送到通知渠道' });
+                      setSendToast({ type: 'success', message: chat('notifySuccess') });
                       setTimeout(() => setSendToast(null), 3000);
                     } catch (err) {
                       const parsed = getParsedApiError(err);
                       setSendToast({
                         type: 'error',
-                        message: parsed.message || '发送失败',
+                        message: parsed.message || chat('notifyFailed'),
                       });
                       setTimeout(() => setSendToast(null), 5000);
                     } finally {
@@ -582,7 +634,7 @@ const ChatPage: React.FC = () => {
                   }}
                   disabled={sending}
                   className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  title="发送到已配置的通知机器人/邮箱"
+                  title={chat('notifyTitle')}
                 >
                   {sending ? (
                     <svg
@@ -619,7 +671,7 @@ const ChatPage: React.FC = () => {
                       />
                     </svg>
                   )}
-                  发送
+                  {sending ? chat('notifySending') : chat('notifyAction')}
                 </button>
                 {sendToast ? (
                   <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
@@ -636,7 +688,7 @@ const ChatPage: React.FC = () => {
             <div className="px-4 pb-0 pt-4 md:px-6 md:pt-6">
               <ApiErrorAlert
                 error={skillsLoadError}
-                actionLabel="重试加载策略"
+                actionLabel={chat('retryLoadSkills')}
                 onAction={() => {
                   void loadSkills();
                 }}
@@ -671,9 +723,9 @@ const ChatPage: React.FC = () => {
                       </svg>
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-lg font-medium text-foreground">从一个高价值问题开始</h3>
+                      <h3 className="text-lg font-medium text-foreground">{chat('emptyTitle')}</h3>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary-text">
-                        问股页现在更偏向“研究助手工作台”：优先帮你形成交易结论、风险提示、催化判断和执行计划，而不是泛泛聊天。
+                        {chat('emptyBody')}
                       </p>
                     </div>
                   </div>
@@ -681,14 +733,14 @@ const ChatPage: React.FC = () => {
                   <div className="mt-5 grid gap-3 md:grid-cols-3">
                     {starterPromptCards.map((card) => (
                       <button
-                        key={card.title}
+                        key={card.id}
                         type="button"
-                        onClick={() => handleSend(card.prompt, card.skill)}
+                        onClick={() => handleSend(chat(`starterCards.${card.id}.prompt`), card.skill)}
                         className="theme-panel-subtle rounded-[1.1rem] px-4 py-4 text-left transition-all duration-200 ease-out hover:-translate-y-[1px]"
                       >
-                        <p className="text-sm font-semibold tracking-tight text-foreground">{card.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-secondary-text">{card.description}</p>
-                        <p className="mt-3 text-xs leading-5 text-muted-text">{card.prompt}</p>
+                        <p className="text-sm font-semibold tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
+                        <p className="mt-2 text-sm leading-6 text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
+                        <p className="mt-3 text-xs leading-5 text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
                       </button>
                     ))}
                   </div>
@@ -701,7 +753,7 @@ const ChatPage: React.FC = () => {
                           onClick={() => handleQuickQuestion(q)}
                           className="theme-inline-chip rounded-full px-3 py-1.5 text-sm text-secondary-text transition-all duration-200 ease-out hover:text-foreground"
                         >
-                          {q.label}
+                          {chat(`quickQuestions.${q.id}`)}
                         </button>
                       ))}
                     </div>
@@ -746,7 +798,7 @@ const ChatPage: React.FC = () => {
                               d="M13 10V3L4 14h7v7l9-11h-7z"
                             />
                           </svg>
-                          {msg.skillName}
+                          {getLocalizedSkillLabel(msg.skillName, t)}
                         </span>
                       </div>
                     )}
@@ -824,7 +876,7 @@ const ChatPage: React.FC = () => {
               <ApiErrorAlert
                 error={chatError}
                 className="mb-3"
-                actionLabel={chatError.category === 'local_connection_failed' ? '刷新页面后重试' : undefined}
+                actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
                 onAction={
                   chatError.category === 'local_connection_failed'
                     ? () => {
@@ -838,8 +890,8 @@ const ChatPage: React.FC = () => {
               <div className="theme-panel-subtle mb-3 rounded-[1rem] p-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">研究模式</p>
-                    <p className="mt-1 text-sm text-secondary-text">选择一个策略视角，让回答更贴近你的分析框架。</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{chat('skills.sectionTitle')}</p>
+                    <p className="mt-1 text-sm text-secondary-text">{chat('skills.sectionBody')}</p>
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -852,7 +904,7 @@ const ChatPage: React.FC = () => {
                         : 'theme-inline-chip text-secondary-text hover:text-foreground'
                     }`}
                   >
-                    通用分析
+                    {chat('skills.general')}
                   </button>
                   {skills.map((s) => (
                     <div
@@ -870,11 +922,11 @@ const ChatPage: React.FC = () => {
                             : 'theme-inline-chip text-secondary-text hover:text-foreground'
                         }`}
                       >
-                        {s.name}
+                        {getLocalizedSkillNameById(s.id, s.name, t)}
                       </button>
                       {showSkillDesc === s.id && s.description ? (
                         <div className="theme-menu-panel absolute left-0 bottom-full mb-2 z-50 w-64 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl pointer-events-none animate-fade-in">
-                          <p className="mb-1 font-medium text-foreground">{s.name}</p>
+                          <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
                           <p>{s.description}</p>
                         </div>
                       ) : null}
@@ -890,7 +942,7 @@ const ChatPage: React.FC = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="例如：分析 600519 / 茅台现在适合买入吗？ (Enter 发送, Shift+Enter 换行)"
+                  placeholder={chat('inputPlaceholder')}
                   disabled={loading}
                   rows={1}
                   className="input-terminal flex-1 min-h-[46px] max-h-[200px] resize-none py-2.5"
@@ -908,19 +960,28 @@ const ChatPage: React.FC = () => {
                   isLoading={loading}
                   className="h-[46px] flex-shrink-0 px-6"
                 >
-                  发送
+                  {chat('notifyAction')}
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-text">优先提问：买点、止损、目标位、风险和催化。</p>
+                <p className="text-xs text-muted-text">{chat('suggestedFocus')}</p>
                 <span className="text-xs text-secondary-text">
-                  当前策略：{selectedSkill ? (skills.find((item) => item.id === selectedSkill)?.name || selectedSkill) : '通用分析'}
+                  {chat('skills.currentPrefix')}
+                  {selectedSkill
+                    ? (() => {
+                        const skill = skills.find((item) => item.id === selectedSkill);
+                        if (skill) {
+                          return getLocalizedSkillNameById(skill.id, skill.name, t);
+                        }
+                        return getLocalizedSkillLabel(selectedSkill, t);
+                      })()
+                    : chat('skills.general')}
                 </span>
               </div>
             </div>
             {isFollowUpContextLoading && (
               <p className="mt-2 text-xs text-secondary-text">
-                正在加载历史分析上下文；现在可直接发送追问。
+                {chat('followUpContextLoading')}
               </p>
             )}
           </div>

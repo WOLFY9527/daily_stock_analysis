@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type {
   BacktestRunHistoryItem,
   BacktestRunResponse,
@@ -110,10 +111,14 @@ function renderBacktestRoutes(
 ) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/backtest" element={<BacktestPage />} />
-        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
-      </Routes>
+      <UiLanguageProvider>
+        <Routes>
+          <Route path="/backtest" element={<BacktestPage />} />
+          <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/:locale/backtest" element={<BacktestPage />} />
+          <Route path="/:locale/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+        </Routes>
+      </UiLanguageProvider>
     </MemoryRouter>,
   );
 }
@@ -885,7 +890,7 @@ describe('BacktestPage', () => {
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
     expect(screen.getByText('普通版配置')).toBeInTheDocument();
-    expect(screen.getByText(/运行后会跳转到独立结果页/i)).toBeInTheDocument();
+    expect(screen.getByText(/运行后会进入结果页查看图表和明细/i)).toBeInTheDocument();
 
     const activeStage = screen.getByTestId('backtest-normal-active-stage');
     expect(within(activeStage).getByTestId('backtest-control-section-symbol')).toHaveAttribute('data-active', 'true');
@@ -1076,7 +1081,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
 
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('backtest-control-section-strategy')).getByRole('button', { name: '确认并打开结果页' }));
+    fireEvent.click(within(screen.getByTestId('backtest-control-section-strategy')).getByRole('button', { name: '确认并查看结果' }));
 
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
     expect(runRuleBacktest).toHaveBeenCalledWith(
@@ -1190,5 +1195,20 @@ describe('BacktestPage', () => {
 
     expect((screen.getByLabelText('股票代码') as HTMLInputElement).value).toBe('ORCL');
     expect((screen.getByLabelText('初始资金') as HTMLInputElement).value).toBe('150000');
+  });
+
+  it('renders English shell copy on localized routes', async () => {
+    window.history.replaceState(window.history.state, '', '/en/backtest');
+    renderBacktestRoutes(['/en/backtest']);
+
+    expect(await screen.findByRole('heading', { name: 'Backtest' })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Backtest mode' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Deterministic backtest' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Historical evaluation' })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Control panel mode' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Strategy input' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Strategy text')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Parse strategy' })).toBeInTheDocument();
   });
 });

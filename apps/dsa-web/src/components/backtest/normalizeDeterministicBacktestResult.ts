@@ -102,12 +102,21 @@ export type DeterministicBacktestNormalizedResult = {
 };
 
 type MutableRow = DeterministicBacktestNormalizedRow;
+type BacktestLanguage = 'zh' | 'en';
 
-const ACTION_LABELS: Record<string, string> = {
-  buy: '买入',
-  sell: '卖出',
-  accumulate: '定投买入',
-  forced_close: '期末平仓',
+const ACTION_LABELS: Record<BacktestLanguage, Record<string, string>> = {
+  zh: {
+    buy: '买入',
+    sell: '卖出',
+    accumulate: '定投买入',
+    forced_close: '期末平仓',
+  },
+  en: {
+    buy: 'Buy',
+    sell: 'Sell',
+    accumulate: 'Accumulate',
+    forced_close: 'Forced close',
+  },
 };
 
 function safeNumber(value: unknown): number | null {
@@ -181,11 +190,18 @@ function deriveActionFromTrade(trade: RuleBacktestTradeItem, side: 'entry' | 'ex
   return side === 'entry' ? 'buy' : 'sell';
 }
 
-function getBenchmarkMeta(run: RuleBacktestRunResponse, rows: DeterministicBacktestNormalizedRow[]): DeterministicBacktestBenchmarkMeta {
+function getBenchmarkMeta(
+  run: RuleBacktestRunResponse,
+  rows: DeterministicBacktestNormalizedRow[],
+  language: BacktestLanguage,
+): DeterministicBacktestBenchmarkMeta {
   const benchmarkSummary = run.benchmarkSummary || {};
   const buyHoldSummary = run.buyAndHoldSummary || null;
-  const benchmarkLabel = String(benchmarkSummary.label || '基准');
-  const buyHoldLabel = String(buyHoldSummary?.label || '当前标的买入并持有');
+  const benchmarkLabel = String(benchmarkSummary.label || (language === 'en' ? 'Benchmark' : '基准'));
+  const rawBuyHoldLabel = String(buyHoldSummary?.label || '').trim();
+  const buyHoldLabel = rawBuyHoldLabel && rawBuyHoldLabel !== '当前标的买入并持有'
+    ? rawBuyHoldLabel
+    : (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有');
   const showBenchmark = rows.some((row) => row.benchmarkCumReturn != null) && benchmarkSummary.resolvedMode !== 'none';
   const showBuyHold = rows.some((row) => row.buyHoldCumReturn != null)
     && benchmarkSummary.resolvedMode !== 'none'
@@ -349,12 +365,15 @@ function populateFromAuditRows(rowsByDate: Map<string, MutableRow>, auditRows: R
   });
 }
 
-export function formatDeterministicActionLabel(action?: string | null): string {
+export function formatDeterministicActionLabel(action?: string | null, language: BacktestLanguage = 'zh'): string {
   if (!action) return '--';
-  return ACTION_LABELS[action] || action;
+  return ACTION_LABELS[language][action] || action;
 }
 
-export function normalizeDeterministicBacktestResult(run: RuleBacktestRunResponse): DeterministicBacktestNormalizedResult {
+export function normalizeDeterministicBacktestResult(
+  run: RuleBacktestRunResponse,
+  language: BacktestLanguage = 'zh',
+): DeterministicBacktestNormalizedResult {
   const rowsByDate = new Map<string, MutableRow>();
   const auditRows = Array.isArray(run.auditRows) ? run.auditRows : [];
   populateFromAuditRows(rowsByDate, auditRows);
@@ -421,7 +440,7 @@ export function normalizeDeterministicBacktestResult(run: RuleBacktestRunRespons
     });
 
   const tradeEvents = buildTradeEvents(rows, run.trades || []);
-  const benchmarkMeta = getBenchmarkMeta(run, rows);
+  const benchmarkMeta = getBenchmarkMeta(run, rows, language);
   const metrics = getMetrics(run, rows);
   const viewerMeta: DeterministicBacktestViewerMeta = {
     runId: run.id,

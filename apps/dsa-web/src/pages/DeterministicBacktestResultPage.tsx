@@ -65,6 +65,8 @@ import type {
   RuleBacktestStatusResponse,
   StatusHistoryItem,
 } from '../types/backtest';
+import { useI18n } from '../contexts/UiLanguageContext';
+import { translate, type UiLanguage } from '../i18n/core';
 
 const RULE_POLL_INTERVAL_MS = 1800;
 const RESULT_HISTORY_PAGE_SIZE = 10;
@@ -85,13 +87,7 @@ type ScenarioRunState = {
 
 type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'history';
 
-const RESULT_PAGE_TABS: Array<{ key: ResultPageTabKey; label: string }> = [
-  { key: 'overview', label: '概览' },
-  { key: 'audit', label: '审计明细' },
-  { key: 'trades', label: '交易记录' },
-  { key: 'parameters', label: '参数与假设' },
-  { key: 'history', label: '历史结果' },
-];
+const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
 
 type CoverageTrackItem = {
   key: string;
@@ -169,16 +165,21 @@ function clampRatio(value: number | null): number {
   return Math.min(1, Math.max(0, value));
 }
 
-function getRobustnessStateLabel(value: unknown): string {
+function btr(language: UiLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
+  return translate(language, `backtest.resultPage.${key}`, vars);
+}
+
+function getRobustnessStateLabel(value: unknown, language: UiLanguage): string {
   const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'available') return '可用';
-  if (normalized === 'partial') return '部分可用';
-  if (normalized === 'unavailable') return '不可用';
+  if (normalized === 'available') return btr(language, 'robustnessState.available');
+  if (normalized === 'partial') return btr(language, 'robustnessState.partial');
+  if (normalized === 'unavailable') return btr(language, 'robustnessState.unavailable');
   return normalized ? String(value) : '--';
 }
 
 function getRiskControlVisualRows(
   parsedStrategy: RuleBacktestRunResponse['parsedStrategy'] | null | undefined,
+  language: UiLanguage,
 ): RiskControlVisualRow[] {
   const directSpec = parsedStrategy?.strategySpec;
   const strategySpec = directSpec && typeof directSpec === 'object'
@@ -189,17 +190,17 @@ function getRiskControlVisualRows(
   const controls = [
     {
       key: 'stop-loss' as const,
-      label: '止损',
+      label: btr(language, 'riskControls.stopLoss'),
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'stop_loss_pct']),
     },
     {
       key: 'take-profit' as const,
-      label: '止盈',
+      label: btr(language, 'riskControls.takeProfit'),
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'take_profit_pct']),
     },
     {
       key: 'trailing-stop' as const,
-      label: '移动止损',
+      label: btr(language, 'riskControls.trailingStop'),
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'trailing_stop_pct']),
     },
   ];
@@ -219,6 +220,7 @@ function RobustnessCoverageTrack({
 }: {
   rows: CoverageTrackItem[];
 }) {
+  const { language } = useI18n();
   if (!rows.length) return null;
 
   const averageCoverage = rows.reduce((total, row) => total + row.ratio, 0) / rows.length;
@@ -227,10 +229,10 @@ function RobustnessCoverageTrack({
     <div className="summary-block mt-4" data-testid="robustness-coverage-overview">
       <div className="summary-block__header">
         <div>
-          <h3 className="summary-block__title">覆盖进度 / Coverage Track</h3>
+          <h3 className="summary-block__title">{btr(language, 'riskControls.coverageTrack')}</h3>
         </div>
         <div className="product-chip-list product-chip-list--tight">
-          <span className="product-chip">平均覆盖 {pct(averageCoverage * 100)}</span>
+          <span className="product-chip">{btr(language, 'riskControls.averageCoverage', { value: pct(averageCoverage * 100) })}</span>
         </div>
       </div>
       <div className="flex h-2.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
@@ -261,7 +263,7 @@ function RobustnessCoverageTrack({
             <p className="mt-1 preview-card__text">{row.summary}</p>
             <p className="mt-1 text-[11px] text-secondary">{row.detail}</p>
             <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-secondary">
-              <span>覆盖 {pct(row.ratio * 100)}</span>
+              <span>{btr(language, 'riskControls.coverage', { value: pct(row.ratio * 100) })}</span>
               <span className="product-chip">{row.state}</span>
             </div>
           </div>
@@ -278,6 +280,7 @@ function RiskControlsLadder({
   rows: RiskControlVisualRow[];
   activeRiskControlKey: RiskControlVisualRow['key'] | null;
 }) {
+  const { language } = useI18n();
   if (!rows.length) return null;
 
   const strongestRiskControl = rows.reduce((currentMax, row) => Math.max(currentMax, row.value), 0);
@@ -286,11 +289,11 @@ function RiskControlsLadder({
     <div className="summary-block mt-4" data-testid="result-risk-controls-visualization">
       <div className="summary-block__header">
         <div>
-          <h3 className="summary-block__title">保护梯度 / Protection Ladder</h3>
+          <h3 className="summary-block__title">{btr(language, 'riskControls.protectionLadder')}</h3>
         </div>
         <div className="product-chip-list product-chip-list--tight">
-          <span className="product-chip">已启用 {rows.length} 项</span>
-          <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+          <span className="product-chip">{btr(language, 'riskControls.enabledCount', { count: rows.length })}</span>
+          <span className="product-chip">{btr(language, 'riskControls.highestThreshold', { value: strongestRiskControl.toFixed(2) })}</span>
         </div>
       </div>
       <div className="space-y-3">
@@ -340,6 +343,7 @@ function AdditiveDashboardPanels({
   onActiveRobustnessChange: (key: string | null) => void;
   onActiveRiskControlChange: (key: RiskControlVisualRow['key'] | null) => void;
 }) {
+  const { language } = useI18n();
   const [hoveredRobustnessRow, setHoveredRobustnessRow] = useState<CoverageTrackItem | null>(null);
   const [hoveredRiskControlRow, setHoveredRiskControlRow] = useState<RiskControlVisualRow | null>(null);
   if (!hasRobustnessAnalysis && riskControlRows.length === 0) return null;
@@ -372,18 +376,18 @@ function AdditiveDashboardPanels({
           <div
             className="summary-block"
             data-testid="dashboard-robustness-panel"
-            title="查看回测鲁棒性 additive 摘要"
+            title={btr(language, 'riskControls.robustnessPanelTitle')}
           >
             <div className="summary-block__header">
               <div>
-                <h3 className="summary-block__title">鲁棒性分析卡片 / Robustness</h3>
+                <h3 className="summary-block__title">{btr(language, 'riskControls.robustnessCard')}</h3>
               </div>
               <div className="product-chip-list product-chip-list--tight">
                 <span
                   className="product-chip"
                   data-linked-highlight={activeRobustnessKey ? 'true' : undefined}
                 >
-                  平均覆盖 {pct(averageCoverage * 100)}
+                  {btr(language, 'riskControls.averageCoverage', { value: pct(averageCoverage * 100) })}
                 </span>
               </div>
             </div>
@@ -431,20 +435,20 @@ function AdditiveDashboardPanels({
           <div
             className="summary-block"
             data-testid="dashboard-risk-controls-panel"
-            title="查看策略风险控制 additive 摘要"
+            title={btr(language, 'riskControls.riskControlPanelTitle')}
           >
             <div className="summary-block__header">
               <div>
-                <h3 className="summary-block__title">风险控制卡片 / Risk Controls</h3>
+                <h3 className="summary-block__title">{btr(language, 'riskControls.riskControlCard')}</h3>
               </div>
               <div className="product-chip-list product-chip-list--tight">
-                <span className="product-chip">已启用 {riskControlRows.length} 项</span>
+                <span className="product-chip">{btr(language, 'riskControls.enabledCount', { count: riskControlRows.length })}</span>
                 <span
                   className="product-chip"
                   data-linked-highlight={activeRiskControlKey ? 'true' : undefined}
                   data-testid="dashboard-risk-controls-threshold-summary"
                 >
-                  最高阈值 {strongestRiskControl.toFixed(2)}%
+                  {btr(language, 'riskControls.highestThreshold', { value: strongestRiskControl.toFixed(2) })}
                 </span>
               </div>
             </div>
@@ -479,7 +483,7 @@ function AdditiveDashboardPanels({
                 id="dashboard-risk-controls-hover-tooltip"
                 role="tooltip"
               >
-                <span className="text-foreground">{hoveredRiskControlRow.label}阈值</span>
+                <span className="text-foreground">{btr(language, 'riskControls.threshold', { label: hoveredRiskControlRow.label })}</span>
                 <span className="ml-1 font-mono text-foreground">{hoveredRiskControlRow.valueLabel}</span>
               </div>
             ) : null}
@@ -503,6 +507,15 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
 const DeterministicBacktestResultPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { language, t } = useI18n();
+  const backtestCopy = useCallback(
+    (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars),
+    [t],
+  );
+  const resultPage = useCallback(
+    (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars),
+    [t],
+  );
   const { runId } = useParams<{ runId: string }>();
   const locationState = location.state as ResultPageLocationState | null;
   const initialRun = locationState?.initialRun || null;
@@ -568,25 +581,25 @@ const DeterministicBacktestResultPage: React.FC = () => {
       {
         key: 'walk-forward',
         label: 'Walk-forward',
-        summary: walkForwardCount == null ? '--' : `${formatNumber(walkForwardCount, 0)} 窗口`,
-        detail: `均值 ${pct(getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct')))} `,
-        state: getRobustnessStateLabel(getObjectField(walkForward, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        summary: walkForwardCount == null ? '--' : btr(language, 'riskControls.walkForwardWindows', { count: formatNumber(walkForwardCount, 0) }),
+        detail: btr(language, 'riskControls.mean', { value: pct(getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct'))) }),
+        state: getRobustnessStateLabel(getObjectField(walkForward, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
         ratio: clampRatio(walkForwardCount != null && walkForwardMax ? walkForwardCount / walkForwardMax : (hasObjectFields(walkForward) ? 1 : 0)),
       },
       {
         key: 'monte-carlo',
         label: 'Monte Carlo',
-        summary: monteCarloCount == null ? '--' : `${formatNumber(monteCarloCount, 0)} 路径`,
-        detail: `中位 ${pct(getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct')))} `,
-        state: getRobustnessStateLabel(getObjectField(monteCarlo, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        summary: monteCarloCount == null ? '--' : btr(language, 'riskControls.monteCarloPaths', { count: formatNumber(monteCarloCount, 0) }),
+        detail: btr(language, 'riskControls.median', { value: pct(getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct'))) }),
+        state: getRobustnessStateLabel(getObjectField(monteCarlo, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
         ratio: clampRatio(monteCarloCount != null && monteCarloMax ? monteCarloCount / monteCarloMax : (hasObjectFields(monteCarlo) ? 1 : 0)),
       },
       {
         key: 'stress-tests',
         label: 'Stress Tests',
-        summary: stressScenarioCount == null ? '--' : `${formatNumber(stressScenarioCount, 0)} 场景`,
-        detail: `最差 ${String(getObjectField(worstScenario, 'scenarioKey') || '--')}`,
-        state: getRobustnessStateLabel(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        summary: stressScenarioCount == null ? '--' : btr(language, 'riskControls.stressScenarios', { count: formatNumber(stressScenarioCount, 0) }),
+        detail: btr(language, 'riskControls.worst', { value: String(getObjectField(worstScenario, 'scenarioKey') || '--') }),
+        state: getRobustnessStateLabel(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
         ratio: clampRatio(stressScenarioCount != null && stressScenarioMax ? stressScenarioCount / stressScenarioMax : (hasObjectFields(stressTests) ? 1 : 0)),
       },
     ];
@@ -594,6 +607,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     monteCarlo,
     monteCarloAggregate,
     monteCarloConfig,
+    language,
     robustnessAnalysis,
     stressTests,
     stressTestsConfig,
@@ -602,6 +616,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
     walkForwardConfig,
     worstScenario,
   ]);
+  const tabs = RESULT_PAGE_TAB_KEYS.map((key) => ({
+    key,
+    label: backtestCopy(`resultPage.tabs.${key}`),
+  }));
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
@@ -712,9 +730,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   useEffect(() => {
     document.title = hasValidRunId
-      ? `确定性回测结果 #${parsedRunId} - WolfyStock`
-      : '确定性回测结果 - WolfyStock';
-  }, [hasValidRunId, parsedRunId]);
+      ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId} - WolfyStock`
+      : `${backtestCopy('resultPage.documentTitle')} - WolfyStock`;
+  }, [backtestCopy, hasValidRunId, parsedRunId]);
 
   useEffect(() => {
     setAvailablePresets(loadRuleBacktestPresets());
@@ -805,6 +823,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
+  const buyAndHoldLabel = String(buyAndHoldSummary?.label || '').trim() === '当前标的买入并持有'
+    ? resultPage('buyAndHoldDefault')
+    : (buyAndHoldSummary?.label || resultPage('buyAndHoldDefault'));
   const selectedBenchmarkLabel = benchmarkSummary
     ? String(
       benchmarkSummary.label
@@ -812,6 +833,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
         (run?.benchmarkMode as RuleBenchmarkMode | undefined) || 'auto',
         run?.code,
         run?.benchmarkCode || undefined,
+        language,
       ),
     )
     : '--';
@@ -819,15 +841,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
     ? (
       benchmarkSummary.unavailableReason
       || (benchmarkSummary.resolvedMode === 'none'
-        ? '未启用额外基准比较。'
+        ? resultPage('benchmarkNotes.none')
         : benchmarkSummary.autoResolved
-          ? `已按标的市场自动解析为 ${selectedBenchmarkLabel}。`
-          : '与策略使用同一回测窗口进行比较。')
+          ? resultPage('benchmarkNotes.autoResolved', { label: selectedBenchmarkLabel })
+          : resultPage('benchmarkNotes.sameWindow'))
     )
-    : '结果加载后显示基准说明。';
+    : resultPage('benchmarkNotes.pending');
   const normalized = useMemo(
-    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run) : null),
-    [run],
+    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null),
+    [run, language],
   );
   const scenarioPlans = useMemo<RuleScenarioPlan[]>(
     () => (run?.status === 'completed' ? getRuleScenarioPlans(run) : []),
@@ -844,55 +866,71 @@ const DeterministicBacktestResultPage: React.FC = () => {
   }, [scenarioPlans, selectedScenarioPlanId]);
   const comparisonItems = useMemo<RuleComparisonItem[]>(() => {
     if (!run || !normalized) return [];
-    const items: RuleComparisonItem[] = [{ run, normalized, label: `当前运行 #${run.id}`, badge: '当前' }];
+    const items: RuleComparisonItem[] = [{
+      run,
+      normalized,
+      label: resultPage('comparison.currentRunLabel', { id: run.id }),
+      badge: resultPage('comparison.currentBadge'),
+    }];
     compareRunIds.forEach((id) => {
       const detail = compareRunMap[id];
       if (!detail || detail.status !== 'completed') return;
       items.push({
         run: detail,
-        normalized: normalizeDeterministicBacktestResult(detail),
-        label: `比较运行 #${detail.id}`,
+        normalized: normalizeDeterministicBacktestResult(detail, language),
+        label: resultPage('comparison.comparedRunLabel', { id: detail.id }),
       });
     });
     return items;
-  }, [compareRunIds, compareRunMap, normalized, run]);
+  }, [compareRunIds, compareRunMap, language, normalized, resultPage, run]);
   const scenarioComparisonItems = useMemo<RuleComparisonItem[]>(() => {
     if (!run || !normalized) return [];
     const completedScenarioRuns = scenarioRuns.filter((item) => item.result?.status === 'completed' && item.result);
     return [
-      { run, normalized, label: `当前运行 #${run.id}`, badge: '基线' },
+      {
+        run,
+        normalized,
+        label: resultPage('comparison.currentRunLabel', { id: run.id }),
+        badge: resultPage('comparison.baselineBadge'),
+      },
       ...completedScenarioRuns.map((item) => ({
         run: item.result as RuleBacktestRunResponse,
-        normalized: normalizeDeterministicBacktestResult(item.result as RuleBacktestRunResponse),
+        normalized: normalizeDeterministicBacktestResult(item.result as RuleBacktestRunResponse, language),
         label: item.label,
       })),
     ];
-  }, [normalized, run, scenarioRuns]);
+  }, [language, normalized, resultPage, run, scenarioRuns]);
   const decisionReportMarkdown = useMemo(
     () => (run && normalized
       ? buildRuleRunReportMarkdown({
         run,
         normalized,
         comparedRuns: comparisonItems.slice(1).map((item) => item.run),
+        language,
       })
       : ''),
-    [comparisonItems, normalized, run],
+    [comparisonItems, normalized, run, language],
   );
   const headerDescription = run
-    ? `${run.code} · ${run.startDate || '--'} -> ${run.endDate || '--'} · 基准 ${selectedBenchmarkLabel}`
-    : '结果页首屏只保留摘要、KPI 与统一图表工作区；审计、交易、参数和历史结果已收纳到下方标签页。';
+    ? resultPage('headerDescriptionLoaded', {
+      code: run.code,
+      startDate: run.startDate || '--',
+      endDate: run.endDate || '--',
+      benchmarkLabel: selectedBenchmarkLabel,
+    })
+    : resultPage('headerDescriptionEmpty');
   const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {})
     .filter(([, value]) => typeof value === 'string' && value.trim())
     .map(([key, value]) => ({ label: formatSummaryLabel(key), value: String(value) }));
   const strategySummaryRows = useMemo(
     () => (run
-      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '')
+      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
       : []),
-    [run],
+    [run, language],
   );
   const riskControlRows = useMemo(
-    () => getRiskControlVisualRows(run?.parsedStrategy),
-    [run?.parsedStrategy],
+    () => getRiskControlVisualRows(run?.parsedStrategy, language),
+    [language, run?.parsedStrategy],
   );
   const strategyWarningEntries = Array.from(
     new Set([
@@ -906,26 +944,39 @@ const DeterministicBacktestResultPage: React.FC = () => {
     () => (run ? [run.id, ...compareRunIds] : []),
     [compareRunIds, run],
   );
+  const localizedNoResultMessage = run?.noResultMessage === '回测窗口内没有触发任何入场信号。'
+    ? resultPage('noEntrySignal')
+    : (run?.noResultMessage || null);
   const statusSummaryItems = run ? [
     {
-      label: '当前阶段',
-      value: getRuleRunStatusLabel(run.status),
-      note: run.statusMessage || getRuleRunStatusDescription(run.status),
+      label: resultPage('statusSummary.currentStageLabel'),
+      value: getRuleRunStatusLabel(run.status, language),
+      note: language === 'en'
+        ? (localizedNoResultMessage || getRuleRunStatusDescription(run.status, language))
+        : (run.statusMessage || localizedNoResultMessage || getRuleRunStatusDescription(run.status, language)),
     },
     {
-      label: '自动刷新',
-      value: isRuleRunTerminal(run.status) ? '已停止' : '每 1.8 秒',
-      note: isPollingStatus ? '正在同步最新状态' : '运行中自动轮询',
+      label: resultPage('statusSummary.autoRefreshLabel'),
+      value: isRuleRunTerminal(run.status) ? resultPage('statusSummary.autoRefreshStopped') : resultPage('statusSummary.autoRefreshEvery'),
+      note: isPollingStatus ? resultPage('statusSummary.autoRefreshSyncing') : resultPage('statusSummary.autoRefreshActive'),
     },
     {
-      label: '最近刷新',
+      label: resultPage('statusSummary.lastRefreshLabel'),
       value: lastStatusRefreshAt ? formatDateTime(lastStatusRefreshAt) : '--',
-      note: isLoadingRun ? '正在拉取详情' : '也可手动刷新',
+      note: isLoadingRun ? resultPage('statusSummary.lastRefreshLoading') : resultPage('statusSummary.lastRefreshManual'),
     },
     {
-      label: '下一步',
-      value: canCancelCurrentRun ? '可取消' : canExportTrace ? '可导出' : isRuleRunTerminal(run.status) ? '查看结果' : '等待执行',
-      note: canExportTrace ? 'CSV / JSON 导出已就绪' : '导出会在轨迹生成后可用',
+      label: resultPage('statusSummary.nextStepLabel'),
+      value: canCancelCurrentRun
+        ? resultPage('statusSummary.nextStepCancelable')
+        : canExportTrace
+          ? resultPage('statusSummary.nextStepExportReady')
+          : isRuleRunTerminal(run.status)
+            ? resultPage('statusSummary.nextStepReviewResult')
+            : resultPage('statusSummary.nextStepWaiting'),
+      note: canExportTrace
+        ? resultPage('statusSummary.nextStepExportReadyNote')
+        : resultPage('statusSummary.nextStepExportPendingNote'),
     },
   ] : [];
 
@@ -946,16 +997,16 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const handleSavePreset = useCallback(() => {
     if (!run) return;
-    const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy)}`;
-    const name = window.prompt('保存预设名称', suggestedName);
+    const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
+    const name = window.prompt(resultPage('promptSavePreset'), suggestedName);
     if (!name || !name.trim()) return;
     const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
       kind: 'saved',
       name,
     }));
     setAvailablePresets(next);
-    setPresetNotice(`已保存预设：${name.trim()}`);
-  }, [run]);
+    setPresetNotice(resultPage('presetSaved', { name: name.trim() }));
+  }, [language, resultPage, run]);
 
   const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
@@ -1014,7 +1065,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const handleCancelRun = useCallback(async () => {
     if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
-    const confirmed = window.confirm('确定取消当前规则回测吗？当前运行会停止继续推进，已保留的数据不会被删除。');
+    const confirmed = window.confirm(resultPage('cancelConfirm'));
     if (!confirmed) return;
 
     setIsCancellingRun(true);
@@ -1034,14 +1085,14 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsCancellingRun(false);
     }
-  }, [fetchHistory, fetchRun, isCancellingRun, run]);
+  }, [fetchHistory, fetchRun, isCancellingRun, resultPage, run]);
 
   const renderRunStatusSection = () => {
     if (!run && isLoadingRun) {
       return (
         <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <Card title="运行状态" subtitle="结果页正在加载" className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">正在加载确定性回测结果…</div>
+          <Card title={resultPage('statusCard.title')} subtitle={resultPage('statusCard.loadingSubtitle')} className="product-section-card product-section-card--backtest-result">
+            <div className="product-empty-state product-empty-state--compact">{resultPage('statusCard.loadingBody')}</div>
           </Card>
         </section>
       );
@@ -1050,8 +1101,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
     if (!run) {
       return (
         <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <Card title="运行状态" subtitle="无法显示结果" className="product-section-card product-section-card--backtest-result">
-            {runError ? <ApiErrorAlert error={runError} /> : <div className="product-empty-state product-empty-state--compact">未找到可显示的运行结果。</div>}
+          <Card title={resultPage('statusCard.title')} subtitle={resultPage('statusCard.unavailableSubtitle')} className="product-section-card product-section-card--backtest-result">
+            {runError ? <ApiErrorAlert error={runError} /> : <div className="product-empty-state product-empty-state--compact">{resultPage('statusCard.unavailableBody')}</div>}
           </Card>
         </section>
       );
@@ -1059,15 +1110,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
     return (
       <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-        <Card title="运行状态" subtitle="结果页负责轮询、取消与导出入口" className="product-section-card product-section-card--backtest-result">
+        <Card title={resultPage('statusCard.title')} subtitle={resultPage('statusCard.controlsSubtitle')} className="product-section-card product-section-card--backtest-result">
           <RuleRunStatusBanner run={run} />
           <SummaryStrip items={statusSummaryItems} />
           {!isRuleRunTerminal(run.status) ? (
             <div className="mt-4">
               <Banner
                 tone="info"
-                title="页面正在自动跟踪状态"
-                body="当前运行尚未结束。页面会自动轮询；完成、取消或失败后会停止刷新。"
+                title={resultPage('statusCard.autoTrackingTitle')}
+                body={resultPage('statusCard.autoTrackingBody')}
               />
             </div>
           ) : null}
@@ -1075,8 +1126,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
             <div className="mt-4">
               <Banner
                 tone="success"
-                title="回测已完成"
-                body="建议先看结果摘要，再按需打开审计明细、执行轨迹、交易记录和参数区。"
+                title={resultPage('statusCard.completedTitle')}
+                body={resultPage('statusCard.completedBody')}
               />
             </div>
           ) : null}
@@ -1084,8 +1135,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
             <div className="mt-4">
               <Banner
                 tone="warning"
-                title="回测已取消"
-                body="当前运行已经停止。可以返回配置页调整参数，或直接用相同参数重新发起。"
+                title={resultPage('statusCard.cancelledTitle')}
+                body={resultPage('statusCard.cancelledBody')}
               />
             </div>
           ) : null}
@@ -1093,41 +1144,41 @@ const DeterministicBacktestResultPage: React.FC = () => {
             <div className="mt-4">
               <Banner
                 tone="danger"
-                title="回测运行失败"
-                body="可以返回配置页修正参数，或使用同一组参数重新发起回测。"
+                title={resultPage('statusCard.failedTitle')}
+                body={resultPage('statusCard.failedBody')}
               />
             </div>
           ) : null}
           <div className="product-action-row mt-4">
             <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
-              {isPollingStatus || isLoadingRun ? '刷新中…' : '刷新状态'}
+              {isPollingStatus || isLoadingRun ? resultPage('statusCard.refreshing') : resultPage('statusCard.refreshStatus')}
             </Button>
             {canCancelCurrentRun ? (
               <Button
                 variant="danger-subtle"
                 onClick={() => void handleCancelRun()}
                 isLoading={isCancellingRun}
-                loadingText="取消中…"
+                loadingText={resultPage('statusCard.cancelling')}
               >
-                取消运行
+                {resultPage('statusCard.cancelRun')}
               </Button>
             ) : null}
             {isRuleRunTerminal(run.status) && canExportTrace ? (
               <>
                 <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)}>
-                  导出 CSV
+                  {resultPage('statusCard.exportCsv')}
                 </Button>
                 <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
-                  导出 JSON
+                  {resultPage('statusCard.exportJson')}
                 </Button>
                 <Button variant="ghost" onClick={() => handleExportDecisionReport('md')}>
-                  导出摘要 MD
+                  {resultPage('statusCard.exportSummaryMd')}
                 </Button>
               </>
             ) : null}
           </div>
           {run.statusHistory?.length ? (
-            <Disclosure summary={`查看状态轨迹 (${run.statusHistory.length})`}>
+            <Disclosure summary={resultPage('statusCard.viewStatusTimeline', { count: run.statusHistory.length })}>
               <div className="product-chip-list">
                 {run.statusHistory.map((item, index) => (
                   <span key={`${item.status}-${item.at || index}`} className="product-chip">
@@ -1141,7 +1192,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
           {cancelError ? <ApiErrorAlert error={cancelError} className="mt-4" /> : null}
           {presetNotice ? (
             <div className="mt-4">
-              <Banner tone="success" title={presetNotice} body={`当前本地可复用预设/最近配置：${availablePresets.length} 条。`} />
+              <Banner tone="success" title={presetNotice} body={resultPage('statusCard.reusableBanner', { count: availablePresets.length })} />
             </div>
           ) : null}
         </Card>
@@ -1162,53 +1213,51 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-overview"
           >
-            <Card title="概览" subtitle="首屏专注看图，补充说明折叠收起" className="product-section-card product-section-card--backtest-secondary">
-              <p className="product-section-copy">
-                日级细节已改为图表 hover 浮层；完整审计表、交易记录、参数与历史结果分别进入专门标签页，避免默认页面继续向下堆叠。
-              </p>
+            <Card title={resultPage('overview.title')} subtitle={resultPage('overview.subtitle')} className="product-section-card product-section-card--backtest-secondary">
+              <p className="product-section-copy">{resultPage('overview.intro')}</p>
               <SummaryStrip
                 items={[
-                  { label: '审计行数', value: String(normalized.viewerMeta.rowCount) },
-                  { label: '交易事件', value: String(normalized.tradeEvents.length) },
-                  { label: '基准收益', value: pct(run.benchmarkReturnPct) },
-                  { label: '买入持有', value: pct(run.buyAndHoldReturnPct) },
+                  { label: resultPage('overview.metricAuditRows'), value: String(normalized.viewerMeta.rowCount) },
+                  { label: resultPage('overview.metricTradeEvents'), value: String(normalized.tradeEvents.length) },
+                  { label: resultPage('overview.metricBenchmarkReturn'), value: pct(run.benchmarkReturnPct) },
+                  { label: resultPage('overview.metricBuyAndHold'), value: pct(run.buyAndHoldReturnPct) },
                 ]}
               />
-              <Disclosure summary="查看基准与执行假设摘要">
+              <Disclosure summary={resultPage('overview.benchmarkDisclosure')}>
                 <div className="backtest-result-page__tab-stack">
                   <div className="preview-grid">
                     <div className="preview-card">
-                      <p className="metric-card__label">所选基准</p>
+                      <p className="metric-card__label">{resultPage('overview.selectedBenchmark')}</p>
                       <p className="preview-card__text">{selectedBenchmarkLabel}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">相对基准</p>
+                      <p className="metric-card__label">{resultPage('overview.vsBenchmark')}</p>
                       <p className="preview-card__text">{pct(run.excessReturnVsBenchmarkPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">买入并持有</p>
-                      <p className="preview-card__text">{buyAndHoldSummary?.label || '当前标的买入并持有'} · {pct(run.buyAndHoldReturnPct)}</p>
+                      <p className="metric-card__label">{resultPage('overview.buyAndHold')}</p>
+                      <p className="preview-card__text">{buyAndHoldLabel} · {pct(run.buyAndHoldReturnPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">状态轨迹</p>
-                      <p className="preview-card__text">{run.statusHistory.length} 个节点</p>
+                      <p className="metric-card__label">{resultPage('overview.statusTimeline')}</p>
+                      <p className="preview-card__text">{resultPage('overview.checkpoints', { count: run.statusHistory.length })}</p>
                     </div>
                   </div>
                   <p className="product-footnote">{benchmarkStatusNote}</p>
-                  <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
+                  <AssumptionList assumptions={run.executionAssumptions} emptyText={resultPage('overview.emptyExecutionAssumptions')} />
                 </div>
               </Disclosure>
-              <Disclosure summary="查看可导出的决策摘要">
+              <Disclosure summary={resultPage('overview.exportSummaryDisclosure')}>
                 <div className="backtest-result-page__tab-stack">
                   <div className="summary-block">
                     <div className="summary-block__header">
                       <div>
-                        <h3 className="summary-block__title">决策摘要 / Shareable Report</h3>
-                        <p className="product-section-copy">优先输出人类可读判断，再把深层 trace 留给 CSV / JSON 导出。</p>
+                        <h3 className="summary-block__title">{resultPage('overview.resultSummaryTitle')}</h3>
+                        <p className="product-section-copy">{resultPage('overview.resultSummaryBody')}</p>
                       </div>
                       <div className="product-action-row">
-                        <Button variant="secondary" onClick={() => handleExportDecisionReport('md')}>导出 Markdown</Button>
-                        <Button variant="ghost" onClick={() => handleExportDecisionReport('html')}>导出 HTML</Button>
+                        <Button variant="secondary" onClick={() => handleExportDecisionReport('md')}>{resultPage('overview.exportMarkdown')}</Button>
+                        <Button variant="ghost" onClick={() => handleExportDecisionReport('html')}>{resultPage('overview.exportHtml')}</Button>
                       </div>
                     </div>
                     <pre className="comparison-report-preview">{decisionReportMarkdown}</pre>
@@ -1252,92 +1301,92 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-parameters"
           >
-            <Card title="参数与假设" subtitle="参数快照、benchmark 口径与策略解释均折叠管理" className="product-section-card product-section-card--backtest-secondary">
+            <Card title={resultPage('parameters.title')} subtitle={resultPage('parameters.subtitle')} className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
                 items={[
-                  { label: '初始资金', value: formatNumber(run.initialCapital) },
-                  { label: '回看范围', value: String(run.lookbackBars) },
-                  { label: '手续费 / 滑点', value: `${formatNumber(run.feeBps, 1)}bp / ${formatNumber(run.slippageBps, 1)}bp` },
-                  { label: '解析置信度', value: run.parsedConfidence == null ? '--' : pct(run.parsedConfidence * 100) },
+                  { label: resultPage('parameters.metricInitialCapital'), value: formatNumber(run.initialCapital) },
+                  { label: resultPage('parameters.metricLookback'), value: String(run.lookbackBars) },
+                  { label: resultPage('parameters.metricFeesSlippage'), value: `${formatNumber(run.feeBps, 1)}bp / ${formatNumber(run.slippageBps, 1)}bp` },
+                  { label: resultPage('parameters.metricParseConfidence'), value: run.parsedConfidence == null ? '--' : pct(run.parsedConfidence * 100) },
                 ]}
               />
               <div className="backtest-result-page__tab-stack">
-                <Disclosure summary="参数快照">
+                <Disclosure summary={resultPage('parameters.snapshotDisclosure')}>
                   <div className="preview-grid">
                     <div className="preview-card">
-                      <p className="metric-card__label">标的</p>
+                      <p className="metric-card__label">{resultPage('parameters.instrument')}</p>
                       <p className="preview-card__text">{run.code}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">回测区间</p>
+                      <p className="metric-card__label">{resultPage('parameters.backtestWindow')}</p>
                       <p className="preview-card__text">{run.startDate || '--'} {'->'} {run.endDate || '--'}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">提交时间</p>
+                      <p className="metric-card__label">{resultPage('parameters.submittedAt')}</p>
                       <p className="preview-card__text">{formatDateTime(run.runAt)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">完成时间</p>
+                      <p className="metric-card__label">{resultPage('parameters.completedAt')}</p>
                       <p className="preview-card__text">{formatDateTime(run.completedAt)}</p>
                     </div>
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="基准与比较口径">
+                <Disclosure summary={resultPage('parameters.benchmarkDisclosure')}>
                   <div className="preview-grid">
                     <div className="preview-card">
-                      <p className="metric-card__label">所选基准</p>
+                      <p className="metric-card__label">{resultPage('overview.selectedBenchmark')}</p>
                       <p className="preview-card__text">{selectedBenchmarkLabel}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">基准收益</p>
+                      <p className="metric-card__label">{resultPage('parameters.benchmarkReturn')}</p>
                       <p className="preview-card__text">{pct(run.benchmarkReturnPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">买入并持有</p>
-                      <p className="preview-card__text">{buyAndHoldSummary?.label || '当前标的买入并持有'} · {pct(run.buyAndHoldReturnPct)}</p>
+                      <p className="metric-card__label">{resultPage('overview.buyAndHold')}</p>
+                      <p className="preview-card__text">{buyAndHoldLabel} · {pct(run.buyAndHoldReturnPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">相对基准</p>
+                      <p className="metric-card__label">{resultPage('overview.vsBenchmark')}</p>
                       <p className="preview-card__text">{pct(run.excessReturnVsBenchmarkPct)}</p>
                     </div>
                   </div>
                   <p className="product-footnote mt-4">{benchmarkStatusNote}</p>
                 </Disclosure>
 
-                <Disclosure summary="执行假设">
-                  <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
+                <Disclosure summary={resultPage('parameters.executionAssumptionsDisclosure')}>
+                  <AssumptionList assumptions={run.executionAssumptions} emptyText={resultPage('overview.emptyExecutionAssumptions')} />
                 </Disclosure>
 
                 {hasRobustnessAnalysis ? (
-                  <Disclosure summary="鲁棒性分析">
+                  <Disclosure summary={backtestCopy('resultPage.riskControls.robustnessDisclosure')}>
                     <div className="backtest-result-page__tab-stack">
                       <SummaryStrip
                         items={[
-                          { label: '状态', value: getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state')) },
-                          { label: 'Walk-forward 窗口', value: formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0) },
-                          { label: '蒙特卡洛模拟', value: formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0) },
-                          { label: '压力场景', value: formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0) },
+                          { label: backtestCopy('resultPage.riskControls.status'), value: getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language) },
+                          { label: backtestCopy('resultPage.riskControls.walkForwardWindow'), value: formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0) },
+                          { label: backtestCopy('resultPage.riskControls.monteCarloSimulation'), value: formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0) },
+                          { label: backtestCopy('resultPage.riskControls.stressScenario'), value: formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0) },
                         ]}
                       />
                       <div className="preview-grid">
                         <div className="preview-card">
-                          <p className="metric-card__label">Walk-forward 平均收益</p>
+                          <p className="metric-card__label">{backtestCopy('resultPage.riskControls.walkForwardMeanReturn')}</p>
                           <p className="preview-card__text">{pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}</p>
                         </div>
                         <div className="preview-card">
-                          <p className="metric-card__label">蒙特卡洛中位收益</p>
+                          <p className="metric-card__label">{backtestCopy('resultPage.riskControls.monteCarloMedianReturn')}</p>
                           <p className="preview-card__text">{pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}</p>
                         </div>
                         <div className="preview-card">
-                          <p className="metric-card__label">最差场景</p>
+                          <p className="metric-card__label">{backtestCopy('resultPage.riskControls.worstScenario')}</p>
                           <p className="preview-card__text">{String(getObjectField(worstScenario, 'scenarioKey') || '--')}</p>
                         </div>
                       </div>
                       <div className="summary-block mt-4" data-testid="robustness-lens">
                         <div className="summary-block__header">
                           <div>
-                            <h3 className="summary-block__title">鲁棒性概览 / Robustness Lens</h3>
+                            <h3 className="summary-block__title">{backtestCopy('resultPage.riskControls.robustnessLens')}</h3>
                           </div>
                         </div>
                         <div className="space-y-3">
@@ -1375,21 +1424,21 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </Disclosure>
                 ) : null}
 
-                <Disclosure summary="实际执行内容">
+                <Disclosure summary={resultPage('parameters.executedSetupDisclosure')}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
-                          <h3 className="summary-block__title">实际执行内容</h3>
+                          <h3 className="summary-block__title">{resultPage('parameters.executedSetupTitle')}</h3>
                         </div>
                       </div>
-                      <p className="product-section-copy">这里展示的是本次回测实际使用的 canonical strategy_spec，和确认页中的“实际执行内容”保持同口径。</p>
+                      <p className="product-section-copy">{resultPage('parameters.executedSetupBody')}</p>
                       <div className="product-chip-list mt-4">
-                        <span className="product-chip">策略族 · {getRuleStrategyTypeLabel(run.parsedStrategy)}</span>
-                        <span className="product-chip">规格来源 · {getRuleStrategySpecSourceLabel(run.parsedStrategy)}</span>
-                        <span className="product-chip">归一化 · {formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</span>
-                        <span className="product-chip">需要确认 · {run.needsConfirmation ? '是' : '否'}</span>
-                        <span className="product-chip">可执行 · {run.parsedStrategy.executable ? '是' : '否'}</span>
+                        <span className="product-chip">{resultPage('parameters.chipStrategyFamily')} · {getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}</span>
+                        <span className="product-chip">{resultPage('parameters.chipSpecSource')} · {getRuleStrategySpecSourceLabel(run.parsedStrategy, language)}</span>
+                        <span className="product-chip">{resultPage('parameters.chipNormalization')} · {formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState, language)}</span>
+                        <span className="product-chip">{resultPage('parameters.chipNeedsConfirmation')} · {run.needsConfirmation ? backtestCopy('common.yes') : backtestCopy('common.no')}</span>
+                        <span className="product-chip">{resultPage('parameters.chipExecutable')} · {run.parsedStrategy.executable ? backtestCopy('common.yes') : backtestCopy('common.no')}</span>
                       </div>
                     </div>
                     <div className="preview-grid">
@@ -1404,12 +1453,12 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="原始输入与解析">
+                <Disclosure summary={resultPage('parameters.originalInputDisclosure')}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
-                          <h3 className="summary-block__title">原始输入</h3>
+                          <h3 className="summary-block__title">{resultPage('parameters.originalInputTitle')}</h3>
                         </div>
                       </div>
                       <p className="product-section-copy">{run.strategyText || '--'}</p>
@@ -1417,20 +1466,20 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     </div>
                     <div className="preview-grid">
                       <div className="preview-card">
-                        <p className="metric-card__label">时间框架</p>
+                        <p className="metric-card__label">{resultPage('parameters.timeframe')}</p>
                         <p className="preview-card__text">{run.timeframe || '--'}</p>
                       </div>
                       <div className="preview-card">
-                        <p className="metric-card__label">规格来源</p>
-                        <p className="preview-card__text">{getRuleStrategySpecSourceLabel(run.parsedStrategy)}</p>
+                        <p className="metric-card__label">{resultPage('parameters.chipSpecSource')}</p>
+                        <p className="preview-card__text">{getRuleStrategySpecSourceLabel(run.parsedStrategy, language)}</p>
                       </div>
                       <div className="preview-card">
-                        <p className="metric-card__label">策略族</p>
-                        <p className="preview-card__text">{getRuleStrategyTypeLabel(run.parsedStrategy)}</p>
+                        <p className="metric-card__label">{resultPage('parameters.chipStrategyFamily')}</p>
+                        <p className="preview-card__text">{getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}</p>
                       </div>
                       <div className="preview-card">
-                        <p className="metric-card__label">归一化状态</p>
-                        <p className="preview-card__text">{formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</p>
+                        <p className="metric-card__label">{resultPage('parameters.normalizationState')}</p>
+                        <p className="preview-card__text">{formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState, language)}</p>
                       </div>
                     </div>
                     {parsedSummaryEntries.length ? (
@@ -1443,18 +1492,18 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         ))}
                       </dl>
                     ) : (
-                      <p className="product-empty-note">暂无额外的策略解析摘要。</p>
+                      <p className="product-empty-note">{resultPage('parameters.interpretationSummaryEmpty')}</p>
                     )}
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="技术说明与提醒">
+                <Disclosure summary={resultPage('parameters.technicalNotesDisclosure')}>
                   <div className="backtest-result-page__tab-stack">
                     {strategyWarningEntries.length ? (
                       <div className="summary-block">
                         <div className="summary-block__header">
                           <div>
-                            <h3 className="summary-block__title">默认补全与提醒</h3>
+                            <h3 className="summary-block__title">{resultPage('parameters.defaultFillsTitle')}</h3>
                           </div>
                         </div>
                         <ul className="backtest-result-page__list">
@@ -1469,22 +1518,22 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="参数迭代 / Scenario Lab">
+                <Disclosure summary={resultPage('parameters.scenarioComparisonDisclosure')}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
-                          <h3 className="summary-block__title">受控场景比较</h3>
-                          <p className="product-section-copy">只做轻量、结构化、确定性的变体，不引入 full optimizer。</p>
+                          <h3 className="summary-block__title">{resultPage('parameters.scenarioComparisonTitle')}</h3>
+                          <p className="product-section-copy">{resultPage('parameters.scenarioComparisonBody')}</p>
                         </div>
                         <Button
                           variant="secondary"
                           onClick={() => void handleRunScenarioPlan()}
                           isLoading={isSubmittingScenarioRuns}
-                          loadingText="提交场景中…"
+                          loadingText={resultPage('parameters.submittingScenarios')}
                           disabled={!selectedScenarioPlan}
                         >
-                          运行当前场景组
+                          {resultPage('parameters.runCurrentScenarioSet')}
                         </Button>
                       </div>
                       <div className="comparison-card-grid">
@@ -1497,10 +1546,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           >
                             <div className="comparison-card__header">
                               <div>
-                                <p className="metric-card__label">Scenario Plan</p>
+                                <p className="metric-card__label">{resultPage('parameters.scenarioPlan')}</p>
                                 <h3 className="comparison-card__title">{plan.label}</h3>
                               </div>
-                              <span className="product-chip">{plan.variants.length} 个变体</span>
+                              <span className="product-chip">{resultPage('parameters.variants', { count: plan.variants.length })}</span>
                             </div>
                             <p className="comparison-card__narrative">{plan.description}</p>
                             <div className="product-chip-list product-chip-list--tight">
@@ -1518,10 +1567,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         <table className="product-table">
                           <thead>
                             <tr>
-                              <th>场景</th>
-                              <th>状态</th>
+                              <th>{resultPage('parameters.scenario')}</th>
+                              <th>{backtestCopy('common.status')}</th>
                               <th>Run ID</th>
-                              <th className="product-table__align-right">操作</th>
+                              <th className="product-table__align-right">{backtestCopy('common.action')}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1533,12 +1582,12 @@ const DeterministicBacktestResultPage: React.FC = () => {
                                     <span>{item.description}</span>
                                   </div>
                                 </td>
-                                <td>{getRuleRunStatusLabel(item.status)}</td>
+                                <td>{getRuleRunStatusLabel(item.status, language)}</td>
                                 <td className="product-table__mono">{item.runId || '--'}</td>
                                 <td className="product-table__align-right">
                                   {item.runId ? (
                                     <Button size="sm" variant="ghost" onClick={() => navigate(`/backtest/results/${item.runId}`)}>
-                                      查看
+                                      {backtestCopy('common.open')}
                                     </Button>
                                   ) : (
                                     '--'
@@ -1551,27 +1600,27 @@ const DeterministicBacktestResultPage: React.FC = () => {
                       </div>
                     ) : null}
                     <RuleRunComparisonPanel
-                      title="场景结果比较"
-                      subtitle="把当前运行作为基线，对照 P6 轻量参数变体。"
+                      title={resultPage('parameters.scenarioResultComparisonTitle')}
+                      subtitle={resultPage('parameters.scenarioResultComparisonSubtitle')}
                       items={scenarioComparisonItems}
-                      emptyText="先选择一个 scenario plan 并运行，结果会在这里汇总成紧凑比较表。"
+                      emptyText={resultPage('parameters.scenarioResultComparisonEmpty')}
                     />
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="可复用配置 / Presets">
+                <Disclosure summary={resultPage('parameters.reusableSetupDisclosure')}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block__header">
                       <div>
-                        <h3 className="summary-block__title">快速复用当前配置</h3>
-                        <p className="product-section-copy">结果页会自动沉淀 recent draft；也可以手动保存一个具名 preset，回到配置页快速复用。</p>
+                        <h3 className="summary-block__title">{resultPage('parameters.reusableSetupTitle')}</h3>
+                        <p className="product-section-copy">{resultPage('parameters.reusableSetupBody')}</p>
                       </div>
-                      <Button variant="secondary" onClick={handleSavePreset}>保存为预设</Button>
+                      <Button variant="secondary" onClick={handleSavePreset}>{resultPage('parameters.saveAsPreset')}</Button>
                     </div>
                     <div className="product-chip-list">
                       {availablePresets.map((preset) => (
                         <span key={preset.id} className="product-chip">
-                          {preset.kind === 'saved' ? '预设' : '最近'} · {preset.name}
+                          {preset.kind === 'saved' ? resultPage('parameters.presetKindSaved') : resultPage('parameters.presetKindRecent')} · {preset.name}
                         </span>
                       ))}
                     </div>
@@ -1590,30 +1639,30 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-history"
           >
-            <Card title="历史结果" subtitle="同标的运行统一走当前结果页路径" className="product-section-card product-section-card--backtest-secondary">
+            <Card title={resultPage('history.title')} subtitle={resultPage('history.subtitle')} className="product-section-card product-section-card--backtest-secondary">
               <div className="summary-block__header">
                 <div>
-                  <h3 className="summary-block__title">同标的历史回测</h3>
-                  <p className="product-section-copy">点击历史项会继续停留在 `/backtest/results/:runId` 路径，只切换当前运行 ID 和对应结果数据；勾选已完成运行可直接做 side-by-side comparison。</p>
+                  <h3 className="summary-block__title">{resultPage('history.runsTitle')}</h3>
+                  <p className="product-section-copy">{resultPage('history.runsBody')}</p>
                 </div>
                 <Button variant="ghost" onClick={() => void fetchHistory(run.code)} disabled={isLoadingHistory}>
-                  {isLoadingHistory ? '刷新中…' : '刷新'}
+                  {isLoadingHistory ? resultPage('history.refreshing') : resultPage('history.refresh')}
                 </Button>
               </div>
               {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
               {compareError ? <ApiErrorAlert error={compareError} className="mb-4" /> : null}
-              {isLoadingCompareRuns ? <p className="product-footnote">正在加载比较运行详情…</p> : null}
+              {isLoadingCompareRuns ? <p className="product-footnote">{resultPage('history.loadingComparedRuns')}</p> : null}
               <RuleRunComparisonPanel
-                title="运行比较"
-                subtitle="当前运行固定为基线，额外支持最多再选 3 条已完成运行。"
+                title={resultPage('history.runComparisonTitle')}
+                subtitle={resultPage('history.runComparisonSubtitle')}
                 items={comparisonItems}
-                emptyText="先在下方历史表中勾选已完成运行，系统会自动拉取详情并生成比较视图。"
+                emptyText={resultPage('history.runComparisonEmpty')}
               />
               <div className="product-action-row mt-4">
                 <Button variant="secondary" onClick={handleOpenCompareWorkbench} disabled={compareRunIds.length === 0}>
-                  打开比较工作台
+                  {resultPage('history.openCompareWorkbench')}
                 </Button>
-                <Button variant="ghost" onClick={() => setCompareRunIds([])} disabled={compareRunIds.length === 0}>清空比较</Button>
+                <Button variant="ghost" onClick={() => setCompareRunIds([])} disabled={compareRunIds.length === 0}>{resultPage('history.clearComparison')}</Button>
               </div>
               <RuleRunsTable
                 rows={historyItems}
@@ -1644,13 +1693,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
         <div className="backtest-result-page__hero-copy">
           <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
           <h1 className="backtest-result-page__hero-title">
-            {hasValidRunId ? `确定性回测结果 #${parsedRunId}` : '确定性回测结果'}
+            {hasValidRunId
+              ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
+              : backtestCopy('resultPage.documentTitle')}
           </h1>
           <p className="backtest-result-page__hero-meta">{headerDescription}</p>
         </div>
         <div className="backtest-result-page__hero-actions">
           <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
-            返回配置页
+            {resultPage('hero.backToConfig')}
           </Button>
           {run ? (
             <Button
@@ -1658,24 +1709,24 @@ const DeterministicBacktestResultPage: React.FC = () => {
               size={density.buttonSize}
               onClick={() => navigate('/backtest', { state: { draftRun: run } })}
             >
-              用相同参数重跑
+              {resultPage('hero.rerunSameParameters')}
             </Button>
           ) : null}
           {run ? (
             <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
-              保存预设
+              {resultPage('hero.savePreset')}
             </Button>
           ) : null}
           <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
-            刷新结果
+            {resultPage('hero.refreshResult')}
           </Button>
         </div>
       </section>
 
       {!hasValidRunId ? (
         <section className="backtest-display-section">
-          <Card title="无效运行 ID" subtitle="结果页无法解析参数" className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">请从 `/backtest` 重新发起回测，或从历史记录里打开有效的运行结果。</div>
+          <Card title={resultPage('invalidRun.title')} subtitle={resultPage('invalidRun.subtitle')} className="product-section-card product-section-card--backtest-result">
+            <div className="product-empty-state product-empty-state--compact">{resultPage('invalidRun.body')}</div>
           </Card>
         </section>
       ) : null}
@@ -1698,8 +1749,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
           </section>
 
           <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
-            <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label="结果详情标签">
-              {RESULT_PAGE_TABS.map((tab) => (
+            <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={backtestCopy('resultPage.tabsAria')}>
+              {tabs.map((tab) => (
                 <button
                   key={tab.key}
                   id={`deterministic-result-tab-${tab.key}`}
