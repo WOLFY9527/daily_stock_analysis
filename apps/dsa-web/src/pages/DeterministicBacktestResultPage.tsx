@@ -65,6 +65,7 @@ import type {
   RuleBacktestStatusResponse,
   StatusHistoryItem,
 } from '../types/backtest';
+import { useI18n } from '../contexts/UiLanguageContext';
 
 const RULE_POLL_INTERVAL_MS = 1800;
 const RESULT_HISTORY_PAGE_SIZE = 10;
@@ -85,13 +86,22 @@ type ScenarioRunState = {
 
 type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'history';
 
-const RESULT_PAGE_TABS: Array<{ key: ResultPageTabKey; label: string }> = [
-  { key: 'overview', label: '概览' },
-  { key: 'audit', label: '审计明细' },
-  { key: 'trades', label: '交易记录' },
-  { key: 'parameters', label: '参数与假设' },
-  { key: 'history', label: '历史结果' },
-];
+const RESULT_PAGE_TABS: Record<'zh' | 'en', Array<{ key: ResultPageTabKey; label: string }>> = {
+  zh: [
+    { key: 'overview', label: '概览' },
+    { key: 'audit', label: '审计明细' },
+    { key: 'trades', label: '交易记录' },
+    { key: 'parameters', label: '参数与假设' },
+    { key: 'history', label: '历史结果' },
+  ],
+  en: [
+    { key: 'overview', label: 'Overview' },
+    { key: 'audit', label: 'Audit detail' },
+    { key: 'trades', label: 'Trades' },
+    { key: 'parameters', label: 'Parameters' },
+    { key: 'history', label: 'History' },
+  ],
+};
 
 type CoverageTrackItem = {
   key: string;
@@ -503,6 +513,7 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
 const DeterministicBacktestResultPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { language } = useI18n();
   const { runId } = useParams<{ runId: string }>();
   const locationState = location.state as ResultPageLocationState | null;
   const initialRun = locationState?.initialRun || null;
@@ -602,6 +613,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     walkForwardConfig,
     worstScenario,
   ]);
+  const tabs = RESULT_PAGE_TABS[language];
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
@@ -712,9 +724,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   useEffect(() => {
     document.title = hasValidRunId
-      ? `确定性回测结果 #${parsedRunId} - WolfyStock`
-      : '确定性回测结果 - WolfyStock';
-  }, [hasValidRunId, parsedRunId]);
+      ? `${language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果'} #${parsedRunId} - WolfyStock`
+      : `${language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果'} - WolfyStock`;
+  }, [hasValidRunId, language, parsedRunId]);
 
   useEffect(() => {
     setAvailablePresets(loadRuleBacktestPresets());
@@ -805,6 +817,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
+  const buyAndHoldLabel = String(buyAndHoldSummary?.label || '').trim() === '当前标的买入并持有'
+    ? (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有')
+    : (buyAndHoldSummary?.label || (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有'));
   const selectedBenchmarkLabel = benchmarkSummary
     ? String(
       benchmarkSummary.label
@@ -819,15 +834,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
     ? (
       benchmarkSummary.unavailableReason
       || (benchmarkSummary.resolvedMode === 'none'
-        ? '未启用额外基准比较。'
+        ? (language === 'en' ? 'No extra benchmark comparison is enabled.' : '未启用额外基准比较。')
         : benchmarkSummary.autoResolved
-          ? `已按标的市场自动解析为 ${selectedBenchmarkLabel}。`
-          : '与策略使用同一回测窗口进行比较。')
+          ? (language === 'en' ? `Resolved automatically from the instrument market as ${selectedBenchmarkLabel}.` : `已按标的市场自动解析为 ${selectedBenchmarkLabel}。`)
+          : (language === 'en' ? 'Compared inside the same backtest window as the strategy.' : '与策略使用同一回测窗口进行比较。'))
     )
-    : '结果加载后显示基准说明。';
+    : (language === 'en' ? 'Benchmark notes appear after the result loads.' : '结果加载后显示基准说明。');
   const normalized = useMemo(
-    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run) : null),
-    [run],
+    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null),
+    [run, language],
   );
   const scenarioPlans = useMemo<RuleScenarioPlan[]>(
     () => (run?.status === 'completed' ? getRuleScenarioPlans(run) : []),
@@ -844,51 +859,54 @@ const DeterministicBacktestResultPage: React.FC = () => {
   }, [scenarioPlans, selectedScenarioPlanId]);
   const comparisonItems = useMemo<RuleComparisonItem[]>(() => {
     if (!run || !normalized) return [];
-    const items: RuleComparisonItem[] = [{ run, normalized, label: `当前运行 #${run.id}`, badge: '当前' }];
+    const items: RuleComparisonItem[] = [{ run, normalized, label: language === 'en' ? `Current run #${run.id}` : `当前运行 #${run.id}`, badge: language === 'en' ? 'Current' : '当前' }];
     compareRunIds.forEach((id) => {
       const detail = compareRunMap[id];
       if (!detail || detail.status !== 'completed') return;
       items.push({
         run: detail,
-        normalized: normalizeDeterministicBacktestResult(detail),
-        label: `比较运行 #${detail.id}`,
+        normalized: normalizeDeterministicBacktestResult(detail, language),
+        label: language === 'en' ? `Compared run #${detail.id}` : `比较运行 #${detail.id}`,
       });
     });
     return items;
-  }, [compareRunIds, compareRunMap, normalized, run]);
+  }, [compareRunIds, compareRunMap, language, normalized, run]);
   const scenarioComparisonItems = useMemo<RuleComparisonItem[]>(() => {
     if (!run || !normalized) return [];
     const completedScenarioRuns = scenarioRuns.filter((item) => item.result?.status === 'completed' && item.result);
     return [
-      { run, normalized, label: `当前运行 #${run.id}`, badge: '基线' },
+      { run, normalized, label: language === 'en' ? `Current run #${run.id}` : `当前运行 #${run.id}`, badge: language === 'en' ? 'Baseline' : '基线' },
       ...completedScenarioRuns.map((item) => ({
         run: item.result as RuleBacktestRunResponse,
-        normalized: normalizeDeterministicBacktestResult(item.result as RuleBacktestRunResponse),
+        normalized: normalizeDeterministicBacktestResult(item.result as RuleBacktestRunResponse, language),
         label: item.label,
       })),
     ];
-  }, [normalized, run, scenarioRuns]);
+  }, [language, normalized, run, scenarioRuns]);
   const decisionReportMarkdown = useMemo(
     () => (run && normalized
       ? buildRuleRunReportMarkdown({
         run,
         normalized,
         comparedRuns: comparisonItems.slice(1).map((item) => item.run),
+        language,
       })
       : ''),
-    [comparisonItems, normalized, run],
+    [comparisonItems, normalized, run, language],
   );
   const headerDescription = run
-    ? `${run.code} · ${run.startDate || '--'} -> ${run.endDate || '--'} · 基准 ${selectedBenchmarkLabel}`
-    : '结果页首屏只保留摘要、KPI 与统一图表工作区；审计、交易、参数和历史结果已收纳到下方标签页。';
+    ? `${run.code} · ${run.startDate || '--'} -> ${run.endDate || '--'} · ${language === 'en' ? 'Benchmark' : '基准'} ${selectedBenchmarkLabel}`
+    : (language === 'en'
+      ? 'The first screen keeps the summary, KPI strip, and shared chart workspace. Audit, trades, parameters, and history live in the tabs below.'
+      : '结果页首屏只保留摘要、KPI 与统一图表工作区；审计、交易、参数和历史结果已收纳到下方标签页。');
   const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {})
     .filter(([, value]) => typeof value === 'string' && value.trim())
     .map(([key, value]) => ({ label: formatSummaryLabel(key), value: String(value) }));
   const strategySummaryRows = useMemo(
     () => (run
-      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '')
+      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
       : []),
-    [run],
+    [run, language],
   );
   const riskControlRows = useMemo(
     () => getRiskControlVisualRows(run?.parsedStrategy),
@@ -906,26 +924,39 @@ const DeterministicBacktestResultPage: React.FC = () => {
     () => (run ? [run.id, ...compareRunIds] : []),
     [compareRunIds, run],
   );
+  const localizedNoResultMessage = run?.noResultMessage === '回测窗口内没有触发任何入场信号。'
+    ? (language === 'en' ? 'No entry signal was triggered during the backtest window.' : '回测窗口内没有触发任何入场信号。')
+    : (run?.noResultMessage || null);
   const statusSummaryItems = run ? [
     {
-      label: '当前阶段',
-      value: getRuleRunStatusLabel(run.status),
-      note: run.statusMessage || getRuleRunStatusDescription(run.status),
+      label: language === 'en' ? 'Current stage' : '当前阶段',
+      value: getRuleRunStatusLabel(run.status, language),
+      note: language === 'en'
+        ? (localizedNoResultMessage || getRuleRunStatusDescription(run.status, language))
+        : (run.statusMessage || localizedNoResultMessage || getRuleRunStatusDescription(run.status, language)),
     },
     {
-      label: '自动刷新',
-      value: isRuleRunTerminal(run.status) ? '已停止' : '每 1.8 秒',
-      note: isPollingStatus ? '正在同步最新状态' : '运行中自动轮询',
+      label: language === 'en' ? 'Auto refresh' : '自动刷新',
+      value: isRuleRunTerminal(run.status) ? (language === 'en' ? 'Stopped' : '已停止') : (language === 'en' ? 'Every 1.8s' : '每 1.8 秒'),
+      note: isPollingStatus ? (language === 'en' ? 'Syncing latest status' : '正在同步最新状态') : (language === 'en' ? 'Auto-polling while the run is active' : '运行中自动轮询'),
     },
     {
-      label: '最近刷新',
+      label: language === 'en' ? 'Last refresh' : '最近刷新',
       value: lastStatusRefreshAt ? formatDateTime(lastStatusRefreshAt) : '--',
-      note: isLoadingRun ? '正在拉取详情' : '也可手动刷新',
+      note: isLoadingRun ? (language === 'en' ? 'Loading details' : '正在拉取详情') : (language === 'en' ? 'Manual refresh is also available' : '也可手动刷新'),
     },
     {
-      label: '下一步',
-      value: canCancelCurrentRun ? '可取消' : canExportTrace ? '可导出' : isRuleRunTerminal(run.status) ? '查看结果' : '等待执行',
-      note: canExportTrace ? 'CSV / JSON 导出已就绪' : '导出会在轨迹生成后可用',
+      label: language === 'en' ? 'Next step' : '下一步',
+      value: canCancelCurrentRun
+        ? (language === 'en' ? 'Cancelable' : '可取消')
+        : canExportTrace
+          ? (language === 'en' ? 'Export ready' : '可导出')
+          : isRuleRunTerminal(run.status)
+            ? (language === 'en' ? 'Review result' : '查看结果')
+            : (language === 'en' ? 'Waiting to finish' : '等待执行'),
+      note: canExportTrace
+        ? 'CSV / JSON export ready'
+        : (language === 'en' ? 'Export becomes available after trace generation.' : '导出会在轨迹生成后可用'),
     },
   ] : [];
 
@@ -946,16 +977,16 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const handleSavePreset = useCallback(() => {
     if (!run) return;
-    const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy)}`;
-    const name = window.prompt('保存预设名称', suggestedName);
+    const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
+    const name = window.prompt(language === 'en' ? 'Save preset as' : '保存预设名称', suggestedName);
     if (!name || !name.trim()) return;
     const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
       kind: 'saved',
       name,
     }));
     setAvailablePresets(next);
-    setPresetNotice(`已保存预设：${name.trim()}`);
-  }, [run]);
+    setPresetNotice(language === 'en' ? `Saved preset: ${name.trim()}` : `已保存预设：${name.trim()}`);
+  }, [language, run]);
 
   const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
@@ -1014,7 +1045,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const handleCancelRun = useCallback(async () => {
     if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
-    const confirmed = window.confirm('确定取消当前规则回测吗？当前运行会停止继续推进，已保留的数据不会被删除。');
+    const confirmed = window.confirm(
+      language === 'en'
+        ? 'Cancel the current rule backtest? The run will stop progressing, and saved data will remain.'
+        : '确定取消当前规则回测吗？当前运行会停止继续推进，已保留的数据不会被删除。',
+    );
     if (!confirmed) return;
 
     setIsCancellingRun(true);
@@ -1034,14 +1069,14 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsCancellingRun(false);
     }
-  }, [fetchHistory, fetchRun, isCancellingRun, run]);
+  }, [fetchHistory, fetchRun, isCancellingRun, language, run]);
 
   const renderRunStatusSection = () => {
     if (!run && isLoadingRun) {
       return (
         <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <Card title="运行状态" subtitle="结果页正在加载" className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">正在加载确定性回测结果…</div>
+          <Card title={language === 'en' ? 'Run status' : '运行状态'} subtitle={language === 'en' ? 'Loading the result page' : '结果页正在加载'} className="product-section-card product-section-card--backtest-result">
+            <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'Loading deterministic backtest result…' : '正在加载确定性回测结果…'}</div>
           </Card>
         </section>
       );
@@ -1050,8 +1085,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
     if (!run) {
       return (
         <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <Card title="运行状态" subtitle="无法显示结果" className="product-section-card product-section-card--backtest-result">
-            {runError ? <ApiErrorAlert error={runError} /> : <div className="product-empty-state product-empty-state--compact">未找到可显示的运行结果。</div>}
+          <Card title={language === 'en' ? 'Run status' : '运行状态'} subtitle={language === 'en' ? 'Unable to render this result' : '无法显示结果'} className="product-section-card product-section-card--backtest-result">
+            {runError ? <ApiErrorAlert error={runError} /> : <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No result is available for display.' : '未找到可显示的运行结果。'}</div>}
           </Card>
         </section>
       );
@@ -1059,15 +1094,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
     return (
       <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-        <Card title="运行状态" subtitle="结果页负责轮询、取消与导出入口" className="product-section-card product-section-card--backtest-result">
+        <Card title={language === 'en' ? 'Run status' : '运行状态'} subtitle={language === 'en' ? 'Polling, cancel, and export controls live here' : '结果页负责轮询、取消与导出入口'} className="product-section-card product-section-card--backtest-result">
           <RuleRunStatusBanner run={run} />
           <SummaryStrip items={statusSummaryItems} />
           {!isRuleRunTerminal(run.status) ? (
             <div className="mt-4">
               <Banner
                 tone="info"
-                title="页面正在自动跟踪状态"
-                body="当前运行尚未结束。页面会自动轮询；完成、取消或失败后会停止刷新。"
+                title={language === 'en' ? 'The page is tracking status automatically' : '页面正在自动跟踪状态'}
+                body={language === 'en' ? 'This run is still active. The page keeps polling until it completes, is cancelled, or fails.' : '当前运行尚未结束。页面会自动轮询；完成、取消或失败后会停止刷新。'}
               />
             </div>
           ) : null}
@@ -1075,8 +1110,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
             <div className="mt-4">
               <Banner
                 tone="success"
-                title="回测已完成"
-                body="建议先看结果摘要，再按需打开审计明细、执行轨迹、交易记录和参数区。"
+                title={language === 'en' ? 'Backtest completed' : '回测已完成'}
+                body={language === 'en' ? 'Start with the summary, then open audit detail, execution trace, trades, and parameters as needed.' : '建议先看结果摘要，再按需打开审计明细、执行轨迹、交易记录和参数区。'}
               />
             </div>
           ) : null}
@@ -1084,8 +1119,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
             <div className="mt-4">
               <Banner
                 tone="warning"
-                title="回测已取消"
-                body="当前运行已经停止。可以返回配置页调整参数，或直接用相同参数重新发起。"
+                title={language === 'en' ? 'Backtest cancelled' : '回测已取消'}
+                body={language === 'en' ? 'The current run has stopped. Return to the configuration page to adjust parameters, or rerun with the same setup.' : '当前运行已经停止。可以返回配置页调整参数，或直接用相同参数重新发起。'}
               />
             </div>
           ) : null}
@@ -1093,41 +1128,41 @@ const DeterministicBacktestResultPage: React.FC = () => {
             <div className="mt-4">
               <Banner
                 tone="danger"
-                title="回测运行失败"
-                body="可以返回配置页修正参数，或使用同一组参数重新发起回测。"
+                title={language === 'en' ? 'Backtest failed' : '回测运行失败'}
+                body={language === 'en' ? 'Return to the configuration page to fix parameters, or rerun with the same setup.' : '可以返回配置页修正参数，或使用同一组参数重新发起回测。'}
               />
             </div>
           ) : null}
           <div className="product-action-row mt-4">
             <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
-              {isPollingStatus || isLoadingRun ? '刷新中…' : '刷新状态'}
+              {isPollingStatus || isLoadingRun ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh status' : '刷新状态')}
             </Button>
             {canCancelCurrentRun ? (
               <Button
                 variant="danger-subtle"
                 onClick={() => void handleCancelRun()}
                 isLoading={isCancellingRun}
-                loadingText="取消中…"
+                loadingText={language === 'en' ? 'Cancelling…' : '取消中…'}
               >
-                取消运行
+                {language === 'en' ? 'Cancel run' : '取消运行'}
               </Button>
             ) : null}
             {isRuleRunTerminal(run.status) && canExportTrace ? (
               <>
                 <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)}>
-                  导出 CSV
+                  {language === 'en' ? 'Export CSV' : '导出 CSV'}
                 </Button>
                 <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
-                  导出 JSON
+                  {language === 'en' ? 'Export JSON' : '导出 JSON'}
                 </Button>
                 <Button variant="ghost" onClick={() => handleExportDecisionReport('md')}>
-                  导出摘要 MD
+                  {language === 'en' ? 'Export summary MD' : '导出摘要 MD'}
                 </Button>
               </>
             ) : null}
           </div>
           {run.statusHistory?.length ? (
-            <Disclosure summary={`查看状态轨迹 (${run.statusHistory.length})`}>
+            <Disclosure summary={`${language === 'en' ? 'View status timeline' : '查看状态轨迹'} (${run.statusHistory.length})`}>
               <div className="product-chip-list">
                 {run.statusHistory.map((item, index) => (
                   <span key={`${item.status}-${item.at || index}`} className="product-chip">
@@ -1141,7 +1176,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
           {cancelError ? <ApiErrorAlert error={cancelError} className="mt-4" /> : null}
           {presetNotice ? (
             <div className="mt-4">
-              <Banner tone="success" title={presetNotice} body={`当前本地可复用预设/最近配置：${availablePresets.length} 条。`} />
+              <Banner tone="success" title={presetNotice} body={language === 'en' ? `Reusable local presets / recent drafts: ${availablePresets.length}.` : `当前本地可复用预设/最近配置：${availablePresets.length} 条。`} />
             </div>
           ) : null}
         </Card>
@@ -1162,53 +1197,55 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-overview"
           >
-            <Card title="概览" subtitle="首屏专注看图，补充说明折叠收起" className="product-section-card product-section-card--backtest-secondary">
+            <Card title={language === 'en' ? 'Overview' : '概览'} subtitle={language === 'en' ? 'Start with charts, then expand supporting detail as needed.' : '先看图表，补充说明按需展开'} className="product-section-card product-section-card--backtest-secondary">
               <p className="product-section-copy">
-                日级细节已改为图表 hover 浮层；完整审计表、交易记录、参数与历史结果分别进入专门标签页，避免默认页面继续向下堆叠。
+                {language === 'en'
+                  ? 'Day-level detail now lives in chart hover states. Full audit tables, trades, parameters, and history each sit in dedicated tabs to avoid one long stacked page.'
+                  : '日级细节已改为图表 hover 浮层；完整审计表、交易记录、参数与历史结果分别进入专门标签页，避免默认页面继续向下堆叠。'}
               </p>
               <SummaryStrip
                 items={[
-                  { label: '审计行数', value: String(normalized.viewerMeta.rowCount) },
-                  { label: '交易事件', value: String(normalized.tradeEvents.length) },
-                  { label: '基准收益', value: pct(run.benchmarkReturnPct) },
-                  { label: '买入持有', value: pct(run.buyAndHoldReturnPct) },
+                  { label: language === 'en' ? 'Audit rows' : '审计行数', value: String(normalized.viewerMeta.rowCount) },
+                  { label: language === 'en' ? 'Trade events' : '交易事件', value: String(normalized.tradeEvents.length) },
+                  { label: language === 'en' ? 'Benchmark return' : '基准收益', value: pct(run.benchmarkReturnPct) },
+                  { label: language === 'en' ? 'Buy and hold' : '买入持有', value: pct(run.buyAndHoldReturnPct) },
                 ]}
               />
-              <Disclosure summary="查看基准与执行假设摘要">
+              <Disclosure summary={language === 'en' ? 'View benchmark and execution assumptions' : '查看基准与执行假设摘要'}>
                 <div className="backtest-result-page__tab-stack">
                   <div className="preview-grid">
                     <div className="preview-card">
-                      <p className="metric-card__label">所选基准</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Selected benchmark' : '所选基准'}</p>
                       <p className="preview-card__text">{selectedBenchmarkLabel}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">相对基准</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Vs benchmark' : '相对基准'}</p>
                       <p className="preview-card__text">{pct(run.excessReturnVsBenchmarkPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">买入并持有</p>
-                      <p className="preview-card__text">{buyAndHoldSummary?.label || '当前标的买入并持有'} · {pct(run.buyAndHoldReturnPct)}</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Buy and hold' : '买入并持有'}</p>
+                      <p className="preview-card__text">{buyAndHoldLabel} · {pct(run.buyAndHoldReturnPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">状态轨迹</p>
-                      <p className="preview-card__text">{run.statusHistory.length} 个节点</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Status timeline' : '状态轨迹'}</p>
+                      <p className="preview-card__text">{language === 'en' ? `${run.statusHistory.length} checkpoints` : `${run.statusHistory.length} 个节点`}</p>
                     </div>
                   </div>
                   <p className="product-footnote">{benchmarkStatusNote}</p>
-                  <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
+                  <AssumptionList assumptions={run.executionAssumptions} emptyText={language === 'en' ? 'No execution assumptions yet.' : '暂无执行假设。'} />
                 </div>
               </Disclosure>
-              <Disclosure summary="查看可导出的决策摘要">
+              <Disclosure summary={language === 'en' ? 'View exportable result summary' : '查看可导出的结果摘要'}>
                 <div className="backtest-result-page__tab-stack">
                   <div className="summary-block">
                     <div className="summary-block__header">
                       <div>
-                        <h3 className="summary-block__title">决策摘要 / Shareable Report</h3>
-                        <p className="product-section-copy">优先输出人类可读判断，再把深层 trace 留给 CSV / JSON 导出。</p>
+                        <h3 className="summary-block__title">{language === 'en' ? 'Result summary' : '结果摘要'}</h3>
+                        <p className="product-section-copy">{language === 'en' ? 'Lead with a readable summary here, then use CSV or JSON export for deeper trace detail.' : '先给出便于阅读的结论，细节轨迹再交给 CSV / JSON 导出。'}</p>
                       </div>
                       <div className="product-action-row">
-                        <Button variant="secondary" onClick={() => handleExportDecisionReport('md')}>导出 Markdown</Button>
-                        <Button variant="ghost" onClick={() => handleExportDecisionReport('html')}>导出 HTML</Button>
+                        <Button variant="secondary" onClick={() => handleExportDecisionReport('md')}>{language === 'en' ? 'Export Markdown' : '导出 Markdown'}</Button>
+                        <Button variant="ghost" onClick={() => handleExportDecisionReport('html')}>{language === 'en' ? 'Export HTML' : '导出 HTML'}</Button>
                       </div>
                     </div>
                     <pre className="comparison-report-preview">{decisionReportMarkdown}</pre>
@@ -1252,61 +1289,61 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-parameters"
           >
-            <Card title="参数与假设" subtitle="参数快照、benchmark 口径与策略解释均折叠管理" className="product-section-card product-section-card--backtest-secondary">
+            <Card title={language === 'en' ? 'Parameters and assumptions' : '参数与假设'} subtitle={language === 'en' ? 'Parameter snapshots, benchmark basis, and strategy interpretation stay folded into focused sections.' : '参数快照、benchmark 口径与策略解释均折叠管理'} className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
                 items={[
-                  { label: '初始资金', value: formatNumber(run.initialCapital) },
-                  { label: '回看范围', value: String(run.lookbackBars) },
-                  { label: '手续费 / 滑点', value: `${formatNumber(run.feeBps, 1)}bp / ${formatNumber(run.slippageBps, 1)}bp` },
-                  { label: '解析置信度', value: run.parsedConfidence == null ? '--' : pct(run.parsedConfidence * 100) },
+                  { label: language === 'en' ? 'Initial capital' : '初始资金', value: formatNumber(run.initialCapital) },
+                  { label: language === 'en' ? 'Lookback' : '回看范围', value: String(run.lookbackBars) },
+                  { label: language === 'en' ? 'Fees / slippage' : '手续费 / 滑点', value: `${formatNumber(run.feeBps, 1)}bp / ${formatNumber(run.slippageBps, 1)}bp` },
+                  { label: language === 'en' ? 'Parse confidence' : '解析置信度', value: run.parsedConfidence == null ? '--' : pct(run.parsedConfidence * 100) },
                 ]}
               />
               <div className="backtest-result-page__tab-stack">
-                <Disclosure summary="参数快照">
+                <Disclosure summary={language === 'en' ? 'Parameter snapshot' : '参数快照'}>
                   <div className="preview-grid">
                     <div className="preview-card">
-                      <p className="metric-card__label">标的</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Instrument' : '标的'}</p>
                       <p className="preview-card__text">{run.code}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">回测区间</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Backtest window' : '回测区间'}</p>
                       <p className="preview-card__text">{run.startDate || '--'} {'->'} {run.endDate || '--'}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">提交时间</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Submitted at' : '提交时间'}</p>
                       <p className="preview-card__text">{formatDateTime(run.runAt)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">完成时间</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Completed at' : '完成时间'}</p>
                       <p className="preview-card__text">{formatDateTime(run.completedAt)}</p>
                     </div>
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="基准与比较口径">
+                <Disclosure summary={language === 'en' ? 'Benchmark and comparison basis' : '基准与比较口径'}>
                   <div className="preview-grid">
                     <div className="preview-card">
-                      <p className="metric-card__label">所选基准</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Selected benchmark' : '所选基准'}</p>
                       <p className="preview-card__text">{selectedBenchmarkLabel}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">基准收益</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Benchmark return' : '基准收益'}</p>
                       <p className="preview-card__text">{pct(run.benchmarkReturnPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">买入并持有</p>
-                      <p className="preview-card__text">{buyAndHoldSummary?.label || '当前标的买入并持有'} · {pct(run.buyAndHoldReturnPct)}</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Buy and hold' : '买入并持有'}</p>
+                      <p className="preview-card__text">{buyAndHoldLabel} · {pct(run.buyAndHoldReturnPct)}</p>
                     </div>
                     <div className="preview-card">
-                      <p className="metric-card__label">相对基准</p>
+                      <p className="metric-card__label">{language === 'en' ? 'Vs benchmark' : '相对基准'}</p>
                       <p className="preview-card__text">{pct(run.excessReturnVsBenchmarkPct)}</p>
                     </div>
                   </div>
                   <p className="product-footnote mt-4">{benchmarkStatusNote}</p>
                 </Disclosure>
 
-                <Disclosure summary="执行假设">
-                  <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
+                <Disclosure summary={language === 'en' ? 'Execution assumptions' : '执行假设'}>
+                  <AssumptionList assumptions={run.executionAssumptions} emptyText={language === 'en' ? 'No execution assumptions yet.' : '暂无执行假设。'} />
                 </Disclosure>
 
                 {hasRobustnessAnalysis ? (
@@ -1375,21 +1412,21 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </Disclosure>
                 ) : null}
 
-                <Disclosure summary="实际执行内容">
+                <Disclosure summary={language === 'en' ? 'Executed setup' : '实际执行内容'}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
-                          <h3 className="summary-block__title">实际执行内容</h3>
+                          <h3 className="summary-block__title">{language === 'en' ? 'Executed setup' : '实际执行内容'}</h3>
                         </div>
                       </div>
-                      <p className="product-section-copy">这里展示的是本次回测实际使用的 canonical strategy_spec，和确认页中的“实际执行内容”保持同口径。</p>
+                      <p className="product-section-copy">{language === 'en' ? 'This section shows the canonical strategy spec that actually ran, aligned with the confirmation step.' : '这里展示的是本次回测实际使用的 canonical strategy_spec，和确认页中的“实际执行内容”保持同口径。'}</p>
                       <div className="product-chip-list mt-4">
-                        <span className="product-chip">策略族 · {getRuleStrategyTypeLabel(run.parsedStrategy)}</span>
-                        <span className="product-chip">规格来源 · {getRuleStrategySpecSourceLabel(run.parsedStrategy)}</span>
-                        <span className="product-chip">归一化 · {formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</span>
-                        <span className="product-chip">需要确认 · {run.needsConfirmation ? '是' : '否'}</span>
-                        <span className="product-chip">可执行 · {run.parsedStrategy.executable ? '是' : '否'}</span>
+                        <span className="product-chip">{language === 'en' ? 'Strategy family' : '策略族'} · {getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}</span>
+                        <span className="product-chip">{language === 'en' ? 'Spec source' : '规格来源'} · {getRuleStrategySpecSourceLabel(run.parsedStrategy, language)}</span>
+                        <span className="product-chip">{language === 'en' ? 'Normalization' : '归一化'} · {formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState, language)}</span>
+                        <span className="product-chip">{language === 'en' ? 'Needs confirmation' : '需要确认'} · {run.needsConfirmation ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
+                        <span className="product-chip">{language === 'en' ? 'Executable' : '可执行'} · {run.parsedStrategy.executable ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
                       </div>
                     </div>
                     <div className="preview-grid">
@@ -1404,12 +1441,12 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="原始输入与解析">
+                <Disclosure summary={language === 'en' ? 'Original input and interpretation' : '原始输入与解析'}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
-                          <h3 className="summary-block__title">原始输入</h3>
+                          <h3 className="summary-block__title">{language === 'en' ? 'Original input' : '原始输入'}</h3>
                         </div>
                       </div>
                       <p className="product-section-copy">{run.strategyText || '--'}</p>
@@ -1417,20 +1454,20 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     </div>
                     <div className="preview-grid">
                       <div className="preview-card">
-                        <p className="metric-card__label">时间框架</p>
+                        <p className="metric-card__label">{language === 'en' ? 'Timeframe' : '时间框架'}</p>
                         <p className="preview-card__text">{run.timeframe || '--'}</p>
                       </div>
                       <div className="preview-card">
-                        <p className="metric-card__label">规格来源</p>
-                        <p className="preview-card__text">{getRuleStrategySpecSourceLabel(run.parsedStrategy)}</p>
+                        <p className="metric-card__label">{language === 'en' ? 'Spec source' : '规格来源'}</p>
+                        <p className="preview-card__text">{getRuleStrategySpecSourceLabel(run.parsedStrategy, language)}</p>
                       </div>
                       <div className="preview-card">
-                        <p className="metric-card__label">策略族</p>
-                        <p className="preview-card__text">{getRuleStrategyTypeLabel(run.parsedStrategy)}</p>
+                        <p className="metric-card__label">{language === 'en' ? 'Strategy family' : '策略族'}</p>
+                        <p className="preview-card__text">{getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}</p>
                       </div>
                       <div className="preview-card">
-                        <p className="metric-card__label">归一化状态</p>
-                        <p className="preview-card__text">{formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</p>
+                        <p className="metric-card__label">{language === 'en' ? 'Normalization state' : '归一化状态'}</p>
+                        <p className="preview-card__text">{formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState, language)}</p>
                       </div>
                     </div>
                     {parsedSummaryEntries.length ? (
@@ -1443,18 +1480,18 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         ))}
                       </dl>
                     ) : (
-                      <p className="product-empty-note">暂无额外的策略解析摘要。</p>
+                      <p className="product-empty-note">{language === 'en' ? 'No additional strategy interpretation summary is available.' : '暂无额外的策略解析摘要。'}</p>
                     )}
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="技术说明与提醒">
+                <Disclosure summary={language === 'en' ? 'Technical notes and reminders' : '技术说明与提醒'}>
                   <div className="backtest-result-page__tab-stack">
                     {strategyWarningEntries.length ? (
                       <div className="summary-block">
                         <div className="summary-block__header">
                           <div>
-                            <h3 className="summary-block__title">默认补全与提醒</h3>
+                            <h3 className="summary-block__title">{language === 'en' ? 'Default fills and reminders' : '默认补全与提醒'}</h3>
                           </div>
                         </div>
                         <ul className="backtest-result-page__list">
@@ -1469,22 +1506,22 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="参数迭代 / Scenario Lab">
+                <Disclosure summary={language === 'en' ? 'Scenario comparison' : '参数变体比较'}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
-                          <h3 className="summary-block__title">受控场景比较</h3>
-                          <p className="product-section-copy">只做轻量、结构化、确定性的变体，不引入 full optimizer。</p>
+                          <h3 className="summary-block__title">{language === 'en' ? 'Controlled scenario comparison' : '受控场景比较'}</h3>
+                          <p className="product-section-copy">{language === 'en' ? 'This stays intentionally lightweight and structured instead of turning into a full optimizer.' : '这里只做轻量、结构化的参数对照，不引入完整优化器。'}</p>
                         </div>
                         <Button
                           variant="secondary"
                           onClick={() => void handleRunScenarioPlan()}
                           isLoading={isSubmittingScenarioRuns}
-                          loadingText="提交场景中…"
+                          loadingText={language === 'en' ? 'Submitting scenarios…' : '提交场景中…'}
                           disabled={!selectedScenarioPlan}
                         >
-                          运行当前场景组
+                          {language === 'en' ? 'Run current scenario set' : '运行当前场景组'}
                         </Button>
                       </div>
                       <div className="comparison-card-grid">
@@ -1497,10 +1534,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           >
                             <div className="comparison-card__header">
                               <div>
-                                <p className="metric-card__label">Scenario Plan</p>
+                                <p className="metric-card__label">{language === 'en' ? 'Scenario plan' : '参数方案'}</p>
                                 <h3 className="comparison-card__title">{plan.label}</h3>
                               </div>
-                              <span className="product-chip">{plan.variants.length} 个变体</span>
+                              <span className="product-chip">{language === 'en' ? `${plan.variants.length} variants` : `${plan.variants.length} 个变体`}</span>
                             </div>
                             <p className="comparison-card__narrative">{plan.description}</p>
                             <div className="product-chip-list product-chip-list--tight">
@@ -1518,10 +1555,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         <table className="product-table">
                           <thead>
                             <tr>
-                              <th>场景</th>
-                              <th>状态</th>
+                              <th>{language === 'en' ? 'Scenario' : '场景'}</th>
+                              <th>{language === 'en' ? 'Status' : '状态'}</th>
                               <th>Run ID</th>
-                              <th className="product-table__align-right">操作</th>
+                              <th className="product-table__align-right">{language === 'en' ? 'Action' : '操作'}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1538,7 +1575,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                                 <td className="product-table__align-right">
                                   {item.runId ? (
                                     <Button size="sm" variant="ghost" onClick={() => navigate(`/backtest/results/${item.runId}`)}>
-                                      查看
+                                      {language === 'en' ? 'Open' : '查看'}
                                     </Button>
                                   ) : (
                                     '--'
@@ -1551,27 +1588,27 @@ const DeterministicBacktestResultPage: React.FC = () => {
                       </div>
                     ) : null}
                     <RuleRunComparisonPanel
-                      title="场景结果比较"
-                      subtitle="把当前运行作为基线，对照 P6 轻量参数变体。"
+                      title={language === 'en' ? 'Scenario result comparison' : '场景结果比较'}
+                      subtitle={language === 'en' ? 'Use the current run as the baseline and compare it against the lightweight P6 variants.' : '把当前运行作为基线，对照 P6 轻量参数变体。'}
                       items={scenarioComparisonItems}
-                      emptyText="先选择一个 scenario plan 并运行，结果会在这里汇总成紧凑比较表。"
+                      emptyText={language === 'en' ? 'Pick and run a scenario plan first. Results will consolidate here for side-by-side review.' : '先选择一个参数方案并运行，结果会在这里汇总成对照表。'}
                     />
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="可复用配置 / Presets">
+                <Disclosure summary={language === 'en' ? 'Reusable setup' : '可复用配置'}>
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block__header">
                       <div>
-                        <h3 className="summary-block__title">快速复用当前配置</h3>
-                        <p className="product-section-copy">结果页会自动沉淀 recent draft；也可以手动保存一个具名 preset，回到配置页快速复用。</p>
+                        <h3 className="summary-block__title">{language === 'en' ? 'Reuse this setup quickly' : '快速复用当前配置'}</h3>
+                        <p className="product-section-copy">{language === 'en' ? 'The result page automatically keeps the latest draft. You can also save a named preset and reuse it directly from the config page.' : '结果页会自动保留最近一次草稿；你也可以手动保存具名预设，回到配置页直接复用。'}</p>
                       </div>
-                      <Button variant="secondary" onClick={handleSavePreset}>保存为预设</Button>
+                      <Button variant="secondary" onClick={handleSavePreset}>{language === 'en' ? 'Save as preset' : '保存为预设'}</Button>
                     </div>
                     <div className="product-chip-list">
                       {availablePresets.map((preset) => (
                         <span key={preset.id} className="product-chip">
-                          {preset.kind === 'saved' ? '预设' : '最近'} · {preset.name}
+                          {preset.kind === 'saved' ? (language === 'en' ? 'Preset' : '预设') : (language === 'en' ? 'Recent' : '最近')} · {preset.name}
                         </span>
                       ))}
                     </div>
@@ -1590,30 +1627,30 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-history"
           >
-            <Card title="历史结果" subtitle="同标的运行统一走当前结果页路径" className="product-section-card product-section-card--backtest-secondary">
+            <Card title={language === 'en' ? 'History' : '历史结果'} subtitle={language === 'en' ? 'Runs for the same instrument stay on this result-page route.' : '同标的运行统一走当前结果页路径'} className="product-section-card product-section-card--backtest-secondary">
               <div className="summary-block__header">
                 <div>
-                  <h3 className="summary-block__title">同标的历史回测</h3>
-                  <p className="product-section-copy">点击历史项会继续停留在 `/backtest/results/:runId` 路径，只切换当前运行 ID 和对应结果数据；勾选已完成运行可直接做 side-by-side comparison。</p>
+                  <h3 className="summary-block__title">{language === 'en' ? 'Historical runs for the same instrument' : '同标的历史回测'}</h3>
+                  <p className="product-section-copy">{language === 'en' ? 'Opening a historical item keeps you on `/backtest/results/:runId` and swaps only the run ID and result payload. Completed runs can also be selected for side-by-side comparison.' : '点击历史项会继续停留在 `/backtest/results/:runId` 路径，只切换当前运行 ID 和对应结果数据；勾选已完成运行可直接做 side-by-side comparison。'}</p>
                 </div>
                 <Button variant="ghost" onClick={() => void fetchHistory(run.code)} disabled={isLoadingHistory}>
-                  {isLoadingHistory ? '刷新中…' : '刷新'}
+                  {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh' : '刷新')}
                 </Button>
               </div>
               {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
               {compareError ? <ApiErrorAlert error={compareError} className="mb-4" /> : null}
-              {isLoadingCompareRuns ? <p className="product-footnote">正在加载比较运行详情…</p> : null}
+              {isLoadingCompareRuns ? <p className="product-footnote">{language === 'en' ? 'Loading compared run details…' : '正在加载比较运行详情…'}</p> : null}
               <RuleRunComparisonPanel
-                title="运行比较"
-                subtitle="当前运行固定为基线，额外支持最多再选 3 条已完成运行。"
+                title={language === 'en' ? 'Run comparison' : '运行比较'}
+                subtitle={language === 'en' ? 'The current run stays pinned as the baseline, with up to three additional completed runs.' : '当前运行固定为基线，额外支持最多再选 3 条已完成运行。'}
                 items={comparisonItems}
-                emptyText="先在下方历史表中勾选已完成运行，系统会自动拉取详情并生成比较视图。"
+                emptyText={language === 'en' ? 'Select completed runs in the history table below. The page will fetch details and build the comparison view automatically.' : '先在下方历史表中勾选已完成运行，系统会自动拉取详情并生成比较视图。'}
               />
               <div className="product-action-row mt-4">
                 <Button variant="secondary" onClick={handleOpenCompareWorkbench} disabled={compareRunIds.length === 0}>
-                  打开比较工作台
+                  {language === 'en' ? 'Open compare workbench' : '打开比较工作台'}
                 </Button>
-                <Button variant="ghost" onClick={() => setCompareRunIds([])} disabled={compareRunIds.length === 0}>清空比较</Button>
+                <Button variant="ghost" onClick={() => setCompareRunIds([])} disabled={compareRunIds.length === 0}>{language === 'en' ? 'Clear comparison' : '清空比较'}</Button>
               </div>
               <RuleRunsTable
                 rows={historyItems}
@@ -1644,13 +1681,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
         <div className="backtest-result-page__hero-copy">
           <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
           <h1 className="backtest-result-page__hero-title">
-            {hasValidRunId ? `确定性回测结果 #${parsedRunId}` : '确定性回测结果'}
+            {hasValidRunId
+              ? `${language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果'} #${parsedRunId}`
+              : (language === 'en' ? 'Deterministic Backtest Result' : '确定性回测结果')}
           </h1>
           <p className="backtest-result-page__hero-meta">{headerDescription}</p>
         </div>
         <div className="backtest-result-page__hero-actions">
           <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
-            返回配置页
+            {language === 'en' ? 'Back to config' : '返回配置页'}
           </Button>
           {run ? (
             <Button
@@ -1658,24 +1697,24 @@ const DeterministicBacktestResultPage: React.FC = () => {
               size={density.buttonSize}
               onClick={() => navigate('/backtest', { state: { draftRun: run } })}
             >
-              用相同参数重跑
+              {language === 'en' ? 'Rerun with same parameters' : '用相同参数重跑'}
             </Button>
           ) : null}
           {run ? (
             <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
-              保存预设
+              {language === 'en' ? 'Save preset' : '保存预设'}
             </Button>
           ) : null}
           <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
-            刷新结果
+            {language === 'en' ? 'Refresh result' : '刷新结果'}
           </Button>
         </div>
       </section>
 
       {!hasValidRunId ? (
         <section className="backtest-display-section">
-          <Card title="无效运行 ID" subtitle="结果页无法解析参数" className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">请从 `/backtest` 重新发起回测，或从历史记录里打开有效的运行结果。</div>
+          <Card title={language === 'en' ? 'Invalid run ID' : '无效运行 ID'} subtitle={language === 'en' ? 'The result page cannot resolve this parameter' : '结果页无法解析参数'} className="product-section-card product-section-card--backtest-result">
+            <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'Restart the backtest from `/backtest`, or open a valid run from history.' : '请从 `/backtest` 重新发起回测，或从历史记录里打开有效的运行结果。'}</div>
           </Card>
         </section>
       ) : null}
@@ -1698,8 +1737,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
           </section>
 
           <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
-            <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label="结果详情标签">
-              {RESULT_PAGE_TABS.map((tab) => (
+            <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={language === 'en' ? 'Result detail tabs' : '结果详情标签'}>
+              {tabs.map((tab) => (
                 <button
                   key={tab.key}
                   id={`deterministic-result-tab-${tab.key}`}

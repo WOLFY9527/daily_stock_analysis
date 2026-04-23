@@ -9,7 +9,7 @@ import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
 export const ChangePasswordCard: React.FC = () => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const { changePassword } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -18,6 +18,13 @@ export const ChangePasswordCard: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const description = language === 'en'
+    ? 'Update the password for this signed-in account.'
+    : '更新当前登录账户的密码。';
+  const successMessage = language === 'en'
+    ? 'Your account password has been updated.'
+    : '当前账户密码已更新。';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +68,7 @@ export const ChangePasswordCard: React.FC = () => {
   return (
     <SettingsSectionCard
       title={t('settings.passwordTitle')}
-      description={t('settings.passwordDesc')}
+      description={description}
     >
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid gap-4 md:grid-cols-2">
@@ -118,7 +125,7 @@ export const ChangePasswordCard: React.FC = () => {
             : <SettingsAlert title={t('settings.passwordErrorTitle')} message={error} variant="error" className="!mt-3" />
           : null}
         {success ? (
-          <SettingsAlert title={t('settings.passwordSuccessTitle')} message={t('settings.passwordSuccessMessage')} variant="success" />
+          <SettingsAlert title={t('settings.passwordSuccessTitle')} message={successMessage} variant="success" />
         ) : null}
 
         <Button type="submit" variant="primary" isLoading={isSubmitting}>

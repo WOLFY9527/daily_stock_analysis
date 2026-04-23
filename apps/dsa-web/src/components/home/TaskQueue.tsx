@@ -56,6 +56,8 @@ export const TaskQueue: React.FC<TaskQueueProps> = ({
   const queueTasks = useMemo(() => sortTasksByPriority(tasks), [tasks]);
   const visibleTasks = queueTasks.slice(0, MAX_VISIBLE_TASKS);
   const overflowCount = Math.max(0, queueTasks.length - visibleTasks.length);
+  const queueSubtitle = t('tasks.queueSubtitle');
+  const queueKeepCopy = t('tasks.keep');
 
   return (
     <section className="home-task-queue theme-panel-solid rounded-[var(--cohere-radius-signature)]" data-testid="home-task-queue">
@@ -64,7 +66,7 @@ export const TaskQueue: React.FC<TaskQueueProps> = ({
           <p className="home-task-queue__eyebrow">{t('tasks.activeTitle')}</p>
           <h3 className="home-task-queue__title">{t('tasks.queueTitle')}</h3>
         </div>
-        <p className="home-task-queue__subtitle">{t('tasks.queueSubtitle')}</p>
+        <p className="home-task-queue__subtitle">{queueSubtitle}</p>
       </div>
 
       {queueTasks.length > 0 ? (
@@ -138,7 +140,7 @@ export const TaskQueue: React.FC<TaskQueueProps> = ({
       ) : (
         <div className="home-task-queue__empty">
           <p>{t('tasks.noTasks')}</p>
-          <p>{t('tasks.keep')}</p>
+          <p>{queueKeepCopy}</p>
         </div>
       )}
     </section>

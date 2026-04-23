@@ -35,7 +35,7 @@ describe('AuthSettingsCard', () => {
     render(<AuthSettingsCard />);
 
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.change(screen.getByLabelText('设置管理员密码'), { target: { value: 'passwd6' } });
+    fireEvent.change(screen.getByLabelText('设置新密码'), { target: { value: 'passwd6' } });
     fireEvent.change(screen.getByLabelText('确认新密码'), { target: { value: 'passwd6' } });
     fireEvent.click(screen.getByRole('button', { name: '开启认证' }));
 
@@ -78,8 +78,8 @@ describe('AuthSettingsCard', () => {
 
     fireEvent.click(screen.getByRole('checkbox'));
 
-    expect(screen.getByLabelText('当前管理员密码')).toBeInTheDocument();
-    expect(screen.queryByLabelText('设置管理员密码')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('当前密码')).toBeInTheDocument();
+    expect(screen.queryByLabelText('设置新密码')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('确认新密码')).not.toBeInTheDocument();
   });
 
@@ -92,7 +92,7 @@ describe('AuthSettingsCard', () => {
 
     render(<AuthSettingsCard />);
 
-    expect(screen.queryByLabelText('设置管理员密码')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('设置新密码')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('确认新密码')).not.toBeInTheDocument();
   });
 

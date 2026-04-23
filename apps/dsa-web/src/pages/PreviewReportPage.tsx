@@ -14,15 +14,15 @@ const PreviewReportPage: React.FC = () => {
   );
 
   useEffect(() => {
-    document.title = `${t('preview.reportTitle')} - WolfyStock`;
+    document.title = t('previewReport.documentTitle');
   }, [t]);
 
   return (
     <div className="workspace-page workspace-page--preview" data-testid="preview-report-page">
       <WorkspacePageHeader
-        eyebrow={t('preview.workspaceEyebrow')}
-        title={t('preview.reportTitle')}
-        description={t('preview.reportDesc')}
+        eyebrow={t('previewReport.eyebrow')}
+        title={t('previewReport.title')}
+        description={t('previewReport.description')}
       />
 
       <StandardReportPanel report={normalizedPreviewReport} chartFixtures={previewChartFixtures} />

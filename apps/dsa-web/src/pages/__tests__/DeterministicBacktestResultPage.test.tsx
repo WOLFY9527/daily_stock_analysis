@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage';
 import RuleBacktestComparePage from '../RuleBacktestComparePage';
@@ -39,10 +40,14 @@ vi.mock('../../api/backtest', () => ({
 function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
-        <Route path="/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
-      </Routes>
+      <UiLanguageProvider>
+        <Routes>
+          <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/:locale/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
+          <Route path="/:locale/backtest/compare" element={<div data-testid="rule-backtest-compare-route">compare route</div>} />
+        </Routes>
+      </UiLanguageProvider>
     </MemoryRouter>,
   );
 }
@@ -50,11 +55,15 @@ function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
 function renderResultPageWithCompareWorkbench(initialEntries: string[] = ['/backtest/results/99']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
-        <Route path="/backtest/compare" element={<RuleBacktestComparePage />} />
-      </Routes>
-    </MemoryRouter>,
+      <UiLanguageProvider>
+        <Routes>
+          <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/:locale/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
+          <Route path="/backtest/compare" element={<RuleBacktestComparePage />} />
+          <Route path="/:locale/backtest/compare" element={<RuleBacktestComparePage />} />
+        </Routes>
+      </UiLanguageProvider>
+    </MemoryRouter>
   );
 }
 
@@ -1289,7 +1298,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('参数迭代 / Scenario Lab'));
+    fireEvent.click(screen.getByText('参数变体比较'));
     fireEvent.click(screen.getByRole('button', { name: '运行当前场景组' }));
 
     await waitFor(() => {
@@ -1298,7 +1307,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByText('场景结果比较')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '概览' }));
-    fireEvent.click(screen.getByText('查看可导出的决策摘要'));
+    fireEvent.click(screen.getByText('查看可导出的结果摘要'));
     fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
 
     await waitFor(() => {
@@ -1306,5 +1315,26 @@ describe('DeterministicBacktestResultPage', () => {
       expect(clickMock).toHaveBeenCalled();
       expect(revokeObjectUrlMock).toHaveBeenCalled();
     });
+  });
+
+  it('renders localized English result-shell actions and tabs', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    window.history.replaceState(window.history.state, '', '/en/backtest/results/99');
+    renderResultPage(['/en/backtest/results/99']);
+
+    expect(await screen.findByRole('heading', { name: 'Deterministic Backtest Result #99' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to config' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh result' })).toBeInTheDocument();
+    expect(await screen.findByRole('tablist', { name: 'Result detail tabs' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Overview' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'History' })).toBeInTheDocument();
   });
 });

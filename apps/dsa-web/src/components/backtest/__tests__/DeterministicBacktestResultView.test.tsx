@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import { UiLanguageProvider } from '../../../contexts/UiLanguageContext';
 import type { RuleBacktestRunResponse } from '../../../types/backtest';
 import { DeterministicAuditTable, DeterministicBacktestResultView } from '../DeterministicBacktestResultView';
 import { normalizeDeterministicBacktestResult } from '../normalizeDeterministicBacktestResult';
@@ -285,5 +287,58 @@ describe('DeterministicBacktestResultView', () => {
     createObjectUrlMock.mockRestore();
     revokeObjectUrlMock.mockRestore();
     clickMock.mockRestore();
+  });
+
+  it('renders chart workspace controls and hover copy in English on localized routes', () => {
+    window.history.replaceState(window.history.state, '', '/en/backtest/results/101');
+    render(
+      <MemoryRouter initialEntries={['/en/backtest/results/101']}>
+        <UiLanguageProvider>
+          <DeterministicBacktestResultView run={makeViewerRun()} />
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last month' }));
+    fireEvent.change(screen.getByLabelText('Start'), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('End'), { target: { value: '39' } });
+
+    expect(screen.getByRole('button', { name: 'Relative comparison' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Daily PnL' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Position activity' })).toBeInTheDocument();
+    expect(screen.getByText('Visible window: 20 days')).toBeInTheDocument();
+
+    const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
+    const workspaceShell = workspace.querySelector('.backtest-unified-chart-viewer__workspace-shell') as HTMLElement;
+    vi.spyOn(workspaceShell, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 820,
+      height: 460,
+      top: 0,
+      left: 0,
+      right: 820,
+      bottom: 460,
+      toJSON: () => ({}),
+    });
+
+    const hoverSurface = screen.getByTestId('deterministic-chart-surface-return');
+    vi.spyOn(hoverSurface, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 100,
+      top: 0,
+      left: 0,
+      right: 400,
+      bottom: 100,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseMove(hoverSurface, { clientX: 120, clientY: 30 });
+
+    const hoverDetail = screen.getByTestId('deterministic-chart-hover-card');
+    expect(within(hoverDetail).getByText('Day detail')).toBeInTheDocument();
+    expect(within(hoverDetail).getByText('Strategy cumulative return')).toBeInTheDocument();
   });
 });

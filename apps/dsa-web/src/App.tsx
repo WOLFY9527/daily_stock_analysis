@@ -63,18 +63,18 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
         : '问股追问依赖真实账户身份，这样报告上下文、会话记忆和保存记录才会稳定绑定到你本人。',
       bullets: isEnglish
         ? [
-          'Guest mode intentionally stops at preview analysis and locked teaser surfaces.',
+          'Guest access stops at preview analysis and locked follow-up features.',
           'Authenticated chat sessions reuse your own saved report context and conversation history.',
-          'Backend ownership and authorization rules remain the source of truth.',
+          'Access rules are still enforced by the backend.',
         ]
         : [
-          '游客模式刻意停留在分析预览与锁定态产品预告，不直接进入深度问股。',
+          '游客模式只保留分析预览和锁定的追问入口，不直接进入深度问股。',
           '登录后的问股会复用你自己的报告上下文和会话历史。',
-          '真实的数据归属与访问控制仍以后端规则为准。',
+          '实际访问权限仍以后端规则为准。',
         ],
       note: isEnglish
-        ? 'After sign-in, we will return you to this workflow automatically.'
-        : '登录成功后，系统会自动把你带回当前工作流。',
+        ? 'After sign-in, we will bring you back here automatically.'
+        : '登录成功后，系统会自动把你带回当前页面。',
       secondaryAction: {
         label: isEnglish ? 'Create account' : '创建账户',
         to: buildRegistrationPath(redirectTarget),
@@ -90,24 +90,24 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
     return {
       eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
       statusLabel: isEnglish ? 'Personal Data Required' : '需要个人数据身份',
-      title: isEnglish ? 'Sign in to open your portfolio workspace' : '登录后进入你的持仓工作区',
+      title: isEnglish ? 'Sign in to open your portfolio' : '登录后查看你的持仓',
       description: isEnglish
-        ? 'Portfolio accounts, trades, cash events, and risk snapshots are all owner-scoped and are never exposed to guest mode.'
-        : '持仓账户、交易、资金流水和风险快照都属于个人 owner 范围，游客模式不会暴露这些数据。',
+        ? 'Portfolio accounts, trades, cash events, and risk snapshots are personal and never shown in guest mode.'
+        : '持仓账户、交易、资金流水和风险快照都属于个人账户范围，游客模式不会暴露这些数据。',
       bullets: isEnglish
         ? [
-          'Portfolio data is personal and stays tied to authenticated ownership.',
+          'Portfolio data stays tied to your signed-in account.',
           'Guest mode does not create shared ledgers or placeholder portfolio state.',
-          'Use sign-in or account creation to continue with a real workspace.',
+          'Sign in or create an account to keep positions, cash events, and risk snapshots under your own name.',
         ]
         : [
           '持仓数据属于个人空间，只会绑定到已认证身份。',
           '游客模式不会创建共享账本或伪造持仓状态。',
-          '请登录或创建账户后继续使用真实工作区。',
+          '登录或创建账户后，持仓、流水和风险快照才会归到你自己的名下。',
         ],
       note: isEnglish
-        ? 'After sign-in, you will return here with your own workspace context.'
-        : '登录成功后，你会带着自己的工作区上下文回到这里。',
+        ? 'After sign-in, we will bring you back to your portfolio page.'
+        : '登录成功后，系统会把你带回你的持仓页面。',
       secondaryAction: {
         label: isEnglish ? 'Create account' : '创建账户',
         to: buildRegistrationPath(redirectTarget),
@@ -125,18 +125,18 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
       statusLabel: isEnglish ? 'Saved Result Locked' : '已保存结果已锁定',
       title: isEnglish ? 'Sign in to reopen saved backtest results' : '登录后重新打开已保存的回测结果',
       description: isEnglish
-        ? 'Historical backtest results remain bound to authenticated identity so one user never reopens another user’s saved run.'
-        : '历史回测结果会绑定到已认证身份，避免一个用户重新打开另一个用户保存的 run。',
+        ? 'Historical backtest results remain bound to authenticated identity so one user never reopens another user’s saved result.'
+        : '历史回测结果会绑定到已认证身份，避免一个用户重新打开另一个用户保存的回测记录。',
       bullets: isEnglish
         ? [
-          'Backtest results and history are protected by ownership-aware backend rules.',
-          'Guest mode does not expose saved run details or historical metrics.',
-          'Sign in to continue exactly where your own research workspace left off.',
+          'Backtest results and history remain protected by account-based backend checks.',
+          'Guest mode does not expose saved result details or historical metrics.',
+          'Sign in to reopen the results saved under your own account.',
         ]
         : [
-          '回测结果与历史已经由 owner-aware 后端规则保护。',
-          '游客模式不会暴露已保存 run 的细节和历史指标。',
-          '登录后可以从你自己的研究工作区继续接着看。',
+          '回测结果与历史已经由基于归属的后端规则保护。',
+          '游客模式不会暴露已保存回测记录的细节和历史指标。',
+          '登录后才可以重新打开保存在你自己账户下的结果。',
         ],
       note: isEnglish
         ? 'If this result belongs to another account, the backend will continue to block access after sign-in.'
@@ -155,25 +155,25 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
   if (pathname.startsWith('/backtest')) {
     return {
       eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
-      statusLabel: isEnglish ? 'Workspace Locked' : '工作区已锁定',
-      title: isEnglish ? 'Sign in to open the backtest workspace' : '登录后进入回测工作区',
+      statusLabel: isEnglish ? 'Backtests Locked' : '回测功能已锁定',
+      title: isEnglish ? 'Sign in to open backtests' : '登录后进入回测',
       description: isEnglish
         ? 'Backtests, saved result history, and follow-up analysis all depend on a real user identity.'
         : '回测、已保存结果历史和后续分析都依赖真实用户身份。',
       bullets: isEnglish
         ? [
-          'Guest mode intentionally stops before persistent deterministic workflows.',
+          'Guest access stops before saved backtests and result history.',
           'Signed-in users can run and revisit their own backtests without shared state.',
-          'Ownership and authorization continue to be enforced by the backend.',
+          'Access rules continue to be enforced by the backend.',
         ]
         : [
-          '游客模式刻意停在持久化确定性工作流之前。',
+          '游客模式不会开放可保存的回测和结果历史。',
           '登录用户可以运行并重新查看属于自己的回测结果，而不是共享状态。',
-          '真实归属与授权仍继续由后端执行。',
+          '实际访问权限仍继续由后端执行。',
         ],
       note: isEnglish
-        ? 'After sign-in, we will take you back to the backtest workspace.'
-        : '登录成功后，系统会把你带回回测工作区。',
+        ? 'After sign-in, we will take you back to backtests.'
+        : '登录成功后，系统会把你带回回测页面。',
       secondaryAction: {
         label: isEnglish ? 'Create account' : '创建账户',
         to: buildRegistrationPath(redirectTarget),
@@ -188,23 +188,23 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
   return {
     eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
     statusLabel: isEnglish ? 'Guest Preview Only' : '仅限游客预览',
-    title: isEnglish ? 'Sign in to continue deeper workflows' : '登录后继续深度工作流',
+    title: isEnglish ? 'Sign in to continue' : '登录后继续使用',
     description: isEnglish
-      ? 'This surface depends on a real user identity for ownership, saved history, and account-aware workflows.'
-      : '这个页面依赖真实用户身份来承载归属、保存历史与账户感知工作流。',
+      ? 'This page depends on a real account for saved history and personal data.'
+      : '这个页面依赖真实账户来承载保存历史与个人数据。',
     bullets: isEnglish
       ? [
-        'Chat, portfolio, backtests, and saved history stay bound to authenticated users.',
-        'Guest mode is intentionally limited to preview flows and locked product teasers.',
-        'Backend ownership and authorization rules remain the source of truth.',
+        'Chat, portfolio, backtests, and saved history stay tied to signed-in users.',
+        'Guest access stays limited to preview flows and locked pages.',
+        'Access rules are still enforced by the backend.',
       ]
       : [
         '问股、持仓、回测和保存历史都必须绑定到已认证用户。',
-        '游客模式刻意只保留预览流和锁定态产品预告。',
-        '真实的数据归属与访问控制仍以后端规则为准。',
+        '游客模式只保留预览流和锁定页面。',
+        '实际访问权限仍以后端规则为准。',
       ],
     note: isEnglish
-      ? 'After sign-in, we will return you to this surface automatically.'
+      ? 'After sign-in, we will return you to this page automatically.'
       : '登录成功后，系统会自动把你带回当前页面。',
     secondaryAction: {
       label: isEnglish ? 'Create account' : '创建账户',
@@ -225,20 +225,20 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
       ? {
         eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
         statusLabel: isEnglish ? 'Admin Sign-in Required' : '需要管理员登录',
-        title: isEnglish ? 'Sign in with an admin account to open logs center' : '请使用管理员账户登录后进入日志中心',
+        title: isEnglish ? 'Sign in with an admin account to open logs' : '请使用管理员账户登录后查看日志',
         description: isEnglish
-          ? 'Execution logs remain in the operator surface and are not part of the guest or normal-user product flow.'
-          : '执行日志仍属于 operator 控制面，不属于游客或普通用户的默认产品流。',
+          ? 'Execution logs are reserved for admins and are not available in guest or regular user pages.'
+          : '执行日志只对管理员开放，不属于游客或普通用户页面的一部分。',
         bullets: isEnglish
           ? [
-            'Guest mode never maps to bootstrap or admin identities.',
+            'Guest access never maps to setup or admin identities.',
             'System logs stay protected even when the route is known.',
-            'Use an admin account if you need provider, schedule, or observability control.',
+            'Use an admin account if you need logs, schedules, or system controls.',
           ]
           : [
-            '游客模式绝不会映射到 bootstrap 或管理员身份。',
+            '游客模式绝不会映射到初始设置账户或管理员身份。',
             '即使知道路由地址，系统日志仍然会被保护。',
-            '如果你需要 provider、调度或可观测性控制，请使用管理员账户。',
+            '如果你需要日志、调度或系统控制，请使用管理员账户。',
           ],
         secondaryAction: {
           label: isEnglish ? 'Back home' : '返回首页',
@@ -250,22 +250,22 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
         statusLabel: isEnglish ? 'Admin Account Required' : '需要管理员账户',
         title: isEnglish ? 'This logs route requires an admin account' : '这个日志页面需要管理员账户',
         description: isEnglish
-          ? 'Your current account can keep using the standard user product surface, but logs center stays reserved for operator workflows.'
-          : '你当前账户仍可继续使用普通用户产品面，但日志中心保留给 operator 工作流。',
+          ? 'Your current account can keep using the regular app, but the logs page stays reserved for admins.'
+          : '你当前账户仍可继续使用普通页面，但日志页只对管理员开放。',
         bullets: isEnglish
           ? [
-            'Normal users no longer see raw system observability surfaces in the default nav.',
+            'Regular users no longer see raw system logs in the default navigation.',
             'If you expected access, sign out and re-enter with an admin account.',
-            'Personal preferences remain available from the user settings surface.',
+            'Personal preferences remain available in personal settings.',
           ]
-          : [
-            '普通用户不会再在默认导航里看到原始系统可观测性界面。',
+        : [
+            '普通用户不会再在默认导航里看到原始系统日志界面。',
             '如果你本应拥有权限，请先退出当前账户，再使用管理员账户重新进入。',
             '你的个人偏好仍然可以在个人设置页面继续使用。',
           ],
         note: isEnglish
-          ? 'Need the normal product instead? Personal settings remain the correct next stop.'
-          : '如果你要继续正常产品流，个人设置仍然是更正确的下一站。',
+          ? 'Need the regular app instead? Personal settings remain the right next stop.'
+          : '如果你要继续使用普通页面，个人设置仍然是更合适的下一站。',
         secondaryAction: {
           label: isEnglish ? 'Back home' : '返回首页',
           to: '/',
@@ -277,20 +277,20 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     ? {
       eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
       statusLabel: isEnglish ? 'Admin Sign-in Required' : '需要管理员登录',
-      title: isEnglish ? 'Sign in with an admin account to enter operator surfaces' : '请使用管理员账户登录后进入 operator 界面',
+      title: isEnglish ? 'Sign in with an admin account to open admin settings' : '请使用管理员账户登录后打开管理设置',
       description: isEnglish
-        ? 'System configuration, provider controls, schedules, channels, and operator logs are not part of the standard user product surface.'
-        : '系统配置、provider 控制、调度、通道和 operator 日志不属于标准用户产品面。',
+        ? 'System settings, data-source controls, schedules, channels, and admin logs are reserved for admin accounts.'
+        : '系统设置、数据源控制、调度、通道和管理员日志只对管理员账户开放。',
       bullets: isEnglish
         ? [
-          'Guest mode never maps to admin or bootstrap identities.',
-          'Operator controls stay behind explicit admin-only entry points.',
-          'Use an admin account if you need system configuration rather than personal settings.',
+          'Guest mode never maps to admin or initial-setup identities.',
+          'Admin tools stay behind explicit admin-only entry points.',
+          'Use an admin account if you need system settings rather than personal preferences.',
         ]
         : [
-          '游客模式绝不会映射到 admin 或 bootstrap 身份。',
-          'operator 控制项仍然保留在显式的 admin-only 入口之后。',
-          '如果你需要系统配置而不是个人偏好，请使用管理员账户登录。',
+          '游客模式绝不会映射到管理员或初始设置身份。',
+          '管理员工具仍然保留在显式的管理员入口之后。',
+          '如果你需要系统设置而不是个人偏好，请使用管理员账户登录。',
         ],
       secondaryAction: {
         label: isEnglish ? 'Back home' : '返回首页',
@@ -300,15 +300,15 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     : {
       eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
       statusLabel: isEnglish ? 'Admin Account Required' : '需要管理员账户',
-      title: isEnglish ? 'This operator surface requires an admin account' : '这个 operator 页面需要管理员账户',
+      title: isEnglish ? 'This page requires an admin account' : '这个页面需要管理员账户',
       description: isEnglish
-        ? 'System configuration, provider controls, schedules, channels, and operator logs remain outside the normal-user product surface.'
-        : '系统配置、provider 控制、调度、通道和 operator 日志仍然留在普通用户产品面之外。',
+        ? 'System configuration, provider controls, schedules, channels, and admin logs stay outside the regular app.'
+        : '系统配置、数据源控制、调度、通道和管理员日志仍然留在普通用户页面之外。',
       bullets: isEnglish
         ? [
-          'Normal users no longer see raw system controls in the default navigation.',
+          'Regular users no longer see raw system controls in the default navigation.',
           'If you expected access, sign out and re-enter with an admin account.',
-          'Personal preferences remain available from the standard settings surface.',
+          'Personal preferences remain available in personal settings.',
         ]
         : [
           '普通用户不会再在默认导航里看到原始系统控制项。',
@@ -316,8 +316,8 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
           '个人偏好仍然保留在标准设置页面。',
         ],
       note: isEnglish
-        ? 'Need user-facing tools instead? Open personal settings or return to the main workspace.'
-        : '如果你要继续用户侧工具，请打开个人设置或返回主工作区。',
+        ? 'Need regular tools instead? Open personal settings or return home.'
+        : '如果你要继续普通工具，请打开个人设置或返回首页。',
       secondaryAction: {
         label: isEnglish ? 'Back home' : '返回首页',
         to: '/',
@@ -370,26 +370,26 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
   if (isAdmin && !isAdminMode) {
     return (
       <AccessGatePage
-        eyebrow={language === 'en' ? 'Admin Mode Required' : '需要 Admin Mode'}
-        title={language === 'en' ? 'Turn on Admin Mode to open operator tools' : '请先开启 Admin Mode 再进入 operator 工具'}
+        eyebrow={language === 'en' ? 'Admin Tools Disabled' : '管理工具未开启'}
+        title={language === 'en' ? 'Turn on admin tools to open this page' : '请先开启管理工具再访问此页面'}
         description={language === 'en'
-          ? 'Your admin account is currently using the safer User Mode surface. Enable Admin Mode explicitly before entering system settings or logs.'
-          : '你的管理员账户当前仍停留在更安全的 User Mode 产品面。请显式开启 Admin Mode 后，再进入系统设置或日志中心。'}
+          ? 'Your admin account is currently using the safer regular mode. Turn on admin tools before entering system settings or logs.'
+          : '你的管理员账户当前仍停留在更安全的普通模式。请先开启管理工具，再进入系统设置或日志中心。'}
         bullets={language === 'en'
           ? [
-            'Admin accounts now default to the same user-like surface used for everyday analysis.',
-            'Operator pages stay hidden until Admin Mode is intentionally enabled.',
-            'Use the header switch or personal settings page to enter Admin Mode, then retry this route.',
+            'Admin accounts now default to the same regular mode used for everyday analysis.',
+            'Admin pages stay hidden until admin tools are intentionally turned on.',
+            'Use the header switch or personal settings page to turn on admin tools, then retry this route.',
           ]
           : [
-            '管理员账户现在会默认先进入普通用户式的日常分析产品面。',
-            'operator 页面会保持隐藏，直到你显式开启 Admin Mode。',
-            '请通过顶部切换按钮或个人设置页进入 Admin Mode，然后再重试当前路由。',
+            '管理员账户现在会默认先进入日常使用的普通模式。',
+            '管理页面会保持隐藏，直到你显式开启管理工具。',
+            '请通过顶部切换按钮或个人设置页开启管理工具，然后再重试当前路由。',
           ]}
-        statusLabel={language === 'en' ? 'User Mode Active' : '当前仍为 User Mode'}
+        statusLabel={language === 'en' ? 'Regular Mode Active' : '当前仍为普通模式'}
         note={language === 'en'
-          ? 'Need normal tools instead? Personal settings remain available without leaving User Mode.'
-          : '如果你只是继续普通工具流，个人设置页仍然可以在 User Mode 中直接使用。'}
+          ? 'Need regular tools instead? Personal settings remain available without leaving regular mode.'
+          : '如果你只是继续普通工具，个人设置页仍然可以在普通模式中直接使用。'}
         primaryAction={{
           label: language === 'en' ? 'Open personal settings' : '打开个人设置',
           to: '/settings',
@@ -422,7 +422,7 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus } = useAuth();
-  const { language, setLanguage, t } = useI18n();
+  const { setLanguage, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
   const [showBootSplash, setShowBootSplash] = useState(true);
   const [bootSplashFading, setBootSplashFading] = useState(false);
@@ -436,10 +436,10 @@ export const AppContent: React.FC = () => {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (routeLocale && routeLocale !== language) {
+    if (routeLocale) {
       setLanguage(routeLocale);
     }
-  }, [language, routeLocale, setLanguage]);
+  }, [routeLocale, setLanguage]);
 
   useEffect(() => {
     if (bootStartedAt.current === 0) {
@@ -509,6 +509,10 @@ export const AppContent: React.FC = () => {
       content = (
         <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
           <Routes>
+            <Route path="/guest/scanner" element={<Navigate to="/scanner" replace />} />
+            <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
+            <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
+            <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
             <Route element={<Shell />}>
               <Route path="/" element={<HomeSurfacePage />} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />

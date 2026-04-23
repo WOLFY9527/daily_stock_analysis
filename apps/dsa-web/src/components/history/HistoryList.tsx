@@ -44,7 +44,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   className = '',
   embedded = false,
 }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [manageMode, setManageMode] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -180,6 +180,11 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   const wrapperClass = embedded
     ? `history-archive-panel min-h-0 h-full flex flex-1 flex-col overflow-hidden ${className}`
     : `history-archive-panel min-h-0 flex flex-1 flex-col overflow-hidden ${className}`;
+  const selectAllLabel = language === 'en' ? 'Select visible' : t('history.selectAllLoaded');
+  const selectAllAriaLabel = language === 'en' ? 'Select all visible history items' : t('history.currentLoaded');
+  const archiveHint = language === 'en'
+    ? 'Recent records appear here automatically. Use Manage to select or delete multiple entries.'
+    : t('history.archiveHint');
 
   return (
     <aside
@@ -231,10 +236,10 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   checked={allVisibleSelected}
                   onChange={onToggleSelectAll}
                   disabled={isDeleting}
-                  aria-label={t('history.currentLoaded')}
+                  aria-label={selectAllAriaLabel}
                   className="theme-checkbox"
                 />
-                <span>{t('history.selectAllLoaded')}</span>
+                <span>{selectAllLabel}</span>
               </label>
               <Button
                 variant="danger-subtle"
@@ -251,7 +256,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
 
           {items.length > 0 ? (
             <p className="history-archive-panel__caption">
-              {t('history.archiveHint')}
+              {archiveHint}
             </p>
           ) : null}
         </div>

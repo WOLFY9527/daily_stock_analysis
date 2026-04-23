@@ -141,6 +141,9 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
+    expect(await screen.findByText('统一研究工作区')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '股票研究工作区' })).toBeInTheDocument();
+    expect(screen.getByText('高度结构化的分析流。聚焦结论、计划与报告，消除无关噪音。')).toBeInTheDocument();
     expect((await screen.findAllByText('开始分析')).length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-decision-summary')).toBeInTheDocument();
     expect(await screen.findByText('暂无历史分析记录')).toBeInTheDocument();
@@ -165,10 +168,41 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Decision Brief')).toBeInTheDocument();
+    expect(await screen.findByText('Unified research workspace')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Stock Research Workspace' })).toBeInTheDocument();
+    expect(screen.getByText('Structured analysis workflow. Focused conclusions, execution plans, and full reports.')).toBeInTheDocument();
+    expect(screen.getByText('Decision Brief')).toBeInTheDocument();
     expect(screen.getByText('Research Status')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL')).toBeInTheDocument();
     expect(screen.getByText('No analysis history yet')).toBeInTheDocument();
+    expect(screen.getByText('Recent and active tasks. Fast context switching.')).toBeInTheDocument();
+    expect(screen.getByText('Retain completed tasks for tracking.')).toBeInTheDocument();
+    expect(screen.queryByText('Research dashboard')).not.toBeInTheDocument();
+  });
+
+  it('uses canonical English status copy when a report is already loaded', async () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(historyReport);
+
+    render(
+      <MemoryRouter>
+        <UiLanguageProvider>
+          <ShellRailHarness>
+            <HomePage />
+          </ShellRailHarness>
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
+
+    const statusBoard = await screen.findByTestId('analysis-status-strip');
+    expect(within(statusBoard).getByText('The analysis for 贵州茅台 has finished')).toBeInTheDocument();
+    expect(within(statusBoard).queryByText('Report ready for 贵州茅台')).not.toBeInTheDocument();
   });
 
   it('shows multiple active tasks in the queue below the decision summary', async () => {
