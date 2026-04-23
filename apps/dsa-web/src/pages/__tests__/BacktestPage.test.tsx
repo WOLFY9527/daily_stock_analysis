@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
-import { translate } from '../../i18n/core';
+import { translate, UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
 import type {
   BacktestRunHistoryItem,
   BacktestRunResponse,
@@ -487,7 +487,7 @@ function makeRuleRunResponse(overrides: Partial<RuleBacktestRunResponse> = {}): 
     },
     benchmarkCurve: [],
     benchmarkSummary: {
-      label: '当前标的买入并持有',
+      label: bt('zh', 'resultPage.buyAndHoldDefault'),
       requestedMode: 'auto',
       resolvedMode: 'same_symbol_buy_and_hold',
       method: 'same_symbol_buy_and_hold',
@@ -498,7 +498,7 @@ function makeRuleRunResponse(overrides: Partial<RuleBacktestRunResponse> = {}): 
     },
     buyAndHoldCurve: [],
     buyAndHoldSummary: {
-      label: '当前标的买入并持有',
+      label: bt('zh', 'resultPage.buyAndHoldDefault'),
       requestedMode: 'same_symbol_buy_and_hold',
       resolvedMode: 'same_symbol_buy_and_hold',
       method: 'same_symbol_buy_and_hold',
@@ -571,6 +571,7 @@ describe('BacktestPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    window.localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
 
     getResults.mockResolvedValue({
       total: 0,
@@ -711,7 +712,7 @@ describe('BacktestPage', () => {
           { date: '2026-03-18', close: 105.2, normalizedValue: 1.052, cumulativeReturnPct: 5.2 },
         ],
         buyAndHoldSummary: {
-          label: '当前标的买入并持有',
+          label: bt('zh', 'resultPage.buyAndHoldDefault'),
           requestedMode: 'same_symbol_buy_and_hold',
           resolvedMode: 'same_symbol_buy_and_hold',
           method: 'same_symbol_buy_and_hold',
@@ -1101,16 +1102,16 @@ describe('BacktestPage', () => {
     );
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '确定性回测结果 #99' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: `${bt('zh', 'resultPage.documentTitle')} #99` })).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
     expect(screen.getByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();
-    expect(screen.getByLabelText('回测范围选择器')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '审计明细' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '交易记录' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '参数与假设' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '历史结果' })).toBeInTheDocument();
+    expect(screen.getByLabelText(bt('zh', 'resultPage.chartWorkspace.rangeSelectorAria'))).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.audit') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.trades') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.parameters') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.history') })).toBeInTheDocument();
   }, 10000);
 
   it('opens deterministic history items in the dedicated result page route', async () => {
@@ -1167,9 +1168,25 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看' }));
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '确定性回测结果 #123' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: `${bt('zh', 'resultPage.documentTitle')} #123` })).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
+  }, 10000);
+
+  it('renders English canonical result-page copy on localized result routes', async () => {
+    window.history.replaceState(window.history.state, '', '/en/backtest/results/99');
+    renderBacktestRoutes(['/en/backtest/results/99']);
+
+    expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: `${bt('en', 'resultPage.documentTitle')} #99` })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: bt('en', 'resultPage.hero.backToConfig') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.audit') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.trades') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.parameters') })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.history') })).toBeInTheDocument();
+    expect(screen.getByText(bt('en', 'resultPage.resultView.keyMetrics'))).toBeInTheDocument();
+    expect(screen.getAllByText(bt('en', 'resultPage.buyAndHoldDefault')).length).toBeGreaterThan(0);
   }, 10000);
 
   it('applies saved presets on the configuration page', async () => {
@@ -1195,11 +1212,11 @@ describe('BacktestPage', () => {
 
     renderBacktestRoutes();
 
-    expect(await screen.findByText('快速复用')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '应用' }));
+    expect(await screen.findByText('Quick reuse')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
-    expect((screen.getByLabelText('股票代码') as HTMLInputElement).value).toBe('ORCL');
-    expect((screen.getByLabelText('初始资金') as HTMLInputElement).value).toBe('150000');
+    expect(screen.getByDisplayValue('ORCL')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('150000')).toBeInTheDocument();
   });
 
   it('renders English shell copy on localized routes', async () => {

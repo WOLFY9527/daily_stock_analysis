@@ -29,6 +29,7 @@ import {
   getRuleRunStatusDescription,
   getRuleRunStatusLabel,
   getStrategySpecValue,
+  isCanonicalNoEntrySignalMessage,
   isRuleRunTerminal,
   pct,
   type RuleBenchmarkMode,
@@ -580,7 +581,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     return [
       {
         key: 'walk-forward',
-        label: 'Walk-forward',
+        label: btr(language, 'riskControls.walkForwardLabel'),
         summary: walkForwardCount == null ? '--' : btr(language, 'riskControls.walkForwardWindows', { count: formatNumber(walkForwardCount, 0) }),
         detail: btr(language, 'riskControls.mean', { value: pct(getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct'))) }),
         state: getRobustnessStateLabel(getObjectField(walkForward, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
@@ -588,7 +589,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       },
       {
         key: 'monte-carlo',
-        label: 'Monte Carlo',
+        label: btr(language, 'riskControls.monteCarloLabel'),
         summary: monteCarloCount == null ? '--' : btr(language, 'riskControls.monteCarloPaths', { count: formatNumber(monteCarloCount, 0) }),
         detail: btr(language, 'riskControls.median', { value: pct(getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct'))) }),
         state: getRobustnessStateLabel(getObjectField(monteCarlo, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
@@ -596,7 +597,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       },
       {
         key: 'stress-tests',
-        label: 'Stress Tests',
+        label: btr(language, 'riskControls.stressTestsLabel'),
         summary: stressScenarioCount == null ? '--' : btr(language, 'riskControls.stressScenarios', { count: formatNumber(stressScenarioCount, 0) }),
         detail: btr(language, 'riskControls.worst', { value: String(getObjectField(worstScenario, 'scenarioKey') || '--') }),
         state: getRobustnessStateLabel(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
@@ -823,7 +824,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
-  const buyAndHoldLabel = String(buyAndHoldSummary?.label || '').trim() === '当前标的买入并持有'
+  const buyAndHoldLabel = (
+    String(buyAndHoldSummary?.label || '').trim() === translate('zh', 'backtest.resultPage.buyAndHoldDefault')
+    || String(buyAndHoldSummary?.label || '').trim() === translate('en', 'backtest.resultPage.buyAndHoldDefault')
+  )
     ? resultPage('buyAndHoldDefault')
     : (buyAndHoldSummary?.label || resultPage('buyAndHoldDefault'));
   const selectedBenchmarkLabel = benchmarkSummary
@@ -944,7 +948,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     () => (run ? [run.id, ...compareRunIds] : []),
     [compareRunIds, run],
   );
-  const localizedNoResultMessage = run?.noResultMessage === '回测窗口内没有触发任何入场信号。'
+  const localizedNoResultMessage = isCanonicalNoEntrySignalMessage(run?.noResultMessage)
     ? resultPage('noEntrySignal')
     : (run?.noResultMessage || null);
   const statusSummaryItems = run ? [
@@ -1017,15 +1021,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
     const html = [
       '<!doctype html>',
       '<html lang="zh-CN"><head><meta charset="utf-8" />',
-      `<title>Backtest Summary #${run.id}</title>`,
+      `<title>${escapeHtml(resultPage('exportHtmlTitle', { id: run.id }))}</title>`,
       '<style>body{font-family:ui-sans-serif,system-ui,sans-serif;padding:24px;line-height:1.6;color:#111827}pre{white-space:pre-wrap;word-break:break-word;background:#f3f4f6;border:1px solid #d1d5db;border-radius:12px;padding:18px}</style>',
       '</head><body>',
-      `<h1>Backtest Summary #${run.id}</h1>`,
+      `<h1>${escapeHtml(resultPage('exportHtmlHeading', { id: run.id }))}</h1>`,
       `<pre>${escapeHtml(decisionReportMarkdown)}</pre>`,
       '</body></html>',
     ].join('');
     downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
-  }, [decisionReportMarkdown, normalized, run]);
+  }, [decisionReportMarkdown, normalized, resultPage, run]);
 
   const handleRunScenarioPlan = useCallback(async () => {
     if (!run || !selectedScenarioPlan) return;

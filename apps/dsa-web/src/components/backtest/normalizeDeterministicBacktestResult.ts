@@ -4,6 +4,7 @@ import type {
   RuleBacktestRunResponse,
   RuleBacktestTradeItem,
 } from '../../types/backtest';
+import { translate } from '../../i18n/core';
 
 export type DeterministicBacktestNormalizedRow = {
   date: string;
@@ -104,6 +105,10 @@ export type DeterministicBacktestNormalizedResult = {
 type MutableRow = DeterministicBacktestNormalizedRow;
 type BacktestLanguage = 'zh' | 'en';
 
+function btr(language: BacktestLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
+  return translate(language, `backtest.resultPage.${key}`, vars);
+}
+
 const ACTION_LABELS: Record<BacktestLanguage, Record<string, string>> = {
   zh: {
     buy: '买入',
@@ -197,11 +202,13 @@ function getBenchmarkMeta(
 ): DeterministicBacktestBenchmarkMeta {
   const benchmarkSummary = run.benchmarkSummary || {};
   const buyHoldSummary = run.buyAndHoldSummary || null;
-  const benchmarkLabel = String(benchmarkSummary.label || (language === 'en' ? 'Benchmark' : '基准'));
+  const benchmarkLabel = String(benchmarkSummary.label || btr(language, 'benchmarkFallback'));
   const rawBuyHoldLabel = String(buyHoldSummary?.label || '').trim();
-  const buyHoldLabel = rawBuyHoldLabel && rawBuyHoldLabel !== '当前标的买入并持有'
+  const buyHoldLabel = rawBuyHoldLabel
+    && rawBuyHoldLabel !== btr('zh', 'buyAndHoldDefault')
+    && rawBuyHoldLabel !== btr('en', 'buyAndHoldDefault')
     ? rawBuyHoldLabel
-    : (language === 'en' ? 'Current instrument buy and hold' : '当前标的买入并持有');
+    : btr(language, 'buyAndHoldDefault');
   const showBenchmark = rows.some((row) => row.benchmarkCumReturn != null) && benchmarkSummary.resolvedMode !== 'none';
   const showBuyHold = rows.some((row) => row.buyHoldCumReturn != null)
     && benchmarkSummary.resolvedMode !== 'none'

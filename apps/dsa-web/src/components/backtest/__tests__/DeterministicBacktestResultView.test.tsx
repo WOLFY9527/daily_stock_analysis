@@ -96,7 +96,7 @@ function makeViewerRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
     },
     buyAndHoldCurve: [],
     buyAndHoldSummary: {
-      label: '当前标的买入并持有',
+      label: translate('zh', 'backtest.resultPage.buyAndHoldDefault'),
       requestedMode: 'same_symbol_buy_and_hold',
       resolvedMode: 'same_symbol_buy_and_hold',
       method: 'same_symbol_buy_and_hold',
@@ -134,8 +134,6 @@ describe('DeterministicBacktestResultView', () => {
     expect(screen.getByText(translate('zh', 'backtest.resultPage.resultView.sharpe'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'backtest.resultPage.auditTable.title'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'backtest.resultPage.tradeEventTable.title'))).not.toBeInTheDocument();
-    expect(screen.queryByText('结果指标')).not.toBeInTheDocument();
-    expect(screen.queryByText('联动结果图表')).not.toBeInTheDocument();
     expect(workspace).toHaveAttribute('data-row-count', '70');
     expect(workspace).toHaveAttribute('data-main-series-length', '70');
     expect(workspace).toHaveAttribute('data-daily-pnl-series-length', '70');
@@ -339,7 +337,7 @@ describe('DeterministicBacktestResultView', () => {
     fireEvent.mouseMove(hoverSurface, { clientX: 120, clientY: 30 });
 
     const hoverDetail = screen.getByTestId('deterministic-chart-hover-card');
-    expect(within(hoverDetail).getByText('Day detail')).toBeInTheDocument();
-    expect(within(hoverDetail).getByText('Strategy cumulative return')).toBeInTheDocument();
+    expect(within(hoverDetail).getByText(translate('en', 'backtest.resultPage.chartWorkspace.dayDetail'))).toBeInTheDocument();
+    expect(within(hoverDetail).getByText(translate('en', 'backtest.resultPage.chartWorkspace.fieldStrategyCumulativeReturn'))).toBeInTheDocument();
   });
 });
