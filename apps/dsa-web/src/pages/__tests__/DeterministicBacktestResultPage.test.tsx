@@ -445,6 +445,17 @@ describe('DeterministicBacktestResultPage', () => {
     const currentRun = makeResultRun({
       robustnessAnalysis: {
         state: 'available',
+        configuration: {
+          walkForward: {
+            maxWindows: 6,
+          },
+          monteCarlo: {
+            simulationCount: 250,
+          },
+          stressTests: {
+            scenarioKeys: ['single_day_shock_down_15', 'volatility_whipsaw', 'gap_down_open'],
+          },
+        },
         walkForward: {
           windowCount: 4,
           aggregateMetrics: {
@@ -482,7 +493,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
 
     expect(screen.getByText('鲁棒性分析')).toBeInTheDocument();
-    expect(screen.getByText('可用')).toBeInTheDocument();
+    expect(screen.getAllByText('可用').length).toBeGreaterThan(0);
     expect(screen.getByText('Walk-forward 窗口')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText('蒙特卡洛模拟')).toBeInTheDocument();
@@ -495,6 +506,11 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByText('8.40%')).toBeInTheDocument();
     expect(screen.getByText('最差场景')).toBeInTheDocument();
     expect(screen.getByText('single_day_shock_down_15')).toBeInTheDocument();
+    expect(screen.getByTestId('robustness-lens')).toBeInTheDocument();
+    expect(screen.getByText('鲁棒性概览 / Robustness Lens')).toBeInTheDocument();
+    expect(screen.getByTestId('robustness-lens-row-walk-forward')).toHaveTextContent('4 窗口');
+    expect(screen.getByTestId('robustness-lens-row-monte-carlo')).toHaveTextContent('200 路径');
+    expect(screen.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
   });
 
   it('hides the robustness analysis section when legacy runs only expose an empty object', async () => {

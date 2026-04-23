@@ -988,12 +988,16 @@ describe('BacktestPage', () => {
 
     const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
     expect(within(executableSpecSection).getByText('风险控制 / Risk Controls')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('止损')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('5.00%')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('止盈')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('10.00%')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('移动止损')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('8.00%')).toBeInTheDocument();
+    expect(within(executableSpecSection).getAllByText('止损').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getAllByText('5.00%').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getAllByText('止盈').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getAllByText('10.00%').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getAllByText('移动止损').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getAllByText('8.00%').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getByTestId('confirm-risk-controls-visualization')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('保护梯度 / Protection Ladder')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('已启用 3 项')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('最高阈值 10.00%')).toBeInTheDocument();
   });
 
   it('marks executable spec fields as compatibility-derived when only legacy setup is available', async () => {

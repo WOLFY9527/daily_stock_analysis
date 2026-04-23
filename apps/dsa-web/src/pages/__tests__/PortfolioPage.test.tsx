@@ -885,10 +885,58 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText('组合归因 / Portfolio Attribution')).toBeInTheDocument();
     expect(screen.getByText('账户归因 / Account Attribution')).toBeInTheDocument();
     expect(screen.getByText('行业归因 / Industry Attribution')).toBeInTheDocument();
-    expect(screen.getByText('Account 1')).toBeInTheDocument();
-    expect(screen.getByText('Main')).toBeInTheDocument();
+    expect(screen.getAllByText('Account 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Main').length).toBeGreaterThan(0);
     expect(screen.getAllByText('半导体').length).toBeGreaterThan(0);
     expect(screen.getAllByText('61.20%').length).toBeGreaterThan(0);
     expect(screen.getAllByText('100.00%').length).toBeGreaterThan(0);
+  });
+
+  it('renders compact attribution visual summaries for additive portfolio blocks', async () => {
+    const snapshot = makeSnapshot();
+    snapshot.portfolioAttribution = {
+      accountAttribution: {
+        topAccounts: [
+          { accountId: 1, accountName: 'Account 1', equityWeightPct: 61.2 },
+          { accountId: 2, accountName: 'Satellite', equityWeightPct: 38.8 },
+        ],
+      },
+      industryAttribution: {
+        topIndustries: [
+          { industry: '半导体', weightPct: 61.2, symbolCount: 2 },
+          { industry: '软件', weightPct: 24.8, symbolCount: 1 },
+        ],
+      },
+    };
+
+    const risk = makeRisk();
+    risk.accountAttribution = {
+      topAccounts: [
+        { accountId: 1, accountName: 'Main', equityWeightPct: 61.2 },
+        { accountId: 2, accountName: 'Satellite', equityWeightPct: 38.8 },
+      ],
+    };
+    risk.industryAttribution = {
+      topIndustries: [
+        { industry: '半导体', weightPct: 61.2, symbolCount: 2 },
+        { industry: '软件', weightPct: 24.8, symbolCount: 1 },
+      ],
+    };
+
+    getSnapshot.mockImplementation(async () => snapshot);
+    getRisk.mockResolvedValue(risk);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-attribution-visual-summary')).toBeInTheDocument();
+    expect(screen.getByText('主导分布 / Dominant Mix')).toBeInTheDocument();
+    expect(screen.getByTestId('account-attribution-top-list')).toBeInTheDocument();
+    expect(screen.getByText('Top 账户分布')).toBeInTheDocument();
+    expect(screen.getByText('Satellite')).toBeInTheDocument();
+    expect(screen.getByTestId('industry-attribution-top-list')).toBeInTheDocument();
+    expect(screen.getByText('Top 行业分布')).toBeInTheDocument();
+    expect(screen.getByText('软件')).toBeInTheDocument();
   });
 });

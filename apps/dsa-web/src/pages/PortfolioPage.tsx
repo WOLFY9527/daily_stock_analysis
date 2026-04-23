@@ -59,6 +59,13 @@ type FxRefreshContext = {
   requestId: number;
 };
 
+type AttributionVisualRow = {
+  label: string;
+  valueLabel: string;
+  percent: number;
+  meta?: string;
+};
+
 function getTodayIso(): string {
   return toDateInputValue(new Date());
 }
@@ -141,6 +148,26 @@ function getTopAttributionEntryFromBlock(
   return asRecord(items[0]);
 }
 
+function getAttributionEntriesFromBlock(
+  block: Record<string, unknown> | null,
+  listSnakeKey: string,
+  listCamelKey: string,
+  limit = 3,
+): Record<string, unknown>[] {
+  const items = getObjectValue(block, listSnakeKey, listCamelKey);
+  if (!Array.isArray(items) || !items.length) return [];
+  return items
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .slice(0, limit);
+}
+
+function parseAttributionPercent(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+  if (!Number.isFinite(numeric)) return null;
+  return Math.min(100, Math.max(0, numeric));
+}
+
 function formatAttributionAccount(entry: Record<string, unknown> | null): string {
   if (!entry) return '--';
   const accountName = String(entry.account_name || entry.accountName || '').trim();
@@ -166,6 +193,41 @@ function formatAttributionCount(value: unknown): string {
   const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
   if (!Number.isFinite(numeric)) return '--';
   return `${numeric.toFixed(0)}`;
+}
+
+function AttributionVisualList({
+  title,
+  rows,
+  testId,
+}: {
+  title: string;
+  rows: AttributionVisualRow[];
+  testId: string;
+}) {
+  if (!rows.length) return null;
+
+  return (
+    <div className="mt-4 space-y-2.5" data-testid={testId}>
+      <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{title}</p>
+      {rows.map((row) => (
+        <div key={`${title}-${row.label}-${row.valueLabel}`} className="space-y-1">
+          <div className="flex items-center justify-between gap-3 text-[11px] text-secondary">
+            <span className="truncate">
+              <span className="text-foreground">{row.label}</span>
+              {row.meta ? <span className="ml-1 text-secondary-text">{row.meta}</span> : null}
+            </span>
+            <span className="font-mono text-foreground">{row.valueLabel}</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-[var(--surface-muted)] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[var(--brand-primary)]"
+              style={{ width: `${Math.max(8, row.percent)}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null): {
@@ -613,6 +675,56 @@ const PortfolioPage: React.FC = () => {
   const riskTopAccount = useMemo(
     () => getTopAttributionEntryFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts'),
     [risk?.accountAttribution],
+  );
+  const portfolioDominantRows = useMemo(() => {
+    const rows: AttributionVisualRow[] = [];
+    const topAccountPercent = parseAttributionPercent(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct);
+    if (topAccountPercent != null) {
+      rows.push({
+        label: formatAttributionAccount(portfolioTopAccount),
+        meta: '账户',
+        percent: topAccountPercent,
+        valueLabel: formatAttributionWeight(topAccountPercent),
+      });
+    }
+    const topIndustryPercent = parseAttributionPercent(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct);
+    if (topIndustryPercent != null) {
+      rows.push({
+        label: formatAttributionIndustry(portfolioTopIndustry),
+        meta: '行业',
+        percent: topIndustryPercent,
+        valueLabel: formatAttributionWeight(topIndustryPercent),
+      });
+    }
+    return rows;
+  }, [portfolioTopAccount, portfolioTopIndustry]);
+  const riskAccountRows = useMemo(
+    () => getAttributionEntriesFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts')
+      .flatMap((entry) => {
+        const percent = parseAttributionPercent(entry.equity_weight_pct ?? entry.equityWeightPct);
+        if (percent == null) return [];
+        return [{
+          label: formatAttributionAccount(entry),
+          meta: `#${formatAttributionCount(entry.account_id ?? entry.accountId)}`,
+          percent,
+          valueLabel: formatAttributionWeight(percent),
+        } satisfies AttributionVisualRow];
+      }),
+    [risk?.accountAttribution],
+  );
+  const riskIndustryRows = useMemo(
+    () => getAttributionEntriesFromBlock(risk?.industryAttribution as Record<string, unknown> | null, 'top_industries', 'topIndustries')
+      .flatMap((entry) => {
+        const percent = parseAttributionPercent(entry.weight_pct ?? entry.weightPct);
+        if (percent == null) return [];
+        return [{
+          label: formatAttributionIndustry(entry),
+          meta: `${formatAttributionCount(entry.symbol_count ?? entry.symbolCount)} 持仓`,
+          percent,
+          valueLabel: formatAttributionWeight(percent),
+        } satisfies AttributionVisualRow];
+      }),
+    [risk?.industryAttribution],
   );
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
@@ -1171,6 +1283,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>Top 行业:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry)}</span></div>
               <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
             </div>
+            <AttributionVisualList title="主导分布 / Dominant Mix" rows={portfolioDominantRows} testId="portfolio-attribution-visual-summary" />
           </Card>
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">账户归因 / Account Attribution</h3>
@@ -1179,6 +1292,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>权益占比:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>账户 ID:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
             </div>
+            <AttributionVisualList title="Top 账户分布" rows={riskAccountRows} testId="account-attribution-top-list" />
           </Card>
           <Card padding="md">
             <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">行业归因 / Industry Attribution</h3>
@@ -1187,6 +1301,7 @@ const PortfolioPage: React.FC = () => {
               <div className="flex justify-between gap-3"><span>行业权重:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
               <div className="flex justify-between gap-3"><span>持仓数:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
             </div>
+            <AttributionVisualList title="Top 行业分布" rows={riskIndustryRows} testId="industry-attribution-top-list" />
           </Card>
         </section>
 

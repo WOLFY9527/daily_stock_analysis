@@ -70,7 +70,7 @@ const FLOW_PANEL_TRANSITION = {
 type ParseState = 'empty' | 'ready' | 'assumed' | 'unsupported' | 'stale';
 
 type StrategyFieldSource = 'explicit' | 'derived' | 'compat';
-type StrategyPreviewRow = { label: string; value: string; source?: StrategyFieldSource | null };
+type StrategyPreviewRow = { label: string; value: string; source?: StrategyFieldSource | null; numericValue?: number | null };
 type StrategyPreviewCardGroup = { label: string; items: string[] };
 type StrategyFieldSourceHint = {
   specPaths?: string[][];
@@ -409,6 +409,7 @@ function getRiskControlRows(parsed: RuleBacktestParseResponse | null): StrategyP
     .map((item) => ({
       label: item.label,
       value: `${Number(item.value).toFixed(2)}%`,
+      numericValue: Number(item.value),
       source: 'explicit',
     }));
 }
@@ -611,6 +612,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   const parseMeta = getParseStateMeta(parseState);
   const strategySpec = getStrategyPreviewSpec(parsedStrategy);
   const riskControlRows = getRiskControlRows(parsedStrategy);
+  const strongestRiskControl = riskControlRows.reduce((max, row) => Math.max(max, Number(row.numericValue || 0)), 0);
   const assumptionGroups = getParsedAssumptionGroups(parsedStrategy);
   const coreIntentSummary = getCoreIntentSummary(parsedStrategy);
   const supportedPortionSummary = getSupportedPortionSummary(parsedStrategy);
@@ -1083,6 +1085,39 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                             <p className="preview-card__text">{row.value}</p>
                           </div>
                         ))}
+                      </div>
+                      <div className="summary-block mt-4" data-testid="confirm-risk-controls-visualization">
+                        <div className="summary-block__header">
+                          <div>
+                            <SectionEyebrow>保护摘要</SectionEyebrow>
+                            <h3 className="summary-block__title">保护梯度 / Protection Ladder</h3>
+                          </div>
+                          <div className="product-chip-list product-chip-list--tight">
+                            <span className="product-chip">已启用 {riskControlRows.length} 项</span>
+                            <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          {riskControlRows.map((row) => {
+                            const width = strongestRiskControl > 0 && row.numericValue
+                              ? Math.max(16, (row.numericValue / strongestRiskControl) * 100)
+                              : 0;
+                            return (
+                              <div key={`risk-ladder-${row.label}`} className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="metric-card__label">{row.label}</span>
+                                  <span className="preview-card__text">{row.value}</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+                                  <div
+                                    className="h-full rounded-full bg-[var(--backtest-accent,#7dd3fc)]"
+                                    style={{ width: `${width}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   ) : null}

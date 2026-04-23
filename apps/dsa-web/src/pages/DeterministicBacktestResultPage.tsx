@@ -136,6 +136,20 @@ function hasObjectFields(record: Record<string, unknown> | null): boolean {
   return Boolean(record && Object.keys(record).length > 0);
 }
 
+function getFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function clampRatio(value: number | null): number {
+  if (value == null || !Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
 function getRobustnessStateLabel(value: unknown): string {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'available') return '可用';
@@ -188,11 +202,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>([]);
   const density = useDeterministicResultDensity();
   const robustnessAnalysis = useMemo(() => asObjectRecord(run?.robustnessAnalysis), [run?.robustnessAnalysis]);
+  const robustnessConfiguration = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'configuration')), [robustnessAnalysis]);
   const walkForward = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward')), [robustnessAnalysis]);
+  const walkForwardConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'walkForward')), [robustnessConfiguration]);
   const walkForwardAggregate = useMemo(() => asObjectRecord(getObjectField(walkForward, 'aggregateMetrics')), [walkForward]);
   const monteCarlo = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo')), [robustnessAnalysis]);
+  const monteCarloConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'monteCarlo')), [robustnessConfiguration]);
   const monteCarloAggregate = useMemo(() => asObjectRecord(getObjectField(monteCarlo, 'aggregateMetrics')), [monteCarlo]);
   const stressTests = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests')), [robustnessAnalysis]);
+  const stressTestsConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'stressTests')), [robustnessConfiguration]);
   const worstScenario = useMemo(() => asObjectRecord(getObjectField(stressTests, 'worstScenario')), [stressTests]);
   const hasRobustnessAnalysis = useMemo(
     () => Boolean(
@@ -203,6 +221,53 @@ const DeterministicBacktestResultPage: React.FC = () => {
     ),
     [monteCarlo, robustnessAnalysis, stressTests, walkForward],
   );
+  const robustnessLensRows = useMemo(() => {
+    const walkForwardCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
+    const walkForwardMax = getFiniteNumber(getObjectField(walkForwardConfig, 'maxWindows'));
+    const monteCarloCount = getFiniteNumber(getObjectField(monteCarlo, 'simulationCount'));
+    const monteCarloMax = getFiniteNumber(getObjectField(monteCarloConfig, 'simulationCount'));
+    const stressScenarioCount = getFiniteNumber(getObjectField(stressTests, 'scenarioCount'));
+    const stressScenarioKeys = getObjectField(stressTestsConfig, 'scenarioKeys');
+    const stressScenarioMax = Array.isArray(stressScenarioKeys) ? stressScenarioKeys.length : null;
+
+    return [
+      {
+        key: 'walk-forward',
+        label: 'Walk-forward',
+        summary: walkForwardCount == null ? '--' : `${formatNumber(walkForwardCount, 0)} 窗口`,
+        detail: `均值 ${pct(getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct')))} `,
+        state: getRobustnessStateLabel(getObjectField(walkForward, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        ratio: clampRatio(walkForwardCount != null && walkForwardMax ? walkForwardCount / walkForwardMax : (hasObjectFields(walkForward) ? 1 : 0)),
+      },
+      {
+        key: 'monte-carlo',
+        label: 'Monte Carlo',
+        summary: monteCarloCount == null ? '--' : `${formatNumber(monteCarloCount, 0)} 路径`,
+        detail: `中位 ${pct(getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct')))} `,
+        state: getRobustnessStateLabel(getObjectField(monteCarlo, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        ratio: clampRatio(monteCarloCount != null && monteCarloMax ? monteCarloCount / monteCarloMax : (hasObjectFields(monteCarlo) ? 1 : 0)),
+      },
+      {
+        key: 'stress-tests',
+        label: 'Stress Tests',
+        summary: stressScenarioCount == null ? '--' : `${formatNumber(stressScenarioCount, 0)} 场景`,
+        detail: `最差 ${String(getObjectField(worstScenario, 'scenarioKey') || '--')}`,
+        state: getRobustnessStateLabel(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state')),
+        ratio: clampRatio(stressScenarioCount != null && stressScenarioMax ? stressScenarioCount / stressScenarioMax : (hasObjectFields(stressTests) ? 1 : 0)),
+      },
+    ];
+  }, [
+    monteCarlo,
+    monteCarloAggregate,
+    monteCarloConfig,
+    robustnessAnalysis,
+    stressTests,
+    stressTestsConfig,
+    walkForward,
+    walkForwardAggregate,
+    walkForwardConfig,
+    worstScenario,
+  ]);
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
@@ -929,6 +994,35 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         <div className="preview-card">
                           <p className="metric-card__label">最差场景</p>
                           <p className="preview-card__text">{String(getObjectField(worstScenario, 'scenarioKey') || '--')}</p>
+                        </div>
+                      </div>
+                      <div className="summary-block mt-4" data-testid="robustness-lens">
+                        <div className="summary-block__header">
+                          <div>
+                            <h3 className="summary-block__title">鲁棒性概览 / Robustness Lens</h3>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          {robustnessLensRows.map((row) => {
+                            const width = row.ratio > 0 ? Math.max(14, row.ratio * 100) : 0;
+                            return (
+                              <div key={row.key} className="space-y-1.5" data-testid={`robustness-lens-row-${row.key}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="metric-card__label">{row.label}</p>
+                                    <p className="preview-card__text">{row.summary} · {row.detail}</p>
+                                  </div>
+                                  <span className="product-chip">{row.state}</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+                                  <div
+                                    className="h-full rounded-full bg-[var(--backtest-accent,#7dd3fc)]"
+                                    style={{ width: `${width}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
