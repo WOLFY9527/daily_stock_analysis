@@ -89,8 +89,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
 
         <div className={`${PANEL_METRIC_CLASS} min-w-[12rem]`}>
           <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
-          <p className="mt-2 text-3xl font-semibold text-white">{scoreValue}</p>
-          <p className="mt-3 text-sm leading-6 text-white/55">{summary}</p>
+          <p className="mt-3 text-3xl font-medium text-white">{scoreValue}</p>
+          <p className="mt-4 text-sm leading-relaxed text-white/55">{summary}</p>
         </div>
       </div>
 

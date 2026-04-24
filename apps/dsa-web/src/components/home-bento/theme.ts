@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 
 export type SignalTone = 'bullish' | 'bearish' | 'neutral';
 
-export const CARD_KICKER_CLASS = 'text-[11px] font-semibold uppercase tracking-[0.2em] text-white/42';
+export const CARD_KICKER_CLASS = 'text-[10px] font-semibold uppercase tracking-widest text-white/40';
 export const CARD_BUTTON_CLASS = 'inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/72 backdrop-blur-xl transition-colors duration-150 hover:border-white/[0.14] hover:bg-white/[0.05] hover:text-white';
 export const PANEL_METRIC_CLASS = 'rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl';
 export const BENTO_SURFACE_ROOT_CLASS = 'bento-surface-root';

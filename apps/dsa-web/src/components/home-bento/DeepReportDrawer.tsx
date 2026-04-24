@@ -51,23 +51,23 @@ export const DeepReportDrawer: React.FC<DeepReportDrawerProps> = ({
             data-testid={`${testId}-${module.id}`}
             className="rounded-[32px] border border-white/[0.08] bg-black/36 p-6 backdrop-blur-3xl"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">{module.eyebrow}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{module.eyebrow}</p>
             <h3 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-white">{module.title}</h3>
             {module.summary ? (
-              <p className="mt-3 text-sm leading-6 text-white/62">{module.summary}</p>
+              <p className="mt-4 text-sm leading-relaxed text-white/62">{module.summary}</p>
             ) : null}
 
-            <div className="mt-6 space-y-3">
+            <div className="mt-7 space-y-5">
               {module.metrics.map((metric) => {
                 const tone = metric.tone || 'neutral';
                 return (
                   <div
                     key={`${module.id}-${metric.label}`}
-                    className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl"
+                    className="border-t border-white/[0.07] pt-5 first:border-t-0 first:pt-0"
                   >
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{metric.label}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
                     <p
-                      className={cn('mt-3 text-lg font-semibold', getToneTextClass(tone))}
+                      className={cn('mt-3 text-xl font-medium leading-relaxed', getToneTextClass(tone))}
                       style={getToneTextStyle(tone, metric.glow === true)}
                     >
                       {metric.value}

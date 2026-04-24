@@ -48,7 +48,7 @@ export const BentoCard: React.FC<BentoCardProps> = ({
         <div className="min-w-0">
           <p className={CARD_KICKER_CLASS}>{eyebrow}</p>
           {title ? <h2 className="mt-3 text-lg font-semibold text-white">{title}</h2> : null}
-          {subtitle ? <p className="mt-2 text-sm leading-6 text-white/58">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-4 text-sm leading-relaxed text-white/58">{subtitle}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>

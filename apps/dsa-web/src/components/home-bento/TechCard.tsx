@@ -38,15 +38,16 @@ export const TechCard: React.FC<TechCardProps> = ({
       </button>
     )}
   >
-    <div className="space-y-3">
+    <div className="space-y-6">
       {signals.map((signal, index) => (
         <div
           key={signal.label}
-          className="flex items-center justify-between gap-3 rounded-[32px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl"
+          data-testid={`home-bento-tech-signal-${signal.label}`}
+          className="grid gap-3 border-b border-white/[0.07] pb-6 last:border-b-0 last:pb-0"
         >
-          <span className="text-sm text-white/62">{signal.label}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{signal.label}</span>
           <span
-            className={`text-sm font-semibold ${getToneTextClass(signal.tone)}`}
+            className={`text-xl font-medium leading-tight ${getToneTextClass(signal.tone)}`}
             style={getToneTextStyle(signal.tone, index === 0)}
           >
             {signal.value}

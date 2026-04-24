@@ -477,7 +477,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             <h1 className="mt-3 text-[2rem] font-semibold tracking-tight text-white sm:text-[2.4rem]">
               {copy.heading}
             </h1>
-            <p className="mt-3 text-sm leading-6 text-white/62">{copy.description}</p>
+            <p className="mt-4 text-sm leading-relaxed text-white/62">{copy.description}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {topActions.map((action) => (
@@ -535,7 +535,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
           />
 
-          <div data-testid="home-bento-sibling-row" className="col-span-12 grid grid-cols-12 gap-6">
+          <div data-testid="home-bento-sibling-row" className="xl:col-span-5 grid grid-cols-12 gap-6 self-start">
             <TechCard
               title={copy.tech.title}
               signals={copy.tech.signals}
