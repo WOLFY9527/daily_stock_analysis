@@ -203,7 +203,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
   onTest,
 }) => {
   const preset = CHANNEL_PRESETS[channel.name];
-  const displayName = presetLabels[channel.name] || channel.name;
+  const displayName = presetLabels[channel.name] || preset?.label || channel.name;
   const modelCount = splitModels(channel.models).length;
   const hasKey = channel.apiKey.length > 0;
   const statusVariant = testState?.status === 'success'
@@ -346,7 +346,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
             value={channel.extraHeaders}
             disabled={busy}
             onChange={(e) => onUpdate(index, 'extraHeaders', e.target.value)}
-            placeholder='{"x-trace-id":"wolfy"}'
+            placeholder='{"x-env":"staging"}'
             hint={t('settings.llmEditor.extraHeadersHint')}
           />
 
@@ -1041,17 +1041,19 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-foreground">
-              {providerScopedMode && scopedPreset ? `${scopedPreset.label} 高级配置` : 'AI 模型配置'}
+              {providerScopedMode && scopedPreset
+                ? t('settings.llmEditor.scopedTitle', { provider: presetLabels[normalizedScopeName] || normalizedScopeName })
+                : t('settings.llmEditor.title')}
             </h3>
-            <Badge variant="info" className="settings-accent-badge">渠道管理</Badge>
+            <Badge variant="info" className="settings-accent-badge">{t('settings.llmEditor.managerBadge')}</Badge>
           </div>
           <p className="text-xs text-muted-text">
             {providerScopedMode && scopedPreset
-              ? `只管理 ${scopedPreset.label} 的高级渠道。配置会自动同步到 .env 文件。`
-              : '添加服务商渠道，填入 API Key 和模型名称即可。配置会自动同步到 .env 文件。'}
+              ? t('settings.llmEditor.scopedHint', { provider: presetLabels[normalizedScopeName] || normalizedScopeName })
+              : t('settings.llmEditor.summary')}
           </p>
         </div>
-        <span className="text-xs text-muted-text">{isCollapsed ? '▶ 展开' : '▼ 收起'}</span>
+        <span className="text-xs text-muted-text">{isCollapsed ? t('settings.llmEditor.collapseClosed') : t('settings.llmEditor.collapseOpen')}</span>
       </button>
 
       {!isCollapsed ? (
@@ -1060,16 +1062,16 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-medium text-foreground">
-                  {providerScopedMode ? '新增当前 Provider 渠道' : '快速添加渠道'}
+                  {providerScopedMode ? t('settings.llmEditor.addScopedSectionTitle') : t('settings.llmEditor.addSectionTitle')}
                 </h4>
                 <p className="mt-1 text-xs text-secondary-text">
                   {providerScopedMode && scopedPreset
-                    ? `只创建 ${scopedPreset.label} 渠道草稿。`
-                    : '先选择预设服务商，再一键创建配置草稿。'}
+                    ? t('settings.llmEditor.addScopedSectionDesc')
+                    : t('settings.llmEditor.addSectionDesc')}
                 </p>
               </div>
               <Badge variant="default" className="settings-border settings-surface-hover text-muted-text">
-                {visibleChannelEntries.length} 个渠道
+                {t('settings.llmEditor.channelCount', { count: visibleChannelEntries.length })}
               </Badge>
             </div>
             <div className="flex items-center gap-2">
@@ -1080,11 +1082,11 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 disabled={busy}
                 onClick={() => addChannel(providerScopedMode ? normalizedScopeName : undefined)}
               >
-                + 添加渠道
+                {t('settings.llmEditor.addChannel')}
               </Button>
               {providerScopedMode && scopedPreset ? (
                 <div className="flex-1 rounded-xl border border-border/50 bg-base/40 px-3 py-2 text-sm font-medium text-secondary-text">
-                  {scopedPreset.label}
+                  {presetLabels[normalizedScopeName] || normalizedScopeName}
                 </div>
               ) : (
                 <Select
@@ -1092,10 +1094,10 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   onChange={setAddPreset}
                   options={Object.entries(CHANNEL_PRESETS).map(([value, preset]) => ({
                     value,
-                    label: preset.label,
+                    label: presetLabels[value] || preset.label,
                   }))}
                   disabled={busy}
-                  placeholder="选择服务商"
+                  placeholder={t('settings.llmEditor.selectPreset')}
                   className="flex-1"
                 />
               )}
@@ -1103,7 +1105,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
             {!providerScopedMode ? (
               <SupportPanel
                 className="mt-3 rounded-xl border settings-border-soft settings-surface-overlay-soft px-3 py-2"
-                body="渠道条目负责管理服务商连接信息；真正生效的主模型、Fallback、Vision 与 Temperature 会在下方统一保存。"
+                body={t('settings.llmEditor.directHint')}
                 bodyClassName="text-muted-text"
               />
             ) : null}
@@ -1111,10 +1113,13 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-text">渠道列表</span>
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-text">{t('settings.llmEditor.listTitle')}</span>
               {visibleChannelEntries.length > 0 ? (
                 <span className="text-[10px] text-muted-text">
-                  {visibleChannelEntries.filter((entry) => entry.channel.enabled).length}/{visibleChannelEntries.length} 已启用
+                  {t('settings.llmEditor.listEnabledSummary', {
+                    enabled: visibleChannelEntries.filter((entry) => entry.channel.enabled).length,
+                    count: visibleChannelEntries.length,
+                  })}
                 </span>
               ) : null}
             </div>
@@ -1122,12 +1127,14 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
             {visibleChannelEntries.length === 0 ? (
               <div className="settings-surface-overlay-muted rounded-[1.35rem] border border-dashed border-border/28 px-4 py-10 text-center">
                 <p className="text-sm font-medium text-foreground">
-                  {providerScopedMode && scopedPreset ? `还没有 ${scopedPreset.label} 渠道` : '还没有渠道'}
+                  {providerScopedMode && scopedPreset
+                    ? t('settings.llmEditor.emptyScopedTitle', { provider: presetLabels[normalizedScopeName] || normalizedScopeName })
+                    : t('settings.llmEditor.emptyTitle')}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-muted-text">
                   {providerScopedMode
-                    ? '点击“添加渠道”即可为当前 Provider 创建高级渠道。'
-                    : '选择服务商预设后点击“添加渠道”即可开始配置。'}
+                    ? t('settings.llmEditor.emptyScopedBody')
+                    : t('settings.llmEditor.emptyBody')}
                 </p>
               </div>
             ) : visibleChannelEntries.map(({ channel, index }) => (
@@ -1160,13 +1167,13 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
             <div className="settings-surface rounded-[1.35rem] border settings-border p-4 shadow-soft-card">
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <span className="settings-accent-text text-xs font-medium uppercase tracking-wider">运行时参数</span>
-                  <p className="mt-1 text-[11px] text-muted-text">主模型、Fallback、Vision 与 Temperature 会直接写入运行时配置。</p>
+                  <span className="settings-accent-text text-xs font-medium uppercase tracking-wider">{t('settings.llmEditor.runtimeTitle')}</span>
+                  <p className="mt-1 text-[11px] text-muted-text">{t('settings.llmEditor.runtimeDesc')}</p>
                 </div>
-                <Badge variant="default" className="settings-border settings-surface-hover text-muted-text">Runtime</Badge>
+                <Badge variant="default" className="settings-border settings-surface-hover text-muted-text">{t('settings.llmEditor.runtimeBadge')}</Badge>
               </div>
               <div className="mb-4">
-                <label className="mb-1 block text-xs text-muted-text">Temperature</label>
+                <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.temperatureLabel')}</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
@@ -1181,45 +1188,45 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   <span className="w-8 text-right text-sm text-secondary-text">{runtimeConfig.temperature}</span>
                 </div>
                 <p className="mt-1 text-[11px] text-secondary-text">
-                  控制模型输出随机性，0 为确定性输出，2 为最大随机性，推荐 0.7。
+                  {t('settings.llmEditor.temperatureHint')}
                 </p>
               </div>
 
               {availableModels.length === 0 ? (
                 <SupportPanel
                   className="rounded-xl border border-dashed settings-border-soft settings-surface-overlay-soft px-3 py-3"
-                  title="还没有可用模型"
-                  body="先添加至少一个已启用渠道并填写模型，下面的主模型、Fallback 和 Vision 选项才会出现。"
+                  title={t('settings.llmEditor.runtimeEmptyTitle')}
+                  body={t('settings.llmEditor.runtimeEmptyBody')}
                 />
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">主模型</label>
+                    <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.primaryModelLabel')}</label>
                     <Select
                       value={runtimeConfig.primaryModel}
                       onChange={setPrimaryModel}
-                      options={buildModelOptions(availableModels, runtimeConfig.primaryModel, '自动（使用第一个可用模型）')}
+                      options={buildModelOptions(availableModels, runtimeConfig.primaryModel, t('settings.llmEditor.primaryModelAuto'))}
                       disabled={busy}
                       placeholder=""
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">Agent 主模型</label>
+                    <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.agentModelLabel')}</label>
                     <Select
                       value={runtimeConfig.agentPrimaryModel}
                       onChange={(value) => setRuntimeConfig((previous) => ({
                         ...previous,
                         agentPrimaryModel: normalizeAgentPrimaryModel(value),
                       }))}
-                      options={buildModelOptions(availableModels, runtimeConfig.agentPrimaryModel, '自动（继承普通分析主模型）')}
+                      options={buildModelOptions(availableModels, runtimeConfig.agentPrimaryModel, t('settings.llmEditor.agentModelAuto'))}
                       disabled={busy}
                       placeholder=""
                     />
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs text-muted-text">Fallback 模型</label>
+                    <label className="mb-2 block text-xs text-muted-text">{t('settings.llmEditor.fallbackLabel')}</label>
                     <div className="space-y-2 rounded-xl border border-border/30 bg-background/10 p-3">
                       {availableModels.map((model) => (
                         <label key={model} className="flex items-center gap-2 text-sm text-secondary-text">
@@ -1235,17 +1242,16 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                       ))}
                     </div>
                     <p className="mt-1 text-[11px] text-secondary-text">
-                      Fallback 只会在主模型失败时使用，且仅接受当前运行时可访问模型（渠道声明或可用直连 Provider Key）。
-                      跨 Provider 的任务级容灾请在上层任务路由的“备用路由”配置。
+                      {t('settings.llmEditor.fallbackHint')}
                     </p>
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">Vision 模型</label>
+                    <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.visionModelLabel')}</label>
                     <Select
                       value={runtimeConfig.visionModel}
                       onChange={(value) => setRuntimeConfig((previous) => ({ ...previous, visionModel: value }))}
-                      options={buildModelOptions(availableModels, runtimeConfig.visionModel, '自动（跟随 Vision 默认逻辑）')}
+                      options={buildModelOptions(availableModels, runtimeConfig.visionModel, t('settings.llmEditor.visionModelAuto'))}
                       disabled={busy}
                       placeholder=""
                     />
@@ -1270,9 +1276,13 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               disabled={busy || !hasChanges}
               onClick={() => void handleSave()}
             >
-              {isSaving ? '保存中...' : providerScopedMode || !managesRuntimeConfig ? '保存渠道配置' : '保存 AI 配置'}
+              {isSaving
+                ? t('settings.llmEditor.saving')
+                : providerScopedMode || !managesRuntimeConfig
+                  ? t('settings.llmEditor.saveChannels')
+                  : t('settings.llmEditor.saveRuntime')}
             </Button>
-            {!hasChanges ? <span className="text-xs text-muted-text">当前没有未保存的改动</span> : null}
+            {!hasChanges ? <span className="text-xs text-muted-text">{t('settings.llmEditor.noChanges')}</span> : null}
           </div>
 
           {saveMessage?.type === 'success' ? (

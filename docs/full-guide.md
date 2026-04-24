@@ -1206,7 +1206,7 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 - 登录回跳、401/403 拒绝态与 admin-route 拦截现在都会保留更明确的下一步提示；当普通用户或仍处于 `User Mode` 的管理员访问 operator 页面时，前端会给出显式引导而不是静默失败。
 - 退出登录确认后，Web 会先清理本地会话状态，再显式跳转到 `/login`；该重定向路径已有单元测试覆盖。当前本地 `authEnabled=false` 时无法完整复现真实登录态的 live logout 跳转，只能把该浏览器验收标记为环境受限。
 - `/reset-password` 页面会调用 `/api/v1/auth/reset-password/request` 发起非枚举式重置请求，并保留 locale 与 redirect 参数返回登录页。该页面在认证关闭的本地环境中会被路由守卫视为不可完整端到端验证，浏览器验收需标记为 `authEnabled=false` 受限。
-- `/settings/system` 的 AI Provider Library 现在会在 provider card 上展示 Quick API 状态与高级渠道数量；内置 provider 与自定义 API provider 可通过高级 channel editor 做 add/edit/delete、连接测试与保存。Safari live 验证已覆盖 Admin Mode 进入、系统设置导航、AI provider drawer 可见性，以及 EN/ZH 切换；涉及真实认证角色的 ordinary-user 拒绝态仍受 `authEnabled=false` 限制。
+- `/settings/system` 的 AI Provider Library 现在会在 provider card 上展示 Quick API 状态与高级渠道数量；内置 provider 与自定义 API provider 可通过高级 channel editor 做 add/edit/delete、连接测试、附加请求头/参数维护与保存。Safari/live smoke 验证覆盖 Admin Mode 进入、系统设置导航、AI provider drawer 可见性，以及 EN/ZH 切换；涉及真实认证角色的 ordinary-user 拒绝态仍受 `authEnabled=false` 限制。
 - 回测页会继续保留“历史分析评估”与“确定性规则策略回测”的语义区分，但首屏信息结构已收紧，详细审计与执行假设更多通过折叠区和下层结果区查看。
 - 移动端会统一通过抽屉导航进入各个工作区，加载态优先使用结构化骨架/状态面板，而不是分散的随机 spinner。
 

@@ -88,7 +88,7 @@ vi.mock('../pages/PersonalSettingsPage', () => ({
   default: () => <div>personal-settings-page</div>,
 }));
 
-vi.mock('../pages/SettingsPage', () => ({
+vi.mock('../pages/SystemSettingsPage', () => ({
   default: () => <div>system-settings-page</div>,
 }));
 

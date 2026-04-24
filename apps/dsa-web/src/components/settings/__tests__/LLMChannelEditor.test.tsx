@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { LLMChannelEditor } from '../LLMChannelEditor';
+import { systemConfigApi } from '../../../api/systemConfig';
 import { UiLanguageProvider } from '../../../contexts/UiLanguageContext';
 import { translate } from '../../../i18n/core';
+import { LLMChannelEditor } from '../LLMChannelEditor';
 
 vi.mock('../../../api/systemConfig', () => ({
   systemConfigApi: {
@@ -11,7 +13,7 @@ vi.mock('../../../api/systemConfig', () => ({
 }));
 
 describe('LLMChannelEditor', () => {
-  const renderEditor = (ui: React.ReactElement) => render(
+  const renderEditor = (ui: ReactElement) => render(
     <UiLanguageProvider>
       {ui}
     </UiLanguageProvider>,
@@ -29,7 +31,7 @@ describe('LLMChannelEditor', () => {
           { key: 'LLM_OPENAI_MODELS', value: 'gpt-4o-mini' },
         ]}
         onSaveItems={() => {}}
-      />
+      />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: new RegExp(translate('zh', 'settings.llmEditor.channelPreset.openai')) }));
@@ -42,7 +44,7 @@ describe('LLMChannelEditor', () => {
   });
 
   it('shows clear guidance when fallback contains cross-provider model without runtime source', async () => {
-    const { container } = render(
+    const { container } = renderEditor(
       <LLMChannelEditor
         items={[
           { key: 'LLM_CHANNELS', value: 'zhipu' },
@@ -56,7 +58,7 @@ describe('LLMChannelEditor', () => {
           { key: 'LLM_TEMPERATURE', value: '0.7' },
         ]}
         onSaveItems={() => {}}
-      />
+      />,
     );
 
     const slider = container.querySelector('input[type="range"]') as HTMLInputElement;
@@ -84,7 +86,7 @@ describe('LLMChannelEditor', () => {
           { key: 'LLM_GEMINI_MODELS', value: 'gemini-2.5-flash' },
         ]}
         onSaveItems={() => {}}
-      />
+      />,
     );
 
     expect(screen.getByText(translate('zh', 'settings.llmEditor.scopedTitle', {
@@ -130,5 +132,39 @@ describe('LLMChannelEditor', () => {
       ]),
       translate('zh', 'settings.llmEditor.saveRuntimeSuccess'),
     );
+  });
+
+  it('persists extra headers and shows connectivity feedback', async () => {
+    vi.mocked(systemConfigApi.testLLMChannel).mockResolvedValue({
+      success: true,
+      message: 'ok',
+      resolvedModel: 'openai/gpt-4o-mini',
+      latencyMs: 123,
+    });
+
+    renderEditor(
+      <LLMChannelEditor
+        items={[
+          { key: 'LLM_CHANNELS', value: 'openai' },
+          { key: 'LLM_OPENAI_PROTOCOL', value: 'openai' },
+          { key: 'LLM_OPENAI_BASE_URL', value: 'https://api.openai.com/v1' },
+          { key: 'LLM_OPENAI_ENABLED', value: 'true' },
+          { key: 'LLM_OPENAI_API_KEY', value: 'secret-key' },
+          { key: 'LLM_OPENAI_MODELS', value: 'gpt-4o-mini' },
+        ]}
+        onSaveItems={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(translate('zh', 'settings.llmEditor.channelPreset.openai')) }));
+    fireEvent.change(await screen.findByLabelText(translate('zh', 'settings.llmEditor.fieldExtraHeaders')), {
+      target: { value: '{"x-env":"staging"}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'settings.llmEditor.testAction') }));
+
+    expect(await screen.findByText(translate('zh', 'settings.llmEditor.testSuccess', {
+      model: 'openai/gpt-4o-mini',
+      latency: 123,
+    }))).toBeInTheDocument();
   });
 });

@@ -249,6 +249,26 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 204)
         self.assertIn("dsa_session=", response.headers["set-cookie"])
 
+    def test_reset_password_request_requires_identifier(self) -> None:
+        response = asyncio.run(
+            auth_endpoint.auth_request_password_reset(
+                auth_endpoint.PasswordResetRequest(identifier=""),
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b'"error":"identifier_required"', response.body)
+
+    def test_reset_password_request_returns_generic_success_for_unknown_identifier(self) -> None:
+        response = asyncio.run(
+            auth_endpoint.auth_request_password_reset(
+                auth_endpoint.PasswordResetRequest(identifier="missing-user"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertIn(b'"ok":true', response.body)
+
     def test_serialize_user_notification_preferences_uses_auth_repository_boundary(self) -> None:
         repo = MagicMock()
         repo.get_user_notification_preferences.return_value = {
@@ -366,6 +386,28 @@ class AuthApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         call_next.assert_not_awaited()
+
+    def test_reset_password_request_is_exempt_from_auth_middleware(self) -> None:
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/auth/reset-password/request",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "root_path": "",
+        }
+        request = Request(scope)
+        middleware = AuthMiddleware(app=MagicMock())
+        call_next = AsyncMock(return_value=Response(status_code=202))
+
+        with patch("api.middlewares.auth.is_auth_enabled", return_value=True):
+            response = asyncio.run(middleware.dispatch(request, call_next))
+
+        self.assertEqual(response.status_code, 202)
+        call_next.assert_awaited_once()
 
     def test_protected_api_accessible_with_session(self) -> None:
         scope = {

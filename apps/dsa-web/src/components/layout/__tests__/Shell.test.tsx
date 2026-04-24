@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '../../../i18n/core';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Shell } from '../Shell';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
@@ -15,6 +16,14 @@ const { mockLogout, mockGetAgentStatus, useAuthMock } = vi.hoisted(() => ({
 
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
+}));
+
+vi.mock('../../../contexts/UiLanguageContext', () => ({
+  useI18n: () => ({
+    language: 'zh',
+    toggleLanguage: vi.fn(),
+    t: (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars),
+  }),
 }));
 
 vi.mock('../../../stores/agentChatStore', () => ({
@@ -111,14 +120,14 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: '首页' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '扫描器' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '设置' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '登录' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '问股' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '持仓' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '回测' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.chat') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.portfolio') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.backtest') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
   });
 
   it('keeps a logout path visible for non-guest shell states even when auth is disabled', () => {
@@ -259,12 +268,16 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole('link', { name: '系统设置' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '进入管理员模式' }));
-    expect(await screen.findByRole('link', { name: '系统设置' })).toHaveAttribute('href', '/settings/system');
-    fireEvent.click(screen.getByRole('button', { name: '返回用户模式' }));
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.adminModeEnter') }));
+    });
+    expect(await screen.findByRole('link', { name: translate('zh', 'nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.adminModeExit') }));
+    });
     await waitFor(() => {
-      expect(screen.queryByRole('link', { name: '系统设置' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     });
   });
 

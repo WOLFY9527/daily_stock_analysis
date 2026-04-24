@@ -37,7 +37,7 @@ const BacktestPage = lazy(() => import('./pages/BacktestPage'));
 const RuleBacktestComparePage = lazy(() => import('./pages/RuleBacktestComparePage'));
 const DeterministicBacktestResultPage = lazy(() => import('./pages/DeterministicBacktestResultPage'));
 const PersonalSettingsPage = lazy(() => import('./pages/PersonalSettingsPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const AdminLogsPage = lazy(() => import('./pages/AdminLogsPage'));
 
 type GateCopy = {
@@ -533,7 +533,7 @@ export const AppContent: React.FC = () => {
               <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
               <Route path="/settings" element={<PersonalSettingsPage />} />
-              <Route path="/settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
+              <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
@@ -546,7 +546,7 @@ export const AppContent: React.FC = () => {
               <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
               <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
               <Route path="settings" element={<PersonalSettingsPage />} />
-              <Route path="settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
+              <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>

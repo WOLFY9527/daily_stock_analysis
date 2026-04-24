@@ -12,6 +12,7 @@ import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { buildLoginPath, buildRegistrationPath, useProductSurface } from '../hooks/useProductSurface';
 import type { MarketColorConvention } from '../utils/marketColors';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
 const MARKET_COLOR_OPTIONS: Array<{
   value: MarketColorConvention;
@@ -53,6 +54,9 @@ const PersonalSettingsPage: React.FC = () => {
   const [notificationNotice, setNotificationNotice] = useState<string | null>(null);
   const loginPath = buildLoginPath('/settings');
   const registrationPath = buildRegistrationPath('/settings');
+  const currentLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
+  const adminConsolePath = currentLocale ? buildLocalizedPath('/settings/system', currentLocale) : '/settings/system';
+  const adminLogsPath = currentLocale ? buildLocalizedPath('/admin/logs', currentLocale) : '/admin/logs';
 
   useEffect(() => {
     document.title = language === 'en' ? 'Settings - WolfyStock' : '设置 - WolfyStock';
@@ -121,11 +125,7 @@ const PersonalSettingsPage: React.FC = () => {
       setNotificationEmailEnabled(Boolean(prefs.emailEnabled));
       setNotificationDiscordEnabled(Boolean(prefs.discordEnabled));
       setNotificationDiscordWebhook(prefs.discordWebhook || '');
-      setNotificationNotice(
-        language === 'en'
-          ? 'Personal notification targets saved.'
-          : '个人通知目标已保存。',
-      );
+      setNotificationNotice(t('settings.personalNotificationTargetsSaved'));
     } catch (err) {
       setNotificationError(getParsedApiError(err));
     } finally {
@@ -136,15 +136,13 @@ const PersonalSettingsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <WorkspacePageHeader
-        eyebrow={language === 'en' ? 'Personal Settings' : '个人设置'}
-        title={language === 'en' ? 'Personal preferences' : '个人偏好'}
-        description={language === 'en'
-          ? 'Keep appearance, readability, and personal account controls separate from system administration settings.'
-          : '将外观、可读性和个人账户控制，与系统级管理设置明确分开。'}
+        eyebrow={t('settings.personalEyebrow')}
+        title={t('settings.personalTitle')}
+        description={t('settings.personalDescription')}
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-        <Card title={language === 'en' ? 'Interface preferences' : '界面偏好'} subtitle={language === 'en' ? 'Local to this browser' : '仅保存在当前浏览器'}>
+        <Card title={t('settings.personalInterfaceTitle')} subtitle={t('settings.personalInterfaceSubtitle')}>
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
               <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.languageTitle')}</p>
@@ -203,7 +201,7 @@ const PersonalSettingsPage: React.FC = () => {
           </div>
         </Card>
 
-        <Card title={language === 'en' ? 'Account access' : '账号访问'} subtitle={language === 'en' ? 'Account and settings boundaries' : '账号与设置边界'}>
+        <Card title={t('settings.personalAccountAccessTitle')} subtitle={t('settings.personalAccountAccessSubtitle')}>
           <div className="space-y-4">
             {isGuest && authEnabled ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-4 py-4">
@@ -213,12 +211,10 @@ const PersonalSettingsPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {language === 'en' ? 'Guest preferences only' : '当前仅为游客偏好'}
+                      {t('settings.personalGuestPreferencesTitle')}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
-                      {language === 'en'
-                        ? 'Your appearance settings are stored locally, but personal history, chat, portfolio, and scanner data still require sign-in.'
-                        : '你的外观偏好会保存在本地，但个人历史、问答、持仓和扫描器数据仍然需要登录后才会拥有。'}
+                      {t('settings.personalGuestPreferencesBody')}
                     </p>
                   </div>
                 </div>
@@ -227,13 +223,13 @@ const PersonalSettingsPage: React.FC = () => {
                     to={loginPath}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                   >
-                    {language === 'en' ? 'Sign in to unlock personal data' : '登录后解锁个人数据'}
+                    {t('settings.personalGuestSignInAction')}
                   </Link>
                   <Link
                     to={registrationPath}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
                   >
-                    {language === 'en' ? 'Create account' : '创建账户'}
+                    {t('settings.personalGuestCreateAccountAction')}
                   </Link>
                 </div>
               </div>
@@ -247,14 +243,12 @@ const PersonalSettingsPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {language === 'en'
-                        ? `Signed in as ${currentUser?.displayName || currentUser?.username || 'user'}`
-                        : `当前身份：${currentUser?.displayName || currentUser?.username || '用户'}`}
+                      {t('settings.personalSignedInAs', {
+                        name: currentUser?.displayName || currentUser?.username || t('settings.personalFallbackUser'),
+                      })}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
-                      {language === 'en'
-                        ? 'Analysis history, chat sessions, portfolio data, scanner runs, and backtests now resolve against your authenticated identity.'
-                        : '分析历史、问答会话、持仓数据、扫描器运行结果与回测现在都会按你的已认证身份解析。'}
+                      {t('settings.personalSignedInBody')}
                     </p>
                   </div>
                 </div>
@@ -269,12 +263,10 @@ const PersonalSettingsPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {language === 'en' ? 'Separate admin tools' : '管理员工具分层'}
+                      {t('settings.personalAdminToolsTitle')}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
-                      {language === 'en'
-                        ? 'Your admin account now defaults to the regular app. Admin tools stay behind a separate switch.'
-                        : '你的管理员账户现在默认先进入普通页面，管理工具会继续保留在单独的开关之后。'}
+                      {t('settings.personalAdminToolsDesc')}
                     </p>
                   </div>
                 </div>
@@ -285,36 +277,34 @@ const PersonalSettingsPage: React.FC = () => {
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                   >
                     {isAdminMode
-                      ? (language === 'en' ? 'Return to regular pages' : '返回普通页面')
-                      : (language === 'en' ? 'Open admin tools' : '打开管理工具')}
+                      ? t('settings.personalAdminToolsReturn')
+                      : t('settings.personalAdminToolsOpen')}
                   </button>
                   <span className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text">
                     {isAdminMode
-                      ? (language === 'en' ? 'Current view: Admin tools' : '当前视图：管理工具')
-                      : (language === 'en' ? 'Current view: Regular pages' : '当前视图：普通页面')}
+                      ? t('settings.personalAdminToolsCurrentAdmin')
+                      : t('settings.personalAdminToolsCurrentUser')}
                   </span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   {isAdminMode ? (
                     <>
                       <Link
-                        to="/settings/system"
+                        to={adminConsolePath}
                         className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                       >
-                        {language === 'en' ? 'Open system settings' : '进入系统设置'}
+                        {t('nav.independentConsole')}
                       </Link>
                       <Link
-                        to="/admin/logs"
+                        to={adminLogsPath}
                         className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
                       >
-                        {language === 'en' ? 'Open admin logs' : '查看管理员日志'}
+                        {t('adminNav.logs')}
                       </Link>
                     </>
                   ) : (
                     <p className="text-xs leading-5 text-secondary-text">
-                      {language === 'en'
-                        ? 'Stay in regular pages for everyday analysis, then turn on admin tools only when you need system settings or admin logs.'
-                        : '日常分析先停留在普通页面，只有需要系统设置或管理员日志时再开启管理工具。'}
+                      {t('settings.personalAdminToolsHint')}
                     </p>
                   )}
                 </div>
@@ -326,15 +316,13 @@ const PersonalSettingsPage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <BellRing className="h-4 w-4 text-foreground" />
                   <p className="text-sm font-semibold text-foreground">
-                    {language === 'en' ? 'Notification scope' : '个人通知范围'}
+                    {t('settings.personalNotificationScopeTitle')}
                   </p>
                 </div>
                 {loggedIn ? (
                   <div className="mt-3 space-y-3">
                     <p className="text-xs leading-5 text-secondary-text">
-                      {language === 'en'
-                        ? 'Personal analysis notifications now resolve to your own email and Discord targets instead of reusing admin/system channels.'
-                        : '个人分析通知现在会解析到你自己的邮箱与 Discord 目标，不再复用管理员/系统通道。'}
+                      {t('settings.personalNotificationScopeBody')}
                     </p>
                     <label className="flex items-center gap-3 text-xs text-secondary-text">
                       <input
@@ -344,24 +332,22 @@ const PersonalSettingsPage: React.FC = () => {
                         onChange={(event) => setNotificationEmailEnabled(event.target.checked)}
                         disabled={notificationLoading || notificationSaving}
                       />
-                      <span>{language === 'en' ? 'Enable personal email notifications' : '启用个人邮件通知'}</span>
+                      <span>{t('settings.personalNotificationEmailToggle')}</span>
                     </label>
                     <label className="block">
-                      <span className="theme-field-label">{language === 'en' ? 'Notification email' : '通知邮箱'}</span>
+                      <span className="theme-field-label">{t('settings.personalNotificationEmailLabel')}</span>
                       <input
                         type="email"
                         value={notificationEmail}
                         onChange={(event) => setNotificationEmail(event.target.value)}
-                        placeholder={language === 'en' ? 'you@example.com' : 'name@example.com'}
+                        placeholder={t('settings.personalNotificationEmailPlaceholder')}
                         disabled={notificationLoading || notificationSaving}
                         className="mt-2 w-full rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-[var(--border-strong)]"
                       />
                     </label>
                     {!notificationPrefs?.emailDeliveryAvailable ? (
                       <p className="text-xs leading-5 text-secondary-text">
-                        {language === 'en'
-                          ? 'System email delivery is not configured yet, so this personal target will stay saved but inactive until an admin enables outbound email.'
-                          : '系统邮件发送尚未配置，因此这个个人目标会先保存下来，等管理员启用发信能力后才会真正生效。'}
+                        {t('settings.personalNotificationEmailUnavailable')}
                       </p>
                     ) : null}
                     <label className="flex items-center gap-3 text-xs text-secondary-text">
@@ -372,10 +358,10 @@ const PersonalSettingsPage: React.FC = () => {
                         onChange={(event) => setNotificationDiscordEnabled(event.target.checked)}
                         disabled={notificationLoading || notificationSaving}
                       />
-                      <span>{language === 'en' ? 'Enable personal Discord webhook notifications' : '启用个人 Discord Webhook 通知'}</span>
+                      <span>{t('settings.personalNotificationDiscordToggle')}</span>
                     </label>
                     <label className="block">
-                      <span className="theme-field-label">{language === 'en' ? 'Discord webhook URL' : 'Discord Webhook 地址'}</span>
+                      <span className="theme-field-label">{t('settings.personalNotificationDiscordLabel')}</span>
                       <input
                         type="url"
                         value={notificationDiscordWebhook}
@@ -386,9 +372,7 @@ const PersonalSettingsPage: React.FC = () => {
                       />
                     </label>
                     <p className="text-xs leading-5 text-secondary-text">
-                      {language === 'en'
-                        ? 'Discord delivery uses the webhook you provide here and stays separate from shared admin channels.'
-                        : 'Discord 通知会使用你在这里填写的 Webhook，并继续与共享的管理员通道保持分离。'}
+                      {t('settings.personalNotificationDiscordHint')}
                     </p>
                     {notificationNotice ? (
                       <p className="text-xs leading-5 text-[hsl(var(--accent-positive-hsl))]">{notificationNotice}</p>
@@ -400,9 +384,7 @@ const PersonalSettingsPage: React.FC = () => {
                       disabled={notificationLoading || notificationSaving}
                       className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)] disabled:pointer-events-none disabled:opacity-50"
                     >
-                      {notificationSaving
-                        ? (language === 'en' ? 'Saving...' : '保存中...')
-                        : (language === 'en' ? 'Save notification target' : '保存通知目标')}
+                      {notificationSaving ? t('settings.personalNotificationSaving') : t('settings.personalNotificationSaveAction')}
                     </button>
                   </div>
                 ) : (
