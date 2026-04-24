@@ -731,7 +731,7 @@ const ChatPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="chat-bento-hero"
     >
-      <div data-testid="chat-workspace" className="w-full overflow-hidden bg-[#030303]">
+      <div data-testid="chat-workspace" className="flex min-h-0 w-full flex-col overflow-hidden bg-[#030303]">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
@@ -755,8 +755,8 @@ const ChatPage: React.FC = () => {
           ) : null}
         </div>
 
-        <div className="flex-1 overflow-hidden w-full flex justify-center">
-          <div className="w-full max-w-4xl h-full flex flex-col relative">
+        <div className="flex min-h-0 flex-1 overflow-hidden w-full justify-center">
+          <div className="relative flex h-full min-h-0 w-full max-w-4xl flex-col">
           {/* Messages */}
           <ScrollArea
             className="flex-1 overflow-y-auto no-scrollbar p-6"
