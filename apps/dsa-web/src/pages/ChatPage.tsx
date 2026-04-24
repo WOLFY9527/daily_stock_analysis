@@ -731,7 +731,7 @@ const ChatPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="chat-bento-hero"
     >
-      <div data-testid="chat-workspace" className="h-screen w-full flex flex-col overflow-hidden bg-[#030303]">
+      <div data-testid="chat-workspace" className="fixed left-0 right-0 bottom-0 top-[80px] z-40 flex flex-col overflow-hidden bg-[#030303]">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
