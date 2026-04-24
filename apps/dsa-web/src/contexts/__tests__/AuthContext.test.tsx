@@ -3,12 +3,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { AuthProvider, useAuth } from '../AuthContext';
 
-const { getStatus, login, changePassword, logout, resetDashboardState } = vi.hoisted(() => ({
+const {
+  getStatus,
+  login,
+  changePassword,
+  logout,
+  resetDashboardState,
+  resetAgentChatState,
+  resetAdminSurfaceMode,
+} = vi.hoisted(() => ({
   getStatus: vi.fn(),
   login: vi.fn(),
   changePassword: vi.fn(),
   logout: vi.fn(),
   resetDashboardState: vi.fn(),
+  resetAgentChatState: vi.fn(),
+  resetAdminSurfaceMode: vi.fn(),
 }));
 
 vi.mock('../../api/auth', () => ({
@@ -26,6 +36,16 @@ vi.mock('../../stores', () => ({
       resetDashboardState,
     }),
   },
+  useAgentChatStore: {
+    getState: () => ({
+      resetSessionState: resetAgentChatState,
+    }),
+  },
+}));
+
+vi.mock('../../hooks/productSurfaceMode', () => ({
+  ADMIN_SURFACE_MODE_STORAGE_KEY: 'dsa-admin-surface-mode',
+  resetAdminSurfaceMode,
 }));
 
 const Probe = () => {
@@ -51,6 +71,8 @@ const Probe = () => {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it('refreshes auth state after a successful login', async () => {
@@ -83,6 +105,12 @@ describe('AuthContext', () => {
   });
 
   it('refreshes auth state after logout', async () => {
+    window.localStorage.setItem('dsa_chat_session_id', 'chat-session-1');
+    window.localStorage.setItem('dsa-selected-history-id', '42');
+    window.localStorage.setItem('dsa-task-queue-v1', '[{"taskId":"task-1"}]');
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    window.sessionStorage.setItem('dsa-admin-surface-mode', 'admin');
+
     getStatus
       .mockResolvedValueOnce({
         authEnabled: true,
@@ -110,6 +138,12 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
     expect(resetDashboardState).toHaveBeenCalled();
+    expect(resetAgentChatState).toHaveBeenCalled();
+    expect(resetAdminSurfaceMode).toHaveBeenCalled();
+    expect(window.localStorage.getItem('dsa_chat_session_id')).toBeNull();
+    expect(window.localStorage.getItem('dsa-selected-history-id')).toBeNull();
+    expect(window.localStorage.getItem('dsa-task-queue-v1')).toBeNull();
+    expect(window.localStorage.getItem('dsa-ui-language')).toBe('en');
   });
 
   it('does not reset dashboard state when auth is disabled', async () => {
@@ -171,5 +205,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
     expect(resetDashboardState).toHaveBeenCalled();
+    expect(resetAgentChatState).toHaveBeenCalled();
+    expect(resetAdminSurfaceMode).toHaveBeenCalled();
   });
 });

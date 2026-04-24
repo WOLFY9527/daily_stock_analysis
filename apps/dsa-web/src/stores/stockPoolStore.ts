@@ -570,7 +570,11 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     dismissedTaskIds.clear();
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(TASK_QUEUE_STORAGE_KEY);
+      window.localStorage.removeItem(SELECTED_HISTORY_ID_STORAGE_KEY);
     }
-    set({ ...initialState });
+    set({
+      ...initialState,
+      activeTasks: [],
+    });
   },
 }));

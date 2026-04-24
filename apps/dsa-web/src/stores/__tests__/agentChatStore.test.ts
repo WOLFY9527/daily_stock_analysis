@@ -77,4 +77,47 @@ describe('agentChatStore.startStream', () => {
     expect(state.messages[1].thinkingSteps).toHaveLength(2);
     expect(state.progressSteps).toEqual([]);
   });
+
+  it('resets chat session state and clears the persisted chat session on logout', () => {
+    const abort = vi.fn();
+    localStorage.setItem('dsa_chat_session_id', 'session-old');
+    useAgentChatStore.setState({
+      messages: [{ id: 'm-1', role: 'user', content: '分析 AAPL' }],
+      loading: true,
+      progressSteps: [{ type: 'thinking', message: '分析中' }],
+      sessionId: 'session-old',
+      sessions: [
+        {
+          session_id: 'session-old',
+          title: '分析 AAPL',
+          message_count: 1,
+          created_at: '2026-03-15T09:00:00Z',
+          last_active: '2026-03-15T09:05:00Z',
+        },
+      ],
+      sessionsLoading: true,
+      sessionLoadError: null,
+      chatError: null,
+      currentRoute: '/chat',
+      completionBadge: true,
+      hasInitialLoad: true,
+      abortController: { abort } as unknown as AbortController,
+    });
+
+    useAgentChatStore.getState().resetSessionState();
+
+    const state = useAgentChatStore.getState();
+    expect(abort).toHaveBeenCalled();
+    expect(state.messages).toEqual([]);
+    expect(state.loading).toBe(false);
+    expect(state.progressSteps).toEqual([]);
+    expect(state.sessions).toEqual([]);
+    expect(state.sessionsLoading).toBe(false);
+    expect(state.chatError).toBeNull();
+    expect(state.completionBadge).toBe(false);
+    expect(state.hasInitialLoad).toBe(false);
+    expect(state.abortController).toBeNull();
+    expect(localStorage.getItem('dsa_chat_session_id')).toBeNull();
+    expect(state.sessionId).not.toBe('session-old');
+  });
 });

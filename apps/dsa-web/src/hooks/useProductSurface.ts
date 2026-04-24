@@ -2,60 +2,19 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getStoredUiLanguage } from '../i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, shouldLocalizePath } from '../utils/localeRouting';
+import {
+  ADMIN_SURFACE_MODE_STORAGE_KEY,
+  getAdminSurfaceModeServerSnapshot,
+  getAdminSurfaceModeSnapshot,
+  setAdminSurfaceMode,
+  subscribeAdminSurfaceMode,
+  syncAdminSurfaceModeFromStorage,
+  type AdminSurfaceMode,
+} from './productSurfaceMode';
 
 export type ProductSurfaceRole = 'guest' | 'user' | 'admin';
-export type AdminSurfaceMode = 'user' | 'admin';
-
-const ADMIN_SURFACE_MODE_STORAGE_KEY = 'dsa-admin-surface-mode';
-
-let adminSurfaceModeSnapshot: AdminSurfaceMode = 'user';
-const adminSurfaceModeListeners = new Set<() => void>();
-
-function getAdminSurfaceModeSnapshot(): AdminSurfaceMode {
-  return adminSurfaceModeSnapshot;
-}
-
-function getAdminSurfaceModeServerSnapshot(): AdminSurfaceMode {
-  return 'user';
-}
-
-function subscribeAdminSurfaceMode(listener: () => void): () => void {
-  adminSurfaceModeListeners.add(listener);
-  return () => {
-    adminSurfaceModeListeners.delete(listener);
-  };
-}
-
-function readStoredAdminSurfaceMode(): AdminSurfaceMode {
-  if (typeof window === 'undefined') {
-    return 'user';
-  }
-  const stored = window.sessionStorage.getItem(ADMIN_SURFACE_MODE_STORAGE_KEY);
-  return stored === 'admin' ? 'admin' : 'user';
-}
-
-function publishAdminSurfaceMode(nextMode: AdminSurfaceMode): void {
-  adminSurfaceModeSnapshot = nextMode;
-  if (typeof window !== 'undefined') {
-    window.sessionStorage.setItem(ADMIN_SURFACE_MODE_STORAGE_KEY, nextMode);
-  }
-  adminSurfaceModeListeners.forEach((listener) => listener());
-}
-
-export function setAdminSurfaceMode(mode: AdminSurfaceMode): void {
-  const normalizedMode: AdminSurfaceMode = mode === 'admin' ? 'admin' : 'user';
-  if (normalizedMode === adminSurfaceModeSnapshot) {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(ADMIN_SURFACE_MODE_STORAGE_KEY, normalizedMode);
-    }
-    return;
-  }
-  publishAdminSurfaceMode(normalizedMode);
-}
-
-if (typeof window !== 'undefined') {
-  adminSurfaceModeSnapshot = readStoredAdminSurfaceMode();
-}
+export { setAdminSurfaceMode };
+export type { AdminSurfaceMode };
 
 export function resolveProductSurfaceRole(params: {
   authEnabled: boolean;
@@ -139,8 +98,7 @@ export function useProductSurface() {
       if (event.key !== ADMIN_SURFACE_MODE_STORAGE_KEY) {
         return;
       }
-      adminSurfaceModeSnapshot = event.newValue === 'admin' ? 'admin' : 'user';
-      adminSurfaceModeListeners.forEach((listener) => listener());
+      syncAdminSurfaceModeFromStorage(event.newValue);
     };
     window.addEventListener('storage', handleStorage);
     return () => {

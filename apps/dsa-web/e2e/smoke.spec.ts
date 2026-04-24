@@ -81,6 +81,20 @@ async function ensureGuestSession(page: Page): Promise<AuthStatusPayload> {
 }
 
 test.describe('web deployment smoke', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const response = await route.fetch({
+        url: `${backendBaseUrl}${requestUrl.pathname}${requestUrl.search}`,
+      });
+      await route.fulfill({ response });
+    });
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
+
   test('home app shell loads', async ({ page }) => {
     await openHome(page);
     await expect(page.locator('body')).toContainText(/输入标的|即时分析预览|Enter a symbol|Instant Analysis Snapshot|历史分析|Analysis history/);

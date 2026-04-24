@@ -3,7 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
-import { useStockPoolStore } from '../stores';
+import { ADMIN_SURFACE_MODE_STORAGE_KEY, resetAdminSurfaceMode } from '../hooks/productSurfaceMode';
+import { useAgentChatStore, useStockPoolStore } from '../stores';
 
 type AuthContextValue = {
   authEnabled: boolean;
@@ -31,6 +32,21 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const AUTH_RELATED_LOCAL_STORAGE_KEYS = [
+  'dsa_chat_session_id',
+  'dsa-selected-history-id',
+  'dsa-task-queue-v1',
+];
+
+function clearAuthRelatedBrowserStorage(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  AUTH_RELATED_LOCAL_STORAGE_KEYS.forEach((key) => {
+    window.localStorage.removeItem(key);
+  });
+  window.sessionStorage.removeItem(ADMIN_SURFACE_MODE_STORAGE_KEY);
+}
 
 function extractLoginError(err: unknown): ParsedApiError {
   const parsed = getParsedApiError(err);
@@ -58,7 +74,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearSessionState = useCallback(() => {
     setLoggedIn(false);
     setCurrentUser(null);
+    clearAuthRelatedBrowserStorage();
     useStockPoolStore.getState().resetDashboardState();
+    useAgentChatStore.getState().resetSessionState();
+    resetAdminSurfaceMode();
   }, []);
 
   const fetchStatus = useCallback(async () => {

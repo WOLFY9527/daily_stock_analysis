@@ -215,6 +215,8 @@ describe('stockPoolStore', () => {
       selectedHistoryIds: [1],
       selectedReport: historyReport,
       markdownDrawerOpen: true,
+      historyItems: [historyItem],
+      highlightedHistoryId: 1,
       activeTasks: [
         {
           ...pendingTask,
@@ -224,6 +226,8 @@ describe('stockPoolStore', () => {
         },
       ],
     });
+    window.localStorage.setItem('dsa-selected-history-id', '1');
+    window.localStorage.setItem('dsa-task-queue-v1', '[{"taskId":"task-2"}]');
 
     useStockPoolStore.getState().resetDashboardState();
     state = useStockPoolStore.getState();
@@ -233,6 +237,9 @@ describe('stockPoolStore', () => {
     expect(state.selectedHistoryIds).toHaveLength(0);
     expect(state.selectedReport).toBeNull();
     expect(state.markdownDrawerOpen).toBe(false);
+    expect(state.historyItems).toEqual([]);
+    expect(window.localStorage.getItem('dsa-selected-history-id')).toBeNull();
+    expect(window.localStorage.getItem('dsa-task-queue-v1')).toBeNull();
   });
 
   it('focuses the newest matching history item after a task completes', async () => {
