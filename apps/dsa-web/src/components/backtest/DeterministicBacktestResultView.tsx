@@ -240,7 +240,7 @@ export const DeterministicBacktestResultView: React.FC<{
               {executionNotes.length > 0 ? (
                 <p className="product-footnote">{executionNotes[0]}</p>
               ) : null}
-              <div className="metric-grid backtest-result-viewer__metric-grid">
+              <div className="backtest-result-viewer__hero-metrics">
                 <MetricCard
                   label={bt(language, 'resultPage.resultView.totalReturn')}
                   value={pct(metrics.totalReturnPct)}
@@ -310,8 +310,8 @@ export const DeterministicBacktestResultView: React.FC<{
                 ]}
               />
             </div>
-            <div className="backtest-result-viewer__chart-stage">
-              <DeterministicBacktestChartWorkspace key={workspaceKey} normalized={normalized} densityConfig={resolvedDensity} />
+            <div className="backtest-result-viewer__chart-stage backtest-result-viewer__chart-stage--void">
+              <DeterministicBacktestChartWorkspace key={workspaceKey} normalized={normalized} run={run} densityConfig={resolvedDensity} />
             </div>
           </Card>
         </div>

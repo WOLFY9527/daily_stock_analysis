@@ -1,1099 +1,425 @@
 import type React from 'react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as echarts from 'echarts/core';
+import { BarChart, LineChart } from 'echarts/charts';
+import type { ComposeOption, ECharts, SetOptionOpts } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import {
+  GridComponent,
+  TooltipComponent,
+  DataZoomComponent,
+} from 'echarts/components';
+import type { BarSeriesOption, LineSeriesOption } from 'echarts/charts';
+import type {
+  GridComponentOption,
+  TooltipComponentOption,
+  DataZoomComponentOption,
+} from 'echarts/components';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useElementSize } from '../../hooks/useElementSize';
 import { translate } from '../../i18n/core';
-import { formatNumber, pct } from './shared';
-import type { DeterministicResultDensityConfig, DeterministicResultDensityMode } from './deterministicResultDensity';
+import type { DeterministicResultDensityConfig } from './deterministicResultDensity';
+import type { RuleBacktestRunResponse } from '../../types/backtest';
 import type {
-  DeterministicBacktestBenchmarkMeta,
   DeterministicBacktestNormalizedResult,
   DeterministicBacktestNormalizedRow,
 } from './normalizeDeterministicBacktestResult';
-import { formatDeterministicActionLabel } from './normalizeDeterministicBacktestResult';
 
-type PanelLayout = {
-  width: number;
-  density: DeterministicResultDensityMode;
-  config: DeterministicResultDensityConfig;
-};
 
-type SharedPanelProps = {
-  visibleRows: DeterministicBacktestNormalizedRow[];
-  hoveredIndex: number;
-  onHoverIndexChange: (index: number, geometry?: { clientX: number; clientY: number }) => void;
-  onHoverLeave: () => void;
-  benchmarkMeta: DeterministicBacktestBenchmarkMeta;
-  layout: PanelLayout;
-  surfaceTestId: string;
-};
+echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, DataZoomComponent, CanvasRenderer]);
 
-type SecondaryPanelMode = 'relative' | 'daily' | 'position';
 type BacktestLanguage = 'zh' | 'en';
+type EChartsOption = ComposeOption<
+  | LineSeriesOption
+  | BarSeriesOption
+  | GridComponentOption
+  | TooltipComponentOption
+  | DataZoomComponentOption
+>;
 
 function ctw(language: BacktestLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
   return translate(language, `backtest.resultPage.chartWorkspace.${key}`, vars);
 }
 
-const CHART_BASE_WIDTH = 1180;
-const RANGE_BRUSH_WIDTH = 1000;
-const RANGE_BRUSH_PADDING = 8;
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function buildTickIndices(count: number, targetTickCount: number): number[] {
-  if (count <= 0) return [];
-  if (count <= targetTickCount) return Array.from({ length: count }, (_, index) => index);
-
-  const indexes = new Set<number>([0, count - 1]);
-  const step = (count - 1) / Math.max(1, targetTickCount - 1);
-  for (let index = 1; index < targetTickCount - 1; index += 1) {
-    indexes.add(Math.round(step * index));
-  }
-  return Array.from(indexes).sort((left, right) => left - right);
-}
-
-function formatChartDateLabel(value: string): string {
+function formatDateLabel(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return value || '--';
   return `${match[2]}-${match[3]}`;
 }
 
-function formatSignedPercent(value: number, digits = 1): string {
+function formatSignedPercent(value: number | null | undefined, digits = 2): string {
+  if (value == null || Number.isNaN(value)) return '--';
   const sign = value > 0 ? '+' : '';
   return `${sign}${value.toFixed(digits)}%`;
 }
 
-function formatCompactPnl(value: number): string {
-  const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-  const abs = Math.abs(value);
-  if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(abs >= 100000 ? 0 : 1)}万`;
-  if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`;
-  return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
+function formatSignedNumber(value: number | null | undefined, digits = 2): string {
+  if (value == null || Number.isNaN(value)) return '--';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(digits)}`;
 }
 
-function formatCompactPnlLabel(value: number, language: BacktestLanguage): string {
-  if (language === 'zh') return formatCompactPnl(value);
+function formatCompactNumber(value: number | null | undefined, language: BacktestLanguage): string {
+  if (value == null || Number.isNaN(value)) return '--';
   const sign = value > 0 ? '+' : value < 0 ? '-' : '';
   const abs = Math.abs(value);
+  if (language === 'zh') {
+    if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(abs >= 100000 ? 0 : 1)}万`;
+    if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k`;
+    return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
+  }
   if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}m`;
   if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}k`;
   return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
 }
 
-function formatPosition(value: number | null | undefined): string | null {
-  if (value == null) return null;
-  return pct(value * 100);
+function getVolumeValue(row: DeterministicBacktestNormalizedRow): number {
+  return Math.abs(Number(row.shares ?? 0));
 }
 
-function createPanelLayout(config: DeterministicResultDensityConfig): PanelLayout {
-  return {
-    width: CHART_BASE_WIDTH,
-    density: config.mode,
-    config,
-  };
-}
-
-function ChartSurface({
-  rows,
-  hoveredIndex,
-  onHoverIndexChange,
-  onHoverLeave,
-  testId,
-  x,
-  y,
-  width,
-  height,
-}: {
-  rows: DeterministicBacktestNormalizedRow[];
-  hoveredIndex: number;
-  onHoverIndexChange: (index: number, geometry?: { clientX: number; clientY: number }) => void;
-  onHoverLeave: () => void;
-  testId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}) {
-  return (
-    <rect
-      data-testid={testId}
-      x={x}
-      y={y}
-      width={width}
-      height={height}
-      fill="transparent"
-      pointerEvents="all"
-      onMouseMove={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        if (!rect.width || rows.length <= 1) return;
-        const ratio = clampNumber((event.clientX - rect.left) / rect.width, 0, 1);
-        onHoverIndexChange(Math.round(ratio * (rows.length - 1)), {
-          clientX: event.clientX,
-          clientY: event.clientY,
-        });
-      }}
-      onFocus={() => {
-        if (rows.length > 0) onHoverIndexChange(hoveredIndex);
-      }}
-      onMouseLeave={onHoverLeave}
-    />
-  );
-}
-
-function buildVisibleTickCount(rowCount: number, width: number, minGap: number, cap: number): number {
-  const widthBudget = Math.max(width - 120, minGap * 1.4);
-  const widthLimited = Math.max(2, Math.floor(widthBudget / Math.max(minGap, 1)));
-  return Math.max(2, Math.min(rowCount, cap, widthLimited));
-}
-
-function ReturnPanel({
-  visibleRows,
-  hoveredIndex,
-  onHoverIndexChange,
-  onHoverLeave,
-  benchmarkMeta,
-  layout,
-  surfaceTestId,
-}: SharedPanelProps) {
-  const { language } = useI18n();
-  const strategyRows = visibleRows.filter((row) => row.strategyCumReturn != null);
-  const strategySeriesLength = strategyRows.length;
-  if (!visibleRows.length || !strategySeriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{ctw(language, 'noCumulativeData')}</div></div>;
-  }
-
-  const { width, density, config } = layout;
-  const height = config.mainHeight;
-  const paddingLeft = density === 'dense' ? 56 : 64;
-  const paddingRight = 22;
-  const paddingTop = 18;
-  const paddingBottom = density === 'dense' ? 34 : density === 'compact' ? 38 : 42;
-  const plotRight = width - paddingRight;
-  const plotBottom = height - paddingBottom;
-  const usableWidth = plotRight - paddingLeft;
-  const usableHeight = plotBottom - paddingTop;
-  const values = visibleRows.flatMap((row) => [
-    ...(row.strategyCumReturn != null ? [row.strategyCumReturn] : []),
-    ...(benchmarkMeta.showBenchmark && row.benchmarkCumReturn != null ? [row.benchmarkCumReturn] : []),
-    ...(benchmarkMeta.showBuyHold && row.buyHoldCumReturn != null ? [row.buyHoldCumReturn] : []),
-  ]);
-  const rawMin = Math.min(...values, 0);
-  const rawMax = Math.max(...values, 0);
-  const padding = Math.max((rawMax - rawMin) * 0.1, 2.5);
-  const min = Math.floor((rawMin - padding) / 2) * 2;
-  const max = Math.ceil((rawMax + padding) / 2) * 2;
-  const span = Math.max(6, max - min);
-  const getX = (index: number) => paddingLeft + (usableWidth * index) / Math.max(1, visibleRows.length - 1);
-  const getY = (value: number) => paddingTop + usableHeight - ((value - min) / span) * usableHeight;
-  const buildPolyline = (selector: (row: DeterministicBacktestNormalizedRow) => number | null) => visibleRows
-    .map((row, index) => {
-      const value = selector(row);
-      return value != null ? `${getX(index)},${getY(value)}` : null;
-    })
-    .filter(Boolean)
-    .join(' ');
-  const xTicks = buildTickIndices(
-    visibleRows.length,
-    buildVisibleTickCount(visibleRows.length, width, config.xTickMinGap, 6),
-  ).map((index) => ({
-    x: getX(index),
-    label: formatChartDateLabel(visibleRows[index]?.date || '--'),
-  }));
-  const yTicks = Array.from({ length: config.mainYTickCount }, (_, index) => {
-    const ratio = config.mainYTickCount === 1 ? 0 : index / (config.mainYTickCount - 1);
-    const value = max - ratio * span;
-    return { value, y: getY(value), label: formatSignedPercent(value, density === 'dense' ? 0 : 1) };
-  });
-  const actionRows = visibleRows
-    .map((row, index) => ({ row, index }))
-    .filter(({ row }) => row.action != null);
-  const markerIndexes = buildTickIndices(
-    actionRows.length,
-    Math.max(4, Math.min(config.markerLimit, Math.floor(width / 88))),
-  );
-  const markers = (actionRows.length > markerIndexes.length
-    ? markerIndexes.map((index) => actionRows[index]).filter(Boolean)
-    : actionRows)
-    .map(({ row, index }) => ({
-      key: `${row.date}:${row.action}:${index}`,
-      x: getX(index),
-      y: getY(row.strategyCumReturn ?? 0),
-      action: row.action === 'sell' || row.action === 'forced_close' ? 'sell' : 'buy',
-      label: `${formatDeterministicActionLabel(row.action, language)} · ${row.date}`,
-    }));
-  const safeHoverIndex = clampNumber(hoveredIndex, 0, visibleRows.length - 1);
-  const hoveredRow = visibleRows[safeHoverIndex];
-  const hoverX = getX(safeHoverIndex);
-  const hoverY = getY(hoveredRow.strategyCumReturn ?? 0);
-
-  return (
-    <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={strategySeriesLength}>
-      <div className="backtest-unified-chart-viewer__panel-header">
-        <div>
-          <span className="product-kicker">{ctw(language, 'primaryKicker')}</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">{ctw(language, 'primaryTitle')}</h3>
-        </div>
-      </div>
-      <div className="chart-card__legend">
-        <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--strategy" />{ctw(language, 'strategyLegend')}</span>
-        {benchmarkMeta.showBenchmark ? (
-          <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--benchmark" />{benchmarkMeta.benchmarkLabel}</span>
-        ) : null}
-        {benchmarkMeta.showBuyHold ? (
-          <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--buy-hold" />{benchmarkMeta.buyHoldLabel}</span>
-        ) : null}
-        <span className="chart-card__legend-item"><span className="chart-card__legend-swatch chart-card__legend-swatch--trades" />{ctw(language, 'tradeMarkersLegend')}</span>
-      </div>
-      <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={ctw(language, 'cumulativeReturnChartAria')}>
-          {yTicks.map((tick) => (
-            <g key={`return-y-${tick.label}`}>
-              <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
-              <text x={paddingLeft - 12} y={tick.y + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>
-                {tick.label}
-              </text>
-            </g>
-          ))}
-          {xTicks.map((tick) => (
-            <g key={`return-x-${tick.label}`}>
-              <line x1={tick.x} y1={paddingTop} x2={tick.x} y2={plotBottom} className="chart-card__grid chart-card__grid--vertical" />
-              <text x={tick.x} y={height - 14} textAnchor="middle" className="chart-card__axis-label" fontSize={config.axisFontSize}>
-                {tick.label}
-              </text>
-            </g>
-          ))}
-          <polyline className="chart-card__line chart-card__line--strategy" points={buildPolyline((row) => row.strategyCumReturn)} />
-          {benchmarkMeta.showBenchmark ? <polyline className="chart-card__line chart-card__line--benchmark" points={buildPolyline((row) => row.benchmarkCumReturn)} /> : null}
-          {benchmarkMeta.showBuyHold ? <polyline className="chart-card__line chart-card__line--buy-hold" points={buildPolyline((row) => row.buyHoldCumReturn)} /> : null}
-          {markers.map((marker) => (
-            <g key={marker.key} className={`chart-card__marker chart-card__marker--${marker.action}`}>
-              {marker.action === 'buy' ? <circle cx={marker.x} cy={marker.y} r={3.2} /> : <rect x={marker.x - 2.8} y={marker.y - 2.8} width={5.6} height={5.6} rx="1.4" />}
-              <title>{marker.label}</title>
-            </g>
-          ))}
-          <line x1={hoverX} y1={paddingTop} x2={hoverX} y2={plotBottom} className="backtest-linked-chart__cursor" />
-          <circle cx={hoverX} cy={hoverY} r={4.1} className="backtest-linked-chart__focus-dot" />
-          <ChartSurface
-            rows={visibleRows}
-            hoveredIndex={hoveredIndex}
-            onHoverIndexChange={onHoverIndexChange}
-            onHoverLeave={onHoverLeave}
-            testId={surfaceTestId}
-            x={paddingLeft}
-            y={paddingTop}
-            width={usableWidth}
-            height={usableHeight}
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function DailyPnlPanel({
-  visibleRows,
-  hoveredIndex,
-  onHoverIndexChange,
-  onHoverLeave,
-  layout,
-  surfaceTestId,
-}: Omit<SharedPanelProps, 'benchmarkMeta'> & { benchmarkMeta?: DeterministicBacktestBenchmarkMeta }) {
-  const { language } = useI18n();
-  const seriesLength = visibleRows.filter((row) => row.dailyPnl != null).length;
-  if (!visibleRows.length || !seriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{ctw(language, 'noDailyPnlData')}</div></div>;
-  }
-
-  const { width, density, config } = layout;
-  const height = config.dailyHeight;
-  const paddingLeft = density === 'dense' ? 56 : 64;
-  const paddingRight = 22;
-  const paddingTop = 14;
-  const paddingBottom = density === 'dense' ? 28 : 34;
-  const plotRight = width - paddingRight;
-  const plotBottom = height - paddingBottom;
-  const usableWidth = plotRight - paddingLeft;
-  const usableHeight = plotBottom - paddingTop;
-  const values = visibleRows.map((row) => row.dailyPnl ?? 0);
-  const amplitude = Math.max(Math.abs(Math.min(...values, 0)), Math.abs(Math.max(...values, 0)), 1);
-  const zeroY = paddingTop + usableHeight / 2;
-  const getX = (index: number) => paddingLeft + (usableWidth * index) / Math.max(1, visibleRows.length - 1);
-  const getY = (value: number) => paddingTop + usableHeight - ((value + amplitude) / (amplitude * 2)) * usableHeight;
-  const barWidth = Math.max(2, Math.min(density === 'comfortable' ? 9 : 7, usableWidth / Math.max(visibleRows.length, 1) - 2));
-  const bars = visibleRows.map((row, index) => {
-    const value = row.dailyPnl ?? 0;
-    const y = Math.min(zeroY, getY(value));
-    return {
-      key: `${row.date}:${index}`,
-      x: getX(index) - barWidth / 2,
-      y,
-      width: barWidth,
-      height: Math.max(1.5, Math.abs(getY(value) - zeroY)),
-      value,
-    };
-  });
-  const xTicks = buildTickIndices(
-    visibleRows.length,
-    buildVisibleTickCount(visibleRows.length, width, config.xTickMinGap, 5),
-  ).map((index) => ({
-    x: getX(index),
-    label: formatChartDateLabel(visibleRows[index]?.date || '--'),
-  }));
-  const yTicks = Array.from({ length: config.subYTickCount + 1 }, (_, index) => {
-    const ratio = config.subYTickCount === 0 ? 0 : index / config.subYTickCount;
-    const value = amplitude - ratio * amplitude * 2;
-    return { value, y: getY(value), label: formatCompactPnlLabel(value, language) };
-  });
-  const hoverX = getX(clampNumber(hoveredIndex, 0, visibleRows.length - 1));
-
-  return (
-    <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
-      <div className="backtest-unified-chart-viewer__panel-header">
-        <div>
-          <span className="product-kicker">{ctw(language, 'secondaryKicker')}</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">{ctw(language, 'dailyPnlTitle')}</h3>
-        </div>
-      </div>
-      <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={ctw(language, 'dailyPnlChartAria')}>
-          {yTicks.map((tick) => (
-            <g key={`daily-y-${tick.label}`}>
-              <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
-              <text x={paddingLeft - 12} y={tick.y + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>
-                {tick.label}
-              </text>
-            </g>
-          ))}
-          {xTicks.map((tick) => (
-            <text key={`daily-x-${tick.label}`} x={tick.x} y={height - 14} textAnchor="middle" className="chart-card__axis-label" fontSize={config.axisFontSize}>
-              {tick.label}
-            </text>
-          ))}
-          {bars.map((bar, index) => (
-            <rect
-              key={bar.key}
-              x={bar.x}
-              y={bar.y}
-              width={bar.width}
-              height={bar.height}
-              rx="2"
-              className={bar.value >= 0 ? 'chart-card__bar chart-card__bar--positive' : 'chart-card__bar chart-card__bar--negative'}
-              opacity={index === hoveredIndex ? 1 : 0.82}
-            />
-          ))}
-          <line x1={hoverX} y1={paddingTop} x2={hoverX} y2={plotBottom} className="backtest-linked-chart__cursor" />
-          <ChartSurface
-            rows={visibleRows}
-            hoveredIndex={hoveredIndex}
-            onHoverIndexChange={onHoverIndexChange}
-            onHoverLeave={onHoverLeave}
-            testId={surfaceTestId}
-            x={paddingLeft}
-            y={paddingTop}
-            width={usableWidth}
-            height={usableHeight}
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function DrawdownPanel({
-  visibleRows,
-  hoveredIndex,
-  onHoverIndexChange,
-  onHoverLeave,
-  layout,
-  surfaceTestId,
-}: Omit<SharedPanelProps, 'benchmarkMeta'> & { benchmarkMeta?: DeterministicBacktestBenchmarkMeta }) {
-  const { language } = useI18n();
-  const seriesLength = visibleRows.filter((row) => row.drawdownPct != null).length;
-  if (!visibleRows.length || !seriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{ctw(language, 'noDrawdownData')}</div></div>;
-  }
-
-  const { width, density, config } = layout;
-  const height = config.dailyHeight;
-  const paddingLeft = density === 'dense' ? 56 : 64;
-  const paddingRight = 22;
-  const paddingTop = 14;
-  const paddingBottom = density === 'dense' ? 28 : 34;
-  const plotRight = width - paddingRight;
-  const plotBottom = height - paddingBottom;
-  const usableWidth = plotRight - paddingLeft;
-  const usableHeight = plotBottom - paddingTop;
-  const values = visibleRows.map((row) => Math.min(row.drawdownPct ?? 0, 0));
-  const min = Math.min(...values, -1);
-  const span = Math.max(4, Math.abs(min));
-  const getX = (index: number) => paddingLeft + (usableWidth * index) / Math.max(1, visibleRows.length - 1);
-  const getY = (value: number) => paddingTop + ((0 - value) / span) * usableHeight;
-  const line = visibleRows.map((row, index) => `${getX(index)},${getY(Math.min(row.drawdownPct ?? 0, 0))}`).join(' ');
-  const area = `${paddingLeft},${getY(0)} ${line} ${plotRight},${getY(0)}`;
-  const xTicks = buildTickIndices(
-    visibleRows.length,
-    buildVisibleTickCount(visibleRows.length, width, config.xTickMinGap, 5),
-  ).map((index) => ({
-    x: getX(index),
-    label: formatChartDateLabel(visibleRows[index]?.date || '--'),
-  }));
-  const yTicks = Array.from({ length: config.subYTickCount + 1 }, (_, index) => {
-    const ratio = config.subYTickCount === 0 ? 0 : index / config.subYTickCount;
-    const value = 0 - ratio * span;
-    return { value, y: getY(value), label: formatSignedPercent(value, density === 'dense' ? 0 : 1) };
-  });
-  const hoverX = getX(clampNumber(hoveredIndex, 0, visibleRows.length - 1));
-
-  return (
-    <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
-      <div className="backtest-unified-chart-viewer__panel-header">
-        <div>
-          <span className="product-kicker">{ctw(language, 'riskKicker')}</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">{ctw(language, 'drawdownTitle')}</h3>
-        </div>
-      </div>
-      <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={ctw(language, 'drawdownChartAria')}>
-          {yTicks.map((tick) => (
-            <g key={`drawdown-y-${tick.label}`}>
-              <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
-              <text x={paddingLeft - 12} y={tick.y + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>
-                {tick.label}
-              </text>
-            </g>
-          ))}
-          {xTicks.map((tick) => (
-            <text key={`drawdown-x-${tick.label}`} x={tick.x} y={height - 14} textAnchor="middle" className="chart-card__axis-label" fontSize={config.axisFontSize}>
-              {tick.label}
-            </text>
-          ))}
-          <polyline className="comparison-chart__drawdown-area" points={area} />
-          <polyline className="comparison-chart__drawdown-line" points={line} />
-          <line x1={hoverX} y1={paddingTop} x2={hoverX} y2={plotBottom} className="backtest-linked-chart__cursor" />
-          <ChartSurface
-            rows={visibleRows}
-            hoveredIndex={hoveredIndex}
-            onHoverIndexChange={onHoverIndexChange}
-            onHoverLeave={onHoverLeave}
-            testId={surfaceTestId}
-            x={paddingLeft}
-            y={paddingTop}
-            width={usableWidth}
-            height={usableHeight}
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function RelativePerformancePanel({
-  visibleRows,
-  hoveredIndex,
-  onHoverIndexChange,
-  onHoverLeave,
-  benchmarkMeta,
-  layout,
-  surfaceTestId,
-}: SharedPanelProps) {
-  const { language } = useI18n();
-  const comparatorLabel = benchmarkMeta.showBenchmark
-    ? benchmarkMeta.benchmarkLabel
-    : benchmarkMeta.showBuyHold
-      ? benchmarkMeta.buyHoldLabel
-      : null;
-  const series = visibleRows.map((row) => {
-    if (benchmarkMeta.showBenchmark && row.strategyCumReturn != null && row.benchmarkCumReturn != null) {
-      return row.strategyCumReturn - row.benchmarkCumReturn;
-    }
-    if (benchmarkMeta.showBuyHold && row.strategyCumReturn != null && row.buyHoldCumReturn != null) {
-      return row.strategyCumReturn - row.buyHoldCumReturn;
-    }
-    return null;
-  });
-  const seriesLength = series.filter((value): value is number => value != null).length;
-  if (!visibleRows.length || !seriesLength || !comparatorLabel) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{ctw(language, 'noRelativeComparisonData')}</div></div>;
-  }
-
-  const { width, density, config } = layout;
-  const height = config.positionHeight;
-  const paddingLeft = density === 'dense' ? 56 : 64;
-  const paddingRight = 22;
-  const paddingTop = 14;
-  const paddingBottom = density === 'dense' ? 24 : 30;
-  const plotRight = width - paddingRight;
-  const plotBottom = height - paddingBottom;
-  const usableWidth = plotRight - paddingLeft;
-  const usableHeight = plotBottom - paddingTop;
-  const values = series.filter((value): value is number => value != null);
-  const amplitude = Math.max(Math.abs(Math.min(...values, 0)), Math.abs(Math.max(...values, 0)), 2);
-  const getX = (index: number) => paddingLeft + (usableWidth * index) / Math.max(1, visibleRows.length - 1);
-  const getY = (value: number) => paddingTop + usableHeight - ((value + amplitude) / (amplitude * 2)) * usableHeight;
-  const line = series.map((value, index) => `${getX(index)},${getY(value ?? 0)}`).join(' ');
-  const xTicks = buildTickIndices(
-    visibleRows.length,
-    buildVisibleTickCount(visibleRows.length, width, config.xTickMinGap, 5),
-  ).map((index) => ({
-    x: getX(index),
-    label: formatChartDateLabel(visibleRows[index]?.date || '--'),
-  }));
-  const yTicks = Array.from({ length: config.subYTickCount + 1 }, (_, index) => {
-    const ratio = config.subYTickCount === 0 ? 0 : index / config.subYTickCount;
-    const value = amplitude - ratio * amplitude * 2;
-    return { value, y: getY(value), label: formatSignedPercent(value, density === 'dense' ? 0 : 1) };
-  });
-  const hoverX = getX(clampNumber(hoveredIndex, 0, visibleRows.length - 1));
-
-  return (
-    <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
-      <div className="backtest-unified-chart-viewer__panel-header">
-        <div>
-          <span className="product-kicker">{ctw(language, 'relativeKicker')}</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">{ctw(language, 'relativeTitle', { label: comparatorLabel })}</h3>
-        </div>
-      </div>
-      <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={ctw(language, 'relativeComparisonChartAria')}>
-          {yTicks.map((tick) => (
-            <g key={`relative-y-${tick.label}`}>
-              <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
-              <text x={paddingLeft - 12} y={tick.y + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>
-                {tick.label}
-              </text>
-            </g>
-          ))}
-          {xTicks.map((tick) => (
-            <text key={`relative-x-${tick.label}`} x={tick.x} y={height - 12} textAnchor="middle" className="chart-card__axis-label" fontSize={config.axisFontSize}>
-              {tick.label}
-            </text>
-          ))}
-          <polyline className="comparison-chart__relative-line" points={line} />
-          <line x1={hoverX} y1={paddingTop} x2={hoverX} y2={plotBottom} className="backtest-linked-chart__cursor" />
-          <ChartSurface
-            rows={visibleRows}
-            hoveredIndex={hoveredIndex}
-            onHoverIndexChange={onHoverIndexChange}
-            onHoverLeave={onHoverLeave}
-            testId={surfaceTestId}
-            x={paddingLeft}
-            y={paddingTop}
-            width={usableWidth}
-            height={usableHeight}
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function PositionPanel({
-  visibleRows,
-  hoveredIndex,
-  onHoverIndexChange,
-  onHoverLeave,
-  layout,
-  surfaceTestId,
-}: Omit<SharedPanelProps, 'benchmarkMeta'> & { benchmarkMeta?: DeterministicBacktestBenchmarkMeta }) {
-  const { language } = useI18n();
-  const seriesLength = visibleRows.filter((row) => row.position != null).length;
-  if (!visibleRows.length || !seriesLength) {
-    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">{ctw(language, 'noPositionData')}</div></div>;
-  }
-
-  const { width, density, config } = layout;
-  const height = config.positionHeight;
-  const paddingLeft = density === 'dense' ? 56 : 64;
-  const paddingRight = 22;
-  const paddingTop = 14;
-  const paddingBottom = density === 'dense' ? 24 : 30;
-  const plotRight = width - paddingRight;
-  const plotBottom = height - paddingBottom;
-  const usableWidth = plotRight - paddingLeft;
-  const usableHeight = plotBottom - paddingTop;
-  const getX = (index: number) => paddingLeft + (usableWidth * index) / Math.max(1, visibleRows.length - 1);
-  const getY = (value: number) => paddingTop + usableHeight - value * usableHeight;
-  const line = visibleRows.map((row, index) => `${getX(index)},${getY(clampNumber(row.position ?? 0, 0, 1))}`).join(' ');
-  const area = `${paddingLeft},${getY(0)} ${line} ${plotRight},${getY(0)}`;
-  const xTicks = buildTickIndices(
-    visibleRows.length,
-    buildVisibleTickCount(visibleRows.length, width, config.xTickMinGap, 5),
-  ).map((index) => ({
-    x: getX(index),
-    label: formatChartDateLabel(visibleRows[index]?.date || '--'),
-  }));
-  const markerRows = visibleRows
-    .map((row, index) => ({ row, index }))
-    .filter(({ row }) => row.action != null);
-  const markerIndexes = buildTickIndices(
-    markerRows.length,
-    Math.max(4, Math.min(config.markerLimit, Math.floor(width / 96))),
-  );
-  const markers = (markerRows.length > markerIndexes.length
-    ? markerIndexes.map((index) => markerRows[index]).filter(Boolean)
-    : markerRows)
-    .map(({ row, index }) => ({
-      key: `${row.date}:${row.action}:${index}`,
-      x: getX(index),
-      y: getY(row.action === 'sell' || row.action === 'forced_close' ? 0.12 : Math.max(0.2, row.position ?? 0.88)),
-      action: row.action === 'sell' || row.action === 'forced_close' ? 'sell' : 'buy',
-    }));
-  const hoverX = getX(clampNumber(hoveredIndex, 0, visibleRows.length - 1));
-
-  return (
-    <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
-      <div className="backtest-unified-chart-viewer__panel-header">
-        <div>
-          <span className="product-kicker">{ctw(language, 'secondaryKicker')}</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">{ctw(language, 'positionTitle')}</h3>
-        </div>
-      </div>
-      <div className="chart-card__frame">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={ctw(language, 'positionChartAria')}>
-          <line x1={paddingLeft} y1={getY(0)} x2={plotRight} y2={getY(0)} className="chart-card__grid" />
-          <line x1={paddingLeft} y1={getY(1)} x2={plotRight} y2={getY(1)} className="chart-card__grid" />
-          <text x={paddingLeft - 12} y={getY(1) + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>{ctw(language, 'axisLong')}</text>
-          <text x={paddingLeft - 12} y={getY(0) + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>{ctw(language, 'axisFlat')}</text>
-          <polyline className="chart-card__area-line" points={area} />
-          <polyline className="chart-card__line chart-card__line--exposure" points={line} />
-          {markers.map((marker) => (
-            <g key={marker.key} className={`chart-card__marker chart-card__marker--${marker.action} chart-card__marker--exposure`}>
-              {marker.action === 'buy' ? <circle cx={marker.x} cy={marker.y} r={2.8} /> : <rect x={marker.x - 2.6} y={marker.y - 2.6} width={5.2} height={5.2} rx="1.2" />}
-            </g>
-          ))}
-          {xTicks.map((tick) => (
-            <text key={`position-x-${tick.label}`} x={tick.x} y={height - 12} textAnchor="middle" className="chart-card__axis-label" fontSize={config.axisFontSize}>
-              {tick.label}
-            </text>
-          ))}
-          <line x1={hoverX} y1={paddingTop} x2={hoverX} y2={plotBottom} className="backtest-linked-chart__cursor" />
-          <ChartSurface
-            rows={visibleRows}
-            hoveredIndex={hoveredIndex}
-            onHoverIndexChange={onHoverIndexChange}
-            onHoverLeave={onHoverLeave}
-            testId={surfaceTestId}
-            x={paddingLeft}
-            y={paddingTop}
-            width={usableWidth}
-            height={usableHeight}
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function RangeBrushPanel({
-  allRows,
-  visibleStartIndex,
-  visibleEndIndex,
-  onChange,
-  height,
-}: {
-  allRows: DeterministicBacktestNormalizedRow[];
-  visibleStartIndex: number;
-  visibleEndIndex: number;
-  onChange: (start: number, end: number) => void;
-  height: number;
-}) {
-  const { language } = useI18n();
-  if (!allRows.length) return null;
-
-  const width = RANGE_BRUSH_WIDTH;
-  const padding = RANGE_BRUSH_PADDING;
-  const plotWidth = width - padding * 2;
-  const plotHeight = height - padding * 2;
-  const values = allRows.map((row) => row.strategyCumReturn ?? 0);
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 0);
-  const span = Math.max(1, max - min);
-  const getX = (index: number) => padding + (plotWidth * index) / Math.max(1, allRows.length - 1);
-  const getY = (value: number) => padding + plotHeight - ((value - min) / span) * plotHeight;
-  const points = allRows.map((row, index) => `${getX(index)},${getY(row.strategyCumReturn ?? 0)}`).join(' ');
-  const leftPct = allRows.length <= 1 ? 0 : (visibleStartIndex / (allRows.length - 1)) * 100;
-  const rightPct = allRows.length <= 1 ? 100 : (visibleEndIndex / (allRows.length - 1)) * 100;
-
-  return (
-    <div className="backtest-range-brush backtest-unified-chart-viewer__panel backtest-unified-chart-viewer__panel--brush">
-      <div className="backtest-unified-chart-viewer__panel-header">
-        <div>
-          <span className="product-kicker">{ctw(language, 'rangeKicker')}</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">{ctw(language, 'linkedTimeWindow')}</h3>
-        </div>
-        <span className="product-inline-meta">{allRows[visibleStartIndex]?.date} {'->'} {allRows[visibleEndIndex]?.date}</span>
-      </div>
-      <div className="backtest-range-brush__overview">
-        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label={ctw(language, 'rangeSelectorAria')}>
-          <polyline className="chart-card__line chart-card__line--strategy backtest-range-brush__line" points={points} />
-        </svg>
-        <div className="backtest-range-brush__selection" style={{ left: `${leftPct}%`, width: `${Math.max(rightPct - leftPct, 1)}%` }} />
-      </div>
-      <div className="backtest-range-brush__controls">
-        <label className="backtest-range-brush__slider">
-          <span>{ctw(language, 'start')}</span>
-          <input
-            aria-label={ctw(language, 'start')}
-            type="range"
-            min={0}
-            max={Math.max(allRows.length - 1, 0)}
-            value={visibleStartIndex}
-            onChange={(event) => onChange(Math.min(Number(event.target.value), visibleEndIndex), visibleEndIndex)}
-          />
-        </label>
-        <label className="backtest-range-brush__slider">
-          <span>{ctw(language, 'end')}</span>
-          <input
-            aria-label={ctw(language, 'end')}
-            type="range"
-            min={0}
-            max={Math.max(allRows.length - 1, 0)}
-            value={visibleEndIndex}
-            onChange={(event) => onChange(visibleStartIndex, Math.max(Number(event.target.value), visibleStartIndex))}
-          />
-        </label>
-      </div>
-    </div>
-  );
-}
-
-function HoverDetail({
-  row,
-  benchmarkMeta,
-  position,
-  tooltipRef,
-  density,
-}: {
-  row: DeterministicBacktestNormalizedRow | null;
-  benchmarkMeta: DeterministicBacktestBenchmarkMeta;
-  position: { left: number; top: number } | null;
-  tooltipRef: React.RefObject<HTMLDivElement | null>;
-  density: DeterministicResultDensityMode;
-}) {
-  const { language } = useI18n();
-  const positionLabel = formatPosition(row?.position);
-  const primaryFields = row ? [
-    { label: ctw(language, 'fieldDate'), value: row.date },
-    { label: ctw(language, 'fieldStrategyCumulativeReturn'), value: pct(row.strategyCumReturn) },
-    ...(benchmarkMeta.showBenchmark && row.benchmarkCumReturn != null
-      ? [{ label: benchmarkMeta.benchmarkLabel, value: pct(row.benchmarkCumReturn) }]
-      : []),
-    ...(benchmarkMeta.showBuyHold && row.buyHoldCumReturn != null
-      ? [{ label: benchmarkMeta.buyHoldLabel, value: pct(row.buyHoldCumReturn) }]
-      : []),
-    ...(row.dailyPnl != null ? [{ label: ctw(language, 'dailyPnl'), value: formatNumber(row.dailyPnl) }] : []),
-    ...(row.dailyReturn != null ? [{ label: ctw(language, 'fieldDailyReturn'), value: pct(row.dailyReturn) }] : []),
-    ...(positionLabel ? [{ label: ctw(language, 'fieldPosition'), value: positionLabel }] : []),
-    ...(row.action != null ? [{ label: ctw(language, 'fieldAction'), value: formatDeterministicActionLabel(row.action, language) }] : []),
-    ...(row.fillPrice != null ? [{ label: ctw(language, 'fieldFillPrice'), value: formatNumber(row.fillPrice) }] : []),
-    ...(row.shares != null ? [{ label: ctw(language, 'fieldSharesHeld'), value: formatNumber(row.shares, 4) }] : []),
-    ...(row.cash != null ? [{ label: ctw(language, 'fieldCash'), value: formatNumber(row.cash) }] : []),
-    ...(row.totalValue != null ? [{ label: ctw(language, 'fieldTotalEquity'), value: formatNumber(row.totalValue) }] : []),
-  ] : [];
-  const detailBlocks = row ? [
-    { label: ctw(language, 'fieldSignalSummary'), value: row.signalSummary || '--' },
-    ...(row.notes ? [{ label: ctw(language, 'fieldNotes'), value: row.notes }] : []),
-    ...(row.unavailableReason ? [{ label: ctw(language, 'fieldUnavailableReason'), value: row.unavailableReason }] : []),
-  ] : [];
-
-  return (
-    <div
-      ref={tooltipRef}
-      className="backtest-unified-chart-viewer__hover backtest-unified-chart-viewer__hover--floating"
-      data-testid="deterministic-chart-hover-card"
-      data-density={density}
-      data-visible={position && row ? 'true' : 'false'}
-      data-tooltip-left={position ? Math.round(position.left) : ''}
-      data-tooltip-top={position ? Math.round(position.top) : ''}
-      style={position && row
-        ? {
-          left: `${position.left}px`,
-          top: `${position.top}px`,
-        }
-        : {
-          left: '0px',
-          top: '0px',
-          opacity: 0,
-          visibility: 'hidden',
-        }}
-    >
-      <div className="backtest-unified-chart-viewer__hover-header">
-        <div>
-          <span className="product-kicker">{ctw(language, 'hoverKicker')}</span>
-          <h3 className="backtest-unified-chart-viewer__panel-title">{ctw(language, 'dayDetail')}</h3>
-        </div>
-        {row ? <span className="product-inline-meta">{row.date}</span> : null}
-      </div>
-      {!row ? (
-        <p className="product-empty-note">{ctw(language, 'hoverEmpty')}</p>
-      ) : (
-        <div className="backtest-tooltip">
-          <dl className="backtest-tooltip__grid">
-          {primaryFields.map((field) => (
-            <div key={field.label} className="backtest-tooltip__row">
-              <dt className="backtest-tooltip__label" title={field.label}>{field.label}</dt>
-              <dd className="backtest-tooltip__value" title={field.value}>{field.value}</dd>
-            </div>
-          ))}
-          </dl>
-          <dl className="backtest-tooltip__stack">
-            {detailBlocks.map((field) => (
-              <div key={field.label} className="backtest-tooltip__section">
-                <dt className="backtest-tooltip__label" title={field.label}>{field.label}</dt>
-                <dd className="backtest-tooltip__text" title={field.value}>{field.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChartHeader({
-  totalRows,
-  visibleRowsLength,
-  onApplyQuickRange,
-  secondaryPanelMode,
-  onSecondaryPanelModeChange,
-}: {
-  totalRows: number;
-  visibleRowsLength: number;
-  onApplyQuickRange: (bars: number | 'all') => void;
-  secondaryPanelMode: SecondaryPanelMode;
-  onSecondaryPanelModeChange: (mode: SecondaryPanelMode) => void;
-}) {
-  const { language } = useI18n();
-  return (
-      <div className="backtest-result-viewer__toolbar">
-        <div className="product-chip-list">
-          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange('all')}>{ctw(language, 'all')}</button>
-          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange(63)}>{ctw(language, 'lastThreeMonths')}</button>
-          <button type="button" className="product-chip product-chip--interactive" onClick={() => onApplyQuickRange(21)}>{ctw(language, 'lastMonth')}</button>
-          <span className="product-chip">{ctw(language, 'visibleWindow', { count: visibleRowsLength })}</span>
-          <span className="product-chip">{ctw(language, 'fullRange', { count: totalRows })}</span>
-        </div>
-        <div className="product-chip-list product-chip-list--tight">
-          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'relative' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('relative')}>{ctw(language, 'relativeComparison')}</button>
-          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'daily' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('daily')}>{ctw(language, 'dailyPnl')}</button>
-          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'position' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('position')}>{ctw(language, 'positionActivity')}</button>
-        </div>
-      <p className="backtest-result-viewer__toolbar-note">{ctw(language, 'toolbarNote')}</p>
-    </div>
-  );
+function getDateRangeLabel(rows: DeterministicBacktestNormalizedRow[]): string {
+  if (!rows.length) return '--';
+  const first = rows[0]?.date ?? '--';
+  const last = rows[rows.length - 1]?.date ?? '--';
+  return `${first} → ${last}`;
 }
 
 export const DeterministicBacktestChartWorkspace: React.FC<{
   normalized: DeterministicBacktestNormalizedResult;
+  run: RuleBacktestRunResponse;
   densityConfig: DeterministicResultDensityConfig;
-}> = ({ normalized, densityConfig }) => {
-  const layout = useMemo(() => createPanelLayout(densityConfig), [densityConfig]);
-  const shellRef = useRef<HTMLDivElement | null>(null);
-  const { ref: tooltipRef, size: tooltipSize } = useElementSize<HTMLDivElement>();
-  const allRows = normalized.rows;
-  const totalRows = allRows.length;
-  const [visibleStartIndex, setVisibleStartIndex] = useState(0);
-  const [visibleEndIndex, setVisibleEndIndex] = useState(Math.max(totalRows - 1, 0));
-  const [hoverIndex, setHoverIndex] = useState(Math.max(totalRows - 1, 0));
-  const [secondaryPanelMode, setSecondaryPanelMode] = useState<SecondaryPanelMode>('relative');
-  const [hoverAnchor, setHoverAnchor] = useState<{
-    x: number;
-    y: number;
-    shellWidth: number;
-    shellHeight: number;
-  } | null>(null);
+}> = ({ normalized, run, densityConfig }) => {
+  const { language } = useI18n();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<ECharts | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { ref: sizeRef, size } = useElementSize();
+  const width = size.width;
+  const height = size.height;
+  const rows = normalized.rows;
 
-  const safeVisibleStartIndex = totalRows > 0 ? clampNumber(visibleStartIndex, 0, totalRows - 1) : 0;
-  const safeVisibleEndIndex = totalRows > 0
-    ? clampNumber(Math.max(visibleEndIndex, safeVisibleStartIndex), safeVisibleStartIndex, totalRows - 1)
-    : 0;
+  const metaStrip = useMemo(() => {
+    const benchmarkLabel = normalized.benchmarkMeta.showBenchmark
+      ? normalized.benchmarkMeta.benchmarkLabel
+      : (language === 'en' ? 'No benchmark' : '无基准');
+    return [
+      { label: language === 'en' ? 'Date window' : '回测区间', value: getDateRangeLabel(rows) },
+      { label: language === 'en' ? 'Initial capital' : '初始本金', value: formatCompactNumber(run.initialCapital, language) },
+      { label: language === 'en' ? 'Benchmark' : '基准模式', value: benchmarkLabel },
+      { label: language === 'en' ? 'Lookback' : '回看窗口', value: `${run.lookbackBars ?? '--'}` },
+      { label: language === 'en' ? 'Costs' : '交易成本', value: `${run.feeBps ?? 0} / ${run.slippageBps ?? 0} bps` },
+    ];
+  }, [language, normalized.benchmarkMeta, rows, run]);
 
-  const visibleRows = useMemo(
-    () => (totalRows > 0 ? allRows.slice(safeVisibleStartIndex, safeVisibleEndIndex + 1) : []),
-    [allRows, safeVisibleEndIndex, safeVisibleStartIndex, totalRows],
-  );
+  const option = useMemo<EChartsOption>(() => {
+    const dates = rows.map((row) => row.date);
+    const strategySeries = rows.map((row) => row.strategyCumReturn ?? null);
+    const benchmarkSeries = rows.map((row) => row.benchmarkCumReturn ?? row.buyHoldCumReturn ?? null);
+    const pnlSeries = rows.map((row) => row.dailyPnl ?? 0);
+    const volumeSeries = rows.map((row) => getVolumeValue(row));
+    const startValue = Math.max(0, dates.length - Math.min(dates.length, densityConfig.mode === 'dense' ? 140 : 110));
+    const tooltipLabels = {
+      date: language === 'en' ? 'Date' : '日期',
+      strategy: language === 'en' ? 'Strategy return' : '策略收益',
+      benchmark: language === 'en' ? 'Benchmark return' : '基准收益',
+      pnl: language === 'en' ? 'Daily P&L' : '当日盈亏',
+      volume: language === 'en' ? 'Trade volume' : '买卖量',
+    };
 
-  const safeHoverIndex = visibleRows.length > 0 ? clampNumber(hoverIndex, 0, visibleRows.length - 1) : 0;
-  const hoveredRow = visibleRows[safeHoverIndex] ?? null;
-  const tooltipPosition = useMemo(() => {
-    if (!hoverAnchor || !hoveredRow) return null;
-    const fallbackTooltipWidth = densityConfig.mode === 'comfortable'
-      ? 288
-      : densityConfig.mode === 'compact'
-        ? 256
-        : 224;
-    const fallbackTooltipHeight = densityConfig.mode === 'comfortable'
-      ? 220
-      : densityConfig.mode === 'compact'
-        ? 200
-        : 180;
-    const tooltipWidth = tooltipSize.width > 0 ? tooltipSize.width : fallbackTooltipWidth;
-    const tooltipHeight = tooltipSize.height > 0 ? tooltipSize.height : fallbackTooltipHeight;
-    const offsetX = densityConfig.tooltipOffsetX;
-    const offsetY = densityConfig.tooltipOffsetY;
-    const minEdge = densityConfig.tooltipEdgePadding;
-    let left = hoverAnchor.x + offsetX;
-    if (left + tooltipWidth > hoverAnchor.shellWidth - minEdge) {
-      left = hoverAnchor.x - tooltipWidth - offsetX;
-    }
-    left = clampNumber(left, minEdge, Math.max(minEdge, hoverAnchor.shellWidth - tooltipWidth - minEdge));
+    return {
+      animation: false,
+      backgroundColor: 'transparent',
+      grid: [
+        { left: 64, right: 20, top: 20, height: '50%' },
+        { left: 64, right: 20, top: '58%', height: '16%' },
+        { left: 64, right: 20, top: '79%', height: '15%' },
+      ],
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: 'rgba(7, 10, 18, 0.88)',
+        borderColor: 'rgba(255,255,255,0.08)',
+        borderWidth: 1,
+        padding: 16,
+        textStyle: {
+          color: '#f5f7fb',
+          fontSize: 12,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        },
+        extraCssText: 'border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,0.45);backdrop-filter:blur(16px);',
+        axisPointer: {
+          type: 'cross',
+          lineStyle: {
+            color: 'rgba(255,255,255,0.22)',
+            width: 1,
+            type: 'solid',
+          },
+          crossStyle: {
+            color: 'rgba(255,255,255,0.22)',
+          },
+          label: {
+            backgroundColor: 'rgba(10,12,20,0.94)',
+            color: '#f5f7fb',
+          },
+        },
+        formatter: (params: unknown) => {
+          const items = Array.isArray(params) ? params : [params];
+          const first = items[0] as { axisValue?: string } | undefined;
+          const date = first?.axisValue ?? '--';
+          const index = Math.max(0, dates.indexOf(date));
+          const strategy = strategySeries[index];
+          const benchmark = benchmarkSeries[index];
+          const pnl = pnlSeries[index];
+          const volume = volumeSeries[index];
+          return [
+            `<div style="font-size:11px;color:rgba(255,255,255,0.58);margin-bottom:10px;">${tooltipLabels.date}</div>`,
+            `<div style="font-size:15px;font-weight:600;margin-bottom:12px;">${date}</div>`,
+            `<div style="display:grid;grid-template-columns:auto auto;gap:8px 18px;">`,
+            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.strategy}</span><span style="text-align:right;color:#34d399;">${formatSignedPercent(strategy)}</span>`,
+            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.benchmark}</span><span style="text-align:right;color:#9db4ff;">${formatSignedPercent(benchmark)}</span>`,
+            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.pnl}</span><span style="text-align:right;color:${(pnl ?? 0) >= 0 ? '#34d399' : '#fb7185'};">${formatSignedNumber(pnl)}</span>`,
+            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.volume}</span><span style="text-align:right;color:#d7dde8;">${formatCompactNumber(volume, language)}</span>`,
+            `</div>`,
+          ].join('');
+        },
+      },
+      axisPointer: {
+        link: [{ xAxisIndex: 'all' }],
+      },
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: [0, 1, 2],
+          startValue,
+          endValue: dates.length - 1,
+          minSpan: 5,
+          zoomLock: false,
+          moveOnMouseWheel: true,
+        },
+      ],
+      xAxis: [
+        {
+          type: 'category',
+          boundaryGap: false,
+          data: dates,
+          gridIndex: 0,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { show: false },
+          splitLine: { show: false },
+        },
+        {
+          type: 'category',
+          boundaryGap: true,
+          data: dates,
+          gridIndex: 1,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { show: false },
+          splitLine: { show: false },
+        },
+        {
+          type: 'category',
+          boundaryGap: true,
+          data: dates,
+          gridIndex: 2,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            color: 'rgba(255,255,255,0.42)',
+            margin: 14,
+            formatter: (value: string) => formatDateLabel(value),
+          },
+          splitLine: { show: false },
+        },
+      ],
+      yAxis: [
+        {
+          type: 'value',
+          gridIndex: 0,
+          scale: true,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            color: 'rgba(255,255,255,0.42)',
+            formatter: (value: number) => `${value.toFixed(0)}%`,
+          },
+          splitLine: { show: false },
+        },
+        {
+          type: 'value',
+          gridIndex: 1,
+          scale: true,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            color: 'rgba(255,255,255,0.35)',
+            formatter: (value: number) => formatCompactNumber(value, language),
+          },
+          splitLine: { show: false },
+        },
+        {
+          type: 'value',
+          gridIndex: 2,
+          min: 0,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            color: 'rgba(255,255,255,0.35)',
+            formatter: (value: number) => formatCompactNumber(value, language),
+          },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: tooltipLabels.strategy,
+          type: 'line',
+          xAxisIndex: 0,
+          yAxisIndex: 0,
+          smooth: 0.16,
+          symbol: 'none',
+          data: strategySeries,
+          lineStyle: {
+            width: 2.5,
+            color: '#34d399',
+            shadowBlur: 12,
+            shadowColor: 'rgba(52,211,153,0.45)',
+          },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(52,211,153,0.16)' },
+              { offset: 1, color: 'rgba(52,211,153,0.01)' },
+            ]),
+          },
+        },
+        {
+          name: tooltipLabels.benchmark,
+          type: 'line',
+          xAxisIndex: 0,
+          yAxisIndex: 0,
+          smooth: 0.16,
+          symbol: 'none',
+          data: benchmarkSeries,
+          lineStyle: {
+            width: 2,
+            color: '#8aa0c8',
+            shadowBlur: 10,
+            shadowColor: 'rgba(138,160,200,0.24)',
+          },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(138,160,200,0.09)' },
+              { offset: 1, color: 'rgba(138,160,200,0.01)' },
+            ]),
+          },
+        },
+        {
+          name: tooltipLabels.pnl,
+          type: 'bar',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: pnlSeries.map((value) => ({
+            value,
+            itemStyle: {
+              color: value >= 0 ? 'rgba(52,211,153,0.82)' : 'rgba(251,113,133,0.82)',
+              borderRadius: [4, 4, 0, 0],
+            },
+          })),
+          barWidth: '56%',
+        },
+        {
+          name: tooltipLabels.volume,
+          type: 'bar',
+          xAxisIndex: 2,
+          yAxisIndex: 2,
+          data: volumeSeries,
+          itemStyle: {
+            color: 'rgba(164,177,197,0.58)',
+            borderRadius: [4, 4, 0, 0],
+          },
+          barWidth: '56%',
+        },
+      ],
+    };
+  }, [densityConfig.mode, language, normalized, rows]);
 
-    let top = hoverAnchor.y + offsetY;
-    if (top + tooltipHeight > hoverAnchor.shellHeight - minEdge) {
-      top = hoverAnchor.y - tooltipHeight - offsetY;
-    }
-    top = clampNumber(top, minEdge, Math.max(minEdge, hoverAnchor.shellHeight - tooltipHeight - minEdge));
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host || width <= 0 || height <= 0 || host.clientWidth <= 0 || host.clientHeight <= 0) return undefined;
+    const instance = chartRef.current ?? echarts.init(containerRef.current, undefined, { renderer: 'canvas' });
+    chartRef.current = instance;
+    const setOpts: SetOptionOpts = { notMerge: true, lazyUpdate: true };
+    instance.setOption(option, setOpts);
+    instance.resize();
+    return undefined;
+  }, [height, option, width]);
 
-    return { left, top };
-  }, [densityConfig.mode, densityConfig.tooltipEdgePadding, densityConfig.tooltipOffsetX, densityConfig.tooltipOffsetY, hoverAnchor, hoveredRow, tooltipSize.height, tooltipSize.width]);
-
-  const applyVisibleRange = (start: number, end: number) => {
-    if (!totalRows) {
-      setVisibleStartIndex(0);
-      setVisibleEndIndex(0);
-      setHoverIndex(0);
-      setHoverAnchor(null);
-      return;
-    }
-    const nextStart = clampNumber(start, 0, totalRows - 1);
-    const nextEnd = clampNumber(Math.max(end, nextStart), nextStart, totalRows - 1);
-    setVisibleStartIndex(nextStart);
-    setVisibleEndIndex(nextEnd);
-    setHoverIndex((previousHoverIndex) => clampNumber(previousHoverIndex, 0, Math.max(nextEnd - nextStart, 0)));
-  };
-
-  const applyQuickRange = (bars: number | 'all') => {
-    if (!totalRows) return;
-    if (bars === 'all') {
-      applyVisibleRange(0, totalRows - 1);
-      return;
-    }
-    const nextEnd = totalRows - 1;
-    const nextStart = Math.max(0, nextEnd - bars + 1);
-    applyVisibleRange(nextStart, nextEnd);
-  };
-
-  const handleHoverIndexChange = (index: number, geometry?: { clientX: number; clientY: number }) => {
-    setHoverIndex(index);
-    if (!geometry || !shellRef.current) return;
-    const shellRect = shellRef.current.getBoundingClientRect();
-    setHoverAnchor({
-      x: geometry.clientX - shellRect.left,
-      y: geometry.clientY - shellRect.top,
-      shellWidth: shellRect.width,
-      shellHeight: shellRect.height,
-    });
-  };
-
-  const handleHoverLeave = () => {
-    setHoverAnchor(null);
-  };
+  useEffect(() => () => {
+    chartRef.current?.dispose();
+    chartRef.current = null;
+  }, []);
 
   return (
-    <div
-      className="backtest-unified-chart-viewer"
+    <section
+      className="backtest-void-workspace"
       data-testid="deterministic-backtest-chart-workspace"
-      data-density={layout.density}
-      data-run-id={normalized.viewerMeta.runId}
-      data-row-count={normalized.viewerMeta.rowCount}
-      data-visible-start-index={safeVisibleStartIndex}
-      data-visible-end-index={safeVisibleEndIndex}
-      data-visible-rows={visibleRows.length}
-      data-hover-index={safeHoverIndex}
-      data-hovered-date={hoveredRow?.date ?? ''}
-      data-main-series-length={normalized.viewerMeta.strategySeriesLength}
-      data-daily-pnl-series-length={normalized.viewerMeta.dailyPnlSeriesLength}
-      data-position-series-length={normalized.viewerMeta.positionSeriesLength}
-      data-main-panel-height={layout.config.mainHeight}
-      data-daily-panel-height={layout.config.dailyHeight}
-      data-position-panel-height={layout.config.positionHeight}
-      data-brush-height={layout.config.brushHeight}
-      data-tooltip-visible={tooltipPosition && hoveredRow ? 'true' : 'false'}
+      data-row-count={rows.length}
+      data-main-series-length={rows.filter((row) => row.strategyCumReturn != null).length}
+      data-daily-pnl-series-length={rows.filter((row) => row.dailyPnl != null).length}
+      data-position-series-length={rows.filter((row) => row.position != null).length}
+      data-chart-engine="echarts"
     >
-      <ChartHeader
-        totalRows={totalRows}
-        visibleRowsLength={visibleRows.length}
-        onApplyQuickRange={applyQuickRange}
-        secondaryPanelMode={secondaryPanelMode}
-        onSecondaryPanelModeChange={setSecondaryPanelMode}
-      />
-      <div
-        ref={(node) => {
-          shellRef.current = node;
-        }}
-        className="backtest-unified-chart-viewer__workspace-shell"
-      >
-        <HoverDetail
-          row={hoveredRow}
-          benchmarkMeta={normalized.benchmarkMeta}
-          position={tooltipPosition}
-          tooltipRef={tooltipRef}
-          density={layout.density}
-        />
-        <div className="backtest-unified-chart-viewer__panels">
-          <ReturnPanel
-            visibleRows={visibleRows}
-            hoveredIndex={safeHoverIndex}
-            onHoverIndexChange={handleHoverIndexChange}
-            onHoverLeave={handleHoverLeave}
-            benchmarkMeta={normalized.benchmarkMeta}
-            layout={layout}
-            surfaceTestId="deterministic-chart-surface-return"
-          />
-          <DrawdownPanel
-            visibleRows={visibleRows}
-            hoveredIndex={safeHoverIndex}
-            onHoverIndexChange={handleHoverIndexChange}
-            onHoverLeave={handleHoverLeave}
-            benchmarkMeta={normalized.benchmarkMeta}
-            layout={layout}
-            surfaceTestId="deterministic-chart-surface-drawdown"
-          />
-          {secondaryPanelMode === 'daily' ? (
-            <DailyPnlPanel
-              visibleRows={visibleRows}
-              hoveredIndex={safeHoverIndex}
-              onHoverIndexChange={handleHoverIndexChange}
-              onHoverLeave={handleHoverLeave}
-              benchmarkMeta={normalized.benchmarkMeta}
-              layout={layout}
-              surfaceTestId="deterministic-chart-surface-daily-pnl"
+      <div className="backtest-void-workspace__meta" data-testid="deterministic-chart-meta-strip">
+        {metaStrip.map((item) => (
+          <div key={item.label} className="backtest-void-workspace__meta-card">
+            <span className="backtest-void-workspace__meta-label">{item.label}</span>
+            <span className="backtest-void-workspace__meta-value">{item.value}</span>
+          </div>
+        ))}
+      </div>
+      <div className="backtest-void-workspace__body" ref={sizeRef as React.RefObject<HTMLDivElement>}>
+        <aside className={`backtest-void-workspace__sidebar ${sidebarOpen ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="backtest-void-workspace__sidebar-toggle"
+            onClick={() => setSidebarOpen((value) => !value)}
+            aria-expanded={sidebarOpen}
+          >
+            <span>{language === 'en' ? 'Parameters' : '回测参数'}</span>
+          </button>
+          <div className="backtest-void-workspace__sidebar-panel">
+            <dl className="backtest-void-workspace__facts">
+              <div><dt>{language === 'en' ? 'Symbol' : '标的'}</dt><dd>{run.code}</dd></div>
+              <div><dt>{language === 'en' ? 'Period' : '区间'}</dt><dd>{getDateRangeLabel(rows)}</dd></div>
+              <div><dt>{language === 'en' ? 'Initial capital' : '初始本金'}</dt><dd>{formatCompactNumber(run.initialCapital, language)}</dd></div>
+              <div><dt>{language === 'en' ? 'Fees' : '手续费'}</dt><dd>{run.feeBps ?? 0} bps</dd></div>
+              <div><dt>{language === 'en' ? 'Slippage' : '滑点'}</dt><dd>{run.slippageBps ?? 0} bps</dd></div>
+              <div><dt>{language === 'en' ? 'Benchmark' : '基准'}</dt><dd>{normalized.benchmarkMeta.benchmarkLabel}</dd></div>
+            </dl>
+          </div>
+        </aside>
+        <div className="backtest-void-workspace__chart-card">
+          <div className="backtest-void-workspace__chart-header">
+            <div>
+              <p className="backtest-void-workspace__eyebrow">{language === 'en' ? 'Triple-linked charts' : '三图联动'}</p>
+              <h3>{language === 'en' ? 'Performance / Daily P&L / Volume' : '收益曲线 / 每日盈亏 / 买卖量'}</h3>
+            </div>
+            <div className="backtest-void-workspace__legend">
+              <span className="is-strategy">{language === 'en' ? 'Strategy' : '策略'}</span>
+              <span className="is-benchmark">{language === 'en' ? 'Benchmark' : '基准'}</span>
+              <span className="is-pnl">{language === 'en' ? 'P&L' : '盈亏'}</span>
+            </div>
+          </div>
+          <div className="backtest-void-workspace__chart-shell">
+            <div
+              ref={containerRef}
+              className="backtest-void-workspace__chart-canvas"
+              role="img"
+              aria-label={ctw(language, 'cumulativeReturnChartAria')}
             />
-          ) : null}
-          {secondaryPanelMode === 'position' ? (
-            <PositionPanel
-              visibleRows={visibleRows}
-              hoveredIndex={safeHoverIndex}
-              onHoverIndexChange={handleHoverIndexChange}
-              onHoverLeave={handleHoverLeave}
-              benchmarkMeta={normalized.benchmarkMeta}
-              layout={layout}
-              surfaceTestId="deterministic-chart-surface-position"
-            />
-          ) : null}
-          {secondaryPanelMode === 'relative' ? (
-            <RelativePerformancePanel
-              visibleRows={visibleRows}
-              hoveredIndex={safeHoverIndex}
-              onHoverIndexChange={handleHoverIndexChange}
-              onHoverLeave={handleHoverLeave}
-              benchmarkMeta={normalized.benchmarkMeta}
-              layout={layout}
-              surfaceTestId="deterministic-chart-surface-relative"
-            />
-          ) : null}
+          </div>
         </div>
       </div>
-      <RangeBrushPanel
-        allRows={allRows}
-        visibleStartIndex={safeVisibleStartIndex}
-        visibleEndIndex={safeVisibleEndIndex}
-        onChange={applyVisibleRange}
-        height={layout.config.brushHeight}
-      />
-    </div>
+    </section>
   );
 };

@@ -1,7 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { Pie, PieChart, ResponsiveContainer, Tooltip, Legend, Cell } from 'recharts';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
@@ -25,8 +24,6 @@ import type {
   PortfolioCostMethod,
   PortfolioFxRefreshResponse,
   PortfolioImportBrokerItem,
-  PortfolioImportCommitResponse,
-  PortfolioImportParseResponse,
   PortfolioIbkrSyncResponse,
   PortfolioPositionItem,
   PortfolioRiskResponse,
@@ -36,8 +33,9 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
+const PORTFOLIO_INPUT_CLASS = 'w-full bg-transparent border-0 border-b border-white/10 px-0 pb-2 pt-1 text-base text-white placeholder:text-white/28 focus:outline-none focus:border-white/50';
+const PORTFOLIO_SELECT_CLASS = 'w-full bg-transparent border-0 border-b border-white/10 px-0 pb-2 pt-1 text-base text-white focus:outline-none focus:border-white/50';
 
-const PIE_COLORS = ['#f0f0fa', '#d8d8e2', '#b5b5c1', '#8d8d98', '#6b6b74', '#4c4c53'];
 const ATTRIBUTION_VISUAL_COLORS = ['#7dd3fc', '#86efac', '#fbbf24'];
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
@@ -344,13 +342,6 @@ function formatBrokerLabel(value: string, displayName: string | undefined, langu
 function formatAccountMarketLabel(value: string, language: PortfolioLanguage): string {
   const normalized = value === 'global' || value === 'hk' || value === 'us' ? value : 'cn';
   return translate(language, `portfolio.marketLabel.${normalized}`);
-}
-
-function formatBrokerConnectionStatus(value: string, language: PortfolioLanguage): string {
-  const normalized = String(value || '').trim().toLowerCase();
-  const label = translate(language, `portfolio.brokerStatus.${normalized}`);
-  if (label !== `portfolio.brokerStatus.${normalized}`) return label;
-  return value || '--';
 }
 
 function formatPositionContext(market: string, currency: string, language: PortfolioLanguage): string {
@@ -823,13 +814,6 @@ const PortfolioPage: React.FC = () => {
   const [brokers, setBrokers] = useState<PortfolioImportBrokerItem[]>([]);
   const [brokerConnections, setBrokerConnections] = useState<PortfolioBrokerConnectionItem[]>([]);
   const [selectedBroker, setSelectedBroker] = useState('huatai');
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [csvDryRun, setCsvDryRun] = useState(true);
-  const [csvParsing, setCsvParsing] = useState(false);
-  const [csvCommitting, setCsvCommitting] = useState(false);
-  const [csvParseResult, setCsvParseResult] = useState<PortfolioImportParseResponse | null>(null);
-  const [csvCommitResult, setCsvCommitResult] = useState<PortfolioImportCommitResponse | null>(null);
-  const [brokerLoadWarning, setBrokerLoadWarning] = useState<string | null>(null);
   const [ibkrApiBaseUrl, setIbkrApiBaseUrl] = useState('https://localhost:5000/v1/api');
   const [ibkrVerifySsl, setIbkrVerifySsl] = useState(false);
   const [ibkrSessionToken, setIbkrSessionToken] = useState('');
@@ -837,17 +821,15 @@ const PortfolioPage: React.FC = () => {
   const [ibkrSyncing, setIbkrSyncing] = useState(false);
   const [ibkrSyncResult, setIbkrSyncResult] = useState<PortfolioIbkrSyncResponse | null>(null);
 
-  const [eventType, setEventType] = useState<EventType>('trade');
-  const [eventDateFrom, setEventDateFrom] = useState('');
-  const [eventDateTo, setEventDateTo] = useState('');
-  const [eventSymbol, setEventSymbol] = useState('');
-  const [eventSide, setEventSide] = useState<'' | PortfolioSide>('');
-  const [eventDirection, setEventDirection] = useState<'' | PortfolioCashDirection>('');
-  const [eventActionType, setEventActionType] = useState<'' | PortfolioCorporateActionType>('');
+  const [eventType] = useState<EventType>('trade');
+  const [eventDateFrom] = useState('');
+  const [eventDateTo] = useState('');
+  const [eventSymbol] = useState('');
+  const [eventSide] = useState<'' | PortfolioSide>('');
+  const [eventDirection] = useState<'' | PortfolioCashDirection>('');
+  const [eventActionType] = useState<'' | PortfolioCorporateActionType>('');
   const [activeAttributionLinkKey, setActiveAttributionLinkKey] = useState<string | null>(null);
   const [eventPage, setEventPage] = useState(1);
-  const [eventTotal, setEventTotal] = useState(0);
-  const [eventLoading, setEventLoading] = useState(false);
   const [tradeEvents, setTradeEvents] = useState<PortfolioTradeListItem[]>([]);
   const [cashEvents, setCashEvents] = useState<PortfolioCashLedgerListItem[]>([]);
   const [corporateEvents, setCorporateEvents] = useState<PortfolioCorporateActionListItem[]>([]);
@@ -889,19 +871,10 @@ const PortfolioPage: React.FC = () => {
   const writableAccount = selectedAccount === 'all' ? undefined : accounts.find((item) => item.id === selectedAccount);
   const writableAccountId = writableAccount?.id;
   const writeBlocked = !writableAccountId;
-  const selectedBrokerSpec = useMemo(
-    () => brokers.find((item) => item.broker === selectedBroker) || FALLBACK_BROKERS.find((item) => item.broker === selectedBroker),
-    [brokers, selectedBroker],
-  );
   const ibkrConnection = useMemo(
     () => brokerConnections.find((item) => item.brokerType === 'ibkr') || null,
     [brokerConnections],
   );
-  const importFileAccept = useMemo(() => {
-    const extensions = selectedBrokerSpec?.fileExtensions?.length ? selectedBrokerSpec.fileExtensions : ['csv'];
-    return extensions.map((item) => `.${item.replace(/^\./, '')}`).join(',');
-  }, [selectedBrokerSpec]);
-  const totalEventPages = Math.max(1, Math.ceil(eventTotal / DEFAULT_PAGE_SIZE));
   const currentEventCount = eventType === 'trade'
     ? tradeEvents.length
     : eventType === 'cash'
@@ -937,7 +910,6 @@ const PortfolioPage: React.FC = () => {
       const brokerItems = response.brokers || [];
       if (brokerItems.length === 0) {
         setBrokers(FALLBACK_BROKERS);
-        setBrokerLoadWarning(copy.brokerFallbackEmpty);
         setSelectedBroker((prev) => (
           FALLBACK_BROKERS.some((item) => item.broker === prev)
             ? prev
@@ -946,7 +918,6 @@ const PortfolioPage: React.FC = () => {
         return;
       }
       setBrokers(brokerItems);
-      setBrokerLoadWarning(null);
       setSelectedBroker((prev) => (
         brokerItems.some((item) => item.broker === prev)
           ? prev
@@ -954,7 +925,6 @@ const PortfolioPage: React.FC = () => {
       ));
     } catch {
       setBrokers(FALLBACK_BROKERS);
-      setBrokerLoadWarning(copy.brokerFallbackUnavailable);
       setSelectedBroker((prev) => (
         FALLBACK_BROKERS.some((item) => item.broker === prev)
           ? prev
@@ -1008,7 +978,7 @@ const PortfolioPage: React.FC = () => {
   }, [copy.riskFallback, costMethod, queryAccountId]);
 
   const loadEventsPage = useCallback(async (page: number) => {
-    setEventLoading(true);
+
     try {
       if (eventType === 'trade') {
         const response = await portfolioApi.listTrades({
@@ -1021,7 +991,6 @@ const PortfolioPage: React.FC = () => {
           pageSize: DEFAULT_PAGE_SIZE,
         });
         setTradeEvents(response.items || []);
-        setEventTotal(response.total || 0);
       } else if (eventType === 'cash') {
         const response = await portfolioApi.listCashLedger({
           accountId: queryAccountId,
@@ -1032,7 +1001,6 @@ const PortfolioPage: React.FC = () => {
           pageSize: DEFAULT_PAGE_SIZE,
         });
         setCashEvents(response.items || []);
-        setEventTotal(response.total || 0);
       } else {
         const response = await portfolioApi.listCorporateActions({
           accountId: queryAccountId,
@@ -1044,12 +1012,10 @@ const PortfolioPage: React.FC = () => {
           pageSize: DEFAULT_PAGE_SIZE,
         });
         setCorporateEvents(response.items || []);
-        setEventTotal(response.total || 0);
       }
     } catch (err) {
       setError(getParsedApiError(err));
     } finally {
-      setEventLoading(false);
     }
   }, [
     eventActionType,
@@ -1135,33 +1101,6 @@ const PortfolioPage: React.FC = () => {
     rows.sort((a, b) => Number(b.marketValueBase || 0) - Number(a.marketValueBase || 0));
     return rows;
   }, [snapshot]);
-
-  const sectorPieData = useMemo(() => {
-    const sectors = risk?.sectorConcentration?.topSectors || [];
-    return sectors
-      .slice(0, 6)
-      .map((item) => ({
-        name: item.sector,
-        value: Number(item.weightPct || 0),
-      }))
-      .filter((item) => item.value > 0);
-  }, [risk]);
-
-  const positionFallbackPieData = useMemo(() => {
-    if (!risk?.concentration?.topPositions?.length) {
-      return [];
-    }
-    return risk.concentration.topPositions
-      .slice(0, 6)
-      .map((item) => ({
-        name: item.symbol,
-        value: Number(item.weightPct || 0),
-      }))
-      .filter((item) => item.value > 0);
-  }, [risk]);
-
-  const concentrationPieData = sectorPieData.length > 0 ? sectorPieData : positionFallbackPieData;
-  const concentrationMode = sectorPieData.length > 0 ? 'sector' : 'position';
 
   const portfolioTopAccount = useMemo(
     () => getTopAttributionEntry(snapshot?.portfolioAttribution as Record<string, unknown> | null, 'account_attribution', 'accountAttribution', 'top_accounts', 'topAccounts'),
@@ -1310,42 +1249,6 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
-  const handleParseCsv = async () => {
-    if (!csvFile) return;
-    try {
-      setCsvParsing(true);
-      const parsed = await portfolioApi.parseCsvImport(selectedBroker, csvFile);
-      setCsvParseResult(parsed);
-      setCsvCommitResult(null);
-    } catch (err) {
-      setError(getParsedApiError(err));
-    } finally {
-      setCsvParsing(false);
-    }
-  };
-
-  const handleCommitCsv = async () => {
-    if (!csvFile) return;
-    if (!writableAccountId) {
-      setWriteWarning(copy.writeRequiresAccount);
-      return;
-    }
-    try {
-      setWriteWarning(null);
-      setCsvCommitting(true);
-      const committed = await portfolioApi.commitCsvImport(writableAccountId, selectedBroker, csvFile, csvDryRun);
-      setCsvCommitResult(committed);
-      await loadBrokerConnections(writableAccountId);
-      if (!csvDryRun) {
-        await refreshPortfolioData();
-      }
-    } catch (err) {
-      setError(getParsedApiError(err));
-    } finally {
-      setCsvCommitting(false);
-    }
-  };
-
   const handleSyncIbkr = async () => {
     if (!writableAccountId) {
       setWriteWarning(copy.syncRequiresAccount);
@@ -1375,14 +1278,6 @@ const PortfolioPage: React.FC = () => {
     } finally {
       setIbkrSyncing(false);
     }
-  };
-
-  const openDeleteDialog = (item: PendingDelete) => {
-    if (!writableAccountId) {
-      setWriteWarning(copy.deleteRequiresAccount);
-      return;
-    }
-    setPendingDelete(item);
   };
 
   const handleConfirmDelete = async () => {
@@ -1555,14 +1450,6 @@ const PortfolioPage: React.FC = () => {
       }
     }
   };
-  const showEventAuditDisclosureByDefault = eventLoading
-    || currentEventCount > 0
-    || Boolean(eventDateFrom)
-    || Boolean(eventDateTo)
-    || Boolean(eventSymbol)
-    || Boolean(eventSide)
-    || Boolean(eventDirection)
-    || Boolean(eventActionType);
   const heroItems: BentoHeroItem[] = [];
   const snapshotCurrency = snapshot?.currency || 'CNY';
   const totalEquity = snapshot?.totalEquity ?? 0;
@@ -1574,114 +1461,51 @@ const PortfolioPage: React.FC = () => {
     <PageChrome
       pageTestId="portfolio-bento-page"
       pageClassName="workspace-page workspace-page--portfolio gemini-bento-page--portfolio"
-        eyebrow={copy.eyebrow}
-        title={copy.title}
-        description={copy.description}
-        actions={(
-          <>
-            <button
-              type="button"
-              className={CARD_BUTTON_CLASS}
-              data-testid="portfolio-bento-drawer-trigger"
-              onClick={() => setIsBriefDrawerOpen(true)}
-            >
-              <PanelRightOpen className="h-4 w-4" />
-              <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-            </button>
-            {hasAccounts ? (
-              <>
-                <button
-                  type="button"
-                  className="btn-secondary text-sm"
-                  onClick={() => {
-                    setShowCreateAccount((prev) => !prev);
-                    setAccountCreateError(null);
-                    setAccountCreateSuccess(null);
-                  }}
-                >
-                  {showCreateAccount ? copy.collapseCreate : copy.createAccount}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleRefresh()}
-                  disabled={isLoading || fxRefreshing}
-                  className="btn-secondary text-sm"
-                >
-                  {isLoading ? copy.refreshingData : copy.refreshData}
-                </button>
-              </>
-            ) : (
-              <p className="workspace-header-actions-note">
-                {copy.noAccounts}
-              </p>
-            )}
-          </>
-        )}
+      eyebrow={copy.eyebrow}
+      title={copy.title}
+      description={copy.description}
+      actions={(
+        <>
+          <button
+            type="button"
+            className={CARD_BUTTON_CLASS}
+            data-testid="portfolio-bento-drawer-trigger"
+            onClick={() => setIsBriefDrawerOpen(true)}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+          </button>
+          {hasAccounts ? (
+            <>
+              <button
+                type="button"
+                className="btn-secondary text-sm"
+                onClick={() => {
+                  setShowCreateAccount((prev) => !prev);
+                  setAccountCreateError(null);
+                  setAccountCreateSuccess(null);
+                }}
+              >
+                {showCreateAccount ? copy.collapseCreate : copy.createAccount}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={isLoading || fxRefreshing}
+                className="btn-secondary text-sm"
+              >
+                {isLoading ? copy.refreshingData : copy.refreshData}
+              </button>
+            </>
+          ) : (
+            <p className="workspace-header-actions-note">{copy.noAccounts}</p>
+          )}
+        </>
+      )}
       heroItems={heroItems}
       heroTestId="portfolio-bento-hero"
-      headerChildren={hasAccounts ? (
-          <section data-testid="portfolio-bento-hero" className="space-y-6 rounded-[32px] border border-white/5 bg-transparent px-1 py-2">
-            <div className="space-y-3">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-secondary">{copy.snapshotBasisTitle}</p>
-              <div
-                data-testid="portfolio-bento-hero-equity-value"
-                className="text-5xl font-medium tracking-[-0.06em] text-white sm:text-7xl xl:text-8xl"
-                style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
-              >
-                {formatMoney(totalEquity, snapshotCurrency)}
-              </div>
-              <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-                <div
-                  className={totalUnrealizedPnl >= 0
-                    ? 'text-3xl text-emerald-400 tabular-nums drop-shadow-[0_0_24px_rgba(52,211,153,0.5)]'
-                    : 'text-3xl text-rose-400 tabular-nums drop-shadow-[0_0_24px_rgba(248,113,113,0.45)]'}
-                >
-                  {formatSignedMoney(totalUnrealizedPnl, snapshotCurrency)}
-                </div>
-                <p className="pb-1 text-sm text-secondary-text">{copy.positionUnrealized}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_220px_220px]">
-              <div className="min-w-0">
-                <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.accountView}</p>
-                <select
-                  value={String(selectedAccount)}
-                  onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                  className="input-terminal w-full border-white/5 bg-white/[0.02] text-sm"
-                >
-                  <option value="all">{copy.allAccounts}</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} · {formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} (#{account.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.costMethod}</p>
-                <select
-                  value={costMethod}
-                  onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
-                  className="input-terminal w-full border-white/5 bg-white/[0.02] text-sm"
-                >
-                  <option value="fifo">{copy.costFifo}</option>
-                  <option value="avg">{copy.costAvg}</option>
-                </select>
-              </div>
-              <div className="flex flex-col justify-end gap-1 text-sm text-secondary-text xl:items-end">
-                <p>{copy.scopeHint}</p>
-                <div className="flex flex-wrap gap-4 text-xs uppercase tracking-[0.18em] text-secondary">
-                  <span>{copy.totalCash}: <span className="text-white">{formatMoney(totalCash, snapshotCurrency)}</span></span>
-                  <span>{copy.totalMarketValue}: <span className="text-white">{formatMoney(totalMarketValue, snapshotCurrency)}</span></span>
-                  <span data-testid="portfolio-bento-hero-fx-value">{snapshot?.fxStale ? (language === 'en' ? 'FX stale' : 'FX 待刷新') : (language === 'en' ? 'FX fresh' : 'FX 已同步')}</span>
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : null}
+      headerChildren={null}
     >
-
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
       {riskWarning ? (
         <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
@@ -1694,78 +1518,12 @@ const PortfolioPage: React.FC = () => {
         </div>
       ) : null}
 
-      <div className="w-full max-w-[1400px] mx-auto px-8 py-12 flex flex-col gap-16 bg-transparent">
-        {(showCreateAccount || !hasAccounts) ? (
-          <section className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xs text-white/30 uppercase tracking-[0.3em]">{copy.createAccountTitle}</h2>
-              {hasAccounts ? (
-                <button
-                  type="button"
-                  className="btn-secondary text-xs px-3 py-1"
-                  onClick={() => {
-                    setShowCreateAccount(false);
-                    setAccountCreateError(null);
-                    setAccountCreateSuccess(null);
-                  }}
-                >
-                  {copy.collapseCreate}
-                </button>
-              ) : (
-                <span className="text-xs text-white/40">{copy.createAccountHelp}</span>
-              )}
-            </div>
-            {accountCreateError ? (
-              <div className="text-xs text-danger rounded-lg border border-[hsl(var(--accent-danger-hsl)/0.3)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-3 py-2">
-                {accountCreateError}
-              </div>
-            ) : null}
-            {accountCreateSuccess ? (
-              <div className="text-xs text-success rounded-lg border border-[hsl(var(--accent-positive-hsl)/0.3)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-3 py-2">
-                {accountCreateSuccess}
-              </div>
-            ) : null}
-            <form className="grid grid-cols-1 gap-4 md:grid-cols-2" onSubmit={handleCreateAccount}>
-              <input
-                className={`${PORTFOLIO_INPUT_CLASS} md:col-span-2`}
-                placeholder={copy.accountNamePlaceholder}
-                value={accountForm.name}
-                onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))}
-              />
-              <input
-                className={PORTFOLIO_INPUT_CLASS}
-                placeholder={copy.brokerPlaceholder}
-                value={accountForm.broker}
-                onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))}
-              />
-              <input
-                className={PORTFOLIO_INPUT_CLASS}
-                placeholder={copy.baseCurrencyPlaceholder}
-                value={accountForm.baseCurrency}
-                onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))}
-              />
-              <select
-                className={PORTFOLIO_SELECT_CLASS}
-                value={accountForm.market}
-                onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}
-              >
-                <option value="cn">{copy.marketCn}</option>
-                <option value="hk">{copy.marketHk}</option>
-                <option value="us">{copy.marketUs}</option>
-                <option value="global">{copy.marketGlobal}</option>
-              </select>
-              <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>
-                {accountCreating ? copy.creatingAccount : copy.createAccount}
-              </button>
-            </form>
-          </section>
-        ) : null}
-
-        <section data-testid="portfolio-bento-hero" className="flex flex-col items-start gap-4">
-          <h2 className="text-xs text-white/30 uppercase tracking-[0.3em]">{copy.totalEquity}</h2>
+      <div className="w-full max-w-[1400px] mx-auto px-8 py-6 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent gap-6">
+        <section data-testid="portfolio-bento-hero" className="shrink-0 flex items-end gap-6">
+          <div className="text-xs text-white/30 uppercase tracking-[0.3em]">{copy.totalEquity}</div>
           <div
             data-testid="portfolio-bento-hero-equity-value"
-            className="text-[120px] font-bold text-white leading-none tracking-tighter drop-shadow-2xl tabular-nums"
+            className="text-[6rem] font-bold text-white leading-none tracking-tighter drop-shadow-2xl tabular-nums"
             style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
           >
             {formatMoney(totalEquity, snapshotCurrency)}
@@ -1779,20 +1537,32 @@ const PortfolioPage: React.FC = () => {
           </div>
         </section>
 
-        <section className="grid grid-cols-12 gap-12">
-          <div className="col-span-12 md:col-span-4 flex flex-col gap-8 bg-white/[0.02] backdrop-blur-2xl border border-white/5 p-8 rounded-[40px]">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h3>
-              <button
-                type="button"
-                className="btn-secondary !px-3 !py-1 !text-[11px] uppercase tracking-widest shrink-0"
-                onClick={() => void handleRefreshFx()}
-                disabled={!hasAccounts || isLoading || fxRefreshing}
-              >
-                {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
-              </button>
+        <section className="shrink-0 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-[28px] bg-white/[0.015] px-5 py-4">
+            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.drawdownTitle}</h3>
+            <div className="text-xs text-secondary space-y-1.5">
+              <div className="flex justify-between"><span>{copy.maxDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.currentDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
+              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.drawdown?.alert ? 'text-danger font-medium' : 'text-success font-medium'}>{risk?.drawdown?.alert ? copy.yes : copy.no}</span></div>
             </div>
-            <div className="space-y-6">
+          </div>
+        </section>
+
+        <section className="flex-1 min-h-0 grid grid-cols-12 gap-8 overflow-hidden">
+          <div className="col-span-12 md:col-span-4 flex flex-col bg-white/[0.02] backdrop-blur-2xl border border-white/5 p-6 rounded-[32px] overflow-y-auto no-scrollbar">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h3>
+                <button
+                  type="button"
+                  className="btn-secondary !px-3 !py-1 !text-[11px] uppercase tracking-widest shrink-0"
+                  onClick={() => void handleRefreshFx()}
+                  disabled={!hasAccounts || isLoading || fxRefreshing}
+                >
+                  {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
+                </button>
+              </div>
+
               <div>
                 <p className="mb-3 text-xs uppercase tracking-[0.2em] text-white/30">{copy.accountView}</p>
                 <select
@@ -1808,6 +1578,7 @@ const PortfolioPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+
               <div>
                 <p className="mb-3 text-xs uppercase tracking-[0.2em] text-white/30">{copy.costMethod}</p>
                 <select
@@ -1819,181 +1590,190 @@ const PortfolioPage: React.FC = () => {
                   <option value="avg">{copy.costAvg}</option>
                 </select>
               </div>
-              <div className="grid grid-cols-1 gap-3 text-sm text-white/45">
+
+              <div className="grid grid-cols-1 gap-2 text-sm text-white/45">
                 <div className="flex items-center justify-between gap-3"><span>{copy.totalCash}</span><span className="text-white tabular-nums">{formatMoney(totalCash, snapshotCurrency)}</span></div>
                 <div className="flex items-center justify-between gap-3"><span>{copy.totalMarketValue}</span><span className="text-white tabular-nums">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
                 <div className="flex items-center justify-between gap-3"><span>{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className="text-white">{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
-              {fxRefreshFeedback ? (
-                <p className={`text-xs ${fxRefreshFeedback.tone === 'success' ? 'text-success' : fxRefreshFeedback.tone === 'warning' ? 'text-[hsl(var(--accent-warning-hsl))]' : 'text-white/50'}`}>
-                  {fxRefreshFeedback.text}
-                </p>
+
+              {(showCreateAccount || !hasAccounts) ? (
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs uppercase tracking-[0.2em] text-white/30">{copy.createAccountTitle}</h3>
+                    {hasAccounts ? (
+                      <button
+                        type="button"
+                        className="btn-secondary text-xs px-3 py-1"
+                        onClick={() => {
+                          setShowCreateAccount(false);
+                          setAccountCreateError(null);
+                          setAccountCreateSuccess(null);
+                        }}
+                      >
+                        {copy.collapseCreate}
+                      </button>
+                    ) : null}
+                  </div>
+                  {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
+                  {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
+                  <form className="grid grid-cols-1 gap-3" onSubmit={handleCreateAccount}>
+                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
+                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}>
+                        <option value="cn">{copy.marketCn}</option>
+                        <option value="hk">{copy.marketHk}</option>
+                        <option value="us">{copy.marketUs}</option>
+                        <option value="global">{copy.marketGlobal}</option>
+                      </select>
+                      <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</button>
+                    </div>
+                  </form>
+                </section>
               ) : null}
-              <div className="flex flex-col gap-8">
-                <div>
-                  <h3 className="mb-5 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualTrade}</h3>
-                  <form className="space-y-4" onSubmit={handleTradeSubmit}>
-                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol}
-                      onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate}
-                        onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
-                      <select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side}
-                        onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
-                        <option value="buy">{copy.buy}</option>
-                        <option value="sell">{copy.sell}</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity}
-                        onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price}
-                        onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
-                    </div>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee}
-                        onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax}
-                        onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
-                    </div>
-                    <button type="submit" className="btn-secondary w-full mt-4 text-[11px]" disabled={!writableAccountId}>{copy.submitTrade}</button>
-                  </form>
+
+              <section className="space-y-4">
+                <h3 className="text-sm text-white/40 uppercase tracking-widest">{copy.dataSyncTitle}</h3>
+                <div className="text-xs text-secondary-text space-y-1">
+                  <p>{copy.brokerImport}</p>
+                  <p>{copy.currentImportAccount}</p>
+                  <p>{writableAccount ? `${writableAccount.name} (#${writableAccount.id})` : copy.brokerFallbackEmpty}</p>
+                  <p>{selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
                 </div>
-                <div>
-                  <h3 className="mb-5 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualCash}</h3>
-                  <form className="space-y-4" onSubmit={handleCashSubmit}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <input className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate}
-                        onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
-                      <select className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction}
-                        onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
-                        <option value="in">{copy.cashIn}</option>
-                        <option value="out">{copy.cashOut}</option>
-                      </select>
-                    </div>
-                    <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.amount}
-                      value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
-                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.currencyOptional(writableAccount?.baseCurrency || '')} value={cashForm.currency}
-                      onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))} />
-                    <button type="submit" className="btn-secondary w-full mt-4 text-[11px]" disabled={!writableAccountId}>{copy.submitCash}</button>
-                  </form>
+                <div className="grid grid-cols-1 gap-3">
+                  <select className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
+                    {brokers.map((broker) => (
+                      <option key={broker.broker} value={broker.broker}>{formatBrokerLabel(broker.broker, broker.displayName, language)}</option>
+                    ))}
+                  </select>
+                  {selectedBroker === 'ibkr' ? (
+                    <>
+                      {ibkrConnection ? <p className="text-xs text-secondary-text">{ibkrConnection.connectionName}</p> : null}
+                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
+                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
+                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
+                      <label className="flex items-center gap-2 text-xs text-secondary-text">
+                        <input type="checkbox" checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySsl(e.target.checked)} />
+                        <span>{copy.verifyIbkrSsl}</span>
+                      </label>
+                      <button type="button" className="btn-secondary text-sm" onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>{ibkrSyncing ? copy.syncing : copy.syncIbkr}</button>
+                      {ibkrSyncResult ? (
+                        <div className="text-xs text-secondary-text">
+                          <div>{copy.syncResult}</div>
+                          <div>{copy.positionsCountLabel} <span className="text-foreground font-mono">{ibkrSyncResult.positionCount ?? '--'}</span></div>
+                          <div>{copy.cashCurrenciesLabel} <span className="text-foreground font-mono">{ibkrSyncResult.cashBalanceCount ?? 0}</span></div>
+                          <div>{copy.accountRef}: <span className="text-foreground font-mono">{ibkrSyncResult.brokerAccountRef || ibkrBrokerAccountRef || '--'}</span></div>
+                          <div>{copy.syncedAt}: <span className="text-foreground font-mono">{ibkrSyncResult.syncedAt ? ibkrSyncResult.syncedAt.replace('T', ' ') : '--'}</span></div>
+                          <span className="text-foreground">{ibkrSyncResult.snapshotOverlayActive ? copy.syncOverlay : copy.syncSaved}</span>
+                          <div>{copy.totalEquity} <span className="text-foreground font-mono">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span></div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
-                <div>
-                  <h3 className="mb-5 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualCorporate}</h3>
-                  <form className="space-y-4" onSubmit={handleCorporateSubmit}>
-                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.stockCode} value={corpForm.symbol}
-                      onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <input className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate}
-                        onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
-                      <select className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType}
-                        onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
-                        <option value="cash_dividend">{copy.cashDividend}</option>
-                        <option value="split_adjustment">{copy.splitAdjustment}</option>
-                      </select>
-                    </div>
-                    {corpForm.actionType === 'cash_dividend' ? (
-                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.000001" placeholder={copy.dividendPerShare}
-                        value={corpForm.cashDividendPerShare}
-                        onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value, splitRatio: '' }))} required />
-                    ) : (
-                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.000001" placeholder={copy.splitRatio}
-                        value={corpForm.splitRatio}
-                        onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value, cashDividendPerShare: '' }))} required />
-                    )}
-                    <button type="submit" className="btn-secondary w-full mt-4 text-[11px]" disabled={!writableAccountId}>{copy.submitCorporate}</button>
-                  </form>
+              </section>
+
+              <Disclosure summary={copy.manualAdjustments} defaultOpen={false}>
+                <div className="mt-4 flex flex-col gap-6">
+                  <div>
+                    <h3 className="mb-4 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualTrade}</h3>
+                    <form className="space-y-4" onSubmit={handleTradeSubmit}>
+                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                      <div className="grid grid-cols-2 gap-3">
+                        <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+                        <select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
+                          <option value="buy">{copy.buy}</option>
+                          <option value="sell">{copy.sell}</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                        <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                      </div>
+                      <button type="submit" className="btn-secondary w-full text-[11px]" disabled={!writableAccountId}>{copy.submitTrade}</button>
+                    </form>
+                  </div>
                 </div>
-              </div>
+              </Disclosure>
             </div>
           </div>
 
-          <div className="col-span-12 md:col-span-8 flex flex-col">
-            <div className="mb-6 flex items-center justify-between px-4">
-              <h3 className="text-sm text-white/40 uppercase tracking-widest">Current Holdings</h3>
+          <div className="col-span-12 md:col-span-8 flex flex-col gap-4 overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between px-4">
+              <h3 className="text-sm text-white/40 uppercase tracking-widest">{copy.positionsTitle}</h3>
               <span className="text-xs uppercase tracking-[0.2em] text-white/30">{copy.positionsCount(positionRows.length)}</span>
             </div>
-            <div className="flex flex-col gap-2">
-              {positionRows.length === 0 ? (
-                <div className="px-6 py-5 rounded-3xl bg-white/[0.02] text-sm text-white/45">{copy.noPositions}</div>
-              ) : (
-                positionRows.map((row) => (
-                  <div
-                    key={`${row.accountId}-${row.symbol}-${row.market}`}
-                    className="flex justify-between items-center px-6 py-5 rounded-3xl hover:bg-white/[0.03] transition-colors cursor-pointer group"
-                  >
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xl text-white font-medium truncate">{row.symbol}</span>
-                      <span className="text-xs text-white/40 tracking-wider">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</span>
-                    </div>
-                    <div className="flex items-center gap-8">
-                      <div className="text-right">
-                        <div className="text-xs text-white/35 uppercase tracking-[0.16em]">{copy.positionMarketValue}</div>
-                        <div className="text-lg text-white tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+              <div className="flex flex-col gap-2">
+                {positionRows.length === 0 ? (
+                  <div className="px-6 py-5 rounded-3xl bg-white/[0.02] text-sm text-white/45">{copy.noPositions}</div>
+                ) : (
+                  positionRows.map((row) => (
+                    <div
+                      key={`${row.accountId}-${row.symbol}-${row.market}`}
+                      className="flex justify-between items-center px-6 py-5 rounded-3xl hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xl text-white font-medium truncate">{row.symbol}</span>
+                        <span className="text-xs text-white/40 tracking-wider">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</span>
                       </div>
-                      <div className={row.unrealizedPnlBase >= 0
-                        ? 'text-xl text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.3)] tabular-nums'
-                        : 'text-xl text-rose-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.3)] tabular-nums'}>
-                        {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                      <div className="flex items-center gap-8">
+                        <div className="text-right">
+                          <div className="text-xs text-white/35 uppercase tracking-[0.16em]">{copy.positionMarketValue}</div>
+                          <div className="text-lg text-white tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
+                        </div>
+                        <div className={row.unrealizedPnlBase >= 0
+                          ? 'text-xl text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.3)] tabular-nums'
+                          : 'text-xl text-rose-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.3)] tabular-nums'}>
+                          {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                        </div>
                       </div>
                     </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 grid grid-cols-1 gap-3 md:grid-cols-3" data-testid="portfolio-attribution-dashboard">
+              <Card padding="md">
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionPortfolioTitle}</h3>
+                <AttributionHero rows={portfolioDominantRows} testId="portfolio-attribution-hero" title={copy.attributionPortfolioHeroTitle} tooltipTestId="portfolio-attribution-hover-tooltip" activeLinkKey={activeAttributionLinkKey} onActiveLinkChange={setActiveAttributionLinkKey} />
+                <AttributionVisualList title={copy.attributionDominantMix} rows={portfolioDominantRows} testId="portfolio-attribution-visual-summary" activeLinkKey={activeAttributionLinkKey} />
+              </Card>
+              <Card padding="md">
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionAccountTitle}</h3>
+                <AttributionDistributionBand rows={riskAccountRows} testId="account-attribution-distribution-band" title={copy.attributionAccountDistributionTitle(getAttributionCoverage(riskAccountRows).toFixed(2))} tooltipTestId="account-attribution-distribution-band-tooltip" activeLinkKey={activeAttributionLinkKey} onActiveLinkChange={setActiveAttributionLinkKey} />
+                <AttributionVisualList title={copy.attributionAccountTopList} rows={riskAccountRows} testId="account-attribution-top-list" activeLinkKey={activeAttributionLinkKey} />
+              </Card>
+              <Card padding="md">
+                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionIndustryTitle}</h3>
+                <AttributionDistributionBand rows={riskIndustryRows} testId="industry-attribution-distribution-band" title={copy.attributionIndustryDistributionTitle(getAttributionCoverage(riskIndustryRows).toFixed(2))} tooltipTestId="industry-attribution-distribution-band-tooltip" activeLinkKey={activeAttributionLinkKey} onActiveLinkChange={setActiveAttributionLinkKey} />
+                <AttributionVisualList title={copy.attributionIndustryTopList} rows={riskIndustryRows} testId="industry-attribution-top-list" activeLinkKey={activeAttributionLinkKey} />
+              </Card>
+            </div>
+
+            <div className="shrink-0 rounded-[24px] border border-white/5 bg-white/[0.02] px-5 py-4">
+              <Disclosure summary={copy.ledgerAudit} defaultOpen={false}>
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <select className="input-terminal text-sm" value={eventType} onChange={() => {}}>
+                      <option value="trade">{copy.tradeLedger}</option>
+                      <option value="cash">{copy.cashLedger}</option>
+                      <option value="corporate">{copy.corporateLedger}</option>
+                    </select>
+                    <button type="button" className="btn-secondary text-[11px] uppercase tracking-widest" onClick={() => void loadEvents()}>
+                      {copy.refreshLedger}
+                    </button>
                   </div>
-                ))
-              )}
+                </div>
+              </Disclosure>
             </div>
           </div>
         </section>
-
-        <Disclosure summary={copy.ledgerAudit} defaultOpen={showEventAuditDisclosureByDefault}>
-          <Card padding="md" className="border-0 bg-transparent">
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <select className="input-terminal text-sm" value={eventType} onChange={(e) => setEventType(e.target.value as EventType)}>
-                  <option value="trade">{copy.tradeLedger}</option>
-                  <option value="cash">{copy.cashLedger}</option>
-                  <option value="corporate">{copy.corporateLedger}</option>
-                </select>
-                <button type="button" className="btn-secondary text-[11px] uppercase tracking-widest" onClick={() => void loadEvents()} disabled={eventLoading}>
-                  {eventLoading ? copy.loading : copy.refreshLedger}
-                </button>
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <input className="input-terminal text-sm" type="date" value={eventDateFrom} onChange={(e) => setEventDateFrom(e.target.value)} />
-                <input className="input-terminal text-sm" type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
-              </div>
-              {(eventType === 'trade' || eventType === 'corporate') ? (
-                <input className="input-terminal text-sm w-full" placeholder={copy.filterBySymbol} value={eventSymbol}
-                  onChange={(e) => setEventSymbol(e.target.value)} />
-              ) : null}
-              {eventType === 'trade' ? (
-                <select className="input-terminal text-sm w-full" value={eventSide} onChange={(e) => setEventSide(e.target.value as '' | PortfolioSide)}>
-                  <option value="">{copy.allSides}</option>
-                  <option value="buy">{copy.buy}</option>
-                  <option value="sell">{copy.sell}</option>
-                </select>
-              ) : null}
-              {eventType === 'cash' ? (
-                <select className="input-terminal text-sm w-full" value={eventDirection}
-                  onChange={(e) => setEventDirection(e.target.value as '' | PortfolioCashDirection)}>
-                  <option value="">{copy.allDirections}</option>
-                  <option value="in">{copy.cashIn}</option>
-                  <option value="out">{copy.cashOut}</option>
-                </select>
-              ) : null}
-              {eventType === 'corporate' ? (
-                <select className="input-terminal text-sm w-full" value={eventActionType}
-                  onChange={(e) => setEventActionType(e.target.value as '' | PortfolioCorporateActionType)}>
-                  <option value="">{copy.allActions}</option>
-                  <option value="cash_dividend">{copy.cashDividend}</option>
-                  <option value="split_adjustment">{copy.splitAdjustment}</option>
-                </select>
-              ) : null}
-              <div className="text-[11px] text-secondary-text">
-                {writeBlocked ? copy.deleteHintBlocked : copy.deleteHintReady}
-              </div>
-            </div>
-          </Card>
-        </Disclosure>
       </div>
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}
@@ -2018,34 +1798,15 @@ const PortfolioPage: React.FC = () => {
           ? 'The portfolio shell now follows the same Bento rhythm as Home while preserving account, ledger, and import flows exactly as before.'
           : '持仓页现在沿用与首页一致的 Bento 节奏，但账户、账本和导入流程保持原样。'}
         metrics={[
-          {
-            label: language === 'en' ? 'Accounts' : '账户数',
-            value: String(snapshot?.accountCount ?? accounts.length),
-          },
-          {
-            label: language === 'en' ? 'Cost method' : '成本法',
-            value: costMethod === 'fifo' ? copy.costFifo : copy.costAvg,
-          },
-          {
-            label: language === 'en' ? 'FX status' : '汇率状态',
-            value: snapshot?.fxStale ? copy.fxStale : copy.fxFresh,
-            tone: snapshot?.fxStale ? 'bearish' : 'bullish',
-          },
-          {
-            label: language === 'en' ? 'Writable scope' : '写入范围',
-            value: selectedAccount === 'all' ? copy.allAccounts : `#${selectedAccount}`,
-          },
+          { label: language === 'en' ? 'Accounts' : '账户数', value: String(snapshot?.accountCount ?? accounts.length) },
+          { label: language === 'en' ? 'Cost method' : '成本法', value: costMethod === 'fifo' ? copy.costFifo : copy.costAvg },
+          { label: language === 'en' ? 'FX status' : '汇率状态', value: snapshot?.fxStale ? copy.fxStale : copy.fxFresh, tone: snapshot?.fxStale ? 'bearish' : 'bullish' },
+          { label: language === 'en' ? 'Writable scope' : '写入范围', value: selectedAccount === 'all' ? copy.allAccounts : `#${selectedAccount}` },
         ]}
         bullets={[
-          language === 'en'
-            ? 'Snapshot, cash buffer, account count, and FX freshness move into the hero strip so the page state reads quickly on first load.'
-            : '总权益、现金缓冲、账户数和汇率新鲜度被抬进 Hero strip，让页面状态在首屏就能读明白。',
-          language === 'en'
-            ? 'Manual adjustments, sync, and ledger disclosures stay where they were, so existing write paths and backend contracts are untouched.'
-            : '手工录入、同步和账本 disclosure 仍保留在原位，因此现有写入路径和后端契约不受影响。',
-          language === 'en'
-            ? 'This refactor is visual convergence plus test hooks, not a data rewrite.'
-            : '这次重构是视觉收敛和测试钩子补齐，不是数据重写。',
+          language === 'en' ? 'Snapshot, cash buffer, account count, and FX freshness move into the hero strip so the page state reads quickly on first load.' : '总权益、现金缓冲、账户数和汇率新鲜度被抬进 Hero strip，让页面状态在首屏就能读明白。',
+          language === 'en' ? 'Manual adjustments, sync, and ledger disclosures stay where they were, so existing write paths and backend contracts are untouched.' : '手工录入、同步和账本 disclosure 仍保留在原位，因此现有写入路径和后端契约不受影响。',
+          language === 'en' ? 'This refactor is visual convergence plus test hooks, not a data rewrite.' : '这次重构是视觉收敛和测试钩子补齐，不是数据重写。',
         ]}
         footnote={language === 'en' ? 'Segment scope: layout and smoke hooks only.' : '本段范围：仅布局和 smoke 钩子。'}
       />

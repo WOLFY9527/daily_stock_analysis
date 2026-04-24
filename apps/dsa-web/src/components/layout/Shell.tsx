@@ -55,6 +55,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { t } = useI18n();
   const location = useLocation();
   const isBacktestRoute = location.pathname.startsWith('/backtest');
+  const isScannerRoute = location.pathname.startsWith('/scanner');
   const isDesktop = useIsDesktopViewport();
   const previousPathnameRef = useRef(location.pathname);
   const didInitializeViewportRef = useRef(false);
@@ -121,9 +122,35 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     return () => window.clearTimeout(timer);
   }, [isDesktop]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const appRoot = document.getElementById('root');
+
+    if (isScannerRoute) {
+      root.dataset.scannerShell = 'true';
+      body.dataset.scannerShell = 'true';
+      appRoot?.setAttribute('data-scanner-shell', 'true');
+      return () => {
+        delete root.dataset.scannerShell;
+        delete body.dataset.scannerShell;
+        appRoot?.removeAttribute('data-scanner-shell');
+      };
+    }
+
+    delete root.dataset.scannerShell;
+    delete body.dataset.scannerShell;
+    appRoot?.removeAttribute('data-scanner-shell');
+
+    return undefined;
+  }, [isScannerRoute]);
+
   return (
     <ShellRailContext.Provider value={railContextValue}>
-      <div className="theme-shell min-h-screen overflow-x-hidden text-foreground" data-layout={isDesktop ? 'desktop' : 'mobile'}>
+      <div
+        className={`theme-shell min-h-screen overflow-x-hidden text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}`}
+        data-layout={isDesktop ? 'desktop' : 'mobile'}
+      >
         <header className="shell-masthead">
           <div className="shell-masthead__inner">
             {isDesktop ? (
@@ -153,8 +180,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           </div>
         </header>
 
-        <div className={`shell-content-frame${isBacktestRoute ? ' shell-content-frame--backtest' : ''}`}>
-          <main className="theme-main-lane shell-main-column">
+        <div
+          className={`shell-content-frame${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}`}
+        >
+          <main className={`theme-main-lane shell-main-column${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
             <div key={location.pathname} className="theme-page-transition">
               {children ?? <Outlet />}
             </div>

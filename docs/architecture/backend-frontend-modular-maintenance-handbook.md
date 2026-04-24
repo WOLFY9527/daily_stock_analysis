@@ -2,6 +2,12 @@
 
 This handbook is the AI-first maintenance entrypoint for the current local codebase shape.
 
+Scope guard for this handbook:
+
+- backend / API / storage / data-provider maintenance first
+- frontend references are allowed only for ownership mapping or compatibility checks
+- when the frontend is under active redesign, prefer backend-only fixes and doc cleanup unless the task explicitly opens frontend scope
+
 Use it to answer:
 
 - which module owns a bug or performance issue

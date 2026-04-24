@@ -1,3 +1,8 @@
+## 2026-04-25
+
+- 🧹 **后端大审计仓库收敛（文档与审计产物治理）** — 将根目录一次性审计报告 `backend-final-audit-report.*` 与 `backend-frontend-global-audit-report.*` 归档到 `docs/architecture/archive/audits/`，删除本地切片交接产物 `slice_report_*.json`，并在 `README.md` 中补充当前项目文档真源入口，减少仓库根目录噪音，降低后续维护时的检索成本。
+- 🧭 **维护手册补充后端优先边界** — `docs/architecture/backend-frontend-modular-maintenance-handbook.md` 明确当前维护默认以后端/API/存储为主，前端仅用于所有权映射与兼容检查，避免在前端重构期把后端审计扩散成跨端改造。
+
 # Changelog
 
 - 🧭 **Admin console 与登出流收口** — Web 前端移除单独的管理员模式：管理员账号现在与普通用户看到相同的设置、持仓、回测、扫描器等页面，仅在导航栏额外显示 `Console` 控制台入口。登出确认后会回到 guest 首页；`/settings/system` 控制台继续复用现有系统配置 API，新增 Alpha Vantage、Finnhub、Yahoo/YFinance、FMP、GNews、Tavily 等内置数据源的安全可编辑入口，并同步清理 EN/ZH 中遗留的 Admin Mode 文案。后端、SQLite primary、Phase F/G 与 smoke 覆盖语义均未改变。

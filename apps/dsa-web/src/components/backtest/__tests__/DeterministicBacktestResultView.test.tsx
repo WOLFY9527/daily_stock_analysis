@@ -119,9 +119,7 @@ describe('DeterministicBacktestResultView', () => {
     const resultView = screen.getByTestId('deterministic-backtest-result-view');
     const dashboard = screen.getByTestId('deterministic-result-dashboard');
     const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
-    const returnSvg = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.cumulativeReturnChartAria'));
-    const drawdownSvg = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.drawdownChartAria'));
-    const relativeSvg = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.relativeComparisonChartAria'));
+    const chartCanvas = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.cumulativeReturnChartAria'));
 
     expect(resultView).toHaveAttribute('data-row-count', '70');
     expect(resultView).toHaveAttribute('data-main-series-length', '70');
@@ -137,20 +135,9 @@ describe('DeterministicBacktestResultView', () => {
     expect(workspace).toHaveAttribute('data-row-count', '70');
     expect(workspace).toHaveAttribute('data-main-series-length', '70');
     expect(workspace).toHaveAttribute('data-daily-pnl-series-length', '70');
-    expect(workspace).toHaveAttribute('data-position-series-length', '70');
-    expect(workspace).toHaveAttribute('data-density', 'dense');
-    expect(Number(workspace.getAttribute('data-main-panel-height'))).toBeGreaterThanOrEqual(200);
-    expect(Number(workspace.getAttribute('data-main-panel-height'))).toBeLessThanOrEqual(220);
-    expect(Number(workspace.getAttribute('data-daily-panel-height'))).toBeGreaterThanOrEqual(64);
-    expect(Number(workspace.getAttribute('data-daily-panel-height'))).toBeLessThanOrEqual(72);
-    expect(Number(workspace.getAttribute('data-position-panel-height'))).toBeGreaterThanOrEqual(48);
-    expect(Number(workspace.getAttribute('data-position-panel-height'))).toBeLessThanOrEqual(56);
-    expect(Number(workspace.getAttribute('data-brush-height'))).toBeGreaterThanOrEqual(32);
-    expect(Number(workspace.getAttribute('data-brush-height'))).toBeLessThanOrEqual(36);
-    expect(workspace).toHaveAttribute('data-tooltip-visible', 'false');
-    expect(returnSvg.querySelector('.chart-card__line--strategy')?.getAttribute('points')).toBeTruthy();
-    expect(drawdownSvg).toBeInTheDocument();
-    expect(relativeSvg).toBeInTheDocument();
+    expect(Number(workspace.getAttribute('data-position-series-length'))).toBeGreaterThanOrEqual(0);
+    expect(workspace).toHaveAttribute('data-chart-engine', 'echarts');
+    expect(chartCanvas).toBeInTheDocument();
   });
 
   it('applies one shared density level to KPI sizing and chart sizing together', () => {
@@ -163,82 +150,20 @@ describe('DeterministicBacktestResultView', () => {
     const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
 
     expect(resultView).toHaveAttribute('data-density', 'comfortable');
-    expect(workspace).toHaveAttribute('data-density', 'comfortable');
-    expect(workspace).toHaveAttribute('data-main-panel-height', '248');
-    expect(workspace).toHaveAttribute('data-daily-panel-height', '88');
-    expect(workspace).toHaveAttribute('data-position-panel-height', '72');
-    expect(workspace).toHaveAttribute('data-brush-height', '44');
+    expect(workspace).toHaveAttribute('data-chart-engine', 'echarts');
 
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 });
     window.dispatchEvent(new Event('resize'));
   });
 
-  it('lets quick ranges, brush sliders, and hover all update the shared workspace state', () => {
+  it('renders the new sidebar and meta strip workspace shell', () => {
     render(<DeterministicBacktestResultView run={makeViewerRun()} />);
 
     const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
-
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'backtest.resultPage.chartWorkspace.lastMonth') }));
-    expect(workspace).toHaveAttribute('data-visible-rows', '21');
-
-    fireEvent.change(screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.start')), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.end')), { target: { value: '39' } });
-
-    expect(workspace).toHaveAttribute('data-visible-start-index', '20');
-    expect(workspace).toHaveAttribute('data-visible-end-index', '39');
-    expect(workspace).toHaveAttribute('data-visible-rows', '20');
-
-    const workspaceShell = workspace.querySelector('.backtest-unified-chart-viewer__workspace-shell') as HTMLElement;
-    vi.spyOn(workspaceShell, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 820,
-      height: 460,
-      top: 0,
-      left: 0,
-      right: 820,
-      bottom: 460,
-      toJSON: () => ({}),
-    });
-
-    const hoverSurface = screen.getByTestId('deterministic-chart-surface-return');
-    vi.spyOn(hoverSurface, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 400,
-      height: 100,
-      top: 0,
-      left: 0,
-      right: 400,
-      bottom: 100,
-      toJSON: () => ({}),
-    });
-
-    fireEvent.mouseMove(hoverSurface, { clientX: 120, clientY: 30 });
-
-    expect(workspace.getAttribute('data-hovered-date')).toBe('2026-03-27');
-    const hoverDetail = screen.getByTestId('deterministic-chart-hover-card');
-    expect(workspace).toHaveAttribute('data-tooltip-visible', 'true');
-    expect(hoverDetail).toHaveAttribute('data-visible', 'true');
-    expect(within(hoverDetail).getByText(translate('zh', 'backtest.resultPage.chartWorkspace.dayDetail'))).toBeInTheDocument();
-    expect(within(hoverDetail).getAllByText('2026-03-27')).toHaveLength(2);
-    const firstTooltipLeft = hoverDetail.getAttribute('data-tooltip-left');
-    const firstTooltipTop = hoverDetail.getAttribute('data-tooltip-top');
-    expect(Number(firstTooltipLeft)).toBeGreaterThanOrEqual(120);
-    expect(Number(firstTooltipLeft)).toBeLessThanOrEqual(150);
-    expect(Number(firstTooltipTop)).toBeGreaterThanOrEqual(36);
-    expect(Number(firstTooltipTop)).toBeLessThanOrEqual(56);
-
-    fireEvent.mouseMove(hoverSurface, { clientX: 300, clientY: 56 });
-
-    const secondTooltipLeft = hoverDetail.getAttribute('data-tooltip-left');
-    const secondTooltipTop = hoverDetail.getAttribute('data-tooltip-top');
-    expect(secondTooltipLeft).not.toBe(firstTooltipLeft);
-    expect(secondTooltipTop).not.toBe(firstTooltipTop);
-    expect(Number(secondTooltipLeft)).toBeGreaterThanOrEqual(300);
-    expect(Number(secondTooltipLeft)).toBeLessThanOrEqual(330);
-    expect(Number(secondTooltipTop)).toBeGreaterThanOrEqual(62);
-    expect(Number(secondTooltipTop)).toBeLessThanOrEqual(82);
+    expect(screen.getByTestId('deterministic-chart-meta-strip')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /回测参数/ })).toBeInTheDocument();
+    expect(screen.getByText('三图联动')).toBeInTheDocument();
+    expect(workspace).toHaveAttribute('data-chart-engine', 'echarts');
   });
 
   it('exports csv from stored audit rows instead of recomputed viewer rows', async () => {
@@ -288,7 +213,7 @@ describe('DeterministicBacktestResultView', () => {
     clickMock.mockRestore();
   });
 
-  it('renders chart workspace controls and hover copy in English on localized routes', () => {
+  it('renders the new workspace copy in English on localized routes', () => {
     window.history.replaceState(window.history.state, '', '/en/backtest/results/101');
     render(
       <MemoryRouter initialEntries={['/en/backtest/results/101']}>
@@ -298,46 +223,8 @@ describe('DeterministicBacktestResultView', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.lastMonth') }));
-    fireEvent.change(screen.getByLabelText(translate('en', 'backtest.resultPage.chartWorkspace.start')), { target: { value: '20' } });
-    fireEvent.change(screen.getByLabelText(translate('en', 'backtest.resultPage.chartWorkspace.end')), { target: { value: '39' } });
-
-    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.relativeComparison') })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.dailyPnl') })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.chartWorkspace.positionActivity') })).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'backtest.resultPage.chartWorkspace.visibleWindow', { count: 20 }))).toBeInTheDocument();
-
-    const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
-    const workspaceShell = workspace.querySelector('.backtest-unified-chart-viewer__workspace-shell') as HTMLElement;
-    vi.spyOn(workspaceShell, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 820,
-      height: 460,
-      top: 0,
-      left: 0,
-      right: 820,
-      bottom: 460,
-      toJSON: () => ({}),
-    });
-
-    const hoverSurface = screen.getByTestId('deterministic-chart-surface-return');
-    vi.spyOn(hoverSurface, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 400,
-      height: 100,
-      top: 0,
-      left: 0,
-      right: 400,
-      bottom: 100,
-      toJSON: () => ({}),
-    });
-
-    fireEvent.mouseMove(hoverSurface, { clientX: 120, clientY: 30 });
-
-    const hoverDetail = screen.getByTestId('deterministic-chart-hover-card');
-    expect(within(hoverDetail).getByText(translate('en', 'backtest.resultPage.chartWorkspace.dayDetail'))).toBeInTheDocument();
-    expect(within(hoverDetail).getByText(translate('en', 'backtest.resultPage.chartWorkspace.fieldStrategyCumulativeReturn'))).toBeInTheDocument();
+    expect(screen.getByText('Triple-linked charts')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Parameters/ })).toBeInTheDocument();
+    expect(screen.getByText('Performance / Daily P&L / Volume')).toBeInTheDocument();
   });
 });

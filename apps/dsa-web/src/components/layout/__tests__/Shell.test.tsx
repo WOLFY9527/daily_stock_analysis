@@ -236,6 +236,24 @@ describe('Shell', () => {
     expect(screen.getByRole('button', { name: '切换语言' })).toBeInTheDocument();
   });
 
+  it('adds dedicated shell modifiers for the scanner route', () => {
+    render(
+      <MemoryRouter initialEntries={['/scanner']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(document.querySelector('.theme-shell--scanner')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--scanner')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
+    expect(document.documentElement.dataset.scannerShell).toBe('true');
+    expect(document.body.dataset.scannerShell).toBe('true');
+  });
+
   it('adds a dedicated content-frame modifier for the backtest route', () => {
     render(
       <MemoryRouter initialEntries={['/backtest']}>

@@ -9,13 +9,23 @@
 
 > 🤖 基于 AI 大模型的 A股/港股/美股自选股智能分析系统，每日自动分析并推送「决策仪表盘」到企业微信/飞书/Telegram/Discord/Slack/邮箱
 
-[**功能特性**](#-功能特性) · [**快速开始**](#-快速开始) · [**推送效果**](#-推送效果) · [**市场扫描器**](docs/market-scanner.md) · [**完整指南**](docs/full-guide.md) · [**常见问题**](docs/FAQ.md) · [**更新日志**](docs/CHANGELOG.md)
+[**功能特性**](#-功能特性) · [**快速开始**](#-快速开始) · [**推送效果**](#-推送效果) · [**市场扫描器**](docs/market-scanner.md) · [**完整指南**](docs/full-guide.md) · [**常见问题**](docs/FAQ.md) · [**更新日志**](docs/CHANGELOG.md) · [**后端维护手册**](docs/architecture/backend-frontend-modular-maintenance-handbook.md)
 
 简体中文 | [English](docs/README_EN.md) | [繁體中文](docs/README_CHT.md)
 
 </div>
 
 
+
+## 🧭 当前项目文档真源
+
+- `README.md`：项目定位、快速开始、部署入口与核心能力总览。
+- `AGENTS.md`：仓库内 AI 协作规则唯一真源。
+- `docs/architecture/backend-frontend-modular-maintenance-handbook.md`：当前代码库维护入口，按模块定位问题、入口文件与验证顺序。
+- `docs/architecture/system-optimization-audit.md`：后端/系统级审计结论与后续收敛建议。
+- `docs/CHANGELOG.md`：用户可见能力、运维路径与重要维护变更记录。
+
+> 仓库根目录历史审计产物已收敛归档到 `docs/architecture/archive/audits/`，避免根目录堆积阶段性报告。
 
 ## ✨ 功能特性
 

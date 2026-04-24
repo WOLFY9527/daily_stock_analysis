@@ -1,7 +1,7 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ApiErrorAlert, Badge, Button, Card } from '../../components/common';
+import { ApiErrorAlert, Badge, Button, Card, Disclosure } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
 import type {
   AssumptionMap,
@@ -15,6 +15,8 @@ import {
   RULE_BENCHMARK_OPTIONS,
   RuleRunsTable,
   SectionEyebrow,
+  MetricCard,
+  SummaryStrip,
   buildPeriodicAssumptionLabels,
   getBenchmarkModeLabel,
   type RuleBenchmarkMode,
@@ -752,36 +754,38 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     if (presets.length === 0) return null;
 
     return (
-      <section className="backtest-display-section" data-testid="backtest-display-section-presets">
-        <Card title={language === 'en' ? 'Quick reuse' : '快速复用'} subtitle="P6 presets / recent drafts" className="product-section-card product-section-card--backtest-secondary">
-          <p className="product-section-copy">{language === 'en' ? 'Recent drafts and named presets saved from the result page appear here so you can reuse the setup quickly.' : '结果页保存的 recent draft 和具名 preset 会出现在这里，方便你不用重新拼完整配置。'}</p>
-          <div className="comparison-card-grid">
-            {presets.map((preset) => (
-              <div key={preset.id} className="comparison-card">
-                <div className="comparison-card__header">
-                  <div>
-                    <p className="metric-card__label">{preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}</p>
-                    <h3 className="comparison-card__title">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</h3>
-                  </div>
-                  <span className="product-chip">{preset.code}</span>
+      <Disclosure
+        summary={language === 'en' ? `Presets (${presets.length})` : `预设（${presets.length}）`}
+        className="backtest-entry-shell__disclosure"
+        summaryClassName="backtest-entry-shell__disclosure-summary"
+        bodyClassName="backtest-entry-shell__disclosure-body"
+      >
+        <div className="comparison-card-grid">
+          {presets.map((preset) => (
+            <div key={preset.id} className="comparison-card">
+              <div className="comparison-card__header">
+                <div>
+                  <p className="metric-card__label">{preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}</p>
+                  <h3 className="comparison-card__title">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</h3>
                 </div>
-                <p className="comparison-card__meta">{preset.startDate || '--'} {'->'} {preset.endDate || '--'} · lookback {preset.lookbackBars}</p>
-                <div className="product-chip-list product-chip-list--tight">
-                  <span className="product-chip">{preset.benchmarkMode || 'auto'}</span>
-                  <span className="product-chip">{language === 'en' ? 'Fee' : '费'} {preset.feeBps}bp</span>
-                  <span className="product-chip">{language === 'en' ? 'Slippage' : '滑'} {preset.slippageBps}bp</span>
-                </div>
-                <div className="product-action-row mt-4">
-                  <Button size="sm" variant="secondary" onClick={() => handleApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
-                  {preset.kind === 'saved' ? (
-                    <Button size="sm" variant="ghost" onClick={() => handleDeletePreset(preset.id)}>{language === 'en' ? 'Delete' : '删除'}</Button>
-                  ) : null}
-                </div>
+                <span className="product-chip">{preset.code}</span>
               </div>
-            ))}
-          </div>
-        </Card>
-      </section>
+              <p className="comparison-card__meta">{preset.startDate || '--'} {'->'} {preset.endDate || '--'} · lookback {preset.lookbackBars}</p>
+              <div className="product-chip-list product-chip-list--tight">
+                <span className="product-chip">{preset.benchmarkMode || 'auto'}</span>
+                <span className="product-chip">{language === 'en' ? 'Fee' : '费'} {preset.feeBps}bp</span>
+                <span className="product-chip">{language === 'en' ? 'Slippage' : '滑'} {preset.slippageBps}bp</span>
+              </div>
+              <div className="product-action-row mt-4">
+                <Button size="sm" variant="secondary" onClick={() => handleApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
+                {preset.kind === 'saved' ? (
+                  <Button size="sm" variant="ghost" onClick={() => handleDeletePreset(preset.id)}>{language === 'en' ? 'Delete' : '删除'}</Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Disclosure>
     );
   };
 
@@ -1453,36 +1457,163 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     };
   };
 
-  const renderHistorySection = () => (
-    <section className="backtest-display-section" data-testid="backtest-display-section-history">
-      <Card title={language === 'en' ? 'History' : '历史记录'} subtitle={language === 'en' ? 'The config page keeps only the entry point instead of embedding the full result analysis.' : '配置页只保留入口，不内嵌完整结果分析'} className="product-section-card product-section-card--backtest-secondary">
-        <div className="summary-block__header">
-          <div>
-            <SectionEyebrow>{language === 'en' ? 'History' : '历史记录'}</SectionEyebrow>
-            <h3 className="summary-block__title">{language === 'en' ? 'Rule backtest history' : '规则回测历史'}</h3>
-          </div>
-          <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
-            {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh' : '刷新')}
-          </Button>
+
+  const isEmptyHistory = historyItems.length === 0 && !isLoadingHistory && !historyError;
+  const backtestEntryMetrics = useMemo(() => ([
+    {
+      label: language === 'en' ? 'Strategy return' : '策略收益',
+      value: '--',
+      tone: 'accent' as const,
+      note: language === 'en' ? 'Run a backtest to populate the result page.' : '运行一次回测后在结果页展示。',
+    },
+    {
+      label: language === 'en' ? 'Benchmark return' : '基准收益',
+      value: '--',
+      tone: 'default' as const,
+      note: language === 'en' ? 'Resolved after the instrument and benchmark are confirmed.' : '确认标的与基准后生成。',
+    },
+    {
+      label: language === 'en' ? 'Max drawdown' : '最大回撤',
+      value: '--',
+      tone: 'negative' as const,
+      note: language === 'en' ? 'Shown only after a completed run.' : '完成回测后显示。',
+    },
+    {
+      label: language === 'en' ? 'Sharpe ratio' : '夏普比率',
+      value: '--',
+      tone: 'default' as const,
+      note: language === 'en' ? 'Risk-adjusted signal stays empty before execution.' : '运行前不显示风险调整信号。',
+    },
+  ]), [language]);
+
+  const renderEmptyStage = () => (
+    <section className="backtest-entry-shell" data-testid="backtest-entry-shell">
+      <div className="backtest-entry-shell__hero">
+        <div className="backtest-entry-shell__hero-copy">
+          <SectionEyebrow>{language === 'en' ? 'Deterministic backtest' : '确定性回测'}</SectionEyebrow>
+          <h2 className="backtest-entry-shell__hero-title">{language === 'en' ? 'Set up the run, then move into the dedicated result console.' : '先完成配置，再进入独立结果控制台。'}</h2>
+          <p className="product-section-copy">
+            {language === 'en'
+              ? 'The config page now behaves like a launch surface. You choose the symbol, window, capital, and strategy here; once you submit, the full KPI and chart workspace open on the result page.'
+              : '配置页现在更像回测启动面板：先在这里选择标的、区间、资金和策略，提交后再进入独立结果页查看 KPI 与三图联动图表。'}
+          </p>
         </div>
-        <p className="product-section-copy">{language === 'en' ? 'Opening any historical item sends you to `/backtest/results/:runId`, where the dedicated result page carries KPI, charts, audit, and trade analysis.' : '点击任意历史项会打开 `/backtest/results/:runId`，由独立结果页承载相同的 KPI、图表、审计与交易分析。'}</p>
-        {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
-        <RuleRunsTable rows={historyItems} selectedRunId={selectedRunId} onOpen={onOpenHistoryRun} />
-        <p className="product-footnote">{language === 'en' ? `${historyTotal} deterministic rule-backtest runs. Page ${historyPage}.` : `共 ${historyTotal} 条确定性规则回测记录。当前页 ${historyPage}。`}</p>
-      </Card>
+        <SummaryStrip
+          items={[
+            {
+              label: language === 'en' ? 'Current symbol' : '当前标的',
+              value: code || '--',
+              note: language === 'en' ? 'Fill the ticker before parsing the strategy.' : '先填写代码，再解析策略。',
+            },
+            {
+              label: language === 'en' ? 'Benchmark' : '对比基准',
+              value: getBenchmarkModeLabel(benchmarkMode, code, undefined, language),
+              note: language === 'en' ? 'Used later on the result page.' : '用于结果页的基准对比。',
+            },
+            {
+              label: language === 'en' ? 'History' : '历史记录',
+              value: historyTotal > 0 ? `${historyTotal}` : '--',
+              note: historyTotal > 0
+                ? (language === 'en' ? 'Previous runs can be reopened directly.' : '已有历史结果可直接打开。')
+                : (language === 'en' ? 'No saved runs yet.' : '当前还没有已保存结果。'),
+            },
+          ]}
+        />
+      </div>
+      <div className="backtest-entry-shell__metrics">
+        {backtestEntryMetrics.map((item) => (
+          <MetricCard key={item.label} label={item.label} value={item.value} tone={item.tone} note={item.note} />
+        ))}
+      </div>
+      <div className="backtest-entry-shell__workspace">
+        <aside className="backtest-entry-shell__sidebar">
+          <div className="backtest-entry-shell__sidebar-block">
+            <span className="backtest-entry-shell__sidebar-label">{language === 'en' ? 'Flow' : '流程'}</span>
+            <strong>{language === 'en' ? 'Setup → Parse → Run' : '配置 → 解析 → 运行'}</strong>
+          </div>
+          <div className="backtest-entry-shell__sidebar-block">
+            <span className="backtest-entry-shell__sidebar-label">{language === 'en' ? 'Mode' : '模式'}</span>
+            <strong>{language === 'en' ? 'Pre-run' : '未运行'}</strong>
+          </div>
+          <div className="backtest-entry-shell__sidebar-block">
+            <span className="backtest-entry-shell__sidebar-label">{language === 'en' ? 'Window' : '区间'}</span>
+            <strong>{startDate || '--'} → {endDate || '--'}</strong>
+          </div>
+        </aside>
+        <div className="backtest-entry-shell__workspace-card">
+          <div className="backtest-entry-shell__workspace-head">
+            <div>
+              <p className="backtest-entry-shell__workspace-eyebrow">{language === 'en' ? 'Result workspace' : '结果工作区'}</p>
+              <h3>{language === 'en' ? 'The chart console appears after you run the backtest.' : '运行后这里会切换成三图联动结果控制台。'}</h3>
+            </div>
+            <div className="backtest-entry-shell__workspace-tags">
+              <span>{language === 'en' ? 'Hero metrics' : 'Hero 指标'}</span>
+              <span>{language === 'en' ? 'Triple-linked charts' : '三图联动'}</span>
+              <span>{language === 'en' ? 'History reopen' : '历史重开'}</span>
+            </div>
+          </div>
+          <div className="backtest-entry-shell__workspace-preview" aria-hidden="true">
+            <div className="backtest-entry-shell__preview-line" />
+            <div className="backtest-entry-shell__preview-grid backtest-entry-shell__preview-grid--mid">
+              <span className="is-pos" /><span className="is-neg" /><span className="is-pos" /><span className="is-neg" /><span className="is-pos" />
+            </div>
+            <div className="backtest-entry-shell__preview-grid backtest-entry-shell__preview-grid--bottom">
+              <span /><span /><span /><span /><span /><span />
+            </div>
+          </div>
+          <div className="backtest-entry-shell__workspace-empty">
+            <strong>{language === 'en' ? 'No active run yet' : '当前还没有进行中的结果'}</strong>
+            <p>{language === 'en' ? 'Finish the form on the left, submit the run, and this area will turn into the full result console.' : '先完成左侧步骤并提交回测，这里会切换成完整结果页中的 KPI 与三图联动图表。'}</p>
+          </div>
+        </div>
+      </div>
     </section>
+  );
+
+  const renderHistorySection = () => (
+    <Disclosure
+      summary={language === 'en' ? `History (${historyTotal})` : `历史（${historyTotal}）`}
+      className="backtest-entry-shell__disclosure"
+      summaryClassName="backtest-entry-shell__disclosure-summary"
+      bodyClassName="backtest-entry-shell__disclosure-body"
+    >
+      <div className="summary-block__header">
+        <div>
+          <SectionEyebrow>{language === 'en' ? 'History' : '历史记录'}</SectionEyebrow>
+          <h3 className="summary-block__title">{language === 'en' ? 'Rule backtest history' : '规则回测历史'}</h3>
+        </div>
+        <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
+          {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh' : '刷新')}
+        </Button>
+      </div>
+      <p className="product-section-copy">{language === 'en' ? 'Opening any historical item sends you to `/backtest/results/:runId`, where the dedicated result page carries KPI, charts, audit, and trade analysis.' : '点击任意历史项会打开 `/backtest/results/:runId`，由独立结果页承载相同的 KPI、图表、审计与交易分析。'}</p>
+      {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
+      <RuleRunsTable rows={historyItems} selectedRunId={selectedRunId} onOpen={onOpenHistoryRun} />
+      {isEmptyHistory ? <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here and can reopen the dedicated result console.' : '当前还没有已保存的规则回测记录。完成第一次回测后，历史结果会出现在这里，并可直接重开独立结果页。'}</div> : null}
+      <p className="product-footnote">{language === 'en' ? `${historyTotal} deterministic rule-backtest runs. Page ${historyPage}.` : `共 ${historyTotal} 条确定性规则回测记录。当前页 ${historyPage}。`}</p>
+    </Disclosure>
   );
 
   if (!isProfessionalMode) {
     return (
       <div className="space-y-6" data-testid="backtest-normal-wizard">
-        <Card title={language === 'en' ? 'Normal-mode setup' : '普通版配置'} subtitle={language === 'en' ? 'Config page' : '配置页'} className="product-section-card product-section-card--backtest-result">
-          <p className="product-section-copy">
-            {language === 'en' ? 'Normal mode guides setup, strategy, and confirmation. After submission, charts and detail move to the dedicated result page instead of staying inside the config page.' : '普通版只负责带你完成参数、策略与确认步骤。运行后会进入结果页查看图表和明细，不再把完整分析挤在配置页里。'}
-          </p>
-        </Card>
+        {renderEmptyStage()}
 
-        {renderPresetSection()}
+        <div className="backtest-entry-shell__compact-actions">
+          <Disclosure
+            key="page-help"
+            summary={language === 'en' ? 'How this page works' : '页面说明'}
+            className="backtest-entry-shell__disclosure"
+            summaryClassName="backtest-entry-shell__disclosure-summary"
+            bodyClassName="backtest-entry-shell__disclosure-body"
+          >
+            <p className="product-section-copy">
+              {language === 'en' ? 'Normal mode keeps only the active setup step on the page. History, presets, and extra explanation are now folded away so the start surface stays clean.' : '普通模式现在只在首屏保留当前正在操作的步骤。历史记录、预设和补充说明已被收纳，避免启动面板继续堆满信息。'}
+            </p>
+          </Disclosure>
+          {renderPresetSection()}
+          {renderHistorySection()}
+        </div>
 
         <nav className="backtest-normal-stepper" aria-label={language === 'en' ? 'Deterministic backtest wizard steps' : '确定性回测向导步骤'}>
           {NORMAL_STEP_ORDER.map((step, index) => {
@@ -1522,31 +1653,6 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           </AnimatePresence>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3" data-testid="backtest-normal-step-summaries">
-          {NORMAL_STEP_ORDER.filter((step) => step !== normalCurrentStep).map((step) => {
-            const stepMeta = normalStepLabels[step];
-            const summary = getNormalStepSummary(step);
-            return (
-              <button
-                key={`summary-${step}`}
-                type="button"
-                className="backtest-normal-summary"
-                data-testid={`backtest-normal-step-summary-${step}`}
-                onClick={() => !summary.disabled && handleStepSelect(step)}
-                disabled={summary.disabled}
-              >
-                <div className="backtest-normal-summary__header">
-                  <span className="backtest-normal-summary__step">{stepMeta.title}</span>
-                  <span className="backtest-normal-summary__short">{stepMeta.short}</span>
-                </div>
-                <p className="backtest-normal-summary__title">{summary.title}</p>
-                <p className="backtest-normal-summary__detail">{summary.detail}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        {renderHistorySection()}
       </div>
     );
   }

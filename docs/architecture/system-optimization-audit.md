@@ -1,5 +1,12 @@
 # System Optimization Audit
 
+## Audit housekeeping decisions
+
+- Root-level staged audit artifacts should not accumulate indefinitely; historical one-off reports belong under `docs/architecture/archive/audits/`.
+- Temporary smoke outputs should stay under `tmp/` and remain untracked.
+- Slice handoff JSON artifacts should remain ignored local artifacts instead of committed repository state.
+- Pre-deployment cleanup should favor documentation consolidation and dead-artifact removal before deeper runtime refactors.
+
 Date: 2026-04-16
 Scope: whole-project audit and planning pass for `WOLFY9527/daily_stock_analysis`
 Mode: inspection-based audit only, not a broad implementation pass
