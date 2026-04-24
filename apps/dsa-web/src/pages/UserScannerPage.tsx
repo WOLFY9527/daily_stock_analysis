@@ -256,12 +256,10 @@ const UserScannerPage: React.FC = () => {
   return (
     <>
       <div data-testid="user-scanner-bento-page" className="min-h-screen bg-[#030303] text-white">
-        <div className="w-full max-w-[1400px] mx-auto px-8 pt-2 pb-6 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent">
-          <header className="shrink-0 flex justify-between items-start mb-4 mt-2">
+        <div className="w-full max-w-[1400px] mx-auto px-8 pt-0 pb-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-transparent">
+          <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.eyebrow')}</p>
-              <h1 className="mt-2 text-[2rem] tracking-[-0.04em] text-white">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
-              <p className="mt-2 max-w-3xl text-xs leading-5 text-secondary-text">{selectedMarketCopy.subtitle}</p>
+              <h1 className="text-[2rem] tracking-[-0.04em] text-white">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
             </div>
             <button
               type="button"
@@ -276,12 +274,12 @@ const UserScannerPage: React.FC = () => {
 
           <section className="shrink-0 grid grid-cols-12 gap-5">
             <div className="col-span-8 flex flex-col gap-3">
-              <div className="bg-white/[0.02] rounded-[32px] p-5 border border-white/5 backdrop-blur-2xl">
-                <div className="space-y-2.5">
+              <div className="bg-white/[0.02] rounded-[32px] p-4 border border-white/5 backdrop-blur-2xl">
+                <div className="space-y-2">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                   <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-2 gap-2">
                     <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
                     <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                   </div>
@@ -294,7 +292,7 @@ const UserScannerPage: React.FC = () => {
 
             </div>
 
-            <div className="col-span-4 bg-white/[0.02] backdrop-blur-3xl border border-white/5 rounded-[40px] p-6 flex flex-col items-center justify-center relative overflow-hidden group">
+            <div className="col-span-4 bg-white/[0.02] backdrop-blur-3xl border border-white/5 rounded-[40px] p-5 flex flex-col items-center justify-center relative overflow-hidden group">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.14),transparent_68%)] opacity-80" aria-hidden="true" />
               <p className="relative z-10 text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.shortlistLabel')}</p>
               <div className="relative z-10 mt-2 text-[9rem] font-bold text-emerald-400 leading-none drop-shadow-[0_0_60px_rgba(52,211,153,0.8)]">{shortlistCount}</div>
@@ -304,13 +302,13 @@ const UserScannerPage: React.FC = () => {
 
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
-          <section className="flex-1 min-h-0 flex flex-col mt-6 overflow-hidden">
+          <section className="flex-1 min-h-0 flex flex-col mt-3 overflow-hidden">
             <div className="shrink-0">
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'My candidates' : '我的候选'}</p>
             </div>
-            <div className="grid grid-cols-4 xl:grid-cols-6 gap-2.5 content-start overflow-y-auto no-scrollbar">
+            <div className="grid grid-cols-4 xl:grid-cols-6 gap-2 content-start overflow-y-auto no-scrollbar">
               {renderedWatchlistCards.map((candidate) => (
-                <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-3.5 py-2.5 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
+                <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
                   <div>
                     <p className="text-sm text-white">{candidate.name}</p>
                     <p className="text-white/50 text-[11px] mt-0.5">{candidate.symbol}</p>
