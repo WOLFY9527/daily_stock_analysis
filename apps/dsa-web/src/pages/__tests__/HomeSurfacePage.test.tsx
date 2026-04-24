@@ -1,5 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import HomeSurfacePage from '../HomeSurfacePage';
 
 const { useProductSurfaceMock } = vi.hoisted(() => ({
@@ -15,23 +17,52 @@ vi.mock('../GuestHomePage', () => ({
 }));
 
 vi.mock('../HomePage', () => ({
-  default: () => <div>full home page</div>,
+  default: () => <div data-testid="legacy-home-page">full home page</div>,
 }));
 
 describe('HomeSurfacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
+
+  const renderSurface = () => render(
+    <MemoryRouter>
+      <UiLanguageProvider>
+        <HomeSurfacePage />
+      </UiLanguageProvider>
+    </MemoryRouter>,
+  );
 
   it('renders the guest homepage when the current surface role is guest', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
-    render(<HomeSurfacePage />);
+    renderSurface();
     expect(screen.getByText('guest home page')).toBeInTheDocument();
   });
 
-  it('renders the full homepage for signed-in users', () => {
+  it('renders the signed-in bento dashboard for authenticated users', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
-    render(<HomeSurfacePage />);
-    expect(screen.getByText('full home page')).toBeInTheDocument();
+    renderSurface();
+    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-grid')).toBeInTheDocument();
+    expect(screen.getByText('WolfyStock 决策面板')).toBeInTheDocument();
+    expect(screen.getByText('WOLFY AI 决断')).toBeInTheDocument();
+  });
+
+  it('renders localized English copy for the signed-in dashboard', () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+    expect(screen.getByText('WolfyStock Command Center')).toBeInTheDocument();
+    expect(screen.getByText('Execution Strategy')).toBeInTheDocument();
+    expect(screen.getByText('Technical Structure')).toBeInTheDocument();
+  });
+
+  it('opens the progressive-disclosure drawer from the strategy card', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+    fireEvent.click(screen.getByRole('button', { name: '查看策略细节' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('执行策略细节')).toBeInTheDocument();
   });
 });

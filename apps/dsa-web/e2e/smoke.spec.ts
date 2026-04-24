@@ -97,7 +97,63 @@ test.describe('web deployment smoke', () => {
 
   test('home app shell loads', async ({ page }) => {
     await openHome(page);
-    await expect(page.locator('body')).toContainText(/输入标的|即时分析预览|Enter a symbol|Instant Analysis Snapshot|历史分析|Analysis history/);
+    await expect(page.locator('body')).toContainText(/WolfyStock 决策面板|WolfyStock Command Center|游客预览模式|Guest Preview Mode/, {
+      timeout: 15_000,
+    });
+  });
+
+  test('signed-in home bento dashboard renders drawer interactions and mobile stack when reachable', async ({ page }) => {
+    await maybeLogin(page);
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const body = page.locator('body');
+    const grid = page.locator('[data-testid="home-bento-grid"]');
+    const decisionCard = page.locator('[data-testid="home-bento-card-decision"]');
+
+    await expect(body).toContainText(/WolfyStock 决策面板|WolfyStock Command Center/, { timeout: 15_000 });
+    await expect(grid).toBeVisible();
+    await expect(decisionCard).toBeVisible();
+
+    await decisionCard.hover();
+    await expect.poll(async () => (
+      decisionCard.evaluate((element) => getComputedStyle(element).translate)
+    )).not.toBe('none');
+
+    const glowLabel = decisionCard.getByText(/看多|Bullish/).first();
+    await expect.poll(async () => (
+      glowLabel.evaluate((element) => getComputedStyle(element).textShadow)
+    )).not.toBe('none');
+
+    await page.getByRole('button', { name: /查看策略细节|Open Strategy Brief/i }).click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15_000 });
+    await expect(body).toContainText(/执行策略细节|Execution strategy brief/i, { timeout: 15_000 });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('[data-testid="home-bento-grid"]')).toBeVisible();
+    await expect(page.locator('[data-testid="home-bento-card-strategy"]')).toBeVisible();
+  });
+
+  test('signed-in home bento dashboard localizes core copy when reachable', async ({ page }) => {
+    await maybeLogin(page);
+
+    await page.goto('/en');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('[data-testid="home-bento-grid"]')).toBeVisible();
+    await expect(page.locator('body')).toContainText(/WolfyStock Command Center|Execution Strategy|Technical Structure/, {
+      timeout: 15_000,
+    });
+
+    await page.goto('/zh');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('[data-testid="home-bento-grid"]')).toBeVisible();
+    await expect(page.locator('body')).toContainText(/WolfyStock 决策面板|执行策略|技术形态/, {
+      timeout: 15_000,
+    });
   });
 
   test('login route is reachable or redirects cleanly when auth is disabled', async ({ page }) => {

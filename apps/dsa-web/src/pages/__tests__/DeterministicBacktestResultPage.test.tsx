@@ -998,7 +998,7 @@ describe('DeterministicBacktestResultPage', () => {
 
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '比较运行 123' }));
 
     await waitFor(() => {
       expect(getRuleBacktestRun).toHaveBeenCalledWith(123);
