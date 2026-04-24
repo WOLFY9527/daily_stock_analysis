@@ -44,6 +44,9 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     const root = screen.getByTestId('home-bento-dashboard');
+    const strategyCard = screen.getByTestId('home-bento-card-strategy');
+    const techCard = screen.getByTestId('home-bento-card-tech');
+    const fundamentalsCard = screen.getByTestId('home-bento-card-fundamentals');
     expect(root).toHaveAttribute('data-bento-surface', 'true');
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
@@ -54,8 +57,11 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-tech')).toHaveClass('xl:col-span-6');
-    expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveClass('xl:col-span-6');
+    expect(techCard).toHaveClass('xl:col-span-6');
+    expect(fundamentalsCard).toHaveClass('xl:col-span-6');
+    expect(screen.getByTestId('home-bento-sibling-row')).toBeInTheDocument();
+    expect(strategyCard.compareDocumentPosition(techCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(strategyCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
     expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
   });

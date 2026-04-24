@@ -285,6 +285,7 @@ const UserScannerPage: React.FC = () => {
       tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
       testId: 'user-scanner-bento-hero-shortlist',
       valueTestId: 'user-scanner-bento-hero-shortlist-value',
+      valueClassName: 'text-7xl sm:text-7xl tracking-[-0.05em]',
     },
     {
       label: language === 'en' ? 'Current run' : '当前运行',
@@ -396,18 +397,18 @@ const UserScannerPage: React.FC = () => {
                   </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-3 py-3">
+                  <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.metricUniverse')}</p>
                     <p className="mt-1 text-foreground">{runDetail.universeSize}</p>
                   </div>
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-3 py-3">
+                  <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.metricShortlist')}</p>
                     <p className="mt-1 text-foreground">{runDetail.shortlistSize}</p>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                 {language === 'en'
                   ? 'No personal scanner run yet. Run the scanner to create your shortlist.'
                   : '你还没有个人扫描结果。运行扫描后即可生成仅属于你账户的候选名单。'}
@@ -424,7 +425,7 @@ const UserScannerPage: React.FC = () => {
         <section className="space-y-4">
           <Card title={t('scanner.shortlistTitle')} subtitle={language === 'en' ? 'My candidates' : '我的候选'}>
             {isLoadingRun ? (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                 {t('scanner.loading')}
               </div>
             ) : null}
@@ -448,11 +449,11 @@ const UserScannerPage: React.FC = () => {
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-3 py-3">
+                      <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.reviewMetricReturn')}</p>
                         <p className="mt-1 text-foreground">{formatPercent(candidate.realizedOutcome.reviewWindowReturnPct)}</p>
                       </div>
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-3 py-3">
+                      <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.aiTitle')}</p>
                         <p className="mt-1 text-foreground">{candidate.aiInterpretation.summary || candidate.aiInterpretation.message || '--'}</p>
                       </div>
@@ -463,7 +464,7 @@ const UserScannerPage: React.FC = () => {
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.riskTitle')}</p>
                         <div className="mt-2 space-y-2">
                           {(candidate.riskNotes.length ? candidate.riskNotes.slice(0, 2) : ['--']).map((note) => (
-                            <div key={`${candidate.symbol}-${note}`} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                            <div key={`${candidate.symbol}-${note}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                               {note}
                             </div>
                           ))}
@@ -473,7 +474,7 @@ const UserScannerPage: React.FC = () => {
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.watchTitle')}</p>
                         <div className="mt-2 space-y-2">
                           {(candidate.watchContext.length ? candidate.watchContext.slice(0, 2) : [{ label: '--', value: '--' }]).map((item) => (
-                            <div key={`${candidate.symbol}-${item.label}-${item.value}`} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                            <div key={`${candidate.symbol}-${item.label}-${item.value}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                               <span className="text-foreground">{item.label}</span>
                               <span className="mx-2 text-muted-text">·</span>
                               <span>{item.value}</span>
@@ -490,7 +491,7 @@ const UserScannerPage: React.FC = () => {
             ) : null}
 
             {!isLoadingRun && !runDetail?.shortlist?.length ? (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-6 text-sm leading-6 text-secondary-text">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-6 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                 <p className="text-base text-foreground">{language === 'en' ? t('scanner.emptyTitle') : '准备生成今日候选名单'}</p>
                 <p className="mt-2">
                   {language === 'en'
@@ -506,7 +507,7 @@ const UserScannerPage: React.FC = () => {
           <Card title={language === 'en' ? 'My recent runs' : '我的近期运行'} subtitle={language === 'en' ? 'Your run history' : '个人范围历史'}>
             {historyError ? <ApiErrorAlert error={historyError} /> : null}
             {isLoadingHistory ? (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                 {t('scanner.loadingHistory')}
               </div>
             ) : null}
@@ -518,10 +519,10 @@ const UserScannerPage: React.FC = () => {
                     key={item.id}
                     type="button"
                     onClick={() => void loadRun(item.id)}
-                    className={`w-full rounded-[var(--theme-panel-radius-md)] border px-4 py-3 text-left transition-colors ${
+                    className={`w-full rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-3 text-left transition-colors backdrop-blur-2xl ${
                       item.id === selectedRunId
-                        ? 'border-[var(--border-strong)] bg-[var(--overlay-selected)]'
-                        : 'border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/35 hover:border-[var(--border-muted)]'
+                        ? 'border-white/10 bg-white/[0.05]'
+                        : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.035]'
                     }`}
                   >
                     <div className="flex flex-wrap items-center gap-2">
@@ -549,7 +550,7 @@ const UserScannerPage: React.FC = () => {
             ) : null}
 
             {!isLoadingHistory && !historyItems.length ? (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                 {language === 'en'
                   ? 'No personal scanner history yet.'
                   : '你还没有个人扫描历史。'}
@@ -591,9 +592,9 @@ const UserScannerPage: React.FC = () => {
         title={language === 'en' ? 'Scanner surface rationale' : '扫描器页面说明'}
         width="max-w-2xl"
       >
-        <div data-testid="user-scanner-bento-drawer" className="rounded-[28px] border border-white/[0.08] bg-[#050505] p-5 text-white sm:p-6">
+        <div data-testid="user-scanner-bento-drawer" className="rounded-[28px] border border-white/5 bg-white/[0.02] p-5 text-white backdrop-blur-2xl sm:p-6">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
+            <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
               <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'User scope' : '用户范围'}</p>
               <p className="mt-3 text-sm leading-6 text-white/70">
                 {language === 'en'
@@ -601,7 +602,7 @@ const UserScannerPage: React.FC = () => {
                   : '这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。'}
               </p>
             </div>
-            <div className="rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
+            <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
               <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'Admin boundary' : '管理员边界'}</p>
               <p className="mt-3 text-sm leading-6 text-white/70">
                 {language === 'en'

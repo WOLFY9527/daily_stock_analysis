@@ -16,6 +16,7 @@ export type BentoHeroItem = {
   tone?: SignalTone;
   testId?: string;
   valueTestId?: string;
+  valueClassName?: string;
 };
 
 type BentoHeroStripProps = {
@@ -54,6 +55,7 @@ export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className
               className={cn(
                 'mt-3 text-[1.65rem] font-semibold tracking-[-0.03em] text-white sm:text-[1.85rem]',
                 getToneTextClass(tone),
+                item.valueClassName,
               )}
               style={getToneTextStyle(tone, tone !== 'neutral')}
             >

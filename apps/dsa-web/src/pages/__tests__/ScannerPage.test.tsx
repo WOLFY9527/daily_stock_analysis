@@ -826,6 +826,8 @@ describe('ScannerPage', () => {
     expect(screen.getByTestId('scanner-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('scanner-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-bento-hero-shortlist-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(screen.getByTestId('scanner-bento-hero-shortlist-value')).toHaveClass('text-7xl');
+    expect(screen.getByTestId('scanner-bento-page').querySelector('.backdrop-blur-2xl')).not.toBeNull();
     expect((await screen.findAllByText('算力龙头')).length).toBeGreaterThan(0);
     expect(screen.getByText('AI算力')).toBeInTheDocument();
     expect(screen.getAllByText('AI 解读').length).toBeGreaterThan(0);

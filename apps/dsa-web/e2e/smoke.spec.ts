@@ -159,6 +159,9 @@ test.describe('web deployment smoke', () => {
     const root = page.locator('[data-testid="home-bento-dashboard"]');
     const grid = page.locator('[data-testid="home-bento-grid"]');
     const decisionCard = page.locator('[data-testid="home-bento-card-decision"]');
+    const strategyCard = page.locator('[data-testid="home-bento-card-strategy"]');
+    const techCard = page.locator('[data-testid="home-bento-card-tech"]');
+    const fundamentalsCard = page.locator('[data-testid="home-bento-card-fundamentals"]');
     const strategyTrigger = page.locator('[data-testid="home-bento-drawer-trigger-strategy"]');
     const techTrigger = page.locator('[data-testid="home-bento-drawer-trigger-tech"]');
     const fundamentalsTrigger = page.locator('[data-testid="home-bento-drawer-trigger-fundamentals"]');
@@ -168,6 +171,9 @@ test.describe('web deployment smoke', () => {
     await expect(root).toHaveClass(/bento-surface-root/);
     await expect(grid).toBeVisible();
     await expect(decisionCard).toBeVisible();
+    await expect(strategyCard).toBeVisible();
+    await expect(techCard).toBeVisible();
+    await expect(fundamentalsCard).toBeVisible();
     await expect(strategyTrigger).toBeVisible();
     await expect(techTrigger).toBeVisible();
     await expect(fundamentalsTrigger).toBeVisible();

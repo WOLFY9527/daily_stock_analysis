@@ -155,7 +155,7 @@ function MetricPair({
   value: string;
 }) {
   return (
-    <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-3 py-2">
+    <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-2 backdrop-blur-2xl">
       <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{label}</p>
       <p className="mt-1 text-sm text-foreground">{value}</p>
     </div>
@@ -574,6 +574,7 @@ const ScannerPage: React.FC = () => {
       tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
       testId: 'scanner-bento-hero-shortlist',
       valueTestId: 'scanner-bento-hero-shortlist-value',
+      valueClassName: 'text-7xl sm:text-7xl tracking-[-0.05em]',
     },
     {
       label: t('scanner.currentRunTitle'),
@@ -735,7 +736,7 @@ const ScannerPage: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   {t('scanner.currentRunEmpty')}
                 </div>
               )}
@@ -767,7 +768,7 @@ const ScannerPage: React.FC = () => {
                       <div className="space-y-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.changeNew')}</p>
                         {comparisonToPrevious.newSymbols.length ? comparisonToPrevious.newSymbols.slice(0, 4).map((item) => (
-                          <div key={`new-${item.symbol}`} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          <div key={`new-${item.symbol}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                             <span className="text-foreground">{item.symbol}</span>
                             {item.name ? <span className="ml-2">{item.name}</span> : null}
                           </div>
@@ -781,7 +782,7 @@ const ScannerPage: React.FC = () => {
                       <div className="space-y-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.changeRetained')}</p>
                         {comparisonToPrevious.retainedSymbols.length ? comparisonToPrevious.retainedSymbols.slice(0, 4).map((item) => (
-                          <div key={`retained-${item.symbol}`} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          <div key={`retained-${item.symbol}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-foreground">{item.symbol}</span>
                               {item.currentRank != null && item.previousRank != null ? (
@@ -803,7 +804,7 @@ const ScannerPage: React.FC = () => {
                       <div className="space-y-2">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.changeDropped')}</p>
                         {comparisonToPrevious.droppedSymbols.length ? comparisonToPrevious.droppedSymbols.slice(0, 4).map((item) => (
-                          <div key={`dropped-${item.symbol}`} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          <div key={`dropped-${item.symbol}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                             <span className="text-foreground">{item.symbol}</span>
                             {item.name ? <span className="ml-2">{item.name}</span> : null}
                           </div>
@@ -816,7 +817,7 @@ const ScannerPage: React.FC = () => {
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+                  <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                     {t('scanner.compareEmpty')}
                   </div>
                 )}
@@ -845,18 +846,18 @@ const ScannerPage: React.FC = () => {
                       <MetricPair label={t('scanner.reviewMetricCoverage')} value={`${currentReviewSummary.reviewedCount}/${currentReviewSummary.candidateCount}`} />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-3 py-3 text-sm leading-6 text-secondary-text">
+                      <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl text-sm leading-6 text-secondary-text">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.reviewBest')}</p>
                         <p className="mt-1 text-foreground">{`${currentReviewSummary.bestSymbol || '--'} ${formatSignedPercent(currentReviewSummary.bestReturnPct)}`}</p>
                       </div>
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-3 py-3 text-sm leading-6 text-secondary-text">
+                      <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl text-sm leading-6 text-secondary-text">
                         <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.reviewWeakest')}</p>
                         <p className="mt-1 text-foreground">{`${currentReviewSummary.weakestSymbol || '--'} ${formatSignedPercent(currentReviewSummary.weakestReturnPct)}`}</p>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+                  <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                     {t('scanner.reviewEmpty')}
                   </div>
                 )}
@@ -869,7 +870,7 @@ const ScannerPage: React.FC = () => {
               className="space-y-5"
             >
               {isLoadingRun ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                   {t('scanner.loading')}
                 </div>
               ) : null}
@@ -908,7 +909,7 @@ const ScannerPage: React.FC = () => {
                         </div>
                         <div className="w-full sm:w-auto sm:min-w-[88px] text-left sm:text-right">
                           <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{language === 'en' ? 'Scanner Score' : '扫描评分'}</p>
-                          <p className="mt-1 text-3xl leading-none text-foreground">{candidate.score.toFixed(1)}</p>
+                          <p className="mt-1 text-4xl leading-none text-foreground [text-shadow:0_0_26px_rgba(52,211,153,0.22)]">{candidate.score.toFixed(1)}</p>
                         </div>
                       </div>
 
@@ -927,7 +928,7 @@ const ScannerPage: React.FC = () => {
                       </div>
 
                       {(candidate.aiInterpretation?.available || (candidate.aiInterpretation?.status && candidate.aiInterpretation.status !== 'skipped')) ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
+                        <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.aiTitle')}</p>
                             <Badge variant={aiStatusVariant(candidate.aiInterpretation.status)}>
@@ -955,7 +956,7 @@ const ScannerPage: React.FC = () => {
                         </div>
                       ) : null}
 
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
+                      <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant={reviewStatusVariant(candidate.realizedOutcome.reviewStatus)}>
                             {t(`scanner.reviewStatus.${candidate.realizedOutcome.reviewStatus}`)}
@@ -979,7 +980,7 @@ const ScannerPage: React.FC = () => {
                           <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.riskTitle')}</p>
                           <div className="mt-2 space-y-2">
                             {candidate.riskNotes.slice(0, 2).map((note) => (
-                              <div key={note} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                              <div key={note} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                                 {note}
                               </div>
                             ))}
@@ -989,7 +990,7 @@ const ScannerPage: React.FC = () => {
                           <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.watchTitle')}</p>
                           <div className="mt-2 space-y-2">
                             {candidate.watchContext.slice(0, 2).map((item) => (
-                              <div key={`${candidate.symbol}-${item.label}`} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                              <div key={`${candidate.symbol}-${item.label}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                                 <span className="text-foreground">{item.label}</span>
                                 <span className="mx-2 text-muted-text">·</span>
                                 <span>{item.value}</span>
@@ -1034,7 +1035,7 @@ const ScannerPage: React.FC = () => {
               ) : null}
 
               {!isLoadingRun && !runDetail?.shortlist?.length ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-6 text-sm leading-6 text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-6 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   <p className="text-base text-foreground">{language === 'en' ? 'No shortlist yet' : '尚未生成候选名单'}</p>
                   <p className="mt-2">
                     {language === 'en'
@@ -1063,7 +1064,7 @@ const ScannerPage: React.FC = () => {
                 </div>
 
                 {coverageSummary.likelyBottleneckLabel ? (
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3 text-sm leading-6 text-secondary-text">
+                  <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl text-sm leading-6 text-secondary-text">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.bottleneckHeading}</p>
                     <p className="mt-1 text-foreground">{String(coverageSummary.likelyBottleneckLabel)}</p>
                     <p className="mt-1 text-xs text-secondary-text">{diagnosticsCopy.bottleneckSummary}</p>
@@ -1083,7 +1084,7 @@ const ScannerPage: React.FC = () => {
                   </div>
                 ) : null}
 
-                <div className="space-y-2 rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
+                <div className="space-y-2 rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{diagnosticsCopy.providersHeading}</p>
                   <p className="text-sm text-foreground">
                     {providerList.length ? providerList.join(' -> ') : String(providerDiagnostics.configuredPrimaryProvider || '--')}
@@ -1133,7 +1134,7 @@ const ScannerPage: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   {t('scanner.qualityEmpty')}
                 </div>
               )}
@@ -1147,7 +1148,7 @@ const ScannerPage: React.FC = () => {
               {historyError ? <ApiErrorAlert error={historyError} /> : null}
 
               {isLoadingHistory ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                   {t('scanner.loadingHistory')}
                 </div>
               ) : null}
@@ -1161,10 +1162,10 @@ const ScannerPage: React.FC = () => {
                         key={item.id}
                         type="button"
                         onClick={() => void loadRun(item.id)}
-                        className={`w-full rounded-[var(--theme-panel-radius-md)] border px-4 py-3 text-left transition-colors ${
+                        className={`w-full rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-3 text-left transition-colors backdrop-blur-2xl ${
                           isActive
-                            ? 'border-[var(--border-selected)] bg-[var(--overlay-selected)]'
-                            : 'border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 hover:bg-[var(--overlay-hover)]'
+                            ? 'border-white/10 bg-white/[0.05]'
+                            : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.035]'
                         }`}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1231,7 +1232,7 @@ const ScannerPage: React.FC = () => {
               ) : null}
 
               {!isLoadingHistory && !historyItems.length ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   {t('scanner.historyEmpty')}
                 </div>
               ) : null}
@@ -1251,7 +1252,7 @@ const ScannerPage: React.FC = () => {
               {personalHistoryError ? <ApiErrorAlert error={personalHistoryError} /> : null}
 
               {isLoadingPersonalHistory ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                   {t('scanner.loadingHistory')}
                 </div>
               ) : null}
@@ -1297,7 +1298,7 @@ const ScannerPage: React.FC = () => {
               ) : null}
 
               {!isLoadingPersonalHistory && !personalHistoryItems.length ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   {language === 'en' ? 'No scanner history yet.' : '当前还没有扫描历史。'}
                 </div>
               ) : null}
@@ -1313,13 +1314,13 @@ const ScannerPage: React.FC = () => {
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.operationsTitle')}</p>
                     <div className="mt-2 grid gap-2">
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                         {`${t('scanner.scheduleLabel')} ${statusSummary.scheduleEnabled ? (statusSummary.scheduleTime || '--') : t('scanner.scheduleDisabled')}`}
                       </div>
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                         {`${t('scanner.lastScheduledLabel')} ${lastScheduledRun?.runAt ? formatTimestamp(lastScheduledRun.runAt, language) : '--'} · ${lastScheduledRun ? t(`scanner.status.${lastScheduledRun.status}`) : '--'}`}
                       </div>
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                         {`${t('scanner.notificationLabel')} ${lastScheduledRun?.notificationStatus ? t(`scanner.notificationStatus.${lastScheduledRun.notificationStatus}`) : '--'}`}
                       </div>
                       {statusSummary.latestFailure?.failureReason ? (
@@ -1335,49 +1336,49 @@ const ScannerPage: React.FC = () => {
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.runtimeDiagnosticsTitle')}</p>
                     <div className="mt-2 space-y-2">
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                         {`${t('scanner.universeSourceLabel')} ${String(universeResolution.source || '--')}`}
                       </div>
-                      <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                         {`${t('scanner.snapshotSourceLabel')} ${String(snapshotResolution.source || runDetail?.diagnostics?.snapshotSource || '--')}`}
                       </div>
                       {degradedModeDefined ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.degradedModeLabel')} ${degradedModeUsed ? t('scanner.degradedYes') : t('scanner.degradedNo')}`}
                         </div>
                       ) : null}
                       {aiStatus ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.aiStatusLabel')} ${t(`scanner.aiStatus.${aiStatus}`)}`}
                         </div>
                       ) : null}
                       {aiGeneratedCandidates != null && aiAttemptedCandidates != null ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.aiCoverageLabel')} ${aiGeneratedCandidates}/${aiAttemptedCandidates}`}
                         </div>
                       ) : null}
                       {aiModelsUsed.length ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.aiModelLabel')} ${aiModelsUsed.join(' / ')}`}
                         </div>
                       ) : null}
                       {liveQuoteAvailableCandidates != null && liveQuoteAttemptedCandidates != null ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.liveQuoteCoverageLabel')} ${liveQuoteAvailableCandidates}/${liveQuoteAttemptedCandidates}`}
                         </div>
                       ) : null}
                       {liveQuoteSources.length ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.liveQuoteSourceLabel')} ${liveQuoteSources.join(' / ')}`}
                         </div>
                       ) : null}
                       {universeAttempts.length ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.universeAttemptsLabel')} ${universeAttempts.join(' / ')}`}
                         </div>
                       ) : null}
                       {snapshotAttempts.length ? (
-                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                        <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                           {`${t('scanner.snapshotAttemptsLabel')} ${snapshotAttempts.join(' / ')}`}
                         </div>
                       ) : null}
@@ -1389,7 +1390,7 @@ const ScannerPage: React.FC = () => {
                   <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.universeNotesTitle')}</p>
                   <div className="mt-2 space-y-2">
                     {(runDetail?.universeNotes || []).map((note) => (
-                      <div key={note} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <div key={note} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                         {note}
                       </div>
                     ))}
@@ -1400,7 +1401,7 @@ const ScannerPage: React.FC = () => {
                   <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.scoringNotesTitle')}</p>
                   <div className="mt-2 space-y-2">
                     {(runDetail?.scoringNotes || []).map((note) => (
-                      <div key={note} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <div key={note} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                         {note}
                       </div>
                     ))}
@@ -1494,23 +1495,23 @@ const ScannerPage: React.FC = () => {
               </div>
               {selectedCandidate.aiInterpretation.available ? (
                 <div className="space-y-2">
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                  <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                     <span className="text-foreground">{t('scanner.aiSummaryLabel')}</span>
                     <span className="mx-2 text-muted-text">·</span>
                     <span>{selectedCandidate.aiInterpretation.summary || '--'}</span>
                   </div>
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                  <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                     <span className="text-foreground">{t('scanner.aiRiskLabel')}</span>
                     <span className="mx-2 text-muted-text">·</span>
                     <span>{selectedCandidate.aiInterpretation.riskInterpretation || '--'}</span>
                   </div>
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                  <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                     <span className="text-foreground">{t('scanner.aiWatchLabel')}</span>
                     <span className="mx-2 text-muted-text">·</span>
                     <span>{selectedCandidate.aiInterpretation.watchPlan || '--'}</span>
                   </div>
                   {(selectedCandidate.aiInterpretation.reviewCommentary || selectedCandidate.realizedOutcome.reviewStatus !== 'pending') ? (
-                    <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                    <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                       <span className="text-foreground">{t('scanner.aiReviewLabel')}</span>
                       <span className="mx-2 text-muted-text">·</span>
                       <span>{selectedCandidate.aiInterpretation.reviewCommentary || t('scanner.aiReviewPending')}</span>
@@ -1550,7 +1551,7 @@ const ScannerPage: React.FC = () => {
             <div className="space-y-3">
               <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.reasonListTitle')}</p>
               {(selectedCandidate.reasons || []).map((reason) => (
-                <div key={reason} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                <div key={reason} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   {reason}
                 </div>
               ))}
@@ -1569,7 +1570,7 @@ const ScannerPage: React.FC = () => {
             <div className="space-y-3">
               <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.riskTitle')}</p>
               {(selectedCandidate.riskNotes || []).map((note) => (
-                <div key={note} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                <div key={note} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   {note}
                 </div>
               ))}
@@ -1578,7 +1579,7 @@ const ScannerPage: React.FC = () => {
             <div className="space-y-3">
               <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.watchTitle')}</p>
               {(selectedCandidate.watchContext || []).map((item) => (
-                <div key={`${selectedCandidate.symbol}-${item.label}`} className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                <div key={`${selectedCandidate.symbol}-${item.label}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   <span className="text-foreground">{item.label}</span>
                   <span className="mx-2 text-muted-text">·</span>
                   <span>{item.value}</span>
@@ -1588,7 +1589,7 @@ const ScannerPage: React.FC = () => {
 
             <div className="space-y-3">
               <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.diagnosticsTitle')}</p>
-              <pre className="overflow-x-auto rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3 text-xs leading-6 text-secondary-text">
+              <pre className="overflow-x-auto rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl text-xs leading-6 text-secondary-text">
                 {JSON.stringify(selectedCandidate.diagnostics || {}, null, 2)}
               </pre>
             </div>

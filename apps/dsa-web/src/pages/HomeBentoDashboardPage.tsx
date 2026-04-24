@@ -535,19 +535,21 @@ const HomeBentoDashboardPage: React.FC = () => {
             onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
           />
 
-          <TechCard
-            title={copy.tech.title}
-            signals={copy.tech.signals}
-            detailLabel={copy.tech.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
-          />
+          <div data-testid="home-bento-sibling-row" className="contents">
+            <TechCard
+              title={copy.tech.title}
+              signals={copy.tech.signals}
+              detailLabel={copy.tech.detailLabel}
+              onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+            />
 
-          <FundamentalsCard
-            title={copy.fundamentals.title}
-            metrics={copy.fundamentals.metrics}
-            detailLabel={copy.fundamentals.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
-          />
+            <FundamentalsCard
+              title={copy.fundamentals.title}
+              metrics={copy.fundamentals.metrics}
+              detailLabel={copy.fundamentals.detailLabel}
+              onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
+            />
+          </div>
         </BentoGrid>
       </section>
 
