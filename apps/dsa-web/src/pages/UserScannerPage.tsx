@@ -256,8 +256,8 @@ const UserScannerPage: React.FC = () => {
   return (
     <>
       <div data-testid="user-scanner-bento-page" className="min-h-screen bg-[#030303] text-white">
-        <div className="w-full max-w-[1400px] mx-auto px-8 pt-4 pb-4 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent">
-          <header className="shrink-0 flex justify-between items-start mb-4">
+        <div className="w-full max-w-[1400px] mx-auto px-8 pt-2 pb-6 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent">
+          <header className="shrink-0 flex justify-between items-start mb-4 mt-2">
             <div>
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.eyebrow')}</p>
               <h1 className="mt-2 text-[2rem] tracking-[-0.04em] text-white">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
@@ -304,11 +304,11 @@ const UserScannerPage: React.FC = () => {
 
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
-          <section className="flex-1 flex flex-col min-h-0 mt-3 overflow-hidden">
+          <section className="flex-1 min-h-0 flex flex-col mt-6 overflow-hidden">
             <div className="shrink-0">
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'My candidates' : '我的候选'}</p>
             </div>
-            <div className="grid grid-cols-4 xl:grid-cols-6 gap-2.5 content-start overflow-hidden">
+            <div className="grid grid-cols-4 xl:grid-cols-6 gap-2.5 content-start overflow-y-auto no-scrollbar">
               {renderedWatchlistCards.map((candidate) => (
                 <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-3.5 py-2.5 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
                   <div>
