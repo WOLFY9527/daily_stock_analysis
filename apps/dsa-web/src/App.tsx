@@ -27,6 +27,7 @@ const AccessGatePage = lazy(() => import('./components/access/AccessGatePage').t
 const HomeSurfacePage = lazy(() => import('./pages/HomeSurfacePage'));
 const ScannerSurfacePage = lazy(() => import('./pages/ScannerSurfacePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const PreviewReportPage = lazy(() => import('./pages/PreviewReportPage'));
 const PreviewFullReportDrawerPage = lazy(() => import('./pages/PreviewFullReportDrawerPage'));
@@ -505,6 +506,16 @@ export const AppContent: React.FC = () => {
           </Suspense>
         );
       }
+    } else if (routePathname === '/reset-password') {
+      if (!authEnabled || loggedIn) {
+        content = <Navigate to={localizedHomePath} replace />;
+      } else {
+        content = (
+          <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+            <ResetPasswordPage />
+          </Suspense>
+        );
+      }
     } else {
       content = (
         <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
@@ -541,6 +552,8 @@ export const AppContent: React.FC = () => {
             </Route>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/:locale/login" element={<LoginPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
           </Routes>
         </Suspense>
       );

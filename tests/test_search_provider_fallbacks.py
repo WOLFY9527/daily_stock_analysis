@@ -73,6 +73,7 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
     def test_search_stock_news_uses_finnhub_company_news(self, mock_get) -> None:
         published_at = datetime.now(timezone.utc) - timedelta(hours=6)
         published_ts = int(published_at.timestamp())
+        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
         mock_get.return_value = _FakeResponse(
             [
                 {
@@ -95,11 +96,15 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
         self.assertTrue(resp.success)
         self.assertEqual(resp.provider, "Finnhub")
         self.assertEqual(len(resp.results), 1)
-        self.assertEqual(resp.results[0].published_date, published_at.date().isoformat())
+        self.assertEqual(
+            resp.results[0].published_date,
+            published_at.astimezone(local_tz).date().isoformat(),
+        )
 
     @patch("src.search_service.requests.get")
     def test_search_stock_news_falls_back_from_finnhub_to_gnews(self, mock_get) -> None:
         published_at = (datetime.now(timezone.utc) - timedelta(hours=3)).replace(microsecond=0)
+        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
 
         def _side_effect(url, params=None, headers=None, timeout=10):
             if "finnhub.io" in url:
@@ -133,7 +138,10 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
         self.assertTrue(resp.success)
         self.assertEqual(resp.provider, "GNews")
         self.assertEqual(len(resp.results), 1)
-        self.assertEqual(resp.results[0].published_date, published_at.date().isoformat())
+        self.assertEqual(
+            resp.results[0].published_date,
+            published_at.astimezone(local_tz).date().isoformat(),
+        )
 
     def test_search_comprehensive_intel_tries_next_provider_for_dimension(self) -> None:
         service = SearchService(searxng_public_instances_enabled=False)

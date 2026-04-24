@@ -55,6 +55,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<ParsedApiError | null>(null);
+  const clearSessionState = useCallback(() => {
+    setLoggedIn(false);
+    setCurrentUser(null);
+    useStockPoolStore.getState().resetDashboardState();
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     setIsLoading(true);
@@ -127,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     let logoutError: unknown = null;
+    clearSessionState();
     try {
       await authApi.logout();
     } catch (err) {
@@ -138,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (logoutError && getParsedApiError(logoutError).status !== 401) {
       throw logoutError;
     }
-  }, [fetchStatus]);
+  }, [clearSessionState, fetchStatus]);
 
   return (
     <AuthContext.Provider

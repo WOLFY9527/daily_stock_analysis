@@ -40,6 +40,11 @@ export type UserNotificationPreferences = {
   updatedAt?: string | null;
 };
 
+export type PasswordResetRequestResponse = {
+  ok: boolean;
+  message: string;
+};
+
 export const authApi = {
   async getStatus(): Promise<AuthStatusResponse> {
     const { data } = await apiClient.get<AuthStatusResponse>('/api/v1/auth/status');
@@ -148,6 +153,13 @@ export const authApi = {
       newPassword,
       newPasswordConfirm,
     });
+  },
+
+  async requestPasswordReset(payload: { identifier: string }): Promise<PasswordResetRequestResponse> {
+    const { data } = await apiClient.post<PasswordResetRequestResponse>('/api/v1/auth/reset-password/request', {
+      identifier: payload.identifier,
+    });
+    return data;
   },
 
   async logout(): Promise<void> {

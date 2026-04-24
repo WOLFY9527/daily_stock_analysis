@@ -309,6 +309,12 @@ class DatabaseDoctorReportTestCase(unittest.TestCase):
             report["real_pg_bundle"]["verification_checks"]["phase_g_execution_log_shadow"]["probe_session_id"],
             "<latest_probe_session_id>",
         )
+        self.assertTrue(
+            all(
+                (not store_summary["bootstrap_recorded"]) or store_summary["bootstrap_applied_at"] == "<bootstrap_applied_at>"
+                for store_summary in report["stores"].values()
+            )
+        )
         self.assertIn(
             f"- isolated_sqlite_path={normalized_sqlite_path}",
             report["real_pg_bundle"]["ai_handoff_sample"]["paste_block"],

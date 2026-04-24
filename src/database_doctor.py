@@ -33,6 +33,7 @@ _DEFAULT_REAL_PG_MARKDOWN_OUTPUT = _ROOT_DIR / "tmp" / "database-real-pg-bundle.
 _DEFAULT_REAL_PG_JSON_OUTPUT = _ROOT_DIR / "tmp" / "database-real-pg-bundle.json"
 _REAL_PG_TEMP_SQLITE_PLACEHOLDER = "<temporary>/database-real-pg-bundle.sqlite"
 _REAL_PG_PROBE_SESSION_PLACEHOLDER = "<latest_probe_session_id>"
+_REAL_PG_BOOTSTRAP_APPLIED_AT_PLACEHOLDER = "<bootstrap_applied_at>"
 
 _URL_TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s]+")
 _SECRET_ASSIGNMENT_PATTERN = re.compile(
@@ -990,6 +991,9 @@ def _normalize_real_pg_bundle_report(
         actual_sqlite_path,
         _REAL_PG_TEMP_SQLITE_PLACEHOLDER,
     )
+    for store_summary in report.get("stores", {}).values():
+        if store_summary.get("bootstrap_applied_at"):
+            store_summary["bootstrap_applied_at"] = _REAL_PG_BOOTSTRAP_APPLIED_AT_PLACEHOLDER
     report["real_pg_bundle"]["ai_handoff_sample"] = _build_real_pg_bundle_ai_handoff(
         report=report,
         disposable_dsn_summary=report["real_pg_bundle"]["disposable_dsn_summary"],

@@ -3,6 +3,7 @@ import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import type { SystemConfigUpdateItem } from '../../types/systemConfig';
 import { ApiErrorAlert, Badge, Button, Input, Select, SupportBanner, SupportPanel } from '../common';
 
@@ -139,6 +140,7 @@ interface ChannelConfig {
   baseUrl: string;
   apiKey: string;
   models: string;
+  extraHeaders: string;
   enabled: boolean;
 }
 
@@ -176,6 +178,8 @@ interface ChannelRowProps {
   visibleKey: boolean;
   expanded: boolean;
   testState?: ChannelTestState;
+  t: (key: string, vars?: Record<string, string | number | undefined>) => string;
+  presetLabels: Record<string, string>;
   onUpdate: (index: number, field: keyof ChannelConfig, value: string | boolean) => void;
   onRemove: (index: number) => void;
   onToggleExpand: (index: number) => void;
@@ -190,6 +194,8 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
   visibleKey,
   expanded,
   testState,
+  t,
+  presetLabels,
   onUpdate,
   onRemove,
   onToggleExpand,
@@ -197,7 +203,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
   onTest,
 }) => {
   const preset = CHANNEL_PRESETS[channel.name];
-  const displayName = preset?.label || channel.name;
+  const displayName = presetLabels[channel.name] || channel.name;
   const modelCount = splitModels(channel.models).length;
   const hasKey = channel.apiKey.length > 0;
   const statusVariant = testState?.status === 'success'
@@ -241,18 +247,22 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
             </Badge>
           </div>
           <p className="mt-0.5 truncate text-[11px] text-secondary-text">
-            {modelCount > 0 ? `${modelCount} 个模型已配置` : '未配置模型'}
+            {modelCount > 0 ? t('settings.llmEditor.statusModelCount', { count: modelCount }) : t('settings.llmEditor.statusModelEmpty')}
           </p>
         </div>
 
         <span className="flex shrink-0 items-center gap-2">
-          {testState?.status === 'success' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-positive)]" title="连接正常" /> : null}
-          {testState?.status === 'error' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-danger)]" title="连接失败" /> : null}
-          {testState?.status === 'loading' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-warning)] animate-pulse" title="测试中" /> : null}
-          {!hasKey && channel.protocol !== 'ollama' ? <Badge variant="warning">未填 Key</Badge> : null}
+          {testState?.status === 'success' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-positive)]" title={t('settings.llmEditor.statusSuccess')} /> : null}
+          {testState?.status === 'error' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-danger)]" title={t('settings.llmEditor.statusError')} /> : null}
+          {testState?.status === 'loading' ? <span className="h-2 w-2 rounded-full bg-[var(--accent-warning)] animate-pulse" title={t('settings.llmEditor.statusLoading')} /> : null}
+          {!hasKey && channel.protocol !== 'ollama' ? <Badge variant="warning">{t('settings.llmEditor.statusMissingKey')}</Badge> : null}
           {testState?.status !== 'idle' ? (
             <Badge variant={statusVariant}>
-              {testState?.status === 'success' ? '连接正常' : testState?.status === 'error' ? '连接失败' : '测试中'}
+              {testState?.status === 'success'
+                ? t('settings.llmEditor.statusSuccess')
+                : testState?.status === 'error'
+                  ? t('settings.llmEditor.statusError')
+                  : t('settings.llmEditor.statusLoading')}
             </Badge>
           ) : null}
         </span>
@@ -267,7 +277,8 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
             e.stopPropagation();
             onRemove(index);
           }}
-          title="删除渠道"
+          title={t('settings.llmEditor.deleteChannelTitle')}
+          aria-label={t('settings.llmEditor.deleteChannelTitle')}
         >
           ✕
         </Button>
@@ -277,38 +288,38 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
         <div className="settings-surface-overlay-soft space-y-4 px-4 py-4">
           <div className="grid gap-2 sm:grid-cols-2">
             <Input
-              label="渠道名称"
+              label={t('settings.llmEditor.fieldName')}
               value={channel.name}
               disabled={busy}
               onChange={(e) => onUpdate(index, 'name', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-              placeholder="primary"
+              placeholder={t('settings.llmEditor.placeholderName')}
             />
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">协议</label>
+              <label className="block text-sm font-medium text-foreground">{t('settings.llmEditor.fieldProtocol')}</label>
               <Select
                 value={channel.protocol}
                 onChange={(v) => onUpdate(index, 'protocol', normalizeProtocol(v))}
                 options={PROTOCOL_OPTIONS}
                 disabled={busy}
-                placeholder="选择协议"
+                placeholder={t('settings.llmEditor.placeholderProtocol')}
               />
             </div>
           </div>
 
           <Input
-            label="Base URL"
+            label={t('settings.llmEditor.fieldBaseUrl')}
             value={channel.baseUrl}
             disabled={busy}
             onChange={(e) => onUpdate(index, 'baseUrl', e.target.value)}
             placeholder={
               channel.protocol === 'gemini' || channel.protocol === 'anthropic'
-                ? '官方接口可留空'
-                : preset?.baseUrl || 'https://api.example.com/v1'
+                ? t('settings.llmEditor.placeholderOfficialEmpty')
+                : preset?.baseUrl || t('settings.llmEditor.placeholderBaseUrl')
             }
           />
 
           <Input
-            label="API Key"
+            label={t('settings.llmEditor.fieldApiKey')}
             type="password"
             allowTogglePassword
             iconType="key"
@@ -317,15 +328,26 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
             value={channel.apiKey}
             disabled={busy}
             onChange={(e) => onUpdate(index, 'apiKey', e.target.value)}
-            placeholder={channel.protocol === 'ollama' ? '本地 Ollama 可留空' : '支持多个 Key 逗号分隔'}
+            placeholder={channel.protocol === 'ollama'
+              ? t('settings.llmEditor.placeholderApiKeyLocal')
+              : t('settings.llmEditor.placeholderApiKeyMulti')}
           />
 
           <Input
-            label="模型（逗号分隔）"
+            label={t('settings.llmEditor.fieldModels')}
             value={channel.models}
             disabled={busy}
             onChange={(e) => onUpdate(index, 'models', e.target.value)}
             placeholder={preset?.placeholder || MODEL_PLACEHOLDERS[channel.protocol]}
+          />
+
+          <Input
+            label={t('settings.llmEditor.fieldExtraHeaders')}
+            value={channel.extraHeaders}
+            disabled={busy}
+            onChange={(e) => onUpdate(index, 'extraHeaders', e.target.value)}
+            placeholder='{"x-trace-id":"wolfy"}'
+            hint={t('settings.llmEditor.extraHeadersHint')}
           />
 
           <div className="flex flex-wrap items-center gap-2 border-t settings-border-soft pt-3">
@@ -337,7 +359,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
               disabled={busy}
               onClick={() => onTest(channel, index)}
             >
-              {testState?.status === 'loading' ? '测试中...' : '测试连接'}
+              {testState?.status === 'loading' ? t('settings.llmEditor.testingAction') : t('settings.llmEditor.testAction')}
             </Button>
             {testState?.text ? (
               <span className={`rounded-full border px-2.5 py-1 text-xs ${
@@ -550,6 +572,24 @@ function parseRuntimeConfigFromItems(items: Array<{ key: string; value: string }
   };
 }
 
+function collectAvailableModels(channels: ChannelConfig[]): string[] {
+  const seen = new Set<string>();
+  const models: string[] = [];
+  for (const channel of channels) {
+    if (!channel.enabled || !channel.name.trim()) {
+      continue;
+    }
+    for (const model of resolveModelPreview(channel.models, channel.protocol)) {
+      if (!model || seen.has(model)) {
+        continue;
+      }
+      seen.add(model);
+      models.push(model);
+    }
+  }
+  return models;
+}
+
 function parseChannelsFromItems(items: Array<{ key: string; value: string }>): ChannelConfig[] {
   const itemMap = new Map(items.map((item) => [item.key, item.value]));
   const channelNames = (itemMap.get('LLM_CHANNELS') || '')
@@ -569,6 +609,7 @@ function parseChannelsFromItems(items: Array<{ key: string; value: string }>): C
       baseUrl,
       apiKey: itemMap.get(`LLM_${upperName}_API_KEYS`) || itemMap.get(`LLM_${upperName}_API_KEY`) || '',
       models: rawModels,
+      extraHeaders: itemMap.get(`LLM_${upperName}_EXTRA_HEADERS`) || '',
       enabled: parseEnabled(itemMap.get(`LLM_${upperName}_ENABLED`)),
     };
   });
@@ -601,6 +642,7 @@ function channelsToUpdateItems(
     updates.push({ key: `${prefix}_API_KEY${isMultiKey ? 'S' : ''}`, value: channel.apiKey });
     updates.push({ key: `${prefix}_API_KEY${isMultiKey ? '' : 'S'}`, value: '' });
     updates.push({ key: `${prefix}_MODELS`, value: channel.models });
+    updates.push({ key: `${prefix}_EXTRA_HEADERS`, value: channel.extraHeaders });
   }
 
   for (const oldName of previousChannelNames) {
@@ -629,6 +671,7 @@ function channelsAreEqual(left: ChannelConfig, right: ChannelConfig): boolean {
     && left.baseUrl === right.baseUrl
     && left.apiKey === right.apiKey
     && left.models === right.models
+    && left.extraHeaders === right.extraHeaders
     && left.enabled === right.enabled
   );
 }
@@ -656,6 +699,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   externalCreatePreset = null,
   onExternalCreateHandled,
 }) => {
+  const { t } = useI18n();
   const normalizedScopeName = normalizeProviderScopeName(providerScopeName);
   const scopedPreset = normalizedScopeName ? CHANNEL_PRESETS[normalizedScopeName] : null;
   const providerScopedMode = Boolean(normalizedScopeName && scopedPreset);
@@ -686,6 +730,10 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [addPreset, setAddPreset] = useState(normalizedScopeName || 'aihubmix');
+  const presetLabels = useMemo(
+    () => Object.fromEntries(Object.keys(CHANNEL_PRESETS).map((key) => [key, t(`settings.llmEditor.channelPreset.${key}`)])),
+    [t],
+  );
 
   const prevChannelsRef = useRef(channelsFingerprint);
   const prevRuntimeRef = useRef(runtimeFingerprint);
@@ -717,21 +765,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     if (!managesRuntimeConfig) {
       return [];
     }
-    const seen = new Set<string>();
-    const models: string[] = [];
-    for (const channel of channels) {
-      if (!channel.enabled || !channel.name.trim()) {
-        continue;
-      }
-      for (const model of resolveModelPreview(channel.models, channel.protocol)) {
-        if (!model || seen.has(model)) {
-          continue;
-        }
-        seen.add(model);
-        models.push(model);
-      }
-    }
-    return models;
+    return collectAvailableModels(channels);
   }, [channels, managesRuntimeConfig]);
 
   const hasChanges = useMemo(() => {
@@ -794,7 +828,26 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   };
 
   const removeChannel = (index: number) => {
-    setChannels((previous) => previous.filter((_, rowIndex) => rowIndex !== index));
+    setChannels((previous) => {
+      const nextChannels = previous.filter((_, rowIndex) => rowIndex !== index);
+      if (managesRuntimeConfig) {
+        const nextAvailableModels = collectAvailableModels(nextChannels);
+        setRuntimeConfig((previousRuntime) => ({
+          ...previousRuntime,
+          primaryModel: hasRuntimeSourceForModel(previousRuntime.primaryModel, nextAvailableModels, rawItemMap)
+            ? previousRuntime.primaryModel
+            : '',
+          agentPrimaryModel: hasRuntimeSourceForModel(previousRuntime.agentPrimaryModel, nextAvailableModels, rawItemMap)
+            ? previousRuntime.agentPrimaryModel
+            : '',
+          visionModel: hasRuntimeSourceForModel(previousRuntime.visionModel, nextAvailableModels, rawItemMap)
+            ? previousRuntime.visionModel
+            : '',
+          fallbackModels: previousRuntime.fallbackModels.filter((model) => hasRuntimeSourceForModel(model, nextAvailableModels, rawItemMap)),
+        }));
+      }
+      return nextChannels;
+    });
     setVisibleKeys({});
     setTestStates({});
     setExpandedRows({});
@@ -802,7 +855,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
   const addChannel = useCallback((presetKey?: string) => {
     const nextPresetKey = presetKey || addPreset;
-    const preset = CHANNEL_PRESETS[nextPresetKey] || CHANNEL_PRESETS.custom;
+      const preset = CHANNEL_PRESETS[nextPresetKey] || CHANNEL_PRESETS.custom;
     const baseName = nextPresetKey === 'custom' ? 'custom' : nextPresetKey;
     let nextIndex = 0;
     setChannels((previous) => {
@@ -823,6 +876,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
           baseUrl: preset.baseUrl,
           apiKey: '',
           models: preset.placeholder || '',
+          extraHeaders: '',
           enabled: true,
         },
       ];
@@ -856,7 +910,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   const handleSave = async () => {
     const hasEmptyName = channels.some((channel) => !channel.name.trim());
     if (hasEmptyName) {
-      setSaveMessage({ type: 'local-error', text: '渠道名称不能为空，且只能包含字母、数字或下划线。' });
+      setSaveMessage({ type: 'local-error', text: t('settings.llmEditor.validationEmptyName') });
       return;
     }
 
@@ -864,14 +918,14 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       const invalidPrimaryModel = runtimeConfig.primaryModel
         && !hasRuntimeSourceForModel(runtimeConfig.primaryModel, availableModels, rawItemMap);
       if (invalidPrimaryModel) {
-        setSaveMessage({ type: 'local-error', text: '当前主模型不在已启用渠道的模型列表中，请重新选择。' });
+        setSaveMessage({ type: 'local-error', text: t('settings.llmEditor.validationPrimaryModel') });
         return;
       }
 
       const invalidAgentPrimaryModel = runtimeConfig.agentPrimaryModel
         && !hasRuntimeSourceForModel(runtimeConfig.agentPrimaryModel, availableModels, rawItemMap);
       if (invalidAgentPrimaryModel) {
-        setSaveMessage({ type: 'local-error', text: '当前 Agent 主模型不在已启用渠道的模型列表中，请重新选择。' });
+        setSaveMessage({ type: 'local-error', text: t('settings.llmEditor.validationAgentModel') });
         return;
       }
 
@@ -881,7 +935,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       if (invalidFallbackModel) {
         setSaveMessage({
           type: 'local-error',
-          text: 'Fallback 仅支持当前运行时可访问模型（已启用渠道声明或可用直连 Provider Key）。跨 Provider 失败切换请在任务层备用路由中配置。',
+          text: t('settings.llmEditor.validationFallbackRuntimeOnly'),
         });
         return;
       }
@@ -889,7 +943,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       const invalidVisionModel = runtimeConfig.visionModel
         && !hasRuntimeSourceForModel(runtimeConfig.visionModel, availableModels, rawItemMap);
       if (invalidVisionModel) {
-        setSaveMessage({ type: 'local-error', text: '当前 Vision 模型不在已启用渠道的模型列表中，请重新选择。' });
+        setSaveMessage({ type: 'local-error', text: t('settings.llmEditor.validationVisionModel') });
         return;
       }
     }
@@ -899,7 +953,9 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
     try {
       const updateItems = channelsToUpdateItems(channels, initialNames, runtimeConfig, managesRuntimeConfig);
-      const successMessage = managesRuntimeConfig ? 'AI 配置已保存' : '渠道配置已保存';
+      const successMessage = managesRuntimeConfig
+        ? t('settings.llmEditor.saveRuntimeSuccess')
+        : t('settings.llmEditor.saveChannelsSuccess');
       await onSaveItems(updateItems, successMessage);
       setSaveMessage({ type: 'success', text: successMessage });
     } catch (error: unknown) {
@@ -912,7 +968,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   const handleTest = async (channel: ChannelConfig, index: number) => {
     setTestStates((previous) => ({
       ...previous,
-      [index]: { status: 'loading', text: '测试中...' },
+      [index]: { status: 'loading', text: t('settings.llmEditor.testingAction') },
     }));
 
     try {
@@ -926,8 +982,10 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       }, { adminUnlockToken });
 
       const text = result.success
-        ? `连接成功${result.resolvedModel ? ` · ${result.resolvedModel}` : ''}${result.latencyMs ? ` · ${result.latencyMs} ms` : ''}`
-        : (result.error || result.message || '测试失败');
+        ? (result.resolvedModel && result.latencyMs
+          ? t('settings.llmEditor.testSuccess', { model: result.resolvedModel, latency: result.latencyMs })
+          : t('settings.llmEditor.testSuccessNoModel'))
+        : (result.error || result.message || t('settings.llmEditor.statusError'));
 
       setTestStates((previous) => ({
         ...previous,
@@ -940,7 +998,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       const parsed = getParsedApiError(error);
       setTestStates((previous) => ({
         ...previous,
-        [index]: { status: 'error', text: parsed.message || '测试失败' },
+        [index]: { status: 'error', text: parsed.message || t('settings.llmEditor.statusError') },
       }));
     }
   };

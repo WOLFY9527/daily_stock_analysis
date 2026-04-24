@@ -5,6 +5,7 @@ import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Shell } from '../Shell';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useShellRailSlot } from '../useShellRailSlot';
+import { translate } from '../../../i18n/core';
 
 const { mockLogout, mockGetAgentStatus, useAuthMock } = vi.hoisted(() => ({
   mockLogout: vi.fn().mockResolvedValue(undefined),
@@ -171,13 +172,13 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '退出' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logout') }));
 
-    expect(await screen.findByRole('heading', { name: '退出登录' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '确认退出' }));
+    expect(await screen.findByRole('heading', { name: translate('zh', 'nav.logoutTitle') })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logoutConfirm') }));
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/'));
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/login'));
   });
 
   it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '../../i18n/core';
 import LoginPage from '../LoginPage';
 
 const { navigate, useSearchParamsMock, useAuthMock } = vi.hoisted(() => ({
@@ -44,11 +45,11 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.change(screen.getByLabelText('管理员密码'), { target: { value: 'passwd6' } });
-    fireEvent.change(screen.getByLabelText('确认密码'), { target: { value: 'passwd7' } });
-    fireEvent.click(screen.getByRole('button', { name: '完成设置并登录' }));
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelSetup')), { target: { value: 'passwd6' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: 'passwd7' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitSetup') }));
 
-    expect(await screen.findByText('两次输入的密码不一致')).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'auth.login.errorPasswordMismatch'))).toBeInTheDocument();
     expect(login).not.toHaveBeenCalled();
   });
 
@@ -61,8 +62,8 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.change(screen.getByLabelText('登录密码'), { target: { value: 'passwd6' } });
-    fireEvent.click(screen.getByRole('button', { name: '登录继续' }));
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') }));
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings', { replace: true }));
   });
@@ -77,10 +78,10 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    expect(screen.getByRole('heading', { name: '创建账户并登录' })).toBeInTheDocument();
-    expect(screen.getByLabelText('用户名')).toBeInTheDocument();
-    expect(screen.getByLabelText('显示名称')).toBeInTheDocument();
-    expect(screen.getByText('登录后将继续进入：扫描器')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.panelTitleCreate') })).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'))).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'auth.login.continuePrefix', { label: translate('zh', 'auth.login.redirectTarget.scanner') }))).toBeInTheDocument();
   });
 
   it('offers a safe exit back to home for direct login entry', () => {
@@ -93,7 +94,7 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: '返回首页' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.exitTarget.homeLabel') }));
 
     expect(navigate).toHaveBeenCalledWith('/', { replace: true });
   });
@@ -108,7 +109,7 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: '返回扫描器预览' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.exitTarget.scannerLabel') }));
 
     expect(navigate).toHaveBeenCalledWith('/scanner', { replace: true });
   });
@@ -124,7 +125,7 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back to scanner preview' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('en', 'auth.login.exitTarget.scannerLabel') }));
 
     expect(navigate).toHaveBeenCalledWith('/en/scanner', { replace: true });
   });
@@ -140,11 +141,27 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    expect(screen.getByRole('heading', { name: 'Sign in to WolfyStock' })).toBeInTheDocument();
-    expect(screen.getByText('Continue after sign-in')).toBeInTheDocument();
-    expect(screen.getByText('After sign-in you will continue to: Ask Stock')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back to home' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: translate('en', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'auth.login.continueAfterLogin'))).toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'auth.login.continuePrefix', { label: translate('en', 'auth.login.redirectTarget.chat') }))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'auth.login.exitTarget.homeLabel') })).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toBeInTheDocument();
+  });
+
+  it('links the login page to the reset-password route', () => {
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fsettings')]);
+    useAuthMock.mockReturnValue({
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    expect(screen.getByRole('link', { name: translate('zh', 'auth.login.forgotPassword') })).toHaveAttribute(
+      'href',
+      '/reset-password?redirect=%2Fsettings',
+    );
   });
 });

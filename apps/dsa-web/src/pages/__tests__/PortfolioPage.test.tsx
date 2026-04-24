@@ -1032,7 +1032,11 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.syncIbkr') }));
 
     expect(await screen.findByText(translate('zh', 'portfolio.readOnlyBadge'))).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(`${translate('zh', 'portfolio.accountRef')}:`))).toBeInTheDocument();
+    expect(
+      await screen.findAllByText((_, element) => (
+        element?.textContent || ''
+      ).includes(`${translate('zh', 'portfolio.accountRef')}:`)),
+    ).not.toHaveLength(0);
     expect(screen.queryByText(translate('en', 'portfolio.readOnlyBadge'))).not.toBeInTheDocument();
     expect(screen.queryByText(/^Ref:/)).not.toBeInTheDocument();
   });

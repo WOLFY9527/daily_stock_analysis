@@ -23,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
 import { useAgentChatStore } from '../../stores/agentChatStore';
+import { buildLocalizedPath } from '../../utils/localeRouting';
 import { cn } from '../../utils/cn';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
@@ -410,7 +411,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           void (async () => {
             try {
               await logout();
-              navigate('/', { replace: true });
+              navigate(buildLocalizedPath('/login', language), { replace: true });
             } catch {
               return;
             }
