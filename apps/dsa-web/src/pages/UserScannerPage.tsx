@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
-import { ApiErrorAlert, Badge, Button, Card, Drawer, Pagination } from '../components/common';
+import { ApiErrorAlert, Badge, Button, Drawer, Pagination } from '../components/common';
 import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
@@ -99,13 +99,6 @@ function marketVariant(market?: string | null): 'success' | 'info' | 'warning' |
   if (market === 'hk') return 'warning';
   if (market === 'cn') return 'info';
   return 'history';
-}
-
-function scannerGlassClassName(className?: string): string {
-  return [
-    'border border-white/5 bg-white/[0.02] backdrop-blur-2xl',
-    className || '',
-  ].join(' ').trim();
 }
 
 const UserScannerPage: React.FC = () => {
@@ -247,8 +240,6 @@ const UserScannerPage: React.FC = () => {
     () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
     [historyTotal],
   );
-  const currentProfileLabel = profileOptions.find((option) => option.value === profile)?.label || profile;
-  const currentMarketLabel = market === 'us' ? t('scanner.marketUs') : market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn');
   const shortlistCount = runDetail?.shortlist?.length ?? Number.parseInt(shortlistSize, 10);
   const watchlistCards = (runDetail?.shortlist || []).slice(0, 8).map((candidate) => ({
     symbol: candidate.symbol,
@@ -279,25 +270,12 @@ const UserScannerPage: React.FC = () => {
               onClick={() => setIsRationaleDrawerOpen(true)}
             >
               <PanelRightOpen className="h-4 w-4" />
-              <span>{language === 'en' ? 'Open rationale' : '查看解释'}</span>
+              <span>{language === 'en' ? 'Run history' : '历史运行记录'}</span>
             </button>
           </header>
 
           <section className="grid grid-cols-12 gap-6">
             <div className="col-span-8 flex flex-col gap-6">
-              <div className="grid grid-cols-2 gap-6">
-                <div className="bg-white/[0.02] rounded-[32px] p-8 border border-white/5 backdrop-blur-2xl">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.marketLabel')}</p>
-                  <p className="mt-4 text-3xl text-white">{currentMarketLabel}</p>
-                  <p className="mt-3 text-sm text-white/50">{language === 'en' ? 'Account-scoped scanner' : '账户范围扫描器'}</p>
-                </div>
-                <div className="bg-white/[0.02] rounded-[32px] p-8 border border-white/5 backdrop-blur-2xl">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.profileLabel')}</p>
-                  <p className="mt-4 text-3xl text-white">{currentProfileLabel}</p>
-                  <p className="mt-3 text-sm text-white/50">{selectedMarketCopy.runHint}</p>
-                </div>
-              </div>
-
               <div className="bg-white/[0.02] rounded-[32px] p-8 border border-white/5 backdrop-blur-2xl">
                 <div className="space-y-6">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
@@ -362,69 +340,63 @@ const UserScannerPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="grid grid-cols-12 gap-6">
-            <div className="col-span-8">
-              <Card title={language === 'en' ? 'My recent runs' : '我的近期运行'} subtitle={language === 'en' ? 'Your run history' : '个人范围历史'} className={scannerGlassClassName()}>
-                {historyError ? <ApiErrorAlert error={historyError} /> : null}
-                {isLoadingHistory ? <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">{t('scanner.loadingHistory')}</div> : null}
-                {!isLoadingHistory && historyItems.length ? (
-                  <div className="space-y-3">
-                    {historyItems.map((item) => (
-                      <button key={item.id} type="button" onClick={() => void loadRun(item.id)} className={`w-full rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-3 text-left transition-colors backdrop-blur-2xl ${item.id === selectedRunId ? 'border-white/10 bg-white/[0.05]' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.035]'}`}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</Badge>
-                          <Badge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
-                          {item.watchlistDate ? <Badge variant="history">{formatDateOnly(item.watchlistDate, language)}</Badge> : null}
-                        </div>
-                        <p className="mt-3 text-sm font-semibold text-foreground">{item.headline || (item.market === 'us' ? t('scanner.currentRunFallbackUs') : item.market === 'hk' ? t('scanner.currentRunFallbackHk') : t('scanner.currentRunFallbackCn'))}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
-                          <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
-                          <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
-                          <span>{formatTimestamp(item.runAt, language)}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {!isLoadingHistory && !historyItems.length ? <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">{language === 'en' ? 'No personal scanner history yet.' : '你还没有个人扫描历史。'}</div> : null}
-                {totalHistoryPages > 1 ? <div className="pt-2"><Pagination currentPage={historyPage} totalPages={totalHistoryPages} onPageChange={(page) => void fetchHistory(page)} /></div> : null}
-              </Card>
-            </div>
-            <div className="col-span-4">
-              <Card title={language === 'en' ? 'Why this page is different' : '为什么用户界面与管理员不同'} subtitle={language === 'en' ? 'User and admin views' : '界面分层'} className={scannerGlassClassName()}>
-                <div className="space-y-3 text-sm leading-6 text-secondary-text">
-                  <p>{language === 'en' ? 'This page focuses on manual runs, shortlist details, and links into other signed-in product features.' : '这个页面只保留手动运行、候选名单详情和登录后功能跳转，面向普通登录用户。'}</p>
-                  <p>{language === 'en' ? 'Run status, system watchlists, schedules, and channel settings stay in admin-only pages.' : '运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。'}</p>
-                </div>
-              </Card>
-            </div>
-          </section>
         </div>
       </div>
 
       <Drawer
         isOpen={isRationaleDrawerOpen}
         onClose={() => setIsRationaleDrawerOpen(false)}
-        title={language === 'en' ? 'Scanner surface rationale' : '扫描器页面说明'}
-        width="max-w-2xl"
+        title={language === 'en' ? 'Run history and ownership' : '历史记录与页面边界'}
+        width="max-w-4xl"
       >
-        <div data-testid="user-scanner-bento-drawer" className="rounded-[28px] border border-white/5 bg-white/[0.02] p-5 text-white backdrop-blur-2xl sm:p-6">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'User scope' : '用户范围'}</p>
-              <p className="mt-3 text-sm leading-6 text-white/70">
-                {language === 'en'
-                  ? 'This surface keeps manual runs, shortlist review, and downstream actions inside the signed-in user account.'
-                  : '这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。'}
-              </p>
+        <div data-testid="user-scanner-bento-drawer" className="ml-auto h-full w-full max-w-4xl rounded-l-[40px] border border-white/5 bg-white/[0.02] p-6 text-white backdrop-blur-3xl sm:p-8">
+          <div className="grid gap-6">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'Run history' : '运行历史'}</p>
+              <h2 className="mt-2 text-2xl text-white">{language === 'en' ? 'Recent scanner runs' : '近期扫描记录'}</h2>
             </div>
-            <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'Admin boundary' : '管理员边界'}</p>
-              <p className="mt-3 text-sm leading-6 text-white/70">
-                {language === 'en'
-                  ? 'System watchlists, schedules, and global run controls stay in admin-only pages instead of leaking into the user workflow.'
-                  : '系统观察名单、调度和全局运行控制继续保留在管理员页面，不混进用户工作流。'}
-              </p>
+
+            {historyError ? <ApiErrorAlert error={historyError} /> : null}
+            {isLoadingHistory ? <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">{t('scanner.loadingHistory')}</div> : null}
+            {!isLoadingHistory && historyItems.length ? (
+              <div className="space-y-3">
+                {historyItems.map((item) => (
+                  <button key={item.id} type="button" onClick={() => void loadRun(item.id)} className={`w-full rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-3 text-left transition-colors backdrop-blur-2xl ${item.id === selectedRunId ? 'border-white/10 bg-white/[0.05]' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.035]'}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</Badge>
+                      <Badge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
+                      {item.watchlistDate ? <Badge variant="history">{formatDateOnly(item.watchlistDate, language)}</Badge> : null}
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-foreground">{item.headline || (item.market === 'us' ? t('scanner.currentRunFallbackUs') : item.market === 'hk' ? t('scanner.currentRunFallbackHk') : t('scanner.currentRunFallbackCn'))}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
+                      <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
+                      <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
+                      <span>{formatTimestamp(item.runAt, language)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {!isLoadingHistory && !historyItems.length ? <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">{language === 'en' ? 'No personal scanner history yet.' : '你还没有个人扫描历史。'}</div> : null}
+            {totalHistoryPages > 1 ? <div className="pt-2"><Pagination currentPage={historyPage} totalPages={totalHistoryPages} onPageChange={(page) => void fetchHistory(page)} /></div> : null}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'User scope' : '用户范围'}</p>
+                <p className="mt-3 text-sm leading-6 text-white/70">
+                  {language === 'en'
+                    ? 'This surface keeps manual runs, shortlist review, and downstream actions inside the signed-in user account.'
+                    : '这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。'}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'Admin boundary' : '管理员边界'}</p>
+                <p className="mt-3 text-sm leading-6 text-white/70">
+                  {language === 'en'
+                    ? 'Run status, system watchlists, schedules, and channel settings stay in admin-only pages.'
+                    : '运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
