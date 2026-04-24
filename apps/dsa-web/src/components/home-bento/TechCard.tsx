@@ -37,12 +37,12 @@ export const TechCard: React.FC<TechCardProps> = ({
       {signals.map((signal) => (
         <div
           key={signal.label}
-          className="flex items-center justify-between gap-3 rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4"
+          className="flex items-center justify-between gap-3 rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 backdrop-blur-xl"
         >
           <span className="text-sm text-white/62">{signal.label}</span>
           <span
             className={`text-sm font-semibold ${getToneTextClass(signal.tone)}`}
-            style={getToneTextStyle(signal.tone)}
+            style={getToneTextStyle(signal.tone, false)}
           >
             {signal.value}
           </span>
@@ -51,4 +51,3 @@ export const TechCard: React.FC<TechCardProps> = ({
     </div>
   </BentoCard>
 );
-

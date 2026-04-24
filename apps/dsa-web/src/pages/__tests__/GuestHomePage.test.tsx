@@ -181,7 +181,8 @@ describe('GuestHomePage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('guest-home-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-bento-page')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('guest-home-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('guest-home-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-bento-hero-unlock-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('guest-home-preview-card')).toBeInTheDocument();

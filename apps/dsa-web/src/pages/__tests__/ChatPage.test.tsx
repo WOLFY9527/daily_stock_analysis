@@ -176,7 +176,8 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('chat-bento-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('chat-bento-page')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('chat-bento-hero')).toBeInTheDocument();
     expect(await screen.findByTestId('chat-bento-hero-skill-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();

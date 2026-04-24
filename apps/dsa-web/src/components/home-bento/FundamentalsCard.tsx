@@ -35,11 +35,11 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
   >
     <div className="grid grid-cols-2 gap-3">
       {metrics.map((metric) => (
-        <div key={metric.label} className="rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
+        <div key={metric.label} className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 backdrop-blur-xl">
           <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{metric.label}</p>
           <p
             className={`mt-3 text-lg font-semibold ${getToneTextClass(metric.tone || 'neutral')}`}
-            style={getToneTextStyle(metric.tone || 'neutral')}
+            style={getToneTextStyle(metric.tone || 'neutral', false)}
           >
             {metric.value}
           </p>
@@ -48,4 +48,3 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
     </div>
   </BentoCard>
 );
-

@@ -1,7 +1,13 @@
 import type React from 'react';
 import { WorkspacePageHeader } from '../common';
 import { cn } from '../../utils/cn';
-import { CARD_KICKER_CLASS, getToneTextClass, getToneTextStyle, type SignalTone } from './theme';
+import {
+  BENTO_SURFACE_ROOT_CLASS,
+  CARD_KICKER_CLASS,
+  getToneTextClass,
+  getToneTextStyle,
+  type SignalTone,
+} from './theme';
 
 export type BentoHeroItem = {
   label: string;
@@ -30,19 +36,17 @@ export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className
         <div
           key={`${item.label}-${index}`}
           data-testid={item.testId}
-          className="group relative overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.03] px-4 py-4 backdrop-blur-[24px] transition-all duration-200 ease-out hover:-translate-y-[2px] hover:border-white/[0.14] hover:bg-white/[0.05] sm:px-5 sm:py-5"
+          className="group relative overflow-hidden rounded-[36px] border border-white/[0.08] bg-white/[0.02] px-6 py-6 backdrop-blur-xl transition-all duration-200 ease-out hover:-translate-y-[2px] hover:border-white/[0.12] hover:bg-white/[0.03] sm:px-6 sm:py-6"
         >
-          <div
-            aria-hidden="true"
-            className={cn(
-              'pointer-events-none absolute right-[-2.5rem] top-[-2.5rem] h-24 w-24 rounded-full blur-[60px]',
-              tone === 'bullish'
-                ? 'bg-[#34D399]/18'
-                : tone === 'bearish'
-                  ? 'bg-[#FB7185]/18'
-                  : 'bg-white/10',
-            )}
-          />
+          {tone !== 'neutral' ? (
+            <div
+              aria-hidden="true"
+              className={cn(
+                'pointer-events-none absolute right-[-2rem] top-[-2rem] h-20 w-20 rounded-full blur-[56px]',
+                tone === 'bullish' ? 'bg-[#34D399]/14' : 'bg-[#FB7185]/14',
+              )}
+            />
+          ) : null}
           <div className="relative z-10">
             <p className={CARD_KICKER_CLASS}>{item.label}</p>
             <p
@@ -51,7 +55,7 @@ export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className
                 'mt-3 text-[1.65rem] font-semibold tracking-[-0.03em] text-white sm:text-[1.85rem]',
                 getToneTextClass(tone),
               )}
-              style={getToneTextStyle(tone)}
+              style={getToneTextStyle(tone, tone !== 'neutral')}
             >
               {item.value}
             </p>
@@ -98,7 +102,11 @@ export const PageChrome: React.FC<PageChromeProps> = ({
   pageTestId,
   heroTestId,
 }) => (
-  <div data-testid={pageTestId} className={cn('gemini-bento-page', pageClassName)}>
+  <div
+    data-testid={pageTestId}
+    data-bento-surface="true"
+    className={cn('gemini-bento-page', BENTO_SURFACE_ROOT_CLASS, pageClassName)}
+  >
     <WorkspacePageHeader
       eyebrow={eyebrow}
       title={title}

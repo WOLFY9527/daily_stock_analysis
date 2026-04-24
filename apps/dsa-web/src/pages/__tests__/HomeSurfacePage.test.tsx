@@ -43,8 +43,10 @@ describe('HomeSurfacePage', () => {
   it('renders the signed-in bento dashboard for authenticated users', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
-    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-dashboard')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('home-bento-dashboard')).toHaveClass('bento-surface-root');
+    expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
+    expect(screen.getByTestId('home-bento-grid')).toHaveClass('bento-grid-root');
     expect(screen.getByText('WolfyStock 决策面板')).toBeInTheDocument();
     expect(screen.getByText('WOLFY AI 决断')).toBeInTheDocument();
   });

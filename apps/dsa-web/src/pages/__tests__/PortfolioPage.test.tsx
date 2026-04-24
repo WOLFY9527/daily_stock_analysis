@@ -327,7 +327,8 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.getByTestId('portfolio-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('portfolio-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-bento-hero-equity-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();

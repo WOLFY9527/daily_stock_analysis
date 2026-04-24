@@ -46,17 +46,16 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
           <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{metric.label}</p>
           <p
             className={`mt-3 text-xl font-semibold ${getToneTextClass(metric.tone || 'neutral')}`}
-            style={getToneTextStyle(metric.tone || 'neutral')}
+            style={getToneTextStyle(metric.tone || 'neutral', false)}
           >
             {metric.value}
           </p>
         </div>
       ))}
     </div>
-    <div className="mt-4 rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
+    <div className="mt-4 rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl">
       <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{positionLabel}</p>
       <p className="mt-3 text-sm leading-6 text-white/68">{positionBody}</p>
     </div>
   </BentoCard>
 );
-

@@ -4,6 +4,7 @@ import { ArrowUpRight, Bot, BriefcaseBusiness, FlaskConical, PanelRightOpen, Sea
 import { Link } from 'react-router-dom';
 import { Drawer } from '../components/common';
 import {
+  BENTO_SURFACE_ROOT_CLASS,
   BentoCard,
   BentoGrid,
   CARD_BUTTON_CLASS,
@@ -445,138 +446,136 @@ const HomeBentoDashboardPage: React.FC = () => {
   );
 
   return (
-    <div data-testid="home-bento-dashboard" className="space-y-5">
-      <section className="relative overflow-hidden rounded-[40px] border border-white/[0.06] bg-[#030303] p-4 sm:p-6">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute right-[-5rem] top-[-4rem] h-56 w-56 rounded-full bg-white/[0.05] blur-[96px]"
-        />
-        <div className="relative z-10 flex flex-col gap-6">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div className="max-w-3xl">
-              <p className={CARD_KICKER_CLASS}>{copy.eyebrow}</p>
-              <h1 className="mt-3 text-[2rem] font-semibold tracking-tight text-white sm:text-[2.4rem]">
-                {copy.heading}
-              </h1>
-              <p className="mt-3 text-sm leading-6 text-white/62">{copy.description}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {topActions.map((action) => (
-                <Link
-                  key={action.label}
-                  to={action.to}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-white/78 transition-colors duration-150 hover:border-white/18 hover:bg-white/[0.08] hover:text-white"
-                >
-                  <span>{action.label}</span>
-                  <ArrowUpRight className="h-4 w-4" />
-                </Link>
-              ))}
-            </div>
+    <div
+      data-testid="home-bento-dashboard"
+      data-bento-surface="true"
+      className={`${BENTO_SURFACE_ROOT_CLASS} space-y-6`}
+    >
+      <section className="space-y-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <p className={CARD_KICKER_CLASS}>{copy.eyebrow}</p>
+            <h1 className="mt-3 text-[2rem] font-semibold tracking-tight text-white sm:text-[2.4rem]">
+              {copy.heading}
+            </h1>
+            <p className="mt-3 text-sm leading-6 text-white/62">{copy.description}</p>
           </div>
-
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-full border border-white/[0.08] bg-white/[0.05] px-4 py-2 text-sm text-white/86">
-              <span className="font-medium text-white">{copy.instrument}</span>
-              <span className="ml-2 font-mono text-white/40">{copy.ticker}</span>
-            </div>
-            <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('bullish')}`}>
-              {copy.sessionBadge}
-            </div>
-            <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('neutral')}`}>
-              {copy.regimeBadge}
-            </div>
+            {topActions.map((action) => (
+              <Link
+                key={action.label}
+                to={action.to}
+                className={CARD_BUTTON_CLASS}
+              >
+                <span>{action.label}</span>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            ))}
           </div>
-
-          <BentoGrid testId="home-bento-grid">
-            <DecisionCard
-              eyebrow={copy.decision.eyebrow}
-              company={copy.decision.company}
-              ticker={copy.ticker}
-              heroValue={copy.decision.heroValue}
-              heroUnit={copy.decision.heroUnit}
-              heroLabel={copy.decision.heroLabel}
-              signalLabel={copy.decision.signalLabel}
-              signalTone={copy.decision.signalTone}
-              scoreLabel={copy.decision.scoreLabel}
-              scoreValue={copy.decision.scoreValue}
-              badge={copy.decision.badge}
-              chartLabel={copy.decision.chartLabel}
-              summary={copy.decision.summary}
-              detailLabel={copy.decision.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
-            />
-
-            <StrategyCard
-              title={copy.strategy.title}
-              subtitle={copy.strategy.subtitle}
-              metrics={copy.strategy.metrics}
-              positionLabel={copy.strategy.positionLabel}
-              positionBody={copy.strategy.positionBody}
-              detailLabel={copy.strategy.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
-            />
-
-            <TechCard
-              title={copy.tech.title}
-              signals={copy.tech.signals}
-              detailLabel={copy.tech.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
-            />
-
-            <FundamentalsCard
-              title={copy.fundamentals.title}
-              metrics={copy.fundamentals.metrics}
-              detailLabel={copy.fundamentals.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
-            />
-
-            <BentoCard
-              eyebrow={copy.workflow.eyebrow}
-              title={copy.workflow.title}
-              subtitle={copy.workflow.body}
-              className="xl:col-span-5"
-              testId="home-bento-card-workflow"
-              action={(
-                <button type="button" className={CARD_BUTTON_CLASS} onClick={() => setActiveDrawer(copy.drawers.workflow)}>
-                  <PanelRightOpen className="h-4 w-4" />
-                  <span>{copy.workflow.detailLabel}</span>
-                </button>
-              )}
-            >
-              <div className="grid gap-3 sm:grid-cols-3">
-                {workflowActions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <Link
-                      key={action.label}
-                      to={action.to}
-                      className="rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4 transition-colors duration-150 hover:border-white/16 hover:bg-black/40"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white/82">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <ArrowUpRight className="h-4 w-4 text-white/46" />
-                      </div>
-                      <p className="mt-4 text-sm font-semibold text-white">{action.label}</p>
-                      <p className="mt-2 text-sm leading-6 text-white/58">{action.description}</p>
-                    </Link>
-                  );
-                })}
-              </div>
-
-              <div className="mt-4 rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
-                <p className={CARD_KICKER_CLASS}>{copy.workflow.statusEyebrow}</p>
-                <div className="mt-3 flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white/78">
-                    <Bot className="h-4 w-4" />
-                  </div>
-                  <p className="text-sm leading-6 text-white/64">{copy.workflow.statusBody}</p>
-                </div>
-              </div>
-            </BentoCard>
-          </BentoGrid>
         </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-full border border-white/[0.08] bg-white/[0.02] px-4 py-2 text-sm text-white/86 backdrop-blur-xl">
+            <span className="font-medium text-white">{copy.instrument}</span>
+            <span className="ml-2 font-mono text-white/40">{copy.ticker}</span>
+          </div>
+          <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('bullish')}`}>
+            {copy.sessionBadge}
+          </div>
+          <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('neutral')}`}>
+            {copy.regimeBadge}
+          </div>
+        </div>
+
+        <BentoGrid testId="home-bento-grid">
+          <DecisionCard
+            eyebrow={copy.decision.eyebrow}
+            company={copy.decision.company}
+            ticker={copy.ticker}
+            heroValue={copy.decision.heroValue}
+            heroUnit={copy.decision.heroUnit}
+            heroLabel={copy.decision.heroLabel}
+            signalLabel={copy.decision.signalLabel}
+            signalTone={copy.decision.signalTone}
+            scoreLabel={copy.decision.scoreLabel}
+            scoreValue={copy.decision.scoreValue}
+            badge={copy.decision.badge}
+            chartLabel={copy.decision.chartLabel}
+            summary={copy.decision.summary}
+            detailLabel={copy.decision.detailLabel}
+            onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
+          />
+
+          <StrategyCard
+            title={copy.strategy.title}
+            subtitle={copy.strategy.subtitle}
+            metrics={copy.strategy.metrics}
+            positionLabel={copy.strategy.positionLabel}
+            positionBody={copy.strategy.positionBody}
+            detailLabel={copy.strategy.detailLabel}
+            onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
+          />
+
+          <TechCard
+            title={copy.tech.title}
+            signals={copy.tech.signals}
+            detailLabel={copy.tech.detailLabel}
+            onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+          />
+
+          <FundamentalsCard
+            title={copy.fundamentals.title}
+            metrics={copy.fundamentals.metrics}
+            detailLabel={copy.fundamentals.detailLabel}
+            onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
+          />
+
+          <BentoCard
+            eyebrow={copy.workflow.eyebrow}
+            title={copy.workflow.title}
+            subtitle={copy.workflow.body}
+            className="xl:col-span-5"
+            testId="home-bento-card-workflow"
+            action={(
+              <button type="button" className={CARD_BUTTON_CLASS} onClick={() => setActiveDrawer(copy.drawers.workflow)}>
+                <PanelRightOpen className="h-4 w-4" />
+                <span>{copy.workflow.detailLabel}</span>
+              </button>
+            )}
+          >
+            <div className="grid gap-3 sm:grid-cols-3">
+              {workflowActions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <Link
+                    key={action.label}
+                    to={action.to}
+                    className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl transition-colors duration-150 hover:border-white/[0.12] hover:bg-white/[0.03]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] text-white/82 backdrop-blur-xl">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <ArrowUpRight className="h-4 w-4 text-white/46" />
+                    </div>
+                    <p className="mt-4 text-sm font-semibold text-white">{action.label}</p>
+                    <p className="mt-2 text-sm leading-6 text-white/58">{action.description}</p>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl">
+              <p className={CARD_KICKER_CLASS}>{copy.workflow.statusEyebrow}</p>
+              <div className="mt-3 flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] text-white/78 backdrop-blur-xl">
+                  <Bot className="h-4 w-4" />
+                </div>
+                <p className="text-sm leading-6 text-white/64">{copy.workflow.statusBody}</p>
+              </div>
+            </div>
+          </BentoCard>
+        </BentoGrid>
       </section>
 
       <Drawer
@@ -586,16 +585,16 @@ const HomeBentoDashboardPage: React.FC = () => {
         width="max-w-3xl"
       >
         {activeDrawer ? (
-          <div data-testid="home-bento-drawer" className="rounded-[32px] border border-white/[0.08] bg-[#050505] p-5 text-white sm:p-6">
+          <div data-testid="home-bento-drawer" className="rounded-[36px] border border-white/[0.08] bg-[#050505]/96 p-6 text-white backdrop-blur-xl sm:p-6">
             <p className="text-sm leading-6 text-white/68">{activeDrawer.summary}</p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {activeDrawer.metrics.map((metric) => (
-                <div key={metric.label} className="rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
+                <div key={metric.label} className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 backdrop-blur-xl">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{metric.label}</p>
                   <p
                     className={`mt-3 text-lg font-semibold ${getToneTextClass(metric.tone || 'neutral')}`}
-                    style={getToneTextStyle(metric.tone || 'neutral')}
+                    style={getToneTextStyle(metric.tone || 'neutral', (metric.tone || 'neutral') !== 'neutral')}
                   >
                     {metric.value}
                   </p>
@@ -621,4 +620,3 @@ const HomeBentoDashboardPage: React.FC = () => {
 };
 
 export default HomeBentoDashboardPage;
-

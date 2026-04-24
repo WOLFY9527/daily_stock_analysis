@@ -822,7 +822,8 @@ describe('ScannerPage', () => {
   it('renders today watchlist status, recent watchlists, and opens the detail drawer', async () => {
     renderScannerPage();
 
-    expect(await screen.findByTestId('scanner-bento-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('scanner-bento-page')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('scanner-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('scanner-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-bento-hero-shortlist-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect((await screen.findAllByText('算力龙头')).length).toBeGreaterThan(0);

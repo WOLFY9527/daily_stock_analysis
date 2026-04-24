@@ -29,7 +29,8 @@ describe('GuestScannerPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('guest-scanner-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-scanner-bento-page')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('guest-scanner-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('guest-scanner-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('guest-scanner-bento-hero-history-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByRole('link', { name: '登录后运行扫描器' })).toHaveAttribute('href', '/zh/login?redirect=%2Fzh%2Fscanner');

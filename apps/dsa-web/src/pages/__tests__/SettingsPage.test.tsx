@@ -474,7 +474,8 @@ describe('SettingsPage', () => {
   it('renders category navigation and auth settings modules', async () => {
     render(<SettingsPage />);
 
-    expect(screen.getByTestId('settings-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-bento-page')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('settings-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();

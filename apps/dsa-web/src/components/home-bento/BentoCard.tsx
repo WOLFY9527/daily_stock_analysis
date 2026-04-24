@@ -11,6 +11,7 @@ type BentoCardProps = {
   className?: string;
   contentClassName?: string;
   tone?: SignalTone;
+  accentGlow?: boolean;
   testId?: string;
 };
 
@@ -23,22 +24,25 @@ export const BentoCard: React.FC<BentoCardProps> = ({
   className,
   contentClassName,
   tone = 'neutral',
+  accentGlow = false,
   testId,
 }) => (
   <section
     data-testid={testId}
     className={cn(
-      'group relative overflow-hidden rounded-[36px] border border-white/[0.06] bg-white/[0.03] p-5 backdrop-blur-[24px] transition-transform duration-200 ease-out hover:-translate-y-[2px] sm:p-6',
+      'group relative overflow-hidden rounded-[36px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl transition-transform duration-200 ease-out hover:-translate-y-[2px] sm:p-8',
       className,
     )}
   >
-    <div
-      aria-hidden="true"
-      className={cn(
-        'pointer-events-none absolute right-[-3rem] top-[-3rem] h-40 w-40 rounded-full blur-[72px]',
-        getCardGlowClass(tone),
-      )}
-    />
+    {accentGlow && tone !== 'neutral' ? (
+      <div
+        aria-hidden="true"
+        className={cn(
+          'pointer-events-none absolute right-[-3rem] top-[-3rem] h-40 w-40 rounded-full blur-[72px]',
+          getCardGlowClass(tone),
+        )}
+      />
+    ) : null}
     <div className={cn('relative z-10 flex h-full flex-col', contentClassName)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -52,4 +56,3 @@ export const BentoCard: React.FC<BentoCardProps> = ({
     </div>
   </section>
 );
-

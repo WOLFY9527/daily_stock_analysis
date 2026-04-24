@@ -41,6 +41,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   <BentoCard
     eyebrow={eyebrow}
     tone={signalTone}
+    accentGlow
     className="xl:col-span-7 xl:row-span-2"
     testId="home-bento-card-decision"
     action={(
@@ -69,7 +70,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
               <p
                 className={`mt-2 text-[32px] font-semibold leading-none ${getToneTextClass(signalTone)}`}
-                style={getToneTextStyle(signalTone)}
+                style={getToneTextStyle(signalTone, true)}
               >
                 {signalLabel}
               </p>
@@ -88,7 +89,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </div>
       </div>
 
-      <div className="relative flex-1 overflow-hidden rounded-[28px] border border-white/[0.06] bg-black/28 px-4 py-5">
+      <div className="relative flex-1 overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl">
         <svg className="h-44 w-full text-[#34D399]" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <linearGradient id="home-bento-decision-fill" x1="0" y1="0" x2="0" y2="1">
@@ -107,11 +108,10 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             style={{ filter: 'drop-shadow(0 4px 8px rgba(52, 211, 153, 0.4))' }}
           />
         </svg>
-        <div className="absolute right-7 top-7 rounded-full border border-white/[0.08] bg-black/52 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/62">
+        <div className="absolute right-7 top-7 rounded-full border border-white/[0.08] bg-black/35 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/62 backdrop-blur-xl">
           {chartLabel}
         </div>
       </div>
     </div>
   </BentoCard>
 );
-

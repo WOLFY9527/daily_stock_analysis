@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 新功能
 
+- 🧱 **Bento 极简风格扩展到核心工作台页面** — `apps/dsa-web` 现已把 Home / Scanner / Portfolio / Backtest / Settings / Chat 以及 guest surfaces 的 Bento 外壳统一收口到纯黑背景上的低透明度玻璃卡片：移除了包裹整页卡片的外层灰色容器，统一为更大的圆角、弱化阴影、`bg-white/[0.02] + backdrop blur` 的面板表皮，并把 glow 限制在 hero / 决策信号等核心指标上。此次改动保持现有 PageChrome、hero strip、占位数据与后端 API 契约不变，同时补齐了统一 Bento root test hook、页级单测和 1440px / 390px Playwright smoke 覆盖。
 - 🧩 **首页切换为 Gemini 风格 Bento 决策面板骨架** — Web `/` 的已登录首页现已切换为新的 Gemini-inspired Bento dashboard skeleton：以深黑背景、超大圆角玻璃卡片、看多/看空 glow 文本、占位策略/技术/基本面模块，以及基于 Drawer 的渐进披露结构重新组织首页信息密度；同时保留 guest 首页、现有路由、后端接口与契约不变，并补充 smoke 覆盖首页 Bento 栅格、抽屉交互与 EN/ZH 核心文案检查。当前数据仍为前端占位值，真实数据接入留待后续迭代。
 - 🖥️ **Slice 9 frontend exposure for additive portfolio/backtest fields** — Web `/portfolio` 现已把 additive 的 `portfolio_attribution`、`account_attribution`、`industry_attribution` 接成只读摘要卡；`/backtest` 配置页的 `解析确认` 区会在 `strategy_spec.risk_controls` 存在时展示止损 / 止盈 / 移动止损；`/backtest/results/:runId` 的 `参数与假设` tab 会在 run payload 含有 `robustness_analysis` 时展示最小版状态与摘要指标。此次改动只做前端可见性补齐，不改变后端 contract、deterministic engine 或既有主交互。
 - ✅ **Backtest release-readiness frontend closure** — Slices 10-16 已完成 portfolio/backtest additive dashboard 的轻量可视化、统一面板整合、hover/focus linked-highlight、ARIA tooltip 语义、路由级与页面级 bundle hardening，以及生产预览回归。当前 Vite large-chunk warning 已清除；这些改动保持 frontend-only、additive/read-only，不改变 backend、schema、API、deterministic execution 或 portfolio ledger data flow。

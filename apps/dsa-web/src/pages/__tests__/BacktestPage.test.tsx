@@ -884,7 +884,8 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByTestId('backtest-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-bento-page')).toHaveAttribute('data-bento-surface', 'true');
+    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('backtest-v1-page')).toBeInTheDocument();
