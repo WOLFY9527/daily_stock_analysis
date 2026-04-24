@@ -58,9 +58,22 @@ type PerformanceNotice = {
 };
 
 type BacktestLanguage = 'zh' | 'en';
+type BacktestMonitorMetric = {
+  label: string;
+  value: string;
+  note: string;
+};
 
 function bt(language: BacktestLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
   return translate(language, `backtest.${key}`, vars);
+}
+
+function formatMonitorPct(value?: number | null): string {
+  return value == null || Number.isNaN(value) ? '--' : `${value.toFixed(1)}%`;
+}
+
+function formatMonitorNumber(value?: number | null): string {
+  return value == null || Number.isNaN(value) ? '--' : value.toFixed(2);
 }
 
 function buildRuleParseSignature(payload: {
@@ -987,6 +1000,42 @@ const BacktestPage: React.FC = () => {
       testId: 'backtest-bento-hero-benchmark',
     },
   ];
+  const latestRuleRun = ruleHistoryItems.find((item) => item.id === selectedRuleRunId) ?? ruleHistoryItems[0] ?? null;
+  const monitorMetrics: BacktestMonitorMetric[] = activeModule === 'historical'
+    ? [
+      {
+        label: language === 'en' ? 'Win rate' : '胜率',
+        value: formatMonitorPct(historicalPerfSnapshot?.winRatePct),
+        note: language === 'en' ? 'Completed sample wins' : '已完成样本命中',
+      },
+      {
+        label: language === 'en' ? 'Max drawdown' : '最大回撤',
+        value: '--',
+        note: language === 'en' ? 'Available after a rule run' : '规则回测后展示',
+      },
+      {
+        label: language === 'en' ? 'Sharpe' : '夏普比率',
+        value: '--',
+        note: language === 'en' ? 'Available on result detail' : '结果详情页展示',
+      },
+    ]
+    : [
+      {
+        label: language === 'en' ? 'Win rate' : '胜率',
+        value: formatMonitorPct(latestRuleRun?.winRatePct),
+        note: language === 'en' ? 'Latest rule run' : '最近规则回测',
+      },
+      {
+        label: language === 'en' ? 'Max drawdown' : '最大回撤',
+        value: formatMonitorPct(latestRuleRun?.maxDrawdownPct),
+        note: language === 'en' ? 'Peak-to-trough risk' : '峰谷风险',
+      },
+      {
+        label: language === 'en' ? 'Sharpe' : '夏普比率',
+        value: formatMonitorNumber((latestRuleRun?.summary as { sharpeRatio?: number | null } | undefined)?.sharpeRatio),
+        note: language === 'en' ? 'Risk-adjusted signal' : '风险调整信号',
+      },
+    ];
 
   return (
     <PageChrome
@@ -1058,19 +1107,20 @@ const BacktestPage: React.FC = () => {
     >
 
       <div data-testid="backtest-v1-page">
-
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={activeModule}
-          className={`backtest-v1-stage backtest-v1-stage--${activeModule}`}
-          data-testid="backtest-v1-stage"
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={WORKBENCH_PANEL_TRANSITION}
-        >
-          {activeModule === 'historical' ? (
-            <HistoricalEvaluationPanel
+        <div className="backtest-cockpit" data-testid="backtest-cockpit">
+          <aside className="backtest-cockpit__console" data-testid="backtest-cockpit-console">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={activeModule}
+                className={`backtest-v1-stage backtest-v1-stage--${activeModule}`}
+                data-testid="backtest-v1-stage"
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={WORKBENCH_PANEL_TRANSITION}
+              >
+                {activeModule === 'historical' ? (
+                  <HistoricalEvaluationPanel
               normalizedCode={normalizedCode}
               codeFilter={codeFilter}
               onCodeChange={setCodeFilter}
@@ -1128,8 +1178,8 @@ const BacktestPage: React.FC = () => {
               isLoadingHistory={isLoadingHistory}
               panelMode={controlPanelMode}
             />
-          ) : (
-            <DeterministicBacktestFlow
+                ) : (
+                  <DeterministicBacktestFlow
               code={normalizedCode}
               onCodeChange={setCodeFilter}
               onCodeEnter={handleRuleCodeKeyDown}
@@ -1177,9 +1227,53 @@ const BacktestPage: React.FC = () => {
               appliedRewriteText={appliedRewriteText}
               panelMode={controlPanelMode}
             />
-          )}
-        </motion.div>
-      </AnimatePresence>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </aside>
+          <section className="backtest-cockpit__monitor" data-testid="backtest-cockpit-monitor">
+            <div className="backtest-equity-monitor" data-testid="backtest-equity-monitor">
+              <div className="backtest-equity-monitor__header">
+                <span>{language === 'en' ? 'Equity Signal' : '资金曲线'}</span>
+                <strong>{normalizedCode || (language === 'en' ? 'No symbol' : '待选择')}</strong>
+              </div>
+              <svg className="backtest-equity-monitor__chart" viewBox="0 0 720 320" role="img" aria-label={language === 'en' ? 'Equity curve preview' : '资金曲线预览'}>
+                <defs>
+                  <linearGradient id="backtest-equity-signal" x1="0" x2="1" y1="0" y2="0">
+                    <stop offset="0%" stopColor="#22d3ee" />
+                    <stop offset="48%" stopColor="#34d399" />
+                    <stop offset="100%" stopColor="#f8fafc" />
+                  </linearGradient>
+                  <filter id="backtest-equity-glow" x="-20%" y="-40%" width="140%" height="180%">
+                    <feGaussianBlur stdDeviation="7" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                <path
+                  className="backtest-equity-monitor__area"
+                  d="M26 238 C84 230 111 210 158 216 C216 224 242 167 301 178 C367 190 393 118 456 132 C514 146 544 91 606 100 C655 107 681 77 702 62 L702 320 L26 320 Z"
+                />
+                <path
+                  className="backtest-equity-monitor__line"
+                  d="M26 238 C84 230 111 210 158 216 C216 224 242 167 301 178 C367 190 393 118 456 132 C514 146 544 91 606 100 C655 107 681 77 702 62"
+                  pathLength="1"
+                />
+              </svg>
+            </div>
+            <div className="backtest-monitor-metrics" data-testid="backtest-monitor-metrics">
+              {monitorMetrics.map((metric) => (
+                <article className="backtest-monitor-metric" key={metric.label}>
+                  <span>{metric.label}</span>
+                  <strong>{metric.value}</strong>
+                  <small>{metric.note}</small>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
       </div>
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}

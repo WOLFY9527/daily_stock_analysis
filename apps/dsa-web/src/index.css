@@ -7942,6 +7942,180 @@ html[data-theme='terminal'] body::before {
   padding: 0 0 3.25rem;
 }
 
+.backtest-cockpit {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(18rem, 3fr) minmax(0, 7fr);
+  gap: clamp(1.25rem, 2vw, 2rem);
+  align-items: start;
+}
+
+.backtest-cockpit__console,
+.backtest-cockpit__monitor {
+  min-width: 0;
+}
+
+.backtest-cockpit__console {
+  display: grid;
+  gap: 1rem;
+}
+
+.backtest-cockpit__monitor {
+  position: sticky;
+  top: 6.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.backtest-equity-monitor {
+  position: relative;
+  overflow: hidden;
+  min-height: clamp(24rem, 46vw, 34rem);
+  border-radius: 2rem;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  background: #000;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.02),
+    0 28px 80px rgb(0 0 0 / 0.42);
+}
+
+.backtest-equity-monitor::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background:
+    radial-gradient(circle at 76% 18%, rgb(52 211 153 / 0.14), transparent 28%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.025), transparent 34%);
+}
+
+.backtest-equity-monitor__header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: clamp(1.3rem, 2vw, 2rem) clamp(1.35rem, 2.4vw, 2.25rem) 0;
+}
+
+.backtest-equity-monitor__header span,
+.backtest-monitor-metric span {
+  color: rgb(255 255 255 / 0.4);
+  font-size: 0.625rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.backtest-equity-monitor__header strong {
+  color: rgb(255 255 255 / 0.82);
+  font-size: clamp(0.9rem, 1vw, 1.05rem);
+  font-weight: 500;
+}
+
+.backtest-equity-monitor__chart {
+  position: absolute;
+  inset: auto 2.5% 0;
+  width: 95%;
+  height: 82%;
+}
+
+.backtest-equity-monitor__area {
+  fill: rgb(52 211 153 / 0.07);
+}
+
+.backtest-equity-monitor__line {
+  fill: none;
+  stroke: url('#backtest-equity-signal');
+  stroke-width: 5;
+  stroke-linecap: round;
+  filter: url('#backtest-equity-glow');
+}
+
+.backtest-monitor-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.backtest-monitor-metric {
+  display: grid;
+  min-width: 0;
+  gap: 0.6rem;
+  padding: clamp(1.25rem, 1.8vw, 1.75rem);
+  border-radius: 1.6rem;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  background: rgb(255 255 255 / 0.02);
+  backdrop-filter: blur(16px);
+}
+
+.backtest-monitor-metric strong {
+  color: rgb(255 255 255 / 0.9);
+  font-size: clamp(2.6rem, 5vw, 4.8rem);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+
+.backtest-monitor-metric small {
+  color: rgb(255 255 255 / 0.36);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.backtest-cockpit__console .product-command-card,
+.backtest-cockpit__console .product-section-card,
+.backtest-cockpit__console .summary-block,
+.backtest-cockpit__console .metric-card,
+.backtest-cockpit__console .preview-card,
+.backtest-cockpit__console .chart-card,
+.backtest-cockpit__console .summary-strip__item,
+.backtest-cockpit__console .backtest-normal-step,
+.backtest-cockpit__console .backtest-normal-summary {
+  border-color: rgb(255 255 255 / 0.05);
+  background: rgb(255 255 255 / 0.02);
+  box-shadow: none;
+}
+
+.backtest-cockpit__console .product-command-input,
+.backtest-cockpit__console .input-surface,
+.backtest-cockpit__console select,
+.backtest-cockpit__console input,
+.backtest-cockpit__console textarea {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.02);
+  box-shadow: none;
+}
+
+.backtest-cockpit__console .product-command-input:focus,
+.backtest-cockpit__console .input-surface:focus,
+.backtest-cockpit__console select:focus,
+.backtest-cockpit__console input:focus,
+.backtest-cockpit__console textarea:focus {
+  border-color: rgb(255 255 255 / 0.16);
+  outline: none;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+.backtest-cockpit__console .theme-field-label,
+.backtest-cockpit__console .product-field label {
+  color: rgb(255 255 255 / 0.4);
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.backtest-cockpit__console .backtest-normal-stepper,
+.backtest-cockpit__console .backtest-control-stepper {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.backtest-cockpit__console .backtest-normal-step,
+.backtest-cockpit__console .backtest-control-step {
+  min-width: 0;
+}
+
 .backtest-v1-page.backtest-result-page {
   gap: 0.82rem;
   padding-bottom: 2.5rem;
@@ -8828,6 +9002,19 @@ html[data-theme='terminal'] body::before {
 }
 
 @media (max-width: 1079px) {
+  .backtest-cockpit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .backtest-cockpit__monitor {
+    position: static;
+    order: -1;
+  }
+
+  .backtest-equity-monitor {
+    min-height: 22rem;
+  }
+
   .backtest-unified-shell {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -8842,6 +9029,10 @@ html[data-theme='terminal'] body::before {
 }
 
 @media (max-width: 767px) {
+  .backtest-monitor-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .backtest-control-grid,
   .backtest-date-range-grid,
   .backtest-display-board__inspection-grid {

@@ -643,6 +643,9 @@ const RESOURCES = {
         controlModeLabel: '控制面板模式',
         normalMode: '普通',
         professionalMode: '专业',
+        symbolSectionTitle: '标的',
+        ruleInputHint: '输入股票代码后运行规则回测',
+        historicalInputHint: '输入股票代码后评估历史样本',
         historicalSummary: {
           preparedSamplesLabel: '已准备样本',
           preparedSamplesNoteFallback: '历史分析样本',
@@ -3254,6 +3257,9 @@ This memo is for research discussion and does not constitute investment advice.`
         controlModeLabel: 'Control panel mode',
         normalMode: 'Normal',
         professionalMode: 'Professional',
+        symbolSectionTitle: 'Symbol',
+        ruleInputHint: 'Enter a ticker before running rule backtests.',
+        historicalInputHint: 'Enter a ticker before evaluating historical samples.',
         historicalSummary: {
           preparedSamplesLabel: 'Prepared samples',
           preparedSamplesNoteFallback: 'Historical analysis samples',

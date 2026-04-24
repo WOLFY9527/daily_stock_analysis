@@ -889,6 +889,11 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('backtest-v1-page')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-cockpit')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-cockpit-console')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-cockpit-monitor')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-equity-monitor')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-monitor-metrics')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') })).toBeInTheDocument();
