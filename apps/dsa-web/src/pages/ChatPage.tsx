@@ -731,7 +731,7 @@ const ChatPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="chat-bento-hero"
     >
-      <div data-testid="chat-workspace" className="workspace-chat-layout">
+      <div data-testid="chat-workspace" className="workspace-chat-layout flex h-[calc(100vh-80px)] flex-col overflow-hidden">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
@@ -743,8 +743,8 @@ const ChatPage: React.FC = () => {
           onCancel={() => setDeleteConfirmId(null)}
         />
 
-        <div className="workspace-chat-main">
-          <div className="workspace-surface relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem]">
+        <div className="workspace-chat-main flex min-h-0 flex-1 overflow-hidden">
+          <div className="workspace-surface relative z-10 mx-auto flex h-full min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden rounded-[1.4rem]">
           {skillsLoadError ? (
             <div className="px-4 pb-0 pt-4 md:px-6 md:pt-6">
               <ApiErrorAlert
@@ -758,15 +758,15 @@ const ChatPage: React.FC = () => {
           ) : null}
           {/* Messages */}
           <ScrollArea
-            className="relative z-10 flex-1"
+            className="relative z-10 flex-1 min-h-0 overflow-hidden"
             viewportRef={messagesViewportRef}
             onScroll={handleMessagesScroll}
-            viewportClassName="p-4 md:p-6"
+            viewportClassName="h-full p-4 md:p-6"
             testId="chat-message-scroll"
           >
-            <div data-testid="chat-message-stream" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 pb-28">
+            <div data-testid="chat-message-stream" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6">
               {messages.length === 0 && !loading ? (
-                <div className="flex min-h-[52vh] w-full flex-col justify-center">
+                <div className="flex min-h-full w-full flex-col justify-center">
                   <div className="mx-auto w-full max-w-4xl">
                     <div className="mx-auto max-w-2xl text-center">
                       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
@@ -791,7 +791,7 @@ const ChatPage: React.FC = () => {
                       </p>
                     </div>
 
-                    <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 place-items-stretch">
                       {starterPromptCards.map((card) => (
                         <button
                           key={card.id}
@@ -934,7 +934,7 @@ const ChatPage: React.FC = () => {
           </ScrollArea>
 
           {/* Input area */}
-          <div className="pointer-events-none sticky bottom-0 z-20 bg-gradient-to-t from-black via-black/92 to-transparent px-4 pb-4 pt-10 md:px-6 md:pb-6">
+          <div className="pointer-events-none shrink-0 bg-gradient-to-t from-black via-black/92 to-transparent px-4 pb-8 pt-4 md:px-6">
             {chatError ? (
               <ApiErrorAlert
                 error={chatError}
