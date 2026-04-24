@@ -162,6 +162,13 @@ function MetricPair({
   );
 }
 
+function scannerCardClassName(className?: string): string {
+  return [
+    'border border-white/5 bg-white/[0.02] backdrop-blur-2xl',
+    className || '',
+  ].join(' ').trim();
+}
+
 const ScannerPage: React.FC = () => {
   const navigate = useNavigate();
   const { t, language } = useI18n();
@@ -553,6 +560,12 @@ const ScannerPage: React.FC = () => {
       : 'neutral';
   const currentProfileLabel = profileOptions.find((option) => option.value === profile)?.label || profile;
   const currentMarketLabel = market === 'us' ? t('scanner.marketUs') : market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn');
+  const heroSignalValue = runDetail ? `${runDetail.shortlistSize}` : shortlistSize;
+  const watchlistCards = (runDetail?.shortlist || []).slice(0, 8).map((candidate) => ({
+    symbol: candidate.symbol,
+    name: candidate.name,
+    scoreText: formatSignedPercent(candidate.score, 1),
+  }));
   const heroItems: BentoHeroItem[] = [
     {
       label: t('scanner.marketLabel'),
@@ -569,12 +582,12 @@ const ScannerPage: React.FC = () => {
     },
     {
       label: t('scanner.shortlistLabel'),
-      value: runDetail ? `${runDetail.shortlistSize}` : shortlistSize,
-      detail: runDetail ? t('scanner.currentRunTitle') : t('scanner.currentRunEmpty'),
+      value: heroSignalValue,
+      detail: language === 'en' ? 'Personal threshold triggered' : '个人阈值触发',
       tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
       testId: 'scanner-bento-hero-shortlist',
       valueTestId: 'scanner-bento-hero-shortlist-value',
-      valueClassName: 'text-7xl sm:text-7xl tracking-[-0.05em]',
+      valueClassName: 'text-[6rem] sm:text-[7rem] xl:text-[8rem] leading-none tracking-[-0.08em] text-emerald-400 drop-shadow-[0_0_24px_rgba(52,211,153,0.6)]',
     },
     {
       label: t('scanner.currentRunTitle'),
@@ -608,11 +621,11 @@ const ScannerPage: React.FC = () => {
         heroItems={heroItems}
         heroTestId="scanner-bento-hero"
         headerChildren={(
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(26rem,0.95fr)]">
             <Card
               title={t('scanner.runPanelTitle')}
               subtitle={t('scanner.runPanelEyebrow')}
-              className="space-y-5"
+              className={scannerCardClassName('space-y-5')}
             >
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Select
@@ -673,7 +686,7 @@ const ScannerPage: React.FC = () => {
             <Card
               title={t('scanner.currentRunTitle')}
               subtitle={t('scanner.currentRunEyebrow')}
-              className="space-y-4"
+              className={scannerCardClassName('space-y-4')}
             >
               {runDetail ? (
                 <>
@@ -736,7 +749,7 @@ const ScannerPage: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   {t('scanner.currentRunEmpty')}
                 </div>
               )}
@@ -753,7 +766,7 @@ const ScannerPage: React.FC = () => {
               <Card
                 title={t('scanner.compareTitle')}
                 subtitle={t('scanner.compareEyebrow')}
-                className="space-y-4"
+                className={scannerCardClassName('space-y-4')}
               >
                 {comparisonToPrevious?.available ? (
                   <>
@@ -826,7 +839,7 @@ const ScannerPage: React.FC = () => {
               <Card
                 title={t('scanner.reviewTitle')}
                 subtitle={t('scanner.reviewEyebrow')}
-                className="space-y-4"
+                className={scannerCardClassName('space-y-4')}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={reviewStatusVariant(currentReviewSummary?.reviewStatus)}>
@@ -867,11 +880,32 @@ const ScannerPage: React.FC = () => {
             <Card
               title={t('scanner.shortlistTitle')}
               subtitle={t('scanner.shortlistEyebrow')}
-              className="space-y-5"
+              className={scannerCardClassName('space-y-5')}
             >
               {isLoadingRun ? (
                 <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                   {t('scanner.loading')}
+                </div>
+              ) : null}
+
+              {!isLoadingRun && watchlistCards.length ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    {watchlistCards.map((candidate) => (
+                      <div
+                        key={`watchlist-card-${candidate.symbol}`}
+                        className="rounded-[26px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-[0.14em] text-white/50">{candidate.symbol}</p>
+                            <p className="mt-2 truncate text-lg tracking-[-0.03em] text-white">{candidate.name}</p>
+                          </div>
+                          <p className="shrink-0 text-sm font-medium text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.45)]">{candidate.scoreText}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
@@ -882,7 +916,7 @@ const ScannerPage: React.FC = () => {
                       key={`${candidate.symbol}-${candidate.rank}`}
                       variant="bordered"
                       padding="md"
-                      className="space-y-4"
+                      className={scannerCardClassName('space-y-4')}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-2">
@@ -1035,7 +1069,7 @@ const ScannerPage: React.FC = () => {
               ) : null}
 
               {!isLoadingRun && !runDetail?.shortlist?.length ? (
-                <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-6 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
+                <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-6 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                   <p className="text-base text-foreground">{language === 'en' ? 'No shortlist yet' : '尚未生成候选名单'}</p>
                   <p className="mt-2">
                     {language === 'en'
@@ -1052,7 +1086,7 @@ const ScannerPage: React.FC = () => {
               <Card
                 title={diagnosticsCopy.title}
                 subtitle={diagnosticsCopy.subtitle}
-                className="space-y-4"
+                className={scannerCardClassName('space-y-4')}
               >
                 <div className="grid gap-3 sm:grid-cols-2">
                   <MetricPair label={diagnosticsCopy.inputUniverse} value={String(coverageSummary.inputUniverseSize ?? '--')} />

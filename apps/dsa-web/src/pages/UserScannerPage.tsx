@@ -137,6 +137,13 @@ function formatPercent(value?: number | null): string {
   return `${value.toFixed(1)}%`;
 }
 
+function scannerGlassClassName(className?: string): string {
+  return [
+    'border border-white/5 bg-white/[0.02] backdrop-blur-2xl',
+    className || '',
+  ].join(' ').trim();
+}
+
 function CandidateActionRow({
   candidate,
   onAnalyze,
@@ -342,6 +349,11 @@ const UserScannerPage: React.FC = () => {
   const currentProfileLabel = profileOptions.find((option) => option.value === profile)?.label || profile;
   const currentMarketLabel = market === 'us' ? t('scanner.marketUs') : market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn');
   const shortlistCount = runDetail?.shortlist?.length ?? Number.parseInt(shortlistSize, 10);
+  const watchlistCards = (runDetail?.shortlist || []).slice(0, 8).map((candidate) => ({
+    symbol: candidate.symbol,
+    name: candidate.name,
+    changeText: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
+  }));
   const heroItems: BentoHeroItem[] = [
     {
       label: t('scanner.marketLabel'),
@@ -359,11 +371,11 @@ const UserScannerPage: React.FC = () => {
     {
       label: t('scanner.shortlistLabel'),
       value: `${shortlistCount}`,
-      detail: language === 'en' ? 'Personal shortlist output' : '个人候选输出',
+      detail: language === 'en' ? 'Personal threshold triggered' : '个人阈值触发',
       tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
       testId: 'user-scanner-bento-hero-shortlist',
       valueTestId: 'user-scanner-bento-hero-shortlist-value',
-      valueClassName: 'text-7xl sm:text-7xl tracking-[-0.05em]',
+      valueClassName: 'text-[6rem] sm:text-[7rem] xl:text-[8rem] leading-none tracking-[-0.08em] text-emerald-400 drop-shadow-[0_0_24px_rgba(52,211,153,0.6)]',
     },
     {
       label: language === 'en' ? 'Current run' : '当前运行',
@@ -379,7 +391,7 @@ const UserScannerPage: React.FC = () => {
     <>
       <PageChrome
         pageTestId="user-scanner-bento-page"
-        pageClassName="workspace-page workspace-page--scanner gemini-bento-page--scanner gemini-bento-page--scanner-user space-y-6"
+        pageClassName="workspace-page workspace-page--scanner gemini-bento-page--scanner gemini-bento-page--scanner-user space-y-8 bg-[#030303]"
         eyebrow={t('scanner.eyebrow')}
         title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
         description={selectedMarketCopy.subtitle}
@@ -397,8 +409,8 @@ const UserScannerPage: React.FC = () => {
         heroItems={heroItems}
         heroTestId="user-scanner-bento-hero"
         headerChildren={(
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_16rem_minmax(20rem,0.92fr)]">
-          <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'Void and Signal filters' : 'Void & Signal 过滤器'} className="border-white/5 bg-transparent">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.08fr)_minmax(28rem,0.92fr)]">
+          <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'Void and Signal filters' : 'Void & Signal 过滤器'} className={scannerGlassClassName()}>
             <div className="space-y-5">
               <div className="grid gap-4">
                 <PillTagGroup
@@ -451,21 +463,10 @@ const UserScannerPage: React.FC = () => {
             </div>
           </Card>
 
-          <Card title={language === 'en' ? 'Signal count' : '信号数量'} subtitle={language === 'en' ? 'Current shortlist' : '当前候选'} className="border-white/5 bg-white/[0.02] backdrop-blur-xl">
-            <div className="flex h-full min-h-[17rem] flex-col justify-between">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'Radar array output' : '雷达阵列输出'}</p>
-                <div className="mt-4 text-7xl font-medium tracking-[-0.08em] text-white animate-pulse-glow" style={{ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' }}>
-                  {shortlistCount}
-                </div>
-              </div>
-              <p className="text-sm leading-6 text-secondary-text">{runDetail?.headline || selectedMarketCopy.currentRunFallback}</p>
-            </div>
-          </Card>
-
           <Card
             title={language === 'en' ? 'Current personal run' : '当前个人运行'}
             subtitle={language === 'en' ? 'Your run details' : '个人范围详情'}
+            className={scannerGlassClassName()}
           >
             {runDetail ? (
               <div className="space-y-4">
@@ -500,7 +501,7 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                 {language === 'en'
                   ? 'No personal scanner run yet. Run the scanner to create your shortlist.'
                   : '你还没有个人扫描结果。运行扫描后即可生成仅属于你账户的候选名单。'}
@@ -515,17 +516,36 @@ const UserScannerPage: React.FC = () => {
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.18fr)_minmax(23rem,0.82fr)]">
         <section className="space-y-4">
-          <Card title={t('scanner.shortlistTitle')} subtitle={language === 'en' ? 'My candidates' : '我的候选'}>
+          <Card title={t('scanner.shortlistTitle')} subtitle={language === 'en' ? 'My candidates' : '我的候选'} className={scannerGlassClassName()}>
             {isLoadingRun ? (
-              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                 {t('scanner.loading')}
+              </div>
+            ) : null}
+
+            {!isLoadingRun && watchlistCards.length ? (
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                {watchlistCards.map((candidate) => (
+                  <div
+                    key={`watchlist-${candidate.symbol}`}
+                    className="rounded-[26px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-[0.14em] text-white/50">{candidate.symbol}</p>
+                        <p className="mt-2 truncate text-lg text-white">{candidate.name}</p>
+                      </div>
+                      <p className="shrink-0 text-sm font-medium text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.45)]">{candidate.changeText}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : null}
 
             {!isLoadingRun && runDetail?.shortlist?.length ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {runDetail.shortlist.map((candidate) => (
-                  <Card key={`${candidate.symbol}-${candidate.rank}`} variant="bordered" padding="md" className="space-y-4 border-white/5 bg-white/[0.02] backdrop-blur-xl">
+                  <Card key={`${candidate.symbol}-${candidate.rank}`} variant="bordered" padding="md" className={scannerGlassClassName('space-y-4')}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">#{candidate.rank} · {candidate.symbol}</p>
@@ -551,7 +571,7 @@ const UserScannerPage: React.FC = () => {
             ) : null}
 
             {!isLoadingRun && !runDetail?.shortlist?.length ? (
-              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-6 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-6 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                 <p className="text-base text-foreground">{language === 'en' ? t('scanner.emptyTitle') : '准备生成今日候选名单'}</p>
                 <p className="mt-2">
                   {language === 'en'
@@ -564,10 +584,10 @@ const UserScannerPage: React.FC = () => {
         </section>
 
         <section className="space-y-4">
-          <Card title={language === 'en' ? 'My recent runs' : '我的近期运行'} subtitle={language === 'en' ? 'Your run history' : '个人范围历史'}>
+          <Card title={language === 'en' ? 'My recent runs' : '我的近期运行'} subtitle={language === 'en' ? 'Your run history' : '个人范围历史'} className={scannerGlassClassName()}>
             {historyError ? <ApiErrorAlert error={historyError} /> : null}
             {isLoadingHistory ? (
-              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
                 {t('scanner.loadingHistory')}
               </div>
             ) : null}
@@ -610,7 +630,7 @@ const UserScannerPage: React.FC = () => {
             ) : null}
 
             {!isLoadingHistory && !historyItems.length ? (
-              <div className="rounded-[28px] border border-white/5 bg-white/[0.015] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
                 {language === 'en'
                   ? 'No personal scanner history yet.'
                   : '你还没有个人扫描历史。'}
@@ -628,7 +648,7 @@ const UserScannerPage: React.FC = () => {
             ) : null}
           </Card>
 
-          <Card title={language === 'en' ? 'Why this page is different' : '为什么用户界面与管理员不同'} subtitle={language === 'en' ? 'User and admin views' : '界面分层'}>
+          <Card title={language === 'en' ? 'Why this page is different' : '为什么用户界面与管理员不同'} subtitle={language === 'en' ? 'User and admin views' : '界面分层'} className={scannerGlassClassName()}>
             <div className="space-y-3 text-sm leading-6 text-secondary-text">
               <p>
                 {language === 'en'
