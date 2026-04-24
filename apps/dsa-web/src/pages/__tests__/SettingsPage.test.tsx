@@ -1,7 +1,10 @@
 import type React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '../../i18n/core';
 import SettingsPage from '../SettingsPage';
+
+const zh = (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars);
 
 const {
   load,
@@ -1458,6 +1461,49 @@ describe('SettingsPage', () => {
     expect(within(dataSection as HTMLElement).getAllByRole('button', { name: '保存优先顺序' }).length).toBeGreaterThan(0);
   });
 
+  it('shows read-only endpoint and internal metadata on api source cards', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('REALTIME_SOURCE_PRIORITY', 'finnhub,yahoo'),
+          buildDataSourceConfigItem('FINNHUB_API_KEY', 'masked-finnhub-token'),
+          buildDataSourceConfigItem('CUSTOM_DATA_SOURCE_LIBRARY', JSON.stringify([
+            {
+              id: 'demo_news_api',
+              name: 'Demo News API',
+              credentialSchema: 'single_key',
+              credential: 'demo-key',
+              secret: '',
+              baseUrl: 'https://demo.example.com/v1',
+              description: 'Custom news endpoint',
+              capabilities: ['news'],
+              validation: { status: 'validated' },
+            },
+          ])),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    expect(dataSection).not.toBeNull();
+
+    const finnhubCard = within(dataSection as HTMLElement).getByTestId('data-source-card-finnhub');
+    expect(within(finnhubCard).getByText(`${translate('zh', 'settings.dataSourceEndpointNameLabel')}: finnhub`)).toBeInTheDocument();
+    expect(within(finnhubCard).getByText(`${translate('zh', 'settings.dataSourceInternalFlagLabel')}: ${translate('zh', 'settings.dataSourceInternalFlagBuiltin')}`)).toBeInTheDocument();
+
+    const yahooCard = within(dataSection as HTMLElement).getByTestId('data-source-card-yahoo');
+    expect(within(yahooCard).getByText(`${translate('zh', 'settings.dataSourceEndpointNameLabel')}: yahoo`)).toBeInTheDocument();
+    expect(within(yahooCard).getByText(`${translate('zh', 'settings.dataSourceInternalFlagLabel')}: ${translate('zh', 'settings.dataSourceInternalFlagBuiltin')}`)).toBeInTheDocument();
+
+    const customCard = within(dataSection as HTMLElement).getByTestId('data-source-card-demo_news_api');
+    expect(within(customCard).getByText(`${translate('zh', 'settings.dataSourceEndpointNameLabel')}: demo_news_api`)).toBeInTheDocument();
+    expect(within(customCard).getByText(`${translate('zh', 'settings.dataSourceInternalFlagLabel')}: ${translate('zh', 'settings.dataSourceInternalFlagExternal')}`)).toBeInTheDocument();
+  });
+
   it('shows the runtime summary visibility title only once in the advanced domain section', async () => {
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({
       activeCategory: 'system',
@@ -1467,6 +1513,18 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByRole('heading', { name: '首页运行时执行摘要可见性' })).toBeInTheDocument();
     expect(screen.getAllByText('首页运行时执行摘要可见性').length).toBe(1);
+  });
+
+  it('keeps personal-only basic settings out of the system control plane', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'system',
+    }));
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: zh('settings.basicTitle') })).not.toBeInTheDocument();
+    expect(screen.queryByText(zh('settings.basicDesc'))).not.toBeInTheDocument();
   });
 
   it('creates a custom data source and exposes it only in the matching routing selector', async () => {
@@ -1563,6 +1621,68 @@ describe('SettingsPage', () => {
       ]),
       expect.any(String),
     );
+  });
+
+  it('deletes a custom data source and scrubs it from saved route priorities', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('NEWS_SOURCE_PRIORITY', 'demo_news_api,tavily'),
+          buildDataSourceConfigItem('TAVILY_API_KEY', 'masked-tavily-token'),
+          buildDataSourceConfigItem('CUSTOM_DATA_SOURCE_LIBRARY', JSON.stringify([
+            {
+              id: 'demo_news_api',
+              name: 'Demo News API',
+              credentialSchema: 'single_key',
+              credential: 'demo-key',
+              secret: '',
+              baseUrl: 'https://demo.example.com/v1',
+              description: 'Custom news endpoint',
+              capabilities: ['news'],
+              validation: { status: 'validated' },
+            },
+          ])),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: zh('settings.dataEffectiveTitle') }).closest('section');
+    expect(dataSection).not.toBeNull();
+    const customCard = within(dataSection as HTMLElement).getByTestId('data-source-card-demo_news_api');
+
+    fireEvent.click(within(customCard).getByRole('button', { name: zh('settings.dataSourceEditAction') }));
+
+    const drawer = await screen.findByRole('dialog', {
+      name: zh('settings.dataSourceDrawerTitleEdit', { source: 'Demo News API' }),
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: zh('settings.dataSourceDeleteAction') }));
+
+    const confirmTitle = await screen.findByText(zh('settings.dataSourceDeleteConfirmTitle', { source: 'Demo News API' }));
+    const confirmDialog = confirmTitle.closest('.confirm-dialog__surface');
+    expect(confirmDialog).not.toBeNull();
+    fireEvent.click(within(confirmDialog as HTMLElement).getByRole('button', { name: zh('settings.dataSourceDeleteAction') }));
+
+    await waitFor(() => {
+      expect(saveExternalItems).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          {
+            key: 'CUSTOM_DATA_SOURCE_LIBRARY',
+            value: '[]',
+          },
+          {
+            key: 'NEWS_SOURCE_PRIORITY',
+            value: 'tavily',
+          },
+        ]),
+        zh('settings.dataSourceDeleted'),
+      );
+    });
+
+    expect(within(dataSection as HTMLElement).queryByTestId('data-source-card-demo_news_api')).not.toBeInTheDocument();
   });
 
   it('manages Alpaca built-in credentials with key-secret plus feed fields', async () => {
@@ -1791,7 +1911,9 @@ describe('SettingsPage', () => {
         name: 'quick_gemini',
       }), expect.any(Object));
     });
-    expect(within(providerDrawer).getByText(/连接成功/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(providerDrawer).getByText(/连接成功/)).toBeInTheDocument();
+    });
     expect(within(providerDrawer).getByText(/86 ms/)).toBeInTheDocument();
   });
 

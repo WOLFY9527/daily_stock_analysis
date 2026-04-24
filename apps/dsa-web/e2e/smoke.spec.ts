@@ -2,7 +2,27 @@ import { expect, test, type Page } from '@playwright/test';
 
 const smokePassword = process.env.DSA_WEB_SMOKE_PASSWORD;
 
+type AuthStatusPayload = {
+  authEnabled: boolean;
+};
+
+async function getAuthStatus(page: Page): Promise<AuthStatusPayload> {
+  const response = await page.request.get('/api/v1/auth/status');
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}
+
 async function login(page: Page) {
+  const authStatus = await getAuthStatus(page);
+  if (!authStatus.authEnabled) {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(
+      page.getByRole('heading', { name: /股票研究工作区|Stock Research Workspace/ }),
+    ).toBeVisible({ timeout: 10_000 });
+    return;
+  }
+
   test.skip(!smokePassword, 'Set DSA_WEB_SMOKE_PASSWORD to run authenticated smoke tests.');
 
   // Navigate to login page
@@ -30,17 +50,29 @@ async function login(page: Page) {
   // Wait for navigation to home page after login
   await page.waitForURL('/', { timeout: 15_000 });
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(1000);
+  await expect(page.getByRole('link', { name: '首页' })).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('web smoke', () => {
   test('login page renders password form', async ({ page }) => {
+    const authStatus = await getAuthStatus(page);
     await page.goto('/login');
     await page.waitForLoadState('domcontentloaded');
 
+    if (!authStatus.authEnabled) {
+      await expect(
+        page.getByRole('heading', { name: /股票研究工作区|Stock Research Workspace/ }),
+      ).toBeVisible({ timeout: 10_000 });
+      return;
+    }
+
     // Check for branding
-    await expect(page.getByText('DAILY STOCK').first()).toBeVisible();
-    await expect(page.getByText('Analysis Engine')).toBeVisible();
+    await expect(page.getByText(/WolfyStock 账户|WolfyStock account/).first()).toBeVisible();
+    await expect(
+      page.getByRole('heading', {
+        name: /登录进入 WolfyStock|设置管理员访问口令|Sign in to WolfyStock|Set the admin access password/,
+      }),
+    ).toBeVisible();
 
     // Check for password input
     await expect(page.locator('#password')).toBeVisible();
@@ -69,15 +101,13 @@ test.describe('web smoke', () => {
     // Navigate to chat page by clicking the link
     await page.getByRole('link', { name: '问股' }).click();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
 
-    await expect(page.getByTestId('chat-workspace')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('chat-session-list-scroll')).toBeVisible();
-    await expect(page.getByTestId('chat-message-scroll')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '问股' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('先提一个具体问题')).toBeVisible();
 
-    const input = page.getByPlaceholder(/分析 600519/);
+    const input = page.getByPlaceholder(/例如：分析 600519/);
     await expect(input).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('策略', { exact: true })).toBeVisible();
+    await expect(page.getByText('研究模式')).toBeVisible();
 
     const prompt = '请简要分析 600519';
     await input.fill(prompt);
@@ -100,16 +130,26 @@ test.describe('web smoke', () => {
     await expect(page.getByRole('link', { name: '回测' })).toBeVisible({ timeout: 5000 });
   });
 
-  test('settings page renders title and save actions after login', async ({ page }) => {
+  test('settings flow keeps personal settings separate from the admin control plane after login', async ({ page }) => {
     await login(page);
 
-    // Navigate to settings page by clicking the link
     await page.getByRole('link', { name: '设置' }).click();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
+    await expect(page.getByRole('heading', { name: '个人偏好' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: '打开管理工具' })).toBeVisible();
+    await expect(page.getByText('当前视图：普通页面')).toBeVisible();
 
-    // Use heading role for more precise selection
-    await expect(page.getByRole('heading', { name: '系统设置' })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: '打开管理工具' }).click();
+    await expect(page.getByRole('button', { name: '返回普通页面' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('当前视图：管理工具')).toBeVisible();
+    await expect(
+      page.getByRole('main').getByRole('link', { name: '独立控制台' }),
+    ).toBeVisible();
+
+    await page.getByRole('main').getByRole('link', { name: '独立控制台' }).click();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByRole('heading', { name: '系统控制面' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Admin Mode 已启用')).toBeVisible();
     await expect(page.getByRole('button', { name: '重置' })).toBeVisible();
     await expect(page.getByRole('button', { name: /保存配置/ })).toBeVisible();
   });
@@ -120,12 +160,12 @@ test.describe('web smoke', () => {
     // Navigate to backtest page by clicking the link
     await page.getByRole('link', { name: '回测' }).click();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
 
-    // Check for filter controls
-    const filterInput = page.getByPlaceholder(/stock code/i);
-    await expect(filterInput).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('button', { name: /filter/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /run backtest/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '回测', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: '基础参数' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: '股票代码' })).toBeVisible();
+    await expect(
+      page.getByTestId('backtest-control-section-symbol').getByRole('button', { name: '继续' }),
+    ).toBeVisible();
   });
 });

@@ -24,6 +24,7 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
 import { useAgentChatStore } from '../../stores/agentChatStore';
 import { cn } from '../../utils/cn';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 type SidebarNavProps = {
@@ -114,17 +115,16 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [agentRuntimeEnabled, setAgentRuntimeEnabled] = useState<boolean>(location.pathname.startsWith('/chat'));
+  const routeLocale = parseLocaleFromPathname(location.pathname);
   const isDrawer = layout === 'drawer';
-  const signInLabel = language === 'en' ? 'Sign in' : '登录';
-  const systemLabel = language === 'en' ? 'System settings' : '系统设置';
-  const adminModeActionLabel = isAdminMode
-    ? (language === 'en' ? 'Return to User Mode' : '返回用户模式')
-    : (language === 'en' ? 'Enter Admin Mode' : '进入管理员模式');
-  const adminModeStatusLabel = isAdminMode
-    ? (language === 'en' ? 'Admin Mode' : '管理员模式')
-    : (language === 'en' ? 'User Mode' : '用户模式');
+  const signInLabel = t('nav.signIn');
+  const consoleLabel = t('nav.independentConsole');
+  const adminModeActionLabel = t(isAdminMode ? 'nav.adminModeExit' : 'nav.adminModeEnter');
+  const adminModeStatusLabel = t(isAdminMode ? 'nav.adminMode' : 'nav.userMode');
   const isAdminOnlyRoute = location.pathname.startsWith('/settings/system') || location.pathname.startsWith('/admin/logs');
   const signInPath = buildLoginPath(location.pathname + location.search);
+  const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
+  const logoutPath = routeLocale ? buildLocalizedPath('/login', routeLocale) : '/login';
 
   useEffect(() => {
     if (isGuest) {
@@ -292,23 +292,23 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 
   const systemAction = isAdminMode ? (
     <NavLink
-      to="/settings/system"
+      to={consolePath}
       onClick={onNavigate}
       className={({ isActive }) => cn(
         isDrawer ? 'shell-drawer-action' : 'shell-header-action',
         isActive ? 'is-active' : '',
       )}
-      aria-label={systemLabel}
+      aria-label={consoleLabel}
     >
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
             <ShieldCheck className="h-4 w-4" />
           </span>
-          <DrawerUtilityLabel label={systemLabel} />
+          <DrawerUtilityLabel label={consoleLabel} />
         </>
       ) : (
-        <span>{systemLabel}</span>
+        <span>{consoleLabel}</span>
       )}
     </NavLink>
   ) : null;
@@ -410,7 +410,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           void (async () => {
             try {
               await logout();
-              navigate('/', { replace: true });
+              navigate(logoutPath, { replace: true });
             } catch {
               return;
             }

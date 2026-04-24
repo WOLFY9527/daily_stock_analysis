@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '../../i18n/core';
 import PersonalSettingsPage from '../PersonalSettingsPage';
+
+const zh = (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars);
 
 const {
   getNotificationPreferences,
@@ -25,18 +28,7 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
     language: 'zh',
     setLanguage,
-    t: (key: string) => ({
-      'settings.languageTitle': '语言',
-      'settings.languageDesc': '切换界面语言',
-      'settings.marketColorTitle': '涨跌颜色',
-      'settings.marketColorDesc': '选择价格涨跌颜色约定',
-      'settings.marketColorConventional': '国际惯例',
-      'settings.marketColorConventionalDesc': '红跌绿涨',
-      'settings.marketColorCn': 'A 股惯例',
-      'settings.marketColorCnDesc': '红涨绿跌',
-      'language.zh': '中文',
-      'language.en': 'EN',
-    }[key] || key),
+    t: (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars),
   }),
 }));
 
@@ -65,11 +57,11 @@ vi.mock('../../hooks/useProductSurface', () => ({
 }));
 
 vi.mock('../../components/settings/FontSizeSettingsCard', () => ({
-  FontSizeSettingsCard: () => <div>font-size-card</div>,
+  FontSizeSettingsCard: () => <div data-testid="font-size-card" />,
 }));
 
 vi.mock('../../components/settings/ChangePasswordCard', () => ({
-  ChangePasswordCard: () => <div>change-password-card</div>,
+  ChangePasswordCard: () => <div data-testid="change-password-card" />,
 }));
 
 describe('PersonalSettingsPage', () => {
@@ -121,11 +113,11 @@ describe('PersonalSettingsPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('当前仅为游客偏好')).toBeInTheDocument();
-    expect(screen.getByText('你的外观偏好会保存在本地，但个人历史、问答、持仓和扫描器数据仍然需要登录后才会拥有。')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '登录后解锁个人数据' })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
-    expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
-    expect(screen.queryByText('Operator 入口')).not.toBeInTheDocument();
+    expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
+    expect(screen.getByText(zh('settings.personalGuestPreferencesBody'))).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: zh('settings.personalGuestSignInAction') })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
+    expect(screen.getByRole('link', { name: zh('settings.personalGuestCreateAccountAction') })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
+    expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
     expect(getNotificationPreferences).not.toHaveBeenCalled();
   });
 
@@ -165,15 +157,15 @@ describe('PersonalSettingsPage', () => {
     );
 
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
-    expect(screen.getByText('管理员工具分层')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '打开管理工具' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '进入系统设置' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '查看管理员日志' })).not.toBeInTheDocument();
+    expect(screen.getByText(zh('settings.personalAdminToolsTitle'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: zh('settings.personalAdminToolsOpen') })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: zh('adminNav.logs') })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument();
     expect(screen.getByDisplayValue('https://discord.com/api/webhooks/123/token')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '保存通知目标' })).toBeInTheDocument();
-    expect(screen.getByText('change-password-card')).toBeInTheDocument();
-    expect(screen.getByText('font-size-card')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toBeInTheDocument();
+    expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
+    expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
   });
 
   it('shows admin entry points after admin tools are opened', async () => {
@@ -200,10 +192,10 @@ describe('PersonalSettingsPage', () => {
     );
 
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('link', { name: '进入系统设置' })).toHaveAttribute('href', '/settings/system');
-    expect(screen.getByRole('link', { name: '查看管理员日志' })).toHaveAttribute('href', '/admin/logs');
-    expect(screen.getByRole('button', { name: '返回普通页面' })).toBeInTheDocument();
-    expect(screen.getByText('分析历史、问答会话、持仓数据、扫描器运行结果与回测现在都会按你的已认证身份解析。')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: zh('nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
+    expect(screen.getByRole('link', { name: zh('adminNav.logs') })).toHaveAttribute('href', '/admin/logs');
+    expect(screen.getByRole('button', { name: zh('settings.personalAdminToolsReturn') })).toBeInTheDocument();
+    expect(screen.getByText(zh('settings.personalSignedInBody'))).toBeInTheDocument();
   });
 
   it('saves email and Discord notification targets together for signed-in users', async () => {
@@ -255,13 +247,13 @@ describe('PersonalSettingsPage', () => {
 
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByLabelText('启用个人邮件通知'));
-    fireEvent.change(screen.getByLabelText('通知邮箱'), { target: { value: 'alice@example.com' } });
-    fireEvent.click(screen.getByLabelText('启用个人 Discord Webhook 通知'));
-    fireEvent.change(screen.getByLabelText('Discord Webhook 地址'), {
+    fireEvent.click(screen.getByLabelText(zh('settings.personalNotificationEmailToggle')));
+    fireEvent.change(screen.getByLabelText(zh('settings.personalNotificationEmailLabel')), { target: { value: 'alice@example.com' } });
+    fireEvent.click(screen.getByLabelText(zh('settings.personalNotificationDiscordToggle')));
+    fireEvent.change(screen.getByLabelText(zh('settings.personalNotificationDiscordLabel')), {
       target: { value: 'https://discord.com/api/webhooks/999/token' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '保存通知目标' }));
+    fireEvent.click(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') }));
 
     await waitFor(() => {
       expect(updateNotificationPreferences).toHaveBeenCalledWith({
@@ -271,6 +263,6 @@ describe('PersonalSettingsPage', () => {
         discordWebhook: 'https://discord.com/api/webhooks/999/token',
       });
     });
-    expect(await screen.findByText('个人通知目标已保存。')).toBeInTheDocument();
+    expect(await screen.findByText(zh('settings.personalNotificationTargetsSaved'))).toBeInTheDocument();
   });
 });

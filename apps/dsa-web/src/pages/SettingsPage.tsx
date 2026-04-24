@@ -4,10 +4,11 @@ import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
 import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, Input, Select, WorkspacePageHeader } from '../components/common';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
+import { ApiSourceCard } from '../components/settings/ApiSourceCard';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import { useAuth, useSystemConfig } from '../hooks';
 import type { SystemConfigCategory } from '../types/systemConfig';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import {
   GATEWAY_READINESS_NOTES,
   getGatewayModelOptions,
@@ -20,7 +21,6 @@ import { getCategoryDescription, getCategoryTitle } from '../utils/systemConfigI
 import {
   AuthSettingsCard,
   ChangePasswordCard,
-  FontSizeSettingsCard,
   IntelligentImport,
   LLMChannelEditor,
   SettingsAlert,
@@ -29,7 +29,6 @@ import {
   SettingsLoading,
   SettingsSectionCard,
 } from '../components/settings';
-import type { MarketColorConvention } from '../utils/marketColors';
 
 type SettingsDomain = 'ai_models' | 'data_sources' | 'advanced';
 type RoutingTier = 'primary' | 'backup' | 'fallback';
@@ -540,6 +539,14 @@ const parseNotificationChannel = (key: string): string => key
   .replace(/_(WEBHOOK|URL|TOKEN|CHAT_ID|EMAIL)$/i, '')
   .trim();
 
+const buildAdminLogsPath = (): string => {
+  if (typeof window === 'undefined') {
+    return '/admin/logs';
+  }
+  const locale = parseLocaleFromPathname(window.location.pathname);
+  return locale ? buildLocalizedPath('/admin/logs', locale) : '/admin/logs';
+};
+
 const sourceToneClass = (index: number): string => {
   if (index === 0) return 'text-[var(--accent-primary)]';
   if (index === 1) return 'text-[var(--accent-positive)]';
@@ -644,28 +651,10 @@ const credentialEntryCount = (value: string, rawValueExists: boolean): number =>
   return rawValueExists ? 1 : 0;
 };
 
-const MARKET_COLOR_OPTIONS: Array<{
-  value: MarketColorConvention;
-  labelKey: string;
-  descriptionKey: string;
-}> = [
-  {
-    value: 'redDownGreenUp',
-    labelKey: 'settings.marketColorConventional',
-    descriptionKey: 'settings.marketColorConventionalDesc',
-  },
-  {
-    value: 'redUpGreenDown',
-    labelKey: 'settings.marketColorCn',
-    descriptionKey: 'settings.marketColorCnDesc',
-  },
-];
-
 const SettingsPage: React.FC = () => {
   const isDesktopViewport = useIsDesktopViewport();
-  const { language, setLanguage, t } = useI18n();
+  const { language, t } = useI18n();
   const { passwordChangeable } = useAuth();
-  const { marketColorConvention, setMarketColorConvention } = useUiPreferences();
 
   const {
     categories,
@@ -1311,11 +1300,16 @@ const SettingsPage: React.FC = () => {
   const [adminActionTone, setAdminActionTone] = useState<'success' | 'error'>('success');
   const [isRunningAdminAction, setIsRunningAdminAction] = useState(false);
   const [factoryResetConfirmation, setFactoryResetConfirmation] = useState('');
+  const [dataSourceDeleteTargetId, setDataSourceDeleteTargetId] = useState<string | null>(null);
   const dataSourceEditorEntry = useMemo(
     () => (dataSourceEditorId && dataSourceEditorId !== 'new'
       ? dataSourceLibraryMap.get(dataSourceEditorId) || null
       : null),
     [dataSourceEditorId, dataSourceLibraryMap],
+  );
+  const dataSourceDeleteTarget = useMemo(
+    () => (dataSourceDeleteTargetId ? dataSourceLibraryMap.get(dataSourceDeleteTargetId) || null : null),
+    [dataSourceDeleteTargetId, dataSourceLibraryMap],
   );
 
   useEffect(() => {
@@ -2413,6 +2407,84 @@ const SettingsPage: React.FC = () => {
       { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
     ], t('settings.dataSourceSaved'));
   }, [customDataSourceLibraryDraft, dataSourceEditorDraft, dataSourceEditorEntry, dataSourceEditorId, dataSourceLibrary, managedBuiltinDataSourceDraft, saveExternalItems, t]);
+  const deleteDataSourceEntry = useCallback(async () => {
+    if (!dataSourceDeleteTargetId) {
+      return;
+    }
+
+    const source = dataSourceLibraryMap.get(dataSourceDeleteTargetId);
+    if (!source?.customRecord) {
+      setDataSourceDeleteTargetId(null);
+      return;
+    }
+
+    const nextLibrary = customDataSourceLibraryDraft.filter((record) => record.id !== dataSourceDeleteTargetId);
+    const cleanupByConfigKey = new Map<string, string>();
+    [
+      dataPriorityKeys.market,
+      dataPriorityKeys.fundamentals,
+      dataPriorityKeys.news,
+      dataPriorityKeys.sentiment,
+    ].forEach((configKey) => {
+      const currentRoute = splitCsv(allItemMap.get(configKey));
+      if (!currentRoute.includes(dataSourceDeleteTargetId)) {
+        return;
+      }
+      cleanupByConfigKey.set(
+        configKey,
+        currentRoute.filter((value) => value !== dataSourceDeleteTargetId).join(','),
+      );
+    });
+
+    setCustomDataSourceLibraryDraft(nextLibrary);
+    setDataSourceValidationStatus((prev) => {
+      if (!(dataSourceDeleteTargetId in prev)) {
+        return prev;
+      }
+      const nextStatus = { ...prev };
+      delete nextStatus[dataSourceDeleteTargetId];
+      return nextStatus;
+    });
+    setRoutingDraft((prev) => ({
+      ...prev,
+      market: toRouteState(
+        effectiveRoute([prev.market.primary, prev.market.backup, prev.market.fallback].filter((value) => value !== dataSourceDeleteTargetId)),
+        true,
+      ),
+      fundamentals: toRouteState(
+        effectiveRoute([prev.fundamentals.primary, prev.fundamentals.backup, prev.fundamentals.fallback].filter((value) => value !== dataSourceDeleteTargetId)),
+        true,
+      ),
+      news: {
+        primary: prev.news.primary === dataSourceDeleteTargetId ? '' : prev.news.primary,
+        backup: prev.news.backup === dataSourceDeleteTargetId ? '' : prev.news.backup,
+      },
+      sentiment: {
+        primary: prev.sentiment.primary === dataSourceDeleteTargetId ? '' : prev.sentiment.primary,
+        backup: prev.sentiment.backup === dataSourceDeleteTargetId ? '' : prev.sentiment.backup,
+      },
+    }));
+    setDataSourceLibraryDrawerOpen(false);
+    setDataSourceEditorId(null);
+    setDataSourceDeleteTargetId(null);
+
+    await saveExternalItems([
+      { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
+      ...[...cleanupByConfigKey.entries()].map(([key, value]) => ({ key, value })),
+    ], t('settings.dataSourceDeleted'));
+  }, [
+    allItemMap,
+    customDataSourceLibraryDraft,
+    dataPriorityKeys.fundamentals,
+    dataPriorityKeys.market,
+    dataPriorityKeys.news,
+    dataPriorityKeys.sentiment,
+    dataSourceDeleteTargetId,
+    dataSourceLibraryMap,
+    effectiveRoute,
+    saveExternalItems,
+    t,
+  ]);
   const validateDataSourceEntry = useCallback(async (sourceId: string) => {
     const source = dataSourceLibraryMap.get(sourceId);
     if (!source) {
@@ -2728,7 +2800,7 @@ const SettingsPage: React.FC = () => {
                   type="button"
                   size="sm"
                   variant="settings-secondary"
-                  onClick={() => window.location.assign('/admin/logs')}
+                  onClick={() => window.location.assign(buildAdminLogsPath())}
                 >
                   {t('settings.viewAdminLogs')}
                 </Button>
@@ -2799,66 +2871,6 @@ const SettingsPage: React.FC = () => {
             </div>
           </Disclosure>
         </div>
-      </SettingsSectionCard>
-
-      <SettingsSectionCard
-        title={t('settings.basicTitle')}
-        description={t('settings.basicDesc')}
-      >
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
-            <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.languageTitle')}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.languageDesc')}</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setLanguage('zh')}
-                className={language === 'zh'
-                  ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
-                  : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
-                aria-pressed={language === 'zh'}
-              >
-                {t('language.zh')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguage('en')}
-                className={language === 'en'
-                  ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
-                  : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
-                aria-pressed={language === 'en'}
-              >
-                {t('language.en')}
-              </button>
-            </div>
-          </div>
-
-          <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
-            <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.marketColorTitle')}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.marketColorDesc')}</p>
-            <div className="mt-3 space-y-2">
-              {MARKET_COLOR_OPTIONS.map((option) => {
-                const active = marketColorConvention === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setMarketColorConvention(option.value)}
-                    className={active
-                      ? 'w-full rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
-                      : 'w-full rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-left hover:border-[var(--border-strong)]'}
-                    aria-pressed={active}
-                  >
-                    <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                    <p className="mt-1 text-xs text-muted-text">{t(option.descriptionKey)}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <FontSizeSettingsCard />
       </SettingsSectionCard>
 
       {loadError ? (
@@ -3316,105 +3328,72 @@ const SettingsPage: React.FC = () => {
                   </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {dataSourceLibrary.map((source) => (
-                      <div
+                      <ApiSourceCard
                         key={source.key}
-                        className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-3 py-3"
-                        data-testid={`data-source-card-${source.key}`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground">{source.label}</p>
-                            <p className="mt-1 text-[11px] text-muted-text">
-                              {source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
-                            </p>
-                          </div>
-                          <span className={source.validationState === 'failed'
-                            ? 'rounded-full border border-[hsl(var(--accent-warning-hsl)/0.4)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-warning-hsl))]'
-                            : source.validationState === 'validated'
-                              ? 'rounded-full border border-[hsl(var(--accent-positive-hsl)/0.4)] bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
-                              : 'rounded-full border border-border/60 bg-base/70 px-2 py-0.5 text-[11px] text-muted-text'}
-                          >
-                            {source.validationState === 'builtin'
-                              ? t('settings.dataSourceValidationBuiltin')
-                              : source.validationState === 'validated'
-                                ? t('settings.dataSourceValidated')
-                                : source.validationState === 'failed'
-                                  ? t('settings.dataSourceValidationFailed')
-                                  : source.configured
-                                    ? t('settings.dataSourceConfiguredPending')
-                                    : t('settings.notConfigured')}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {source.capabilityLabels.map((capability) => (
-                            <span
-                              key={`${source.key}-${capability}`}
-                              className="rounded-full border border-border/50 bg-surface/45 px-2 py-0.5 text-[11px] text-secondary-text"
-                            >
-                              {capability}
-                            </span>
-                          ))}
-                        </div>
-                        <p className="mt-2 text-xs text-secondary-text">
-                          {source.configured
-                            ? t('settings.dataSourceStatusConfigured')
-                            : t('settings.dataSourceStatusMissing')}
-                        </p>
-                        <p className="mt-1 text-xs text-secondary-text">{source.validationMessage}</p>
-                        <p className="mt-1 text-xs text-secondary-text">
-                          {t('settings.dataSourceUsedByLabel')}: {source.routeUsage.length
-                            ? source.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
-                            : t('settings.dataSourceNotRouted')}
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted-text">{source.description}</p>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="settings-secondary"
-                            onClick={() => openEditDataSourceDrawer(source.key)}
-                          >
-                            {source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="settings-secondary"
-                            disabled={!source.usable}
-                            onClick={() => {
-                              const nextStatus: DataSourceValidationState = source.validationState === 'validated'
-                                ? 'validated'
-                                : source.validationState === 'failed'
-                                  ? 'failed'
-                                  : source.builtin
-                                    ? 'builtin'
-                                    : 'validated';
-                              setDataSourceValidationStatus((prev) => ({
-                                ...prev,
-                                [source.key]: nextStatus,
-                              }));
-                              if (source.customRecord) {
-                                const validation: CustomDataSourceValidation = nextStatus === 'failed'
-                                  ? { status: 'failed', message: t('settings.dataSourceValidationFailed') }
-                                  : nextStatus === 'validated'
-                                    ? { status: 'validated', message: t('settings.dataSourceValidationLocalSuccess') }
-                                    : { status: 'pending' };
-                                const nextLibrary = customDataSourceLibraryDraft.map((record) => (
-                                  record.id === source.key
-                                    ? { ...record, validation }
-                                    : record
-                                ));
-                                setCustomDataSourceLibraryDraft(nextLibrary);
-                                void saveExternalItems([
-                                  { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
-                                ], t('settings.dataSourceValidationSaved'));
-                              }
-                            }}
-                          >
-                            {t('settings.dataSourceValidateAction')}
-                          </Button>
-                        </div>
-                      </div>
+                        testId={`data-source-card-${source.key}`}
+                        label={source.label}
+                        kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
+                        validationLabel={source.validationState === 'builtin'
+                          ? t('settings.dataSourceValidationBuiltin')
+                          : source.validationState === 'validated'
+                            ? t('settings.dataSourceValidated')
+                            : source.validationState === 'failed'
+                              ? t('settings.dataSourceValidationFailed')
+                              : source.configured
+                                ? t('settings.dataSourceConfiguredPending')
+                                : t('settings.notConfigured')}
+                        validationTone={source.validationState === 'failed'
+                          ? 'warning'
+                          : source.validationState === 'validated'
+                            ? 'success'
+                            : 'default'}
+                        capabilities={source.capabilityLabels}
+                        statusText={source.configured
+                          ? t('settings.dataSourceStatusConfigured')
+                          : t('settings.dataSourceStatusMissing')}
+                        validationMessage={source.validationMessage}
+                        usedByText={`${t('settings.dataSourceUsedByLabel')}: ${source.routeUsage.length
+                          ? source.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
+                          : t('settings.dataSourceNotRouted')}`}
+                        endpointText={`${t('settings.dataSourceEndpointNameLabel')}: ${source.key}`}
+                        internalFlagText={`${t('settings.dataSourceInternalFlagLabel')}: ${source.builtin
+                          ? t('settings.dataSourceInternalFlagBuiltin')
+                          : t('settings.dataSourceInternalFlagExternal')}`}
+                        description={source.description}
+                        manageLabel={source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
+                        validateLabel={t('settings.dataSourceValidateAction')}
+                        validateDisabled={!source.usable}
+                        onManage={() => openEditDataSourceDrawer(source.key)}
+                        onValidate={() => {
+                          const nextStatus: DataSourceValidationState = source.validationState === 'validated'
+                            ? 'validated'
+                            : source.validationState === 'failed'
+                              ? 'failed'
+                              : source.builtin
+                                ? 'builtin'
+                                : 'validated';
+                          setDataSourceValidationStatus((prev) => ({
+                            ...prev,
+                            [source.key]: nextStatus,
+                          }));
+                          if (source.customRecord) {
+                            const validation: CustomDataSourceValidation = nextStatus === 'failed'
+                              ? { status: 'failed', message: t('settings.dataSourceValidationFailed') }
+                              : nextStatus === 'validated'
+                                ? { status: 'validated', message: t('settings.dataSourceValidationLocalSuccess') }
+                                : { status: 'pending' };
+                            const nextLibrary = customDataSourceLibraryDraft.map((record) => (
+                              record.id === source.key
+                                ? { ...record, validation }
+                                : record
+                            ));
+                            setCustomDataSourceLibraryDraft(nextLibrary);
+                            void saveExternalItems([
+                              { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
+                            ], t('settings.dataSourceValidationSaved'));
+                          }
+                        }}
+                      />
                     ))}
                   </div>
                 </div>
@@ -4548,6 +4527,17 @@ const SettingsPage: React.FC = () => {
                     : t('settings.dataSourceValidationConfiguredOnly')}
               </p>
               <div className="flex flex-wrap items-center gap-2">
+                {dataSourceEditorId !== 'new' ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger-subtle"
+                    onClick={() => setDataSourceDeleteTargetId(dataSourceEditorId)}
+                    disabled={isSaving}
+                  >
+                    {t('settings.dataSourceDeleteAction')}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
@@ -4588,6 +4578,16 @@ const SettingsPage: React.FC = () => {
           setAdminActionDialog(null);
           setFactoryResetConfirmation('');
         }}
+      />
+      <ConfirmDialog
+        isOpen={dataSourceDeleteTarget !== null}
+        title={t('settings.dataSourceDeleteConfirmTitle', { source: dataSourceDeleteTarget?.label || '' })}
+        message={t('settings.dataSourceDeleteConfirmBody', { source: dataSourceDeleteTarget?.label || '' })}
+        confirmText={t('settings.dataSourceDeleteAction')}
+        cancelText={t('common.cancel')}
+        isDanger
+        onConfirm={() => void deleteDataSourceEntry()}
+        onCancel={() => setDataSourceDeleteTargetId(null)}
       />
 
       {toast ? (

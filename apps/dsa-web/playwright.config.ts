@@ -21,7 +21,7 @@ function resolveBackendCommand() {
     return `"${windowsVenvPython}" main.py --serve-only --host 127.0.0.1 --port 8000`;
   }
 
-  return 'python main.py --serve-only --host 127.0.0.1 --port 8000';
+  return 'python3 main.py --serve-only --host 127.0.0.1 --port 8000';
 }
 
 export default defineConfig({
