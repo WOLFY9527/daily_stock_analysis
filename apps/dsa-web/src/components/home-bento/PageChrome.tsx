@@ -27,7 +27,7 @@ type BentoHeroStripProps = {
 export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className, testId }) => (
   <div
     data-testid={testId}
-    className={cn('grid gap-3 md:grid-cols-2 xl:grid-cols-4', className)}
+    className={cn('grid gap-4 md:grid-cols-2 xl:grid-cols-4', className)}
   >
     {items.map((item, index) => {
       const tone = item.tone || 'neutral';
@@ -36,7 +36,7 @@ export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className
         <div
           key={`${item.label}-${index}`}
           data-testid={item.testId}
-          className="group relative overflow-hidden rounded-[36px] border border-white/[0.08] bg-white/[0.02] px-6 py-6 backdrop-blur-xl transition-all duration-200 ease-out hover:-translate-y-[2px] hover:border-white/[0.12] hover:bg-white/[0.03] sm:px-6 sm:py-6"
+          className="group relative overflow-hidden rounded-[40px] border border-white/[0.08] bg-white/[0.02] px-6 py-6 backdrop-blur-3xl transition-all duration-200 ease-out hover:-translate-y-[2px] hover:border-white/[0.12] hover:bg-white/[0.03] sm:px-7 sm:py-7"
         >
           {tone !== 'neutral' ? (
             <div
@@ -105,7 +105,7 @@ export const PageChrome: React.FC<PageChromeProps> = ({
   <div
     data-testid={pageTestId}
     data-bento-surface="true"
-    className={cn('gemini-bento-page', BENTO_SURFACE_ROOT_CLASS, pageClassName)}
+    className={cn('gemini-bento-page bg-black', BENTO_SURFACE_ROOT_CLASS, pageClassName)}
   >
     <WorkspacePageHeader
       eyebrow={eyebrow}

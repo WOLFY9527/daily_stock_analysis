@@ -1,22 +1,19 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Bot, BriefcaseBusiness, FlaskConical, PanelRightOpen, Search } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Drawer } from '../components/common';
 import {
   BENTO_SURFACE_ROOT_CLASS,
-  BentoCard,
   BentoGrid,
   CARD_BUTTON_CLASS,
   CARD_KICKER_CLASS,
   DecisionCard,
+  DeepReportDrawer,
   FundamentalsCard,
   StrategyCard,
   TechCard,
   type SignalTone,
   getToneBorderClass,
-  getToneTextClass,
-  getToneTextStyle,
 } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath } from '../utils/localeRouting';
@@ -25,14 +22,21 @@ type DrawerMetric = {
   label: string;
   value: string;
   tone?: SignalTone;
+  glow?: boolean;
+};
+
+type DrawerModule = {
+  id: string;
+  eyebrow: string;
+  title: string;
+  summary?: string;
+  metrics: DrawerMetric[];
+  footnote?: string;
 };
 
 type DrawerPayload = {
   title: string;
-  summary: string;
-  metrics: DrawerMetric[];
-  bullets: string[];
-  footnote: string;
+  modules: DrawerModule[];
 };
 
 type DashboardLocale = 'zh' | 'en';
@@ -68,7 +72,7 @@ const CONTENT: Record<DashboardLocale, {
   };
   strategy: {
     title: string;
-    subtitle: string;
+    subtitle?: string;
     metrics: Array<{ label: string; value: string; tone?: SignalTone }>;
     positionLabel: string;
     positionBody: string;
@@ -84,28 +88,18 @@ const CONTENT: Record<DashboardLocale, {
     metrics: Array<{ label: string; value: string; tone?: SignalTone }>;
     detailLabel: string;
   };
-  workflow: {
-    eyebrow: string;
-    title: string;
-    body: string;
-    actions: Array<{ label: string; description: string; path: string }>;
-    statusEyebrow: string;
-    statusBody: string;
-    detailLabel: string;
-  };
   drawers: {
     decision: DrawerPayload;
     strategy: DrawerPayload;
     tech: DrawerPayload;
     fundamentals: DrawerPayload;
-    workflow: DrawerPayload;
   };
 }> = {
   zh: {
     documentTitle: '首页 - WolfyStock',
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock 决策面板',
-    description: '把今日信号、执行区间、结构判断与后续流程压进一个高密度首页，先看结论，再决定下一步。',
+    description: '',
     instrument: '英伟达',
     ticker: 'NVDA',
     sessionBadge: '美股 AI 基础设施',
@@ -132,7 +126,6 @@ const CONTENT: Record<DashboardLocale, {
     },
     strategy: {
       title: '执行策略',
-      subtitle: '先给出区间，再决定节奏。',
       metrics: [
         { label: '建仓区间', value: '118.40 - 121.00', tone: 'neutral' },
         { label: '目标位', value: '136.00', tone: 'bullish' },
@@ -152,7 +145,7 @@ const CONTENT: Record<DashboardLocale, {
       detailLabel: '查看结构细节',
     },
     fundamentals: {
-      title: '基本面',
+      title: '基本面画像',
       metrics: [
         { label: '收入增速', value: '+18.2%', tone: 'bullish' },
         { label: '自由现金流', value: '$16.4B', tone: 'bullish' },
@@ -161,99 +154,118 @@ const CONTENT: Record<DashboardLocale, {
       ],
       detailLabel: '查看基本面细节',
     },
-    workflow: {
-      eyebrow: 'FLOW AUTOMATION',
-      title: '下一步流程',
-      body: '把候选扫描、组合校验与策略回测放进同一条执行链，先筛选，再对照仓位，最后验证假设。',
-      actions: [
-        { label: '扫描器', description: '补一轮候选池', path: '/scanner' },
-        { label: '持仓', description: '检查相关敞口', path: '/portfolio' },
-        { label: '回测', description: '验证执行条件', path: '/backtest' },
-      ],
-      statusEyebrow: '当前节奏',
-      statusBody: '候选筛选已优先级排序，下一步适合先做相关性检查，再决定是否进入回测。',
-      detailLabel: '查看流程摘要',
-    },
     drawers: {
       decision: {
-        title: 'AI 决断细节',
-        summary: '当前卡片只用占位数据表达首页节奏，但结构已经准备好承接后续真实信号、分数和图表。',
-        metrics: [
-          { label: '方向', value: '看多', tone: 'bullish' },
-          { label: '置信度', value: '8.6 / 10', tone: 'neutral' },
-          { label: '时间窗', value: '未来 72 小时', tone: 'neutral' },
-          { label: '主线', value: 'AI 订单 + 结构回稳', tone: 'bullish' },
+        title: '深度报告',
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: '技术形态',
+            title: '技术形态深看',
+            summary: '只保留能解释当前偏向的核心信号，用更大的留白承接后续真实图表。',
+            metrics: [
+              { label: 'MACD', value: '零轴上方金叉延续', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: '双均线继续扩张上行', tone: 'bullish' },
+              { label: '主力资金', value: '近三日净流入持续放大', tone: 'bullish' },
+            ],
+            footnote: '技术模块当前仍是前端占位数据。',
+          },
+          {
+            id: 'fundamental',
+            eyebrow: '基本面画像',
+            title: '基本面画像深看',
+            summary: '这里先用描述卡占位，后续接入更深层的盈利质量、订单结构和资本效率。',
+            metrics: [
+              { label: '业务描述', value: 'AI 基础设施主线仍是最强盈利锚点。', tone: 'neutral' },
+              { label: '现金流画像', value: '自由现金流充足，允许估值波动期保持耐心。', tone: 'neutral' },
+              { label: '质量占位', value: '后续补充订单、毛利率与资本效率深层信号。', tone: 'neutral' },
+            ],
+            footnote: '基本面深层字段将在后续数据接入阶段替换。',
+          },
         ],
-        bullets: [
-          '优先保留结论、分数、方向和一句话理由，避免首页被长文挤满。',
-          '图表区域先用占位 SVG 建立视觉层级，后续可直接换成真实序列数据。',
-          '细节抽屉承接扩展信息，桌面与移动端都不需要把所有上下文铺在首页。',
-        ],
-        footnote: '当前为前端占位版本，未接入实时研究结果。',
       },
       strategy: {
         title: '执行策略细节',
-        summary: '首页策略卡只保留入场、目标、止损和仓位节奏，抽屉再展开执行顺序与风控说明。',
-        metrics: [
-          { label: '初始仓位', value: '6%', tone: 'neutral' },
-          { label: '上限仓位', value: '15%', tone: 'bullish' },
-          { label: '失败条件', value: '跌破 111.80', tone: 'bearish' },
-          { label: '复核时间', value: '下一个交易日开盘前', tone: 'neutral' },
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: '技术形态',
+            title: '执行前结构确认',
+            summary: '策略仍然依赖技术确认来控制节奏。',
+            metrics: [
+              { label: 'MACD', value: '零轴上方金叉延续', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: '趋势未破坏前继续顺势', tone: 'bullish' },
+              { label: '主力资金', value: '资金没有出现明显背离', tone: 'bullish' },
+            ],
+          },
+          {
+            id: 'fundamental',
+            eyebrow: '基本面画像',
+            title: '执行耐心的基本面锚',
+            summary: '基本面模块只用来解释为何值得等待更好的入场质量。',
+            metrics: [
+              { label: '盈利质量', value: '增长质量仍支持中期偏强预期', tone: 'neutral' },
+              { label: '现金流', value: '现金流强度为回撤期提供安全垫', tone: 'neutral' },
+              { label: '后续占位', value: '未来在这里挂载更深层财务描述卡', tone: 'neutral' },
+            ],
+          },
         ],
-        bullets: [
-          '先用回踩确认来换取更好的盈亏比，避免追涨式入场。',
-          '突破放量后才考虑第二笔加仓，缩量反弹则继续观察。',
-          '一旦结构失效，优先执行减仓，不在首页里叠加更多例外规则。',
-        ],
-        footnote: '该抽屉仍使用占位策略值，后续再绑定真实报告输出。',
       },
       tech: {
         title: '技术结构细节',
-        summary: '技术卡聚焦结构是否配合当前方向，不把全部指标平铺到首页。',
-        metrics: [
-          { label: 'MACD', value: '金叉', tone: 'bullish' },
-          { label: 'MA20', value: '向上拐头', tone: 'bullish' },
-          { label: '量能', value: '突破前回落', tone: 'neutral' },
-          { label: '风险', value: '压力位尚未确认消化', tone: 'bearish' },
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: '技术形态',
+            title: '技术形态深看',
+            summary: '聚焦 MACD、均线和主力资金，避免非核心信号占用注意力。',
+            metrics: [
+              { label: 'MACD', value: '金叉延续，快慢线继续抬升', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: '均线发散健康，趋势仍完整', tone: 'bullish' },
+              { label: '主力资金', value: '净流入延续，回踩承接仍在', tone: 'bullish' },
+            ],
+            footnote: '仅核心信号保留辉光。',
+          },
+          {
+            id: 'fundamental',
+            eyebrow: '基本面画像',
+            title: '基本面占位卡',
+            summary: '为后续深层信息预留固定容器，而不是让技术抽屉单线扩张。',
+            metrics: [
+              { label: '行业叙事', value: 'AI 基础设施需求仍提供中期支撑。', tone: 'neutral' },
+              { label: '盈利韧性', value: '高利润率框架仍然成立。', tone: 'neutral' },
+              { label: '未来字段', value: '将接入盈利质量与估值弹性描述卡。', tone: 'neutral' },
+            ],
+          },
         ],
-        bullets: [
-          '首页保持三条最强信号，抽屉负责补足支撑/压力、均线斜率与量价配合。',
-          '技术信息用高对比、短句、可扫描的行列表达，不回到传统表格堆叠。',
-          '后续接入真实数据时，只要替换数组内容即可保留现有视觉结构。',
-        ],
-        footnote: '当前技术项与说明均为静态占位数据。',
       },
       fundamentals: {
         title: '基本面细节',
-        summary: '基本面卡只展示四个高价值指标，抽屉用于说明为什么这些指标值得保留在首页。',
-        metrics: [
-          { label: '收入增速', value: '+18.2%', tone: 'bullish' },
-          { label: '现金流', value: '$16.4B', tone: 'bullish' },
-          { label: '毛利率', value: '74.1%', tone: 'neutral' },
-          { label: 'ROE', value: '31.8%', tone: 'bullish' },
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: '技术形态',
+            title: '技术确认辅助',
+            summary: '即使打开基本面抽屉，也保留技术确认模块保持双核结构一致。',
+            metrics: [
+              { label: 'MACD', value: '趋势与基本面叙事同向', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: '均线支撑尚未失真', tone: 'bullish' },
+              { label: '主力资金', value: '核心资金没有明显撤退', tone: 'bullish' },
+            ],
+          },
+          {
+            id: 'fundamental',
+            eyebrow: '基本面画像',
+            title: '基本面画像深看',
+            summary: '把收入、现金流与质量描述收束到一组更沉静的说明卡中。',
+            metrics: [
+              { label: '收入增速', value: '+18.2%', tone: 'bullish' },
+              { label: '自由现金流', value: '$16.4B', tone: 'bullish' },
+              { label: '质量描述', value: '毛利率与资本效率仍是后续深度卡的核心锚点。', tone: 'neutral' },
+            ],
+            footnote: '当前为基本面占位卡结构。',
+          },
         ],
-        bullets: [
-          '保留能直接影响执行信心的指标，避免把整张财报摘要搬进首页。',
-          '数值与标签均采用占位数据，后续可替换为标准化后的真实字段。',
-          '抽屉给出筛选逻辑和补充说明，主页仍保持快速浏览节奏。',
-        ],
-        footnote: '当前数值仅用于前端布局与视觉校验。',
-      },
-      workflow: {
-        title: '流程摘要',
-        summary: '工作流卡把首页从“看完就走”变成“看完就能继续动作”，但先只接真实路由，不接自动执行。',
-        metrics: [
-          { label: '候选扫描', value: '下一轮待执行', tone: 'neutral' },
-          { label: '组合检查', value: '需复核相关性', tone: 'neutral' },
-          { label: '策略回测', value: '建议二次验证', tone: 'bullish' },
-          { label: '自动化状态', value: '占位流程', tone: 'neutral' },
-        ],
-        bullets: [
-          '首页保留进入扫描器、持仓、回测的快速入口，缩短从判断到行动的路径。',
-          '流程说明先放在抽屉里，避免首页出现大段方法论文本。',
-          '这一步只调整前端导航节奏，不触碰后端接口和既有路由契约。',
-        ],
-        footnote: '自动执行逻辑未接入，本次仅提供路由级流程入口。',
       },
     },
   },
@@ -261,7 +273,7 @@ const CONTENT: Record<DashboardLocale, {
     documentTitle: 'Home - WolfyStock',
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock Command Center',
-    description: 'Compress the session signal, execution range, structural view, and follow-up flow into one dense homepage so the next action is obvious.',
+    description: '',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
     sessionBadge: 'US AI infrastructure',
@@ -288,7 +300,6 @@ const CONTENT: Record<DashboardLocale, {
     },
     strategy: {
       title: 'Execution Strategy',
-      subtitle: 'Lock the range first, then decide the pace.',
       metrics: [
         { label: 'Entry Zone', value: '118.40 - 121.00', tone: 'neutral' },
         { label: 'Target', value: '136.00', tone: 'bullish' },
@@ -308,7 +319,7 @@ const CONTENT: Record<DashboardLocale, {
       detailLabel: 'Open Technical Brief',
     },
     fundamentals: {
-      title: 'Fundamentals',
+      title: 'Fundamental Profile',
       metrics: [
         { label: 'Revenue Growth', value: '+18.2%', tone: 'bullish' },
         { label: 'Free Cash Flow', value: '$16.4B', tone: 'bullish' },
@@ -317,105 +328,122 @@ const CONTENT: Record<DashboardLocale, {
       ],
       detailLabel: 'Open Fundamental Brief',
     },
-    workflow: {
-      eyebrow: 'FLOW AUTOMATION',
-      title: 'Next Workflow',
-      body: 'Keep scanning, portfolio review, and strategy validation in one chain: shortlist candidates, check exposure, then validate the setup.',
-      actions: [
-        { label: 'Scanner', description: 'Refresh the candidate queue', path: '/scanner' },
-        { label: 'Portfolio', description: 'Check correlated exposure', path: '/portfolio' },
-        { label: 'Backtest', description: 'Validate the trigger set', path: '/backtest' },
-      ],
-      statusEyebrow: 'Current Rhythm',
-      statusBody: 'The candidate queue is already prioritized. The clean next move is to review overlap before running a validation pass.',
-      detailLabel: 'Open Flow Brief',
-    },
     drawers: {
       decision: {
-        title: 'AI Decision Brief',
-        summary: 'This card is still powered by placeholder data, but the shell is already shaped for real signals, scores, and chart inputs later.',
-        metrics: [
-          { label: 'Direction', value: 'Bullish', tone: 'bullish' },
-          { label: 'Conviction', value: '8.6 / 10', tone: 'neutral' },
-          { label: 'Horizon', value: 'Next 72 hours', tone: 'neutral' },
-          { label: 'Primary Thread', value: 'AI orders + structure repair', tone: 'bullish' },
+        title: 'Deep report',
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: 'Technical Analysis',
+            title: 'Technical analysis deep read',
+            summary: 'Keep only the core signals that explain the current bias, with more negative space for future live charts.',
+            metrics: [
+              { label: 'MACD', value: 'Bullish crossover continues above zero', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: 'Both moving averages keep expanding higher', tone: 'bullish' },
+              { label: 'Main Fund Inflows', value: 'Three-session inflow trend remains intact', tone: 'bullish' },
+            ],
+            footnote: 'Technical data remains placeholder-only in this pass.',
+          },
+          {
+            id: 'fundamental',
+            eyebrow: 'Fundamental Profile',
+            title: 'Fundamental profile deep read',
+            summary: 'Use description cards as placeholders until deeper profitability and capital-efficiency data arrive.',
+            metrics: [
+              { label: 'Business Thread', value: 'AI infrastructure remains the clearest earnings anchor.', tone: 'neutral' },
+              { label: 'Cash Flow Profile', value: 'Free cash flow strength supports patience through pullbacks.', tone: 'neutral' },
+              { label: 'Future Slot', value: 'Deeper quality and efficiency signals land here later.', tone: 'neutral' },
+            ],
+            footnote: 'The fundamental module is intentionally placeholder-driven for now.',
+          },
         ],
-        bullets: [
-          'The homepage keeps only the verdict, score, direction, and one-sentence rationale.',
-          'The chart zone is a placeholder SVG today, but the layout is ready for a real series later.',
-          'The drawer absorbs the deeper context so the homepage stays scannable on desktop and mobile.',
-        ],
-        footnote: 'This is a frontend-only placeholder layer for now.',
       },
       strategy: {
         title: 'Execution strategy brief',
-        summary: 'The strategy card keeps entry, target, stop, and position rhythm on the homepage, then expands the sequencing and risk notes here.',
-        metrics: [
-          { label: 'Initial Size', value: '6%', tone: 'neutral' },
-          { label: 'Max Size', value: '15%', tone: 'bullish' },
-          { label: 'Failure Condition', value: 'Break below 111.80', tone: 'bearish' },
-          { label: 'Review Window', value: 'Before next session open', tone: 'neutral' },
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: 'Technical Analysis',
+            title: 'Pre-entry structure confirmation',
+            summary: 'Execution still depends on technical confirmation before sizing up.',
+            metrics: [
+              { label: 'MACD', value: 'Crossover remains constructive above zero', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: 'Trend stays intact while averages expand', tone: 'bullish' },
+              { label: 'Main Fund Inflows', value: 'No meaningful sponsorship fade yet', tone: 'bullish' },
+            ],
+          },
+          {
+            id: 'fundamental',
+            eyebrow: 'Fundamental Profile',
+            title: 'Patience anchor',
+            summary: 'The fundamental module explains why a cleaner entry is still worth waiting for.',
+            metrics: [
+              { label: 'Earnings Quality', value: 'Growth quality still supports a constructive medium-term bias.', tone: 'neutral' },
+              { label: 'Cash Flow', value: 'Cash generation adds a cushion during pullbacks.', tone: 'neutral' },
+              { label: 'Future Slot', value: 'Deeper financial description cards land here later.', tone: 'neutral' },
+            ],
+          },
         ],
-        bullets: [
-          'Use a pullback confirmation to improve the payoff instead of chasing the move.',
-          'Only consider the second add after the breakout confirms on volume.',
-          'If structure breaks, reduce exposure first instead of stacking exception logic on the homepage.',
-        ],
-        footnote: 'All values remain static placeholders in this pass.',
       },
       tech: {
         title: 'Technical structure brief',
-        summary: 'The technical card focuses on whether structure agrees with the bias instead of flattening every indicator into the homepage.',
-        metrics: [
-          { label: 'MACD', value: 'Bullish crossover', tone: 'bullish' },
-          { label: 'MA20', value: 'Turning higher', tone: 'bullish' },
-          { label: 'Volume', value: 'Quiet into the setup', tone: 'neutral' },
-          { label: 'Risk', value: 'Overhead supply still needs clearance', tone: 'bearish' },
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: 'Technical Analysis',
+            title: 'Technical analysis deep read',
+            summary: 'Focus on MACD, moving averages, and main fund inflows only.',
+            metrics: [
+              { label: 'MACD', value: 'Bullish crossover continues with rising slope', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: 'Average expansion stays healthy and trend intact', tone: 'bullish' },
+              { label: 'Main Fund Inflows', value: 'Net inflows remain supportive through pullbacks', tone: 'bullish' },
+            ],
+            footnote: 'Glow remains reserved for the core signal only.',
+          },
+          {
+            id: 'fundamental',
+            eyebrow: 'Fundamental Profile',
+            title: 'Fundamental placeholder cards',
+            summary: 'Reserve a stable second module so the drawer keeps a balanced two-core structure.',
+            metrics: [
+              { label: 'Industry Thread', value: 'AI infrastructure demand still supports the broader story.', tone: 'neutral' },
+              { label: 'Profitability', value: 'High-margin structure remains intact.', tone: 'neutral' },
+              { label: 'Future Slot', value: 'Quality and valuation elasticity cards arrive later.', tone: 'neutral' },
+            ],
+          },
         ],
-        bullets: [
-          'The homepage keeps only the strongest three signals while the drawer adds the structural context.',
-          'Short, high-contrast rows are easier to scan than a dense indicator table.',
-          'Once real data lands, the existing visual shell stays intact and only the arrays change.',
-        ],
-        footnote: 'All signals and notes are static placeholders.',
       },
       fundamentals: {
         title: 'Fundamental brief',
-        summary: 'The fundamentals card keeps four high-value metrics visible and uses the drawer to explain why they belong in the homepage layer.',
-        metrics: [
-          { label: 'Revenue Growth', value: '+18.2%', tone: 'bullish' },
-          { label: 'Cash Flow', value: '$16.4B', tone: 'bullish' },
-          { label: 'Gross Margin', value: '74.1%', tone: 'neutral' },
-          { label: 'ROE', value: '31.8%', tone: 'bullish' },
+        modules: [
+          {
+            id: 'technical',
+            eyebrow: 'Technical Analysis',
+            title: 'Technical confirmation layer',
+            summary: 'Even on the fundamental view, the technical module remains visible to preserve the dual-core rhythm.',
+            metrics: [
+              { label: 'MACD', value: 'Trend confirmation still aligns with the story', tone: 'bullish', glow: true },
+              { label: 'MA20 / MA60', value: 'Average support has not broken down', tone: 'bullish' },
+              { label: 'Main Fund Inflows', value: 'Core sponsorship remains constructive', tone: 'bullish' },
+            ],
+          },
+          {
+            id: 'fundamental',
+            eyebrow: 'Fundamental Profile',
+            title: 'Fundamental profile deep read',
+            summary: 'Pull revenue, cash flow, and quality description into quieter high-context cards.',
+            metrics: [
+              { label: 'Revenue Growth', value: '+18.2%', tone: 'bullish' },
+              { label: 'Free Cash Flow', value: '$16.4B', tone: 'bullish' },
+              { label: 'Quality Note', value: 'Margin and capital-efficiency remain the next deep-data anchors.', tone: 'neutral' },
+            ],
+            footnote: 'The module keeps placeholder content intentionally for now.',
+          },
         ],
-        bullets: [
-          'Keep only metrics that change execution confidence directly.',
-          'All labels and values are placeholders for now but already mapped to a stable layout.',
-          'The drawer carries the explanatory burden so the homepage remains fast to read.',
-        ],
-        footnote: 'Metric values are placeholders used for layout and visual QA.',
-      },
-      workflow: {
-        title: 'Workflow brief',
-        summary: 'The workflow card turns the homepage into an action hub, but this pass still links only to existing routes and does not trigger automation.',
-        metrics: [
-          { label: 'Candidate Scan', value: 'Queued next', tone: 'neutral' },
-          { label: 'Portfolio Check', value: 'Exposure review needed', tone: 'neutral' },
-          { label: 'Backtest', value: 'Suggested validation', tone: 'bullish' },
-          { label: 'Automation State', value: 'Placeholder flow', tone: 'neutral' },
-        ],
-        bullets: [
-          'The homepage keeps direct links into Scanner, Portfolio, and Backtest to shorten the path from decision to action.',
-          'The process explanation lives in the drawer so the homepage avoids feature-description copy.',
-          'This is a frontend-only workflow layer and leaves backend contracts untouched.',
-        ],
-        footnote: 'No automation logic is wired yet; the flow is route-level only.',
       },
     },
   },
 };
-
-const ACTION_ICONS = [Search, BriefcaseBusiness, FlaskConical] as const;
 
 const HomeBentoDashboardPage: React.FC = () => {
   const { language } = useI18n();
@@ -426,15 +454,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
-
-  const workflowActions = useMemo(
-    () => copy.workflow.actions.map((action, index) => ({
-      ...action,
-      icon: ACTION_ICONS[index],
-      to: buildLocalizedPath(action.path, language),
-    })),
-    [copy.workflow.actions, language],
-  );
 
   const topActions = useMemo(
     () => ([
@@ -529,92 +548,16 @@ const HomeBentoDashboardPage: React.FC = () => {
             detailLabel={copy.fundamentals.detailLabel}
             onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
           />
-
-          <BentoCard
-            eyebrow={copy.workflow.eyebrow}
-            title={copy.workflow.title}
-            subtitle={copy.workflow.body}
-            className="xl:col-span-5"
-            testId="home-bento-card-workflow"
-            action={(
-              <button type="button" className={CARD_BUTTON_CLASS} onClick={() => setActiveDrawer(copy.drawers.workflow)}>
-                <PanelRightOpen className="h-4 w-4" />
-                <span>{copy.workflow.detailLabel}</span>
-              </button>
-            )}
-          >
-            <div className="grid gap-3 sm:grid-cols-3">
-              {workflowActions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <Link
-                    key={action.label}
-                    to={action.to}
-                    className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl transition-colors duration-150 hover:border-white/[0.12] hover:bg-white/[0.03]"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] text-white/82 backdrop-blur-xl">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <ArrowUpRight className="h-4 w-4 text-white/46" />
-                    </div>
-                    <p className="mt-4 text-sm font-semibold text-white">{action.label}</p>
-                    <p className="mt-2 text-sm leading-6 text-white/58">{action.description}</p>
-                  </Link>
-                );
-              })}
-            </div>
-
-            <div className="mt-4 rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl">
-              <p className={CARD_KICKER_CLASS}>{copy.workflow.statusEyebrow}</p>
-              <div className="mt-3 flex items-start gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] text-white/78 backdrop-blur-xl">
-                  <Bot className="h-4 w-4" />
-                </div>
-                <p className="text-sm leading-6 text-white/64">{copy.workflow.statusBody}</p>
-              </div>
-            </div>
-          </BentoCard>
         </BentoGrid>
       </section>
 
-      <Drawer
+      <DeepReportDrawer
         isOpen={Boolean(activeDrawer)}
         onClose={() => setActiveDrawer(null)}
-        title={activeDrawer?.title}
-        width="max-w-3xl"
-      >
-        {activeDrawer ? (
-          <div data-testid="home-bento-drawer" className="rounded-[36px] border border-white/[0.08] bg-[#050505]/96 p-6 text-white backdrop-blur-xl sm:p-6">
-            <p className="text-sm leading-6 text-white/68">{activeDrawer.summary}</p>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {activeDrawer.metrics.map((metric) => (
-                <div key={metric.label} className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 backdrop-blur-xl">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{metric.label}</p>
-                  <p
-                    className={`mt-3 text-lg font-semibold ${getToneTextClass(metric.tone || 'neutral')}`}
-                    style={getToneTextStyle(metric.tone || 'neutral', (metric.tone || 'neutral') !== 'neutral')}
-                  >
-                    {metric.value}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <ul className="mt-5 space-y-3">
-              {activeDrawer.bullets.map((bullet) => (
-                <li key={bullet} className="flex gap-3 text-sm leading-6 text-white/64">
-                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-white/32" />
-                  <span>{bullet}</span>
-                </li>
-              ))}
-            </ul>
-
-            <p className="mt-5 text-xs uppercase tracking-[0.18em] text-white/36">{activeDrawer.footnote}</p>
-          </div>
-        ) : null}
-      </Drawer>
+        title={activeDrawer?.title || ''}
+        modules={activeDrawer?.modules || []}
+        testId="home-bento-drawer"
+      />
     </div>
   );
 };

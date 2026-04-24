@@ -11,7 +11,7 @@ type StrategyMetric = {
 
 type StrategyCardProps = {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   metrics: StrategyMetric[];
   positionLabel: string;
   positionBody: string;
@@ -34,7 +34,12 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     className="xl:col-span-5"
     testId="home-bento-card-strategy"
     action={(
-      <button type="button" className={CARD_BUTTON_CLASS} onClick={onOpenDetails}>
+      <button
+        type="button"
+        className={CARD_BUTTON_CLASS}
+        data-testid="home-bento-drawer-trigger-strategy"
+        onClick={onOpenDetails}
+      >
         <PanelRightOpen className="h-4 w-4" />
         <span>{detailLabel}</span>
       </button>
@@ -53,7 +58,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
         </div>
       ))}
     </div>
-    <div className="mt-4 rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl">
+    <div className="mt-4 rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl">
       <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{positionLabel}</p>
       <p className="mt-3 text-sm leading-6 text-white/68">{positionBody}</p>
     </div>

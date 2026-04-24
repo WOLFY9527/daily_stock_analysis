@@ -24,10 +24,15 @@ export const TechCard: React.FC<TechCardProps> = ({
 }) => (
   <BentoCard
     eyebrow={title}
-    className="xl:col-span-4"
+    className="xl:col-span-6"
     testId="home-bento-card-tech"
     action={(
-      <button type="button" className={CARD_BUTTON_CLASS} onClick={onOpenDetails}>
+      <button
+        type="button"
+        className={CARD_BUTTON_CLASS}
+        data-testid="home-bento-drawer-trigger-tech"
+        onClick={onOpenDetails}
+      >
         <PanelRightOpen className="h-4 w-4" />
         <span>{detailLabel}</span>
       </button>
@@ -37,7 +42,7 @@ export const TechCard: React.FC<TechCardProps> = ({
       {signals.map((signal) => (
         <div
           key={signal.label}
-          className="flex items-center justify-between gap-3 rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 backdrop-blur-xl"
+          className="flex items-center justify-between gap-3 rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl"
         >
           <span className="text-sm text-white/62">{signal.label}</span>
           <span

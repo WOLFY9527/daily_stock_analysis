@@ -43,12 +43,21 @@ describe('HomeSurfacePage', () => {
   it('renders the signed-in bento dashboard for authenticated users', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
-    expect(screen.getByTestId('home-bento-dashboard')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('home-bento-dashboard')).toHaveClass('bento-surface-root');
+    const root = screen.getByTestId('home-bento-dashboard');
+    expect(root).toHaveAttribute('data-bento-surface', 'true');
+    expect(root).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
     expect(screen.getByTestId('home-bento-grid')).toHaveClass('bento-grid-root');
     expect(screen.getByText('WolfyStock 决策面板')).toBeInTheDocument();
     expect(screen.getByText('WOLFY AI 决断')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-drawer-trigger-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-tech')).toHaveClass('xl:col-span-6');
+    expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveClass('xl:col-span-6');
+    expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
+    expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
   });
 
   it('renders localized English copy for the signed-in dashboard', () => {
@@ -58,13 +67,24 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('WolfyStock Command Center')).toBeInTheDocument();
     expect(screen.getByText('Execution Strategy')).toBeInTheDocument();
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
+    expect(screen.getByText('Fundamental Profile')).toBeInTheDocument();
+    expect(screen.queryByText('Lock the range first, then decide the pace.')).not.toBeInTheDocument();
   });
 
-  it('opens the progressive-disclosure drawer from the strategy card', async () => {
+  it('opens and closes the progressive-disclosure drawer from the strategy card', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
-    fireEvent.click(screen.getByRole('button', { name: '查看策略细节' }));
+    expect(document.body.style.overflow).toBe('');
+    fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-strategy'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('执行策略细节')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-drawer')).toBeInTheDocument();
+    expect(screen.getAllByText('技术形态').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('基本面画像').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/MACD/i).length).toBeGreaterThan(0);
+    expect(document.body.style.overflow).toBe('hidden');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await new Promise((resolve) => window.setTimeout(resolve, 220));
+    expect(document.body.style.overflow).toBe('');
+    expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 });

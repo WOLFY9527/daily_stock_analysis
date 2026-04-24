@@ -6,4 +6,5 @@ export * from './TechCard';
 export * from './FundamentalsCard';
 export * from './PageChrome';
 export * from './PageBriefDrawer';
+export * from './DeepReportDrawer';
 export * from './theme';

@@ -45,7 +45,12 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
     className="xl:col-span-7 xl:row-span-2"
     testId="home-bento-card-decision"
     action={(
-      <button type="button" className={CARD_BUTTON_CLASS} onClick={onOpenDetails}>
+      <button
+        type="button"
+        className={CARD_BUTTON_CLASS}
+        data-testid="home-bento-drawer-trigger-decision"
+        onClick={onOpenDetails}
+      >
         <PanelRightOpen className="h-4 w-4" />
         <span>{detailLabel}</span>
       </button>
@@ -89,7 +94,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </div>
       </div>
 
-      <div className="relative flex-1 overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl">
+      <div className="relative flex-1 overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl">
         <svg className="h-44 w-full text-[#34D399]" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <linearGradient id="home-bento-decision-fill" x1="0" y1="0" x2="0" y2="1">

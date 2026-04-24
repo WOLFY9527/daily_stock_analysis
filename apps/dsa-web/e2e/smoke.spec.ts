@@ -156,12 +156,22 @@ test.describe('web deployment smoke', () => {
     await page.waitForLoadState('domcontentloaded');
 
     const body = page.locator('body');
+    const root = page.locator('[data-testid="home-bento-dashboard"]');
     const grid = page.locator('[data-testid="home-bento-grid"]');
     const decisionCard = page.locator('[data-testid="home-bento-card-decision"]');
+    const strategyTrigger = page.locator('[data-testid="home-bento-drawer-trigger-strategy"]');
+    const techTrigger = page.locator('[data-testid="home-bento-drawer-trigger-tech"]');
+    const fundamentalsTrigger = page.locator('[data-testid="home-bento-drawer-trigger-fundamentals"]');
 
     await expect(body).toContainText(/WolfyStock 决策面板|WolfyStock Command Center/, { timeout: 15_000 });
+    await expect(root).toHaveAttribute('data-bento-surface', 'true');
+    await expect(root).toHaveClass(/bento-surface-root/);
     await expect(grid).toBeVisible();
     await expect(decisionCard).toBeVisible();
+    await expect(strategyTrigger).toBeVisible();
+    await expect(techTrigger).toBeVisible();
+    await expect(fundamentalsTrigger).toBeVisible();
+    await expect(page.locator('[data-testid="home-bento-card-workflow"]')).toHaveCount(0);
 
     await decisionCard.hover();
     await expect.poll(async () => (
@@ -173,7 +183,7 @@ test.describe('web deployment smoke', () => {
       glowLabel.evaluate((element) => getComputedStyle(element).textShadow)
     )).not.toBe('none');
 
-    await page.getByRole('button', { name: /查看策略细节|Open Strategy Brief/i }).click();
+    await strategyTrigger.click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15_000 });
     await expect(body).toContainText(/执行策略细节|Execution strategy brief/i, { timeout: 15_000 });
     await page.keyboard.press('Escape');
