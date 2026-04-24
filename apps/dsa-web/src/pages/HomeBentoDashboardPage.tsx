@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   BENTO_SURFACE_ROOT_CLASS,
@@ -46,6 +46,7 @@ const CONTENT: Record<DashboardLocale, {
   eyebrow: string;
   heading: string;
   description: string;
+  omnibarPlaceholder: string;
   instrument: string;
   ticker: string;
   sessionBadge: string;
@@ -100,6 +101,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock 决策面板',
     description: '',
+    omnibarPlaceholder: '输入股票代码或公司名称，唤醒 AI 深度分析...',
     instrument: '英伟达',
     ticker: 'NVDA',
     sessionBadge: '美股 AI 基础设施',
@@ -274,6 +276,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock Command Center',
     description: '',
+    omnibarPlaceholder: 'Enter a ticker or company name to wake AI deep analysis...',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
     sessionBadge: 'US AI infrastructure',
@@ -471,9 +474,29 @@ const HomeBentoDashboardPage: React.FC = () => {
       className={`${BENTO_SURFACE_ROOT_CLASS} space-y-6`}
     >
       <section className="space-y-6">
+        <div className="mb-12 max-w-2xl">
+          <p className={CARD_KICKER_CLASS}>{copy.eyebrow}</p>
+          <label
+            className="mt-4 flex w-full max-w-2xl items-center gap-3 rounded-full border border-white/5 bg-white/[0.02] px-5 py-3.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
+            data-testid="home-bento-omnibar"
+          >
+            <Search className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+            <span className="sr-only">{copy.omnibarPlaceholder}</span>
+            <input
+              type="search"
+              className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/20 focus:outline-none"
+              placeholder={copy.omnibarPlaceholder}
+              aria-label={copy.omnibarPlaceholder}
+              autoComplete="off"
+            />
+            <span className="shrink-0 rounded-md bg-white/5 px-2 py-1 font-mono text-[10px] text-white/30">
+              ↵ Enter
+            </span>
+          </label>
+        </div>
+
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <p className={CARD_KICKER_CLASS}>{copy.eyebrow}</p>
             <h1 className="mt-3 text-[2rem] font-semibold tracking-tight text-white sm:text-[2.4rem]">
               {copy.heading}
             </h1>

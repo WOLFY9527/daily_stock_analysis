@@ -55,6 +55,22 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
     expect(screen.getByTestId('home-bento-grid')).toHaveClass('bento-grid-root');
     expect(screen.getByText('WolfyStock 决策面板')).toBeInTheDocument();
+    const omnibar = screen.getByTestId('home-bento-omnibar');
+    const omnibarInput = screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...');
+    expect(omnibar).toHaveClass(
+      'w-full',
+      'max-w-2xl',
+      'rounded-full',
+      'border-white/5',
+      'bg-white/[0.02]',
+      'backdrop-blur-md',
+      'focus-within:border-white/20',
+      'focus-within:bg-white/[0.04]',
+      'focus-within:ring-1',
+      'focus-within:ring-white/10',
+    );
+    expect(omnibarInput).toHaveAttribute('type', 'search');
+    expect(screen.getByText('↵ Enter')).toHaveClass('text-[10px]', 'text-white/30', 'bg-white/5');
     expect(screen.getByText('WOLFY AI 决断')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
