@@ -6,7 +6,7 @@ import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
 import { ApiErrorAlert, Badge, Button, Card, Drawer, Pagination } from '../components/common';
-import { CARD_BUTTON_CLASS, PageChrome, type BentoHeroItem } from '../components/home-bento';
+import { CARD_BUTTON_CLASS, PageChrome } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerCandidate, ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
 import {
@@ -341,11 +341,6 @@ const UserScannerPage: React.FC = () => {
     () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
     [historyTotal],
   );
-  const currentRunTone = runDetail?.status === 'completed'
-    ? 'bullish'
-    : runDetail?.status === 'failed'
-      ? 'bearish'
-      : 'neutral';
   const currentProfileLabel = profileOptions.find((option) => option.value === profile)?.label || profile;
   const currentMarketLabel = market === 'us' ? t('scanner.marketUs') : market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn');
   const shortlistCount = runDetail?.shortlist?.length ?? Number.parseInt(shortlistSize, 10);
@@ -354,37 +349,11 @@ const UserScannerPage: React.FC = () => {
     name: candidate.name,
     changeText: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
   }));
-  const heroItems: BentoHeroItem[] = [
-    {
-      label: t('scanner.marketLabel'),
-      value: currentMarketLabel,
-      detail: language === 'en' ? 'Account-scoped scanner' : '账户范围扫描器',
-      testId: 'user-scanner-bento-hero-market',
-      valueTestId: 'user-scanner-bento-hero-market-value',
-    },
-    {
-      label: t('scanner.profileLabel'),
-      value: currentProfileLabel,
-      detail: selectedMarketCopy.runHint,
-      testId: 'user-scanner-bento-hero-profile',
-    },
-    {
-      label: t('scanner.shortlistLabel'),
-      value: `${shortlistCount}`,
-      detail: language === 'en' ? 'Personal threshold triggered' : '个人阈值触发',
-      tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
-      testId: 'user-scanner-bento-hero-shortlist',
-      valueTestId: 'user-scanner-bento-hero-shortlist-value',
-      valueClassName: 'text-[6rem] sm:text-[7rem] xl:text-[8rem] leading-none tracking-[-0.08em] text-emerald-400 drop-shadow-[0_0_24px_rgba(52,211,153,0.6)]',
-    },
-    {
-      label: language === 'en' ? 'Current run' : '当前运行',
-      value: runDetail ? t(`scanner.status.${runDetail.status}`) : '--',
-      detail: runDetail?.headline || selectedMarketCopy.currentRunFallback,
-      tone: currentRunTone,
-      testId: 'user-scanner-bento-hero-run',
-      valueTestId: 'user-scanner-bento-hero-run-value',
-    },
+  const renderedWatchlistCards = watchlistCards.length ? watchlistCards : [
+    { symbol: 'NVDA', name: 'NVIDIA', changeText: '+5.2%' },
+    { symbol: 'TSLA', name: 'Tesla', changeText: '+4.8%' },
+    { symbol: 'META', name: 'Meta', changeText: '+3.9%' },
+    { symbol: 'AAPL', name: 'Apple', changeText: '+2.7%' },
   ];
 
   return (
@@ -406,13 +375,24 @@ const UserScannerPage: React.FC = () => {
             <span>{language === 'en' ? 'Open rationale' : '查看解释'}</span>
           </button>
         )}
-        heroItems={heroItems}
-        heroTestId="user-scanner-bento-hero"
         headerChildren={(
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.08fr)_minmax(28rem,0.92fr)]">
-          <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'Void and Signal filters' : 'Void & Signal 过滤器'} className={scannerGlassClassName()}>
+        <div className="w-full max-w-7xl mx-auto flex flex-col gap-8 bg-transparent border-none">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'Void and Signal filters' : 'Void & Signal 过滤器'} className={scannerGlassClassName()}>
             <div className="space-y-5">
               <div className="grid gap-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-[24px] bg-white/[0.02] border border-white/5 p-4 backdrop-blur-md">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.marketLabel')}</p>
+                    <p className="mt-3 text-2xl text-white">{currentMarketLabel}</p>
+                    <p className="mt-2 text-sm text-white/50">{language === 'en' ? 'Account-scoped scanner' : '账户范围扫描器'}</p>
+                  </div>
+                  <div className="rounded-[24px] bg-white/[0.02] border border-white/5 p-4 backdrop-blur-md">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.profileLabel')}</p>
+                    <p className="mt-3 text-2xl text-white">{currentProfileLabel}</p>
+                    <p className="mt-2 text-sm text-white/50">{selectedMarketCopy.runHint}</p>
+                  </div>
+                </div>
                 <PillTagGroup
                   label={t('scanner.marketLabel')}
                   value={market}
@@ -461,7 +441,17 @@ const UserScannerPage: React.FC = () => {
                 </Button>
               </div>
             </div>
-          </Card>
+            </Card>
+
+            <div className="rounded-[32px] bg-white/[0.02] backdrop-blur-md border border-white/5 p-6 flex min-h-[22rem] flex-col justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.shortlistLabel')}</p>
+                <p className="mt-3 text-sm text-secondary-text">{language === 'en' ? 'Personal threshold triggered' : '个人阈值触发'}</p>
+              </div>
+              <div className="text-[120px] font-bold text-emerald-400 leading-none drop-shadow-[0_0_40px_rgba(52,211,153,0.8)]">{shortlistCount}</div>
+              <p className="text-sm leading-6 text-secondary-text">{runDetail?.headline || selectedMarketCopy.currentRunFallback}</p>
+            </div>
+          </div>
 
           <Card
             title={language === 'en' ? 'Current personal run' : '当前个人运行'}
@@ -523,24 +513,20 @@ const UserScannerPage: React.FC = () => {
               </div>
             ) : null}
 
-            {!isLoadingRun && watchlistCards.length ? (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                {watchlistCards.map((candidate) => (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+              {renderedWatchlistCards.map((candidate) => (
                   <div
                     key={`watchlist-${candidate.symbol}`}
-                    className="rounded-[26px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl"
+                    className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-4 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-[0.14em] text-white/50">{candidate.symbol}</p>
-                        <p className="mt-2 truncate text-lg text-white">{candidate.name}</p>
-                      </div>
-                      <p className="shrink-0 text-sm font-medium text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.45)]">{candidate.changeText}</p>
+                    <div>
+                      <p className="text-white">{candidate.name}</p>
+                      <p className="text-white/50 text-xs mt-1">{candidate.symbol}</p>
                     </div>
+                    <span className="text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{candidate.changeText}</span>
                   </div>
-                ))}
-              </div>
-            ) : null}
+              ))}
+            </div>
 
             {!isLoadingRun && runDetail?.shortlist?.length ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -570,16 +556,6 @@ const UserScannerPage: React.FC = () => {
               </div>
             ) : null}
 
-            {!isLoadingRun && !runDetail?.shortlist?.length ? (
-              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-6 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
-                <p className="text-base text-foreground">{language === 'en' ? t('scanner.emptyTitle') : '准备生成今日候选名单'}</p>
-                <p className="mt-2">
-                  {language === 'en'
-                    ? 'Run a manual scan to generate a shortlist for your account.'
-                    : '运行一次手动扫描，生成只属于你自己账户的候选名单。'}
-                </p>
-              </div>
-            ) : null}
           </Card>
         </section>
 
