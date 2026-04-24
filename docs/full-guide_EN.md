@@ -1061,6 +1061,8 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 - Normal-user task surfaces now emphasize symbol, stage, progress, and recency instead of exposing raw long task IDs by default. Technical identifiers remain available in admin/operator diagnostics where debugging still matters.
 - Login-return flows, 401/403 states, and admin-route guards now provide more explicit next-step guidance. When a normal user, or an admin still in `User Mode`, hits an operator route, the UI explains how to continue instead of failing silently.
 - After logout, the Web app now explicitly returns to the guest home surface so guest-mode navigation and locked cards are restored immediately instead of leaving users inside a protected shell.
+- The sign-in page now includes a `Forgot password?` entry that opens `/reset-password`; the page only accepts a username or email and triggers a backend reset-request API that always returns the same generic success message to avoid account enumeration.
+- The advanced AI channel editor now supports extra header/parameter JSON, and deleting the last channel that provided a runtime model also clears stale runtime primary/fallback/vision references so the settings UI does not keep dangling channel routes.
 - The backtest product flow now treats deterministic configuration and deterministic result analysis as two separate pages: `/backtest` stays configuration-first, while `/backtest/results/:runId` owns the full-width chart workspace and audit flow.
 - On mobile, navigation now consistently uses the shared drawer shell, and loading states favor structured skeleton/status surfaces instead of unrelated spinner-only treatments.
 

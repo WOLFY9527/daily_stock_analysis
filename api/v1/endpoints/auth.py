@@ -71,6 +71,12 @@ class ChangePasswordRequest(BaseModel):
     new_password_confirm: str = Field(default="", alias="newPasswordConfirm")
 
 
+class PasswordResetRequest(BaseModel):
+    """Password reset request body."""
+
+    identifier: str = Field(default="", description="Username or email")
+
+
 class AuthSettingsRequest(BaseModel):
     """Update auth enablement and initial password settings."""
 
@@ -907,6 +913,43 @@ async def auth_login(request: Request, body: LoginRequest):
     )
     _set_session_cookie(resp, session_val, request)
     return resp
+
+
+@router.post(
+    "/reset-password/request",
+    summary="Request password reset",
+    description="Trigger the backend password-reset flow without revealing whether the account exists.",
+)
+async def auth_request_password_reset(body: PasswordResetRequest):
+    """Accept a password reset request and return a generic non-enumerating response."""
+    identifier = (body.identifier or "").strip()
+    if not identifier:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "identifier_required", "message": "请输入邮箱地址或用户名"},
+        )
+
+    normalized_identifier = identifier.lower()
+    matched_user_id = ""
+    if normalized_identifier == BOOTSTRAP_ADMIN_USERNAME.lower():
+        matched_user_id = BOOTSTRAP_ADMIN_USER_ID
+    else:
+        user_row = AuthRepository().get_app_user_by_username(identifier)
+        if user_row is not None:
+            matched_user_id = str(getattr(user_row, "id", "") or "")
+
+    logger.info(
+        "Password reset requested for identifier=%s matched=%s",
+        identifier,
+        bool(matched_user_id),
+    )
+    return JSONResponse(
+        status_code=202,
+        content={
+            "ok": True,
+            "message": "如果该账户存在，系统已接受重置请求。请按后续提示完成密码重置。",
+        },
+    )
 
 
 @router.post(

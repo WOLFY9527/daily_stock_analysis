@@ -750,19 +750,19 @@ describe('RuleBacktestComparePage', () => {
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenNthCalledWith(1, 'http://localhost:3000/backtest/compare?runIds=101%2C202');
     });
-    expect(screen.getByText('已复制当前比较链接')).toBeInTheDocument();
+    expect(await screen.findByText('已复制当前比较链接')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '复制 runIds' }));
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenNthCalledWith(2, '101,202');
     });
-    expect(screen.getByText('已复制当前 runIds')).toBeInTheDocument();
+    expect(await screen.findByText('已复制当前 runIds')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '复制摘要' }));
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenNthCalledWith(3, 'compare 101,202 | baseline #101 ORCL | overall partially_comparable | profile same_code_different_periods | comparable 2/2');
     });
-    expect(screen.getByText('已复制比较摘要')).toBeInTheDocument();
+    expect(await screen.findByText('已复制比较摘要')).toBeInTheDocument();
   });
 
   it('lets users remove a candidate run from the current compare selection', async () => {
