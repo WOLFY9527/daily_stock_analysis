@@ -822,6 +822,9 @@ describe('ScannerPage', () => {
   it('renders today watchlist status, recent watchlists, and opens the detail drawer', async () => {
     renderScannerPage();
 
+    expect(await screen.findByTestId('scanner-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-bento-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-bento-hero-shortlist-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect((await screen.findAllByText('算力龙头')).length).toBeGreaterThan(0);
     expect(screen.getByText('AI算力')).toBeInTheDocument();
     expect(screen.getAllByText('AI 解读').length).toBeGreaterThan(0);
@@ -837,6 +840,11 @@ describe('ScannerPage', () => {
     expect(screen.getByText('运行时诊断')).toBeInTheDocument();
     expect(screen.getAllByText(/local_universe_cache/).length).toBeGreaterThan(0);
     expect(screen.getByText(/akshare_snapshot_fetch_failed/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('scanner-bento-drawer-trigger'));
+
+    expect(await screen.findByTestId('scanner-bento-drawer')).toBeInTheDocument();
+    expect(screen.getByText('扫描器工作台摘要')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '查看解释' }));
 

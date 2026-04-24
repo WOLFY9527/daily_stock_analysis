@@ -1,10 +1,17 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { Pie, PieChart, ResponsiveContainer, Tooltip, Legend, Cell } from 'recharts';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Card, Badge, ConfirmDialog, Disclosure, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Card, Badge, ConfirmDialog, Disclosure } from '../components/common';
+import {
+  CARD_BUTTON_CLASS,
+  PageBriefDrawer,
+  PageChrome,
+  type BentoHeroItem,
+} from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
@@ -837,6 +844,7 @@ const PortfolioPage: React.FC = () => {
   const [cashEvents, setCashEvents] = useState<PortfolioCashLedgerListItem[]>([]);
   const [corporateEvents, setCorporateEvents] = useState<PortfolioCorporateActionListItem[]>([]);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [tradeForm, setTradeForm] = useState({
@@ -1547,42 +1555,89 @@ const PortfolioPage: React.FC = () => {
     || Boolean(eventSide)
     || Boolean(eventDirection)
     || Boolean(eventActionType);
+  const heroItems: BentoHeroItem[] = [
+    {
+      label: copy.snapshotBasisTitle,
+      value: formatMoney(snapshot?.totalEquity, snapshot?.currency || 'CNY'),
+      detail: language === 'en' ? 'Combined snapshot' : '组合快照',
+      tone: 'bullish',
+      testId: 'portfolio-bento-hero-equity',
+      valueTestId: 'portfolio-bento-hero-equity-value',
+    },
+    {
+      label: language === 'en' ? 'Cash buffer' : '现金缓冲',
+      value: formatMoney(snapshot?.totalCash, snapshot?.currency || 'CNY'),
+      detail: language === 'en' ? 'Liquidity reserve' : '流动性预留',
+      testId: 'portfolio-bento-hero-cash',
+    },
+    {
+      label: copy.accountCount,
+      value: String(snapshot?.accountCount ?? accounts.length),
+      detail: selectedAccount === 'all' ? copy.allAccounts : `${selectedAccount}`,
+      testId: 'portfolio-bento-hero-accounts',
+    },
+    {
+      label: copy.fxState,
+      value: snapshot?.fxStale
+        ? (language === 'en' ? 'Stale rates' : '待刷新')
+        : (language === 'en' ? 'Fresh rates' : '已同步'),
+      detail: copy.refreshFx,
+      tone: snapshot?.fxStale ? 'bearish' : 'bullish',
+      testId: 'portfolio-bento-hero-fx',
+      valueTestId: 'portfolio-bento-hero-fx-value',
+    },
+  ];
 
   return (
-    <div className="workspace-page workspace-page--portfolio">
-      <WorkspacePageHeader
+    <PageChrome
+      pageTestId="portfolio-bento-page"
+      pageClassName="workspace-page workspace-page--portfolio gemini-bento-page--portfolio"
         eyebrow={copy.eyebrow}
         title={copy.title}
         description={copy.description}
-        actions={hasAccounts ? (
+        actions={(
           <>
             <button
               type="button"
-              className="btn-secondary text-sm"
-              onClick={() => {
-                setShowCreateAccount((prev) => !prev);
-                setAccountCreateError(null);
-                setAccountCreateSuccess(null);
-              }}
+              className={CARD_BUTTON_CLASS}
+              data-testid="portfolio-bento-drawer-trigger"
+              onClick={() => setIsBriefDrawerOpen(true)}
             >
-              {showCreateAccount ? copy.collapseCreate : copy.createAccount}
+              <PanelRightOpen className="h-4 w-4" />
+              <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={isLoading || fxRefreshing}
-              className="btn-secondary text-sm"
-            >
-              {isLoading ? copy.refreshingData : copy.refreshData}
-            </button>
+            {hasAccounts ? (
+              <>
+                <button
+                  type="button"
+                  className="btn-secondary text-sm"
+                  onClick={() => {
+                    setShowCreateAccount((prev) => !prev);
+                    setAccountCreateError(null);
+                    setAccountCreateSuccess(null);
+                  }}
+                >
+                  {showCreateAccount ? copy.collapseCreate : copy.createAccount}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRefresh()}
+                  disabled={isLoading || fxRefreshing}
+                  className="btn-secondary text-sm"
+                >
+                  {isLoading ? copy.refreshingData : copy.refreshData}
+                </button>
+              </>
+            ) : (
+              <p className="workspace-header-actions-note">
+                {copy.noAccounts}
+              </p>
+            )}
           </>
-        ) : (
-          <p className="workspace-header-actions-note">
-            {copy.noAccounts}
-          </p>
         )}
-      >
-        {hasAccounts ? (
+      heroItems={heroItems}
+      heroTestId="portfolio-bento-hero"
+      headerChildren={hasAccounts ? (
           <div className="workspace-surface-muted p-3.5">
             <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_220px_minmax(0,260px)] xl:items-end">
               <div>
@@ -1617,7 +1672,7 @@ const PortfolioPage: React.FC = () => {
             </div>
           </div>
         ) : null}
-      </WorkspacePageHeader>
+    >
 
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
       {riskWarning ? (
@@ -2362,7 +2417,47 @@ const PortfolioPage: React.FC = () => {
           }
         }}
       />
-    </div>
+      <PageBriefDrawer
+        isOpen={isBriefDrawerOpen}
+        onClose={() => setIsBriefDrawerOpen(false)}
+        title={language === 'en' ? 'Portfolio surface brief' : '持仓页面摘要'}
+        testId="portfolio-bento-drawer"
+        summary={language === 'en'
+          ? 'The portfolio shell now follows the same Bento rhythm as Home while preserving account, ledger, and import flows exactly as before.'
+          : '持仓页现在沿用与首页一致的 Bento 节奏，但账户、账本和导入流程保持原样。'}
+        metrics={[
+          {
+            label: language === 'en' ? 'Accounts' : '账户数',
+            value: String(snapshot?.accountCount ?? accounts.length),
+          },
+          {
+            label: language === 'en' ? 'Cost method' : '成本法',
+            value: costMethod === 'fifo' ? copy.costFifo : copy.costAvg,
+          },
+          {
+            label: language === 'en' ? 'FX status' : '汇率状态',
+            value: snapshot?.fxStale ? copy.fxStale : copy.fxFresh,
+            tone: snapshot?.fxStale ? 'bearish' : 'bullish',
+          },
+          {
+            label: language === 'en' ? 'Writable scope' : '写入范围',
+            value: selectedAccount === 'all' ? copy.allAccounts : `#${selectedAccount}`,
+          },
+        ]}
+        bullets={[
+          language === 'en'
+            ? 'Snapshot, cash buffer, account count, and FX freshness move into the hero strip so the page state reads quickly on first load.'
+            : '总权益、现金缓冲、账户数和汇率新鲜度被抬进 Hero strip，让页面状态在首屏就能读明白。',
+          language === 'en'
+            ? 'Manual adjustments, sync, and ledger disclosures stay where they were, so existing write paths and backend contracts are untouched.'
+            : '手工录入、同步和账本 disclosure 仍保留在原位，因此现有写入路径和后端契约不受影响。',
+          language === 'en'
+            ? 'This refactor is visual convergence plus test hooks, not a data rewrite.'
+            : '这次重构是视觉收敛和测试钩子补齐，不是数据重写。',
+        ]}
+        footnote={language === 'en' ? 'Segment scope: layout and smoke hooks only.' : '本段范围：仅布局和 smoke 钩子。'}
+      />
+    </PageChrome>
   );
 };
 

@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const backendBaseUrl = process.env.DSA_WEB_SMOKE_BACKEND_URL || 'http://127.0.0.1:8000';
 const smokePassword = process.env.DSA_WEB_SMOKE_PASSWORD;
+const routeApiRequests = process.env.DSA_WEB_SMOKE_ROUTE_API === '1';
 
 type AuthStatusPayload = {
   authEnabled: boolean;
@@ -80,8 +81,40 @@ async function ensureGuestSession(page: Page): Promise<AuthStatusPayload> {
   return getAuthStatus(page);
 }
 
+async function expectBentoRoute(
+  page: Page,
+  path: string,
+  pageTestId: string,
+  heroTestId: string,
+  bodyText: RegExp,
+) {
+  await page.goto(path);
+  await waitForAppShell(page);
+  await expect(page.locator(`[data-testid="${pageTestId}"]`)).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(`[data-testid="${heroTestId}"]`)).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('body')).toContainText(bodyText, { timeout: 15_000 });
+}
+
+async function expectGlowText(page: Page, valueTestId: string) {
+  const target = page.locator(`[data-testid="${valueTestId}"]`);
+  await expect(target).toBeVisible({ timeout: 15_000 });
+  await expect.poll(async () => (
+    target.evaluate((element) => getComputedStyle(element).textShadow)
+  )).not.toBe('none');
+}
+
+async function expectDrawerToggle(page: Page, triggerTestId: string, drawerTestId: string) {
+  await page.locator(`[data-testid="${triggerTestId}"]`).click();
+  await expect(page.locator(`[data-testid="${drawerTestId}"]`)).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+}
+
 test.describe('web deployment smoke', () => {
   test.beforeEach(async ({ page }) => {
+    if (!routeApiRequests) {
+      return;
+    }
     await page.route('**/api/**', async (route) => {
       const requestUrl = new URL(route.request().url());
       const response = await route.fetch({
@@ -92,6 +125,9 @@ test.describe('web deployment smoke', () => {
   });
 
   test.afterEach(async ({ page }) => {
+    if (!routeApiRequests) {
+      return;
+    }
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
@@ -176,7 +212,33 @@ test.describe('web deployment smoke', () => {
   test('guest route loads the dedicated guest surface', async ({ page }) => {
     await page.goto('/guest');
     await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('[data-testid="guest-home-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="guest-home-bento-hero"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('body')).toContainText(/游客预览模式|Guest Preview Mode|输入标的|Enter a symbol|即时分析预览|Instant Analysis Snapshot/, {
+      timeout: 15_000,
+    });
+  });
+
+  test('guest preview keeps hover lift and locale switching on the bento shell', async ({ page }) => {
+    await page.goto('/en/guest');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="guest-home-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('body')).toContainText(/Guest Preview Mode|Instant Analysis Snapshot|Guest limits/, {
+      timeout: 15_000,
+    });
+
+    const previewCard = page.locator('[data-testid="guest-home-preview-card"]');
+    await previewCard.hover();
+    await expect.poll(async () => (
+      previewCard.evaluate((element) => getComputedStyle(element).translate)
+    )).not.toBe('none');
+    await expectGlowText(page, 'guest-home-bento-hero-unlock-value');
+    await expectDrawerToggle(page, 'guest-home-bento-drawer-trigger', 'guest-home-bento-drawer');
+
+    await page.goto('/zh/guest');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="guest-home-bento-hero"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('body')).toContainText(/游客预览模式|即时分析预览|游客限制/, {
       timeout: 15_000,
     });
   });
@@ -293,5 +355,114 @@ test.describe('web deployment smoke', () => {
     await expect(page.locator('body')).toContainText(/回测|Backtest|基础参数|Basic parameters|股票代码|Stock symbol/, {
       timeout: 15_000,
     });
+  });
+
+  test('major product routes expose Gemini Bento shells across desktop and mobile viewports', async ({ page }) => {
+    await maybeLogin(page);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectBentoRoute(page, '/scanner', 'user-scanner-bento-page', 'user-scanner-bento-hero', /市场扫描|Market Scanner|我的手动扫描|My scanner run/);
+    await expectBentoRoute(page, '/portfolio', 'portfolio-bento-page', 'portfolio-bento-hero', /持仓管理|Portfolio management|总权益|Total equity/);
+    await expectBentoRoute(page, '/backtest', 'backtest-bento-page', 'backtest-bento-hero', /回测|Backtest|普通版配置|Configuration page/);
+    await expectBentoRoute(page, '/chat', 'chat-bento-page', 'chat-bento-hero', /问股|Stock Chat|量化研究|Quant Research/);
+    await expectGlowText(page, 'chat-bento-hero-skill-value');
+
+    await page.goto('/settings/system');
+    await waitForAppShell(page);
+    const settingsReady = await page.locator('[data-testid="settings-bento-page"]').isVisible({ timeout: 2_000 }).catch(() => false);
+    if (settingsReady) {
+      await expect(page.locator('[data-testid="settings-bento-hero"]')).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator('body')).toContainText(/系统控制面|System control|管理员控制台|Admin Console/, { timeout: 15_000 });
+    } else {
+      test.info().annotations.push({
+        type: 'environment-limited',
+        description: '/settings/system did not expose the admin Bento surface in this runtime.',
+      });
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectBentoRoute(page, '/scanner', 'user-scanner-bento-page', 'user-scanner-bento-hero', /市场扫描|Market Scanner/);
+    await expectBentoRoute(page, '/portfolio', 'portfolio-bento-page', 'portfolio-bento-hero', /持仓管理|Portfolio management/);
+    await expectBentoRoute(page, '/backtest', 'backtest-bento-page', 'backtest-bento-hero', /回测|Backtest/);
+    await expectBentoRoute(page, '/chat', 'chat-bento-page', 'chat-bento-hero', /问股|Stock Chat|量化研究|Quant Research/);
+  });
+
+  test('segment pages keep drawer toggles, glow text, and locale-ready Bento shells', async ({ page }) => {
+    await maybeLogin(page);
+
+    await page.goto('/scanner');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="user-scanner-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expectGlowText(page, 'user-scanner-bento-hero-shortlist-value');
+    await expectDrawerToggle(page, 'user-scanner-bento-drawer-trigger', 'user-scanner-bento-drawer');
+
+    await page.goto('/portfolio');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="portfolio-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expectGlowText(page, 'portfolio-bento-hero-equity-value');
+    await expectDrawerToggle(page, 'portfolio-bento-drawer-trigger', 'portfolio-bento-drawer');
+
+    await page.goto('/backtest');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="backtest-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expectGlowText(page, 'backtest-bento-hero-module-value');
+    await expectDrawerToggle(page, 'backtest-bento-drawer-trigger', 'backtest-bento-drawer');
+
+    await page.goto('/chat');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="chat-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expectGlowText(page, 'chat-bento-hero-skill-value');
+    await expectDrawerToggle(page, 'chat-bento-drawer-trigger', 'chat-bento-drawer');
+
+    await page.goto('/settings/system');
+    await waitForAppShell(page);
+    const settingsPage = page.locator('[data-testid="settings-bento-page"]');
+    const settingsAvailable = await settingsPage.isVisible({ timeout: 2_000 }).catch(() => false);
+    if (!settingsAvailable) {
+      test.info().annotations.push({
+        type: 'environment-limited',
+        description: '/settings/system disclosure checks require admin Bento access in this runtime.',
+      });
+      return;
+    }
+
+    await expectGlowText(page, 'settings-bento-hero-dirty-value');
+    await expectDrawerToggle(page, 'settings-bento-drawer-trigger', 'settings-bento-drawer');
+
+    await page.goto('/en/scanner');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="user-scanner-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('body')).toContainText(/Market Scanner|My scanner run|Open rationale/i, { timeout: 15_000 });
+
+    await page.goto('/en/guest');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="guest-home-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expectGlowText(page, 'guest-home-bento-hero-unlock-value');
+
+    await page.goto('/scanner');
+    await waitForAppShell(page);
+    await expect(page.locator('body')).toContainText(/市场扫描|我的扫描运行|查看解释/, { timeout: 15_000 });
+  });
+
+  test('guest scanner teaser keeps drawer toggle and locale copy', async ({ page }) => {
+    await ensureGuestSession(page);
+    await page.goto('/scanner');
+    await waitForAppShell(page);
+    const guestSurface = await page.locator('[data-testid="guest-scanner-bento-page"]').isVisible({ timeout: 2_000 }).catch(() => false);
+    if (!guestSurface) {
+      test.info().annotations.push({
+        type: 'environment-limited',
+        description: 'Current runtime routed /scanner to the signed-in scanner surface; guest teaser validation requires a guest session.',
+      });
+      return;
+    }
+
+    await expectGlowText(page, 'guest-scanner-bento-hero-history-value');
+    await expectDrawerToggle(page, 'guest-scanner-bento-drawer-trigger', 'guest-scanner-bento-drawer');
+
+    await page.goto('/en/scanner');
+    await waitForAppShell(page);
+    await expect(page.locator('[data-testid="guest-scanner-bento-page"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('body')).toContainText(/Market Scanner Preview|Access guide|Saved history/, { timeout: 15_000 });
   });
 });

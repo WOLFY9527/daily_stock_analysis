@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import type { ParsedApiError } from '../api/error';
@@ -13,8 +14,14 @@ import {
   Drawer,
   Pagination,
   Select,
-  WorkspacePageHeader,
 } from '../components/common';
+import {
+  CARD_BUTTON_CLASS,
+  PageBriefDrawer,
+  PageChrome,
+  type BentoHeroItem,
+  type SignalTone,
+} from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type {
   ScannerCandidate,
@@ -174,6 +181,7 @@ const ScannerPage: React.FC = () => {
   const [statusSummary, setStatusSummary] = useState<ScannerOperationalStatus | null>(null);
 
   const [selectedCandidate, setSelectedCandidate] = useState<ScannerCandidate | null>(null);
+  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [personalHistoryError, setPersonalHistoryError] = useState<ParsedApiError | null>(null);
@@ -538,14 +546,67 @@ const ScannerPage: React.FC = () => {
     window.URL.revokeObjectURL(url);
   }, [runDetail, runNotificationStatus, t]);
 
+  const currentRunTone: SignalTone = runDetail?.status === 'failed'
+    ? 'bearish'
+    : runDetail?.status === 'completed'
+      ? 'bullish'
+      : 'neutral';
+  const currentProfileLabel = profileOptions.find((option) => option.value === profile)?.label || profile;
+  const currentMarketLabel = market === 'us' ? t('scanner.marketUs') : market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn');
+  const heroItems: BentoHeroItem[] = [
+    {
+      label: t('scanner.marketLabel'),
+      value: currentMarketLabel,
+      detail: selectedMarketCopy.universeTitle,
+      testId: 'scanner-bento-hero-market',
+      valueTestId: 'scanner-bento-hero-market-value',
+    },
+    {
+      label: t('scanner.profileLabel'),
+      value: currentProfileLabel,
+      detail: selectedMarketCopy.universeBody,
+      testId: 'scanner-bento-hero-profile',
+    },
+    {
+      label: t('scanner.shortlistLabel'),
+      value: runDetail ? `${runDetail.shortlistSize}` : shortlistSize,
+      detail: runDetail ? t('scanner.currentRunTitle') : t('scanner.currentRunEmpty'),
+      tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
+      testId: 'scanner-bento-hero-shortlist',
+      valueTestId: 'scanner-bento-hero-shortlist-value',
+    },
+    {
+      label: t('scanner.currentRunTitle'),
+      value: runDetail ? t(`scanner.status.${runDetail.status}`) : '--',
+      detail: runDetail?.headline || selectedMarketCopy.currentRunFallback,
+      tone: currentRunTone,
+      testId: 'scanner-bento-hero-run',
+      valueTestId: 'scanner-bento-hero-run-value',
+    },
+  ];
+
   return (
     <>
-      <div className="space-y-6">
-        <WorkspacePageHeader
-          eyebrow={t('scanner.eyebrow')}
-          title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
-          description={selectedMarketCopy.subtitle}
-        >
+      <PageChrome
+        pageTestId="scanner-bento-page"
+        pageClassName="gemini-bento-page--scanner gemini-bento-page--scanner-admin space-y-6"
+        eyebrow={t('scanner.eyebrow')}
+        title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
+        description={selectedMarketCopy.subtitle}
+        actions={(
+          <button
+            type="button"
+            className={CARD_BUTTON_CLASS}
+            data-testid="scanner-bento-drawer-trigger"
+            onClick={() => setIsBriefDrawerOpen(true)}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            <span>{language === 'en' ? 'Open ops brief' : '查看页面摘要'}</span>
+          </button>
+        )}
+        heroItems={heroItems}
+        heroTestId="scanner-bento-hero"
+        headerChildren={(
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
             <Card
               title={t('scanner.runPanelTitle')}
@@ -680,7 +741,8 @@ const ScannerPage: React.FC = () => {
               )}
             </Card>
           </div>
-        </WorkspacePageHeader>
+        )}
+      >
 
         {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
@@ -1348,7 +1410,48 @@ const ScannerPage: React.FC = () => {
             </Card>
           </section>
         </div>
-      </div>
+      </PageChrome>
+
+      <PageBriefDrawer
+        isOpen={isBriefDrawerOpen}
+        onClose={() => setIsBriefDrawerOpen(false)}
+        title={language === 'en' ? 'Scanner operating brief' : '扫描器工作台摘要'}
+        testId="scanner-bento-drawer"
+        summary={language === 'en'
+          ? 'This surface keeps run controls, watchlist review, and diagnostics in one Bento shell while leaving scanner APIs and selection logic untouched.'
+          : '这个页面把运行控制、观察名单复核和诊断信息收进同一个 Bento 壳层里，但没有改动扫描 API 和候选筛选逻辑。'}
+        metrics={[
+          {
+            label: language === 'en' ? 'Market' : '市场',
+            value: currentMarketLabel,
+          },
+          {
+            label: language === 'en' ? 'Profile' : '策略档位',
+            value: currentProfileLabel,
+          },
+          {
+            label: language === 'en' ? 'History rows' : '历史条数',
+            value: String(historyItems.length),
+          },
+          {
+            label: language === 'en' ? 'Run state' : '运行状态',
+            value: runDetail ? t(`scanner.status.${runDetail.status}`) : '--',
+            tone: currentRunTone,
+          },
+        ]}
+        bullets={[
+          language === 'en'
+            ? 'The hero strip surfaces market, profile, shortlist, and run state so the page stays scannable before you dive into detail.'
+            : 'Hero strip 先把市场、策略档位、候选数和运行状态抬出来，避免进入详情前就被长内容压住节奏。',
+          language === 'en'
+            ? 'Candidate detail still opens in the existing drawer, so downstream analysis and backtest handoff remain unchanged.'
+            : '候选详情仍然沿用原有抽屉展开，因此后续分析和回测联动不受影响。',
+          language === 'en'
+            ? 'This pass changes shell, test hooks, and visual density only.'
+            : '这次改动只收敛外壳、测试钩子和视觉密度。',
+        ]}
+        footnote={language === 'en' ? 'Layout-only segment; backend contracts preserved.' : '仅做布局段收敛；后端契约保持不变。'}
+      />
 
       <Drawer
         isOpen={Boolean(selectedCandidate)}

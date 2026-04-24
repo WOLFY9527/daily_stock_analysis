@@ -4,5 +4,6 @@ export * from './DecisionCard';
 export * from './StrategyCard';
 export * from './TechCard';
 export * from './FundamentalsCard';
+export * from './PageChrome';
+export * from './PageBriefDrawer';
 export * from './theme';
-

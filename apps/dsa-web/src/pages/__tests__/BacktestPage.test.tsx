@@ -884,6 +884,9 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
+    expect(screen.getByTestId('backtest-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('backtest-v1-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
@@ -909,6 +912,10 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-normal-step-summaries')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-normal-step-summary-setup')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-display-section-history')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('backtest-bento-drawer-trigger'));
+    expect(await screen.findByTestId('backtest-bento-drawer')).toBeInTheDocument();
+    expect(screen.getByText('回测页面摘要')).toBeInTheDocument();
   });
 
   it('prefills the symbol when navigated from scanner context', async () => {

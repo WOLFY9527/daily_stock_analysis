@@ -176,11 +176,18 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
+    expect(await screen.findByTestId('chat-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-bento-hero')).toBeInTheDocument();
+    expect(await screen.findByTestId('chat-bento-hero-skill-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toBeInTheDocument();
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('chat-bento-drawer-trigger'));
+    expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: translate('zh', 'chat.title') })).toBeInTheDocument();
   });
 
   it('shows research-focused starter cards in the empty state', async () => {

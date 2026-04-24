@@ -1,8 +1,15 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
-import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, Input, Select, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, Input, Select } from '../components/common';
+import {
+  CARD_BUTTON_CLASS,
+  PageBriefDrawer,
+  PageChrome,
+  type BentoHeroItem,
+} from '../components/home-bento';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import { ApiSourceCard } from '../components/settings/ApiSourceCard';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -744,6 +751,7 @@ const SettingsPage: React.FC = () => {
     adminUnlockToken,
   } = useSystemConfig();
   const [activeDomain, setActiveDomain] = useState<SettingsDomain>('advanced');
+  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
 
   useEffect(() => {
     document.title = t('settings.documentTitle');
@@ -2781,15 +2789,50 @@ const SettingsPage: React.FC = () => {
         : t('settings.dataSourceNoUsableSources'),
     },
   ]), [aiSummary.configuredProviders, dataSourceLibrary, t]);
+  const activeDomainTitle = domainNavItems.find((item) => item.domain === activeDomain)?.title || activeDomain;
+  const heroItems: BentoHeroItem[] = [
+    ...globalAdminStats.map((item) => ({
+      label: item.label,
+      value: item.value,
+      detail: item.detail,
+      tone: item.key === 'providers' && Number(item.value) > 0 ? 'bullish' as const : 'neutral' as const,
+      testId: `settings-bento-hero-${item.key}`,
+      valueTestId: item.key === 'providers' ? 'settings-bento-hero-providers-value' : undefined,
+    })),
+    {
+      label: t('settings.domainTitle'),
+      value: DOMAIN_ORDER.length,
+      detail: activeDomainTitle,
+      testId: 'settings-bento-hero-domains',
+    },
+    {
+      label: t('settings.save'),
+      value: dirtyCount || 0,
+      detail: dirtyCount ? t('settings.saving') : t('settings.success'),
+      tone: dirtyCount ? 'bearish' : 'bullish',
+      testId: 'settings-bento-hero-dirty',
+      valueTestId: 'settings-bento-hero-dirty-value',
+    },
+  ];
   return (
-    <div className="workspace-page workspace-page--settings">
-      <WorkspacePageHeader
-        className="shadow-soft-card-strong"
+    <PageChrome
+      pageTestId="settings-bento-page"
+      pageClassName="workspace-page workspace-page--settings gemini-bento-page--settings"
+      headerClassName="shadow-soft-card-strong"
         eyebrow={t('settings.eyebrow')}
         title={t('settings.title')}
         description={t('settings.subtitle')}
         actions={(
           <>
+            <button
+              type="button"
+              className={CARD_BUTTON_CLASS}
+              data-testid="settings-bento-drawer-trigger"
+              onClick={() => setIsBriefDrawerOpen(true)}
+            >
+              <PanelRightOpen className="h-4 w-4" />
+              <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+            </button>
             <Button
               type="button"
               variant="settings-secondary"
@@ -2811,7 +2854,9 @@ const SettingsPage: React.FC = () => {
             </Button>
           </>
         )}
-      />
+      heroItems={heroItems}
+      heroTestId="settings-bento-hero"
+    >
 
       <SettingsSectionCard
         title={t('settings.controlPlaneTitle')}
@@ -4661,6 +4706,47 @@ const SettingsPage: React.FC = () => {
         onConfirm={() => void deleteDataSourceEntry()}
         onCancel={() => setDataSourceDeleteTargetId(null)}
       />
+      <PageBriefDrawer
+        isOpen={isBriefDrawerOpen}
+        onClose={() => setIsBriefDrawerOpen(false)}
+        title={t('settings.title')}
+        testId="settings-bento-drawer"
+        summary={language === 'en'
+          ? 'This control plane now shares the Bento shell with the rest of the product while preserving the same admin-only routing, save flow, and provider drawers.'
+          : '这个控制面现在与产品其他页面共用 Bento 外壳，但管理员路由、保存流程和各类 provider 抽屉都保持不变。'}
+        metrics={[
+          {
+            label: t('settings.globalSummaryProviders'),
+            value: aiSummary.configuredProviders,
+            tone: Number(aiSummary.configuredProviders) > 0 ? 'bullish' : 'neutral',
+          },
+          {
+            label: t('settings.globalSummaryDataSources'),
+            value: dataSourceLibrary.filter((source) => source.usable).length,
+          },
+          {
+            label: t('settings.domainTitle'),
+            value: activeDomainTitle,
+          },
+          {
+            label: t('settings.save'),
+            value: dirtyCount || 0,
+            tone: dirtyCount ? 'bearish' : 'bullish',
+          },
+        ]}
+        bullets={[
+          language === 'en'
+            ? 'The hero strip summarizes provider readiness, usable data sources, active domain, and dirty state before you scroll into the control plane.'
+            : 'Hero strip 先总结 provider 就绪度、可用数据源、当前域和脏状态，再进入控制面细节。',
+          language === 'en'
+            ? 'All existing management drawers remain intact, so this pass does not rewrite admin workflows.'
+            : '原有管理抽屉全部保留，因此这次改动没有重写管理员工作流。',
+          language === 'en'
+            ? 'This segment focuses on layout convergence, stable hooks, and browser-visible structure.'
+            : '这一段聚焦布局收敛、稳定测试钩子和浏览器可见结构。',
+        ]}
+        footnote={language === 'en' ? 'Admin scope unchanged.' : '管理员边界不变。'}
+      />
 
       {toast ? (
         <div className="fixed bottom-5 right-5 z-50 w-[320px] max-w-[calc(100vw-24px)]">
@@ -4669,7 +4755,7 @@ const SettingsPage: React.FC = () => {
             : <ApiErrorAlert error={toast.error} />}
         </div>
       ) : null}
-    </div>
+    </PageChrome>
   );
 };
 

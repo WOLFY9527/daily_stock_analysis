@@ -327,8 +327,15 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
+    expect(screen.getByTestId('portfolio-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-bento-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-bento-hero-equity-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('portfolio-bento-drawer-trigger'));
+    expect(await screen.findByTestId('portfolio-bento-drawer')).toBeInTheDocument();
+    expect(screen.getByText('持仓页面摘要')).toBeInTheDocument();
   });
 
   it('keeps manual entry tools collapsed by default once accounts are available', async () => {

@@ -1,10 +1,12 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
-import { ApiErrorAlert, Badge, Button, Card, Pagination, Select, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Badge, Button, Card, Drawer, Pagination, Select } from '../components/common';
+import { CARD_BUTTON_CLASS, PageChrome, type BentoHeroItem } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerCandidate, ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
 import {
@@ -111,6 +113,7 @@ const UserScannerPage: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
+  const [isRationaleDrawerOpen, setIsRationaleDrawerOpen] = useState(false);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
@@ -254,14 +257,67 @@ const UserScannerPage: React.FC = () => {
     () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
     [historyTotal],
   );
+  const currentRunTone = runDetail?.status === 'completed'
+    ? 'bullish'
+    : runDetail?.status === 'failed'
+      ? 'bearish'
+      : 'neutral';
+  const currentProfileLabel = profileOptions.find((option) => option.value === profile)?.label || profile;
+  const currentMarketLabel = market === 'us' ? t('scanner.marketUs') : market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn');
+  const heroItems: BentoHeroItem[] = [
+    {
+      label: t('scanner.marketLabel'),
+      value: currentMarketLabel,
+      detail: language === 'en' ? 'Account-scoped scanner' : '账户范围扫描器',
+      testId: 'user-scanner-bento-hero-market',
+      valueTestId: 'user-scanner-bento-hero-market-value',
+    },
+    {
+      label: t('scanner.profileLabel'),
+      value: currentProfileLabel,
+      detail: selectedMarketCopy.runHint,
+      testId: 'user-scanner-bento-hero-profile',
+    },
+    {
+      label: t('scanner.shortlistLabel'),
+      value: runDetail ? `${runDetail.shortlistSize}` : shortlistSize,
+      detail: language === 'en' ? 'Personal shortlist output' : '个人候选输出',
+      tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
+      testId: 'user-scanner-bento-hero-shortlist',
+      valueTestId: 'user-scanner-bento-hero-shortlist-value',
+    },
+    {
+      label: language === 'en' ? 'Current run' : '当前运行',
+      value: runDetail ? t(`scanner.status.${runDetail.status}`) : '--',
+      detail: runDetail?.headline || selectedMarketCopy.currentRunFallback,
+      tone: currentRunTone,
+      testId: 'user-scanner-bento-hero-run',
+      valueTestId: 'user-scanner-bento-hero-run-value',
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <WorkspacePageHeader
+    <>
+      <PageChrome
+        pageTestId="user-scanner-bento-page"
+        pageClassName="workspace-page workspace-page--scanner gemini-bento-page--scanner gemini-bento-page--scanner-user space-y-6"
         eyebrow={t('scanner.eyebrow')}
         title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
         description={selectedMarketCopy.subtitle}
-      >
+        actions={(
+          <button
+            type="button"
+            className={CARD_BUTTON_CLASS}
+            data-testid="user-scanner-bento-drawer-trigger"
+            onClick={() => setIsRationaleDrawerOpen(true)}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            <span>{language === 'en' ? 'Open rationale' : '查看解释'}</span>
+          </button>
+        )}
+        heroItems={heroItems}
+        heroTestId="user-scanner-bento-hero"
+        headerChildren={(
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
           <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'My scanner run' : '我的扫描运行'}>
             <div className="space-y-5">
@@ -314,7 +370,10 @@ const UserScannerPage: React.FC = () => {
             </div>
           </Card>
 
-          <Card title={language === 'en' ? 'Current personal run' : '当前个人运行'} subtitle={language === 'en' ? 'Your run details' : '个人范围详情'}>
+          <Card
+            title={language === 'en' ? 'Current personal run' : '当前个人运行'}
+            subtitle={language === 'en' ? 'Your run details' : '个人范围详情'}
+          >
             {runDetail ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -356,7 +415,8 @@ const UserScannerPage: React.FC = () => {
             )}
           </Card>
         </div>
-      </WorkspacePageHeader>
+        )}
+      >
 
       {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
@@ -523,7 +583,36 @@ const UserScannerPage: React.FC = () => {
           </Card>
         </section>
       </div>
-    </div>
+      </PageChrome>
+
+      <Drawer
+        isOpen={isRationaleDrawerOpen}
+        onClose={() => setIsRationaleDrawerOpen(false)}
+        title={language === 'en' ? 'Scanner surface rationale' : '扫描器页面说明'}
+        width="max-w-2xl"
+      >
+        <div data-testid="user-scanner-bento-drawer" className="rounded-[28px] border border-white/[0.08] bg-[#050505] p-5 text-white sm:p-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'User scope' : '用户范围'}</p>
+              <p className="mt-3 text-sm leading-6 text-white/70">
+                {language === 'en'
+                  ? 'This surface keeps manual runs, shortlist review, and downstream actions inside the signed-in user account.'
+                  : '这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。'}
+              </p>
+            </div>
+            <div className="rounded-[24px] border border-white/[0.08] bg-black/28 px-4 py-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'Admin boundary' : '管理员边界'}</p>
+              <p className="mt-3 text-sm leading-6 text-white/70">
+                {language === 'en'
+                  ? 'System watchlists, schedules, and global run controls stay in admin-only pages instead of leaking into the user workflow.'
+                  : '系统观察名单、调度和全局运行控制继续保留在管理员页面，不混进用户工作流。'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </Drawer>
+    </>
   );
 };
 

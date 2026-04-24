@@ -1,7 +1,14 @@
 import type React from 'react';
-import { BarChart3, History, Radar, ShieldAlert, TestTubeDiagonal } from 'lucide-react';
+import { useState } from 'react';
+import { BarChart3, History, PanelRightOpen, Radar, ShieldAlert, TestTubeDiagonal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Card, WorkspacePageHeader } from '../components/common';
+import {
+  BentoCard,
+  CARD_BUTTON_CLASS,
+  PageBriefDrawer,
+  PageChrome,
+  type BentoHeroItem,
+} from '../components/home-bento';
 import { LockedFeatureCard } from '../components/access/LockedFeatureCard';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLoginPath, buildRegistrationPath } from '../hooks/useProductSurface';
@@ -53,26 +60,83 @@ const GuestScannerPage: React.FC = () => {
   const { language } = useI18n();
   const loginPath = buildLoginPath('/scanner');
   const registrationPath = buildRegistrationPath('/scanner');
+  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
+  const heroItems: BentoHeroItem[] = [
+    {
+      label: language === 'en' ? 'Access mode' : '访问模式',
+      value: language === 'en' ? 'Guest preview' : '游客预览',
+      detail: language === 'en'
+        ? 'Scanner runs stay locked until sign-in.'
+        : '登录前不开放真实扫描运行。',
+      tone: 'bearish',
+      testId: 'guest-scanner-bento-hero-mode',
+      valueTestId: 'guest-scanner-bento-hero-mode-value',
+    },
+    {
+      label: language === 'en' ? 'Manual runs' : '手动运行',
+      value: language === 'en' ? 'Locked' : '已锁定',
+      detail: language === 'en'
+        ? 'No shared guest watchlists are created.'
+        : '不会创建共享的游客观察名单。',
+      testId: 'guest-scanner-bento-hero-runs',
+    },
+    {
+      label: language === 'en' ? 'Saved history' : '历史记录',
+      value: language === 'en' ? 'Account scoped' : '账户隔离',
+      detail: language === 'en'
+        ? 'History stays under the signed-in account.'
+        : '历史记录只保存在登录账户下。',
+      tone: 'bullish',
+      testId: 'guest-scanner-bento-hero-history',
+      valueTestId: 'guest-scanner-bento-hero-history-value',
+    },
+    {
+      label: language === 'en' ? 'Next step' : '下一步',
+      value: language === 'en' ? 'Sign in' : '登录',
+      detail: language === 'en'
+        ? 'Unlock watchlists, analysis handoff, and backtests.'
+        : '解锁候选名单、分析联动和回测。',
+      testId: 'guest-scanner-bento-hero-next',
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <WorkspacePageHeader
-        eyebrow={language === 'en' ? 'Scanner Preview' : '扫描器预告'}
-        title={language === 'en' ? 'Market Scanner Preview' : '市场扫描预告'}
-        description={language === 'en'
-          ? 'Guests can explore how the scanner works, but manual runs, watchlists, and review history unlock only after sign-in.'
-          : '游客可以先了解扫描器的工作方式与产品边界，但手动运行、观察名单与复盘历史需要登录后解锁。'}
-        actions={(
-          <Link
-            to={loginPath}
-            className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
+    <PageChrome
+      pageTestId="guest-scanner-bento-page"
+      pageClassName="gemini-bento-page--scanner gemini-bento-page--guest-scanner space-y-6"
+      eyebrow={language === 'en' ? 'Scanner Preview' : '扫描器预告'}
+      title={language === 'en' ? 'Market Scanner Preview' : '市场扫描预告'}
+      description={language === 'en'
+        ? 'Guests can explore how the scanner works, but manual runs, watchlists, and review history unlock only after sign-in.'
+        : '游客可以先了解扫描器的工作方式与产品边界，但手动运行、观察名单与复盘历史需要登录后解锁。'}
+      actions={(
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={CARD_BUTTON_CLASS}
+            data-testid="guest-scanner-bento-drawer-trigger"
+            onClick={() => setIsBriefDrawerOpen(true)}
           >
+            <PanelRightOpen className="h-4 w-4" />
+            <span>{language === 'en' ? 'Access guide' : '查看访问说明'}</span>
+          </button>
+          <Link to={loginPath} className={CARD_BUTTON_CLASS}>
             {language === 'en' ? 'Sign in to run scanner' : '登录后运行扫描器'}
           </Link>
-        )}
-      >
+        </div>
+      )}
+      heroItems={heroItems}
+      heroTestId="guest-scanner-bento-hero"
+      headerChildren={(
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-          <Card title={language === 'en' ? 'How the scanner fits in' : '扫描器在产品中的位置'} subtitle={language === 'en' ? 'Access boundaries' : '角色边界'}>
+          <BentoCard
+            eyebrow={language === 'en' ? 'Access boundaries' : '角色边界'}
+            title={language === 'en' ? 'How the scanner fits in' : '扫描器在产品中的位置'}
+            subtitle={language === 'en'
+              ? 'Product ownership stays explicit even in preview mode.'
+              : '即使在预览模式下，也保持清晰的产品归属与权限边界。'}
+            testId="guest-scanner-boundary-card"
+          >
             <div className="space-y-4">
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
                 {language === 'en'
@@ -90,9 +154,16 @@ const GuestScannerPage: React.FC = () => {
                   : '这个预览页只做说明而不执行实时运行，确保游客不会创建共享的扫描记录。'}
               </div>
             </div>
-          </Card>
+          </BentoCard>
 
-          <Card title={language === 'en' ? 'What unlocks after sign-in' : '登录后会解锁什么'} subtitle={language === 'en' ? 'Next step' : '下一步'}>
+          <BentoCard
+            eyebrow={language === 'en' ? 'Next step' : '下一步'}
+            title={language === 'en' ? 'What unlocks after sign-in' : '登录后会解锁什么'}
+            subtitle={language === 'en'
+              ? 'Move from product preview into a personal scanner workflow.'
+              : '从产品预览进入个人扫描器工作流。'}
+            testId="guest-scanner-unlock-card"
+          >
             <div className="space-y-3">
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
                 <div className="flex items-start gap-3">
@@ -111,22 +182,17 @@ const GuestScannerPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <Link
-                to={loginPath}
-                className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
-              >
+              <Link to={loginPath} className={CARD_BUTTON_CLASS}>
                 {language === 'en' ? 'Sign in now' : '立即登录'}
               </Link>
-              <Link
-                to={registrationPath}
-                className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
-              >
+              <Link to={registrationPath} className={CARD_BUTTON_CLASS}>
                 {language === 'en' ? 'Create account' : '创建账户'}
               </Link>
             </div>
-          </Card>
+          </BentoCard>
         </div>
-      </WorkspacePageHeader>
+      )}
+    >
 
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
         {LOCKED_FEATURES.map((item) => (
@@ -141,7 +207,48 @@ const GuestScannerPage: React.FC = () => {
           />
         ))}
       </div>
-    </div>
+      <PageBriefDrawer
+        isOpen={isBriefDrawerOpen}
+        onClose={() => setIsBriefDrawerOpen(false)}
+        title={language === 'en' ? 'Scanner access guide' : '扫描器访问说明'}
+        testId="guest-scanner-bento-drawer"
+        summary={language === 'en'
+          ? 'This guest scanner page explains product boundaries without creating guest watchlists, guest runs, or shared follow-up state.'
+          : '这个游客扫描页只解释产品边界，不会创建游客观察名单、游客运行结果或共享的后续状态。'}
+        metrics={[
+          {
+            label: language === 'en' ? 'Access mode' : '访问模式',
+            value: language === 'en' ? 'Guest preview' : '游客预览',
+            tone: 'bearish',
+          },
+          {
+            label: language === 'en' ? 'Manual runs' : '手动运行',
+            value: language === 'en' ? 'Locked' : '已锁定',
+          },
+          {
+            label: language === 'en' ? 'Saved history' : '历史记录',
+            value: language === 'en' ? 'Account scoped' : '账户隔离',
+            tone: 'bullish',
+          },
+          {
+            label: language === 'en' ? 'Next step' : '下一步',
+            value: language === 'en' ? 'Sign in' : '登录',
+          },
+        ]}
+        bullets={[
+          language === 'en'
+            ? 'The hero strip makes it obvious that this page is a product preview, not a live scanner.'
+            : 'Hero strip 会明确告诉用户这是一张产品预览页，而不是真实扫描器。',
+          language === 'en'
+            ? 'Locked cards explain what a signed-in account unlocks without leaking admin-only or saved-user workflows.'
+            : '锁定卡片只解释登录后会解锁什么，不会泄露管理员或已保存用户流程。',
+          language === 'en'
+            ? 'This segment changes shell, messaging hierarchy, and test hooks only.'
+            : '这一段只改外壳、信息层级和测试钩子。',
+        ]}
+        footnote={language === 'en' ? 'Guest preview stays non-persistent.' : '游客预览继续保持无持久化。'}
+      />
+    </PageChrome>
   );
 };
 

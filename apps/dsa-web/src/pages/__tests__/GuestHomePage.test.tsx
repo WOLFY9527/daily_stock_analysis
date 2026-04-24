@@ -181,6 +181,10 @@ describe('GuestHomePage', () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByTestId('guest-home-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-bento-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-bento-hero-unlock-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(screen.getByTestId('guest-home-preview-card')).toBeInTheDocument();
     expect(screen.getByText('完整分析报告')).toBeInTheDocument();
     expect(screen.getByText('后续交流')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/zh/login?mode=create&redirect=%2Fzh');
@@ -197,9 +201,13 @@ describe('GuestHomePage', () => {
     });
 
     expect(await screen.findByText('趋势延续但需要等待更好的介入点。')).toBeInTheDocument();
-    expect(screen.getByText('等待回踩')).toBeInTheDocument();
-    expect(screen.getByText('偏强震荡')).toBeInTheDocument();
+    expect(screen.getAllByText('等待回踩').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('偏强震荡').length).toBeGreaterThan(0);
     expect(screen.getByText('184-186')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('guest-home-bento-drawer-trigger'));
+    expect(await screen.findByTestId('guest-home-bento-drawer')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '游客预览模式' })).toBeInTheDocument();
   });
 
   it('renders the English guest preview copy and feature unlock messaging', () => {
@@ -212,16 +220,18 @@ describe('GuestHomePage', () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByTestId('guest-home-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-bento-hero')).toBeInTheDocument();
     expect(screen.getAllByText('Guest Preview').length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: 'Guest Preview Mode' })).toBeInTheDocument();
     expect(screen.getByText('Start with a lightweight analysis snapshot, then sign in if you want to keep going. Guest previews are never saved to an account.')).toBeInTheDocument();
     expect(screen.getAllByText('Instant Analysis Snapshot').length).toBeGreaterThan(0);
-    expect(screen.getByText('Guests can generate one lightweight analysis snapshot. Full reports, follow-up chat, backtests, portfolio tools, and saved history unlock after sign-in.')).toBeInTheDocument();
+    expect(screen.getAllByText('Guests can generate one lightweight analysis snapshot. Full reports, follow-up chat, backtests, portfolio tools, and saved history unlock after sign-in.').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/en/login?mode=create&redirect=%2Fen');
-    expect(screen.getByText('Sign in for the full app')).toBeInTheDocument();
-    expect(screen.getByText('Unlock saved reports, chat, portfolio, and backtests')).toBeInTheDocument();
-    expect(screen.getByText('Guest limits')).toBeInTheDocument();
-    expect(screen.getByText('Guest previews do not create an account record and do not unlock saved cross-page features.')).toBeInTheDocument();
+    expect(screen.getAllByText('Sign in for the full app').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Unlock saved reports, chat, portfolio, and backtests').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Guest limits').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Guest previews do not create an account record and do not unlock saved cross-page features.').length).toBeGreaterThan(0);
   });
 
   it('keeps static guest shell copy on the canonical guestHome namespace', () => {

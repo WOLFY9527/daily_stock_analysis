@@ -474,10 +474,17 @@ describe('SettingsPage', () => {
   it('renders category navigation and auth settings modules', async () => {
     render(<SettingsPage />);
 
+    expect(screen.getByTestId('settings-bento-page')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();
     expect(await screen.findByText('认证与登录保护')).toBeInTheDocument();
     expect(await screen.findByText('修改密码')).toBeInTheDocument();
     expect(load).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('settings-bento-drawer-trigger'));
+    expect(await screen.findByTestId('settings-bento-drawer')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '系统控制面' })).toBeInTheDocument();
   });
 
   it('renders the admin control plane directly without a second unlock wall', async () => {

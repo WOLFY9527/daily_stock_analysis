@@ -1,9 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { agentApi } from '../api/agent';
-import { ApiErrorAlert, Button, ConfirmDialog, ScrollArea, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Button, ConfirmDialog, ScrollArea } from '../components/common';
+import {
+  CARD_BUTTON_CLASS,
+  PageBriefDrawer,
+  PageChrome,
+  type BentoHeroItem,
+} from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
 import {
@@ -103,6 +110,7 @@ const ChatPage: React.FC = () => {
     message: string;
   } | null>(null);
   const [skillsLoadError, setSkillsLoadError] = useState<ParsedApiError | null>(null);
+  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
@@ -217,6 +225,13 @@ const ChatPage: React.FC = () => {
   }, [loadSkills]);
 
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
+  const selectedSkillLabel = selectedSkill
+    ? getLocalizedSkillNameById(
+      selectedSkill,
+      skills.find((skill) => skill.id === selectedSkill)?.name || selectedSkill,
+      t,
+    )
+    : chat('skills.general');
   const quickQuestions = QUICK_QUESTIONS.filter(
     (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
   );
@@ -549,9 +564,174 @@ const ChatPage: React.FC = () => {
 
   useShellRailSlot(sidebarContent);
 
+  const heroItems: BentoHeroItem[] = [
+    {
+      label: language === 'en' ? 'Skill mode' : '技能模式',
+      value: selectedSkillLabel,
+      detail: chat('skills.sectionBody'),
+      tone: selectedSkill ? 'bullish' : 'neutral',
+      testId: 'chat-bento-hero-skill',
+      valueTestId: 'chat-bento-hero-skill-value',
+    },
+    {
+      label: language === 'en' ? 'Tracked threads' : '跟踪对话',
+      value: sessions.length,
+      detail: chat('newChatTitle'),
+      testId: 'chat-bento-hero-sessions',
+    },
+    {
+      label: language === 'en' ? 'Message depth' : '消息深度',
+      value: messages.length,
+      detail: loading ? getCurrentStage(progressSteps) : chat('description'),
+      tone: loading ? 'bullish' : 'neutral',
+      testId: 'chat-bento-hero-messages',
+      valueTestId: 'chat-bento-hero-messages-value',
+    },
+    {
+      label: language === 'en' ? 'Delivery' : '发送状态',
+      value: sending ? chat('notifySending') : chat('notifyAction'),
+      detail: sendToast?.message || chat('notifyTitle'),
+      tone: sendToast?.type === 'error' ? 'bearish' : sending ? 'bullish' : 'neutral',
+      testId: 'chat-bento-hero-delivery',
+      valueTestId: 'chat-bento-hero-delivery-value',
+    },
+  ];
+
   return (
-    <div data-testid="chat-workspace" className="workspace-page workspace-page--chat">
-      <div className="workspace-chat-layout">
+    <PageChrome
+      pageTestId="chat-bento-page"
+      pageClassName="workspace-page workspace-page--chat gemini-bento-page--chat"
+      eyebrow={chat('eyebrow')}
+      title={(
+        <span className="mb-2 mt-2 flex items-center gap-2">
+          <svg
+            className="h-6 w-6 text-[hsl(var(--accent-primary-hsl))]"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+            />
+          </svg>
+          <span>{chat('title')}</span>
+        </span>
+      )}
+      titleClassName="text-2xl font-bold"
+      description={chat('description')}
+      actions={(
+        <>
+          <button
+            type="button"
+            onClick={() => setIsBriefDrawerOpen(true)}
+            data-testid="chat-bento-drawer-trigger"
+            className={CARD_BUTTON_CLASS}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+          </button>
+          {messages.length > 0 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => downloadSession(messages)}
+                className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
+                title={chat('exportTitle')}
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                {chat('exportAction')}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (sending) return;
+                  setSending(true);
+                  setSendToast(null);
+                  try {
+                    const content = formatSessionAsMarkdown(messages);
+                    await agentApi.sendChat(content);
+                    setSendToast({ type: 'success', message: chat('notifySuccess') });
+                    setTimeout(() => setSendToast(null), 3000);
+                  } catch (err) {
+                    const parsed = getParsedApiError(err);
+                    setSendToast({
+                      type: 'error',
+                      message: parsed.message || chat('notifyFailed'),
+                    });
+                    setTimeout(() => setSendToast(null), 5000);
+                  } finally {
+                    setSending(false);
+                  }
+                }}
+                disabled={sending}
+                className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                title={chat('notifyTitle')}
+              >
+                {sending ? (
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                    />
+                  </svg>
+                )}
+                {sending ? chat('notifySending') : chat('notifyAction')}
+              </button>
+              {sendToast ? (
+                <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                  {sendToast.message}
+                </span>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      )}
+      heroItems={heroItems}
+      heroTestId="chat-bento-hero"
+    >
+      <div data-testid="chat-workspace" className="workspace-chat-layout">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
@@ -564,125 +744,6 @@ const ChatPage: React.FC = () => {
         />
 
         <div className="workspace-chat-main">
-          <WorkspacePageHeader
-            className="mb-4 flex-shrink-0"
-            eyebrow={chat('eyebrow')}
-            title={(
-              <span className="mb-2 mt-2 flex items-center gap-2">
-                <svg
-                  className="h-6 w-6 text-[hsl(var(--accent-primary-hsl))]"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                  />
-                </svg>
-                <span>{chat('title')}</span>
-              </span>
-            )}
-            titleClassName="text-2xl font-bold"
-            description={chat('description')}
-            actions={messages.length > 0 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => downloadSession(messages)}
-                  className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
-                  title={chat('exportTitle')}
-                >
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                    />
-                  </svg>
-                  {chat('exportAction')}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (sending) return;
-                    setSending(true);
-                    setSendToast(null);
-                    try {
-                      const content = formatSessionAsMarkdown(messages);
-                      await agentApi.sendChat(content);
-                      setSendToast({ type: 'success', message: chat('notifySuccess') });
-                      setTimeout(() => setSendToast(null), 3000);
-                    } catch (err) {
-                      const parsed = getParsedApiError(err);
-                      setSendToast({
-                        type: 'error',
-                        message: parsed.message || chat('notifyFailed'),
-                      });
-                      setTimeout(() => setSendToast(null), 5000);
-                    } finally {
-                      setSending(false);
-                    }
-                  }}
-                  disabled={sending}
-                  className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  title={chat('notifyTitle')}
-                >
-                  {sending ? (
-                    <svg
-                      className="h-4 w-4 animate-spin"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                      />
-                    </svg>
-                  )}
-                  {sending ? chat('notifySending') : chat('notifyAction')}
-                </button>
-                {sendToast ? (
-                  <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                    {sendToast.message}
-                  </span>
-                ) : null}
-              </>
-            ) : null}
-          >
-          </WorkspacePageHeader>
-
           <div className="workspace-surface relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem]">
           {skillsLoadError ? (
             <div className="px-4 pb-0 pt-4 md:px-6 md:pt-6">
@@ -988,7 +1049,49 @@ const ChatPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+      <PageBriefDrawer
+        isOpen={isBriefDrawerOpen}
+        onClose={() => setIsBriefDrawerOpen(false)}
+        title={chat('title')}
+        testId="chat-bento-drawer"
+        summary={language === 'en'
+          ? 'Ask Stock now shares the same Bento shell as the rest of the app while keeping session state, streamed replies, and follow-up context behavior intact.'
+          : '问股页现在与其他页面共用同一套 Bento 外壳，但会话状态、流式回复和追问上下文行为保持不变。'}
+        metrics={[
+          {
+            label: language === 'en' ? 'Skill mode' : '技能模式',
+            value: selectedSkillLabel,
+            tone: selectedSkill ? 'bullish' : 'neutral',
+          },
+          {
+            label: language === 'en' ? 'Tracked threads' : '跟踪对话',
+            value: sessions.length,
+          },
+          {
+            label: language === 'en' ? 'Message depth' : '消息深度',
+            value: messages.length,
+            tone: loading ? 'bullish' : 'neutral',
+          },
+          {
+            label: language === 'en' ? 'Delivery' : '发送状态',
+            value: sending ? chat('notifySending') : chat('notifyAction'),
+            tone: sendToast?.type === 'error' ? 'bearish' : sending ? 'bullish' : 'neutral',
+          },
+        ]}
+        bullets={[
+          language === 'en'
+            ? 'The hero strip surfaces mode, session count, message depth, and delivery state before you enter the conversation stream.'
+            : 'Hero strip 先抬出模式、会话数、消息深度和发送状态，再进入对话流。',
+          language === 'en'
+            ? 'The shell rail, message viewport, and composer remain separate scroll regions, so the chat workflow stays ergonomic.'
+            : '侧栏、消息区和输入区仍然保持独立滚动层，因此聊天工作流的手感不变。',
+          language === 'en'
+            ? 'This pass is visual convergence and testability, not a chat behavior rewrite.'
+            : '这次改动是视觉收敛和可测性补齐，不是聊天行为重写。',
+        ]}
+        footnote={language === 'en' ? 'Session and agent APIs unchanged.' : '会话和 agent API 保持不变。'}
+      />
+    </PageChrome>
   );
 };
 

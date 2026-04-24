@@ -1,11 +1,17 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { WorkspacePageHeader } from '../components/common';
+import {
+  CARD_BUTTON_CLASS,
+  PageBriefDrawer,
+  PageChrome,
+  type BentoHeroItem,
+} from '../components/home-bento';
 import DeterministicBacktestFlow, {
   type RuleWizardStep,
 } from '../components/backtest/DeterministicBacktestFlow';
@@ -156,6 +162,7 @@ const BacktestPage: React.FC = () => {
   const [ruleCurrentStep, setRuleCurrentStep] = useState<RuleWizardStep>('symbol');
   const [ruleParseSignature, setRuleParseSignature] = useState<string | null>(null);
   const [appliedRewriteText, setAppliedRewriteText] = useState<string | null>(null);
+  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
 
   const normalizedCode = codeFilter.trim().toUpperCase();
   const resolvedSampleCount = samplePreset === 'custom'
@@ -948,20 +955,62 @@ const BacktestPage: React.FC = () => {
     setRuleBenchmarkMode('auto');
     setRuleBenchmarkCode('');
   }, []);
+  const heroItems: BentoHeroItem[] = [
+    {
+      label: bt(language, 'page.moduleTabsLabel'),
+      value: activeModule === 'rule' ? bt(language, 'page.ruleTab') : bt(language, 'page.historicalTab'),
+      detail: bt(language, 'page.controlModeLabel'),
+      tone: 'bullish',
+      testId: 'backtest-bento-hero-module',
+      valueTestId: 'backtest-bento-hero-module-value',
+    },
+    {
+      label: bt(language, 'page.controlModeLabel'),
+      value: controlPanelMode === 'professional' ? bt(language, 'page.professionalMode') : bt(language, 'page.normalMode'),
+      detail: bt(language, 'page.headerEyebrow'),
+      testId: 'backtest-bento-hero-mode',
+    },
+    {
+      label: bt(language, 'page.symbolSectionTitle'),
+      value: normalizedCode || '--',
+      detail: activeModule === 'rule' ? bt(language, 'page.ruleInputHint') : bt(language, 'page.historicalInputHint'),
+      tone: normalizedCode ? 'bullish' : 'neutral',
+      testId: 'backtest-bento-hero-symbol',
+      valueTestId: 'backtest-bento-hero-symbol-value',
+    },
+    {
+      label: bt(language, 'page.headerTitle'),
+      value: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
+      detail: bt(language, 'page.headerDescription', {
+        benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
+      }),
+      testId: 'backtest-bento-hero-benchmark',
+    },
+  ];
 
   return (
-    <div className="theme-page-transition backtest-v1-page workspace-page--backtest" data-testid="backtest-v1-page">
-      <WorkspacePageHeader
+    <PageChrome
+      pageTestId="backtest-bento-page"
+      pageClassName="theme-page-transition backtest-v1-page workspace-page--backtest gemini-bento-page--backtest"
         eyebrow={bt(language, 'page.headerEyebrow')}
         title={bt(language, 'page.headerTitle')}
         description={bt(language, 'page.headerDescription', {
           benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
         })}
-        className="backtest-v1-header"
-        contentClassName="backtest-v1-header__layout"
+        headerClassName="backtest-v1-header"
+        headerContentClassName="backtest-v1-header__layout"
         descriptionClassName="backtest-v1-header__description"
         actions={(
           <div className="backtest-header-toggles">
+            <button
+              type="button"
+              className={CARD_BUTTON_CLASS}
+              data-testid="backtest-bento-drawer-trigger"
+              onClick={() => setIsBriefDrawerOpen(true)}
+            >
+              <PanelRightOpen className="h-4 w-4" />
+              <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+            </button>
             <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
               <button
                 type="button"
@@ -1004,7 +1053,11 @@ const BacktestPage: React.FC = () => {
             </div>
           </div>
         )}
-      />
+      heroItems={heroItems}
+      heroTestId="backtest-bento-hero"
+    >
+
+      <div data-testid="backtest-v1-page">
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
@@ -1127,7 +1180,49 @@ const BacktestPage: React.FC = () => {
           )}
         </motion.div>
       </AnimatePresence>
-    </div>
+      </div>
+      <PageBriefDrawer
+        isOpen={isBriefDrawerOpen}
+        onClose={() => setIsBriefDrawerOpen(false)}
+        title={language === 'en' ? 'Backtest surface brief' : '回测页面摘要'}
+        testId="backtest-bento-drawer"
+        summary={language === 'en'
+          ? 'The backtest shell now uses the shared Bento header while leaving deterministic workflows, parse logic, and result plumbing untouched.'
+          : '回测页现在套用共享 Bento 头部，但确定性流程、解析逻辑和结果链路都保持原样。'}
+        metrics={[
+          {
+            label: bt(language, 'page.moduleTabsLabel'),
+            value: activeModule === 'rule' ? bt(language, 'page.ruleTab') : bt(language, 'page.historicalTab'),
+            tone: 'bullish',
+          },
+          {
+            label: bt(language, 'page.controlModeLabel'),
+            value: controlPanelMode === 'professional' ? bt(language, 'page.professionalMode') : bt(language, 'page.normalMode'),
+          },
+          {
+            label: bt(language, 'page.symbolSectionTitle'),
+            value: normalizedCode || '--',
+            tone: normalizedCode ? 'bullish' : 'neutral',
+          },
+          {
+            label: bt(language, 'page.headerTitle'),
+            value: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
+          },
+        ]}
+        bullets={[
+          language === 'en'
+            ? 'The hero strip anchors module, control mode, symbol, and benchmark so the page reads as a workbench instead of a form wall.'
+            : 'Hero strip 先锚定模块、控制模式、标的和基准，让页面更像工作台而不是表单墙。',
+          language === 'en'
+            ? 'Historical evaluation and rule backtest still render through the existing components, so backend contracts and result routes stay stable.'
+            : '历史评估和规则回测仍走原有组件，因此后端契约和结果路由继续保持稳定。',
+          language === 'en'
+            ? 'This segment changes shell, test hooks, and disclosure affordances only.'
+            : '这一段只调整外壳、测试钩子和说明抽屉。',
+        ]}
+        footnote={language === 'en' ? 'No strategy-engine or API changes in this pass.' : '本次不改策略引擎和 API。'}
+      />
+    </PageChrome>
   );
 };
 

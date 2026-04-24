@@ -1,22 +1,30 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, BriefcaseBusiness, History, LockKeyhole, MessageSquareText, TestTubeDiagonal } from 'lucide-react';
+import { BarChart3, BriefcaseBusiness, History, LockKeyhole, MessageSquareText, PanelRightOpen, TestTubeDiagonal } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { publicAnalysisApi } from '../api/publicAnalysis';
-import { ApiErrorAlert, Card, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert } from '../components/common';
 import { StockAutocomplete } from '../components/StockAutocomplete';
 import { LockedFeatureCard } from '../components/access/LockedFeatureCard';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
+import {
+  BentoCard,
+  CARD_BUTTON_CLASS,
+  PageBriefDrawer,
+  PageChrome,
+  type BentoHeroItem,
+} from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLoginPath, buildRegistrationPath } from '../hooks/useProductSurface';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 
 const GuestHomePage: React.FC = () => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
   const loginPath = useMemo(() => buildLoginPath('/'), []);
   const registrationPath = useMemo(() => buildRegistrationPath('/'), []);
 
@@ -50,26 +58,81 @@ const GuestHomePage: React.FC = () => {
   const previewSummary = preview?.report.summary;
   const previewStrategy = preview?.report.strategy;
   const previewMeta = preview?.report.meta;
+  const heroItems = useMemo<BentoHeroItem[]>(() => [
+    {
+      label: t('guestHome.previewTitle'),
+      value: previewMeta?.stockCode || '--',
+      detail: previewMeta?.stockName || t('guestHome.previewNote'),
+      tone: previewMeta?.stockCode ? 'bullish' : 'neutral',
+      testId: 'guest-home-bento-hero-preview',
+      valueTestId: 'guest-home-bento-hero-preview-value',
+    },
+    {
+      label: t('guestHome.decision'),
+      value: previewSummary?.operationAdvice || t('guestHome.noValue'),
+      detail: previewSummary?.trendPrediction || t('guestHome.helper'),
+      tone: previewSummary?.operationAdvice ? 'bullish' : 'neutral',
+      testId: 'guest-home-bento-hero-decision',
+      valueTestId: 'guest-home-bento-hero-decision-value',
+    },
+    {
+      label: t('guestHome.unlockTitle'),
+      value: language === 'en' ? '4 modules' : '4 个模块',
+      detail: t('guestHome.unlockPrimary'),
+      tone: 'bullish',
+      testId: 'guest-home-bento-hero-unlock',
+      valueTestId: 'guest-home-bento-hero-unlock-value',
+    },
+    {
+      label: t('guestHome.limits.title'),
+      value: language === 'en' ? 'Guest only' : '游客模式',
+      detail: t('guestHome.limits.accountIsolation'),
+      tone: 'bearish',
+      testId: 'guest-home-bento-hero-limits',
+      valueTestId: 'guest-home-bento-hero-limits-value',
+    },
+  ], [
+    language,
+    previewMeta?.stockCode,
+    previewMeta?.stockName,
+    previewSummary?.operationAdvice,
+    previewSummary?.trendPrediction,
+    t,
+  ]);
 
   return (
-    <div className="space-y-6">
-      <WorkspacePageHeader
-        eyebrow={t('guestHome.eyebrow')}
-        title={t('guestHome.title')}
-        description={t('guestHome.description')}
-        actions={(
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              to={loginPath}
-              className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
-            >
-              {t('guestHome.signIn')}
-            </Link>
-          </div>
-        )}
-      >
+    <PageChrome
+      pageTestId="guest-home-bento-page"
+      pageClassName="gemini-bento-page--home gemini-bento-page--guest-home space-y-6"
+      eyebrow={t('guestHome.eyebrow')}
+      title={t('guestHome.title')}
+      description={t('guestHome.description')}
+      actions={(
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={CARD_BUTTON_CLASS}
+            data-testid="guest-home-bento-drawer-trigger"
+            onClick={() => setIsBriefDrawerOpen(true)}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            <span>{language === 'en' ? 'Preview guide' : '查看预览说明'}</span>
+          </button>
+          <Link to={loginPath} className={CARD_BUTTON_CLASS}>
+            {t('guestHome.signIn')}
+          </Link>
+        </div>
+      )}
+      heroItems={heroItems}
+      heroTestId="guest-home-bento-hero"
+      headerChildren={(
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(22rem,0.82fr)]">
-          <Card title={t('guestHome.previewTitle')} subtitle={t('guestHome.previewSubtitle')}>
+          <BentoCard
+            eyebrow={t('guestHome.previewSubtitle')}
+            title={t('guestHome.previewTitle')}
+            subtitle={t('guestHome.helper')}
+            testId="guest-home-preview-card"
+          >
             <div className="space-y-4">
               <label className="block">
                 <span className="theme-field-label">{t('guestHome.inputLabel')}</span>
@@ -95,8 +158,6 @@ const GuestHomePage: React.FC = () => {
                   </button>
                 </div>
               </label>
-
-              <p className="text-sm leading-6 text-secondary-text">{t('guestHome.helper')}</p>
 
               {error ? <ApiErrorAlert error={error} /> : null}
 
@@ -157,11 +218,15 @@ const GuestHomePage: React.FC = () => {
                 <p className="mt-4 text-xs leading-5 text-muted-text">{t('guestHome.previewNote')}</p>
               </div>
             </div>
-          </Card>
+          </BentoCard>
 
-          <Card title={t('guestHome.unlockTitle')} subtitle={t('guestHome.unlockSubtitle')}>
+          <BentoCard
+            eyebrow={t('guestHome.unlockSubtitle')}
+            title={t('guestHome.unlockTitle')}
+            subtitle={t('guestHome.unlockBody')}
+            testId="guest-home-unlock-card"
+          >
             <div className="space-y-4">
-              <p className="text-sm leading-6 text-secondary-text">{t('guestHome.unlockBody')}</p>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/6 text-foreground">
@@ -175,24 +240,22 @@ const GuestHomePage: React.FC = () => {
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <Link
-                    to={loginPath}
-                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
-                  >
+                  <Link to={loginPath} className={CARD_BUTTON_CLASS}>
                     {t('guestHome.signIn')}
                   </Link>
                   <Link
                     to={registrationPath}
-                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
+                    className={CARD_BUTTON_CLASS}
                   >
                     {t('guestHome.createAccount')}
                   </Link>
                 </div>
               </div>
             </div>
-          </Card>
+          </BentoCard>
         </div>
-      </WorkspacePageHeader>
+      )}
+    >
 
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-5">
         <LockedFeatureCard
@@ -237,7 +300,12 @@ const GuestHomePage: React.FC = () => {
         />
       </div>
 
-      <Card title={t('guestHome.limits.title')} subtitle={t('guestHome.limits.subtitle')}>
+      <BentoCard
+        eyebrow={t('guestHome.limits.subtitle')}
+        title={t('guestHome.limits.title')}
+        subtitle={t('guestHome.previewNote')}
+        testId="guest-home-limits-card"
+      >
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
             {t('guestHome.limits.accountIsolation')}
@@ -249,8 +317,51 @@ const GuestHomePage: React.FC = () => {
             {t('guestHome.limits.admin')}
           </div>
         </div>
-      </Card>
-    </div>
+      </BentoCard>
+      <PageBriefDrawer
+        isOpen={isBriefDrawerOpen}
+        onClose={() => setIsBriefDrawerOpen(false)}
+        title={t('guestHome.title')}
+        testId="guest-home-bento-drawer"
+        summary={language === 'en'
+          ? 'This guest surface is a lightweight Bento preview: one analysis snapshot, clear product boundaries, and direct sign-in handoff without shared saved state.'
+          : '这个游客页是轻量 Bento 预览：只开放一次分析快照、明确产品边界，并把后续动作直接交给登录流程。'}
+        metrics={[
+          {
+            label: t('guestHome.previewTitle'),
+            value: previewMeta?.stockCode || '--',
+            tone: previewMeta?.stockCode ? 'bullish' : 'neutral',
+          },
+          {
+            label: t('guestHome.decision'),
+            value: previewSummary?.operationAdvice || t('guestHome.noValue'),
+            tone: previewSummary?.operationAdvice ? 'bullish' : 'neutral',
+          },
+          {
+            label: t('guestHome.unlockTitle'),
+            value: language === 'en' ? '4 modules' : '4 个模块',
+            tone: 'bullish',
+          },
+          {
+            label: t('guestHome.limits.title'),
+            value: language === 'en' ? 'Guest only' : '游客模式',
+            tone: 'bearish',
+          },
+        ]}
+        bullets={[
+          language === 'en'
+            ? 'The hero strip surfaces preview result, decision snapshot, unlock scope, and guest boundary before you scroll into detail.'
+            : 'Hero strip 先把预览结果、判断快照、解锁范围和游客边界抬出来，再进入详细内容。',
+          language === 'en'
+            ? 'Feature cards stay locked by design, so the page explains the product instead of faking saved data.'
+            : '功能卡本来就是锁定态，因此页面是在解释产品，而不是伪造保存数据。',
+          language === 'en'
+            ? 'This pass changes layout and smoke hooks only.'
+            : '这次只调整布局和 smoke 钩子。',
+        ]}
+        footnote={language === 'en' ? 'Guest mode remains read-only.' : '游客模式继续保持只读。'}
+      />
+    </PageChrome>
   );
 };
 
