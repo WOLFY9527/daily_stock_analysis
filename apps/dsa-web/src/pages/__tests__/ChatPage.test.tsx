@@ -183,6 +183,16 @@ describe('ChatPage', () => {
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-4xl', 'mx-auto');
+    expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
+      'max-w-4xl',
+      'rounded-full',
+      'border-white/5',
+      'bg-white/[0.02]',
+      'backdrop-blur-xl',
+      'focus-within:border-white/20',
+      'focus-within:ring-white/10',
+    );
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
 
@@ -201,6 +211,8 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
+    const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
+    expect(entryDecisionCard).toHaveClass('rounded-3xl', 'bg-white/[0.02]', 'hover:bg-white/[0.04]', 'backdrop-blur-xl', 'border-white/5');
     expect(screen.getByText(translate('zh', 'chat.starterCards.entryDecision.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'chat.starterCards.positionReview.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'chat.starterCards.eventFollowUp.title'))).toBeInTheDocument();

@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { PanelRightOpen } from 'lucide-react';
+import { ArrowUp, PanelRightOpen } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { agentApi } from '../api/agent';
-import { ApiErrorAlert, Button, ConfirmDialog, ScrollArea } from '../components/common';
+import { ApiErrorAlert, ConfirmDialog, ScrollArea } from '../components/common';
 import {
   CARD_BUTTON_CLASS,
   PageBriefDrawer,
@@ -761,72 +761,73 @@ const ChatPage: React.FC = () => {
             className="relative z-10 flex-1"
             viewportRef={messagesViewportRef}
             onScroll={handleMessagesScroll}
-            viewportClassName="space-y-6 p-4 md:p-6"
+            viewportClassName="p-4 md:p-6"
             testId="chat-message-scroll"
           >
-            {messages.length === 0 && !loading ? (
-              <div className="mx-auto flex h-full w-full max-w-5xl flex-col justify-center">
-                <div className="theme-panel-glass rounded-[1.35rem] px-5 py-5">
-                  <div className="flex items-start gap-4">
-                    <div className="theme-panel-subtle flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
-                      <svg
-                        className="h-7 w-7 text-[hsl(var(--accent-primary-hsl))]"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                        />
-                      </svg>
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-lg font-medium text-foreground">{chat('emptyTitle')}</h3>
-                      <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary-text">
+            <div data-testid="chat-message-stream" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 pb-28">
+              {messages.length === 0 && !loading ? (
+                <div className="flex min-h-[52vh] w-full flex-col justify-center">
+                  <div className="mx-auto w-full max-w-4xl">
+                    <div className="mx-auto max-w-2xl text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
+                        <svg
+                          className="h-7 w-7"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="mt-5 text-2xl font-medium tracking-tight text-foreground">{chat('emptyTitle')}</h3>
+                      <p className="mt-3 text-sm leading-relaxed text-secondary-text">
                         {chat('emptyBody')}
                       </p>
                     </div>
-                  </div>
 
-                  <div className="mt-5 grid gap-3 md:grid-cols-3">
-                    {starterPromptCards.map((card) => (
-                      <button
-                        key={card.id}
-                        type="button"
-                        onClick={() => handleSend(chat(`starterCards.${card.id}.prompt`), card.skill)}
-                        className="theme-panel-subtle rounded-[1.1rem] px-4 py-4 text-left transition-all duration-200 ease-out hover:-translate-y-[1px]"
-                      >
-                        <p className="text-sm font-semibold tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
-                        <p className="mt-2 text-sm leading-6 text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
-                        <p className="mt-3 text-xs leading-5 text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
-                      </button>
-                    ))}
-                  </div>
-
-                  {quickQuestions.length > 0 ? (
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {quickQuestions.slice(0, 4).map((q, i) => (
+                    <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {starterPromptCards.map((card) => (
                         <button
-                          key={i}
-                          onClick={() => handleQuickQuestion(q)}
-                          className="theme-inline-chip rounded-full px-3 py-1.5 text-sm text-secondary-text transition-all duration-200 ease-out hover:text-foreground"
+                          key={card.id}
+                          type="button"
+                          data-testid={`chat-starter-card-${card.id}`}
+                          onClick={() => handleSend(chat(`starterCards.${card.id}.prompt`), card.skill)}
+                          className="rounded-3xl border border-white/5 bg-white/[0.02] px-5 py-5 text-left backdrop-blur-xl transition-colors duration-150 hover:bg-white/[0.04]"
                         >
-                          {chat(`quickQuestions.${q.id}`)}
+                          <p className="text-sm font-medium tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
+                          <p className="mt-3 text-sm leading-relaxed text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
+                          <p className="mt-4 text-xs leading-relaxed text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
                         </button>
                       ))}
                     </div>
-                  ) : null}
+
+                    {quickQuestions.length > 0 ? (
+                      <div className="mt-6 flex flex-wrap justify-center gap-2">
+                        {quickQuestions.slice(0, 4).map((q, i) => (
+                          <button
+                            key={i}
+                            onClick={() => handleQuickQuestion(q)}
+                            className="rounded-full bg-white/[0.02] px-3 py-1.5 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.04] hover:text-foreground"
+                          >
+                            {chat(`quickQuestions.${q.id}`)}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
-                >
+              ) : (
+                messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+                  >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
                       msg.role === 'user'
@@ -905,38 +906,39 @@ const ChatPage: React.FC = () => {
                         ))
                     )}
                   </div>
-                </div>
-              ))
-            )}
+                  </div>
+                ))
+              )}
 
-            {loading && (
-              <div className="flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-elevated text-foreground flex items-center justify-center flex-shrink-0 text-xs font-bold">
-                  AI
-                </div>
-                <div className="theme-panel-subtle min-w-[200px] max-w-[min(100%,56rem)] overflow-hidden rounded-2xl rounded-tl-sm px-5 py-4">
-                  <div className="flex items-center gap-2.5 text-sm text-secondary-text">
-                    <div className="relative w-4 h-4 flex-shrink-0">
-                      <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
-                      <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+              {loading && (
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-elevated text-foreground flex items-center justify-center flex-shrink-0 text-xs font-bold">
+                    AI
+                  </div>
+                  <div className="theme-panel-subtle min-w-[200px] max-w-[min(100%,56rem)] overflow-hidden rounded-2xl rounded-tl-sm px-5 py-4">
+                    <div className="flex items-center gap-2.5 text-sm text-secondary-text">
+                      <div className="relative w-4 h-4 flex-shrink-0">
+                        <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
+                        <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+                      </div>
+                      <span className="text-secondary-text">
+                        {getCurrentStage(progressSteps)}
+                      </span>
                     </div>
-                    <span className="text-secondary-text">
-                      {getCurrentStage(progressSteps)}
-                    </span>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} />
+            </div>
           </ScrollArea>
 
           {/* Input area */}
-          <div className="theme-sidebar-divider relative z-20 border-t p-4 md:p-5">
+          <div className="pointer-events-none sticky bottom-0 z-20 bg-gradient-to-t from-black via-black/92 to-transparent px-4 pb-4 pt-10 md:px-6 md:pb-6">
             {chatError ? (
               <ApiErrorAlert
                 error={chatError}
-                className="mb-3"
+                className="pointer-events-auto mx-auto mb-3 max-w-4xl"
                 actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
                 onAction={
                   chatError.category === 'local_connection_failed'
@@ -948,8 +950,8 @@ const ChatPage: React.FC = () => {
               />
             ) : null}
             {skills.length > 0 && (
-              <div className="theme-panel-subtle mb-3 rounded-[1rem] p-3.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="pointer-events-auto mx-auto mb-3 max-w-4xl px-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{chat('skills.sectionTitle')}</p>
                     <p className="mt-1 text-sm text-secondary-text">{chat('skills.sectionBody')}</p>
@@ -959,10 +961,10 @@ const ChatPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedSkill('')}
-                    className={`rounded-full border px-3 py-1.5 text-sm transition-all duration-200 ease-out ${
+                    className={`rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ${
                       selectedSkill === ''
-                        ? 'border-[hsl(var(--accent-primary-hsl)/0.3)] bg-[hsl(var(--accent-primary-hsl)/0.08)] text-foreground'
-                        : 'theme-inline-chip text-secondary-text hover:text-foreground'
+                        ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground'
+                        : 'bg-white/[0.02] text-secondary-text hover:bg-white/[0.04] hover:text-foreground'
                     }`}
                   >
                     {chat('skills.general')}
@@ -977,10 +979,10 @@ const ChatPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setSelectedSkill(s.id)}
-                        className={`rounded-full border px-3 py-1.5 text-sm transition-all duration-200 ease-out ${
+                        className={`rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ${
                           selectedSkill === s.id
-                            ? 'border-[hsl(var(--accent-primary-hsl)/0.3)] bg-[hsl(var(--accent-primary-hsl)/0.08)] text-foreground'
-                            : 'theme-inline-chip text-secondary-text hover:text-foreground'
+                            ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground'
+                            : 'bg-white/[0.02] text-secondary-text hover:bg-white/[0.04] hover:text-foreground'
                         }`}
                       >
                         {getLocalizedSkillNameById(s.id, s.name, t)}
@@ -997,7 +999,10 @@ const ChatPage: React.FC = () => {
               </div>
             )}
 
-            <div className="theme-panel-subtle rounded-[1rem] p-3">
+            <div
+              data-testid="chat-composer-omnibar"
+              className="pointer-events-auto mx-auto max-w-4xl rounded-full border border-white/5 bg-white/[0.02] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-xl transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
+            >
               <div className="flex items-end gap-3">
                 <textarea
                   value={input}
@@ -1006,7 +1011,7 @@ const ChatPage: React.FC = () => {
                   placeholder={chat('inputPlaceholder')}
                   disabled={loading}
                   rows={1}
-                  className="input-terminal flex-1 min-h-[46px] max-h-[200px] resize-none py-2.5"
+                  className="min-h-[42px] max-h-[160px] flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-relaxed text-white placeholder:text-white/25 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ height: 'auto' }}
                   onInput={(e) => {
                     const t = e.target as HTMLTextAreaElement;
@@ -1014,34 +1019,23 @@ const ChatPage: React.FC = () => {
                     t.style.height = `${Math.min(t.scrollHeight, 200)}px`;
                   }}
                 />
-                <Button
-                  variant="primary"
+                <button
+                  type="button"
                   onClick={() => handleSend()}
                   disabled={!input.trim() || loading}
-                  isLoading={loading}
-                  className="h-[46px] flex-shrink-0 px-6"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--accent-primary-hsl))] text-black shadow-[0_0_28px_hsl(var(--accent-primary-hsl)/0.32)] transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                  aria-label={chat('notifyAction')}
                 >
-                  {chat('notifyAction')}
-                </Button>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-text">{chat('suggestedFocus')}</p>
-                <span className="text-xs text-secondary-text">
-                  {chat('skills.currentPrefix')}
-                  {selectedSkill
-                    ? (() => {
-                        const skill = skills.find((item) => item.id === selectedSkill);
-                        if (skill) {
-                          return getLocalizedSkillNameById(skill.id, skill.name, t);
-                        }
-                        return getLocalizedSkillLabel(selectedSkill, t);
-                      })()
-                    : chat('skills.general')}
-                </span>
+                  {loading ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
+                  ) : (
+                    <ArrowUp className="h-5 w-5" />
+                  )}
+                </button>
               </div>
             </div>
             {isFollowUpContextLoading && (
-              <p className="mt-2 text-xs text-secondary-text">
+              <p className="pointer-events-auto mx-auto mt-2 max-w-4xl text-xs text-secondary-text">
                 {chat('followUpContextLoading')}
               </p>
             )}
