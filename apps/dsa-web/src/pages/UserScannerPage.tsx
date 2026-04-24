@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
-import { ApiErrorAlert, Badge, Button, Card, Drawer, Pagination, Select } from '../components/common';
+import { ApiErrorAlert, Badge, Button, Card, Drawer, Pagination } from '../components/common';
 import { CARD_BUTTON_CLASS, PageChrome, type BentoHeroItem } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerCandidate, ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
@@ -17,6 +17,83 @@ import {
 } from './scannerPageShared';
 
 const HISTORY_PAGE_SIZE = 8;
+
+
+type PillOption = { value: string; label: string };
+
+function PillTagGroup({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: PillOption[];
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{label}</span>
+        <select
+          aria-label={label}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="sr-only"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={`rounded-full border border-white/5 px-3 py-1.5 text-sm transition-colors ${active ? 'bg-white/10 text-white shadow-[0_0_20px_rgba(255,255,255,0.08)]' : 'bg-transparent text-white/40 hover:bg-white/[0.03] hover:text-white/70'}`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ScannerSparkline({ seed }: { seed: string }) {
+  const points = useMemo(() => {
+    const values = Array.from(seed).map((char, index) => ((char.charCodeAt(0) + index * 11) % 18) + 8);
+    const normalized = (values.length ? values : [10, 14, 12, 18, 16, 22]).slice(0, 7);
+    return normalized.map((value, index) => `${index * (100 / (normalized.length - 1 || 1))},${34 - value}`).join(' ');
+  }, [seed]);
+
+  return (
+    <svg className="h-12 w-full text-[#34D399]" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={`scanner-spark-fill-${seed}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity="0.24" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={`0,40 ${points} 100,40`} fill={`url(#scanner-spark-fill-${seed})`} />
+      <polyline
+        points={points}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ filter: 'drop-shadow(0 4px 10px rgba(52, 211, 153, 0.45))' }}
+      />
+    </svg>
+  );
+}
 
 function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
@@ -264,6 +341,7 @@ const UserScannerPage: React.FC = () => {
       : 'neutral';
   const currentProfileLabel = profileOptions.find((option) => option.value === profile)?.label || profile;
   const currentMarketLabel = market === 'us' ? t('scanner.marketUs') : market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn');
+  const shortlistCount = runDetail?.shortlist?.length ?? Number.parseInt(shortlistSize, 10);
   const heroItems: BentoHeroItem[] = [
     {
       label: t('scanner.marketLabel'),
@@ -280,7 +358,7 @@ const UserScannerPage: React.FC = () => {
     },
     {
       label: t('scanner.shortlistLabel'),
-      value: runDetail ? `${runDetail.shortlistSize}` : shortlistSize,
+      value: `${shortlistCount}`,
       detail: language === 'en' ? 'Personal shortlist output' : '个人候选输出',
       tone: runDetail?.shortlistSize ? 'bullish' : 'neutral',
       testId: 'user-scanner-bento-hero-shortlist',
@@ -319,27 +397,27 @@ const UserScannerPage: React.FC = () => {
         heroItems={heroItems}
         heroTestId="user-scanner-bento-hero"
         headerChildren={(
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-          <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'My scanner run' : '我的扫描运行'}>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_16rem_minmax(20rem,0.92fr)]">
+          <Card title={t('scanner.runPanelTitle')} subtitle={language === 'en' ? 'Void and Signal filters' : 'Void & Signal 过滤器'} className="border-white/5 bg-transparent">
             <div className="space-y-5">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Select
+              <div className="grid gap-4">
+                <PillTagGroup
                   label={t('scanner.marketLabel')}
                   value={market}
-                  onChange={handleMarketChange}
+                  onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')}
                   options={[
                     { value: 'cn', label: t('scanner.marketCn') },
                     { value: 'us', label: t('scanner.marketUs') },
                     { value: 'hk', label: t('scanner.marketHk') },
                   ]}
                 />
-                <Select
+                <PillTagGroup
                   label={t('scanner.profileLabel')}
                   value={profile}
                   onChange={setProfile}
                   options={profileOptions}
                 />
-                <Select
+                <PillTagGroup
                   label={t('scanner.shortlistLabel')}
                   value={shortlistSize}
                   onChange={setShortlistSize}
@@ -349,18 +427,20 @@ const UserScannerPage: React.FC = () => {
                     { value: '10', label: language === 'en' ? 'Top 10' : '前 10' },
                   ]}
                 />
-                <Select
-                  label={t('scanner.universeLabel')}
-                  value={universeLimit}
-                  onChange={setUniverseLimit}
-                  options={universeOptions}
-                />
-                <Select
-                  label={t('scanner.detailLabel')}
-                  value={detailLimit}
-                  onChange={setDetailLimit}
-                  options={detailOptions}
-                />
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <PillTagGroup
+                    label={t('scanner.universeLabel')}
+                    value={universeLimit}
+                    onChange={setUniverseLimit}
+                    options={universeOptions}
+                  />
+                  <PillTagGroup
+                    label={t('scanner.detailLabel')}
+                    value={detailLimit}
+                    onChange={setDetailLimit}
+                    options={detailOptions}
+                  />
+                </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
@@ -368,6 +448,18 @@ const UserScannerPage: React.FC = () => {
                   {t('scanner.run')}
                 </Button>
               </div>
+            </div>
+          </Card>
+
+          <Card title={language === 'en' ? 'Signal count' : '信号数量'} subtitle={language === 'en' ? 'Current shortlist' : '当前候选'} className="border-white/5 bg-white/[0.02] backdrop-blur-xl">
+            <div className="flex h-full min-h-[17rem] flex-col justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'Radar array output' : '雷达阵列输出'}</p>
+                <div className="mt-4 text-7xl font-medium tracking-[-0.08em] text-white animate-pulse-glow" style={{ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' }}>
+                  {shortlistCount}
+                </div>
+              </div>
+              <p className="text-sm leading-6 text-secondary-text">{runDetail?.headline || selectedMarketCopy.currentRunFallback}</p>
             </div>
           </Card>
 
@@ -431,56 +523,24 @@ const UserScannerPage: React.FC = () => {
             ) : null}
 
             {!isLoadingRun && runDetail?.shortlist?.length ? (
-              <div className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {runDetail.shortlist.map((candidate) => (
-                  <Card key={`${candidate.symbol}-${candidate.rank}`} variant="bordered" padding="md" className="space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="info">#{candidate.rank}</Badge>
-                          <Badge variant="history">{candidate.symbol}</Badge>
-                          <Badge variant="success">{candidate.score.toFixed(1)}</Badge>
-                        </div>
-                        <div>
-                          <h3 className="text-base font-semibold text-foreground">{candidate.name}</h3>
-                          <p className="mt-1 text-sm text-secondary-text">{candidate.reasonSummary || '--'}</p>
-                        </div>
+                  <Card key={`${candidate.symbol}-${candidate.rank}`} variant="bordered" padding="md" className="space-y-4 border-white/5 bg-white/[0.02] backdrop-blur-xl">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">#{candidate.rank} · {candidate.symbol}</p>
+                        <h3 className="mt-2 text-base font-semibold text-white">{candidate.name}</h3>
                       </div>
+                      <Badge variant="success">{candidate.score.toFixed(1)}</Badge>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.reviewMetricReturn')}</p>
-                        <p className="mt-1 text-foreground">{formatPercent(candidate.realizedOutcome.reviewWindowReturnPct)}</p>
-                      </div>
-                      <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-3 py-3 backdrop-blur-2xl">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.aiTitle')}</p>
-                        <p className="mt-1 text-foreground">{candidate.aiInterpretation.summary || candidate.aiInterpretation.message || '--'}</p>
-                      </div>
-                    </div>
+                    <ScannerSparkline seed={`${candidate.symbol}-${candidate.rank}`} />
 
-                    <div className="grid gap-4 xl:grid-cols-2">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.riskTitle')}</p>
-                        <div className="mt-2 space-y-2">
-                          {(candidate.riskNotes.length ? candidate.riskNotes.slice(0, 2) : ['--']).map((note) => (
-                            <div key={`${candidate.symbol}-${note}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
-                              {note}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.watchTitle')}</p>
-                        <div className="mt-2 space-y-2">
-                          {(candidate.watchContext.length ? candidate.watchContext.slice(0, 2) : [{ label: '--', value: '--' }]).map((item) => (
-                            <div key={`${candidate.symbol}-${item.label}-${item.value}`} className="rounded-[24px] border border-white/5 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-secondary-text backdrop-blur-2xl">
-                              <span className="text-foreground">{item.label}</span>
-                              <span className="mx-2 text-muted-text">·</span>
-                              <span>{item.value}</span>
-                            </div>
-                          ))}
-                        </div>
+                    <div className="space-y-2">
+                      <p className="text-sm text-secondary-text">{candidate.reasonSummary || '--'}</p>
+                      <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em] text-secondary-text">
+                        <span>{t('scanner.reviewMetricReturn')}</span>
+                        <span className="font-mono text-white">{formatPercent(candidate.realizedOutcome.reviewWindowReturnPct)}</span>
                       </div>
                     </div>
 
