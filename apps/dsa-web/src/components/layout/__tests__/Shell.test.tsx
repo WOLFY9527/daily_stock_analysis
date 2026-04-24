@@ -121,12 +121,12 @@ describe('Shell', () => {
     );
 
     expect(screen.getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.scanner') })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.chat') })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.portfolio') })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.backtest') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.settings') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
   });
 

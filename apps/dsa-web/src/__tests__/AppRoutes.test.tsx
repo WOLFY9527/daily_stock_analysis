@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppContent } from '../App';
 
@@ -120,6 +120,20 @@ function renderAt(path: string) {
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-path">{location.pathname}</div>;
+}
+
+function renderAtWithLocationProbe(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <LocationProbe />
+      <AppContent />
+    </MemoryRouter>,
+  );
+}
+
 describe('AppContent route flows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -183,10 +197,28 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
 
-  it('gates guest access to registered-user routes with a redirect-aware sign-in link', async () => {
-    renderAt('/chat');
-    expect(await screen.findByRole('heading', { name: 'Sign in to continue Ask Stock follow-up' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Sign in now' })).toHaveAttribute('href', '/login?redirect=%2Fchat');
+  it.each(['/chat', '/portfolio', '/backtest', '/scanner', '/settings', '/settings/system'])(
+    'redirects guest access from %s to the dedicated guest page',
+    async (path) => {
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/guest'));
+      expect(screen.queryByText('chat-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('portfolio-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('backtest-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('personal-settings-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+    },
+  );
+
+  it('redirects locale-prefixed guest access to the locale guest page', async () => {
+    languageState.value = 'en';
+    renderAtWithLocationProbe('/en/settings/system');
+
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/guest'));
   });
 
   it('redirects away from login to the requested route after authentication succeeds', async () => {
@@ -267,11 +299,30 @@ describe('AppContent route flows', () => {
     await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
   });
 
-  it('supports locale-prefixed product routes and syncs language from the path', async () => {
-    renderAt('/en/chat');
+  it('redirects locale-prefixed guest product routes to the locale guest page', async () => {
+    renderAtWithLocationProbe('/en/chat');
 
-    expect(await screen.findByRole('heading', { name: 'Sign in to continue Ask Stock follow-up' })).toBeInTheDocument();
-    expect(screen.getByText('Guest Preview Only')).toBeInTheDocument();
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/guest'));
+  });
+
+  it('keeps scanner reachable for signed-in users', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+    });
+
+    renderAt('/scanner');
+
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
   });
 
   it('renders the rule backtest compare workbench route for signed-in users', async () => {
@@ -293,17 +344,17 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('backtest-compare-page')).toBeInTheDocument();
   });
 
-  it('redirects legacy locale guest scanner path to the scanner surface', async () => {
+  it('redirects legacy locale guest scanner path to the guest surface', async () => {
     renderAt('/en/guest/scanner');
 
-    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 
-  it('redirects legacy locale user scanner path to the scanner surface', async () => {
+  it('redirects legacy locale user scanner path to the guest surface for guests', async () => {
     renderAt('/zh/user/scanner');
 
-    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(await screen.findByText('游客预览模式')).toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 });

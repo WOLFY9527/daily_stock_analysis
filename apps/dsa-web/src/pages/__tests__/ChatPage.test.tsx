@@ -369,6 +369,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 AAPL')).toBeInTheDocument();
+    await screen.findByRole('button', { name: canonicalBullTrendLabel('zh') });
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
 

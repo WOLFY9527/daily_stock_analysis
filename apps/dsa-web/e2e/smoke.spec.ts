@@ -5,6 +5,7 @@ const smokePassword = process.env.DSA_WEB_SMOKE_PASSWORD;
 
 type AuthStatusPayload = {
   authEnabled: boolean;
+  loggedIn?: boolean;
 };
 
 async function getAuthStatus(page: Page): Promise<AuthStatusPayload> {
@@ -43,7 +44,7 @@ async function maybeLogin(page: Page): Promise<AuthStatusPayload> {
   await expect(page.locator('#password')).toBeVisible({ timeout: 10_000 });
   await page.locator('#password').fill(smokePassword!);
 
-  const submitButton = page.getByRole('button', { name: /授权进入工作台|完成设置并登录|Sign in|Set password/i });
+  const submitButton = page.getByRole('button', { name: /授权进入工作台|完成设置并登录|登录继续|Sign in|Set password/i });
   await expect(submitButton).toBeVisible();
 
   await Promise.all([
@@ -65,10 +66,24 @@ async function expectReachableRoute(page: Page, path: string, expectedText: RegE
   await expect(page.locator('body')).toContainText(expectedText, { timeout: 15_000 });
 }
 
+async function ensureGuestSession(page: Page): Promise<AuthStatusPayload> {
+  const authStatus = await getAuthStatus(page);
+  if (!authStatus.authEnabled) {
+    test.info().annotations.push({
+      type: 'environment-limited',
+      description: 'authEnabled=false; guest redirect enforcement is inactive in auth-disabled local runtime.',
+    });
+    return authStatus;
+  }
+
+  await page.request.post(`${backendBaseUrl}/api/v1/auth/logout`).catch(() => undefined);
+  return getAuthStatus(page);
+}
+
 test.describe('web deployment smoke', () => {
   test('home app shell loads', async ({ page }) => {
     await openHome(page);
-    await expect(page.locator('body')).toContainText(/输入股票代码或名称|历史分析|Start with a symbol|Analysis history/);
+    await expect(page.locator('body')).toContainText(/输入标的|即时分析预览|Enter a symbol|Instant Analysis Snapshot|历史分析|Analysis history/);
   });
 
   test('login route is reachable or redirects cleanly when auth is disabled', async ({ page }) => {
@@ -85,13 +100,13 @@ test.describe('web deployment smoke', () => {
 
     await expect(page.locator('body')).toContainText(/WolfyStock 账户|WolfyStock account/, { timeout: 10_000 });
     await expect(page.locator('#password')).toBeVisible();
-    await expect(page.getByRole('button', { name: /授权进入工作台|完成设置并登录|Sign in|Set password/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /授权进入工作台|完成设置并登录|登录继续|Sign in|Set password/i })).toBeVisible();
   });
 
   test('guest route loads the dedicated guest surface', async ({ page }) => {
     await page.goto('/guest');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('body')).toContainText(/游客预览模式|Guest Preview Mode|输入股票代码或名称|Start with a symbol/, {
+    await expect(page.locator('body')).toContainText(/游客预览模式|Guest Preview Mode|输入标的|Enter a symbol|即时分析预览|Instant Analysis Snapshot/, {
       timeout: 15_000,
     });
   });
@@ -108,7 +123,7 @@ test.describe('web deployment smoke', () => {
       return;
     }
 
-    await expect(page.locator('body')).toContainText(/重置访问口令|Reset access password|管理员|administrator/i, {
+    await expect(page.locator('body')).toContainText(/请求重置密码|账户恢复|Reset access password|Request password reset|Account recovery/i, {
       timeout: 10_000,
     });
   });
@@ -119,9 +134,24 @@ test.describe('web deployment smoke', () => {
       page,
       '/portfolio',
       authStatus.authEnabled
-        ? /持仓管理|Portfolio|登录后查看你的持仓|Sign in to open your portfolio/
+        ? /游客预览模式|Guest Preview Mode|输入标的|Enter a symbol|即时分析预览|Instant Analysis Snapshot/
         : /持仓管理|登录后查看你的持仓|Sign in to open your portfolio|Portfolio/,
     );
+  });
+
+  test('guest-only session cannot open restricted product routes', async ({ page }) => {
+    const authStatus = await ensureGuestSession(page);
+    test.skip(!authStatus.authEnabled, 'Auth-disabled runtime treats the app as an unrestricted local workspace.');
+
+    for (const path of ['/portfolio', '/backtest', '/scanner', '/settings', '/settings/system']) {
+      await page.goto(path);
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page).toHaveURL(/\/guest$/);
+      await expect(page.locator('body')).toContainText(/游客预览模式|Guest Preview Mode|输入标的|Enter a symbol|即时分析预览|Instant Analysis Snapshot/, {
+        timeout: 15_000,
+      });
+      await expect(page.locator('body')).not.toContainText(/持仓管理|Portfolio Management|市场扫描|Market Scanner|系统控制面|System control/);
+    }
   });
 
   test('settings flow keeps personal settings separate from the admin control plane when reachable', async ({ page }) => {

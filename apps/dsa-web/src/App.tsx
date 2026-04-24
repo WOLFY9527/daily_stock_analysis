@@ -389,6 +389,7 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus } = useAuth();
+  const { isGuest } = useProductSurface();
   const { setLanguage, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
   const [showBootSplash, setShowBootSplash] = useState(true);
@@ -397,6 +398,21 @@ export const AppContent: React.FC = () => {
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const routePathname = stripLocalePrefix(location.pathname);
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
+  const localizedGuestPath = routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest';
+  const isGuestRestrictedPath = (
+    routePathname === '/chat'
+    || routePathname.startsWith('/chat/')
+    || routePathname === '/portfolio'
+    || routePathname.startsWith('/portfolio/')
+    || routePathname === '/backtest'
+    || routePathname.startsWith('/backtest/')
+    || routePathname === '/scanner'
+    || routePathname.startsWith('/scanner/')
+    || routePathname === '/settings'
+    || routePathname.startsWith('/settings/')
+    || routePathname === '/admin/logs'
+    || routePathname.startsWith('/admin/logs/')
+  );
 
   useEffect(() => {
     useAgentChatStore.getState().setCurrentRoute(location.pathname);
@@ -482,6 +498,8 @@ export const AppContent: React.FC = () => {
           </Suspense>
         );
       }
+    } else if (isGuest && isGuestRestrictedPath) {
+      content = <Navigate to={localizedGuestPath} replace />;
     } else {
       content = (
         <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>

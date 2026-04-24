@@ -154,7 +154,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       if (item.key === 'chat') {
         return !isGuest && agentEnabled;
       }
-      if (item.key === 'portfolio' || item.key === 'backtest') {
+      if (item.key === 'scanner' || item.key === 'portfolio' || item.key === 'backtest') {
         return !isGuest;
       }
       return true;
@@ -237,7 +237,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </button>
   );
 
-  const settingsAction = (
+  const settingsAction = !isGuest ? (
     <NavLink
       to="/settings"
       onClick={onNavigate}
@@ -258,7 +258,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         <span>{t('nav.settings')}</span>
       )}
     </NavLink>
-  );
+  ) : null;
 
   const systemAction = isAdminAccount ? (
     <NavLink
