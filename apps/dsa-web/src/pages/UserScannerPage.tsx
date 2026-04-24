@@ -255,7 +255,7 @@ const UserScannerPage: React.FC = () => {
 
   return (
     <>
-      <div data-testid="user-scanner-bento-page" className="min-h-screen bg-[#030303] text-white">
+      <div data-testid="user-scanner-bento-page" className="h-[calc(100vh-80px)] overflow-hidden bg-[#030303] text-white">
         <div className="w-full max-w-[1400px] mx-auto px-8 pt-0 pb-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-transparent">
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
