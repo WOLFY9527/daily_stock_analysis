@@ -256,8 +256,8 @@ const UserScannerPage: React.FC = () => {
   return (
     <>
       <div data-testid="user-scanner-bento-page" className="min-h-screen bg-[#030303] text-white">
-        <div className="w-full max-w-[1400px] mx-auto px-8 py-6 min-h-[calc(100vh-100px)] flex flex-col justify-between gap-6">
-          <header className="flex items-start justify-between gap-4">
+        <div className="w-full max-w-[1400px] mx-auto px-8 pt-4 pb-6 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent">
+          <header className="shrink-0 flex justify-between items-start mb-6">
             <div>
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.eyebrow')}</p>
               <h1 className="mt-3 text-4xl tracking-[-0.04em] text-white">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
@@ -274,18 +274,18 @@ const UserScannerPage: React.FC = () => {
             </button>
           </header>
 
-          <section className="grid grid-cols-12 gap-5">
+          <section className="shrink-0 grid grid-cols-12 gap-6">
             <div className="col-span-8 flex flex-col gap-4">
               <div className="bg-white/[0.02] rounded-[32px] p-6 border border-white/5 backdrop-blur-2xl">
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                   <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
                     <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                   </div>
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
                     <Button type="button" onClick={() => void handleRun()} isLoading={isRunning} loadingText={t('scanner.running')}>{t('scanner.run')}</Button>
                   </div>
@@ -304,12 +304,12 @@ const UserScannerPage: React.FC = () => {
 
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
-          <section className="flex flex-col gap-3">
+          <section className="flex-1 flex flex-col min-h-0 mt-4">
             <div>
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'My candidates' : '我的候选'}</p>
               <h2 className="mt-1 text-xl text-white">{t('scanner.shortlistTitle')}</h2>
             </div>
-            <div className="grid grid-cols-4 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-4 xl:grid-cols-6 gap-3 content-start">
               {renderedWatchlistCards.map((candidate) => (
                 <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-4 py-3 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
                   <div>
