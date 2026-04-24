@@ -1183,7 +1183,7 @@ const ScannerPage: React.FC = () => {
 
             <Card
               title={language === 'en' ? 'My recent runs' : '我的近期运行'}
-              subtitle={language === 'en' ? 'Personal history remains visible in Admin Mode' : '管理员模式下也保留个人历史可见'}
+              subtitle={language === 'en' ? 'Personal history stays tied to the signed-in account' : '个人历史始终绑定当前登录账号'}
               className="space-y-4"
             >
               {personalHistoryError ? <ApiErrorAlert error={personalHistoryError} /> : null}

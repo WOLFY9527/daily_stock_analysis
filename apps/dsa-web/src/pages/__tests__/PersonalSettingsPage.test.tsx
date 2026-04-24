@@ -11,7 +11,6 @@ const {
   updateNotificationPreferences,
   setLanguage,
   setMarketColorConvention,
-  setAdminSurfaceModeMock,
   useAuthMock,
   useProductSurfaceMock,
 } = vi.hoisted(() => ({
@@ -19,7 +18,6 @@ const {
   updateNotificationPreferences: vi.fn(),
   setLanguage: vi.fn(),
   setMarketColorConvention: vi.fn(),
-  setAdminSurfaceModeMock: vi.fn(),
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
 }));
@@ -101,10 +99,8 @@ describe('PersonalSettingsPage', () => {
     useProductSurfaceMock.mockReturnValue({
       isGuest: true,
       isAdmin: false,
-      isAdminMode: false,
       loggedIn: false,
       currentUser: null,
-      setAdminSurfaceMode: setAdminSurfaceModeMock,
     });
 
     render(
@@ -121,7 +117,7 @@ describe('PersonalSettingsPage', () => {
     expect(getNotificationPreferences).not.toHaveBeenCalled();
   });
 
-  it('keeps admins on regular pages by default and hides admin links until admin tools are opened', async () => {
+  it('shows admin console links without changing personal settings content', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       passwordChangeable: true,
@@ -129,13 +125,11 @@ describe('PersonalSettingsPage', () => {
     useProductSurfaceMock.mockReturnValue({
       isGuest: false,
       isAdmin: true,
-      isAdminMode: false,
       loggedIn: true,
       currentUser: {
         username: 'admin',
         displayName: 'Admin',
       },
-      setAdminSurfaceMode: setAdminSurfaceModeMock,
     });
     getNotificationPreferences.mockResolvedValue({
       channel: 'email',
@@ -157,45 +151,14 @@ describe('PersonalSettingsPage', () => {
     );
 
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(zh('settings.personalAdminToolsTitle'))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: zh('settings.personalAdminToolsOpen') })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: zh('adminNav.logs') })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: zh('nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
+    expect(screen.getByRole('link', { name: zh('adminNav.logs') })).toHaveAttribute('href', '/admin/logs');
+    expect(screen.queryByRole('button', { name: /管理工具/ })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument();
     expect(screen.getByDisplayValue('https://discord.com/api/webhooks/123/token')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toBeInTheDocument();
     expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
     expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
-  });
-
-  it('shows admin entry points after admin tools are opened', async () => {
-    useAuthMock.mockReturnValue({
-      authEnabled: true,
-      passwordChangeable: false,
-    });
-    useProductSurfaceMock.mockReturnValue({
-      isGuest: false,
-      isAdmin: true,
-      isAdminMode: true,
-      loggedIn: true,
-      currentUser: {
-        username: 'admin',
-        displayName: 'Admin',
-      },
-      setAdminSurfaceMode: setAdminSurfaceModeMock,
-    });
-
-    render(
-      <MemoryRouter>
-        <PersonalSettingsPage />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('link', { name: zh('nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
-    expect(screen.getByRole('link', { name: zh('adminNav.logs') })).toHaveAttribute('href', '/admin/logs');
-    expect(screen.getByRole('button', { name: zh('settings.personalAdminToolsReturn') })).toBeInTheDocument();
-    expect(screen.getByText(zh('settings.personalSignedInBody'))).toBeInTheDocument();
   });
 
   it('saves email and Discord notification targets together for signed-in users', async () => {
@@ -206,13 +169,11 @@ describe('PersonalSettingsPage', () => {
     useProductSurfaceMock.mockReturnValue({
       isGuest: false,
       isAdmin: false,
-      isAdminMode: false,
       loggedIn: true,
       currentUser: {
         username: 'alice',
         displayName: 'Alice',
       },
-      setAdminSurfaceMode: setAdminSurfaceModeMock,
     });
     getNotificationPreferences.mockResolvedValue({
       channel: 'email',

@@ -170,7 +170,7 @@ describe('Shell', () => {
     });
   });
 
-  it('shows a confirmation dialog before logout', async () => {
+  it('shows a confirmation dialog before logout and returns to guest home', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ThemeProvider>
@@ -187,7 +187,7 @@ describe('Shell', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logoutConfirm') }));
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/login'));
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/'));
   });
 
   it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
@@ -250,7 +250,7 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-content-frame--backtest')).not.toBeNull();
   });
 
-  it('keeps admin accounts in User Mode by default and only shows system entry after switching modes', async () => {
+  it('shows the console entry for admin accounts without an admin-mode switch', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -268,17 +268,8 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.adminModeEnter') }));
-    });
     expect(await screen.findByRole('link', { name: translate('zh', 'nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.adminModeExit') }));
-    });
-    await waitFor(() => {
-      expect(screen.queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
-    });
+    expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
   });
 
   it('resets mobile drawer and archive rail state when crossing back to desktop', async () => {

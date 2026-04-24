@@ -359,48 +359,13 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
 export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
-  const { isAdmin, isAdminMode, isGuest } = useProductSurface();
+  const { isAdmin, isGuest } = useProductSurface();
   const routePathname = stripLocalePrefix(location.pathname);
   const routeTarget = `${routePathname}${location.search}`;
   const gateCopy = getAdminSurfaceCopy(routePathname, language, isGuest);
 
-  if (isAdmin && isAdminMode) {
+  if (isAdmin) {
     return <>{children}</>;
-  }
-
-  if (isAdmin && !isAdminMode) {
-    return (
-      <AccessGatePage
-        eyebrow={language === 'en' ? 'Admin Tools Disabled' : '管理工具未开启'}
-        title={language === 'en' ? 'Turn on admin tools to open this page' : '请先开启管理工具再访问此页面'}
-        description={language === 'en'
-          ? 'Your admin account is currently using the safer regular mode. Turn on admin tools before entering system settings or logs.'
-          : '你的管理员账户当前仍停留在更安全的普通模式。请先开启管理工具，再进入系统设置或日志中心。'}
-        bullets={language === 'en'
-          ? [
-            'Admin accounts now default to the same regular mode used for everyday analysis.',
-            'Admin pages stay hidden until admin tools are intentionally turned on.',
-            'Use the header switch or personal settings page to turn on admin tools, then retry this route.',
-          ]
-          : [
-            '管理员账户现在会默认先进入日常使用的普通模式。',
-            '管理页面会保持隐藏，直到你显式开启管理工具。',
-            '请通过顶部切换按钮或个人设置页开启管理工具，然后再重试当前路由。',
-          ]}
-        statusLabel={language === 'en' ? 'Regular Mode Active' : '当前仍为普通模式'}
-        note={language === 'en'
-          ? 'Need regular tools instead? Personal settings remain available without leaving regular mode.'
-          : '如果你只是继续普通工具，个人设置页仍然可以在普通模式中直接使用。'}
-        primaryAction={{
-          label: language === 'en' ? 'Open personal settings' : '打开个人设置',
-          to: '/settings',
-        }}
-        secondaryAction={{
-          label: language === 'en' ? 'Back home' : '返回首页',
-          to: '/',
-        }}
-      />
-    );
   }
 
   return (

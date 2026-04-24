@@ -128,18 +128,13 @@ test.describe('web deployment smoke', () => {
     }
 
     await expect(page.getByRole('heading', { name: /个人偏好|Personal preferences/i })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('button', { name: /打开管理工具|Open admin tools/i })).toBeVisible();
-    await expect(page.locator('body')).toContainText(/当前视图：普通页面|Current view: User page/i);
+    await expect(page.getByRole('main').getByRole('link', { name: /控制台|Console/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('main').getByRole('link', { name: /日志|Logs/i })).toBeVisible({ timeout: 10_000 });
 
-    await page.getByRole('button', { name: /打开管理工具|Open admin tools/i }).click();
-    await expect(page.getByRole('button', { name: /返回普通页面|Return to user page/i })).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('body')).toContainText(/当前视图：管理工具|Current view: Admin tools/i);
-    await expect(page.getByRole('main').getByRole('link', { name: /独立控制台|Independent console/i })).toBeVisible();
-
-    await page.getByRole('main').getByRole('link', { name: /独立控制台|Independent console/i }).click();
+    await page.getByRole('main').getByRole('link', { name: /控制台|Console/i }).click();
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByRole('heading', { name: /系统控制面|System control/i })).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('body')).toContainText(/Admin Mode 已启用|Admin Mode enabled/i);
+    await expect(page.locator('body')).toContainText(/管理员控制台|Admin Console|全局系统控制面|global system control plane/i);
     await expect(page.getByRole('button', { name: /重置|Reset/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /保存配置|Save/i })).toBeVisible();
   });
@@ -149,7 +144,7 @@ test.describe('web deployment smoke', () => {
     await expectReachableRoute(
       page,
       '/settings/system',
-      /系统控制面|System control|请先开启管理工具|Open personal settings first|Sign in/i,
+      /系统控制面|System control|Sign in|登录/i,
     );
   });
 
@@ -158,7 +153,7 @@ test.describe('web deployment smoke', () => {
     await expectReachableRoute(
       page,
       '/settings/system',
-      /系统控制面|System control|请先开启管理工具|Open personal settings first|Sign in/i,
+      /系统控制面|System control|Sign in|登录/i,
     );
 
     const body = page.locator('body');
@@ -166,7 +161,7 @@ test.describe('web deployment smoke', () => {
     if (!systemReady) {
       test.info().annotations.push({
         type: 'environment-limited',
-        description: '/settings/system is currently gated; provider editor and locale checks require admin/system access.',
+        description: '/settings/system is currently unavailable for this session; provider editor and locale checks require admin console access.',
       });
       return;
     }

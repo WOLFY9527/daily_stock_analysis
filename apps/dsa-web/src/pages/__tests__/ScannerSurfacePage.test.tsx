@@ -39,9 +39,10 @@ describe('ScannerSurfacePage', () => {
     expect(screen.getByText('user scanner page')).toBeInTheDocument();
   });
 
-  it('renders admin scanner surface only when admin mode is enabled', () => {
-    useProductSurfaceMock.mockReturnValue({ isGuest: false, isAdminMode: true });
+  it('renders the normal user scanner surface for admin accounts too', () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false, isAdmin: true });
     render(<ScannerSurfacePage />);
-    expect(screen.getByText('admin scanner page')).toBeInTheDocument();
+    expect(screen.getByText('user scanner page')).toBeInTheDocument();
+    expect(screen.queryByText('admin scanner page')).not.toBeInTheDocument();
   });
 });

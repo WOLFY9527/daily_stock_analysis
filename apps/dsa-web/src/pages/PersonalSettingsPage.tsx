@@ -38,10 +38,8 @@ const PersonalSettingsPage: React.FC = () => {
   const {
     isGuest,
     isAdmin,
-    isAdminMode,
     loggedIn,
     currentUser,
-    setAdminSurfaceMode,
   } = useProductSurface();
   const [notificationPrefs, setNotificationPrefs] = useState<UserNotificationPreferences | null>(null);
   const [notificationEmail, setNotificationEmail] = useState('');
@@ -263,50 +261,26 @@ const PersonalSettingsPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {t('settings.personalAdminToolsTitle')}
+                      {t('settings.personalAdminConsoleTitle')}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-secondary-text">
-                      {t('settings.personalAdminToolsDesc')}
+                      {t('settings.personalAdminConsoleDesc')}
                     </p>
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAdminSurfaceMode(isAdminMode ? 'user' : 'admin')}
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link
+                    to={adminConsolePath}
                     className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
                   >
-                    {isAdminMode
-                      ? t('settings.personalAdminToolsReturn')
-                      : t('settings.personalAdminToolsOpen')}
-                  </button>
-                  <span className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text">
-                    {isAdminMode
-                      ? t('settings.personalAdminToolsCurrentAdmin')
-                      : t('settings.personalAdminToolsCurrentUser')}
-                  </span>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  {isAdminMode ? (
-                    <>
-                      <Link
-                        to={adminConsolePath}
-                        className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
-                      >
-                        {t('nav.independentConsole')}
-                      </Link>
-                      <Link
-                        to={adminLogsPath}
-                        className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
-                      >
-                        {t('adminNav.logs')}
-                      </Link>
-                    </>
-                  ) : (
-                    <p className="text-xs leading-5 text-secondary-text">
-                      {t('settings.personalAdminToolsHint')}
-                    </p>
-                  )}
+                    {t('nav.independentConsole')}
+                  </Link>
+                  <Link
+                    to={adminLogsPath}
+                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
+                  >
+                    {t('adminNav.logs')}
+                  </Link>
                 </div>
               </div>
             ) : null}

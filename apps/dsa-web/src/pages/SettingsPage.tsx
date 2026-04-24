@@ -73,8 +73,8 @@ type DataSourceBuiltinExtraFieldDefinition = {
   options: Array<{ label: string; value: string }>;
 };
 type DataSourceBuiltinManagementDefinition = {
-  credentialSchema: Exclude<DataSourceCredentialSchema, 'none'>;
-  credentialEnvKey: string;
+  credentialSchema: DataSourceCredentialSchema;
+  credentialEnvKey?: string;
   pluralCredentialEnvKey?: string;
   secretEnvKey?: string;
   fields: DataSourceCredentialFieldDefinition[];
@@ -168,6 +168,25 @@ const PROVIDER_LABEL_MAP: Record<string, string> = {
   zhipu: 'GLM / Zhipu',
 };
 
+function createSingleKeyDataSourceManagement(params: {
+  credentialEnvKey: string;
+  pluralCredentialEnvKey?: string;
+  hintKey?: string;
+}): DataSourceBuiltinManagementDefinition {
+  return {
+    credentialSchema: 'single_key',
+    credentialEnvKey: params.credentialEnvKey,
+    pluralCredentialEnvKey: params.pluralCredentialEnvKey,
+    fields: [
+      {
+        name: 'credential',
+        labelKey: 'settings.dataSourceFieldApiKey',
+        hintKey: params.hintKey || 'settings.dataSourceFieldApiKeyHint',
+      },
+    ],
+  };
+}
+
 const DATA_SOURCE_LIBRARY_ITEMS: Array<{
   key: string;
   routeKeys: DataRouteKey[];
@@ -184,6 +203,11 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     capabilityKeys: ['market'],
     credentialPatterns: [/^ALPHA_VANTAGE_API_KEYS?$/i, /^ALPHAVANTAGE_API_KEYS?$/i],
     requireCredential: true,
+    credentialSchema: 'single_key',
+    management: createSingleKeyDataSourceManagement({
+      credentialEnvKey: 'ALPHA_VANTAGE_API_KEY',
+      pluralCredentialEnvKey: 'ALPHA_VANTAGE_API_KEYS',
+    }),
   },
   {
     key: 'finnhub',
@@ -191,6 +215,11 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     capabilityKeys: ['market', 'fundamentals', 'news'],
     credentialPatterns: [/^FINNHUB_API_KEYS?$/i],
     requireCredential: true,
+    credentialSchema: 'single_key',
+    management: createSingleKeyDataSourceManagement({
+      credentialEnvKey: 'FINNHUB_API_KEY',
+      pluralCredentialEnvKey: 'FINNHUB_API_KEYS',
+    }),
   },
   {
     key: 'yahoo',
@@ -198,6 +227,26 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     capabilityKeys: ['market', 'fundamentals'],
     credentialPatterns: [],
     builtin: true,
+    credentialSchema: 'none',
+    management: {
+      credentialSchema: 'none',
+      fields: [],
+      extraField: {
+        key: 'priority',
+        envKey: 'YFINANCE_PRIORITY',
+        labelKey: 'settings.dataSourceFieldYahooPriority',
+        hintKey: 'settings.dataSourceFieldYahooPriorityHint',
+        defaultValue: '4',
+        options: [
+          { label: '0', value: '0' },
+          { label: '1', value: '1' },
+          { label: '2', value: '2' },
+          { label: '3', value: '3' },
+          { label: '4', value: '4' },
+          { label: '5', value: '5' },
+        ],
+      },
+    },
   },
   {
     key: 'fmp',
@@ -205,6 +254,11 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     capabilityKeys: ['fundamentals'],
     credentialPatterns: [/^FMP_API_KEYS?$/i],
     requireCredential: true,
+    credentialSchema: 'single_key',
+    management: createSingleKeyDataSourceManagement({
+      credentialEnvKey: 'FMP_API_KEY',
+      pluralCredentialEnvKey: 'FMP_API_KEYS',
+    }),
   },
   {
     key: 'gnews',
@@ -212,6 +266,11 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     capabilityKeys: ['news'],
     credentialPatterns: [/^GNEWS_API_KEYS?$/i],
     requireCredential: true,
+    credentialSchema: 'single_key',
+    management: createSingleKeyDataSourceManagement({
+      credentialEnvKey: 'GNEWS_API_KEY',
+      pluralCredentialEnvKey: 'GNEWS_API_KEYS',
+    }),
   },
   {
     key: 'tavily',
@@ -219,6 +278,11 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     capabilityKeys: ['news', 'sentiment'],
     credentialPatterns: [/^TAVILY_API_KEYS?$/i],
     requireCredential: true,
+    credentialSchema: 'single_key',
+    management: createSingleKeyDataSourceManagement({
+      credentialEnvKey: 'TAVILY_API_KEY',
+      pluralCredentialEnvKey: 'TAVILY_API_KEYS',
+    }),
   },
   {
     key: 'social_sentiment_service',
@@ -2301,7 +2365,8 @@ const SettingsPage: React.FC = () => {
   const saveDataSourceEditor = useCallback(async () => {
     if (dataSourceEditorEntry?.management) {
       const { management } = dataSourceEditorEntry;
-      const missingCredential = !managedBuiltinDataSourceDraft.credential.trim();
+      const requiresCredential = management.credentialSchema !== 'none';
+      const missingCredential = requiresCredential && !managedBuiltinDataSourceDraft.credential.trim();
       const missingSecret = management.credentialSchema === 'key_secret' && !managedBuiltinDataSourceDraft.secret.trim();
       const message = missingCredential
         ? t('settings.dataSourceValidationMissingCredential')
@@ -2318,9 +2383,10 @@ const SettingsPage: React.FC = () => {
 
       const credentialValue = managedBuiltinDataSourceDraft.credential.trim();
       const saveToPlural = Boolean(management.pluralCredentialEnvKey && credentialValue.includes(','));
-      const updatedItems = [
-        { key: management.credentialEnvKey, value: saveToPlural ? '' : credentialValue },
-      ];
+      const updatedItems: Array<{ key: string; value: string }> = [];
+      if (management.credentialEnvKey) {
+        updatedItems.push({ key: management.credentialEnvKey, value: saveToPlural ? '' : credentialValue });
+      }
       if (management.pluralCredentialEnvKey) {
         updatedItems.push({
           key: management.pluralCredentialEnvKey,
@@ -2548,7 +2614,9 @@ const SettingsPage: React.FC = () => {
     if (source.management) {
       const sourceState = source.management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(source.management.pluralCredentialEnvKey) || '')
         ? String(allItemMap.get(source.management.pluralCredentialEnvKey) || '')
-        : String(allItemMap.get(source.management.credentialEnvKey) || '');
+        : source.management.credentialEnvKey
+          ? String(allItemMap.get(source.management.credentialEnvKey) || '')
+          : '';
       const hasCredential = Boolean(sourceState.trim());
       const hasSecret = source.management.secretEnvKey
         ? Boolean(String(allItemMap.get(source.management.secretEnvKey) || '').trim())
@@ -2613,7 +2681,9 @@ const SettingsPage: React.FC = () => {
     const { management } = dataSourceEditorEntry;
     const credentialValue = management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(management.pluralCredentialEnvKey) || '')
       ? String(allItemMap.get(management.pluralCredentialEnvKey) || '')
-      : String(allItemMap.get(management.credentialEnvKey) || '');
+      : management.credentialEnvKey
+        ? String(allItemMap.get(management.credentialEnvKey) || '')
+        : '';
     const secretValue = management.secretEnvKey
       ? String(allItemMap.get(management.secretEnvKey) || '')
       : '';
@@ -4314,7 +4384,9 @@ const SettingsPage: React.FC = () => {
                 >
                   {dataSourceEditorEntry.credentialSchema === 'key_secret'
                     ? t('settings.dataSourceSchemaKeySecret')
-                    : t('settings.dataSourceSchemaSingleKey')}
+                    : dataSourceEditorEntry.credentialSchema === 'single_key'
+                      ? t('settings.dataSourceSchemaSingleKey')
+                      : t('settings.dataSourceSchemaNone')}
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">

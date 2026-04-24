@@ -110,7 +110,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { authEnabled, logout } = useAuth();
-  const { isGuest, isAdminAccount, isAdminMode, toggleAdminSurfaceMode } = useProductSurface();
+  const { isGuest, isAdminAccount } = useProductSurface();
   const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -119,12 +119,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const isDrawer = layout === 'drawer';
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
-  const adminModeActionLabel = t(isAdminMode ? 'nav.adminModeExit' : 'nav.adminModeEnter');
-  const adminModeStatusLabel = t(isAdminMode ? 'nav.adminMode' : 'nav.userMode');
-  const isAdminOnlyRoute = location.pathname.startsWith('/settings/system') || location.pathname.startsWith('/admin/logs');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
-  const logoutPath = routeLocale ? buildLocalizedPath('/login', routeLocale) : '/login';
+  const logoutPath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
 
   useEffect(() => {
     if (isGuest) {
@@ -263,34 +260,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   );
 
-  const adminModeAction = isAdminAccount ? (
-    <button
-      type="button"
-      onClick={() => {
-        const nextMode = isAdminMode ? 'user' : 'admin';
-        toggleAdminSurfaceMode();
-        onNavigate?.();
-        if (nextMode === 'user' && isAdminOnlyRoute) {
-          navigate('/settings', { replace: true });
-        }
-      }}
-      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : 'shell-header-action'}
-      aria-label={adminModeActionLabel}
-    >
-      {isDrawer ? (
-        <>
-          <span className="shell-nav-item__icon" aria-hidden="true">
-            <ShieldCheck className="h-4 w-4" />
-          </span>
-          <DrawerUtilityLabel label={adminModeActionLabel} value={adminModeStatusLabel} />
-        </>
-      ) : (
-        <span>{adminModeActionLabel}</span>
-      )}
-    </button>
-  ) : null;
-
-  const systemAction = isAdminMode ? (
+  const systemAction = isAdminAccount ? (
     <NavLink
       to={consolePath}
       onClick={onNavigate}
@@ -371,7 +341,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {archiveAction}
             {languageAction}
             {settingsAction}
-            {adminModeAction}
             {systemAction}
             {signInAction}
             {logoutAction}
@@ -389,7 +358,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {archiveAction}
             {languageAction}
             {settingsAction}
-            {adminModeAction}
             {systemAction}
             {signInAction}
             {logoutAction}

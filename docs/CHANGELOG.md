@@ -1,5 +1,6 @@
 # Changelog
 
+- 🧭 **Admin console 与登出流收口** — Web 前端移除单独的管理员模式：管理员账号现在与普通用户看到相同的设置、持仓、回测、扫描器等页面，仅在导航栏额外显示 `Console` 控制台入口。登出确认后会回到 guest 首页；`/settings/system` 控制台继续复用现有系统配置 API，新增 Alpha Vantage、Finnhub、Yahoo/YFinance、FMP、GNews、Tavily 等内置数据源的安全可编辑入口，并同步清理 EN/ZH 中遗留的 Admin Mode 文案。后端、SQLite primary、Phase F/G 与 smoke 覆盖语义均未改变。
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

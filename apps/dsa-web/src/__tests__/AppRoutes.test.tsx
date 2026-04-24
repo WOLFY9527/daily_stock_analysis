@@ -204,11 +204,10 @@ describe('AppContent route flows', () => {
 
     renderAt('/settings/system');
 
-    expect(await screen.findByRole('heading', { name: 'Turn on admin tools to open this page' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open personal settings' })).toHaveAttribute('href', '/settings');
+    await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
   });
 
-  it('renders admin routes once admin tools are enabled', async () => {
+  it('renders admin routes for admin accounts without a separate admin mode', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
