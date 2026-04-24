@@ -57,9 +57,11 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
-    expect(techCard).toHaveClass('xl:col-span-6');
-    expect(fundamentalsCard).toHaveClass('xl:col-span-6');
-    expect(screen.getByTestId('home-bento-sibling-row')).toBeInTheDocument();
+    const siblingRow = screen.getByTestId('home-bento-sibling-row');
+    expect(siblingRow).toBeInTheDocument();
+    expect(siblingRow).toHaveClass('grid', 'grid-cols-12', 'gap-6');
+    expect(techCard).toHaveClass('col-span-6');
+    expect(fundamentalsCard).toHaveClass('col-span-6');
     expect(strategyCard.compareDocumentPosition(techCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(strategyCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();

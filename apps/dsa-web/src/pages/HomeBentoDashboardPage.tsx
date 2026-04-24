@@ -535,7 +535,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
           />
 
-          <div data-testid="home-bento-sibling-row" className="contents">
+          <div data-testid="home-bento-sibling-row" className="col-span-12 grid grid-cols-12 gap-6">
             <TechCard
               title={copy.tech.title}
               signals={copy.tech.signals}

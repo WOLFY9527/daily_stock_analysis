@@ -30,7 +30,7 @@ export const BentoCard: React.FC<BentoCardProps> = ({
   <section
     data-testid={testId}
     className={cn(
-      'group relative overflow-hidden rounded-[36px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl transition-transform duration-200 ease-out hover:-translate-y-[2px] sm:p-8',
+      'group relative overflow-hidden rounded-[36px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl transition-transform duration-200 ease-out hover:-translate-y-[2px] sm:p-8',
       className,
     )}
   >

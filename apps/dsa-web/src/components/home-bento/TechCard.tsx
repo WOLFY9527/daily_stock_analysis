@@ -24,7 +24,7 @@ export const TechCard: React.FC<TechCardProps> = ({
 }) => (
   <BentoCard
     eyebrow={title}
-    className="xl:col-span-6"
+    className="col-span-6 xl:col-span-6"
     testId="home-bento-card-tech"
     action={(
       <button
@@ -39,15 +39,15 @@ export const TechCard: React.FC<TechCardProps> = ({
     )}
   >
     <div className="space-y-3">
-      {signals.map((signal) => (
+      {signals.map((signal, index) => (
         <div
           key={signal.label}
-          className="flex items-center justify-between gap-3 rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl"
+          className="flex items-center justify-between gap-3 rounded-[32px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl"
         >
           <span className="text-sm text-white/62">{signal.label}</span>
           <span
             className={`text-sm font-semibold ${getToneTextClass(signal.tone)}`}
-            style={getToneTextStyle(signal.tone, false)}
+            style={getToneTextStyle(signal.tone, index === 0)}
           >
             {signal.value}
           </span>
