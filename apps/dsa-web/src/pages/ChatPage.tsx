@@ -731,7 +731,7 @@ const ChatPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="chat-bento-hero"
     >
-      <div data-testid="chat-workspace" className="workspace-chat-layout flex h-[calc(100vh-80px)] flex-col overflow-hidden">
+      <div data-testid="chat-workspace" className="h-screen w-full flex flex-col overflow-hidden bg-[#030303]">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
@@ -743,25 +743,26 @@ const ChatPage: React.FC = () => {
           onCancel={() => setDeleteConfirmId(null)}
         />
 
-        <div className="workspace-chat-main flex min-h-0 flex-1 overflow-hidden">
-          <div className="workspace-surface relative z-10 mx-auto flex h-full min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden rounded-[1.4rem]">
+        <div className="shrink-0 w-full max-w-6xl mx-auto px-6 pt-6">
           {skillsLoadError ? (
-            <div className="px-4 pb-0 pt-4 md:px-6 md:pt-6">
-              <ApiErrorAlert
-                error={skillsLoadError}
-                actionLabel={chat('retryLoadSkills')}
-                onAction={() => {
-                  void loadSkills();
-                }}
-              />
-            </div>
+            <ApiErrorAlert
+              error={skillsLoadError}
+              actionLabel={chat('retryLoadSkills')}
+              onAction={() => {
+                void loadSkills();
+              }}
+            />
           ) : null}
+        </div>
+
+        <div className="flex-1 overflow-hidden w-full flex justify-center">
+          <div className="w-full max-w-4xl h-full flex flex-col relative">
           {/* Messages */}
           <ScrollArea
-            className="relative z-10 flex-1 min-h-0 overflow-hidden"
+            className="flex-1 overflow-y-auto no-scrollbar p-6"
             viewportRef={messagesViewportRef}
             onScroll={handleMessagesScroll}
-            viewportClassName="h-full p-4 md:p-6"
+            viewportClassName="h-full"
             testId="chat-message-scroll"
           >
             <div data-testid="chat-message-stream" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6">
@@ -934,11 +935,11 @@ const ChatPage: React.FC = () => {
           </ScrollArea>
 
           {/* Input area */}
-          <div className="pointer-events-none shrink-0 bg-gradient-to-t from-black via-black/92 to-transparent px-4 pb-8 pt-4 md:px-6">
+          <div className="shrink-0 w-full pb-8 pt-4 bg-gradient-to-t from-[#030303] to-transparent">
             {chatError ? (
               <ApiErrorAlert
                 error={chatError}
-                className="pointer-events-auto mx-auto mb-3 max-w-4xl"
+                className="mx-auto mb-3 max-w-4xl"
                 actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
                 onAction={
                   chatError.category === 'local_connection_failed'
@@ -950,7 +951,7 @@ const ChatPage: React.FC = () => {
               />
             ) : null}
             {skills.length > 0 && (
-              <div className="pointer-events-auto mx-auto mb-3 max-w-4xl px-2">
+              <div className="mx-auto mb-3 max-w-4xl px-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{chat('skills.sectionTitle')}</p>
@@ -1001,7 +1002,7 @@ const ChatPage: React.FC = () => {
 
             <div
               data-testid="chat-composer-omnibar"
-              className="pointer-events-auto mx-auto max-w-4xl rounded-full border border-white/5 bg-white/[0.02] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-xl transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
+              className="mx-auto max-w-4xl rounded-full border border-white/5 bg-white/[0.02] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-xl transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
             >
               <div className="flex items-end gap-3">
                 <textarea
@@ -1035,7 +1036,7 @@ const ChatPage: React.FC = () => {
               </div>
             </div>
             {isFollowUpContextLoading && (
-              <p className="pointer-events-auto mx-auto mt-2 max-w-4xl text-xs text-secondary-text">
+              <p className="mx-auto mt-2 max-w-4xl text-xs text-secondary-text">
                 {chat('followUpContextLoading')}
               </p>
             )}
