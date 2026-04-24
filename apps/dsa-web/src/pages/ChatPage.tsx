@@ -223,14 +223,6 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     void loadSkills();
   }, [loadSkills]);
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-
 
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
   const selectedSkillLabel = selectedSkill
@@ -739,7 +731,7 @@ const ChatPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="chat-bento-hero"
     >
-      <div data-testid="chat-workspace" className="flex min-h-0 w-full flex-col overflow-hidden bg-[#030303]" style={{ height: "calc(100vh - 80px)" }}>
+      <div data-testid="chat-workspace" className="w-full overflow-hidden bg-[#030303]">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
