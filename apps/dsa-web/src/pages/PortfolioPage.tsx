@@ -15,7 +15,6 @@ import {
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
-import { getMarketDirectionColor } from '../utils/marketColors';
 import type {
   PortfolioAccountItem,
   PortfolioBrokerConnectionItem,
@@ -37,7 +36,6 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const HERO_PNL_NEGATIVE_GLOW = '0 0 30px rgba(248, 113, 113, 0.35)';
 
 const PIE_COLORS = ['#f0f0fa', '#d8d8e2', '#b5b5c1', '#8d8d98', '#6b6b74', '#4c4c53'];
 const ATTRIBUTION_VISUAL_COLORS = ['#7dd3fc', '#86efac', '#fbbf24'];
@@ -1571,7 +1569,6 @@ const PortfolioPage: React.FC = () => {
   const totalCash = snapshot?.totalCash ?? 0;
   const totalMarketValue = snapshot?.totalMarketValue ?? 0;
   const totalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
-  const pnlGlow = totalUnrealizedPnl >= 0 ? HERO_PNL_POSITIVE_GLOW : HERO_PNL_NEGATIVE_GLOW;
 
   return (
     <PageChrome
@@ -1635,8 +1632,9 @@ const PortfolioPage: React.FC = () => {
               </div>
               <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
                 <div
-                  className="text-xl font-medium sm:text-2xl"
-                  style={{ color: getMarketDirectionColor(totalUnrealizedPnl), textShadow: pnlGlow }}
+                  className={totalUnrealizedPnl >= 0
+                    ? 'text-3xl text-emerald-400 tabular-nums drop-shadow-[0_0_24px_rgba(52,211,153,0.5)]'
+                    : 'text-3xl text-rose-400 tabular-nums drop-shadow-[0_0_24px_rgba(248,113,113,0.45)]'}
                 >
                   {formatSignedMoney(totalUnrealizedPnl, snapshotCurrency)}
                 </div>
@@ -1696,89 +1694,95 @@ const PortfolioPage: React.FC = () => {
         </div>
       ) : null}
 
-      {(showCreateAccount || !hasAccounts) ? (
-        <Card padding="md">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-foreground">{copy.createAccountTitle}</h2>
-            {hasAccounts ? (
-              <button
-                type="button"
-                className="btn-secondary text-xs px-3 py-1"
-                onClick={() => {
-                  setShowCreateAccount(false);
-                  setAccountCreateError(null);
-                  setAccountCreateSuccess(null);
-                }}
+      <div className="w-full max-w-[1400px] mx-auto px-8 py-12 flex flex-col gap-16 bg-transparent">
+        {(showCreateAccount || !hasAccounts) ? (
+          <section className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xs text-white/30 uppercase tracking-[0.3em]">{copy.createAccountTitle}</h2>
+              {hasAccounts ? (
+                <button
+                  type="button"
+                  className="btn-secondary text-xs px-3 py-1"
+                  onClick={() => {
+                    setShowCreateAccount(false);
+                    setAccountCreateError(null);
+                    setAccountCreateSuccess(null);
+                  }}
+                >
+                  {copy.collapseCreate}
+                </button>
+              ) : (
+                <span className="text-xs text-white/40">{copy.createAccountHelp}</span>
+              )}
+            </div>
+            {accountCreateError ? (
+              <div className="text-xs text-danger rounded-lg border border-[hsl(var(--accent-danger-hsl)/0.3)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-3 py-2">
+                {accountCreateError}
+              </div>
+            ) : null}
+            {accountCreateSuccess ? (
+              <div className="text-xs text-success rounded-lg border border-[hsl(var(--accent-positive-hsl)/0.3)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-3 py-2">
+                {accountCreateSuccess}
+              </div>
+            ) : null}
+            <form className="grid grid-cols-1 gap-4 md:grid-cols-2" onSubmit={handleCreateAccount}>
+              <input
+                className={`${PORTFOLIO_INPUT_CLASS} md:col-span-2`}
+                placeholder={copy.accountNamePlaceholder}
+                value={accountForm.name}
+                onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))}
+              />
+              <input
+                className={PORTFOLIO_INPUT_CLASS}
+                placeholder={copy.brokerPlaceholder}
+                value={accountForm.broker}
+                onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))}
+              />
+              <input
+                className={PORTFOLIO_INPUT_CLASS}
+                placeholder={copy.baseCurrencyPlaceholder}
+                value={accountForm.baseCurrency}
+                onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))}
+              />
+              <select
+                className={PORTFOLIO_SELECT_CLASS}
+                value={accountForm.market}
+                onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}
               >
-                {copy.collapseCreate}
+                <option value="cn">{copy.marketCn}</option>
+                <option value="hk">{copy.marketHk}</option>
+                <option value="us">{copy.marketUs}</option>
+                <option value="global">{copy.marketGlobal}</option>
+              </select>
+              <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>
+                {accountCreating ? copy.creatingAccount : copy.createAccount}
               </button>
-            ) : (
-              <span className="text-xs text-secondary">{copy.createAccountHelp}</span>
-            )}
-          </div>
-          {accountCreateError ? (
-            <div className="mt-2 text-xs text-danger rounded-lg border border-[hsl(var(--accent-danger-hsl)/0.3)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-2 py-1">
-              {accountCreateError}
-            </div>
-          ) : null}
-          {accountCreateSuccess ? (
-            <div className="mt-2 text-xs text-success rounded-lg border border-[hsl(var(--accent-positive-hsl)/0.3)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-2 py-1">
-              {accountCreateSuccess}
-            </div>
-          ) : null}
-          <form className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2" onSubmit={handleCreateAccount}>
-            <input
-              className="input-terminal text-sm md:col-span-2"
-              placeholder={copy.accountNamePlaceholder}
-              value={accountForm.name}
-              onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))}
-            />
-            <input
-              className="input-terminal text-sm"
-              placeholder={copy.brokerPlaceholder}
-              value={accountForm.broker}
-              onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))}
-            />
-            <input
-              className="input-terminal text-sm"
-              placeholder={copy.baseCurrencyPlaceholder}
-              value={accountForm.baseCurrency}
-              onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))}
-            />
-            <select
-              className="input-terminal text-sm"
-              value={accountForm.market}
-              onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}
-            >
-              <option value="cn">{copy.marketCn}</option>
-              <option value="hk">{copy.marketHk}</option>
-              <option value="us">{copy.marketUs}</option>
-              <option value="global">{copy.marketGlobal}</option>
-            </select>
-            <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>
-              {accountCreating ? copy.creatingAccount : copy.createAccount}
-            </button>
-          </form>
-        </Card>
-      ) : null}
+            </form>
+          </section>
+        ) : null}
 
-      <div className="space-y-3">
-        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalEquity}</p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalEquity, snapshot?.currency || 'CNY')}</p>
-          </Card>
-          <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalMarketValue}</p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalMarketValue, snapshot?.currency || 'CNY')}</p>
-          </Card>
-          <Card variant="gradient" padding="md">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.totalCash}</p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalCash, snapshot?.currency || 'CNY')}</p>
-          </Card>
-          <Card variant="gradient" padding="md">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.fxState}</p>
+        <section data-testid="portfolio-bento-hero" className="flex flex-col items-start gap-4">
+          <h2 className="text-xs text-white/30 uppercase tracking-[0.3em]">{copy.totalEquity}</h2>
+          <div
+            data-testid="portfolio-bento-hero-equity-value"
+            className="text-[120px] font-bold text-white leading-none tracking-tighter drop-shadow-2xl tabular-nums"
+            style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
+          >
+            {formatMoney(totalEquity, snapshotCurrency)}
+          </div>
+          <div
+            className={totalUnrealizedPnl >= 0
+              ? 'text-3xl font-medium text-emerald-400 drop-shadow-[0_0_24px_rgba(52,211,153,0.4)] tabular-nums'
+              : 'text-3xl font-medium text-rose-400 drop-shadow-[0_0_24px_rgba(248,113,113,0.35)] tabular-nums'}
+          >
+            {formatSignedMoney(totalUnrealizedPnl, snapshotCurrency)}
+          </div>
+        </section>
+
+        <section className="grid grid-cols-12 gap-12">
+          <div className="col-span-12 md:col-span-4 flex flex-col gap-8 bg-white/[0.02] backdrop-blur-2xl border border-white/5 p-8 rounded-[40px]">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h3>
               <button
                 type="button"
                 className="btn-secondary !px-3 !py-1 !text-[11px] uppercase tracking-widest shrink-0"
@@ -1788,638 +1792,208 @@ const PortfolioPage: React.FC = () => {
                 {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
               </button>
             </div>
-            <div className="mt-2">{snapshot?.fxStale ? <Badge variant="warning">{copy.fxStale}</Badge> : <Badge variant="success">{copy.fxFresh}</Badge>}</div>
-            {fxRefreshFeedback ? (
-              <p
-                className={`mt-2 text-xs ${
-                  fxRefreshFeedback.tone === 'success'
-                    ? 'text-success'
-                    : fxRefreshFeedback.tone === 'warning'
-                      ? 'text-[hsl(var(--accent-warning-hsl))]'
-                      : 'text-secondary'
-                }`}
-              >
-                {fxRefreshFeedback.text}
-              </p>
-            ) : null}
-          </Card>
-        </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.drawdownTitle}</h3>
-            <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>{copy.maxDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>{copy.currentDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.drawdown?.alert ? 'text-danger font-medium' : 'text-success font-medium'}>{risk?.drawdown?.alert ? copy.yes : copy.no}</span></div>
-            </div>
-          </Card>
-          <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.stopLossTitle}</h3>
-            <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>{copy.triggeredCount}:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.triggeredCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>{copy.nearCount}:</span> <span className="text-foreground font-mono">{risk?.stopLoss?.nearCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.stopLoss?.nearAlert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.stopLoss?.nearAlert ? copy.yes : copy.no}</span></div>
-            </div>
-          </Card>
-          <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.snapshotBasisTitle}</h3>
-            <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>{copy.accountCount}:</span> <span className="text-foreground font-mono">{snapshot?.accountCount ?? 0}</span></div>
-              <div className="flex justify-between"><span>{copy.reportingCurrency}:</span> <span className="text-foreground font-mono">{snapshot?.currency || 'CNY'}</span></div>
-              <div className="flex justify-between"><span>{copy.costMethodLabel}:</span> <span className="text-foreground font-mono">{(snapshot?.costMethod || costMethod).toUpperCase()}</span></div>
-            </div>
-          </Card>
-        </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-3" data-testid="portfolio-attribution-dashboard">
-          <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionPortfolioTitle}</h3>
-            <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(portfolioTopAccount, language)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionAccountWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(portfolioTopIndustry, language)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct)}</span></div>
-            </div>
-            <AttributionHero
-              rows={portfolioDominantRows}
-              testId="portfolio-attribution-hero"
-              title={copy.attributionPortfolioHeroTitle}
-              tooltipTestId="portfolio-attribution-hover-tooltip"
-              activeLinkKey={activeAttributionLinkKey}
-              onActiveLinkChange={setActiveAttributionLinkKey}
-            />
-            <AttributionVisualList
-              title={copy.attributionDominantMix}
-              rows={portfolioDominantRows}
-              testId="portfolio-attribution-visual-summary"
-              activeLinkKey={activeAttributionLinkKey}
-            />
-          </Card>
-          <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionAccountTitle}</h3>
-            <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopAccount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionAccount(riskTopAccount, language)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionEquityWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopAccount?.equity_weight_pct ?? riskTopAccount?.equityWeightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionAccountId}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopAccount?.account_id ?? riskTopAccount?.accountId)}</span></div>
-            </div>
-            <AttributionDistributionBand
-              rows={riskAccountRows}
-              testId="account-attribution-distribution-band"
-              title={copy.attributionAccountDistributionTitle(getAttributionCoverage(riskAccountRows).toFixed(2))}
-              tooltipTestId="account-attribution-distribution-band-tooltip"
-              activeLinkKey={activeAttributionLinkKey}
-              onActiveLinkChange={setActiveAttributionLinkKey}
-            />
-            <AttributionVisualList
-              title={copy.attributionAccountTopList}
-              rows={riskAccountRows}
-              testId="account-attribution-top-list"
-              activeLinkKey={activeAttributionLinkKey}
-            />
-          </Card>
-          <Card padding="md">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionIndustryTitle}</h3>
-            <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between gap-3"><span>{copy.attributionTopIndustry}:</span> <span className="text-foreground font-mono text-right">{formatAttributionIndustry(riskTopIndustry, language)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionIndustryWeight}:</span> <span className="text-foreground font-mono text-right">{formatAttributionWeight(riskTopIndustry?.weight_pct ?? riskTopIndustry?.weightPct)}</span></div>
-              <div className="flex justify-between gap-3"><span>{copy.attributionPositionCount}:</span> <span className="text-foreground font-mono text-right">{formatAttributionCount(riskTopIndustry?.symbol_count ?? riskTopIndustry?.symbolCount)}</span></div>
-            </div>
-            <AttributionDistributionBand
-              rows={riskIndustryRows}
-              testId="industry-attribution-distribution-band"
-              title={copy.attributionIndustryDistributionTitle(getAttributionCoverage(riskIndustryRows).toFixed(2))}
-              tooltipTestId="industry-attribution-distribution-band-tooltip"
-              activeLinkKey={activeAttributionLinkKey}
-              onActiveLinkChange={setActiveAttributionLinkKey}
-            />
-            <AttributionVisualList
-              title={copy.attributionIndustryTopList}
-              rows={riskIndustryRows}
-              testId="industry-attribution-top-list"
-              activeLinkKey={activeAttributionLinkKey}
-            />
-          </Card>
-        </section>
-
-        {writeBlocked && hasAccounts ? (
-          <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2">
-            {copy.allAccountsWarning}
-          </div>
-        ) : null}
-
-        <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-          <div className="xl:col-span-2 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{copy.positionsTitle}</h2>
-              <span className="text-[11px] uppercase tracking-[0.2em] text-secondary">{copy.positionsCount(positionRows.length)}</span>
-            </div>
-            {positionRows.length === 0 ? (
-              <div className="rounded-[28px] border border-white/5 px-6 py-12 text-center">
-                <p className="text-sm text-muted">{copy.noPositions}</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {positionRows.map((row) => (
-                  <article
-                    key={`${row.accountId}-${row.symbol}-${row.market}`}
-                    className="rounded-2xl border border-white/5 bg-transparent px-5 py-4 transition-colors hover:bg-white/[0.02]"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="font-mono text-lg text-white">{row.symbol}</h3>
-                          <span className="text-xs uppercase tracking-[0.18em] text-secondary">{row.accountName}</span>
-                        </div>
-                        <p className="text-sm text-secondary-text">{formatPositionContext(row.market, row.currency, language)}</p>
-                        <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs uppercase tracking-[0.16em] text-secondary">
-                          <span>{copy.positionQuantity} <span className="ml-2 font-mono text-white text-sm normal-case tracking-normal">{row.quantity.toFixed(2)}</span></span>
-                          <span>{copy.positionAvgCost} <span className="ml-2 font-mono text-white text-sm normal-case tracking-normal">{row.avgCost.toFixed(4)}</span></span>
-                          <span>{copy.positionLastPrice} <span className="ml-2 font-mono text-white text-sm normal-case tracking-normal">{row.lastPrice.toFixed(4)}</span></span>
-                        </div>
-                      </div>
-                      <div className="grid min-w-[240px] grid-cols-1 gap-3 text-left lg:text-right">
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.positionMarketValue}</p>
-                          <p className="mt-1 font-mono text-xl text-white">{formatMoney(row.marketValueBase, row.valuationCurrency)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.positionUnrealized}</p>
-                          <p
-                            className="mt-1 font-mono text-2xl"
-                            style={{
-                              color: getMarketDirectionColor(row.unrealizedPnlBase),
-                              textShadow: row.unrealizedPnlBase >= 0 ? HERO_PNL_POSITIVE_GLOW : HERO_PNL_NEGATIVE_GLOW,
-                            }}
-                          >
-                            {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <Card padding="md" className="border-white/5 bg-transparent">
-            <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? copy.sectorConcentration : copy.singleNameConcentration}</h2>
-            {concentrationPieData.length > 0 ? (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={concentrationPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}>
-                      {concentrationPieData.map((entry, index) => (
-                        <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `${Number(value).toFixed(2)}%`} contentStyle={{ backgroundColor: 'var(--surface-2)', borderColor: 'var(--border-muted)' }} />
-                    <Legend wrapperStyle={{ fontSize: '11px', color: 'var(--text-secondary)' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-[var(--border-muted)] bg-[var(--surface-1)] px-4 py-8 text-center h-64 flex flex-col items-center justify-center">
-                <p className="text-[11px] uppercase tracking-widest text-foreground">{copy.emptyConcentration}</p>
-                <p className="mt-2 text-xs leading-5 text-muted-text max-w-[20ch]">
-                  {copy.concentrationHint}
-                </p>
-              </div>
-            )}
-            <div className="mt-3 text-xs text-secondary space-y-1.5 border-t border-[var(--border-muted)] pt-3">
-              <div className="flex justify-between"><span>{copy.concentrationScope}:</span> <span className="text-foreground">{concentrationMode === 'sector' ? copy.concentrationScopeSector : copy.concentrationScopeFallback}</span></div>
-              <div className="flex justify-between"><span>{copy.sectorAlert}:</span> <span className={risk?.sectorConcentration?.alert ? 'text-warning font-medium' : 'text-success font-medium'}>{risk?.sectorConcentration?.alert ? copy.yes : copy.no}</span></div>
-              <div className="flex justify-between"><span>{copy.topWeight}:</span> <span className="text-foreground font-mono">{formatPct(risk?.sectorConcentration?.topWeightPct ?? risk?.concentration?.topWeightPct)}</span></div>
-            </div>
-          </Card>
-        </section>
-
-        <section>
-          <Card padding="md" className="border-[var(--border-strong)] bg-[var(--surface-2)] shadow-[var(--glow-soft)]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[11px] uppercase tracking-[0.14em] text-foreground">{copy.dataSyncTitle}</h3>
-              <span className="text-[10px] uppercase tracking-widest text-muted-text hidden sm:inline">{copy.brokerImport}</span>
-            </div>
-            
-            <div className="space-y-4">
-              {brokerLoadWarning ? (
-                <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-md border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2">
-                  {brokerLoadWarning}
-                </div>
-              ) : null}
-
-              {writableAccount ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5 text-xs text-secondary-text">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-foreground">{copy.currentImportAccount}</span>
-                    <span>{writableAccount.name}</span>
-                    <Badge>{formatAccountMarketLabel(writableAccount.market, language)}</Badge>
-                    <Badge>{writableAccount.baseCurrency}</Badge>
-                  </div>
-                  {brokerConnections.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {brokerConnections.map((connection) => (
-                        <span
-                          key={connection.id}
-                          className="inline-flex items-center gap-1 rounded-full border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)] px-2 py-1 text-[11px]"
-                        >
-                          <span className="font-mono text-foreground">{connection.connectionName}</span>
-                          {connection.brokerAccountRef ? <span>{connection.brokerAccountRef}</span> : null}
-                          <span className="text-muted-text">{formatBrokerConnectionStatus(connection.status, language)}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[11px] text-muted-text">{copy.noBrokerConnections}</p>
-                  )}
-                </div>
-              ) : null}
-              
-              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-                <select className="input-terminal text-sm md:w-[160px] h-[2.6rem]" value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
-                  {brokers.length > 0 ? (
-                    brokers.map((item) => <option key={item.broker} value={item.broker}>{formatBrokerLabel(item.broker, item.displayName, language)}</option>)
-                  ) : (
-                    <option value="huatai">{formatBrokerLabel('huatai', undefined, language)}</option>
-                  )}
+            <div className="space-y-6">
+              <div>
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-white/30">{copy.accountView}</p>
+                <select
+                  value={String(selectedAccount)}
+                  onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  className={PORTFOLIO_SELECT_CLASS}
+                >
+                  <option value="all">{copy.allAccounts}</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name} · {formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} (#{account.id})
+                    </option>
+                  ))}
                 </select>
-                
-                <label className="input-terminal text-sm flex-1 flex items-center justify-center cursor-pointer border-dashed hover:border-[var(--border-strong)] bg-[var(--surface-1)] transition-colors min-h-[2.6rem]">
-                  <span className="truncate text-secondary-text">
-                    {csvFile ? csvFile.name : selectedBroker === 'ibkr' ? copy.selectIbkrExport : copy.selectBrokerExport}
-                  </span>
-                  <input type="file" accept={importFileAccept} className="hidden"
-                    onChange={(e) => setCsvFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
-                </label>
-
-                <div className="flex items-center justify-center gap-2 px-3 py-2 border border-[var(--input-border)] rounded-[var(--theme-control-radius)] bg-[var(--surface-1)] h-[2.6rem]">
-                  <input id="csv-dry-run" type="checkbox" className="theme-checkbox" checked={csvDryRun} onChange={(e) => setCsvDryRun(e.target.checked)} />
-                  <label htmlFor="csv-dry-run" className="text-xs text-secondary-text cursor-pointer whitespace-nowrap">{copy.dryRun}</label>
+              </div>
+              <div>
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-white/30">{copy.costMethod}</p>
+                <select
+                  value={costMethod}
+                  onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
+                  className={PORTFOLIO_SELECT_CLASS}
+                >
+                  <option value="fifo">{copy.costFifo}</option>
+                  <option value="avg">{copy.costAvg}</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-1 gap-3 text-sm text-white/45">
+                <div className="flex items-center justify-between gap-3"><span>{copy.totalCash}</span><span className="text-white tabular-nums">{formatMoney(totalCash, snapshotCurrency)}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>{copy.totalMarketValue}</span><span className="text-white tabular-nums">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className="text-white">{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
+              </div>
+              {fxRefreshFeedback ? (
+                <p className={`text-xs ${fxRefreshFeedback.tone === 'success' ? 'text-success' : fxRefreshFeedback.tone === 'warning' ? 'text-[hsl(var(--accent-warning-hsl))]' : 'text-white/50'}`}>
+                  {fxRefreshFeedback.text}
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-8">
+                <div>
+                  <h3 className="mb-5 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualTrade}</h3>
+                  <form className="space-y-4" onSubmit={handleTradeSubmit}>
+                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol}
+                      onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate}
+                        onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+                      <select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side}
+                        onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
+                        <option value="buy">{copy.buy}</option>
+                        <option value="sell">{copy.sell}</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity}
+                        onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price}
+                        onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee}
+                        onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax}
+                        onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+                    </div>
+                    <button type="submit" className="btn-secondary w-full mt-4 text-[11px]" disabled={!writableAccountId}>{copy.submitTrade}</button>
+                  </form>
                 </div>
-
-                <div className="flex gap-2">
-                  <button type="button" className="btn-secondary h-[2.6rem] px-4 whitespace-nowrap text-xs" disabled={!csvFile || csvParsing} onClick={() => void handleParseCsv()}>
-                    {csvParsing ? copy.parsing : copy.parseFile}
-                  </button>
-                  <button type="button" className="btn-primary h-[2.6rem] px-4 whitespace-nowrap text-xs shadow-[var(--glow-soft)]" disabled={!csvFile || !writableAccountId || csvCommitting} onClick={() => void handleCommitCsv()}>
-                    {csvCommitting ? copy.committing : copy.commitImport}
-                  </button>
+                <div>
+                  <h3 className="mb-5 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualCash}</h3>
+                  <form className="space-y-4" onSubmit={handleCashSubmit}>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <input className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate}
+                        onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+                      <select className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction}
+                        onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
+                        <option value="in">{copy.cashIn}</option>
+                        <option value="out">{copy.cashOut}</option>
+                      </select>
+                    </div>
+                    <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.amount}
+                      value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.currencyOptional(writableAccount?.baseCurrency || '')} value={cashForm.currency}
+                      onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))} />
+                    <button type="submit" className="btn-secondary w-full mt-4 text-[11px]" disabled={!writableAccountId}>{copy.submitCash}</button>
+                  </form>
+                </div>
+                <div>
+                  <h3 className="mb-5 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualCorporate}</h3>
+                  <form className="space-y-4" onSubmit={handleCorporateSubmit}>
+                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.stockCode} value={corpForm.symbol}
+                      onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <input className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate}
+                        onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                      <select className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType}
+                        onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
+                        <option value="cash_dividend">{copy.cashDividend}</option>
+                        <option value="split_adjustment">{copy.splitAdjustment}</option>
+                      </select>
+                    </div>
+                    {corpForm.actionType === 'cash_dividend' ? (
+                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.000001" placeholder={copy.dividendPerShare}
+                        value={corpForm.cashDividendPerShare}
+                        onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value, splitRatio: '' }))} required />
+                    ) : (
+                      <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.000001" placeholder={copy.splitRatio}
+                        value={corpForm.splitRatio}
+                        onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value, cashDividendPerShare: '' }))} required />
+                    )}
+                    <button type="submit" className="btn-secondary w-full mt-4 text-[11px]" disabled={!writableAccountId}>{copy.submitCorporate}</button>
+                  </form>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <p className="text-[11px] text-muted-text">
-                {selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}
-              </p>
-
-              {selectedBroker === 'ibkr' ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-3 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-foreground">{copy.ibkrReadOnlyTitle}</p>
-                      <p className="mt-1 text-[11px] text-muted-text">
-                        {copy.ibkrReadOnlyBody}
-                      </p>
+          <div className="col-span-12 md:col-span-8 flex flex-col">
+            <div className="mb-6 flex items-center justify-between px-4">
+              <h3 className="text-sm text-white/40 uppercase tracking-widest">Current Holdings</h3>
+              <span className="text-xs uppercase tracking-[0.2em] text-white/30">{copy.positionsCount(positionRows.length)}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {positionRows.length === 0 ? (
+                <div className="px-6 py-5 rounded-3xl bg-white/[0.02] text-sm text-white/45">{copy.noPositions}</div>
+              ) : (
+                positionRows.map((row) => (
+                  <div
+                    key={`${row.accountId}-${row.symbol}-${row.market}`}
+                    className="flex justify-between items-center px-6 py-5 rounded-3xl hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                  >
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xl text-white font-medium truncate">{row.symbol}</span>
+                      <span className="text-xs text-white/40 tracking-wider">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</span>
                     </div>
-                    <Badge>{copy.readOnlyBadge}</Badge>
-                  </div>
-                  <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_180px] gap-2">
-                    <input
-                      className="input-terminal text-sm"
-                      placeholder={copy.ibkrApiBasePlaceholder}
-                      value={ibkrApiBaseUrl}
-                      onChange={(e) => setIbkrApiBaseUrl(e.target.value)}
-                    />
-                    <input
-                      className="input-terminal text-sm"
-                      placeholder={copy.ibkrAccountRefPlaceholder}
-                      value={ibkrBrokerAccountRef}
-                      onChange={(e) => setIbkrBrokerAccountRef(e.target.value.toUpperCase())}
-                    />
-                    <input
-                      className="input-terminal text-sm xl:col-span-2"
-                      type="password"
-                      placeholder={copy.ibkrSessionTokenPlaceholder}
-                      value={ibkrSessionToken}
-                      onChange={(e) => setIbkrSessionToken(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="inline-flex items-center gap-2 text-xs text-secondary-text">
-                      <input
-                        type="checkbox"
-                        className="theme-checkbox"
-                        checked={ibkrVerifySsl}
-                        onChange={(e) => setIbkrVerifySsl(e.target.checked)}
-                      />
-                      <span>{copy.verifyIbkrSsl}</span>
-                    </label>
-                    <button
-                      type="button"
-                      className="btn-secondary h-[2.5rem] px-4 text-xs whitespace-nowrap"
-                      disabled={!writableAccountId || !ibkrSessionToken.trim() || ibkrSyncing}
-                      onClick={() => void handleSyncIbkr()}
-                    >
-                      {ibkrSyncing ? copy.syncing : copy.syncIbkr}
-                    </button>
-                  </div>
-                  {ibkrSyncResult ? (
-                    <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.syncResult}</span>
-                      {copy.positionsCountLabel} <span className="text-foreground font-mono">{ibkrSyncResult.positionCount}</span> ·
-                      {copy.cashCurrenciesLabel} <span className="text-foreground font-mono">{ibkrSyncResult.cashBalanceCount}</span> ·
-                      {copy.totalEquity} <span className="text-success font-mono">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span>
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-text">
-                        <span>{copy.accountRef}: <span className="font-mono text-foreground">{ibkrSyncResult.brokerAccountRef}</span></span>
-                        <span>{copy.syncedAt}: <span className="text-foreground">{ibkrSyncResult.syncedAt.replace('T', ' ')}</span></span>
-                        <span>{ibkrSyncResult.snapshotOverlayActive ? copy.syncOverlay : copy.syncSaved}</span>
+                    <div className="flex items-center gap-8">
+                      <div className="text-right">
+                        <div className="text-xs text-white/35 uppercase tracking-[0.16em]">{copy.positionMarketValue}</div>
+                        <div className="text-lg text-white tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
                       </div>
-                      {ibkrSyncResult.warnings.length > 0 ? (
-                        <div className="mt-2 rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-2.5 py-2 text-[11px] text-[hsl(var(--accent-warning-hsl))]">
-                          {ibkrSyncResult.warnings.map((warning) => (
-                            <p key={warning} className="leading-5">
-                              {warning}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
+                      <div className={row.unrealizedPnlBase >= 0
+                        ? 'text-xl text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.3)] tabular-nums'
+                        : 'text-xl text-rose-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.3)] tabular-nums'}>
+                        {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                      </div>
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
 
-              {csvParseResult || csvCommitResult ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                  {csvParseResult ? (
-                    <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.parseResult}</span>
-                      {copy.valid} <span className="text-success font-mono">{csvParseResult.recordCount}</span> ·
-                      {copy.cash} <span className="text-foreground font-mono">{csvParseResult.cashRecordCount ?? 0}</span> ·
-                      {copy.corporateActions} <span className="text-foreground font-mono">{csvParseResult.corporateActionCount ?? 0}</span> ·
-                      {copy.skipped} <span className="text-warning font-mono">{csvParseResult.skippedCount}</span> ·
-                      {copy.errors} <span className="text-danger font-mono">{csvParseResult.errorCount}</span>
-                      {csvParseResult.metadata?.brokerAccountRef ? (
-                        <div className="mt-2 text-[11px] text-muted-text">
-                          {copy.accountMapping}: <span className="font-mono text-foreground">{String(csvParseResult.metadata.brokerAccountRef)}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {csvCommitResult ? (
-                    <div className="text-[11px] tracking-wide text-secondary-text rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)] px-3 py-2.5">
-                      <span className="font-semibold text-foreground uppercase tracking-[0.14em] mr-2">{copy.commitResult}</span>
-                      {copy.inserted} <span className="text-success font-mono">{csvCommitResult.insertedCount}</span> ·
-                      {copy.cash} <span className="text-foreground font-mono">{csvCommitResult.cashInsertedCount ?? 0}</span> ·
-                      {copy.corporateActions} <span className="text-foreground font-mono">{csvCommitResult.corporateActionInsertedCount ?? 0}</span> ·
-                      {copy.duplicates} <span className="text-warning font-mono">{csvCommitResult.duplicateCount}</span> ·
-                      {copy.failed} <span className="text-danger font-mono">{csvCommitResult.failedCount}</span>
-                      {csvCommitResult.duplicateImport ? (
-                        <div className="mt-2 text-[11px] text-[hsl(var(--accent-warning-hsl))]">
-                          {copy.duplicateFingerprintHint}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+        <Disclosure summary={copy.ledgerAudit} defaultOpen={showEventAuditDisclosureByDefault}>
+          <Card padding="md" className="border-0 bg-transparent">
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <select className="input-terminal text-sm" value={eventType} onChange={(e) => setEventType(e.target.value as EventType)}>
+                  <option value="trade">{copy.tradeLedger}</option>
+                  <option value="cash">{copy.cashLedger}</option>
+                  <option value="corporate">{copy.corporateLedger}</option>
+                </select>
+                <button type="button" className="btn-secondary text-[11px] uppercase tracking-widest" onClick={() => void loadEvents()} disabled={eventLoading}>
+                  {eventLoading ? copy.loading : copy.refreshLedger}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input className="input-terminal text-sm" type="date" value={eventDateFrom} onChange={(e) => setEventDateFrom(e.target.value)} />
+                <input className="input-terminal text-sm" type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
+              </div>
+              {(eventType === 'trade' || eventType === 'corporate') ? (
+                <input className="input-terminal text-sm w-full" placeholder={copy.filterBySymbol} value={eventSymbol}
+                  onChange={(e) => setEventSymbol(e.target.value)} />
               ) : null}
-
-              {csvParseResult?.warnings?.length ? (
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.25)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-3 py-2 text-[11px] text-[hsl(var(--accent-warning-hsl))]">
-                  {csvParseResult.warnings[0]}
-                </div>
+              {eventType === 'trade' ? (
+                <select className="input-terminal text-sm w-full" value={eventSide} onChange={(e) => setEventSide(e.target.value as '' | PortfolioSide)}>
+                  <option value="">{copy.allSides}</option>
+                  <option value="buy">{copy.buy}</option>
+                  <option value="sell">{copy.sell}</option>
+                </select>
               ) : null}
+              {eventType === 'cash' ? (
+                <select className="input-terminal text-sm w-full" value={eventDirection}
+                  onChange={(e) => setEventDirection(e.target.value as '' | PortfolioCashDirection)}>
+                  <option value="">{copy.allDirections}</option>
+                  <option value="in">{copy.cashIn}</option>
+                  <option value="out">{copy.cashOut}</option>
+                </select>
+              ) : null}
+              {eventType === 'corporate' ? (
+                <select className="input-terminal text-sm w-full" value={eventActionType}
+                  onChange={(e) => setEventActionType(e.target.value as '' | PortfolioCorporateActionType)}>
+                  <option value="">{copy.allActions}</option>
+                  <option value="cash_dividend">{copy.cashDividend}</option>
+                  <option value="split_adjustment">{copy.splitAdjustment}</option>
+                </select>
+              ) : null}
+              <div className="text-[11px] text-secondary-text">
+                {writeBlocked ? copy.deleteHintBlocked : copy.deleteHintReady}
+              </div>
             </div>
           </Card>
-        </section>
-
-        <section className="space-y-3">
-          <Disclosure summary={copy.manualAdjustments} defaultOpen={false}>
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-              <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualTrade}</h3>
-                <form className="space-y-2" onSubmit={handleTradeSubmit}>
-                  <input className="input-terminal w-full text-sm" placeholder={copy.symbolPlaceholder} value={tradeForm.symbol}
-                    onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="date" value={tradeForm.tradeDate}
-                      onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
-                    <select className="input-terminal text-sm" value={tradeForm.side}
-                      onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
-                      <option value="buy">{copy.buy}</option>
-                      <option value="sell">{copy.sell}</option>
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity}
-                      onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price}
-                      onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee}
-                      onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax}
-                      onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
-                  </div>
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitTrade}</button>
-                </form>
-              </Card>
-
-              <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualCash}</h3>
-                <form className="space-y-2" onSubmit={handleCashSubmit}>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="date" value={cashForm.eventDate}
-                      onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
-                    <select className="input-terminal text-sm" value={cashForm.direction}
-                      onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
-                      <option value="in">{copy.cashIn}</option>
-                      <option value="out">{copy.cashOut}</option>
-                    </select>
-                  </div>
-                  <input className="input-terminal w-full text-sm" type="number" min="0" step="0.0001" placeholder={copy.amount}
-                    value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
-                  <input className="input-terminal w-full text-sm" placeholder={copy.currencyOptional(writableAccount?.baseCurrency || '')} value={cashForm.currency}
-                    onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))} />
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitCash}</button>
-                </form>
-              </Card>
-
-              <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.manualCorporate}</h3>
-                <form className="space-y-2" onSubmit={handleCorporateSubmit}>
-                  <input className="input-terminal w-full text-sm" placeholder={copy.stockCode} value={corpForm.symbol}
-                    onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input-terminal text-sm" type="date" value={corpForm.effectiveDate}
-                      onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
-                    <select className="input-terminal text-sm" value={corpForm.actionType}
-                      onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
-                      <option value="cash_dividend">{copy.cashDividend}</option>
-                      <option value="split_adjustment">{copy.splitAdjustment}</option>
-                    </select>
-                  </div>
-                  {corpForm.actionType === 'cash_dividend' ? (
-                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder={copy.dividendPerShare}
-                      value={corpForm.cashDividendPerShare}
-                      onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value, splitRatio: '' }))} required />
-                  ) : (
-                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder={copy.splitRatio}
-                      value={corpForm.splitRatio}
-                      onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value, cashDividendPerShare: '' }))} required />
-                  )}
-                  <button type="submit" className="btn-secondary w-full mt-2 text-[11px]" disabled={!writableAccountId}>{copy.submitCorporate}</button>
-                </form>
-              </Card>
-            </div>
-          </Disclosure>
-
-          <Disclosure summary={copy.ledgerAudit} defaultOpen={showEventAuditDisclosureByDefault}>
-            <Card padding="md" className="border-0 bg-transparent">
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <select className="input-terminal text-sm" value={eventType} onChange={(e) => setEventType(e.target.value as EventType)}>
-                    <option value="trade">{copy.tradeLedger}</option>
-                    <option value="cash">{copy.cashLedger}</option>
-                    <option value="corporate">{copy.corporateLedger}</option>
-                  </select>
-                  <button type="button" className="btn-secondary text-[11px] uppercase tracking-widest" onClick={() => void loadEvents()} disabled={eventLoading}>
-                    {eventLoading ? copy.loading : copy.refreshLedger}
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <input className="input-terminal text-sm" type="date" value={eventDateFrom} onChange={(e) => setEventDateFrom(e.target.value)} />
-                  <input className="input-terminal text-sm" type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
-                </div>
-                {(eventType === 'trade' || eventType === 'corporate') ? (
-                  <input className="input-terminal text-sm w-full" placeholder={copy.filterBySymbol} value={eventSymbol}
-                    onChange={(e) => setEventSymbol(e.target.value)} />
-                ) : null}
-                {eventType === 'trade' ? (
-                  <select className="input-terminal text-sm w-full" value={eventSide} onChange={(e) => setEventSide(e.target.value as '' | PortfolioSide)}>
-                    <option value="">{copy.allSides}</option>
-                    <option value="buy">{copy.buy}</option>
-                    <option value="sell">{copy.sell}</option>
-                  </select>
-                ) : null}
-                {eventType === 'cash' ? (
-                  <select className="input-terminal text-sm w-full" value={eventDirection}
-                    onChange={(e) => setEventDirection(e.target.value as '' | PortfolioCashDirection)}>
-                    <option value="">{copy.allDirections}</option>
-                    <option value="in">{copy.cashIn}</option>
-                    <option value="out">{copy.cashOut}</option>
-                  </select>
-                ) : null}
-                {eventType === 'corporate' ? (
-                  <select className="input-terminal text-sm w-full" value={eventActionType}
-                    onChange={(e) => setEventActionType(e.target.value as '' | PortfolioCorporateActionType)}>
-                    <option value="">{copy.allActions}</option>
-                    <option value="cash_dividend">{copy.cashDividend}</option>
-                    <option value="split_adjustment">{copy.splitAdjustment}</option>
-                  </select>
-                ) : null}
-                <div className="text-[11px] text-secondary-text">
-                  {writeBlocked ? copy.deleteHintBlocked : copy.deleteHintReady}
-                </div>
-                <div className="rounded-md border border-[var(--border-muted)] bg-[var(--surface-1)] p-2 max-h-none overflow-visible lg:max-h-[400px] lg:overflow-auto">
-                  {eventType === 'trade' && tradeEvents.map((item) => (
-                    <div key={`t-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
-                      <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
-                        <span className="text-muted-text">{item.tradeDate}</span>
-                        <span className={item.side === 'buy' ? 'text-success' : 'text-warning'}>{formatSideLabel(item.side, language)}</span>
-                        <span className="text-foreground font-semibold">{item.symbol}</span>
-                        <span>{copy.quantity} <span className="text-foreground">{item.quantity}</span></span>
-                        <span>{copy.price} <span className="text-foreground">{item.price}</span></span>
-                      </div>
-                      {!writeBlocked ? (
-                        <button
-                          type="button"
-                          className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
-                          onClick={() => openDeleteDialog({
-                            eventType: 'trade',
-                            id: item.id,
-                            message: copy.tradeDeleteMessage(item),
-                          })}
-                        >
-                          {copy.deleteConfirm}
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                  {eventType === 'cash' && cashEvents.map((item) => (
-                    <div key={`c-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
-                      <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
-                        <span className="text-muted-text">{item.eventDate}</span>
-                        <span className={item.direction === 'in' ? 'text-success' : 'text-warning'}>{formatCashDirectionLabel(item.direction, language)}</span>
-                        <span className="text-foreground">{item.amount}</span>
-                        <span className="text-foreground font-semibold">{item.currency}</span>
-                      </div>
-                      {!writeBlocked ? (
-                        <button
-                          type="button"
-                          className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
-                          onClick={() => openDeleteDialog({
-                            eventType: 'cash',
-                            id: item.id,
-                            message: copy.cashDeleteMessage(item),
-                          })}
-                        >
-                          {copy.deleteConfirm}
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                  {eventType === 'corporate' && corporateEvents.map((item) => (
-                    <div key={`ca-${item.id}`} className="flex items-center justify-between gap-3 border-b border-[var(--border-muted)] py-2.5 text-xs text-secondary-text last:border-0 hover:bg-[var(--overlay-hover)] transition-colors px-2">
-                      <div className="min-w-0 font-mono flex-1 flex flex-wrap gap-x-4 gap-y-1">
-                        <span className="text-muted-text">{item.effectiveDate}</span>
-                        <span className="text-info">{formatCorporateActionLabel(item.actionType, language)}</span>
-                        <span className="text-foreground font-semibold">{item.symbol}</span>
-                      </div>
-                      {!writeBlocked ? (
-                        <button
-                          type="button"
-                          className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
-                          onClick={() => openDeleteDialog({
-                            eventType: 'corporate',
-                            id: item.id,
-                            message: copy.corporateDeleteMessage(item),
-                          })}
-                        >
-                          {copy.deleteConfirm}
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                  {!eventLoading
-                    && ((eventType === 'trade' && tradeEvents.length === 0)
-                      || (eventType === 'cash' && cashEvents.length === 0)
-                      || (eventType === 'corporate' && corporateEvents.length === 0)) ? (
-                        <div className="px-2 py-6 text-center">
-                          <p className="text-[11px] uppercase tracking-widest text-foreground">{copy.emptyEventsTitle}</p>
-                          <p className="mt-1 text-xs leading-5 text-muted-text">
-                            {copy.emptyEventsBody}
-                          </p>
-                        </div>
-                      ) : null}
-                </div>
-                <div className="flex flex-col gap-2 text-[11px] uppercase tracking-widest text-secondary-text sm:flex-row sm:items-center sm:justify-between px-1">
-                  <span>{copy.pageLabel} {eventPage} / {totalEventPages}</span>
-                  <div className="flex gap-2">
-                    <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage <= 1}
-                      onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>
-                      {copy.prevPage}
-                    </button>
-                    <button type="button" className="btn-secondary text-[11px] px-4 py-1" disabled={eventPage >= totalEventPages}
-                      onClick={() => setEventPage((prev) => Math.min(totalEventPages, prev + 1))}>
-                      {copy.nextPage}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </Disclosure>
-        </section>
+        </Disclosure>
       </div>
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}
