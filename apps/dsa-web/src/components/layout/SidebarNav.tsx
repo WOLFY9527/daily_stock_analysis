@@ -121,7 +121,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const consoleLabel = t('nav.independentConsole');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
-  const logoutPath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
+  const logoutPath = routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest';
 
   useEffect(() => {
     if (isGuest) {

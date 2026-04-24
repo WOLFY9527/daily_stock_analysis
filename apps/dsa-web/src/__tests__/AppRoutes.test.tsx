@@ -55,6 +55,14 @@ vi.mock('../components/common', async () => {
 vi.mock('../pages/HomeSurfacePage', () => ({
   default: () => (
     <div>
+      {languageState.value === 'en' ? 'Home Workspace' : '首页工作区'}
+    </div>
+  ),
+}));
+
+vi.mock('../pages/GuestHomePage', () => ({
+  default: () => (
+    <div>
       {languageState.value === 'en' ? 'Guest Preview Mode' : '游客预览模式'}
     </div>
   ),
@@ -130,15 +138,48 @@ describe('AppContent route flows', () => {
     languageState.value = 'en';
   });
 
-  it('renders the Chinese guest homepage on the root route for an anonymous session', async () => {
+  it('renders the Chinese home surface on the root route', async () => {
     languageState.value = 'zh';
     renderAt('/');
-    expect(await screen.findByText('游客预览模式')).toBeInTheDocument();
+    expect(await screen.findByText('首页工作区')).toBeInTheDocument();
   });
 
-  it('renders the English guest homepage on the /en route for an anonymous session', async () => {
+  it('renders the English home surface on the /en route', async () => {
     languageState.value = 'en';
     renderAt('/en');
+    expect(await screen.findByText('Home Workspace')).toBeInTheDocument();
+  });
+
+  it('renders the dedicated guest route for an anonymous session', async () => {
+    languageState.value = 'en';
+    renderAt('/guest');
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+  });
+
+  it('keeps the dedicated guest route on guest copy for signed-in sessions', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+    });
+
+    languageState.value = 'en';
+    renderAt('/guest');
+
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    expect(screen.queryByText('Home Workspace')).not.toBeInTheDocument();
+  });
+
+  it('renders the locale-prefixed dedicated guest route', async () => {
+    languageState.value = 'en';
+    renderAt('/en/guest');
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
 

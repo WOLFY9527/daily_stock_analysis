@@ -25,6 +25,7 @@ const AccessGatePage = lazy(() => import('./components/access/AccessGatePage').t
   default: module.AccessGatePage,
 })));
 const HomeSurfacePage = lazy(() => import('./pages/HomeSurfacePage'));
+const GuestHomePage = lazy(() => import('./pages/GuestHomePage'));
 const ScannerSurfacePage = lazy(() => import('./pages/ScannerSurfacePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
@@ -82,7 +83,7 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
       },
       tertiaryAction: {
         label: isEnglish ? 'Back to guest preview' : '返回游客预览',
-        to: '/',
+        to: '/guest',
       },
     };
   }
@@ -115,7 +116,7 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
       },
       tertiaryAction: {
         label: isEnglish ? 'Back to guest preview' : '返回游客预览',
-        to: '/',
+        to: '/guest',
       },
     };
   }
@@ -213,7 +214,7 @@ function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, lang
     },
     tertiaryAction: {
       label: isEnglish ? 'Back to guest preview' : '返回游客预览',
-      to: '/',
+      to: '/guest',
     },
   };
 }
@@ -491,6 +492,7 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
             <Route element={<Shell />}>
               <Route path="/" element={<HomeSurfacePage />} />
+              <Route path="/guest" element={<GuestHomePage />} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
               <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
@@ -504,6 +506,7 @@ export const AppContent: React.FC = () => {
             </Route>
             <Route path="/:locale" element={<Shell />}>
               <Route index element={<HomeSurfacePage />} />
+              <Route path="guest" element={<GuestHomePage />} />
               <Route path="scanner" element={<ScannerSurfacePage />} />
               <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />

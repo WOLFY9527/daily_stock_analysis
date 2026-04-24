@@ -170,7 +170,7 @@ describe('Shell', () => {
     });
   });
 
-  it('shows a confirmation dialog before logout and returns to guest home', async () => {
+  it('shows a confirmation dialog before logout and returns to the guest page', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ThemeProvider>
@@ -187,7 +187,7 @@ describe('Shell', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logoutConfirm') }));
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/'));
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/guest'));
   });
 
   it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {

@@ -88,6 +88,14 @@ test.describe('web deployment smoke', () => {
     await expect(page.getByRole('button', { name: /授权进入工作台|完成设置并登录|Sign in|Set password/i })).toBeVisible();
   });
 
+  test('guest route loads the dedicated guest surface', async ({ page }) => {
+    await page.goto('/guest');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('body')).toContainText(/游客预览模式|Guest Preview Mode|输入股票代码或名称|Start with a symbol/, {
+      timeout: 15_000,
+    });
+  });
+
   test('reset-password route is reachable when runtime allows it', async ({ page }) => {
     const authStatus = await getAuthStatus(page);
     await page.goto('/reset-password');
