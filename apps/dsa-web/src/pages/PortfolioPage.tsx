@@ -36,6 +36,9 @@ import type {
   PortfolioTradeListItem,
 } from '../types/portfolio';
 
+const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
+const HERO_PNL_NEGATIVE_GLOW = '0 0 30px rgba(248, 113, 113, 0.35)';
+
 const PIE_COLORS = ['#f0f0fa', '#d8d8e2', '#b5b5c1', '#8d8d98', '#6b6b74', '#4c4c53'];
 const ATTRIBUTION_VISUAL_COLORS = ['#7dd3fc', '#86efac', '#fbbf24'];
 const DEFAULT_PAGE_SIZE = 20;
@@ -358,6 +361,13 @@ function formatPositionContext(market: string, currency: string, language: Portf
     market: marketLabel,
     currency: currency || '--',
   });
+}
+
+function formatSignedMoney(value: number, currency: string): string {
+  const formatted = formatMoney(Math.abs(value), currency);
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `-${formatted}`;
+  return formatted;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -1555,38 +1565,13 @@ const PortfolioPage: React.FC = () => {
     || Boolean(eventSide)
     || Boolean(eventDirection)
     || Boolean(eventActionType);
-  const heroItems: BentoHeroItem[] = [
-    {
-      label: copy.snapshotBasisTitle,
-      value: formatMoney(snapshot?.totalEquity, snapshot?.currency || 'CNY'),
-      detail: language === 'en' ? 'Combined snapshot' : '组合快照',
-      tone: 'bullish',
-      testId: 'portfolio-bento-hero-equity',
-      valueTestId: 'portfolio-bento-hero-equity-value',
-    },
-    {
-      label: language === 'en' ? 'Cash buffer' : '现金缓冲',
-      value: formatMoney(snapshot?.totalCash, snapshot?.currency || 'CNY'),
-      detail: language === 'en' ? 'Liquidity reserve' : '流动性预留',
-      testId: 'portfolio-bento-hero-cash',
-    },
-    {
-      label: copy.accountCount,
-      value: String(snapshot?.accountCount ?? accounts.length),
-      detail: selectedAccount === 'all' ? copy.allAccounts : `${selectedAccount}`,
-      testId: 'portfolio-bento-hero-accounts',
-    },
-    {
-      label: copy.fxState,
-      value: snapshot?.fxStale
-        ? (language === 'en' ? 'Stale rates' : '待刷新')
-        : (language === 'en' ? 'Fresh rates' : '已同步'),
-      detail: copy.refreshFx,
-      tone: snapshot?.fxStale ? 'bearish' : 'bullish',
-      testId: 'portfolio-bento-hero-fx',
-      valueTestId: 'portfolio-bento-hero-fx-value',
-    },
-  ];
+  const heroItems: BentoHeroItem[] = [];
+  const snapshotCurrency = snapshot?.currency || 'CNY';
+  const totalEquity = snapshot?.totalEquity ?? 0;
+  const totalCash = snapshot?.totalCash ?? 0;
+  const totalMarketValue = snapshot?.totalMarketValue ?? 0;
+  const totalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
+  const pnlGlow = totalUnrealizedPnl >= 0 ? HERO_PNL_POSITIVE_GLOW : HERO_PNL_NEGATIVE_GLOW;
 
   return (
     <PageChrome
@@ -1638,14 +1623,34 @@ const PortfolioPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="portfolio-bento-hero"
       headerChildren={hasAccounts ? (
-          <div className="workspace-surface-muted p-3.5">
-            <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_220px_minmax(0,260px)] xl:items-end">
-              <div>
-                <p className="mb-1 text-xs text-secondary">{copy.accountView}</p>
+          <section data-testid="portfolio-bento-hero" className="space-y-6 rounded-[32px] border border-white/5 bg-transparent px-1 py-2">
+            <div className="space-y-3">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-secondary">{copy.snapshotBasisTitle}</p>
+              <div
+                data-testid="portfolio-bento-hero-equity-value"
+                className="text-5xl font-medium tracking-[-0.06em] text-white sm:text-7xl xl:text-8xl"
+                style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
+              >
+                {formatMoney(totalEquity, snapshotCurrency)}
+              </div>
+              <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+                <div
+                  className="text-xl font-medium sm:text-2xl"
+                  style={{ color: getMarketDirectionColor(totalUnrealizedPnl), textShadow: pnlGlow }}
+                >
+                  {formatSignedMoney(totalUnrealizedPnl, snapshotCurrency)}
+                </div>
+                <p className="pb-1 text-sm text-secondary-text">{copy.positionUnrealized}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.2fr)_220px_220px]">
+              <div className="min-w-0">
+                <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.accountView}</p>
                 <select
                   value={String(selectedAccount)}
                   onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                  className="input-terminal w-full text-sm"
+                  className="input-terminal w-full border-white/5 bg-white/[0.02] text-sm"
                 >
                   <option value="all">{copy.allAccounts}</option>
                   {accounts.map((account) => (
@@ -1656,21 +1661,26 @@ const PortfolioPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <p className="mb-1 text-xs text-secondary">{copy.costMethod}</p>
+                <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.costMethod}</p>
                 <select
                   value={costMethod}
                   onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
-                  className="input-terminal w-full text-sm"
+                  className="input-terminal w-full border-white/5 bg-white/[0.02] text-sm"
                 >
                   <option value="fifo">{copy.costFifo}</option>
                   <option value="avg">{copy.costAvg}</option>
                 </select>
               </div>
-              <p className="workspace-header-actions-note xl:text-right">
-                {copy.scopeHint}
-              </p>
+              <div className="flex flex-col justify-end gap-1 text-sm text-secondary-text xl:items-end">
+                <p>{copy.scopeHint}</p>
+                <div className="flex flex-wrap gap-4 text-xs uppercase tracking-[0.18em] text-secondary">
+                  <span>{copy.totalCash}: <span className="text-white">{formatMoney(totalCash, snapshotCurrency)}</span></span>
+                  <span>{copy.totalMarketValue}: <span className="text-white">{formatMoney(totalMarketValue, snapshotCurrency)}</span></span>
+                  <span data-testid="portfolio-bento-hero-fx-value">{snapshot?.fxStale ? (language === 'en' ? 'FX stale' : 'FX 待刷新') : (language === 'en' ? 'FX fresh' : 'FX 已同步')}</span>
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
         ) : null}
     >
 
@@ -1898,54 +1908,62 @@ const PortfolioPage: React.FC = () => {
           </div>
         ) : null}
 
-        <section className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-          <Card className="xl:col-span-2" padding="md">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.positionsTitle}</h2>
-              <span className="text-[11px] uppercase tracking-widest text-secondary">{copy.positionsCount(positionRows.length)}</span>
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="xl:col-span-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{copy.positionsTitle}</h2>
+              <span className="text-[11px] uppercase tracking-[0.2em] text-secondary">{copy.positionsCount(positionRows.length)}</span>
             </div>
             {positionRows.length === 0 ? (
-              <p className="text-sm text-muted py-6 text-center">{copy.noPositions}</p>
+              <div className="rounded-[28px] border border-white/5 px-6 py-12 text-center">
+                <p className="text-sm text-muted">{copy.noPositions}</p>
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-[11px] uppercase tracking-[0.14em] text-secondary border-b border-[var(--border-muted)]">
-                    <tr>
-                      <th className="text-left py-2 pr-2 font-medium">{copy.positionAccount}</th>
-                      <th className="text-left py-2 pr-2 font-medium">{copy.positionCode}</th>
-                      <th className="text-left py-2 pr-2 font-medium">{copy.positionMarketCurrency}</th>
-                      <th className="text-right py-2 pr-2 font-medium">{copy.positionQuantity}</th>
-                      <th className="text-right py-2 pr-2 font-medium">{copy.positionAvgCost}</th>
-                      <th className="text-right py-2 pr-2 font-medium">{copy.positionLastPrice}</th>
-                      <th className="text-right py-2 pr-2 font-medium">{copy.positionMarketValue}</th>
-                      <th className="text-right py-2 font-medium">{copy.positionUnrealized}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {positionRows.map((row) => (
-                      <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-[var(--border-muted)] hover:bg-[var(--overlay-hover)] transition-colors">
-                        <td className="py-2.5 pr-2 text-secondary-text text-xs">{row.accountName}</td>
-                        <td className="py-2.5 pr-2 font-mono text-foreground text-xs">{row.symbol}</td>
-                        <td className="py-2.5 pr-2 text-secondary-text text-xs">{formatPositionContext(row.market, row.currency, language)}</td>
-                        <td className="py-2.5 pr-2 text-right font-mono text-secondary-text text-xs">{row.quantity.toFixed(2)}</td>
-                        <td className="py-2.5 pr-2 text-right font-mono text-secondary-text text-xs">{row.avgCost.toFixed(4)}</td>
-                        <td className="py-2.5 pr-2 text-right font-mono text-secondary-text text-xs">{row.lastPrice.toFixed(4)}</td>
-                        <td className="py-2.5 pr-2 text-right font-mono text-foreground text-xs">{formatMoney(row.marketValueBase, row.valuationCurrency)}</td>
-                        <td
-                          className="py-2.5 text-right font-mono text-xs"
-                          style={{ color: getMarketDirectionColor(row.unrealizedPnlBase) }}
-                        >
-                          {formatMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-3">
+                {positionRows.map((row) => (
+                  <article
+                    key={`${row.accountId}-${row.symbol}-${row.market}`}
+                    className="rounded-2xl border border-white/5 bg-transparent px-5 py-4 transition-colors hover:bg-white/[0.02]"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="font-mono text-lg text-white">{row.symbol}</h3>
+                          <span className="text-xs uppercase tracking-[0.18em] text-secondary">{row.accountName}</span>
+                        </div>
+                        <p className="text-sm text-secondary-text">{formatPositionContext(row.market, row.currency, language)}</p>
+                        <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs uppercase tracking-[0.16em] text-secondary">
+                          <span>{copy.positionQuantity} <span className="ml-2 font-mono text-white text-sm normal-case tracking-normal">{row.quantity.toFixed(2)}</span></span>
+                          <span>{copy.positionAvgCost} <span className="ml-2 font-mono text-white text-sm normal-case tracking-normal">{row.avgCost.toFixed(4)}</span></span>
+                          <span>{copy.positionLastPrice} <span className="ml-2 font-mono text-white text-sm normal-case tracking-normal">{row.lastPrice.toFixed(4)}</span></span>
+                        </div>
+                      </div>
+                      <div className="grid min-w-[240px] grid-cols-1 gap-3 text-left lg:text-right">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.positionMarketValue}</p>
+                          <p className="mt-1 font-mono text-xl text-white">{formatMoney(row.marketValueBase, row.valuationCurrency)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-secondary">{copy.positionUnrealized}</p>
+                          <p
+                            className="mt-1 font-mono text-2xl"
+                            style={{
+                              color: getMarketDirectionColor(row.unrealizedPnlBase),
+                              textShadow: row.unrealizedPnlBase >= 0 ? HERO_PNL_POSITIVE_GLOW : HERO_PNL_NEGATIVE_GLOW,
+                            }}
+                          >
+                            {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
               </div>
             )}
-          </Card>
+          </div>
 
-          <Card padding="md">
+          <Card padding="md" className="border-white/5 bg-transparent">
             <h2 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{concentrationMode === 'sector' ? copy.sectorConcentration : copy.singleNameConcentration}</h2>
             {concentrationPieData.length > 0 ? (
               <div className="h-64">
