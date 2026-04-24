@@ -1180,7 +1180,7 @@ describe('BacktestPage', () => {
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: `${bt('en', 'resultPage.documentTitle')} #99` })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: bt('en', 'resultPage.hero.backToConfig') })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('tab', { name: bt('en', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.audit') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.trades') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.parameters') })).toBeInTheDocument();

@@ -150,6 +150,7 @@ describe('LoginPage', () => {
   });
 
   it('links the login page to the reset-password route', () => {
+    window.history.replaceState(window.history.state, '', '/login?redirect=%2Fsettings');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fsettings')]);
     useAuthMock.mockReturnValue({
       login: vi.fn(),

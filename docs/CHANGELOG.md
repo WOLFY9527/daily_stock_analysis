@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🌫️ **Web smoke script now targets the canonical smoke surface only** — `apps/dsa-web` 的 `npm run test:smoke` 现在只执行 `e2e/smoke.spec.ts`，不再把 `portfolio-ibkr-sync.spec.ts` 这类专用 e2e 一起纳入发布前 smoke。该命令同时会显式启动本地 backend + `vite preview` 后再跑 smoke，避免 `playwright webServer` 在当前环境里偶发漏起前端导致的假失败。与此同时，canonical smoke 已补齐 `/portfolio` 与 `/settings/system` 路由验证，并对本地 `authEnabled=false` 与启用认证两种登录变体保持兼容。
 - 🧯 **Phase F partial-Postgres fallback hardening** — 当 `broker_connections`、`portfolio_sync_states` 等 Phase F PostgreSQL 表只完成了部分建表或被跨 phase 清理移除时，portfolio metadata / latest-sync 读路径现在会安全回退到 legacy storage，而不是直接抛出 `UndefinedTable`。本次同时补充了 real-PG 回归覆盖，锁定 broker connection surface、latest sync surface，以及 cash-ledger comparison 在多用户 account scope 下的边界行为。
 - 🧮 **Rule backtest fixed-amount accumulation now honors insufficient-cash policy** — `periodic_accumulation` 在 `fixed_amount` 模式下不再用剩余现金做隐式部分成交；当剩余现金低于目标金额时，现在会按既有 `skip_when_insufficient_cash / stop_when_insufficient_cash` 语义稳定跳过或停止。此次同时补上了中文按金额定投解析回归，以及 single-account small-capital 边界测试，避免 deterministic 回测结果在资金尾段悄悄漂移。
 - 📊 **Rule backtest now stores Sharpe ratio and hardens custom benchmark readback** — deterministic rule backtest metrics 现在新增 `sharpe_ratio`，并随 run/detail/history/support manifest 一起稳定暴露；同时补上 `custom_code` benchmark 成功路径回归，锁定策略收益与自定义基准收益的比较载荷，避免 benchmark 只在 fallback/unavailable 路径上被测试到。
