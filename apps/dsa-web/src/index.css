@@ -7961,11 +7961,8 @@ html[data-theme='terminal'] body::before {
 }
 
 .backtest-cockpit {
-  display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(18rem, 3fr) minmax(0, 7fr);
-  gap: clamp(1.25rem, 2vw, 2rem);
   align-items: start;
 }
 
@@ -7977,15 +7974,112 @@ html[data-theme='terminal'] body::before {
 .backtest-cockpit__console {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .backtest-cockpit__monitor {
-  position: relative;
-  top: auto;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
+}
+
+.backtest-control-rail .product-command-card,
+.backtest-control-rail .product-section-card,
+.backtest-control-rail .summary-block,
+.backtest-control-rail .metric-card,
+.backtest-control-rail .preview-card,
+.backtest-control-rail .chart-card,
+.backtest-control-rail .summary-strip__item,
+.backtest-control-rail .backtest-normal-step,
+.backtest-control-rail .backtest-normal-summary {
+  height: auto;
+  border-color: rgb(255 255 255 / 0.05);
+  background: rgb(255 255 255 / 0.02);
+  box-shadow: none;
+  border-radius: 1.5rem;
+}
+
+.backtest-control-rail .product-command-input,
+.backtest-control-rail .input-surface,
+.backtest-control-rail select,
+.backtest-control-rail input,
+.backtest-control-rail textarea {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.02);
+  box-shadow: none;
+}
+
+.backtest-control-rail .product-command-input:focus,
+.backtest-control-rail .input-surface:focus,
+.backtest-control-rail select:focus,
+.backtest-control-rail input:focus,
+.backtest-control-rail textarea:focus {
+  border-color: rgb(255 255 255 / 0.16);
+  outline: none;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+.backtest-control-rail .theme-field-label,
+.backtest-control-rail .product-field label {
+  color: rgb(255 255 255 / 0.4);
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.backtest-control-rail .backtest-normal-stepper,
+.backtest-control-rail .backtest-control-stepper {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.backtest-control-rail .backtest-normal-step,
+.backtest-control-rail .backtest-control-step {
+  min-width: 0;
+}
+
+.backtest-result-rail {
+  min-width: 0;
+}
+
+.backtest-monitor-empty {
+  display: flex;
+  min-height: 31.25rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border-radius: 1.9rem;
+  border: 1px dashed rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.01);
+  padding: 2rem;
+  text-align: center;
+}
+
+.backtest-monitor-empty__icon {
+  width: 5rem;
+  height: 5rem;
+  fill: none;
+  stroke: rgb(255 255 255 / 0.22);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.backtest-monitor-empty__axis {
+  stroke: rgb(255 255 255 / 0.14);
+}
+
+.backtest-monitor-empty h3 {
+  margin: 0;
+  color: rgb(255 255 255 / 0.62);
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+.backtest-monitor-empty p {
+  margin: 0;
+  color: rgb(255 255 255 / 0.32);
+  font-size: 0.875rem;
 }
 
 .backtest-equity-monitor {
@@ -8056,7 +8150,7 @@ html[data-theme='terminal'] body::before {
 
 .backtest-monitor-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -8073,7 +8167,7 @@ html[data-theme='terminal'] body::before {
 
 .backtest-monitor-metric strong {
   color: rgb(255 255 255 / 0.9);
-  font-size: clamp(2.6rem, 5vw, 4.8rem);
+  font-size: clamp(1.8rem, 3vw, 3.2rem);
   font-weight: 500;
   line-height: 0.95;
   letter-spacing: 0;
@@ -8083,58 +8177,6 @@ html[data-theme='terminal'] body::before {
   color: rgb(255 255 255 / 0.36);
   font-size: 0.75rem;
   line-height: 1.6;
-}
-
-.backtest-cockpit__console .product-command-card,
-.backtest-cockpit__console .product-section-card,
-.backtest-cockpit__console .summary-block,
-.backtest-cockpit__console .metric-card,
-.backtest-cockpit__console .preview-card,
-.backtest-cockpit__console .chart-card,
-.backtest-cockpit__console .summary-strip__item,
-.backtest-cockpit__console .backtest-normal-step,
-.backtest-cockpit__console .backtest-normal-summary {
-  border-color: rgb(255 255 255 / 0.05);
-  background: rgb(255 255 255 / 0.02);
-  box-shadow: none;
-}
-
-.backtest-cockpit__console .product-command-input,
-.backtest-cockpit__console .input-surface,
-.backtest-cockpit__console select,
-.backtest-cockpit__console input,
-.backtest-cockpit__console textarea {
-  border-color: transparent;
-  background: rgb(255 255 255 / 0.02);
-  box-shadow: none;
-}
-
-.backtest-cockpit__console .product-command-input:focus,
-.backtest-cockpit__console .input-surface:focus,
-.backtest-cockpit__console select:focus,
-.backtest-cockpit__console input:focus,
-.backtest-cockpit__console textarea:focus {
-  border-color: rgb(255 255 255 / 0.16);
-  outline: none;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
-}
-
-.backtest-cockpit__console .theme-field-label,
-.backtest-cockpit__console .product-field label {
-  color: rgb(255 255 255 / 0.4);
-  font-size: 0.625rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.backtest-cockpit__console .backtest-normal-stepper,
-.backtest-cockpit__console .backtest-control-stepper {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.backtest-cockpit__console .backtest-normal-step,
-.backtest-cockpit__console .backtest-control-step {
-  min-width: 0;
 }
 
 .backtest-v1-page.backtest-result-page {
@@ -9027,15 +9069,6 @@ html[data-theme='terminal'] body::before {
 }
 
 @media (max-width: 1079px) {
-  .backtest-cockpit {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .backtest-cockpit__monitor {
-    position: static;
-    order: -1;
-  }
-
   .backtest-equity-monitor {
     min-height: 22rem;
   }
@@ -9050,6 +9083,12 @@ html[data-theme='terminal'] body::before {
 
   .backtest-normal-workspace {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .backtest-monitor-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

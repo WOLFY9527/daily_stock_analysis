@@ -896,13 +896,14 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'max-w-[1400px]', 'mx-auto', 'px-4', 'md:px-8', 'pt-4', 'pb-24', 'min-h-screen', 'flex', 'flex-col', 'bg-transparent', 'gap-6', 'md:gap-8');
-    expect(screen.getByTestId('backtest-cockpit')).not.toHaveClass('overflow-hidden');
-    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('flex', 'flex-col');
+    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('mt-6', 'grid', 'min-h-0', 'w-full', 'flex-1', 'grid-cols-1', 'gap-6', 'lg:grid-cols-12', 'lg:gap-8');
+    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('flex', 'flex-col', 'gap-6', 'lg:col-span-4', 'xl:col-span-3');
     expect(screen.getByTestId('backtest-cockpit-console')).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex', 'flex-col');
+    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-6', 'lg:col-span-8', 'xl:col-span-9');
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('backtest-equity-monitor')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-monitor-metrics')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-monitor-empty')).toBeInTheDocument();
+    expect(screen.queryByTestId('backtest-equity-monitor')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('backtest-monitor-metrics')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') })).toBeInTheDocument();
@@ -916,6 +917,8 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-entry-shell')).toBeInTheDocument();
     expect(screen.getByText('先完成配置，再进入独立结果控制台。')).toBeInTheDocument();
     expect(screen.getByText('当前还没有进行中的结果')).toBeInTheDocument();
+    expect(screen.getByText('完成左侧参数配置，启动回测')).toBeInTheDocument();
+    expect(screen.getByText('资金曲线与绩效评估将在此处生成')).toBeInTheDocument();
 
     const activeStage = screen.getByTestId('backtest-normal-active-stage');
     expect(within(activeStage).getByTestId('backtest-control-section-symbol')).toHaveAttribute('data-active', 'true');
@@ -1139,6 +1142,23 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.parameters') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.history') })).toBeInTheDocument();
   }, 10000);
+
+  it('reveals the right-side KPI console after a historical run starts', async () => {
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('tab', { name: '历史评估' }));
+    fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') }));
+    fireEvent.click(screen.getByRole('button', { name: '运行历史评估' }));
+
+    await waitFor(() => expect(runBacktest).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId('backtest-monitor-empty')).not.toBeInTheDocument();
+    expect(screen.getByTestId('backtest-monitor-result-state')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-equity-monitor')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-monitor-metrics')).toBeInTheDocument();
+  });
 
   it('opens deterministic history items in the dedicated result page route', async () => {
     const historySummary = makeRuleRunResponse({
