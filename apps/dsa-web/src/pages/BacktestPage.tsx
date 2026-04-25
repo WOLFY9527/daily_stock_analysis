@@ -1040,79 +1040,80 @@ const BacktestPage: React.FC = () => {
   return (
     <PageChrome
       pageTestId="backtest-bento-page"
-      pageClassName="theme-page-transition backtest-v1-page workspace-page--backtest gemini-bento-page--backtest"
-        eyebrow={bt(language, 'page.headerEyebrow')}
-        title={bt(language, 'page.headerTitle')}
-        description={bt(language, 'page.headerDescription', {
-          benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
-        })}
-        headerClassName="backtest-v1-header"
-        headerContentClassName="backtest-v1-header__layout"
-        descriptionClassName="backtest-v1-header__description"
-        actions={(
-          <div className="backtest-header-toggles">
+      pageClassName="backtest-v1-page workspace-page--backtest gemini-bento-page--backtest"
+      scrollMode="contained"
+      eyebrow={bt(language, 'page.headerEyebrow')}
+      title={bt(language, 'page.headerTitle')}
+      description={bt(language, 'page.headerDescription', {
+        benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
+      })}
+      headerClassName="backtest-v1-header"
+      headerContentClassName="backtest-v1-header__layout"
+      descriptionClassName="backtest-v1-header__description"
+      actions={(
+        <div className="backtest-header-toggles">
+          <button
+            type="button"
+            className={CARD_BUTTON_CLASS}
+            data-testid="backtest-bento-drawer-trigger"
+            onClick={() => setIsBriefDrawerOpen(true)}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+          </button>
+          <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
             <button
               type="button"
-              className={CARD_BUTTON_CLASS}
-              data-testid="backtest-bento-drawer-trigger"
-              onClick={() => setIsBriefDrawerOpen(true)}
+              role="tab"
+              aria-selected={activeModule === 'rule'}
+              className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
+              onClick={() => setActiveModule('rule')}
             >
-              <PanelRightOpen className="h-4 w-4" />
-              <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+              {bt(language, 'page.ruleTab')}
             </button>
-            <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeModule === 'rule'}
-                className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
-                onClick={() => setActiveModule('rule')}
-              >
-                {bt(language, 'page.ruleTab')}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeModule === 'historical'}
-                className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
-                onClick={() => setActiveModule('historical')}
-              >
-                {bt(language, 'page.historicalTab')}
-              </button>
-            </div>
-            <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={controlPanelMode === 'normal'}
-                className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
-                onClick={() => setControlPanelMode('normal')}
-              >
-                {bt(language, 'page.normalMode')}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={controlPanelMode === 'professional'}
-                className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
-                onClick={() => setControlPanelMode('professional')}
-              >
-                {bt(language, 'page.professionalMode')}
-              </button>
-            </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeModule === 'historical'}
+              className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
+              onClick={() => setActiveModule('historical')}
+            >
+              {bt(language, 'page.historicalTab')}
+            </button>
           </div>
-        )}
+          <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={controlPanelMode === 'normal'}
+              className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
+              onClick={() => setControlPanelMode('normal')}
+            >
+              {bt(language, 'page.normalMode')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={controlPanelMode === 'professional'}
+              className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
+              onClick={() => setControlPanelMode('professional')}
+            >
+              {bt(language, 'page.professionalMode')}
+            </button>
+          </div>
+        </div>
+      )}
       heroItems={heroItems}
       heroTestId="backtest-bento-hero"
     >
 
-      <div data-testid="backtest-v1-page">
-        <div className="backtest-cockpit" data-testid="backtest-cockpit">
-          <aside className="backtest-cockpit__console" data-testid="backtest-cockpit-console">
+      <div data-testid="backtest-v1-page" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="backtest-cockpit flex-1 h-full min-h-0 overflow-hidden" data-testid="backtest-cockpit">
+          <aside className="backtest-cockpit__console h-full min-h-0 flex flex-col overflow-y-auto no-scrollbar" data-testid="backtest-cockpit-console">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={activeModule}
-                className={`backtest-v1-stage backtest-v1-stage--${activeModule}`}
+                className={`backtest-v1-stage backtest-v1-stage--${activeModule} h-full min-h-0`}
                 data-testid="backtest-v1-stage"
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1231,7 +1232,7 @@ const BacktestPage: React.FC = () => {
               </motion.div>
             </AnimatePresence>
           </aside>
-          <section className="backtest-cockpit__monitor" data-testid="backtest-cockpit-monitor">
+          <section className="backtest-cockpit__monitor flex-1 min-h-0 flex flex-col overflow-y-auto no-scrollbar" data-testid="backtest-cockpit-monitor">
             <div className="backtest-equity-monitor" data-testid="backtest-equity-monitor">
               <div className="backtest-equity-monitor__header">
                 <span>{language === 'en' ? 'Equity Signal' : '资金曲线'}</span>

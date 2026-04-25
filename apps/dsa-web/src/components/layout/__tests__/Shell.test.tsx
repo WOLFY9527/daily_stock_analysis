@@ -251,6 +251,7 @@ describe('Shell', () => {
 
     expect(document.querySelector('.theme-shell--scanner')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--scanner')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('flex');
     expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
     expect(document.documentElement.dataset.scannerShell).toBe('true');
     expect(document.body.dataset.scannerShell).toBe('true');
@@ -268,6 +269,7 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.shell-content-frame--backtest')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('flex');
   });
 
   it('shows the console entry for admin accounts without an admin-mode switch', async () => {

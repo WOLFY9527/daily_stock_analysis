@@ -891,12 +891,14 @@ describe('BacktestPage', () => {
 
     expect(screen.getByTestId('backtest-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('backtest-bento-page')).toHaveClass('bento-surface-root');
+    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
+    expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('min-h-full', 'overflow-visible');
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByTestId('backtest-v1-page')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-cockpit')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-cockpit-console')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-cockpit-monitor')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
+    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('flex-1', 'h-full', 'min-h-0', 'overflow-hidden');
+    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('h-full', 'min-h-0', 'flex', 'flex-col', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('backtest-equity-monitor')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-monitor-metrics')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
@@ -1060,6 +1062,9 @@ describe('BacktestPage', () => {
     const controlPanel = screen.getByTestId('backtest-control-panel');
     const displayBoard = screen.getByTestId('backtest-display-board');
     expect(screen.getByTestId('backtest-control-window')).toBeInTheDocument();
+    expect(unifiedShell).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
+    expect(controlPanel).toHaveClass('h-full', 'min-h-0', 'flex', 'flex-col', 'overflow-y-auto', 'no-scrollbar');
+    expect(displayBoard).toHaveClass('h-full', 'flex-1', 'min-h-0', 'flex', 'flex-col', 'overflow-y-auto', 'no-scrollbar');
 
     expect(within(screen.getByTestId('historical-control-section-scope-samples')).getByText('范围与样本')).toBeInTheDocument();
     expect(screen.queryByTestId('historical-control-section-params')).not.toBeInTheDocument();

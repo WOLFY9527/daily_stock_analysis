@@ -178,12 +178,17 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
+    expect(screen.getByTestId('chat-bento-page')).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
+    expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('min-h-full', 'overflow-visible');
     expect(screen.getByTestId('chat-bento-hero')).toBeInTheDocument();
     expect(await screen.findByTestId('chat-bento-hero-skill-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-workspace')).toHaveClass('flex-1', 'min-h-0', 'overflow-hidden');
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-4xl', 'mx-auto');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('shrink-0');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'max-w-4xl',
       'rounded-full',

@@ -79,6 +79,7 @@ type PageChromeProps = {
   heroItems?: BentoHeroItem[];
   children?: React.ReactNode;
   headerChildren?: React.ReactNode;
+  scrollMode?: 'contained' | 'page';
   pageClassName?: string;
   headerClassName?: string;
   headerContentClassName?: string;
@@ -96,6 +97,7 @@ export const PageChrome: React.FC<PageChromeProps> = ({
   heroItems,
   children,
   headerChildren,
+  scrollMode = 'contained',
   pageClassName,
   headerClassName,
   headerContentClassName,
@@ -107,7 +109,12 @@ export const PageChrome: React.FC<PageChromeProps> = ({
   <div
     data-testid={pageTestId}
     data-bento-surface="true"
-    className={cn('gemini-bento-page flex h-full min-h-0 flex-col overflow-hidden bg-black', BENTO_SURFACE_ROOT_CLASS, pageClassName)}
+    className={cn(
+      'gemini-bento-page flex flex-col bg-black',
+      scrollMode === 'page' ? 'min-h-full overflow-visible' : 'h-full min-h-0 overflow-hidden',
+      BENTO_SURFACE_ROOT_CLASS,
+      pageClassName,
+    )}
   >
     <WorkspacePageHeader
       eyebrow={eyebrow}
@@ -122,7 +129,7 @@ export const PageChrome: React.FC<PageChromeProps> = ({
       {heroItems?.length ? <BentoHeroStrip items={heroItems} testId={heroTestId} /> : null}
       {headerChildren}
     </WorkspacePageHeader>
-    <div className="flex flex-1 min-h-0 flex-col">
+    <div className={cn('flex flex-col', scrollMode === 'page' ? 'min-h-0' : 'flex-1 min-h-0')}>
       {children}
     </div>
   </div>

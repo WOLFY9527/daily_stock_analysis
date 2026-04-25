@@ -601,6 +601,7 @@ const ChatPage: React.FC = () => {
     <PageChrome
       pageTestId="chat-bento-page"
       pageClassName="workspace-page workspace-page--chat gemini-bento-page--chat"
+      scrollMode="contained"
       eyebrow={chat('eyebrow')}
       title={(
         <span className="mb-2 mt-2 flex items-center gap-2">
@@ -731,7 +732,7 @@ const ChatPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="chat-bento-hero"
     >
-      <div data-testid="chat-workspace" className="flex flex-1 min-h-0 w-full flex-col overflow-hidden bg-[#030303]">
+      <div data-testid="chat-workspace" className="flex w-full flex-1 min-h-0 flex-col overflow-hidden bg-[#030303]">
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
@@ -755,17 +756,16 @@ const ChatPage: React.FC = () => {
           ) : null}
         </div>
 
-        <div className="flex min-h-0 flex-1 overflow-hidden w-full justify-center">
+        <div className="flex w-full flex-1 min-h-0 justify-center overflow-hidden">
           <div className="relative flex h-full min-h-0 w-full max-w-4xl flex-col">
           {/* Messages */}
-          <ScrollArea
-            className="flex-1 p-6"
-            viewportRef={messagesViewportRef}
+          <div
+            ref={messagesViewportRef}
             onScroll={handleMessagesScroll}
-            viewportClassName="h-full"
-            testId="chat-message-scroll"
+            data-testid="chat-message-scroll"
+            className="flex-1 min-h-0 overflow-y-auto no-scrollbar"
           >
-            <div data-testid="chat-message-stream" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6">
+            <div data-testid="chat-message-stream" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 p-6">
               {messages.length === 0 && !loading ? (
                 <div className="flex min-h-full w-full flex-col justify-center">
                   <div className="mx-auto w-full max-w-4xl">
@@ -932,10 +932,10 @@ const ChatPage: React.FC = () => {
 
               <div ref={messagesEndRef} />
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Input area */}
-          <div className="shrink-0 w-full pb-8 pt-4 bg-gradient-to-t from-[#030303] to-transparent">
+          <div data-testid="chat-input-shell" className="shrink-0 w-full bg-gradient-to-t from-[#030303] to-transparent pb-8 pt-4">
             {chatError ? (
               <ApiErrorAlert
                 error={chatError}

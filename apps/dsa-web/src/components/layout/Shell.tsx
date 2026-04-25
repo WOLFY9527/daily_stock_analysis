@@ -185,7 +185,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame flex-1 min-h-0 overflow-hidden${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}`}
+          className={`shell-content-frame flex flex-1 min-h-0 overflow-hidden${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}`}
         >
           <main className={`theme-main-lane shell-main-column flex-1 min-h-0 overflow-hidden${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
             <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 flex-col">
