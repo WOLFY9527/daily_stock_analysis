@@ -240,22 +240,20 @@ const UserScannerPage: React.FC = () => {
     () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
     [historyTotal],
   );
-  const shortlistCount = runDetail?.shortlist?.length ?? Number.parseInt(shortlistSize, 10);
+  const shortlistCount = runDetail?.shortlist?.length ?? 0;
   const watchlistCards = (runDetail?.shortlist || []).slice(0, 8).map((candidate) => ({
     symbol: candidate.symbol,
     name: candidate.name,
     changeText: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
   }));
-  const renderedWatchlistCards = watchlistCards.length ? watchlistCards : [
-    { symbol: 'NVDA', name: 'NVIDIA', changeText: '+5.2%' },
-    { symbol: 'TSLA', name: 'Tesla', changeText: '+4.8%' },
-    { symbol: 'META', name: 'Meta', changeText: '+3.9%' },
-    { symbol: 'AAPL', name: 'Apple', changeText: '+2.7%' },
-  ];
 
   return (
     <>
-      <div data-testid="user-scanner-bento-page" className="h-[calc(100vh-80px)] overflow-hidden bg-[#030303] text-white">
+      <div
+        data-testid="user-scanner-bento-page"
+        data-bento-surface="true"
+        className="bento-surface-root h-[calc(100vh-80px)] overflow-hidden bg-[#030303] text-white"
+      >
         <div className="workspace-width-wide w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12 pt-0 pb-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-transparent">
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
@@ -292,10 +290,18 @@ const UserScannerPage: React.FC = () => {
 
             </div>
 
-            <div className="col-span-4 bg-white/[0.02] backdrop-blur-3xl border border-white/5 rounded-[40px] p-5 flex flex-col items-center justify-center relative overflow-hidden group">
+            <div
+              data-testid="user-scanner-bento-hero"
+              className="col-span-4 bg-white/[0.02] backdrop-blur-3xl border border-white/5 rounded-[40px] p-5 flex flex-col items-center justify-center relative overflow-hidden group"
+            >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.14),transparent_68%)] opacity-80" aria-hidden="true" />
               <p className="relative z-10 text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.shortlistLabel')}</p>
-              <div className="relative z-10 mt-2 text-[9rem] font-bold text-emerald-400 leading-none drop-shadow-[0_0_60px_rgba(52,211,153,0.8)]">{shortlistCount}</div>
+              <div
+                data-testid="user-scanner-bento-hero-shortlist-value"
+                className="relative z-10 mt-2 text-[9rem] font-bold text-emerald-400 leading-none drop-shadow-[0_0_60px_rgba(52,211,153,0.8)]"
+              >
+                {shortlistCount}
+              </div>
               <p className="relative z-10 mt-2 text-center text-xs leading-4 text-secondary-text">{runDetail?.headline || (language === 'en' ? 'Personal threshold triggered' : '个人阈值触发')}</p>
             </div>
           </section>
@@ -306,17 +312,23 @@ const UserScannerPage: React.FC = () => {
             <div className="shrink-0">
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'My candidates' : '我的候选'}</p>
             </div>
-            <div className="grid grid-cols-1 gap-2 content-start overflow-y-auto no-scrollbar md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
-              {renderedWatchlistCards.map((candidate) => (
-                <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
-                  <div>
-                    <p className="text-sm text-white">{candidate.name}</p>
-                    <p className="text-white/50 text-[11px] mt-0.5">{candidate.symbol}</p>
+            {watchlistCards.length ? (
+              <div className="grid grid-cols-1 gap-2 content-start overflow-y-auto no-scrollbar md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
+                {watchlistCards.map((candidate) => (
+                  <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
+                    <div>
+                      <p className="text-sm text-white">{candidate.name}</p>
+                      <p className="text-white/50 text-[11px] mt-0.5">{candidate.symbol}</p>
+                    </div>
+                    <span className="text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{candidate.changeText}</span>
                   </div>
-                  <span className="text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{candidate.changeText}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
+                {pageError?.message || selectedMarketCopy.currentRunFallback}
+              </div>
+            )}
           </section>
 
         </div>

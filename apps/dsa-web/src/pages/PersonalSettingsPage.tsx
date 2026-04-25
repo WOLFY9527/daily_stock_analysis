@@ -2,7 +2,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellRing, LockKeyhole, ShieldCheck, SlidersHorizontal } from 'lucide-react';
-import { ApiErrorAlert, Card, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, WorkspacePageHeader } from '../components/common';
 import { authApi, type UserNotificationPreferences } from '../api/auth';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
@@ -13,6 +13,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { buildLoginPath, buildRegistrationPath, useProductSurface } from '../hooks/useProductSurface';
 import type { MarketColorConvention } from '../utils/marketColors';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+
+const GLASS_CARD_CLASS = 'bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-2xl p-5 md:p-6';
+const GLASS_INPUT_CLASS = 'w-full bg-white/[0.03] border border-white/10 focus:border-emerald-500/50 rounded-xl px-4 py-2 text-sm text-white transition-colors outline-none';
+const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.03] p-1';
+const SEGMENT_BUTTON_CLASS = 'min-w-[4.5rem] rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
 
 const MARKET_COLOR_OPTIONS: Array<{
   value: MarketColorConvention;
@@ -132,7 +137,7 @@ const PersonalSettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <main className="w-full max-w-4xl mx-auto flex flex-col gap-6">
       <WorkspacePageHeader
         eyebrow={t('settings.personalEyebrow')}
         title={t('settings.personalTitle')}
@@ -140,18 +145,23 @@ const PersonalSettingsPage: React.FC = () => {
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-        <Card title={t('settings.personalInterfaceTitle')} subtitle={t('settings.personalInterfaceSubtitle')}>
+        <section className={GLASS_CARD_CLASS}>
+          <div className="mb-5 space-y-1">
+            <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalInterfaceTitle')}</h2>
+            <p className="text-sm leading-6 text-muted-text">{t('settings.personalInterfaceSubtitle')}</p>
+          </div>
           <div className="grid gap-4 xl:grid-cols-2">
-            <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
               <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.languageTitle')}</p>
               <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.languageDesc')}</p>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3">
+                <div className={SEGMENT_WRAPPER_CLASS} role="tablist" aria-label={t('settings.languageTitle')}>
                 <button
                   type="button"
                   onClick={() => setLanguage('zh')}
                   className={language === 'zh'
-                    ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
-                    : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                    ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                    : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
                   aria-pressed={language === 'zh'}
                 >
                   {t('language.zh')}
@@ -160,16 +170,17 @@ const PersonalSettingsPage: React.FC = () => {
                   type="button"
                   onClick={() => setLanguage('en')}
                   className={language === 'en'
-                    ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
-                    : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                    ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                    : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
                   aria-pressed={language === 'en'}
                 >
                   {t('language.en')}
                 </button>
+                </div>
               </div>
             </div>
 
-            <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
               <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.marketColorTitle')}</p>
               <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.marketColorDesc')}</p>
               <div className="mt-3 space-y-2">
@@ -181,8 +192,8 @@ const PersonalSettingsPage: React.FC = () => {
                       type="button"
                       onClick={() => setMarketColorConvention(option.value)}
                       className={active
-                        ? 'w-full rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
-                        : 'w-full rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-left hover:border-[var(--border-strong)]'}
+                        ? 'w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-left'
+                        : 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left hover:border-white/20 hover:bg-white/[0.05]'}
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
@@ -197,9 +208,13 @@ const PersonalSettingsPage: React.FC = () => {
           <div className="mt-4">
             <FontSizeSettingsCard />
           </div>
-        </Card>
+        </section>
 
-        <Card title={t('settings.personalAccountAccessTitle')} subtitle={t('settings.personalAccountAccessSubtitle')}>
+        <section className={GLASS_CARD_CLASS}>
+          <div className="mb-5 space-y-1">
+            <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalAccountAccessTitle')}</h2>
+            <p className="text-sm leading-6 text-muted-text">{t('settings.personalAccountAccessSubtitle')}</p>
+          </div>
           <div className="space-y-4">
             {isGuest && authEnabled ? (
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-4 py-4">
@@ -316,7 +331,7 @@ const PersonalSettingsPage: React.FC = () => {
                         onChange={(event) => setNotificationEmail(event.target.value)}
                         placeholder={t('settings.personalNotificationEmailPlaceholder')}
                         disabled={notificationLoading || notificationSaving}
-                        className="mt-2 w-full rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-[var(--border-strong)]"
+                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
                       />
                     </label>
                     {!notificationPrefs?.emailDeliveryAvailable ? (
@@ -342,7 +357,7 @@ const PersonalSettingsPage: React.FC = () => {
                         onChange={(event) => setNotificationDiscordWebhook(event.target.value)}
                         placeholder="https://discord.com/api/webhooks/..."
                         disabled={notificationLoading || notificationSaving}
-                        className="mt-2 w-full rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-[var(--border-strong)]"
+                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
                       />
                     </label>
                     <p className="text-xs leading-5 text-secondary-text">
@@ -384,11 +399,11 @@ const PersonalSettingsPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </Card>
+        </section>
       </div>
 
       {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}
-    </div>
+    </main>
   );
 };
 

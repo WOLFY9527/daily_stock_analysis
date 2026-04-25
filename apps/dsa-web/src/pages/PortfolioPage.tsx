@@ -1458,6 +1458,7 @@ const PortfolioPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsHistoryDrawerOpen(true)}
+                  data-testid="portfolio-history-drawer-trigger"
                   className="shrink-0 rounded-full border border-white/5 px-3 py-1.5 text-xs text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white xl:hidden"
                 >
                   {historyDrawerLabel}

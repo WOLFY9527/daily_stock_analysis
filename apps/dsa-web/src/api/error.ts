@@ -602,6 +602,23 @@ export function parseApiError(error: unknown): ParsedApiError {
     });
   }
 
+  if (includesAny(matchText, [
+    'balance is insufficient',
+    'account balance is insufficient',
+    'insufficient balance',
+    'please recharge your account',
+    'quota exceeded',
+    'credit balance',
+  ])) {
+    return createParsedApiError({
+      title: '上游模型额度不足',
+      message: '当前 LLM 渠道余额或额度不足，请充值、切换可用模型，或在系统设置中改用其他渠道后重试。',
+      rawMessage,
+      status,
+      category: 'upstream_forbidden',
+    });
+  }
+
   const hasLlmProviderHint = includesAny(matchText, [
     'chat/completions',
     'generativelanguage',

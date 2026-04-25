@@ -610,6 +610,7 @@ const ChatPage: React.FC = () => {
   return (
     <PageChrome
       pageTestId="chat-bento-page"
+      heroTestId="chat-bento-hero"
       pageClassName="workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12"
       scrollMode="page"
       eyebrow={chat('eyebrow')}
@@ -633,6 +634,7 @@ const ChatPage: React.FC = () => {
       )}
       titleClassName="text-2xl font-bold"
       description={chat('description')}
+      heroItems={heroItems}
       actions={(
         <>
           <button

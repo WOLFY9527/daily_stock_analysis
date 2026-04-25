@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from '../AuthContext';
 const {
   getStatus,
   login,
+  updateSettings,
   changePassword,
   logout,
   resetDashboardState,
@@ -14,6 +15,7 @@ const {
 } = vi.hoisted(() => ({
   getStatus: vi.fn(),
   login: vi.fn(),
+  updateSettings: vi.fn(),
   changePassword: vi.fn(),
   logout: vi.fn(),
   resetDashboardState: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock('../../api/auth', () => ({
   authApi: {
     getStatus,
     login,
+    updateSettings,
     changePassword,
     logout,
   },
@@ -102,6 +105,38 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
     expect(screen.getByTestId('password-set')).toHaveTextContent('set');
+  });
+
+  it('enables auth through settings when bootstrap setup starts with auth disabled', async () => {
+    getStatus
+      .mockResolvedValueOnce({
+        authEnabled: false,
+        loggedIn: false,
+        passwordSet: false,
+        passwordChangeable: false,
+        setupState: 'no_password',
+      })
+      .mockResolvedValueOnce({
+        authEnabled: true,
+        loggedIn: true,
+        passwordSet: true,
+        passwordChangeable: true,
+        setupState: 'enabled',
+      });
+    updateSettings.mockResolvedValue(undefined);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('status');
+    fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
+    expect(updateSettings).toHaveBeenCalledWith(true, 'passwd6', 'passwd6');
+    expect(login).not.toHaveBeenCalled();
   });
 
   it('refreshes auth state after logout', async () => {

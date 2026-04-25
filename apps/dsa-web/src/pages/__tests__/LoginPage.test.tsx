@@ -38,6 +38,7 @@ describe('LoginPage', () => {
   it('blocks first-time setup when confirmation does not match', async () => {
     const login = vi.fn();
     useAuthMock.mockReturnValue({
+      authEnabled: false,
       login,
       passwordSet: false,
       setupState: 'no_password',
@@ -55,6 +56,7 @@ describe('LoginPage', () => {
 
   it('navigates to redirect after a successful login', async () => {
     useAuthMock.mockReturnValue({
+      authEnabled: true,
       login: vi.fn().mockResolvedValue({ success: true }),
       passwordSet: true,
       setupState: 'enabled',
@@ -71,6 +73,7 @@ describe('LoginPage', () => {
   it('enters create-account mode directly when requested by the route and shows destination context', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('mode=create&redirect=%2Fscanner')]);
     useAuthMock.mockReturnValue({
+      authEnabled: true,
       login: vi.fn(),
       passwordSet: true,
       setupState: 'enabled',
@@ -87,6 +90,7 @@ describe('LoginPage', () => {
   it('offers a safe exit back to home for direct login entry', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('')]);
     useAuthMock.mockReturnValue({
+      authEnabled: true,
       login: vi.fn(),
       passwordSet: true,
       setupState: 'enabled',
@@ -102,6 +106,7 @@ describe('LoginPage', () => {
   it('offers a safe exit back to the public scanner surface when redirected from scanner', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
     useAuthMock.mockReturnValue({
+      authEnabled: true,
       login: vi.fn(),
       passwordSet: true,
       setupState: 'enabled',
@@ -118,6 +123,7 @@ describe('LoginPage', () => {
     window.history.replaceState(window.history.state, '', '/en/login?redirect=%2Fen%2Fscanner');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fen%2Fscanner')]);
     useAuthMock.mockReturnValue({
+      authEnabled: true,
       login: vi.fn(),
       passwordSet: true,
       setupState: 'enabled',
@@ -134,6 +140,7 @@ describe('LoginPage', () => {
     window.history.replaceState(window.history.state, '', '/en/login?redirect=%2Fen%2Fchat');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fen%2Fchat')]);
     useAuthMock.mockReturnValue({
+      authEnabled: true,
       login: vi.fn(),
       passwordSet: true,
       setupState: 'enabled',
@@ -153,6 +160,7 @@ describe('LoginPage', () => {
     window.history.replaceState(window.history.state, '', '/login?redirect=%2Fsettings');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fsettings')]);
     useAuthMock.mockReturnValue({
+      authEnabled: true,
       login: vi.fn(),
       passwordSet: true,
       setupState: 'enabled',

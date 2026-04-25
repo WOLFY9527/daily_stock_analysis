@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppContent } from '../App';
+import { isPreviewRoutePath } from '../utils/appRouteGuards';
 
 const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock, languageState } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
@@ -239,6 +240,35 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByText('portfolio-page')).toBeInTheDocument();
     expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+  });
+
+  it('keeps the login route available for bootstrap setup when auth is disabled but no password exists', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: false,
+      loggedIn: false,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+      passwordSet: false,
+      setupState: 'no_password',
+    });
+
+    renderAt('/login');
+
+    expect(await screen.findByText('login-page')).toBeInTheDocument();
+    expect(screen.queryByText('首页工作区')).not.toBeInTheDocument();
+  });
+
+  it('supports the register route as an account-creation entry', async () => {
+    renderAt('/register?redirect=%2Fscanner');
+
+    expect(await screen.findByText('login-page')).toBeInTheDocument();
+  });
+
+  it('treats preview routes as preview pages outside dev-only mode checks', () => {
+    expect(isPreviewRoutePath('/__preview/report')).toBe(true);
+    expect(isPreviewRoutePath('/en/__preview/full-report')).toBe(true);
+    expect(isPreviewRoutePath('/scanner')).toBe(false);
   });
 
   it('shows the admin-account gate when a normal user visits an admin route', async () => {

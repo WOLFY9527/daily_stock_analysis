@@ -589,7 +589,7 @@ describe('SettingsPage', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it('hides unavailable deep research and event monitor fields from the agent category', () => {
+  it('hides unavailable deep research and event monitor fields from the agent category', async () => {
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({
       activeCategory: 'agent',
       itemsByCategory: {
@@ -655,9 +655,11 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(screen.getByText('AGENT_ORCHESTRATOR_TIMEOUT_S')).toBeInTheDocument();
-    expect(screen.queryByText('AGENT_DEEP_RESEARCH_BUDGET')).not.toBeInTheDocument();
-    expect(screen.queryByText('AGENT_EVENT_MONITOR_ENABLED')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
+    const drawer = await screen.findByRole('dialog', { name: zh('settings.currentCategory') });
+    expect(within(drawer).getByText('AGENT_ORCHESTRATOR_TIMEOUT_S')).toBeInTheDocument();
+    expect(within(drawer).queryByText('AGENT_DEEP_RESEARCH_BUDGET')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('AGENT_EVENT_MONITOR_ENABLED')).not.toBeInTheDocument();
   });
 
   it('reset button semantic: discards local changes without network request', () => {
@@ -684,22 +686,15 @@ describe('SettingsPage', () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it('keeps base raw fields behind disclosure while keeping smart import visible', () => {
+  it('keeps base raw fields behind a drawer trigger while keeping smart import visible', async () => {
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'base' }));
 
     render(<SettingsPage />);
 
     expect(screen.getByRole('button', { name: 'merge stock list' })).toBeInTheDocument();
-    const summary = screen.getByText('展开原始字段与兼容键');
-    const disclosure = summary.closest('details');
-
-    expect(disclosure).not.toBeNull();
-    expect(disclosure).not.toHaveAttribute('open');
-
-    fireEvent.click(summary.closest('summary') ?? summary);
-
-    expect(disclosure).toHaveAttribute('open');
-    expect(screen.getByText('STOCK_LIST')).toBeInTheDocument();
+    expect(screen.queryByText('STOCK_LIST')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
+    expect(await screen.findByText('STOCK_LIST')).toBeInTheDocument();
   });
 
   it('refreshes server state after intelligent import merges stock list', async () => {
@@ -1465,8 +1460,11 @@ describe('SettingsPage', () => {
     expect(within(yahooCard).getByText('行情')).toBeInTheDocument();
     expect(within(yahooCard).getByText('基本面')).toBeInTheDocument();
     expect(within(yahooCard).getAllByText('状态检查：内置源无需验证').length).toBeGreaterThan(0);
-    expect(within(dataSection as HTMLElement).getAllByRole('combobox').length).toBeGreaterThan(0);
-    expect(within(dataSection as HTMLElement).getAllByRole('button', { name: '保存优先顺序' }).length).toBeGreaterThan(0);
+    expect(within(dataSection as HTMLElement).queryAllByRole('combobox').length).toBe(0);
+    fireEvent.click(within(dataSection as HTMLElement).getByTestId('data-routing-manage-news'));
+    const routingDrawer = await screen.findByRole('dialog', { name: '新闻数据' });
+    expect(within(routingDrawer).getAllByRole('combobox').length).toBeGreaterThan(0);
+    expect(within(routingDrawer).getByRole('button', { name: '保存优先顺序' })).toBeInTheDocument();
   });
 
   it('shows read-only endpoint and internal metadata on api source cards', async () => {
@@ -1580,13 +1578,17 @@ describe('SettingsPage', () => {
     expect(within(customCard).getByText('新闻')).toBeInTheDocument();
     expect(within(customCard).getByText('已配置待验证')).toBeInTheDocument();
 
-    const newsGroup = within(dataSection as HTMLElement).getByText('新闻数据').closest('div.flex.items-start');
-    expect(newsGroup).not.toBeNull();
-    expect(within(newsGroup as HTMLElement).getAllByRole('option', { name: /Demo News Api/i }).length).toBeGreaterThan(0);
+    fireEvent.click(within(dataSection as HTMLElement).getByTestId('data-routing-manage-news'));
+    const newsDrawer = await screen.findByRole('dialog', { name: '新闻数据' });
+    expect(within(newsDrawer).getAllByRole('option', { name: /Demo News Api/i }).length).toBeGreaterThan(0);
 
-    const marketGroup = within(dataSection as HTMLElement).getByText('行情数据').closest('div.flex.items-start');
-    expect(marketGroup).not.toBeNull();
-    expect(within(marketGroup as HTMLElement).queryAllByRole('option', { name: /Demo News Api/i }).length).toBe(0);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '新闻数据' })).not.toBeInTheDocument();
+    });
+    fireEvent.click(within(dataSection as HTMLElement).getByTestId('data-routing-manage-market'));
+    const marketDrawer = await screen.findByRole('dialog', { name: '行情数据' });
+    expect(within(marketDrawer).queryAllByRole('option', { name: /Demo News Api/i }).length).toBe(0);
   });
 
   it('supports custom key-secret data sources and persists both credentials', async () => {

@@ -86,4 +86,19 @@ describe('parseApiError', () => {
     expect(parsed.category).toBe('validation_error');
     expect(parsed.title).toBe('IBKR 账户映射冲突');
   });
+
+  it('classifies insufficient upstream LLM balance as actionable provider guidance', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 200,
+        data: {
+          success: false,
+          error: 'All LLM models failed. Last error: litellm.APIError: APIError: OpenAIException - Your account balance is insufficient. Please recharge your account to continue using the API.',
+        },
+      },
+    });
+
+    expect(parsed.category).toBe('upstream_forbidden');
+    expect(parsed.title).toBe('上游模型额度不足');
+  });
 });

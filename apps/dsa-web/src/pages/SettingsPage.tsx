@@ -98,6 +98,10 @@ type CustomDataSourceRecord = {
   capabilities: DataSourceCapability[];
   validation?: CustomDataSourceValidation;
 };
+
+const GLASS_SUBCARD_CLASS = 'rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4';
+const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.03] p-1';
+const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
 type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
 type DataSourceLibraryEntry = {
   key: string;
@@ -1360,6 +1364,9 @@ const SettingsPage: React.FC = () => {
   const [quickProviderDrawerProvider, setQuickProviderDrawerProvider] = useState<QuickProviderKey | null>(null);
   const [aiAdvancedDrawerOpen, setAiAdvancedDrawerOpen] = useState(false);
   const [dataSourceLibraryDrawerOpen, setDataSourceLibraryDrawerOpen] = useState(false);
+  const [dataRoutingDrawerKey, setDataRoutingDrawerKey] = useState<DataRouteKey | null>(null);
+  const [runtimeVisibilityDrawerOpen, setRuntimeVisibilityDrawerOpen] = useState(false);
+  const [rawFieldsDrawerOpen, setRawFieldsDrawerOpen] = useState(false);
   const [dataSourceEditorId, setDataSourceEditorId] = useState<string | null>(null);
   const [dataSourceEditorDraft, setDataSourceEditorDraft] = useState<CustomDataSourceRecord>(createEmptyCustomDataSource());
   const [managedBuiltinDataSourceDraft, setManagedBuiltinDataSourceDraft] = useState({
@@ -2790,6 +2797,62 @@ const SettingsPage: React.FC = () => {
     },
   ]), [aiSummary.configuredProviders, dataSourceLibrary, t]);
   const activeDomainTitle = domainNavItems.find((item) => item.domain === activeDomain)?.title || activeDomain;
+  const dataRoutingGroups = [
+    {
+      key: 'market' as const,
+      role: t('settings.marketDataRole'),
+      values: effectiveRoute([routingDraft.market.primary, routingDraft.market.backup, routingDraft.market.fallback]),
+      available: dataSourceRouteOptions.market,
+      route: routingDraft.market,
+      allowFallback: true,
+      onSave: () => saveDataRouting(dataPriorityKeys.market, [
+        routingDraft.market.primary,
+        routingDraft.market.backup,
+        routingDraft.market.fallback,
+      ]),
+    },
+    {
+      key: 'fundamentals' as const,
+      role: t('settings.fundamentalDataRole'),
+      values: effectiveRoute([routingDraft.fundamentals.primary, routingDraft.fundamentals.backup, routingDraft.fundamentals.fallback]),
+      available: dataSourceRouteOptions.fundamentals,
+      route: routingDraft.fundamentals,
+      allowFallback: true,
+      onSave: () => saveDataRouting(dataPriorityKeys.fundamentals, [
+        routingDraft.fundamentals.primary,
+        routingDraft.fundamentals.backup,
+        routingDraft.fundamentals.fallback,
+      ]),
+    },
+    {
+      key: 'news' as const,
+      role: t('settings.newsDataRole'),
+      values: effectiveRoute([routingDraft.news.primary, routingDraft.news.backup]),
+      available: dataSourceRouteOptions.news,
+      route: routingDraft.news,
+      allowFallback: false,
+      onSave: () => saveDataRouting(dataPriorityKeys.news, [
+        routingDraft.news.primary,
+        routingDraft.news.backup,
+      ]),
+    },
+    {
+      key: 'sentiment' as const,
+      role: t('settings.sentimentDataRole'),
+      values: effectiveRoute([routingDraft.sentiment.primary, routingDraft.sentiment.backup]),
+      available: dataSourceRouteOptions.sentiment,
+      route: routingDraft.sentiment,
+      allowFallback: false,
+      onSave: () => saveDataRouting(dataPriorityKeys.sentiment, [
+        routingDraft.sentiment.primary,
+        routingDraft.sentiment.backup,
+      ]),
+    },
+  ];
+  const activeDataRoutingGroup = dataRoutingGroups.find((group) => group.key === dataRoutingDrawerKey) || null;
+  const rawFieldsSummaryText = activeItems.length
+    ? t('settings.currentCategory')
+    : t('settings.noItems');
   const heroItems: BentoHeroItem[] = [
     ...globalAdminStats.map((item) => ({
       label: item.label,
@@ -2863,7 +2926,7 @@ const SettingsPage: React.FC = () => {
         description={t('settings.controlPlaneDesc')}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
-          <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+          <div className={GLASS_SUBCARD_CLASS}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-positive-hsl))]">
@@ -2879,7 +2942,7 @@ const SettingsPage: React.FC = () => {
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {globalAdminStats.map((item) => (
-                <div key={item.key} className="rounded-[var(--theme-panel-radius-md)] border border-border/50 bg-base/35 px-3 py-3">
+                <div key={item.key} className="rounded-2xl border border-white/5 bg-white/[0.03] px-3 py-3">
                   <p className="text-[11px] uppercase tracking-[0.12em] text-muted-text">{item.label}</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">{item.value}</p>
                   <p className="mt-2 text-xs leading-5 text-secondary-text">{item.detail}</p>
@@ -2903,11 +2966,11 @@ const SettingsPage: React.FC = () => {
                 </span>
               </div>
             )}
-            className="rounded-[var(--theme-panel-radius-md)] border settings-border bg-base/25"
+            className="rounded-2xl border border-white/5 bg-white/[0.02]"
             summaryClassName="px-4 py-4"
             bodyClassName="space-y-4 px-4 pb-4"
           >
-            <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+            <div className={GLASS_SUBCARD_CLASS}>
               <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.controlPlaneLogsTitle')}</p>
               <p className="mt-2 text-sm leading-6 text-secondary-text">{t('settings.controlPlaneLogsDesc')}</p>
               <div className="mt-4 flex justify-end">
@@ -2922,7 +2985,7 @@ const SettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-4 py-4">
+            <div className="rounded-2xl border border-[hsl(var(--accent-warning-hsl)/0.22)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-warning-hsl))]">
@@ -2933,7 +2996,7 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
               <div className="mt-4 grid gap-3">
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-border/40 bg-base/30 px-3 py-3">
+                <div className="rounded-2xl border border-white/5 bg-white/[0.03] px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminMaintenanceTitle')}</p>
@@ -2953,7 +3016,7 @@ const SettingsPage: React.FC = () => {
                   </div>
                   <p className="mt-3 text-xs text-secondary-text">{t('settings.adminActionResetRuntimeCachesHint')}</p>
                 </div>
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-danger-hsl)/0.22)] bg-[hsl(var(--accent-danger-hsl)/0.08)] px-3 py-3">
+                <div className="rounded-2xl border border-[hsl(var(--accent-danger-hsl)/0.22)] bg-[hsl(var(--accent-danger-hsl)/0.08)] px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminFactoryResetTitle')}</p>
@@ -3005,7 +3068,7 @@ const SettingsPage: React.FC = () => {
             title={t('settings.domainTitle')}
             description={t('settings.domainDesc')}
           >
-            <div className="grid gap-2 grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               {DOMAIN_ORDER.map((domain) => {
                 const nav = domainNavItems.find((item) => item.domain === domain);
                 if (!nav) {
@@ -3018,8 +3081,8 @@ const SettingsPage: React.FC = () => {
                     key={domain}
                     type="button"
                     className={isActive
-                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2.5 text-left transition-colors'
-                      : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--surface-1)] px-3 py-2.5 text-left transition-colors hover:border-[var(--border-default)] hover:bg-[var(--overlay-hover)]'}
+                      ? 'rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-left transition-colors'
+                      : 'rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.05]'}
                     onClick={() => {
                       setActiveDomain(domain);
                       const firstCategory = categories.find(
@@ -3032,7 +3095,7 @@ const SettingsPage: React.FC = () => {
                   >
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{nav.title}</p>
-                      <p className="text-[10px] font-mono text-muted-text">{count}</p>
+                      <p className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-mono text-muted-text">{count}</p>
                     </div>
                     <p className="text-xs text-secondary-text truncate">{nav.desc}</p>
                   </button>
@@ -3277,7 +3340,7 @@ const SettingsPage: React.FC = () => {
               description={t('settings.dataEffectiveDesc')}
             >
               <div className="space-y-3">
-                <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+                <div className={GLASS_SUBCARD_CLASS}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -3286,66 +3349,13 @@ const SettingsPage: React.FC = () => {
                       <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.dataRoutingCompactTitle')}</p>
                     </div>
                   </div>
-                  <div className="mt-3 space-y-2">
-                    {[
-                      {
-                        key: 'market' as const,
-                        role: t('settings.marketDataRole'),
-                        values: effectiveRoute([routingDraft.market.primary, routingDraft.market.backup, routingDraft.market.fallback]),
-                        available: dataSourceRouteOptions.market,
-                        route: routingDraft.market,
-                        allowFallback: true,
-                        onSave: () => saveDataRouting(dataPriorityKeys.market, [
-                          routingDraft.market.primary,
-                          routingDraft.market.backup,
-                          routingDraft.market.fallback,
-                        ]),
-                      },
-                      {
-                        key: 'fundamentals' as const,
-                        role: t('settings.fundamentalDataRole'),
-                        values: effectiveRoute([routingDraft.fundamentals.primary, routingDraft.fundamentals.backup, routingDraft.fundamentals.fallback]),
-                        available: dataSourceRouteOptions.fundamentals,
-                        route: routingDraft.fundamentals,
-                        allowFallback: true,
-                        onSave: () => saveDataRouting(dataPriorityKeys.fundamentals, [
-                          routingDraft.fundamentals.primary,
-                          routingDraft.fundamentals.backup,
-                          routingDraft.fundamentals.fallback,
-                        ]),
-                      },
-                      {
-                        key: 'news' as const,
-                        role: t('settings.newsDataRole'),
-                        values: effectiveRoute([routingDraft.news.primary, routingDraft.news.backup]),
-                        available: dataSourceRouteOptions.news,
-                        route: routingDraft.news,
-                        allowFallback: false,
-                        onSave: () => saveDataRouting(dataPriorityKeys.news, [
-                          routingDraft.news.primary,
-                          routingDraft.news.backup,
-                        ]),
-                      },
-                      {
-                        key: 'sentiment' as const,
-                        role: t('settings.sentimentDataRole'),
-                        values: effectiveRoute([routingDraft.sentiment.primary, routingDraft.sentiment.backup]),
-                        available: dataSourceRouteOptions.sentiment,
-                        route: routingDraft.sentiment,
-                        allowFallback: false,
-                        onSave: () => saveDataRouting(dataPriorityKeys.sentiment, [
-                          routingDraft.sentiment.primary,
-                          routingDraft.sentiment.backup,
-                        ]),
-                      },
-                    ].map((group) => {
-                      const route = group.route as { primary: string; backup: string; fallback?: string };
-                      return (
-                      <div key={group.role} className="flex items-start gap-3 rounded-2xl border border-border/50 bg-base/40 px-3 py-3">
+                  <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {dataRoutingGroups.map((group) => (
+                      <div key={group.role} className="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-semibold text-foreground">{group.role}</p>
-                            <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] text-secondary-text">
+                            <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-secondary-text">
                               {group.values.length ? t('settings.configuredNoPriority') : t('settings.notConfigured')}
                             </span>
                           </div>
@@ -3373,58 +3383,30 @@ const SettingsPage: React.FC = () => {
                               ? group.available.map((source) => prettySourceLabel(source)).join(' · ')
                               : t('settings.dataSourceNotRouted')}
                           </p>
-                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                            <Select
-                              value={route.primary}
-                              onChange={(value) => setRouteTier(group.key, 'primary', value)}
-                              options={group.available.map((source) => ({ value: source, label: prettySourceLabel(source) }))}
-                              placeholder={group.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
-                              disabled={adminLocked || isSaving || group.available.length === 0}
-                            />
-                            <Select
-                              value={route.backup}
-                              onChange={(value) => setRouteTier(group.key, 'backup', value)}
-                              options={group.available
-                                .filter((source) => source !== route.primary)
-                                .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
-                              placeholder={group.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
-                              disabled={adminLocked || isSaving || group.available.length < 2}
-                            />
-                            {group.allowFallback ? (
-                              <Select
-                                value={route.fallback || ''}
-                                onChange={(value) => setRouteTier(group.key, 'fallback', value)}
-                                options={group.available
-                                  .filter((source) => source !== route.primary && source !== route.backup)
-                                  .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
-                                placeholder={group.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
-                                disabled={adminLocked || isSaving || group.available.length < 3}
-                              />
-                            ) : <div className="hidden sm:block" />}
-                          </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="settings-secondary"
-                            disabled={adminLocked || isSaving}
-                            onClick={() => void group.onSave()}
-                          >
-                            {t('settings.saveRoute')}
-                          </Button>
-                          <p className="max-w-[9rem] text-right text-[11px] leading-5 text-muted-text">
+                        <div className="mt-4 flex items-center justify-between gap-2">
+                          <p className="text-[11px] leading-5 text-muted-text">
                             {group.available.length
                               ? t('settings.dataRoutingSelectableCount', { count: group.available.length })
                               : t('settings.dataSourceNoUsableSources')}
                           </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="settings-secondary"
+                            disabled={adminLocked || isSaving || group.available.length === 0}
+                            data-testid={`data-routing-manage-${group.key}`}
+                            onClick={() => setDataRoutingDrawerKey(group.key)}
+                          >
+                            {t('settings.dataSourceManageAction')}
+                          </Button>
                         </div>
                       </div>
-                    ); })}
+                    ))}
                   </div>
                 </div>
 
-                <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+                <div className={GLASS_SUBCARD_CLASS}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -3521,47 +3503,31 @@ const SettingsPage: React.FC = () => {
               title={t('settings.runtimeSummaryVisibilityTitle')}
               description={t('settings.runtimeSummaryVisibilityDesc')}
             >
-              <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-3.5 py-3">
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowRuntimeExecutionSummary(true)}
-                    className={showRuntimeExecutionSummary
-                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
-                      : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
-                    disabled={adminLocked || isSaving}
-                  >
-                    {t('settings.runtimeSummaryVisibleOn')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowRuntimeExecutionSummary(false)}
-                    className={!showRuntimeExecutionSummary
-                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
-                      : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
-                    disabled={adminLocked || isSaving}
-                  >
-                    {t('settings.runtimeSummaryVisibleOff')}
-                  </button>
-                </div>
-                <div className="mt-3 flex justify-end">
+              <div className={GLASS_SUBCARD_CLASS}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {showRuntimeExecutionSummary ? t('settings.runtimeSummaryVisibleOn') : t('settings.runtimeSummaryVisibleOff')}
+                    </p>
+                    <p className="mt-1 text-xs text-secondary-text">{t('settings.runtimeSummaryVisibilityDesc')}</p>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
-                    variant="settings-primary"
-                    onClick={() => void saveRuntimeSummaryVisibility()}
+                    variant="settings-secondary"
+                    onClick={() => setRuntimeVisibilityDrawerOpen(true)}
                     disabled={adminLocked || isSaving}
                   >
-                    {t('settings.runtimeSummaryVisibilitySave')}
+                    {t('settings.dataSourceManageAction')}
                   </Button>
                 </div>
               </div>
             </SettingsSectionCard>
           ) : null}
 
-          <div className={isDesktopViewport ? 'workspace-split-layout' : 'workspace-split-layout workspace-split-layout--main-only'}>
+          <div className="w-full max-w-[1600px] mx-auto min-h-[calc(100vh-80px)] flex flex-col gap-8 md:flex-row">
           {isDesktopViewport ? (
-            <aside className="workspace-split-rail">
+            <aside className="w-full md:w-64 shrink-0 flex flex-col gap-4 sticky top-8 h-fit self-start">
               <SettingsCategoryNav
                 categories={domainCategories}
                 itemsByCategory={itemsByCategory}
@@ -3572,11 +3538,11 @@ const SettingsPage: React.FC = () => {
             </aside>
           ) : null}
 
-          <section className="workspace-split-main space-y-4">
+          <section className="flex-1 min-h-0 space-y-4">
             {!isDesktopViewport ? (
               <Disclosure
                 summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
-                className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border"
+                className="rounded-2xl border border-white/5 bg-white/[0.02]"
                 bodyClassName="space-y-3"
               >
                 <SettingsCategoryNav
@@ -3628,48 +3594,31 @@ const SettingsPage: React.FC = () => {
                 title={rawFieldsSectionTitle}
                 description={rawFieldsSectionDescription}
               >
-                {shouldCollapseRawFields ? (
-                  <Disclosure
-                    summary={rawFieldsToggleLabel}
-                    className="rounded-[var(--theme-panel-radius-md)] border border-border/50 bg-base/40"
-                    bodyClassName="space-y-3"
-                  >
-                    {activeItems.map((item) => (
-                      <SettingsField
-                        key={item.key}
-                        item={item}
-                        value={item.value}
-                        disabled={isSaving || adminLocked}
-                        onChange={(key, value) => {
-                          if (adminLocked) {
-                            return;
-                          }
-                          setDraftValue(key, value);
-                        }}
-                        issues={issueByKey[item.key] || []}
-                      />
-                    ))}
-                  </Disclosure>
-                ) : (
-                  activeItems.map((item) => (
-                    <SettingsField
-                      key={item.key}
-                      item={item}
-                      value={item.value}
-                      disabled={isSaving || adminLocked}
-                      onChange={(key, value) => {
-                        if (adminLocked) {
-                          return;
-                        }
-                        setDraftValue(key, value);
-                      }}
-                      issues={issueByKey[item.key] || []}
-                    />
-                  ))
-                )}
+                <div className={GLASS_SUBCARD_CLASS}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{activeCategoryLabel}</p>
+                      <p className="mt-1 text-xs leading-5 text-secondary-text">
+                        {activeItems.length
+                          ? `${rawFieldsSummaryText} · ${activeItems.length}`
+                          : activeCategoryDescription}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="settings-secondary"
+                      data-testid="raw-fields-drawer-trigger"
+                      onClick={() => setRawFieldsDrawerOpen(true)}
+                      disabled={adminLocked || isSaving}
+                    >
+                      {shouldCollapseRawFields ? rawFieldsToggleLabel : t('settings.dataSourceManageAction')}
+                    </Button>
+                  </div>
+                </div>
               </SettingsSectionCard>
             ) : (
-              <div className="settings-panel-muted rounded-[var(--theme-panel-radius-lg)] border p-5">
+              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
                 <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">
                   {t('settings.noItems')}
@@ -3683,6 +3632,145 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <Drawer
+        isOpen={Boolean(dataRoutingDrawerKey && activeDataRoutingGroup)}
+        onClose={() => setDataRoutingDrawerKey(null)}
+        title={activeDataRoutingGroup ? activeDataRoutingGroup.role : t('settings.dataRoutingCompactTitle')}
+        width="max-w-[min(100vw,48rem)]"
+        zIndex={77}
+      >
+        {activeDataRoutingGroup ? (
+          <div className="space-y-4">
+            <div className={GLASS_SUBCARD_CLASS}>
+              <p className="text-sm font-semibold text-foreground">{activeDataRoutingGroup.role}</p>
+              <p className="mt-1 text-xs text-secondary-text">
+                {activeDataRoutingGroup.values.length
+                  ? activeDataRoutingGroup.values.map((source) => prettySourceLabel(source)).join(' -> ')
+                  : t('settings.notConfigured')}
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              <Select
+                label={t('settings.sourcePrimary')}
+                value={activeDataRoutingGroup.route.primary}
+                onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'primary', value)}
+                options={activeDataRoutingGroup.available.map((source) => ({ value: source, label: prettySourceLabel(source) }))}
+                placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
+                disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length === 0}
+              />
+              <Select
+                label={t('settings.sourceBackup')}
+                value={activeDataRoutingGroup.route.backup}
+                onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'backup', value)}
+                options={activeDataRoutingGroup.available
+                  .filter((source) => source !== activeDataRoutingGroup.route.primary)
+                  .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
+                placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
+                disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 2}
+              />
+              {activeDataRoutingGroup.allowFallback ? (
+                <Select
+                  label={t('settings.sourceSecondaryBackup')}
+                  value={('fallback' in activeDataRoutingGroup.route ? activeDataRoutingGroup.route.fallback : '') || ''}
+                  onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'fallback', value)}
+                  options={activeDataRoutingGroup.available
+                    .filter((source) => source !== activeDataRoutingGroup.route.primary && source !== activeDataRoutingGroup.route.backup)
+                    .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
+                  placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
+                  disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 3}
+                />
+              ) : null}
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="settings-primary"
+                disabled={adminLocked || isSaving}
+                onClick={() => void activeDataRoutingGroup.onSave()}
+              >
+                {t('settings.saveRoute')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Drawer>
+
+      <Drawer
+        isOpen={runtimeVisibilityDrawerOpen}
+        onClose={() => setRuntimeVisibilityDrawerOpen(false)}
+        title={t('settings.runtimeSummaryVisibilityTitle')}
+        width="max-w-[min(100vw,36rem)]"
+        zIndex={77}
+      >
+        <div className="space-y-4">
+          <div className={GLASS_SUBCARD_CLASS}>
+            <p className="text-sm font-semibold text-foreground">{t('settings.runtimeSummaryVisibilityDesc')}</p>
+          </div>
+          <div className={SEGMENT_WRAPPER_CLASS}>
+            <button
+              type="button"
+              onClick={() => setShowRuntimeExecutionSummary(true)}
+              className={showRuntimeExecutionSummary
+                ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
+              disabled={adminLocked || isSaving}
+            >
+              {t('settings.runtimeSummaryVisibleOn')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRuntimeExecutionSummary(false)}
+              className={!showRuntimeExecutionSummary
+                ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
+              disabled={adminLocked || isSaving}
+            >
+              {t('settings.runtimeSummaryVisibleOff')}
+            </button>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="settings-primary"
+              onClick={() => void saveRuntimeSummaryVisibility()}
+              disabled={adminLocked || isSaving}
+            >
+              {t('settings.runtimeSummaryVisibilitySave')}
+            </Button>
+          </div>
+        </div>
+      </Drawer>
+
+      <Drawer
+        isOpen={rawFieldsDrawerOpen}
+        onClose={() => setRawFieldsDrawerOpen(false)}
+        title={rawFieldsSectionTitle}
+        width="max-w-[min(100vw,48rem)]"
+        zIndex={77}
+      >
+        <div className="space-y-3">
+          {activeItems.map((item) => (
+            <SettingsField
+              key={item.key}
+              item={item}
+              value={item.value}
+              disabled={isSaving || adminLocked}
+              onChange={(key, value) => {
+                if (adminLocked) {
+                  return;
+                }
+                setDraftValue(key, value);
+              }}
+              issues={issueByKey[item.key] || []}
+            />
+          ))}
+        </div>
+      </Drawer>
 
       <Drawer
         isOpen={aiRoutingDrawerOpen}

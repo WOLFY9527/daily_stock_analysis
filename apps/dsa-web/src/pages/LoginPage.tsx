@@ -214,7 +214,7 @@ function describeExitTarget(
 }
 
 const LoginPage: React.FC = () => {
-  const { login, passwordSet, setupState } = useAuth();
+  const { authEnabled, login, setupState } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -238,8 +238,9 @@ const LoginPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
 
-  const isAdminBootstrap = setupState === 'no_password' || !passwordSet;
-  const isCreateUserMode = !isAdminBootstrap && createUser;
+  const isAdminBootstrap = !authEnabled && setupState === 'no_password';
+  const isAuthReenable = !authEnabled && setupState === 'password_retained';
+  const isCreateUserMode = authEnabled && !isAdminBootstrap && !isAuthReenable && createUser;
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -268,7 +269,7 @@ const LoginPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const result = await login({
-        username: isAdminBootstrap ? 'admin' : (username.trim() || 'admin'),
+        username: isAdminBootstrap || isAuthReenable ? 'admin' : (username.trim() || 'admin'),
         displayName: isCreateUserMode ? displayName.trim() : undefined,
         password,
         passwordConfirm: isAdminBootstrap || isCreateUserMode ? passwordConfirm : undefined,
@@ -347,7 +348,7 @@ const LoginPage: React.FC = () => {
               </button>
             </div>
 
-            {!isAdminBootstrap ? (
+            {!isAdminBootstrap && !isAuthReenable ? (
               <Input
                 id="username"
                 type="text"

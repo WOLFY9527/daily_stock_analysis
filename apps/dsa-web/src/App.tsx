@@ -15,6 +15,7 @@ import {
 } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
+import { isPreviewRoutePath } from './utils/appRouteGuards';
 import { useAgentChatStore } from './stores/agentChatStore';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
@@ -388,7 +389,7 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
 
 export const AppContent: React.FC = () => {
   const location = useLocation();
-  const { authEnabled, loggedIn, isLoading, loadError, refreshStatus } = useAuth();
+  const { authEnabled, loggedIn, isLoading, loadError, refreshStatus, setupState } = useAuth();
   const { isGuest } = useProductSurface();
   const { setLanguage, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
@@ -479,7 +480,10 @@ export const AppContent: React.FC = () => {
   } else if (!isLoading) {
     if (routePathname === '/login') {
       const redirectTarget = resolveAuthRedirect(location.search, localizedHomePath);
-      if (!authEnabled || loggedIn) {
+      const canRenderLogin = authEnabled || setupState === 'no_password' || setupState === 'password_retained';
+      if (loggedIn) {
+        content = <Navigate to={redirectTarget} replace />;
+      } else if (!canRenderLogin) {
         content = <Navigate to={redirectTarget} replace />;
       } else {
         content = (
@@ -538,6 +542,8 @@ export const AppContent: React.FC = () => {
             </Route>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/:locale/login" element={<LoginPage />} />
+            <Route path="/register" element={<Navigate to={buildRegistrationPath(resolveAuthRedirect(location.search, localizedHomePath))} replace />} />
+            <Route path="/:locale/register" element={<Navigate to={buildRegistrationPath(resolveAuthRedirect(location.search, localizedHomePath))} replace />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
           </Routes>
@@ -588,8 +594,7 @@ const PreviewRoutes: React.FC = () => {
 
 const AppBody: React.FC = () => {
   const location = useLocation();
-  const routePathname = stripLocalePrefix(location.pathname);
-  const isPreviewRoute = import.meta.env.DEV && routePathname.startsWith('/__preview/');
+  const isPreviewRoute = isPreviewRoutePath(location.pathname);
 
   if (isPreviewRoute) {
     return <PreviewRoutes />;

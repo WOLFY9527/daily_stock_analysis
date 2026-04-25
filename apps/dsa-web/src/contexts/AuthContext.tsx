@@ -123,14 +123,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     ): Promise<{ success: boolean; error?: ParsedApiError }> => {
       try {
-        await authApi.login(params);
+        if (!authEnabled) {
+          if (setupState === 'no_password') {
+            await authApi.updateSettings(true, params.password, params.passwordConfirm);
+          } else if (setupState === 'password_retained') {
+            await authApi.updateSettings(true, undefined, undefined, params.password);
+          } else {
+            await authApi.login(params);
+          }
+        } else {
+          await authApi.login(params);
+        }
         await fetchStatus();
         return { success: true };
       } catch (err: unknown) {
         return { success: false, error: extractLoginError(err) };
       }
     },
-    [fetchStatus]
+    [authEnabled, fetchStatus, setupState]
   );
 
   const changePassword = useCallback(

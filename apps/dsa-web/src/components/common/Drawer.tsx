@@ -136,7 +136,7 @@ export const Drawer: React.FC<DrawerProps> = ({
       <div
         data-state={uiState}
         className={cn(
-          'theme-overlay-backdrop absolute inset-0 transition-opacity duration-200 ease-out',
+          'absolute inset-0 bg-black/60 transition-opacity duration-200 ease-out',
           uiState === 'open' ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={handleBackdropClick}
@@ -148,14 +148,14 @@ export const Drawer: React.FC<DrawerProps> = ({
           aria-modal="true"
           aria-labelledby={titleId}
           className={cn(
-            'drawer__panel theme-modal-panel relative flex w-full flex-col transition-all duration-200 ease-out',
+            'drawer__panel relative flex h-full w-full flex-col bg-[#0a0a0a] transition-all duration-200 ease-out',
             borderClass,
-            side === 'right' ? 'border-border/70' : 'border-border/70',
+            'border-white/10',
             panelStateClass,
           )}
           data-state={uiState}
         >
-          <div className="drawer__header flex items-center justify-between border-b border-[var(--theme-panel-subtle-border)] px-4 py-3 sm:px-5 [padding-top:max(0.9rem,env(safe-area-inset-top))]">
+          <div className="drawer__header flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5 [padding-top:max(0.9rem,env(safe-area-inset-top))]">
             {title ? (
               <h2 id={titleId} className="drawer__title text-[11px] font-semibold uppercase tracking-[0.16em] text-secondary-text">
                 {title}
@@ -164,7 +164,7 @@ export const Drawer: React.FC<DrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="drawer__close inline-flex h-9 w-9 items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--overlay-hover)] text-secondary-text transition-colors hover:border-[var(--border-default)] hover:bg-[var(--overlay-selected)] hover:text-foreground"
+              className="drawer__close inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-secondary-text transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
               aria-label={t('common.closeDrawer')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

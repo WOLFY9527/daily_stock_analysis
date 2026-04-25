@@ -1,3 +1,8 @@
+## 2026-04-26
+
+- 🛠️ **WolfyStock UX 故障修复与端到端验证补齐** — `apps/dsa-web` 修复了本轮 UX 报告中的关键前端断点：登录/引导页现在在 `authEnabled=true` 或 bootstrap `setupState` 下都能正确暴露入口；预览路由 `__preview/report` 与 `__preview/full-report` 不再只在 `import.meta.env.DEV` 下注册，生产预览构建与 WebKit/Safari 路径都能访问；Scanner / Chat / Portfolio 的页面壳层补齐了稳定的 Bento surface / hero / drawer test hook，并把 smoke 套件收口到真实页面契约，避免把不存在的 hero/drawer 结构误判成回归。同时新增 `apps/dsa-web/scripts/verify-browser-flows.mjs` 与 `scripts/verify_runtime_writes.py`，将 Chromium/WebKit 路由截图、SPA 重放结果、以及 Portfolio / Scanner / Rule Backtest / Chat 的 SQLite 持久化检查统一落到 `reports/ux-test-2026-04-26/`。
+- 🧭 **Settings / Admin 全面收口到玻璃终端风格与抽屉编辑** — `apps/dsa-web` 对 `/settings` 与 `/settings/system` 做了一轮结构级重构：个人设置主容器现在固定在居中的 `max-w-4xl` 宽度，语言切换与运行时可见性等二元选择收口为紧凑 segmented control；系统控制面则统一切到低对比毛玻璃卡片、左侧固定分类导航、右侧状态卡片流式列表，并把数据路由、运行摘要可见性、原始兼容字段编辑继续下沉到右侧 Drawer，避免主页面继续平铺大段表单。此次调整不删减现有 AI routing、数据源库、智能导入、密码修改或日志入口能力，只重构视觉基线与交互深度。
+
 ## 2026-04-25
 
 - 🖥️ **Web 宽屏骨架全面放宽并改为多列重排** — `apps/dsa-web` 现已对 Home、Scanner、Chat、Portfolio 的 workspace 外层和 shell 宽度上限执行定向放宽：目标页面统一切到 `max-w-[1920px]` 宽屏容器，并为首页/扫描器观察名单引入更高列数的自适应网格，而不是继续把单卡片横向拉长。`ChatPage` 改为左侧状态边栏 + 右侧居中聊天主窗的 Slack/Discord 式结构，`PortfolioPage` 改为左侧 Trade Station、中间总资产与持仓、右侧历史记录常驻的三栏终端布局；Scanner 用户页与管理页的底部 watchlist 同步扩展到 `xl:6列 / 2xl:8列`。本次调整保持既有路由、数据流、分页删除动作与后端契约不变，只重构宽屏信息密度和骨架分栏方式。

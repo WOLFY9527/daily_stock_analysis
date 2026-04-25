@@ -23,9 +23,9 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
 }) => {
   const { language, t } = useI18n();
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/30">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-2xl">
       {!hideHeader ? (
-        <div className="border-b border-[var(--theme-panel-subtle-border)] px-4 py-3">
+        <div className="border-b border-white/5 px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary-text">{t('settings.categoriesTitle')}</p>
         </div>
       ) : null}
@@ -41,10 +41,10 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
               key={category.category}
               type="button"
               className={cn(
-                'w-full flex items-center justify-between border-l-[3px] border-y-0 border-r-0 px-4 py-2.5 text-left transition-colors bg-transparent',
+                'mx-2 flex w-[calc(100%-1rem)] items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors',
                 isActive
-                  ? 'border-l-[var(--accent-primary)] bg-[var(--overlay-selected)]'
-                  : 'border-l-transparent hover:border-l-[var(--border-muted)] hover:bg-[var(--overlay-hover)]',
+                  ? 'border-emerald-500/30 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(16,185,129,0.08)]'
+                  : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]',
                 disabled ? 'pointer-events-none opacity-60' : '',
               )}
               onClick={() => {
@@ -56,11 +56,11 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
               disabled={disabled}
             >
               <div className="min-w-0 flex-1">
-                <p className={cn('text-[12px] font-semibold tracking-wide uppercase', isActive ? 'text-foreground' : 'text-secondary-text')}>
+                <p className={cn('text-[12px] font-semibold tracking-wide uppercase', isActive ? 'text-white' : 'text-secondary-text')}>
                   {title}
                 </p>
               </div>
-              <span className="text-[10px] font-mono text-muted-text ml-3">
+              <span className="ml-3 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-mono text-muted-text">
                 {count}
               </span>
             </button>

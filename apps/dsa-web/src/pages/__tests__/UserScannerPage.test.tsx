@@ -282,4 +282,28 @@ describe('UserScannerPage', () => {
       });
     });
   });
+
+  it('does not render placeholder candidates after a failed manual run', async () => {
+    runScan.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {
+          detail: {
+            error: 'validation_error',
+            message: 'A 股全市场快照不可用。',
+          },
+        },
+      },
+    });
+
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /run scanner|运行扫描/i }));
+
+    expect(await screen.findByText('A 股全市场快照不可用。')).toBeInTheDocument();
+    expect(screen.queryByText('NVIDIA')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
+    expect(screen.queryByText('Meta')).not.toBeInTheDocument();
+    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+  });
 });

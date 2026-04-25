@@ -185,8 +185,9 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'w-full', 'flex-col');
     expect(screen.getByTestId('chat-main')).not.toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-status-sidebar')).toHaveClass('hidden', 'xl:flex', 'xl:w-80', 'xl:flex-col', 'xl:gap-4');
-    expect(await screen.findByTestId('chat-bento-hero-skill')).toBeInTheDocument();
-    expect(await screen.findByTestId('chat-bento-hero-skill-value')).toHaveTextContent(canonicalBullTrendLabel('zh'));
+    expect((await screen.findAllByTestId('chat-bento-hero-skill')).length).toBeGreaterThan(0);
+    const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
+    expect(skillValues[0]).toHaveTextContent(canonicalBullTrendLabel('zh'));
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex', 'w-full', 'justify-center');
