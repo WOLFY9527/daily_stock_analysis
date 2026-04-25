@@ -2938,6 +2938,13 @@ class PortfolioService:
         as_of_date: date,
         cost_method: str,
     ) -> Optional[Dict[str, Any]]:
+        latest_cached_snapshot_date = self.repo.get_latest_cached_snapshot_date(
+            account_id=int(account.id),
+            cost_method=cost_method,
+        )
+        if latest_cached_snapshot_date != as_of_date:
+            return None
+
         cached = self.repo.get_cached_snapshot_bundle(
             account_id=int(account.id),
             snapshot_date=as_of_date,

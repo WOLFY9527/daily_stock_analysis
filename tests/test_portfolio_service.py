@@ -1083,6 +1083,60 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(position_ids_after, position_ids_before)
         self.assertEqual(lot_ids_after, lot_ids_before)
 
+    def test_historical_cached_snapshot_does_not_reuse_newer_position_cache(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 1), 100.0)
+        first_snapshot = self.service.get_portfolio_snapshot(
+            account_id=aid,
+            as_of=date(2026, 1, 1),
+            cost_method="fifo",
+        )
+
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=5,
+            price=110,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 2), 110.0)
+        second_snapshot = self.service.get_portfolio_snapshot(
+            account_id=aid,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        historical_snapshot = self.service.get_portfolio_snapshot(
+            account_id=aid,
+            as_of=date(2026, 1, 1),
+            cost_method="fifo",
+        )
+
+        self.assertEqual(first_snapshot["accounts"][0]["positions"][0]["quantity"], 10.0)
+        self.assertEqual(second_snapshot["accounts"][0]["positions"][0]["quantity"], 15.0)
+        self.assertEqual(historical_snapshot["accounts"][0]["positions"][0]["quantity"], 10.0)
+        self.assertEqual(historical_snapshot["accounts"][0]["total_equity"], first_snapshot["accounts"][0]["total_equity"])
+
     def test_snapshot_cache_refreshes_after_market_data_update(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]

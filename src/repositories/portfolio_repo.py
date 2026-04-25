@@ -1525,6 +1525,22 @@ class PortfolioRepository:
                 "lots": list(lots),
             }
 
+    def get_latest_cached_snapshot_date(
+        self,
+        *,
+        account_id: int,
+        cost_method: str,
+    ) -> Optional[date]:
+        with self.db.get_session() as session:
+            return session.execute(
+                select(func.max(PortfolioDailySnapshot.snapshot_date)).where(
+                    and_(
+                        PortfolioDailySnapshot.account_id == account_id,
+                        PortfolioDailySnapshot.cost_method == cost_method,
+                    )
+                )
+            ).scalar_one()
+
     # ------------------------------------------------------------------
     # Snapshot / position cache
     # ------------------------------------------------------------------

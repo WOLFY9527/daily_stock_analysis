@@ -2,6 +2,7 @@
 
 - 🧹 **后端大审计仓库收敛（文档与审计产物治理）** — 将根目录一次性审计报告 `backend-final-audit-report.*` 与 `backend-frontend-global-audit-report.*` 归档到 `docs/architecture/archive/audits/`，删除本地切片交接产物 `slice_report_*.json`，并在 `README.md` 中补充当前项目文档真源入口，减少仓库根目录噪音，降低后续维护时的检索成本。
 - 🧭 **维护手册补充后端优先边界** — `docs/architecture/backend-frontend-modular-maintenance-handbook.md` 明确当前维护默认以后端/API/存储为主，前端仅用于所有权映射与兼容检查，避免在前端重构期把后端审计扩散成跨端改造。
+- 🧮 **Portfolio 历史快照缓存正确性修复** — 修复了 `portfolio` 历史日期快照错误复用账号级最新 `positions/lots` 缓存的问题。现在只有“该账号当前最新快照日期”才会命中持仓缓存；历史日期快照会回退到重放计算，避免在先缓存较新日期后重读旧日期时错误显示较新的持仓数量。
 
 # Changelog
 

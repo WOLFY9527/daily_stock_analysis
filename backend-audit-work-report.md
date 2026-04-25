@@ -36,6 +36,10 @@
    - `src/storage.py`
    - `src/postgres_identity_store.py`
    - `tests/test_storage.py`
+9. 修复 `portfolio` 历史快照缓存误用最新持仓缓存的问题：
+   - `src/repositories/portfolio_repo.py`
+   - `src/services/portfolio_service.py`
+   - `tests/test_portfolio_service.py`
 
 ## 为什么这么改
 
@@ -56,6 +60,11 @@
 - 修复 `revoke_all_app_user_sessions()` 在 Phase A 开启时的返回计数低报问题：原实现使用 `max(phase_a_count, legacy_count)`，当同一用户同时存在 Phase A 新会话与 legacy 旧会话时会只返回较大一侧的数量。
 - 新增 SQLite / Phase A 的“活跃 session id 列表”读取，用 union 计数后再执行 revoke，保证返回值反映本次真正撤销的逻辑 session 数量，而不是单侧存储数量。
 
+## 第三批代码级收敛
+
+- 修复 `portfolio` 历史快照缓存错误复用问题：`PortfolioDailySnapshot` 带 `snapshot_date`，但 `PortfolioPosition` / `PortfolioPositionLot` 只保存账号级最新缓存。旧实现允许历史日期快照直接复用当前最新的 positions/lots，导致先缓存 `T1`、再缓存 `T2` 后重新读取 `T1` 时，旧快照会错误看到 `T2` 的持仓数量。
+- 当前改为只允许“该账号/成本法下的最新快照日期”命中 positions/lots 缓存；历史日期一律走 replay，避免返回错的历史持仓。
+
 ## 验证情况
 
 - `python3 scripts/check_ai_assets.py`
@@ -74,6 +83,12 @@
   - PASS
 - `python3 -m pytest tests/test_postgres_phase_a.py -q`
   - PASS
+- `PYTHONPYCACHEPREFIX=/tmp/dsa-pyc python3 -m py_compile src/repositories/portfolio_repo.py src/services/portfolio_service.py tests/test_portfolio_service.py`
+  - PASS
+- `python3 -m pytest tests/test_portfolio_service.py -q`
+  - PASS
+- `python3 -m pytest tests/test_portfolio_snapshot_benchmark.py tests/test_portfolio_ibkr_sync.py -q`
+  - PASS
 
 ## 未验证项
 
@@ -88,6 +103,7 @@
 - 本次主要是仓库治理与文档收敛，不等于完成整仓后端代码级性能审计。
 - 第一批代码改动属于 seam 级别收敛，不等于 `DatabaseManager` 架构性拆分。
 - 第二批修复改变了 `revoke_all_app_user_sessions()` 的返回计数语义，使其更接近“实际撤销的逻辑 session 数”；如果有上游调用错误依赖旧的低报值，需要同步注意。
+- 第三批修复会让“历史日期快照”更少命中缓存、更多走 replay；这是为了修正错误结果，属于正确性优先的有意退让，不是性能回退事故。
 - 历史审计报告已移动到归档目录；若有外部脚本硬编码根目录路径，需要同步改为新路径。
 - 由于本次故意避开前端，README 中与产品功能有关的旧表述仍可能存在后续需继续修订的内容。
 
