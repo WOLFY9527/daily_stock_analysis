@@ -27,7 +27,7 @@ import type {
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
 const PORTFOLIO_INPUT_CLASS = 'h-8 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-white placeholder:text-white/28 focus:border-white/30 focus:outline-none';
 const PORTFOLIO_SELECT_CLASS = 'h-8 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-white focus:border-white/30 focus:outline-none';
-const PORTFOLIO_BUTTON_CLASS = 'btn-secondary px-3 py-2 text-sm';
+const PORTFOLIO_BUTTON_CLASS = 'btn-secondary h-8 px-3 py-1.5 text-sm';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -1019,8 +1019,8 @@ const PortfolioPage: React.FC = () => {
       >
         <main className="w-full flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-6">
           <section className="md:col-span-5 h-full flex flex-col bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-[24px] overflow-hidden">
-            <div className="shrink-0 px-6 pt-6">
-              <div className="flex items-start justify-between gap-4">
+            <div className="shrink-0 px-5 pt-5">
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h2>
                 </div>
@@ -1033,7 +1033,7 @@ const PortfolioPage: React.FC = () => {
                   {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="mt-3 grid grid-cols-2 gap-3">
                 <select
                   value={String(selectedAccount)}
                   onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
@@ -1055,13 +1055,13 @@ const PortfolioPage: React.FC = () => {
                   <option value="avg">{copy.costAvg}</option>
                 </select>
               </div>
-              <div data-testid="portfolio-trade-station-summary" className="flex flex-col gap-1 py-2 border-y border-white/5 mt-4">
+              <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-white/5 py-2">
                 <div className="flex justify-between text-xs"><span className="text-white/40">{copy.totalCash}</span><span className="text-white">{formatMoney(totalCash, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-white/40">{copy.totalMarketValue}</span><span className="text-white">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-white/40">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
               {fxRefreshFeedback ? (
-                <p className={`mt-3 text-xs ${
+                <p className={`mt-2 text-xs ${
                   fxRefreshFeedback.tone === 'success'
                     ? 'text-emerald-300'
                     : fxRefreshFeedback.tone === 'warning'
@@ -1073,21 +1073,21 @@ const PortfolioPage: React.FC = () => {
               ) : null}
             </div>
 
-            <div className="shrink-0 flex gap-6 border-b border-white/5 px-6 pt-2">
-              <button type="button" onClick={() => setLeftTab('trade')} className={`pb-3 text-sm ${leftTab === 'trade' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Trade' : '交易'}</button>
-              <button type="button" onClick={() => setLeftTab('account')} className={`pb-3 text-sm ${leftTab === 'account' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Account' : '账户'}</button>
-              <button type="button" onClick={() => setLeftTab('sync')} className={`pb-3 text-sm ${leftTab === 'sync' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Sync' : '同步'}</button>
+            <div className="shrink-0 flex gap-4 border-b border-white/5 px-5 pt-1">
+              <button type="button" onClick={() => setLeftTab('trade')} className={`pb-2 text-sm ${leftTab === 'trade' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Trade' : '交易'}</button>
+              <button type="button" onClick={() => setLeftTab('account')} className={`pb-2 text-sm ${leftTab === 'account' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Account' : '账户'}</button>
+              <button type="button" onClick={() => setLeftTab('sync')} className={`pb-2 text-sm ${leftTab === 'sync' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Sync' : '同步'}</button>
             </div>
 
             <div
               data-testid="portfolio-trade-station-scroll"
-              className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5"
+              className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4"
             >
               {leftTab === 'trade' ? (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                   <div
                     data-testid="portfolio-trade-type-switcher"
-                    className="flex bg-white/[0.05] p-1 rounded-lg mb-4 shrink-0"
+                    className="mb-3 flex shrink-0 rounded-lg bg-white/[0.05] p-1"
                   >
                     <button
                       type="button"
@@ -1112,25 +1112,25 @@ const PortfolioPage: React.FC = () => {
                     </button>
                   </div>
                   {tradeType === 'stock' ? (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualTrade}</p>
-                      <form className="space-y-2" onSubmit={handleTradeSubmit}>
-                        <div className="grid grid-cols-2 gap-4">
+                      <form className="space-y-1.5" onSubmit={handleTradeSubmit}>
+                        <div className="grid grid-cols-2 gap-3">
                           <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
                           <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                           <select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
                             <option value="buy">{copy.buy}</option>
                             <option value="sell">{copy.sell}</option>
                           </select>
                           <input className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.tradeUidPlaceholder} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                           <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
                           <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                           <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
                           <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                         </div>
@@ -1141,17 +1141,17 @@ const PortfolioPage: React.FC = () => {
                   ) : null}
 
                   {tradeType === 'fund' ? (
-                    <div className="space-y-2 rounded-[24px] border border-white/8 bg-black/20 p-3">
+                    <div className="space-y-1.5 rounded-[24px] border border-white/8 bg-black/20 p-3">
                       <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCash}</p>
-                      <form className="space-y-2" onSubmit={handleCashSubmit}>
-                        <div className="grid grid-cols-2 gap-4">
+                      <form className="space-y-1.5" onSubmit={handleCashSubmit}>
+                        <div className="grid grid-cols-2 gap-3">
                           <input className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
                           <select className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
                             <option value="in">{copy.cashIn}</option>
                             <option value="out">{copy.cashOut}</option>
                           </select>
                         </div>
-                        <div data-testid="portfolio-cash-amount-currency-grid" className="grid grid-cols-2 gap-4">
+                        <div data-testid="portfolio-cash-amount-currency-grid" className="grid grid-cols-2 gap-3">
                           <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder={copy.amount} value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
                           <select
                             data-testid="portfolio-cash-currency-select"
@@ -1174,10 +1174,10 @@ const PortfolioPage: React.FC = () => {
                   ) : null}
 
                   {tradeType === 'corporate' ? (
-                    <div className="space-y-2 rounded-[24px] border border-white/8 bg-black/20 p-3">
+                    <div className="space-y-1.5 rounded-[24px] border border-white/8 bg-black/20 p-3">
                       <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCorporate}</p>
-                      <form className="space-y-2" onSubmit={handleCorporateSubmit}>
-                        <div className="grid grid-cols-2 gap-4">
+                      <form className="space-y-1.5" onSubmit={handleCorporateSubmit}>
+                        <div className="grid grid-cols-2 gap-3">
                           <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.stockCode} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
                           <input className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
                         </div>
@@ -1185,7 +1185,7 @@ const PortfolioPage: React.FC = () => {
                           <option value="cash_dividend">{copy.cashDividend}</option>
                           <option value="split_adjustment">{copy.splitAdjustment}</option>
                         </select>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-3">
                           <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.dividendPerShare} value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
                           <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.splitRatio} value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
                         </div>

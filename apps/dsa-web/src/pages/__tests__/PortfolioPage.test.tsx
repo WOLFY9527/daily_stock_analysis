@@ -1077,7 +1077,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(scrollContainer.className).toContain('min-h-0');
     expect(scrollContainer.className).toContain('overflow-y-auto');
     expect(scrollContainer.className).toContain('no-scrollbar');
-    expect(scrollContainer.className).toContain('p-5');
+    expect(scrollContainer.className).toContain('p-4');
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     expect(totalAssetsCard.className).toContain('shrink-0');
@@ -1104,7 +1104,7 @@ describe('PortfolioPage FX refresh', () => {
     const cashAmountCurrencyGrid = screen.getByTestId('portfolio-cash-amount-currency-grid');
     expect(cashAmountCurrencyGrid.className).toContain('grid');
     expect(cashAmountCurrencyGrid.className).toContain('grid-cols-2');
-    expect(cashAmountCurrencyGrid.className).toContain('gap-4');
+    expect(cashAmountCurrencyGrid.className).toContain('gap-3');
 
     const cashCurrencySelect = screen.getByTestId('portfolio-cash-currency-select');
     expect(cashCurrencySelect.tagName).toBe('SELECT');
