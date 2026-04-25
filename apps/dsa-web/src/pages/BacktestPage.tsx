@@ -1041,7 +1041,7 @@ const BacktestPage: React.FC = () => {
     <PageChrome
       pageTestId="backtest-bento-page"
       pageClassName="backtest-v1-page workspace-page--backtest gemini-bento-page--backtest"
-      scrollMode="contained"
+      scrollMode="page"
       eyebrow={bt(language, 'page.headerEyebrow')}
       title={bt(language, 'page.headerTitle')}
       description={bt(language, 'page.headerDescription', {
@@ -1107,13 +1107,16 @@ const BacktestPage: React.FC = () => {
       heroTestId="backtest-bento-hero"
     >
 
-      <div data-testid="backtest-v1-page" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="backtest-cockpit flex-1 h-full min-h-0 overflow-hidden" data-testid="backtest-cockpit">
-          <aside className="backtest-cockpit__console h-full min-h-0 flex flex-col overflow-y-auto no-scrollbar" data-testid="backtest-cockpit-console">
+      <div
+        data-testid="backtest-v1-page"
+        className="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-4 pb-24 min-h-screen flex flex-col bg-transparent gap-6 md:gap-8"
+      >
+        <div className="backtest-cockpit" data-testid="backtest-cockpit">
+          <aside className="backtest-cockpit__console flex flex-col" data-testid="backtest-cockpit-console">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={activeModule}
-                className={`backtest-v1-stage backtest-v1-stage--${activeModule} h-full min-h-0`}
+                className={`backtest-v1-stage backtest-v1-stage--${activeModule}`}
                 data-testid="backtest-v1-stage"
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1232,7 +1235,7 @@ const BacktestPage: React.FC = () => {
               </motion.div>
             </AnimatePresence>
           </aside>
-          <section className="backtest-cockpit__monitor flex-1 min-h-0 flex flex-col overflow-y-auto no-scrollbar" data-testid="backtest-cockpit-monitor">
+          <section className="backtest-cockpit__monitor flex flex-col" data-testid="backtest-cockpit-monitor">
             <div className="backtest-equity-monitor" data-testid="backtest-equity-monitor">
               <div className="backtest-equity-monitor__header">
                 <span>{language === 'en' ? 'Equity Signal' : '资金曲线'}</span>

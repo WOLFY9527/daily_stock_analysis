@@ -413,12 +413,12 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
   return (
     <div
-      className="backtest-unified-shell backtest-unified-shell--historical h-full min-h-0 overflow-hidden"
+      className="backtest-unified-shell backtest-unified-shell--historical"
       data-testid="backtest-unified-shell"
       data-module="historical"
       data-panel-mode={panelMode}
     >
-      <aside className="backtest-control-panel h-full min-h-0 flex flex-col overflow-y-auto no-scrollbar" data-testid="backtest-control-panel" data-panel-mode={panelMode}>
+      <aside className="backtest-control-panel flex flex-col" data-testid="backtest-control-panel" data-panel-mode={panelMode}>
         <div className="backtest-control-panel__header shrink-0">
           <SectionEyebrow>控制面板</SectionEyebrow>
           <h2 className="backtest-control-panel__title">历史评估</h2>
@@ -483,7 +483,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         )}
       </aside>
 
-      <section className="backtest-display-board h-full flex-1 min-h-0 flex flex-col overflow-y-auto no-scrollbar" data-testid="backtest-display-board">
+      <section className="backtest-display-board flex flex-col" data-testid="backtest-display-board">
         <div className="backtest-display-board__header shrink-0">
           <SectionEyebrow>显示面板</SectionEyebrow>
           <h2 className="backtest-display-board__title">历史评估显示板</h2>
@@ -492,7 +492,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           </p>
         </div>
 
-        <div className="backtest-display-board__stack flex-1 min-h-0 flex flex-col">
+        <div className="backtest-display-board__stack flex flex-col">
           <section className="backtest-display-section" data-testid="historical-display-section-summary">
             <Card title="评估概览" subtitle="关键指标" className="product-section-card product-section-card--backtest-result">
               <p className="product-section-copy">这里只做历史信号验证，不展示账户权益曲线，也不表示完整策略盈亏回放。</p>

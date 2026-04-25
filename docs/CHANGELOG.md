@@ -1,6 +1,6 @@
 ## 2026-04-25
 
-- 🧱 **Chat / Backtest 内容密集板块恢复局部滚动** — `apps/dsa-web` 修复了全局密度收口后 Chat 与 Backtest 在锁死外层 `overflow-hidden` 时内部高度链断裂的问题。共享 `Shell / PreviewShell` 的 `shell-content-frame` 现已恢复为真正的 flex 容器，确保页面主体拿到受限高度；Chat 的消息流继续保持 `flex-1 min-h-0 overflow-y-auto no-scrollbar`，输入区维持 `shrink-0` 固定底部；Backtest 历史评估右侧显示板补齐 `h-full`，与左侧控制面板一起恢复为“面板内部滚动、页面整体不动”的 App 级滚动体验。
+- 🧱 **Chat / Backtest 恢复原生页面滚动** — `apps/dsa-web` 放弃了 Chat 与 Backtest 先锁定整页高度、再把滚动塞进局部面板的策略，统一回归浏览器原生页面滚动。Backtest 主工作区、历史评估控制台/显示板以及相关结果卡片不再依赖 `overflow-y-auto / no-scrollbar / h-full / min-h-0` 组成的内嵌滚动链，图表与结果区会按内容自然撑开，整页作为长报告顺滑下滚；Chat 则移除了消息主区的局部滚动锁，改为整页随对话长度自然增长，同时把输入区改成底部 sticky 悬浮，避免查看长对话时输入能力丢失。此次调整不删减既有功能、数据面板与提示入口，只重置滚动所有权。
 - 🧭 **Web 全系统 UI 密度重置与视口锁定收口** — `apps/dsa-web` 现已对共享 `Shell / PreviewShell / PageChrome / Input / Select`、SpaceX 主题末端覆盖层，以及高密度的 Home Bento / Portfolio / Admin Logs 页面执行统一降密：正文与标签层级整体缩小、卡片与控件间距压缩、输入高度收口到 `h-9`、表格行高下降、导航与 tab 样式改为更薄的仪表盘节奏，同时把壳层主链路改成 `h-screen + flex + min-h-0 + overflow-hidden`，将页面滚动收口到内容区内部而不是继续把整个 body 撑长。此次调整保持现有路由、数据流和后端契约不变，目标是减少首屏纵向占用和多重滚动条。
 - 🗂️ **Portfolio 持仓页右侧改为持仓主面板 + 历史抽屉** — `apps/dsa-web/src/pages/PortfolioPage.tsx` 移除了右侧 `Current Holdings / Order History` tabs，右栏现在固定聚焦当前持仓，历史委托/资金流水/公司行为改为通过右上角“历史记录 ↗”按钮呼出的页面级右侧抽屉承载。该调整保持现有数据流、分页、删除动作和左侧交易/账户/同步工作台不变，只收口右侧信息密度与滚动行为。
 - 🎯 **WolfyStock 品牌图标正式接入 Web 平台** — `apps/dsa-web` 新增独立 `WolfyStock` mark 资源，并把它接到顶栏品牌位、移动端品牌位、预览壳、首页 `WolfyStock` 标题旁、启动 splash fallback 与运行时 loading screen，同时把浏览器 favicon 切到该品牌图标。此次改动只更新前端品牌呈现，不改变现有路由、数据流或后端契约。

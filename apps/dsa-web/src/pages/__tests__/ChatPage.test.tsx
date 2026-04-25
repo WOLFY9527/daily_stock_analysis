@@ -167,7 +167,7 @@ beforeEach(() => {
 });
 
 describe('ChatPage', () => {
-  it('renders a fixed workspace shell with independent session and message viewports', async () => {
+  it('renders a native page-scroll chat shell with a sticky composer footer', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -178,19 +178,21 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('chat-bento-page')).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
-    expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('min-h-full', 'overflow-visible');
+    expect(screen.getByTestId('chat-bento-page')).toHaveClass('min-h-full', 'overflow-visible');
+    expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
     expect(screen.getByTestId('chat-bento-hero')).toBeInTheDocument();
     expect(await screen.findByTestId('chat-bento-hero-skill-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-workspace')).toHaveClass('flex-1', 'min-h-0', 'overflow-hidden');
+    expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'max-w-[1400px]', 'mx-auto', 'px-4', 'md:px-8', 'pt-4', 'pb-24', 'min-h-screen', 'flex', 'flex-col', 'bg-transparent', 'gap-6', 'md:gap-8');
+    expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'flex-col');
+    expect(screen.getByTestId('chat-main')).not.toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-4xl', 'mx-auto');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('shrink-0');
+    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex', 'w-full', 'justify-center');
+    expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('min-h-full');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-4xl', 'flex-col');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('sticky', 'bottom-0', 'z-50', 'w-full', 'py-4', 'bg-[#030303]/80', 'backdrop-blur-xl', 'border-t', 'border-white/5');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
-      'max-w-4xl',
       'rounded-full',
       'border-white/5',
       'bg-white/[0.02]',

@@ -150,12 +150,13 @@ const ChatPage: React.FC = () => {
   } = useAgentChatStore();
 
   const syncScrollState = useCallback(() => {
-    const viewport = messagesViewportRef.current;
-    if (!viewport) return;
+    if (typeof window === 'undefined') return;
+
+    const doc = document.documentElement;
     shouldStickToBottomRef.current = isNearBottom({
-      scrollTop: viewport.scrollTop,
-      clientHeight: viewport.clientHeight,
-      scrollHeight: viewport.scrollHeight,
+      scrollTop: window.scrollY || doc.scrollTop,
+      clientHeight: window.innerHeight || doc.clientHeight,
+      scrollHeight: Math.max(doc.scrollHeight, document.body.scrollHeight),
     });
   }, []);
 
@@ -175,6 +176,13 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     syncScrollState();
   }, [syncScrollState, sessionId]);
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleMessagesScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleMessagesScroll);
+    };
+  }, [handleMessagesScroll]);
 
   useEffect(() => {
     const behavior = pendingScrollBehaviorRef.current;
@@ -601,7 +609,7 @@ const ChatPage: React.FC = () => {
     <PageChrome
       pageTestId="chat-bento-page"
       pageClassName="workspace-page workspace-page--chat gemini-bento-page--chat"
-      scrollMode="contained"
+      scrollMode="page"
       eyebrow={chat('eyebrow')}
       title={(
         <span className="mb-2 mt-2 flex items-center gap-2">
@@ -732,7 +740,10 @@ const ChatPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="chat-bento-hero"
     >
-      <div data-testid="chat-workspace" className="flex w-full flex-1 min-h-0 flex-col overflow-hidden bg-[#030303]">
+      <div
+        data-testid="chat-workspace"
+        className="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-4 pb-24 min-h-screen flex flex-col bg-transparent gap-6 md:gap-8"
+      >
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title={chat('deleteConversationTitle')}
@@ -744,31 +755,25 @@ const ChatPage: React.FC = () => {
           onCancel={() => setDeleteConfirmId(null)}
         />
 
-        <div className="shrink-0 w-full max-w-4xl mx-auto px-6 pt-6">
-          {skillsLoadError ? (
-            <ApiErrorAlert
-              error={skillsLoadError}
-              actionLabel={chat('retryLoadSkills')}
-              onAction={() => {
-                void loadSkills();
-              }}
-            />
-          ) : null}
-        </div>
-
-        <div className="flex w-full flex-1 min-h-0 justify-center overflow-hidden">
-          <div className="relative flex h-full min-h-0 w-full max-w-4xl flex-col">
-          {/* Messages */}
+        <main data-testid="chat-main" className="flex flex-col">
           <div
             ref={messagesViewportRef}
-            onScroll={handleMessagesScroll}
             data-testid="chat-message-scroll"
-            className="flex-1 min-h-0 overflow-y-auto no-scrollbar"
+            className="flex w-full justify-center"
           >
-            <div data-testid="chat-message-stream" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-6 p-6">
+            <div data-testid="chat-message-stream" className="flex w-full max-w-4xl flex-col gap-8">
+              {skillsLoadError ? (
+                <ApiErrorAlert
+                  error={skillsLoadError}
+                  actionLabel={chat('retryLoadSkills')}
+                  onAction={() => {
+                    void loadSkills();
+                  }}
+                />
+              ) : null}
               {messages.length === 0 && !loading ? (
                 <div className="flex min-h-full w-full flex-col justify-center">
-                  <div className="mx-auto w-full max-w-4xl">
+                  <div className="w-full">
                     <div className="mx-auto max-w-2xl text-center">
                       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
                         <svg
@@ -792,7 +797,57 @@ const ChatPage: React.FC = () => {
                       </p>
                     </div>
 
-                    <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 place-items-stretch">
+                    {skills.length > 0 && (
+                      <section className="mt-8">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{chat('skills.sectionTitle')}</p>
+                            <p className="mt-1 text-sm text-secondary-text">{chat('skills.sectionBody')}</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSkill('')}
+                            className={`rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ${
+                              selectedSkill === ''
+                                ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground'
+                                : 'bg-white/[0.02] text-secondary-text hover:bg-white/[0.04] hover:text-foreground'
+                            }`}
+                          >
+                            {chat('skills.general')}
+                          </button>
+                          {skills.map((s) => (
+                            <div
+                              key={s.id}
+                              className="relative"
+                              onMouseEnter={() => setShowSkillDesc(s.id)}
+                              onMouseLeave={() => setShowSkillDesc(null)}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSkill(s.id)}
+                                className={`rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ${
+                                  selectedSkill === s.id
+                                    ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground'
+                                    : 'bg-white/[0.02] text-secondary-text hover:bg-white/[0.04] hover:text-foreground'
+                                }`}
+                              >
+                                {getLocalizedSkillNameById(s.id, s.name, t)}
+                              </button>
+                              {showSkillDesc === s.id && s.description ? (
+                                <div className="theme-menu-panel absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl pointer-events-none animate-fade-in">
+                                  <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
+                                  <p>{s.description}</p>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    <div className="mt-8 grid gap-4 place-items-stretch sm:grid-cols-2 xl:grid-cols-3">
                       {starterPromptCards.map((card) => (
                         <button
                           key={card.id}
@@ -934,12 +989,17 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Input area */}
-          <div data-testid="chat-input-shell" className="shrink-0 w-full bg-gradient-to-t from-[#030303] to-transparent pb-8 pt-4">
+        </main>
+
+        <footer
+          data-testid="chat-input-shell"
+          className="sticky bottom-0 z-50 w-full py-4 bg-[#030303]/80 backdrop-blur-xl border-t border-white/5"
+        >
+          <div className="mx-auto w-full max-w-4xl">
             {chatError ? (
               <ApiErrorAlert
                 error={chatError}
-                className="mx-auto mb-3 max-w-4xl"
+                className="mb-3"
                 actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
                 onAction={
                   chatError.category === 'local_connection_failed'
@@ -950,59 +1010,9 @@ const ChatPage: React.FC = () => {
                 }
               />
             ) : null}
-            {skills.length > 0 && (
-              <div className="mx-auto mb-3 max-w-4xl px-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{chat('skills.sectionTitle')}</p>
-                    <p className="mt-1 text-sm text-secondary-text">{chat('skills.sectionBody')}</p>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSkill('')}
-                    className={`rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ${
-                      selectedSkill === ''
-                        ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground'
-                        : 'bg-white/[0.02] text-secondary-text hover:bg-white/[0.04] hover:text-foreground'
-                    }`}
-                  >
-                    {chat('skills.general')}
-                  </button>
-                  {skills.map((s) => (
-                    <div
-                      key={s.id}
-                      className="relative"
-                      onMouseEnter={() => setShowSkillDesc(s.id)}
-                      onMouseLeave={() => setShowSkillDesc(null)}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSkill(s.id)}
-                        className={`rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ${
-                          selectedSkill === s.id
-                            ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground'
-                            : 'bg-white/[0.02] text-secondary-text hover:bg-white/[0.04] hover:text-foreground'
-                        }`}
-                      >
-                        {getLocalizedSkillNameById(s.id, s.name, t)}
-                      </button>
-                      {showSkillDesc === s.id && s.description ? (
-                        <div className="theme-menu-panel absolute left-0 bottom-full mb-2 z-50 w-64 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl pointer-events-none animate-fade-in">
-                          <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
-                          <p>{s.description}</p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div
               data-testid="chat-composer-omnibar"
-              className="mx-auto max-w-4xl rounded-full border border-white/5 bg-white/[0.02] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-xl transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
+              className="rounded-full border border-white/5 bg-white/[0.02] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-xl transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
             >
               <div className="flex items-end gap-3">
                 <textarea
@@ -1036,13 +1046,12 @@ const ChatPage: React.FC = () => {
               </div>
             </div>
             {isFollowUpContextLoading && (
-              <p className="mx-auto mt-2 max-w-4xl text-xs text-secondary-text">
+              <p className="mt-2 text-xs text-secondary-text">
                 {chat('followUpContextLoading')}
               </p>
             )}
           </div>
-          </div>
-        </div>
+        </footer>
       </div>
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}
