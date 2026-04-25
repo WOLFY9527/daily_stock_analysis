@@ -7,6 +7,9 @@ export const CARD_BUTTON_CLASS = 'inline-flex items-center gap-1.5 rounded-full 
 export const PANEL_METRIC_CLASS = 'rounded-[18px] border border-white/5 bg-white/[0.01] p-4 backdrop-blur-xl';
 export const BENTO_SURFACE_ROOT_CLASS = 'bento-surface-root';
 export const BENTO_GRID_ROOT_CLASS = 'bento-grid-root';
+export const SYSTEM_ACCENT_TEXT_CLASS = 'text-[#60A5FA]';
+export const SYSTEM_ACCENT_BORDER_CLASS = 'border-[#60A5FA]/24 bg-[#3B82F6]/10 text-[#60A5FA]';
+export const SYSTEM_ACCENT_GLOW_CLASS = 'bg-[#3B82F6]/16';
 
 const TONE_COLOR: Record<SignalTone, string> = {
   bullish: '#34D399',

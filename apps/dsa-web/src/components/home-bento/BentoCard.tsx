@@ -1,6 +1,6 @@
 import type React from 'react';
 import { cn } from '../../utils/cn';
-import { CARD_KICKER_CLASS, type SignalTone, getCardGlowClass } from './theme';
+import { CARD_KICKER_CLASS, SYSTEM_ACCENT_GLOW_CLASS, type SignalTone, getCardGlowClass } from './theme';
 
 type BentoCardProps = {
   eyebrow: string;
@@ -12,6 +12,7 @@ type BentoCardProps = {
   contentClassName?: string;
   tone?: SignalTone;
   accentGlow?: boolean;
+  accentGlowClassName?: string;
   testId?: string;
 };
 
@@ -25,6 +26,7 @@ export const BentoCard: React.FC<BentoCardProps> = ({
   contentClassName,
   tone = 'neutral',
   accentGlow = false,
+  accentGlowClassName = SYSTEM_ACCENT_GLOW_CLASS,
   testId,
 }) => (
   <section
@@ -34,12 +36,12 @@ export const BentoCard: React.FC<BentoCardProps> = ({
       className,
     )}
   >
-    {accentGlow && tone !== 'neutral' ? (
+    {accentGlow ? (
       <div
         aria-hidden="true"
         className={cn(
           'pointer-events-none absolute right-[-3rem] top-[-3rem] h-40 w-40 rounded-full blur-[72px]',
-          getCardGlowClass(tone),
+          accentGlowClassName || getCardGlowClass(tone),
         )}
       />
     ) : null}

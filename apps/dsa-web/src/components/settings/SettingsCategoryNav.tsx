@@ -23,14 +23,14 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
 }) => {
   const { language, t } = useI18n();
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-2xl">
+    <div className="flex h-full flex-col gap-1">
       {!hideHeader ? (
-        <div className="border-b border-white/5 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary-text">{t('settings.categoriesTitle')}</p>
+        <div className="px-3 pb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/36">{t('settings.categoriesTitle')}</p>
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 overflow-y-auto">
         {categories.map((category) => {
           const isActive = category.category === activeCategory;
           const count = (itemsByCategory[category.category] || []).length;
@@ -41,10 +41,10 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
               key={category.category}
               type="button"
               className={cn(
-                'mx-2 flex w-[calc(100%-1rem)] items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors',
+                'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors',
                 isActive
-                  ? 'border-emerald-500/30 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(16,185,129,0.08)]'
-                  : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]',
+                  ? 'bg-white/[0.05] text-white'
+                  : 'text-white/60 hover:bg-white/[0.02] hover:text-white',
                 disabled ? 'pointer-events-none opacity-60' : '',
               )}
               onClick={() => {
@@ -56,11 +56,15 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
               disabled={disabled}
             >
               <div className="min-w-0 flex-1">
-                <p className={cn('text-[12px] font-semibold tracking-wide uppercase', isActive ? 'text-white' : 'text-secondary-text')}>
+                <p className={cn('text-[12px] font-semibold tracking-wide uppercase', isActive ? 'text-white' : 'text-inherit')}>
                   {title}
                 </p>
               </div>
-              <span className="ml-3 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-mono text-muted-text">
+              <span className={cn(
+                'ml-3 rounded-full px-2 py-0.5 text-[10px] font-mono',
+                isActive ? 'bg-white/[0.08] text-white/70' : 'bg-white/[0.03] text-white/40',
+              )}
+              >
                 {count}
               </span>
             </button>

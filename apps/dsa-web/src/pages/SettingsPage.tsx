@@ -99,9 +99,10 @@ type CustomDataSourceRecord = {
   validation?: CustomDataSourceValidation;
 };
 
-const GLASS_SUBCARD_CLASS = 'rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4';
+const GLASS_SUBCARD_CLASS = 'rounded-2xl bg-white/[0.015] px-4 py-4';
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.03] p-1';
 const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
+const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-lg px-3 py-2 text-left text-sm transition-colors';
 type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
 type DataSourceLibraryEntry = {
   key: string;
@@ -2881,6 +2882,7 @@ const SettingsPage: React.FC = () => {
     <PageChrome
       pageTestId="settings-bento-page"
       pageClassName="workspace-page workspace-page--settings gemini-bento-page--settings"
+      scrollMode="page"
       headerClassName="shadow-soft-card-strong"
         eyebrow={t('settings.eyebrow')}
         title={t('settings.title')}
@@ -2920,6 +2922,54 @@ const SettingsPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="settings-bento-hero"
     >
+      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-10 px-4 py-8 md:flex-row md:px-8">
+        <aside className="w-full shrink-0 self-start md:sticky md:top-8 md:w-64">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-1">
+              <p className="mb-4 px-3 text-xs font-bold uppercase tracking-[0.22em] text-white/40">{t('settings.title')}</p>
+              {DOMAIN_ORDER.map((domain) => {
+                const nav = domainNavItems.find((item) => item.domain === domain);
+                if (!nav) {
+                  return null;
+                }
+                const isActive = activeDomain === domain;
+                return (
+                  <button
+                    key={domain}
+                    type="button"
+                    className={isActive
+                      ? `${CONSOLE_NAV_BUTTON_CLASS} bg-white/[0.05] font-medium text-white`
+                      : `${CONSOLE_NAV_BUTTON_CLASS} text-white/60 hover:bg-white/[0.02] hover:text-white`}
+                    onClick={() => {
+                      setActiveDomain(domain);
+                      const firstCategory = categories.find(
+                        (category) => (categoryDomainMap.get(category.category) || 'advanced') === domain,
+                      )?.category;
+                      if (firstCategory) {
+                        setActiveCategory(firstCategory);
+                      }
+                    }}
+                  >
+                    <span className="block">{nav.title}</span>
+                    <span className="mt-1 block text-xs text-white/40">{nav.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+              <SettingsCategoryNav
+                categories={domainCategories}
+                itemsByCategory={itemsByCategory}
+                activeCategory={activeCategory}
+                onSelect={setActiveCategory}
+                disabled={adminLocked}
+              />
+            </div>
+          </div>
+        </aside>
+
+        <main className="flex min-h-0 flex-1 flex-col gap-8">
 
       <SettingsSectionCard
         title={t('settings.controlPlaneTitle')}
@@ -2942,7 +2992,7 @@ const SettingsPage: React.FC = () => {
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {globalAdminStats.map((item) => (
-                <div key={item.key} className="rounded-2xl border border-white/5 bg-white/[0.03] px-3 py-3">
+                <div key={item.key} className="rounded-xl bg-white/[0.03] px-3 py-3">
                   <p className="text-[11px] uppercase tracking-[0.12em] text-muted-text">{item.label}</p>
                   <p className="mt-2 text-2xl font-semibold text-foreground">{item.value}</p>
                   <p className="mt-2 text-xs leading-5 text-secondary-text">{item.detail}</p>
@@ -2985,7 +3035,7 @@ const SettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[hsl(var(--accent-warning-hsl)/0.22)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-4 py-4">
+            <div className="rounded-2xl bg-[hsl(var(--accent-warning-hsl)/0.08)] px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-warning-hsl))]">
@@ -2995,8 +3045,8 @@ const SettingsPage: React.FC = () => {
                   <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.adminActionsSafetyDesc')}</p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-3">
-                <div className="rounded-2xl border border-white/5 bg-white/[0.03] px-3 py-3">
+              <div className="mt-4 divide-y divide-white/5 rounded-2xl bg-white/[0.03]">
+                <div className="px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminMaintenanceTitle')}</p>
@@ -3016,7 +3066,7 @@ const SettingsPage: React.FC = () => {
                   </div>
                   <p className="mt-3 text-xs text-secondary-text">{t('settings.adminActionResetRuntimeCachesHint')}</p>
                 </div>
-                <div className="rounded-2xl border border-[hsl(var(--accent-danger-hsl)/0.22)] bg-[hsl(var(--accent-danger-hsl)/0.08)] px-3 py-3">
+                <div className="px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">{t('settings.adminFactoryResetTitle')}</p>
@@ -3064,46 +3114,6 @@ const SettingsPage: React.FC = () => {
         <SettingsLoading />
       ) : (
         <div className="space-y-4">
-          <SettingsSectionCard
-            title={t('settings.domainTitle')}
-            description={t('settings.domainDesc')}
-          >
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-              {DOMAIN_ORDER.map((domain) => {
-                const nav = domainNavItems.find((item) => item.domain === domain);
-                if (!nav) {
-                  return null;
-                }
-                const isActive = activeDomain === domain;
-                const count = categories.filter((category) => (categoryDomainMap.get(category.category) || 'advanced') === domain).length;
-                return (
-                  <button
-                    key={domain}
-                    type="button"
-                    className={isActive
-                      ? 'rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-left transition-colors'
-                      : 'rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.05]'}
-                    onClick={() => {
-                      setActiveDomain(domain);
-                      const firstCategory = categories.find(
-                        (category) => (categoryDomainMap.get(category.category) || 'advanced') === domain,
-                      )?.category;
-                      if (firstCategory) {
-                        setActiveCategory(firstCategory);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{nav.title}</p>
-                      <p className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-mono text-muted-text">{count}</p>
-                    </div>
-                    <p className="text-xs text-secondary-text truncate">{nav.desc}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </SettingsSectionCard>
-
           {activeDomain === 'ai_models' ? (
             <SettingsSectionCard
               title={t('settings.aiAnalysisRouteTitle')}
@@ -3231,7 +3241,7 @@ const SettingsPage: React.FC = () => {
                 <div className="settings-surface rounded-xl border settings-border px-4 py-4" data-testid="ai-provider-quick-section">
                   <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyProviderTitle')}</p>
                   <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.aiDirectProviderTitle')}</p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                     {PROVIDER_LIBRARY_ITEMS.map((provider) => {
                       const providerState = providerReadinessByGateway.get(provider.key);
                       const quickApiConfigured = hasConfigValue(resolveQuickProviderCredential(provider.key));
@@ -3243,14 +3253,14 @@ const SettingsPage: React.FC = () => {
                       return (
                         <div
                           key={provider.key}
-                          className="rounded-[var(--theme-panel-radius-md)] border border-border/50 bg-base/40 px-3 py-3"
+                          className="rounded-[var(--theme-panel-radius-md)] bg-white/[0.02] px-3 py-3"
                           data-testid={`ai-provider-card-${provider.key}`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-foreground">{provider.label}</p>
                             <span className={isReady
-                              ? 'rounded-full border border-[hsl(var(--accent-positive-hsl)/0.4)] bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
-                              : 'rounded-full border border-border/60 bg-base/70 px-2 py-0.5 text-[11px] text-muted-text'}
+                              ? 'rounded-full bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
+                              : 'rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-muted-text'}
                             >
                               {isReady ? t('settings.aiProviderReady') : t('settings.aiProviderMissingCredential')}
                             </span>
@@ -3349,13 +3359,13 @@ const SettingsPage: React.FC = () => {
                       <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.dataRoutingCompactTitle')}</p>
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                     {dataRoutingGroups.map((group) => (
-                      <div key={group.role} className="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                      <div key={group.role} className="rounded-2xl bg-white/[0.02] p-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-semibold text-foreground">{group.role}</p>
-                            <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-secondary-text">
+                            <span className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-secondary-text">
                               {group.values.length ? t('settings.configuredNoPriority') : t('settings.notConfigured')}
                             </span>
                           </div>
@@ -3369,7 +3379,7 @@ const SettingsPage: React.FC = () => {
                               {group.values.map((source, index) => (
                                 <span
                                   key={`${group.role}-${source}-${index}`}
-                                  className="rounded-full border border-border/50 bg-base/50 px-2.5 py-1 text-[11px] text-secondary-text"
+                                  className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-secondary-text"
                                 >
                                   <span className={sourceToneClass(index)}>{priorityLabel(index)}</span>
                                   {' · '}
@@ -3423,7 +3433,7 @@ const SettingsPage: React.FC = () => {
                       {t('settings.dataSourceAddAction')}
                     </Button>
                   </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
                     {dataSourceLibrary.map((source) => (
                       <ApiSourceCard
                         key={source.key}
@@ -3525,113 +3535,99 @@ const SettingsPage: React.FC = () => {
             </SettingsSectionCard>
           ) : null}
 
-          <div className="w-full max-w-[1600px] mx-auto min-h-[calc(100vh-80px)] flex flex-col gap-8 md:flex-row">
-          {isDesktopViewport ? (
-            <aside className="w-full md:w-64 shrink-0 flex flex-col gap-4 sticky top-8 h-fit self-start">
+          {!isDesktopViewport ? (
+            <Disclosure
+              summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
+              className="rounded-2xl border border-white/5 bg-white/[0.02]"
+              bodyClassName="space-y-3"
+            >
               <SettingsCategoryNav
                 categories={domainCategories}
                 itemsByCategory={itemsByCategory}
                 activeCategory={activeCategory}
                 onSelect={setActiveCategory}
                 disabled={adminLocked}
+                hideHeader
               />
-            </aside>
+            </Disclosure>
           ) : null}
 
-          <section className="flex-1 min-h-0 space-y-4">
-            {!isDesktopViewport ? (
-              <Disclosure
-                summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
-                className="rounded-2xl border border-white/5 bg-white/[0.02]"
-                bodyClassName="space-y-3"
-              >
-                <SettingsCategoryNav
-                  categories={domainCategories}
-                  itemsByCategory={itemsByCategory}
-                  activeCategory={activeCategory}
-                  onSelect={setActiveCategory}
-                  disabled={adminLocked}
-                  hideHeader
-                />
-              </Disclosure>
-            ) : null}
+          {saveError ? (
+            <ApiErrorAlert
+              className="mt-4"
+              error={saveError}
+              actionLabel={retryAction === 'save' ? t('settings.retrySave') : undefined}
+              onAction={retryAction === 'save' ? () => void retry() : undefined}
+            />
+          ) : null}
 
-            {saveError ? (
-              <ApiErrorAlert
-                className="mt-4"
-                error={saveError}
-                actionLabel={retryAction === 'save' ? t('settings.retrySave') : undefined}
-                onAction={retryAction === 'save' ? () => void retry() : undefined}
-              />
-            ) : null}
-
-            {activeCategory === 'system' ? <AuthSettingsCard /> : null}
-            {activeCategory === 'base' ? (
-              <SettingsSectionCard
-                title={t('settings.importTitle')}
-                description={t('settings.importDesc')}
-              >
-                <IntelligentImport
-                  stockListValue={
-                    (activeItems.find((i) => i.key === 'STOCK_LIST')?.value as string) ?? ''
+          {activeCategory === 'system' ? <AuthSettingsCard /> : null}
+          {activeCategory === 'base' ? (
+            <SettingsSectionCard
+              title={t('settings.importTitle')}
+              description={t('settings.importDesc')}
+            >
+              <IntelligentImport
+                stockListValue={
+                  (activeItems.find((i) => i.key === 'STOCK_LIST')?.value as string) ?? ''
+                }
+                onMergeStockList={async (value) => {
+                  if (adminLocked) {
+                    return;
                   }
-                  onMergeStockList={async (value) => {
-                    if (adminLocked) {
-                      return;
-                    }
-                    await saveExternalItems([{ key: 'STOCK_LIST', value }], t('settings.success'));
-                  }}
-                  disabled={isSaving || isLoading || adminLocked}
-                />
-              </SettingsSectionCard>
-            ) : null}
-            {activeCategory === 'system' && passwordChangeable ? (
-              <ChangePasswordCard />
-            ) : null}
+                  await saveExternalItems([{ key: 'STOCK_LIST', value }], t('settings.success'));
+                }}
+                disabled={isSaving || isLoading || adminLocked}
+              />
+            </SettingsSectionCard>
+          ) : null}
+          {activeCategory === 'system' && passwordChangeable ? (
+            <ChangePasswordCard />
+          ) : null}
 
-            {activeItems.length ? (
-              <SettingsSectionCard
-                title={rawFieldsSectionTitle}
-                description={rawFieldsSectionDescription}
-              >
-                <div className={GLASS_SUBCARD_CLASS}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{activeCategoryLabel}</p>
-                      <p className="mt-1 text-xs leading-5 text-secondary-text">
-                        {activeItems.length
-                          ? `${rawFieldsSummaryText} · ${activeItems.length}`
-                          : activeCategoryDescription}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="settings-secondary"
-                      data-testid="raw-fields-drawer-trigger"
-                      onClick={() => setRawFieldsDrawerOpen(true)}
-                      disabled={adminLocked || isSaving}
-                    >
-                      {shouldCollapseRawFields ? rawFieldsToggleLabel : t('settings.dataSourceManageAction')}
-                    </Button>
+          {activeItems.length ? (
+            <SettingsSectionCard
+              title={rawFieldsSectionTitle}
+              description={rawFieldsSectionDescription}
+            >
+              <div className={GLASS_SUBCARD_CLASS}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{activeCategoryLabel}</p>
+                    <p className="mt-1 text-xs leading-5 text-secondary-text">
+                      {activeItems.length
+                        ? `${rawFieldsSummaryText} · ${activeItems.length}`
+                        : activeCategoryDescription}
+                    </p>
                   </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="settings-secondary"
+                    data-testid="raw-fields-drawer-trigger"
+                    onClick={() => setRawFieldsDrawerOpen(true)}
+                    disabled={adminLocked || isSaving}
+                  >
+                    {shouldCollapseRawFields ? rawFieldsToggleLabel : t('settings.dataSourceManageAction')}
+                  </Button>
                 </div>
-              </SettingsSectionCard>
-            ) : (
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
-                <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
-                <p className="mt-2 text-sm font-semibold text-foreground">
-                  {t('settings.noItems')}
-                </p>
-                <p className="mt-2 text-xs leading-6 text-muted-text">
-                  {activeCategoryDescription}
-                </p>
               </div>
-            )}
-          </section>
-          </div>
+            </SettingsSectionCard>
+          ) : (
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
+              <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
+              <p className="mt-2 text-sm font-semibold text-foreground">
+                {t('settings.noItems')}
+              </p>
+              <p className="mt-2 text-xs leading-6 text-muted-text">
+                {activeCategoryDescription}
+              </p>
+            </div>
+          )}
         </div>
       )}
+        </main>
+      </div>
 
       <Drawer
         isOpen={Boolean(dataRoutingDrawerKey && activeDataRoutingGroup)}

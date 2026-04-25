@@ -1,16 +1,17 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   BENTO_SURFACE_ROOT_CLASS,
   BentoGrid,
   DecisionCard,
   DeepReportDrawer,
   FundamentalsCard,
+  SYSTEM_ACCENT_BORDER_CLASS,
   StrategyCard,
   TechCard,
   type SignalTone,
-  getToneBorderClass,
 } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 
@@ -129,6 +130,8 @@ const CONTENT: Record<DashboardLocale, {
         { label: 'MACD', value: '零轴上方金叉', tone: 'bullish' },
         { label: '均线结构', value: 'MA20 / MA60 扩张', tone: 'bullish' },
         { label: '量价配合', value: '回踩缩量，突破放量', tone: 'bullish' },
+        { label: 'RSI', value: '65.4', tone: 'neutral' },
+        { label: '波动率', value: '2.4%', tone: 'neutral' },
       ],
       detailLabel: '查看结构细节',
     },
@@ -139,6 +142,8 @@ const CONTENT: Record<DashboardLocale, {
         { label: '自由现金流', value: '$16.4B', tone: 'bullish' },
         { label: '毛利率', value: '74.1%', tone: 'neutral' },
         { label: 'ROE', value: '31.8%', tone: 'bullish' },
+        { label: '市盈率 (PE)', value: '74.5', tone: 'neutral' },
+        { label: '机构持仓', value: '68.2%', tone: 'neutral' },
       ],
       detailLabel: '查看基本面细节',
     },
@@ -299,6 +304,8 @@ const CONTENT: Record<DashboardLocale, {
         { label: 'MACD', value: 'Bullish crossover above zero', tone: 'bullish' },
         { label: 'Moving Averages', value: 'MA20 / MA60 expansion', tone: 'bullish' },
         { label: 'Volume Profile', value: 'Quiet pullback, active breakout', tone: 'bullish' },
+        { label: 'RSI', value: '65.4', tone: 'neutral' },
+        { label: 'Volatility', value: '2.4%', tone: 'neutral' },
       ],
       detailLabel: 'Open Technical Brief',
     },
@@ -309,6 +316,8 @@ const CONTENT: Record<DashboardLocale, {
         { label: 'Free Cash Flow', value: '$16.4B', tone: 'bullish' },
         { label: 'Gross Margin', value: '74.1%', tone: 'neutral' },
         { label: 'ROE', value: '31.8%', tone: 'bullish' },
+        { label: 'PE', value: '74.5', tone: 'neutral' },
+        { label: 'Institutional Ownership', value: '68.2%', tone: 'neutral' },
       ],
       detailLabel: 'Open Fundamental Brief',
     },
@@ -431,13 +440,25 @@ const CONTENT: Record<DashboardLocale, {
 
 const HomeBentoDashboardPage: React.FC = () => {
   const { language } = useI18n();
+  const navigate = useNavigate();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const copy = CONTENT[locale];
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextQuery = query.trim();
+    if (!nextQuery) {
+      return;
+    }
+
+    navigate(`/chat?stock=${encodeURIComponent(nextQuery)}`);
+  };
 
   return (
     <div
@@ -445,7 +466,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       data-bento-surface="true"
       className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-col gap-4 bg-transparent px-4 md:px-8 xl:px-12 2xl:max-w-full`}
     >
-      <header className="shrink-0 flex flex-col gap-3 mb-4 mt-1" data-testid="home-bento-header">
+      <header className="mb-4 mt-8 flex shrink-0 flex-col gap-3" data-testid="home-bento-header">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
             {copy.heading}
@@ -454,7 +475,8 @@ const HomeBentoDashboardPage: React.FC = () => {
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div className="w-full md:max-w-xl">
-            <label
+            <form
+              onSubmit={handleSubmit}
               className="flex w-full items-center gap-2.5 rounded-full border border-white/5 bg-white/[0.01] px-4 py-2.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/15 focus-within:bg-white/[0.02] focus-within:ring-1 focus-within:ring-white/10"
               data-testid="home-bento-omnibar"
             >
@@ -466,11 +488,18 @@ const HomeBentoDashboardPage: React.FC = () => {
                 placeholder={copy.omnibarPlaceholder}
                 aria-label={copy.omnibarPlaceholder}
                 autoComplete="off"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
               />
-              <span className="shrink-0 rounded-md bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/30">
+              <button
+                type="submit"
+                className="relative z-10 shrink-0 rounded-md border border-white/8 bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/55 transition-colors duration-150 hover:bg-white/10 cursor-pointer"
+                data-testid="home-bento-omnibar-submit"
+                aria-label={locale === 'en' ? 'Submit stock search' : '提交股票搜索'}
+              >
                 ↵ Enter
-              </span>
-            </label>
+              </button>
+            </form>
           </div>
 
           <div className="flex flex-wrap gap-2 shrink-0">
@@ -478,10 +507,10 @@ const HomeBentoDashboardPage: React.FC = () => {
               <span className="font-medium text-white">{copy.instrument}</span>
               <span className="ml-2 font-mono text-white/40">{copy.ticker}</span>
             </div>
-            <div className={`rounded-full border px-3 py-1.5 text-xs ${getToneBorderClass('bullish')}`}>
+            <div className={`rounded-full border px-3 py-1.5 text-xs ${SYSTEM_ACCENT_BORDER_CLASS}`}>
               {copy.sessionBadge}
             </div>
-            <div className={`rounded-full border px-3 py-1.5 text-xs ${getToneBorderClass('neutral')}`}>
+            <div className="rounded-full border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs text-white/78">
               {copy.regimeBadge}
             </div>
           </div>

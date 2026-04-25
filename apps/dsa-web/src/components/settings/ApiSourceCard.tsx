@@ -41,10 +41,10 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   onValidate,
 }) => (
   <div
-    className="bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-2xl p-4"
+    className="rounded-2xl bg-white/[0.015] p-4"
     data-testid={testId}
   >
-    <div className="flex flex-wrap items-start justify-between gap-2">
+    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/5 pb-3">
       <div className="min-w-0">
         <p className="text-base font-semibold text-foreground">{label}</p>
         <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-text">{kindLabel}</p>
@@ -58,25 +58,27 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
         {validationLabel}
       </span>
     </div>
-    <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="mt-3 flex flex-wrap gap-1.5">
       {capabilities.map((capability) => (
         <span
           key={`${testId}-${capability}`}
-          className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-secondary-text"
+          className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-secondary-text"
         >
           {capability}
         </span>
       ))}
     </div>
-    <p className="mt-3 text-sm text-secondary-text">{statusText}</p>
-    <p className="mt-1 text-xs text-secondary-text">{validationMessage}</p>
-    <p className="mt-1 text-xs text-secondary-text">{usedByText}</p>
-    <div className="mt-3 space-y-1 text-[11px] text-muted-text">
+    <div className="mt-3 space-y-1 text-sm text-secondary-text">
+      <p>{statusText}</p>
+      <p className="text-xs">{validationMessage}</p>
+      <p className="text-xs">{usedByText}</p>
+    </div>
+    <div className="mt-3 space-y-1 border-t border-white/5 pt-3 text-[11px] text-muted-text">
       <p>{endpointText}</p>
       <p>{internalFlagText}</p>
     </div>
-    <p className="mt-3 line-clamp-3 text-[11px] text-muted-text">{description}</p>
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+    <p className="mt-3 line-clamp-3 border-t border-white/5 pt-3 text-[11px] text-muted-text">{description}</p>
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
       <Button
         type="button"
         size="sm"

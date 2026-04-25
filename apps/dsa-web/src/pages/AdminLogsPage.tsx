@@ -239,21 +239,21 @@ const AdminLogsPage: React.FC = () => {
   }, [selectedSessionId]);
 
   return (
-    <main className="mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-col gap-3 overflow-hidden px-4 py-3 md:px-5">
-      <section className="theme-panel-solid shrink-0 rounded-[0.85rem] border border-white/5 bg-white/[0.01] p-3">
-        <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_minmax(0,56rem)] xl:items-end">
+    <main className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-6 px-4 py-8 md:px-8">
+      <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,64rem)] xl:items-end">
           <div>
-            <h1 className="text-lg font-semibold text-foreground">{t('adminLogs.pageTitle')}</h1>
-            <p className="text-xs text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
-            <p className="mt-2 text-xs text-muted-text">{t('adminLogs.scopeTitle')}</p>
-            <p className="mt-2 text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
+            <h1 className="text-2xl font-semibold text-foreground">{t('adminLogs.pageTitle')}</h1>
+            <p className="mt-1 text-sm text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
+            <p className="mt-3 text-xs uppercase tracking-[0.18em] text-white/36">{t('adminLogs.scopeTitle')}</p>
+            <p className="mt-2 text-sm text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[9rem_8rem_10rem_minmax(0,1fr)_8rem_auto]">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[10rem_9rem_11rem_minmax(0,1fr)_9rem_auto]">
             <label className="sr-only" htmlFor="admin-logs-activity-type">{t('adminLogs.activityTypeLabel')}</label>
             <select
               id="admin-logs-activity-type"
               aria-label={t('adminLogs.activityTypeLabel')}
-              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-xl px-3 text-sm"
               value={activityTypeFilter}
               onChange={(e) => setActivityTypeFilter(e.target.value as 'all' | 'admin_action' | 'user_activity')}
             >
@@ -265,7 +265,7 @@ const AdminLogsPage: React.FC = () => {
             <input
               id="admin-logs-stock-filter"
               aria-label={t('adminLogs.stockFilterLabel')}
-              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-xl px-3 text-sm"
               placeholder={t('adminLogs.stockFilterPlaceholder')}
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value)}
@@ -274,7 +274,7 @@ const AdminLogsPage: React.FC = () => {
             <select
               id="admin-logs-category-filter"
               aria-label={t('adminLogs.categoryFilterLabel')}
-              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-xl px-3 text-sm"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -293,7 +293,7 @@ const AdminLogsPage: React.FC = () => {
             <input
               id="admin-logs-provider-filter"
               aria-label={t('adminLogs.providerFilterLabel')}
-              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-xl px-3 text-sm"
               placeholder={t('adminLogs.providerFilterPlaceholder')}
               value={keywordFilter}
               onChange={(e) => setKeywordFilter(e.target.value)}
@@ -302,7 +302,7 @@ const AdminLogsPage: React.FC = () => {
             <select
               id="admin-logs-status-filter"
               aria-label={t('adminLogs.statusFilterLabel')}
-              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-xl px-3 text-sm"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -313,7 +313,7 @@ const AdminLogsPage: React.FC = () => {
             </select>
             <button
               type="button"
-              className="btn-secondary h-9 px-3 py-1.5 text-sm sm:col-span-2 xl:col-span-1"
+              className="btn-secondary h-10 rounded-xl px-4 py-1.5 text-sm sm:col-span-2 xl:col-span-1"
               onClick={() => void loadSessions()}
               disabled={isLoadingList}
             >
@@ -325,86 +325,102 @@ const AdminLogsPage: React.FC = () => {
 
       {error ? <ApiErrorAlert error={error} /> : null}
 
-      <section className="grid flex-1 min-h-0 gap-3 lg:grid-cols-[360px,minmax(0,1fr)]">
-        <div className="theme-panel-solid flex min-h-0 flex-col rounded-[0.85rem] border border-white/5 bg-white/[0.01] p-3">
-          <div className="border-b border-border/50 px-2 pb-3">
-            <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
-            <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionListHint')}</p>
+      <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
+          <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionListHint')}</p>
+        </div>
+        {filteredSessions.length === 0 ? (
+          <div className="rounded-2xl bg-white/[0.02] px-4 py-6">
+            <p className="text-sm font-medium text-foreground">{t('adminLogs.noSessionsTitle')}</p>
+            <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
           </div>
-          {filteredSessions.length === 0 ? (
-            <div className="px-2 py-6">
-              <p className="text-sm font-medium text-foreground">{t('adminLogs.noSessionsTitle')}</p>
-              <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
+        ) : (
+          <div className="overflow-hidden rounded-2xl bg-white/[0.015]">
+            <div className="hidden grid-cols-[11rem_8rem_11rem_minmax(0,1fr)] gap-4 border-b border-white/5 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
+              <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+              <div>{locale === 'zh' ? '级别' : 'Level'}</div>
+              <div>{locale === 'zh' ? '模块' : 'Module'}</div>
+              <div>{locale === 'zh' ? '摘要' : 'Summary'}</div>
             </div>
-          ) : (
-            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pt-2">
+            <div className="divide-y divide-white/5">
               {filteredSessions.map((item) => {
                 const cls = STATUS_CLASS[item.overallStatus] || STATUS_CLASS.running;
                 const selected = selectedSessionId === item.sessionId;
                 const summary = item.readableSummary || {};
                 const notifState = String(summary.notificationClassification || '').trim();
+                const summaryTitle = item.name || item.code || t('adminLogs.unavailable');
+                const timeText = (item.startedAt && new Date(item.startedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')) || t('adminLogs.unavailable');
+                const moduleText = `${resolveSubsystemLabel(String(summary.subsystem || ''), t)}${summary.sessionKind ? ` · ${resolveSessionKindLabel(String(summary.sessionKind || ''), t)}` : ''}`;
                 return (
                   <button
                     key={item.sessionId}
                     type="button"
                     onClick={() => setSelectedSessionId(item.sessionId)}
-                    className={`w-full rounded-lg border px-3 py-2 text-left ${selected ? 'border-accent bg-accent/10' : 'border-border/50 bg-muted/10 hover:bg-muted/20'}`}
+                    className={`grid w-full gap-3 px-4 py-4 text-left transition-colors md:grid-cols-[11rem_8rem_11rem_minmax(0,1fr)] ${selected ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'}`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="break-words text-sm font-medium text-foreground">{item.name || item.code || t('adminLogs.unavailable')}</p>
-                        <p className="break-all text-xs text-muted-text">{item.sessionId}</p>
-                      </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] ${cls}`}>
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '时间' : 'Time'}</p>
+                      <p className="mt-1 text-sm text-secondary-text md:mt-0">{timeText}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '级别' : 'Level'}</p>
+                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] md:mt-0 ${cls}`}>
                         {resolveStatusLabel(item.overallStatus, t)}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-secondary-text">
-                      {(item.startedAt && new Date(item.startedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')) || t('adminLogs.unavailable')}
-                    </p>
-                    <p className="mt-1 break-words text-xs text-secondary-text">
-                      {summary.actorDisplay || t('adminLogs.unavailable')} · {resolveRoleLabel(String(summary.actorRole || ''), t)} · {resolveSubsystemLabel(String(summary.subsystem || ''), t)}
-                    </p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-secondary-text">
-                      <span>{resolveSessionKindLabel(String(summary.sessionKind || ''), t)}</span>
-                      {summary.actionName ? <span>{summary.actionName}</span> : null}
-                      {summary.scannerRunId ? <span>{formatScannerRunMeta(summary.scannerRunId, t)}</span> : null}
-                      {summary.scannerMarket ? <span>{summary.scannerMarket}</span> : null}
-                      {summary.scannerShortlistCount != null ? <span>{formatScannerShortlistMeta(summary.scannerShortlistCount, t)}</span> : null}
-                      <span>{t('adminLogs.finalAiModel')}: {summary.finalAiModel || t('adminLogs.unavailable')}</span>
-                      {summary.aiFallbackUsed ? (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                          {t('adminLogs.badge.aiFallback')}
-                        </span>
-                      ) : null}
-                      {summary.dataFallbackUsed ? (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                          {t('adminLogs.badge.dataFallback')}
-                        </span>
-                      ) : null}
-                      {notifState ? (
-                        <span className={`rounded-full px-2 py-0.5 ${STATUS_CLASS[notifState] || STATUS_CLASS.running}`}>
-                          {t('adminLogs.notification')}: {resolveStatusLabel(notifState, t)}
-                        </span>
-                      ) : null}
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '模块' : 'Module'}</p>
+                      <p className="mt-1 text-sm text-secondary-text md:mt-0">{moduleText}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '摘要' : 'Summary'}</p>
+                      <p className="mt-1 break-words text-sm font-medium text-foreground md:mt-0">{summaryTitle}</p>
+                      <p className="break-all text-xs text-muted-text">{item.sessionId}</p>
+                      <p className="mt-2 break-words text-xs text-secondary-text">
+                        {summary.actorDisplay || t('adminLogs.unavailable')} · {resolveRoleLabel(String(summary.actorRole || ''), t)} · {resolveSessionKindLabel(String(summary.sessionKind || ''), t)}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-secondary-text">
+                        {summary.actionName ? <span>{summary.actionName}</span> : null}
+                        {summary.scannerRunId ? <span>{formatScannerRunMeta(summary.scannerRunId, t)}</span> : null}
+                        {summary.scannerMarket ? <span>{summary.scannerMarket}</span> : null}
+                        {summary.scannerShortlistCount != null ? <span>{formatScannerShortlistMeta(summary.scannerShortlistCount, t)}</span> : null}
+                        <span>{t('adminLogs.finalAiModel')}: {summary.finalAiModel || t('adminLogs.unavailable')}</span>
+                        {summary.aiFallbackUsed ? (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                            {t('adminLogs.badge.aiFallback')}
+                          </span>
+                        ) : null}
+                        {summary.dataFallbackUsed ? (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                            {t('adminLogs.badge.dataFallback')}
+                          </span>
+                        ) : null}
+                        {notifState ? (
+                          <span className={`rounded-full px-2 py-0.5 ${STATUS_CLASS[notifState] || STATUS_CLASS.running}`}>
+                            {t('adminLogs.notification')}: {resolveStatusLabel(notifState, t)}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </button>
                 );
               })}
             </div>
-          )}
-        </div>
-
-        <div className="theme-panel-solid flex min-h-0 flex-col rounded-[0.85rem] border border-white/5 bg-white/[0.01] p-3">
-          <div className="border-b border-border/50 pb-3">
-            <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionDetailTitle')}</h2>
-            <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionDetailHint')}</p>
           </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
+        <div className="mb-4 border-b border-white/5 pb-4">
+          <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionDetailTitle')}</h2>
+          <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionDetailHint')}</p>
+        </div>
           {detailError ? <ApiErrorAlert error={detailError} /> : null}
           {isLoadingDetail ? (
             <p className="pt-3 text-sm text-muted-text">{t('adminLogs.loading')}</p>
           ) : detail ? (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pt-2">
+            <div className="space-y-5 pt-2">
               {(() => {
                 const readable = detail.readableSummary || {};
                 const events = Array.isArray(detail.events) ? detail.events : [];
@@ -417,7 +433,7 @@ const AdminLogsPage: React.FC = () => {
                       </h2>
                       <p className="mt-1 break-all text-xs text-muted-text">{detail.sessionId}</p>
                     </div>
-                    <section className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                    <section className="rounded-2xl bg-white/[0.015] p-4">
                       <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.executiveSummary')}</h3>
                       <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
                       <p className="break-words text-secondary-text">{t('adminLogs.actor')}: <span className="break-words text-foreground">{sourceText(readable.actorDisplay, t('adminLogs.unavailable'))}</span></p>
@@ -475,9 +491,9 @@ const AdminLogsPage: React.FC = () => {
                       <p className="break-all text-xs text-secondary-text">{t('adminLogs.taskId')}: <span className="break-all text-foreground">{detail.taskId || t('adminLogs.unavailable')}</span></p>
                     </div>
                     <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.timelineTitle')}</h3>
-                    <div className="space-y-2">
+                    <div className="overflow-hidden rounded-2xl bg-white/[0.015]">
                       {events.length === 0 ? (
-                        <div className="rounded-md border border-border/50 bg-muted/10 px-3 py-3">
+                        <div className="px-4 py-4">
                           <p className="text-sm font-medium text-foreground">{t('adminLogs.emptyTimelineTitle')}</p>
                           <p className="mt-1 text-sm text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>
                         </div>
@@ -488,7 +504,7 @@ const AdminLogsPage: React.FC = () => {
                         const outcome = String(event.outcome || '').trim().toLowerCase();
                         const reason = String(event.reason || '').trim();
                         return (
-                          <div key={event.id} className="rounded-md border border-border/50 bg-muted/10 px-3 py-2">
+                          <div key={event.id} className="border-b border-white/5 px-4 py-3 last:border-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] font-medium text-foreground">
                                 {resolveCategoryLabel(category, t)}
@@ -531,7 +547,6 @@ const AdminLogsPage: React.FC = () => {
               <p className="mt-1 text-sm text-muted-text">{t('adminLogs.selectSessionBody')}</p>
             </div>
           )}
-        </div>
       </section>
     </main>
   );

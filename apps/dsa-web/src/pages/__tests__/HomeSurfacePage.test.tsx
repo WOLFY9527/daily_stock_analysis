@@ -63,7 +63,8 @@ describe('HomeSurfacePage', () => {
     const main = screen.getByTestId('home-bento-main');
     const omnibar = screen.getByTestId('home-bento-omnibar');
     const omnibarInput = screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...');
-    expect(header).toHaveClass('shrink-0', 'flex', 'flex-col', 'gap-3', 'mb-4', 'mt-1');
+    const omnibarSubmit = screen.getByTestId('home-bento-omnibar-submit');
+    expect(header).toHaveClass('shrink-0', 'flex', 'flex-col', 'gap-3', 'mb-4', 'mt-8');
     expect(main).toHaveClass('flex-1', 'min-h-0');
     expect(main.className).not.toContain('md:overflow-hidden');
     expect(omnibar).toHaveClass(
@@ -81,7 +82,9 @@ describe('HomeSurfacePage', () => {
       'focus-within:ring-white/10',
     );
     expect(omnibarInput).toHaveAttribute('type', 'search');
-    expect(screen.getByText('↵ Enter')).toHaveClass('text-[10px]', 'text-white/30', 'bg-white/5');
+    expect(omnibarSubmit).toHaveAttribute('type', 'submit');
+    expect(omnibarSubmit).toHaveClass('relative', 'z-10', 'hover:bg-white/10', 'cursor-pointer');
+    expect(screen.getByText('↵ Enter')).toHaveClass('text-[10px]', 'bg-white/5');
     expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
@@ -101,9 +104,14 @@ describe('HomeSurfacePage', () => {
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
     expect(screen.getByText('建仓区间')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40');
+    expect(screen.getByText('118.40 - 121.00')).toHaveClass('whitespace-nowrap', 'text-xl');
     expect(screen.getByText('136.00')).toHaveClass('text-2xl', 'font-medium');
     expect(screen.getByText('零轴上方金叉')).toHaveClass('text-xl', 'font-medium');
     expect(screen.getByText('+18.2%')).toHaveClass('text-2xl', 'font-medium');
+    expect(screen.getByText('65.4')).toBeInTheDocument();
+    expect(screen.getByText('2.4%')).toBeInTheDocument();
+    expect(screen.getByText('市盈率 (PE)')).toBeInTheDocument();
+    expect(screen.getByText('68.2%')).toBeInTheDocument();
     expect(techMetricTiles.length).toBe(0);
     expect(fundamentalsMetricTiles.length).toBe(0);
     expect(screen.getByText('零轴上方金叉')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
@@ -143,5 +151,15 @@ describe('HomeSurfacePage', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     await new Promise((resolve) => window.setTimeout(resolve, 220));
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
+  });
+
+  it('submits the home omnibar through the enter button without breaking the surface', () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+    fireEvent.change(screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...'), {
+      target: { value: 'NVDA' },
+    });
+    fireEvent.click(screen.getByTestId('home-bento-omnibar-submit'));
+    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 });
