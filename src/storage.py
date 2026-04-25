@@ -1730,9 +1730,17 @@ class DatabaseManager:
         if not normalized_session_id:
             return None
         with self.get_session() as session:
-            return session.execute(
-                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
-            ).scalar_one_or_none()
+            return self._sqlite_find_app_user_session_row(session, session_id=normalized_session_id)
+
+    def _sqlite_find_app_user_session_row(
+        self,
+        session: Session,
+        *,
+        session_id: str,
+    ) -> Optional[AppUserSession]:
+        return session.execute(
+            select(AppUserSession).where(AppUserSession.session_id == session_id).limit(1)
+        ).scalar_one_or_none()
 
     def _sqlite_create_or_update_app_user_session(
         self,
@@ -1780,9 +1788,7 @@ class DatabaseManager:
         if not normalized_session_id:
             return False
         with self.get_session() as session:
-            row = session.execute(
-                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
-            ).scalar_one_or_none()
+            row = self._sqlite_find_app_user_session_row(session, session_id=normalized_session_id)
             if row is None:
                 return False
             row.last_seen_at = datetime.now()
@@ -1794,9 +1800,7 @@ class DatabaseManager:
         if not normalized_session_id:
             return False
         with self.get_session() as session:
-            row = session.execute(
-                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
-            ).scalar_one_or_none()
+            row = self._sqlite_find_app_user_session_row(session, session_id=normalized_session_id)
             if row is None:
                 return False
             row.revoked_at = datetime.now()
@@ -2054,7 +2058,7 @@ class DatabaseManager:
                 return True
             legacy_row = self._sqlite_get_app_user_session(normalized_session_id)
             if legacy_row is not None:
-                self._sync_phase_a_session_from_legacy(self._sqlite_get_app_user_session(normalized_session_id))
+                self._sync_phase_a_session_from_legacy(legacy_row)
                 return self._phase_a_store.revoke_app_user_session(normalized_session_id) or legacy_revoked
             return legacy_revoked
         return self._sqlite_revoke_app_user_session(normalized_session_id)
@@ -5270,6 +5274,19 @@ class DatabaseManager:
                 select(AnalysisHistory).where(and_(*conditions))
             ).scalars().first()
             return result
+
+    def list_recent_analysis_symbols(self) -> List[Tuple[str, Optional[str]]]:
+        """Return recent analysis-history codes and names in newest-first order."""
+        with self.get_session() as session:
+            rows = session.execute(
+                select(AnalysisHistory.code, AnalysisHistory.name)
+                .order_by(AnalysisHistory.created_at.desc())
+            ).all()
+        return [
+            (str(code), str(name) if name is not None else None)
+            for code, name in rows
+            if code
+        ]
 
     def delete_analysis_history_records(
         self,

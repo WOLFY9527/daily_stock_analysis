@@ -13,8 +13,6 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import select
-
 from src.storage import DatabaseManager, AnalysisHistory
 
 logger = logging.getLogger(__name__)
@@ -254,13 +252,8 @@ class AnalysisRepository:
 
     def list_recent_named_codes(self) -> List[Dict[str, Optional[str]]]:
         """Return recent analysis codes with their latest seen names."""
-        with self.db.get_session() as session:
-            rows = session.execute(
-                select(AnalysisHistory.code, AnalysisHistory.name)
-                .order_by(AnalysisHistory.created_at.desc())
-            ).all()
         return [
-            {"code": str(code or "").strip(), "name": str(name or "").strip() or None}
-            for code, name in rows
+            {"code": code.strip(), "name": str(name or "").strip() or None}
+            for code, name in self.db.list_recent_analysis_symbols()
             if code
         ]

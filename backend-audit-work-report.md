@@ -2,7 +2,7 @@
 
 - Generated at: `2026-04-25`
 - Branch: `main`
-- Scope: `backend/docs/governance only`
+- Scope: `backend/docs/governance + storage seam cleanup`
 - Frontend touched: `no`
 - Verdict: `completed_with_bounded_scope`
 
@@ -26,13 +26,26 @@
    - 增补审计产物归档/临时产物治理规则
 6. 更新变更记录：
    - `docs/CHANGELOG.md`
+7. 实施第一批 `storage` 收敛：
+   - `src/storage.py`
+   - `src/repositories/analysis_repo.py`
+   - `src/repositories/scanner_repo.py`
+   - `tests/test_storage.py`
+   - `docs/superpowers/plans/2026-04-25-storage-seam-audit.md`
 
 ## 为什么这么改
 
 - 当前仓库根目录累积了阶段性审计报告与切片交接 JSON，增加检索噪音，不利于长期维护。
 - 这些文件更适合作为历史档案或本地产物，而不是项目根目录的常驻入口。
 - 本轮目标是“后端大审计前的基础治理”，优先把文档真源、维护入口和仓库结构理顺，再做更深的代码级优化。
+- 在真正进入大体量 `storage.py` 之前，先收掉可证明安全的重复 seam，避免一上来做高风险拆分。
 - 由于 `apps/dsa-web/` 当前已有进行中的未提交改动，本次严格避免前端改造，防止交叉污染。
+
+## 第一批代码级收敛
+
+- 将“最近分析历史中的代码/名称读取”统一收敛到 `DatabaseManager.list_recent_analysis_symbols()`，避免 `AnalysisRepository` 与 `ScannerRepository` 各自维护一份相同 SQL。
+- 将 SQLite app-user session 单条查询统一收敛到 `_sqlite_find_app_user_session_row(...)`，减少 `_sqlite_get_app_user_session`、`_sqlite_touch_app_user_session`、`_sqlite_revoke_app_user_session` 的重复查询代码。
+- 顺手消除了 `revoke_app_user_session()` 在 Phase A 回退路径中对同一 legacy session 的重复读取。
 
 ## 验证情况
 
@@ -42,17 +55,25 @@
   - PASS
 - `python3 -m pytest tests/test_api_app_health.py -q`
   - PASS
+- `PYTHONPYCACHEPREFIX=/tmp/dsa-pyc python3 -m py_compile src/storage.py src/repositories/analysis_repo.py src/repositories/scanner_repo.py tests/test_storage.py`
+  - PASS
+- `python3 -m pytest tests/test_storage.py -q`
+  - PASS
+- `python3 -m pytest tests/test_auth_api.py -q`
+  - PASS
 
 ## 未验证项
 
 - 未运行 `./scripts/ci_gate.sh`
 - 未运行前端 `npm run lint` / `npm run build`
 - 未运行浏览器验证
-- 未进行大范围后端性能 benchmark 或重复 helper 合并
+- 未进行大范围后端性能 benchmark
+- 未开始第二批 `storage.py` / `portfolio_service.py` / `market_scanner_service.py` 重复 helper 深度清理
 
 ## 风险点
 
 - 本次主要是仓库治理与文档收敛，不等于完成整仓后端代码级性能审计。
+- 第一批代码改动属于 seam 级别收敛，不等于 `DatabaseManager` 架构性拆分。
 - 历史审计报告已移动到归档目录；若有外部脚本硬编码根目录路径，需要同步改为新路径。
 - 由于本次故意避开前端，README 中与产品功能有关的旧表述仍可能存在后续需继续修订的内容。
 
@@ -65,6 +86,10 @@
    - `docs/architecture/backend-frontend-modular-maintenance-handbook.md`
    - `docs/architecture/system-optimization-audit.md`
    - `docs/CHANGELOG.md`
+   - `src/storage.py`
+   - `src/repositories/analysis_repo.py`
+   - `src/repositories/scanner_repo.py`
+   - `tests/test_storage.py`
 
 ## 下一阶段建议
 

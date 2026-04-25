@@ -10,7 +10,6 @@ from sqlalchemy import and_, desc, func, or_, select
 
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normalize_scope
 from src.storage import (
-    AnalysisHistory,
     DatabaseManager,
     MarketScannerCandidate,
     MarketScannerRun,
@@ -200,16 +199,7 @@ class ScannerRepository:
 
     def list_recent_analysis_symbols(self) -> List[Tuple[str, Optional[str]]]:
         """Return recent analysis-history codes and names for scanner-local fallbacks."""
-        with self.db.get_session() as session:
-            rows = session.execute(
-                select(AnalysisHistory.code, AnalysisHistory.name)
-                .order_by(AnalysisHistory.created_at.desc())
-            ).all()
-            return [
-                (str(code), str(name) if name is not None else None)
-                for code, name in rows
-                if code
-            ]
+        return self.db.list_recent_analysis_symbols()
 
     def count_recent_symbol_mentions(
         self,

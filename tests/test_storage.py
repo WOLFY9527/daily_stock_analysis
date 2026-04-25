@@ -2,13 +2,27 @@
 import unittest
 import sys
 import os
+from datetime import datetime, timedelta
 
 # Ensure src module can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.storage import DatabaseManager
+from src.analyzer import AnalysisResult
+from src.repositories.analysis_repo import AnalysisRepository
+from src.repositories.scanner_repo import ScannerRepository
 
 class TestStorage(unittest.TestCase):
+
+    def _build_analysis_result(self, *, code: str, name: str) -> AnalysisResult:
+        return AnalysisResult(
+            code=code,
+            name=name,
+            sentiment_score=70,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary=f"{name} 分析摘要",
+        )
     
     def test_parse_sniper_value(self):
         """测试解析狙击点位数值"""
@@ -88,6 +102,67 @@ class TestStorage(unittest.TestCase):
         )
 
         self.assertEqual({item["session_id"] for item in sessions}, {"feishu_u1", "feishu_u1:ask_600519"})
+
+        DatabaseManager.reset_instance()
+
+    def test_list_recent_analysis_symbols_returns_shared_recent_code_name_view(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        db.save_analysis_history(
+            result=self._build_analysis_result(code="600001", name="算力龙头"),
+            query_id="query_600001",
+            report_type="simple",
+            news_content="",
+            save_snapshot=False,
+        )
+        db.save_analysis_history(
+            result=self._build_analysis_result(code="600002", name="机器人核心"),
+            query_id="query_600002",
+            report_type="simple",
+            news_content="",
+            save_snapshot=False,
+        )
+
+        recent_symbols = db.list_recent_analysis_symbols()
+        scanner_repo = ScannerRepository(db)
+        analysis_repo = AnalysisRepository(db)
+
+        self.assertEqual(
+            recent_symbols[:2],
+            [("600002", "机器人核心"), ("600001", "算力龙头")],
+        )
+        self.assertEqual(scanner_repo.list_recent_analysis_symbols()[:2], recent_symbols[:2])
+        self.assertEqual(
+            analysis_repo.list_recent_named_codes()[:2],
+            [
+                {"code": "600002", "name": "机器人核心"},
+                {"code": "600001", "name": "算力龙头"},
+            ],
+        )
+
+        DatabaseManager.reset_instance()
+
+    def test_touch_and_revoke_app_user_session_keep_session_state_consistent(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        user = db.ensure_bootstrap_admin_user()
+        expires_at = datetime.now() + timedelta(hours=1)
+        created = db.create_app_user_session(
+            session_id="session-1",
+            user_id=str(user.id),
+            expires_at=expires_at,
+        )
+
+        self.assertEqual(created.session_id, "session-1")
+        self.assertTrue(db.touch_app_user_session("session-1"))
+        self.assertTrue(db.revoke_app_user_session("session-1"))
+
+        row = db.get_app_user_session("session-1")
+        self.assertIsNotNone(row)
+        self.assertIsNotNone(row.last_seen_at)
+        self.assertIsNotNone(row.revoked_at)
 
         DatabaseManager.reset_instance()
 
