@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ApiErrorAlert, Badge, Button, Card, Disclosure } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
@@ -11,7 +11,6 @@ import type {
 import {
   AssumptionList,
   Banner,
-  Disclosure,
   RULE_BENCHMARK_OPTIONS,
   RuleRunsTable,
   SectionEyebrow,
@@ -1690,7 +1689,9 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       </nav>
 
       <div className="space-y-6" data-testid="backtest-control-panel-expanded">
-        {PROFESSIONAL_STEP_ORDER.map((step) => professionalControlSections[step])}
+        {PROFESSIONAL_STEP_ORDER.map((step) => (
+          <Fragment key={step}>{professionalControlSections[step]}</Fragment>
+        ))}
       </div>
 
       {renderHistorySection()}

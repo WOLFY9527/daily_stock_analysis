@@ -128,6 +128,11 @@ function renderBacktestRoutes(
   );
 }
 
+function expectCollapsedHistoryDisclosure(language: 'zh' | 'en' = 'zh') {
+  const label = language === 'en' ? /^History \(\d+\)$/ : /^历史（\d+）$/;
+  expect(screen.getByText(label)).toBeInTheDocument();
+}
+
 function makeRunResponse(overrides: Partial<BacktestRunResponse> = {}): BacktestRunResponse {
   return {
     runId: 1,
@@ -917,7 +922,7 @@ describe('BacktestPage', () => {
     expect(screen.queryByTestId('backtest-control-section-strategy')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-control-section-run')).not.toBeInTheDocument();
     expect(screen.getByText('页面说明')).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes('历史') && content.includes('1'))).toBeInTheDocument();
+    expectCollapsedHistoryDisclosure();
 
     fireEvent.click(screen.getByTestId('backtest-bento-drawer-trigger'));
     expect(await screen.findByTestId('backtest-bento-drawer')).toBeInTheDocument();
@@ -1001,7 +1006,7 @@ describe('BacktestPage', () => {
     expect(screen.getByText('默认补全与提醒')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.getAllByLabelText(/我已确认当前解析结果与执行假设/i)).toHaveLength(1);
-    expect(screen.getByTestId('backtest-display-section-history')).toBeInTheDocument();
+    expectCollapsedHistoryDisclosure();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1090,7 +1095,7 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-control-section-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-confirm')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-run')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-display-section-history')).toBeInTheDocument();
+    expectCollapsedHistoryDisclosure();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
