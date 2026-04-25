@@ -1,5 +1,5 @@
 import type React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
@@ -328,33 +328,40 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('portfolio-bento-hero')).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-bento-hero-equity-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('max-w-[1400px]');
+    expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-total-assets-card')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('portfolio-bento-drawer-trigger'));
-    expect(await screen.findByTestId('portfolio-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByText('持仓页面摘要')).toBeInTheDocument();
+    const refreshFxButton = screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') });
+    expect(refreshFxButton).toBeInTheDocument();
+    expect(refreshFxButton.className).toContain('shrink-0');
+    expect(refreshFxButton.className).toContain('whitespace-nowrap');
+    expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '交易' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '账户' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '同步' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '历史记录 ↗' })).toBeInTheDocument();
   });
 
-  it('keeps manual entry tools collapsed by default once accounts are available', async () => {
+  it('switches left tabs between trade, account, and sync surfaces', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    const summary = screen.getByText(translate('zh', 'portfolio.manualAdjustments'));
-    const disclosure = summary.closest('details');
-
-    expect(disclosure).not.toBeNull();
-    expect(disclosure).not.toHaveAttribute('open');
-
-    fireEvent.click(summary.closest('summary') ?? summary);
-
-    expect(disclosure).toHaveAttribute('open');
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.createAccountTitle'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.dataSyncTitle'))).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '账户' }));
+    expect(screen.getAllByText(translate('zh', 'portfolio.createAccountTitle')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.createAccount') })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '同步' }));
     expect(screen.getByText(translate('zh', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.currentImportAccount'))).toBeInTheDocument();
   });
 
   it('shows IBKR as a broker import option and surfaces account-linked connection context', async () => {
@@ -387,6 +394,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(accountSelect, { target: { value: '1' } });
 
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
+    fireEvent.click(screen.getByRole('button', { name: '同步' }));
 
     const brokerSelect = screen.getAllByRole('combobox').find((element) =>
       (element as HTMLSelectElement).value === 'huatai'
@@ -395,7 +403,7 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(screen.getByText(translate('zh', 'portfolio.ibkrImportHint'))).toBeInTheDocument();
     expect(screen.getByText('Primary IBKR')).toBeInTheDocument();
-    expect(screen.getByText('U1234567')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('U1234567')).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.currentImportAccount'))).toBeInTheDocument();
   });
 
@@ -434,6 +442,7 @@ describe('PortfolioPage FX refresh', () => {
     const accountSelect = screen.getAllByRole('combobox')[0];
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
+    fireEvent.click(screen.getByRole('button', { name: '同步' }));
 
     const brokerSelect = screen.getAllByRole('combobox').find((element) =>
       (element as HTMLSelectElement).value === 'huatai'
@@ -454,13 +463,8 @@ describe('PortfolioPage FX refresh', () => {
       apiBaseUrl: 'https://localhost:5000/v1/api',
       verifySsl: false,
     }));
-    expect(await screen.findByText(new RegExp(`${translate('zh', 'portfolio.accountRef')}:`))).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) =>
-        element?.tagName.toLowerCase() === 'span'
-        && (element.textContent || '').includes(translate('zh', 'portfolio.syncOverlay')),
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.syncResult')).closest('div')).toHaveTextContent(`${translate('zh', 'portfolio.positionsCountLabel')} 1`);
   });
 
   it('keeps the IBKR sync result visible after metadata refresh and preserves the broker selector', async () => {
@@ -569,6 +573,7 @@ describe('PortfolioPage FX refresh', () => {
     const accountSelect = screen.getAllByRole('combobox')[0];
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
+    fireEvent.click(screen.getByRole('button', { name: '同步' }));
 
     const brokerSelect = screen.getAllByRole('combobox').find((element) =>
       (element as HTMLSelectElement).value === 'huatai'
@@ -588,7 +593,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(listBrokerConnections.mock.calls.length).toBeGreaterThan(brokerConnectionCallCount));
     await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallCount));
 
-    expect(await screen.findByText(new RegExp(`${translate('zh', 'portfolio.accountRef')}:`))).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
     expect(screen.getByText('AAPL')).toBeInTheDocument();
     expect(brokerSelect.value).toBe('ibkr');
     const syncResultCard = screen.getByText(translate('zh', 'portfolio.syncResult')).closest('div');
@@ -908,18 +913,17 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.getByRole('heading', { name: translate('en', 'portfolio.title') })).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'portfolio.description'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'portfolio.accountView'))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('en', 'portfolio.createAccount') })).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'portfolio.totalEquity'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'portfolio.drawdownTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'portfolio.positionsTitle'))).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Trade' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'History ↗' })).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'portfolio.noPositions'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'portfolio.brokerImport'))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('en', 'portfolio.refreshData') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'portfolio.refreshFx') })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
+    expect(screen.getByText(translate('en', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
   });
 
   it('renders localized English FX refresh feedback on /en routes', async () => {
@@ -977,6 +981,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
     fireEvent.change(
       screen.getAllByRole('combobox').find((element) => (element as HTMLSelectElement).value === 'huatai') as HTMLSelectElement,
       { target: { value: 'ibkr' } },
@@ -988,12 +993,8 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(await screen.findByText(translate('en', 'portfolio.readOnlyBadge'))).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'portfolio.ibkrImportHint'))).toBeInTheDocument();
-    expect(
-      await screen.findAllByText((_, element) => (
-        element?.textContent || ''
-      ).includes(`${translate('en', 'portfolio.accountRef')}:`)),
-    ).not.toHaveLength(0);
-    expect(screen.queryByText(/^Ref:/)).not.toBeInTheDocument();
+    expect(screen.getByText(translate('en', 'portfolio.syncResult'))).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes(translate('en', 'portfolio.positionsCountLabel')))).toBeInTheDocument();
   });
 
   it('keeps zh IBKR sync detail labels localized on default routes', async () => {
@@ -1030,6 +1031,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
+    fireEvent.click(screen.getByRole('button', { name: '同步' }));
     fireEvent.change(
       screen.getAllByRole('combobox').find((element) => (element as HTMLSelectElement).value === 'huatai') as HTMLSelectElement,
       { target: { value: 'ibkr' } },
@@ -1040,217 +1042,145 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.syncIbkr') }));
 
     expect(await screen.findByText(translate('zh', 'portfolio.readOnlyBadge'))).toBeInTheDocument();
-    expect(
-      await screen.findAllByText((_, element) => (
-        element?.textContent || ''
-      ).includes(`${translate('zh', 'portfolio.accountRef')}:`)),
-    ).not.toHaveLength(0);
+    expect(screen.getByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.syncResult')).closest('div')).toHaveTextContent(`${translate('zh', 'portfolio.positionsCountLabel')} 1`);
     expect(screen.queryByText(translate('en', 'portfolio.readOnlyBadge'))).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Ref:/)).not.toBeInTheDocument();
   });
 
-  it('renders additive portfolio attribution blocks without changing the existing snapshot flow', async () => {
+  it('renders the rebuilt two-column portfolio shell without the legacy attribution dashboard', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    expect(screen.getByText(translate('zh', 'portfolio.attribution.portfolioTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'portfolio.attribution.accountTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'portfolio.attribution.industryTitle'))).toBeInTheDocument();
-    expect(screen.getAllByText('Account 1').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Main').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('半导体').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('61.20%').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('100.00%').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('portfolio-attribution-dashboard')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Trade Station' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.noPositions'))).toBeInTheDocument();
   });
 
-  it('renders compact attribution visual summaries for additive portfolio blocks', async () => {
-    const snapshot = makeSnapshot();
-    snapshot.portfolioAttribution = {
-      accountAttribution: {
-        topAccounts: [
-          { accountId: 1, accountName: 'Account 1', equityWeightPct: 61.2 },
-          { accountId: 2, accountName: 'Satellite', equityWeightPct: 38.8 },
-        ],
-      },
-      industryAttribution: {
-        topIndustries: [
-          { industry: '半导体', weightPct: 61.2, symbolCount: 2 },
-          { industry: '软件', weightPct: 24.8, symbolCount: 1 },
-        ],
-      },
-    };
-
-    const risk = makeRisk();
-    risk.accountAttribution = {
-      topAccounts: [
-        { accountId: 1, accountName: 'Main', equityWeightPct: 61.2 },
-        { accountId: 2, accountName: 'Satellite', equityWeightPct: 38.8 },
-      ],
-    };
-    risk.industryAttribution = {
-      topIndustries: [
-        { industry: '半导体', weightPct: 61.2, symbolCount: 2 },
-        { industry: '软件', weightPct: 24.8, symbolCount: 1 },
-      ],
-    };
-
-    getSnapshot.mockImplementation(async () => snapshot);
-    getRisk.mockResolvedValue(risk);
-
+  it('locks the portfolio viewport and only renders one trade form at a time', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    expect(screen.getByTestId('portfolio-attribution-dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-attribution-visual-summary')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'portfolio.attribution.dominantMix'))).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-attribution-hero')).toHaveAttribute('title', translate('zh', 'portfolio.attribution.portfolioHeroTitle'));
-    expect(screen.getByTestId('account-attribution-top-list')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'portfolio.attribution.accountTopList'))).toBeInTheDocument();
-    expect(screen.getAllByText('Satellite').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveTextContent(translate('zh', 'portfolio.attribution.coverage', { coverage: '100.00' }));
-    expect(screen.getByTestId('account-attribution-distribution-band')).toHaveAttribute('title', translate('zh', 'portfolio.attribution.accountDistributionTitle', { coverage: '100.00' }));
-    expect(screen.getByTestId('industry-attribution-top-list')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'portfolio.attribution.industryTopList'))).toBeInTheDocument();
-    expect(screen.getAllByText('软件').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveTextContent(translate('zh', 'portfolio.attribution.coverage', { coverage: '86.00' }));
-    expect(screen.getByTestId('industry-attribution-distribution-band')).toHaveAttribute('title', translate('zh', 'portfolio.attribution.industryDistributionTitle', { coverage: '86.00' }));
+    const pageShell = screen.getByTestId('portfolio-bento-page');
+    expect(pageShell.className).toContain('h-[calc(100vh-80px)]');
+    expect(pageShell.className).toContain('flex');
+    expect(pageShell.className).toContain('flex-col');
+    expect(pageShell.className).toContain('overflow-hidden');
+    expect(pageShell.className).toContain('bg-transparent');
+    expect(pageShell.className).toContain('pt-2');
+    expect(pageShell.className).toContain('pb-2');
+
+    const scrollContainer = screen.getByTestId('portfolio-trade-station-scroll');
+    expect(scrollContainer.className).toContain('min-h-0');
+    expect(scrollContainer.className).toContain('overflow-y-auto');
+    expect(scrollContainer.className).toContain('no-scrollbar');
+    expect(scrollContainer.className).toContain('p-5');
+
+    const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
+    expect(totalAssetsCard.className).toContain('shrink-0');
+    expect(totalAssetsCard.className).toContain('rounded-[24px]');
+
+    const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');
+    expect(summaryBlock.className).toContain('flex');
+    expect(summaryBlock.className).toContain('flex-col');
+    expect(summaryBlock.className).toContain('gap-1');
+    expect(summaryBlock.className).toContain('py-2');
+
+    expect(screen.getByRole('button', { name: '股票买卖' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '资金划转' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '公司行为' })).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.manualCash'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.manualCorporate'))).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '资金划转' }));
+    expect(screen.getByText(translate('zh', 'portfolio.manualCash'))).toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.manualTrade'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.manualCorporate'))).not.toBeInTheDocument();
+
+    const cashAmountCurrencyGrid = screen.getByTestId('portfolio-cash-amount-currency-grid');
+    expect(cashAmountCurrencyGrid.className).toContain('grid');
+    expect(cashAmountCurrencyGrid.className).toContain('grid-cols-2');
+    expect(cashAmountCurrencyGrid.className).toContain('gap-4');
+
+    const cashCurrencySelect = screen.getByTestId('portfolio-cash-currency-select');
+    expect(cashCurrencySelect.tagName).toBe('SELECT');
+    expect(cashCurrencySelect.className).toContain('py-1.5');
+    expect(cashCurrencySelect.className).toContain('h-8');
+    expect(cashCurrencySelect.className).toContain('text-sm');
+
+    fireEvent.click(screen.getByRole('button', { name: '公司行为' }));
+    expect(screen.getByText(translate('zh', 'portfolio.manualCorporate'))).toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.manualTrade'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.manualCash'))).not.toBeInTheDocument();
   });
 
-  it('shows attribution hover details and linked highlights across the additive dashboard panels', async () => {
-    const snapshot = makeSnapshot();
-    snapshot.portfolioAttribution = {
-      accountAttribution: {
-        topAccounts: [
-          { accountId: 1, accountName: 'Account 1', equityWeightPct: 70 },
-          { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
-        ],
-      },
-      industryAttribution: {
-        topIndustries: [
-          { industry: '半导体', weightPct: 55, symbolCount: 2 },
-          { industry: '软件', weightPct: 25, symbolCount: 1 },
-        ],
-      },
-    };
-
-    const risk = makeRisk();
-    risk.accountAttribution = {
-      topAccounts: [
-        { accountId: 1, accountName: 'Main', equityWeightPct: 70 },
-        { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
-      ],
-    };
-    risk.industryAttribution = {
-      topIndustries: [
-        { industry: '半导体', weightPct: 55, symbolCount: 2 },
-        { industry: '软件', weightPct: 25, symbolCount: 1 },
-      ],
-    };
-
-    getSnapshot.mockImplementation(async () => snapshot);
-    getRisk.mockResolvedValue(risk);
-
+  it('opens the order history drawer and shows event filters', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
-    fireEvent.mouseEnter(screen.getByTestId('portfolio-attribution-hero'));
+    fireEvent.click(screen.getByRole('button', { name: '历史记录 ↗' }));
 
-    expect(screen.getByTestId('portfolio-attribution-hover-tooltip')).toHaveTextContent(translate('zh', 'portfolio.attribution.accountHover'));
-    expect(screen.getByTestId('account-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
-
-    fireEvent.mouseLeave(screen.getByTestId('portfolio-attribution-hero'));
-    expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
-
-    fireEvent.mouseEnter(screen.getByTestId('industry-attribution-distribution-band-legend-0'));
-    expect(screen.getByTestId('industry-attribution-distribution-band-tooltip')).toHaveTextContent('半导体');
-    expect(screen.getByTestId('industry-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
+    expect(screen.getByTestId('portfolio-history-drawer')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '历史记录' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.tradeLedger') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.cashLedger') })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: translate('zh', 'portfolio.corporateLedger') }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshLedger') })).toBeInTheDocument();
   });
 
-  it('supports keyboard focus details and linked highlights across attribution panels', async () => {
-    const snapshot = makeSnapshot();
-    snapshot.portfolioAttribution = {
-      accountAttribution: {
-        topAccounts: [
-          { accountId: 1, accountName: 'Account 1', equityWeightPct: 70 },
-          { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
-        ],
-      },
-      industryAttribution: {
-        topIndustries: [
-          { industry: '半导体', weightPct: 55, symbolCount: 2 },
-          { industry: '软件', weightPct: 25, symbolCount: 1 },
-        ],
-      },
-    };
-
-    const risk = makeRisk();
-    risk.accountAttribution = {
-      topAccounts: [
-        { accountId: 1, accountName: 'Main', equityWeightPct: 70 },
-        { accountId: 2, accountName: 'Satellite', equityWeightPct: 30 },
-      ],
-    };
-    risk.industryAttribution = {
-      topIndustries: [
-        { industry: '半导体', weightPct: 55, symbolCount: 2 },
-        { industry: '软件', weightPct: 25, symbolCount: 1 },
-      ],
-    };
-
-    getSnapshot.mockImplementation(async () => snapshot);
-    getRisk.mockResolvedValue(risk);
-
+  it('switches order-history event type filters inside the drawer without restoring the old attribution surface', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    const portfolioHero = screen.getByTestId('portfolio-attribution-hero');
-    expect(portfolioHero).toHaveAttribute('tabindex', '0');
-    fireEvent.focus(portfolioHero);
+    fireEvent.click(screen.getByRole('button', { name: '历史记录 ↗' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.cashLedger') }));
+    await waitFor(() => expect(listCashLedger).toHaveBeenCalled());
 
-    const portfolioTooltip = screen.getByTestId('portfolio-attribution-hover-tooltip');
-    expect(portfolioTooltip).toHaveTextContent(translate('zh', 'portfolio.attribution.accountHover'));
-    expect(portfolioTooltip).toHaveAttribute('role', 'tooltip');
-    expect(portfolioTooltip).toHaveAttribute('id', 'portfolio-attribution-hover-tooltip');
-    expect(portfolioHero).toHaveAttribute('aria-describedby', 'portfolio-attribution-hover-tooltip');
-    expect(screen.getByTestId('account-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
+    const corporateLedgerButtons = screen.getAllByRole('button', { name: translate('zh', 'portfolio.corporateLedger') });
+    fireEvent.click(corporateLedgerButtons[corporateLedgerButtons.length - 1]);
+    await waitFor(() => expect(listCorporateActions).toHaveBeenCalled());
 
-    fireEvent.blur(portfolioHero);
-    expect(screen.queryByTestId('portfolio-attribution-hover-tooltip')).not.toBeInTheDocument();
-    expect(portfolioHero).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByTestId('portfolio-attribution-dashboard')).not.toBeInTheDocument();
+  });
 
-    const accountLegend = screen.getByTestId('account-attribution-distribution-band-legend-1');
-    expect(accountLegend).toHaveAttribute('tabindex', '0');
-    fireEvent.focus(accountLegend);
+  it('keeps current holdings in the main panel while the history drawer opens and closes independently', async () => {
+    render(<PortfolioPage />);
 
-    const accountTooltip = screen.getByTestId('account-attribution-distribution-band-tooltip');
-    expect(accountTooltip).toHaveTextContent('Satellite');
-    expect(accountTooltip).toHaveAttribute('role', 'tooltip');
-    expect(accountTooltip).toHaveAttribute('id', 'account-attribution-distribution-band-tooltip');
-    expect(accountLegend).toHaveAttribute('aria-describedby', 'account-attribution-distribution-band-tooltip');
-    expect(screen.getByTestId('account-attribution-top-list-row-1')).toHaveAttribute('data-linked-highlight', 'true');
+    await waitForInitialLoad();
 
-    fireEvent.blur(accountLegend);
-    expect(screen.queryByTestId('account-attribution-distribution-band-tooltip')).not.toBeInTheDocument();
-    expect(accountLegend).not.toHaveAttribute('aria-describedby');
+    const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
+    expect(within(holdingsPanel).getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-history-drawer')).not.toBeInTheDocument();
 
-    const industrySegment = screen.getByTestId('industry-attribution-distribution-band-segment-0');
-    expect(industrySegment).toHaveAttribute('tabindex', '0');
-    fireEvent.focus(industrySegment);
+    fireEvent.click(screen.getByRole('button', { name: '历史记录 ↗' }));
 
-    const industryTooltip = screen.getByTestId('industry-attribution-distribution-band-tooltip');
-    expect(industryTooltip).toHaveTextContent('半导体');
-    expect(industryTooltip).toHaveAttribute('role', 'tooltip');
-    expect(industryTooltip).toHaveAttribute('id', 'industry-attribution-distribution-band-tooltip');
-    expect(industrySegment).toHaveAttribute('aria-describedby', 'industry-attribution-distribution-band-tooltip');
-    expect(screen.getByTestId('industry-attribution-top-list-row-0')).toHaveAttribute('data-linked-highlight', 'true');
+    expect(screen.getByTestId('portfolio-history-drawer')).toBeInTheDocument();
+    expect(within(holdingsPanel).getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
 
-    fireEvent.blur(industrySegment);
-    expect(screen.queryByTestId('industry-attribution-distribution-band-tooltip')).not.toBeInTheDocument();
-    expect(industrySegment).not.toHaveAttribute('aria-describedby');
+    fireEvent.click(screen.getByRole('button', { name: '关闭历史记录' }));
+    await waitFor(() => expect(screen.queryByTestId('portfolio-history-drawer')).not.toBeInTheDocument());
+  });
+
+  it('keeps the rebuilt shell navigable by tabs instead of the removed attribution widgets', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(screen.getByRole('button', { name: '账户' }));
+    expect(screen.getAllByText(translate('zh', 'portfolio.createAccountTitle')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(translate('zh', 'portfolio.manualTrade'))).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '同步' }));
+    expect(screen.getByText(translate('zh', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.createAccountTitle'))).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '交易' }));
+    expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
   });
 });

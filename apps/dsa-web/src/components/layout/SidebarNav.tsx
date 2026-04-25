@@ -25,6 +25,7 @@ import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface
 import { useAgentChatStore } from '../../stores/agentChatStore';
 import { cn } from '../../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
+import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 type SidebarNavProps = {
@@ -53,7 +54,10 @@ const BrandWordmark: React.FC<{
     aria-label="WolfyStock"
     className={({ isActive }) => cn('shell-brand-link', className || '', isActive ? 'is-active' : '')}
   >
-    <span className="shell-wordmark">WolfyStock</span>
+    <span className="inline-flex min-w-0 items-center gap-3">
+      <BrandLogo />
+      <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
+    </span>
   </NavLink>
 );
 

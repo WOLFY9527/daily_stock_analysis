@@ -24,7 +24,7 @@ export const TechCard: React.FC<TechCardProps> = ({
 }) => (
   <BentoCard
     eyebrow={title}
-    className="col-span-6 xl:col-span-6 p-4 sm:p-5"
+    className="col-span-6 xl:col-span-6"
     testId="home-bento-card-tech"
     action={(
       <button
@@ -38,12 +38,12 @@ export const TechCard: React.FC<TechCardProps> = ({
       </button>
     )}
   >
-    <div className="space-y-4">
+    <div className="space-y-6">
       {signals.map((signal, index) => (
         <div
           key={signal.label}
           data-testid={`home-bento-tech-signal-${signal.label}`}
-          className="grid gap-2 border-b border-white/[0.07] pb-4 last:border-b-0 last:pb-0"
+          className="grid gap-3 border-b border-white/[0.07] pb-6 last:border-b-0 last:pb-0"
         >
           <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{signal.label}</span>
           <span

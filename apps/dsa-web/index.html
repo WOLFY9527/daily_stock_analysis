@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/wolfystock-logo-mark.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>dsa-web</title>
     <script>
@@ -45,35 +45,8 @@
         width: min(92vw, 360px);
         text-align: center;
       }
-      .boot-splash-fallback__logo-wrap {
-        position: relative;
-        margin: 0 auto;
-        width: clamp(140px, 32vw, 188px);
-        aspect-ratio: 1 / 1;
-      }
-      .boot-splash-fallback__line {
-        position: absolute;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: rgba(240, 240, 250, 0.3);
-      }
-      .boot-splash-fallback__line--top {
-        top: 24%;
-      }
-      .boot-splash-fallback__line--bottom {
-        bottom: 24%;
-      }
-      .boot-splash-fallback__logo {
-        position: absolute;
-        inset: 18%;
-        width: 64%;
-        height: 64%;
-        object-fit: contain;
-        filter: grayscale(1) contrast(1.08);
-      }
       .boot-splash-fallback__text {
-        margin: 16px 0 0;
+        margin: 0;
         font:
           700 12px/1.2 "D-DIN", "DIN Alternate", "Arial Narrow", "Inter", "Segoe UI", system-ui,
           sans-serif;
@@ -86,11 +59,6 @@
   <body>
     <div id="boot-splash" aria-hidden="true">
       <div class="boot-splash-fallback__inner">
-        <div class="boot-splash-fallback__logo-wrap">
-          <span class="boot-splash-fallback__line boot-splash-fallback__line--top"></span>
-          <span class="boot-splash-fallback__line boot-splash-fallback__line--bottom"></span>
-          <img src="/image.png" alt="WolfyStock logo" class="boot-splash-fallback__logo" />
-        </div>
         <p class="boot-splash-fallback__text">Loading WolfyStock...</p>
       </div>
     </div>

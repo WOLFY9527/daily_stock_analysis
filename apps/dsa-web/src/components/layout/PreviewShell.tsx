@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
+import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { Drawer } from '../common/Drawer';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useIsDesktopViewport } from './useIsDesktopViewport';
@@ -34,7 +35,10 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
           {isDesktop ? (
             <div className="shell-nav-strip">
               <div className="shell-nav-brand">
-                <span className="shell-wordmark">WolfyStock</span>
+                <span className="inline-flex min-w-0 items-center gap-3">
+                  <BrandLogo />
+                  <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
+                </span>
                 <span className="shell-nav-brand-note">{t('preview.shellNote')}</span>
               </div>
               <div className="shell-nav-actions">
@@ -54,7 +58,10 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
                 <Menu className="h-4 w-4" />
               </button>
               <div className="shell-mobile-brand">
-                <span className="shell-wordmark">{t('preview.eyebrow')}</span>
+                <span className="inline-flex min-w-0 items-center gap-3">
+                  <BrandLogo />
+                  <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>{t('preview.eyebrow')}</span>
+                </span>
                 <span className="shell-mobile-brand__note">{t('preview.shellTitle')}</span>
               </div>
               <span className="shell-mobile-placeholder" aria-hidden="true" />

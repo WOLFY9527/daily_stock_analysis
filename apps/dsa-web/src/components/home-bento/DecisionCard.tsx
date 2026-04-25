@@ -56,7 +56,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       </button>
     )}
   >
-    <div className="flex h-full flex-col gap-5">
+    <div className="flex h-full flex-col gap-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-white/78">
@@ -94,29 +94,27 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 w-full relative mt-4">
-        <div className="relative h-full w-full overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl">
-          <svg className="h-full w-full text-[#34D399]" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
-            <defs>
-              <linearGradient id="home-bento-decision-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
-                <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <polygon points="0,56 0,40 18,37 36,27 52,31 70,18 85,12 100,6 100,56" fill="url(#home-bento-decision-fill)" />
-            <polyline
-              points="0,40 18,37 36,27 52,31 70,18 85,12 100,6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.25"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ filter: 'drop-shadow(0 4px 8px rgba(52, 211, 153, 0.4))' }}
-            />
-          </svg>
-          <div className="absolute right-7 top-7 rounded-full border border-white/[0.08] bg-black/35 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/62 backdrop-blur-xl">
-            {chartLabel}
-          </div>
+      <div className="relative flex-1 overflow-hidden rounded-[32px] border border-white/[0.08] bg-white/[0.02] p-6 backdrop-blur-xl">
+        <svg className="h-44 w-full text-[#34D399]" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="home-bento-decision-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <polygon points="0,56 0,40 18,37 36,27 52,31 70,18 85,12 100,6 100,56" fill="url(#home-bento-decision-fill)" />
+          <polyline
+            points="0,40 18,37 36,27 52,31 70,18 85,12 100,6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.25"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ filter: 'drop-shadow(0 4px 8px rgba(52, 211, 153, 0.4))' }}
+          />
+        </svg>
+        <div className="absolute right-7 top-7 rounded-full border border-white/[0.08] bg-black/35 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/62 backdrop-blur-xl">
+          {chartLabel}
         </div>
       </div>
     </div>

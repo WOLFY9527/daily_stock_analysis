@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../../i18n/core';
@@ -96,7 +96,9 @@ describe('Shell', () => {
     );
 
     expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'WolfyStock' })).toHaveAttribute('href', '/');
+    const brandLink = screen.getByRole('link', { name: 'WolfyStock' });
+    expect(brandLink).toHaveAttribute('href', '/');
+    expect(within(brandLink).getByRole('img', { name: 'WolfyStock logo' })).toHaveClass('brightness-0', 'invert');
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();

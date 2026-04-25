@@ -1,5 +1,6 @@
 ## 2026-04-25
 
+- 🗂️ **Portfolio 持仓页右侧改为持仓主面板 + 历史抽屉** — `apps/dsa-web/src/pages/PortfolioPage.tsx` 移除了右侧 `Current Holdings / Order History` tabs，右栏现在固定聚焦当前持仓，历史委托/资金流水/公司行为改为通过右上角“历史记录 ↗”按钮呼出的页面级右侧抽屉承载。该调整保持现有数据流、分页、删除动作和左侧交易/账户/同步工作台不变，只收口右侧信息密度与滚动行为。
 - 🎯 **WolfyStock 品牌图标正式接入 Web 平台** — `apps/dsa-web` 新增独立 `WolfyStock` mark 资源，并把它接到顶栏品牌位、移动端品牌位、预览壳、首页 `WolfyStock` 标题旁、启动 splash fallback 与运行时 loading screen，同时把浏览器 favicon 切到该品牌图标。此次改动只更新前端品牌呈现，不改变现有路由、数据流或后端契约。
 - 🧹 **后端大审计仓库收敛（文档与审计产物治理）** — 将根目录一次性审计报告 `backend-final-audit-report.*` 与 `backend-frontend-global-audit-report.*` 归档到 `docs/architecture/archive/audits/`，删除本地切片交接产物 `slice_report_*.json`，并在 `README.md` 中补充当前项目文档真源入口，减少仓库根目录噪音，降低后续维护时的检索成本。
 - 🧭 **维护手册补充后端优先边界** — `docs/architecture/backend-frontend-modular-maintenance-handbook.md` 明确当前维护默认以后端/API/存储为主，前端仅用于所有权映射与兼容检查，避免在前端重构期把后端审计扩散成跨端改造。

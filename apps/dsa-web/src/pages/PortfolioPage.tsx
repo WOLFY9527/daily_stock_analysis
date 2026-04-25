@@ -1,16 +1,9 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelRightOpen } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Card, Badge, ConfirmDialog, Disclosure } from '../components/common';
-import {
-  CARD_BUTTON_CLASS,
-  PageBriefDrawer,
-  PageChrome,
-  type BentoHeroItem,
-} from '../components/home-bento';
+import { ApiErrorAlert, Badge, ConfirmDialog } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
@@ -26,17 +19,17 @@ import type {
   PortfolioImportBrokerItem,
   PortfolioIbkrSyncResponse,
   PortfolioPositionItem,
-  PortfolioRiskResponse,
   PortfolioSide,
   PortfolioSnapshotResponse,
   PortfolioTradeListItem,
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_INPUT_CLASS = 'w-full bg-transparent border-0 border-b border-white/10 px-0 pb-2 pt-1 text-base text-white placeholder:text-white/28 focus:outline-none focus:border-white/50';
-const PORTFOLIO_SELECT_CLASS = 'w-full bg-transparent border-0 border-b border-white/10 px-0 pb-2 pt-1 text-base text-white focus:outline-none focus:border-white/50';
+const PORTFOLIO_INPUT_CLASS = 'h-8 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-white placeholder:text-white/28 focus:border-white/30 focus:outline-none';
+const PORTFOLIO_SELECT_CLASS = 'h-8 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-white focus:border-white/30 focus:outline-none';
+const PORTFOLIO_BUTTON_CLASS = 'btn-secondary px-3 py-2 text-sm';
+const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 
-const ATTRIBUTION_VISUAL_COLORS = ['#7dd3fc', '#86efac', '#fbbf24'];
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
   { broker: 'huatai', aliases: [], displayName: translate('zh', 'portfolio.brokerName.huatai'), fileExtensions: ['csv'] },
@@ -47,6 +40,7 @@ const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
 
 type AccountOption = 'all' | number;
 type EventType = 'trade' | 'cash' | 'corporate';
+type TradeFormType = 'stock' | 'fund' | 'corporate';
 
 type FlatPosition = PortfolioPositionItem & {
   accountId: number;
@@ -262,42 +256,12 @@ function getPortfolioCopy(
       actionLabel: formatCorporateActionLabel(item.actionType, language),
       symbol: item.symbol,
     }),
-    attributionHeroKicker: t('portfolio.attribution.heroKicker'),
-    attributionDistributionKicker: t('portfolio.attribution.distributionKicker'),
-    attributionCoverage: (coverage: string) => t('portfolio.attribution.coverage', { coverage }),
-    attributionTopSlice: t('portfolio.attribution.topSlice'),
-    attributionSecondarySignal: t('portfolio.attribution.secondarySignal'),
-    attributionAccountMeta: t('portfolio.attribution.accountMeta'),
-    attributionIndustryMeta: t('portfolio.attribution.industryMeta'),
-    attributionPortfolioTitle: t('portfolio.attribution.portfolioTitle'),
-    attributionAccountTitle: t('portfolio.attribution.accountTitle'),
-    attributionIndustryTitle: t('portfolio.attribution.industryTitle'),
-    attributionDominantMix: t('portfolio.attribution.dominantMix'),
-    attributionAccountTopList: t('portfolio.attribution.accountTopList'),
-    attributionIndustryTopList: t('portfolio.attribution.industryTopList'),
-    attributionTopAccount: t('portfolio.attribution.topAccount'),
-    attributionAccountWeight: t('portfolio.attribution.accountWeight'),
-    attributionTopIndustry: t('portfolio.attribution.topIndustry'),
-    attributionIndustryWeight: t('portfolio.attribution.industryWeight'),
-    attributionEquityWeight: t('portfolio.attribution.equityWeight'),
-    attributionAccountId: t('portfolio.attribution.accountId'),
-    attributionPositionCount: t('portfolio.attribution.positionCount'),
-    attributionPositionCountValue: (count: string) => t('portfolio.attribution.positionCountValue', { count }),
-    attributionPortfolioHeroTitle: t('portfolio.attribution.portfolioHeroTitle'),
-    attributionAccountDistributionTitle: (coverage: string) => t('portfolio.attribution.accountDistributionTitle', { coverage }),
-    attributionIndustryDistributionTitle: (coverage: string) => t('portfolio.attribution.industryDistributionTitle', { coverage }),
+    tradeUidPlaceholder: language === 'en' ? 'Trade reference (optional)' : '交易引用 (可选)',
+    notePlaceholder: language === 'en' ? 'Note (optional)' : '备注 (可选)',
   };
 
   return copy;
 }
-
-type AttributionVisualRow = {
-  label: string;
-  valueLabel: string;
-  percent: number;
-  meta?: string;
-  linkKey?: string | null;
-};
 
 function getTodayIso(): string {
   return toDateInputValue(new Date());
@@ -309,11 +273,6 @@ function formatMoney(value: number | undefined | null, currency = 'CNY'): string
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
-
-function formatPct(value: number | undefined | null): string {
-  if (value == null || Number.isNaN(value)) return '--';
-  return `${value.toFixed(2)}%`;
 }
 
 function formatSideLabel(value: PortfolioSide, language: PortfolioLanguage): string {
@@ -357,360 +316,6 @@ function formatSignedMoney(value: number, currency: string): string {
   if (value > 0) return `+${formatted}`;
   if (value < 0) return `-${formatted}`;
   return formatted;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
-}
-
-function getObjectValue(record: Record<string, unknown> | null, snakeKey: string, camelKey: string): unknown {
-  if (!record) return undefined;
-  if (snakeKey in record) return record[snakeKey];
-  if (camelKey in record) return record[camelKey];
-  return undefined;
-}
-
-function getTopAttributionEntry(
-  payload: Record<string, unknown> | null,
-  blockSnakeKey: string,
-  blockCamelKey: string,
-  listSnakeKey: string,
-  listCamelKey: string,
-): Record<string, unknown> | null {
-  const block = asRecord(getObjectValue(payload, blockSnakeKey, blockCamelKey));
-  return getTopAttributionEntryFromBlock(block, listSnakeKey, listCamelKey);
-}
-
-function getTopAttributionEntryFromBlock(
-  block: Record<string, unknown> | null,
-  listSnakeKey: string,
-  listCamelKey: string,
-): Record<string, unknown> | null {
-  const items = getObjectValue(block, listSnakeKey, listCamelKey);
-  if (!Array.isArray(items) || !items.length) return null;
-  return asRecord(items[0]);
-}
-
-function getAttributionEntriesFromBlock(
-  block: Record<string, unknown> | null,
-  listSnakeKey: string,
-  listCamelKey: string,
-  limit = 3,
-): Record<string, unknown>[] {
-  const items = getObjectValue(block, listSnakeKey, listCamelKey);
-  if (!Array.isArray(items) || !items.length) return [];
-  return items
-    .map((item) => asRecord(item))
-    .filter((item): item is Record<string, unknown> => Boolean(item))
-    .slice(0, limit);
-}
-
-function parseAttributionPercent(value: unknown): number | null {
-  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
-  if (!Number.isFinite(numeric)) return null;
-  return Math.min(100, Math.max(0, numeric));
-}
-
-function formatAttributionAccount(entry: Record<string, unknown> | null, language: PortfolioLanguage): string {
-  if (!entry) return '--';
-  const accountName = String(entry.account_name || entry.accountName || '').trim();
-  if (accountName) return accountName;
-  const accountId = entry.account_id ?? entry.accountId;
-  return accountId == null
-    ? '--'
-    : translate(language, 'portfolio.attribution.accountFallback', { id: String(accountId) });
-}
-
-function formatAttributionIndustry(entry: Record<string, unknown> | null, language: PortfolioLanguage): string {
-  if (!entry) return '--';
-  const value = String(entry.industry || entry.name || '').trim();
-  return value || translate(language, 'portfolio.attribution.unclassifiedIndustry');
-}
-
-function formatAttributionWeight(value: unknown): string {
-  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
-  if (!Number.isFinite(numeric)) return '--';
-  return `${numeric.toFixed(2)}%`;
-}
-
-function formatAttributionCount(value: unknown): string {
-  if (value == null) return '--';
-  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value));
-  if (!Number.isFinite(numeric)) return '--';
-  return `${numeric.toFixed(0)}`;
-}
-
-function getAttributionAccountLinkKey(entry: Record<string, unknown> | null): string | null {
-  const value = entry?.account_id ?? entry?.accountId;
-  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
-  if (!Number.isFinite(numeric)) return null;
-  return `account:${numeric.toFixed(0)}`;
-}
-
-function getAttributionIndustryLinkKey(entry: Record<string, unknown> | null): string | null {
-  const value = String(entry?.industry || entry?.name || '').trim();
-  return value ? `industry:${value}` : null;
-}
-
-function getAttributionHoverHeading(row: AttributionVisualRow, language: PortfolioLanguage): string {
-  if (row.meta === translate(language, 'portfolio.attribution.accountMeta')) return translate(language, 'portfolio.attribution.accountHover');
-  if (row.meta === translate(language, 'portfolio.attribution.industryMeta')) return translate(language, 'portfolio.attribution.industryHover');
-  return translate(language, 'portfolio.attribution.focusHover');
-}
-
-function getAttributionCoverage(rows: AttributionVisualRow[]): number {
-  return Math.min(100, rows.reduce((total, row) => total + Math.max(0, Math.min(100, row.percent)), 0));
-}
-
-function AttributionHero({
-  rows,
-  testId,
-  title,
-  tooltipTestId,
-  activeLinkKey,
-  onActiveLinkChange,
-}: {
-  rows: AttributionVisualRow[];
-  testId: string;
-  title?: string;
-  tooltipTestId: string;
-  activeLinkKey: string | null;
-  onActiveLinkChange: (linkKey: string | null) => void;
-}) {
-  const { language, t } = useI18n();
-  const [isActive, setIsActive] = useState(false);
-  if (!rows.length) return null;
-
-  const sortedRows = [...rows].sort((left, right) => right.percent - left.percent);
-  const leadRow = sortedRows[0];
-  const companionRows = sortedRows.slice(1, 3);
-  const isLinkedHighlight = Boolean(leadRow.linkKey && activeLinkKey === leadRow.linkKey);
-  const activateLeadRow = () => {
-    setIsActive(true);
-    onActiveLinkChange(leadRow.linkKey ?? null);
-  };
-  const clearLeadRow = () => {
-    setIsActive(false);
-    onActiveLinkChange(null);
-  };
-
-  return (
-    <div
-      className={`relative mt-4 rounded-[var(--theme-panel-radius-lg)] border bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(255,255,255,0.04))] p-3 transition-[border-color,box-shadow,background-color] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)] ${
-        isLinkedHighlight ? 'border-[rgba(125,211,252,0.55)] shadow-[0_0_0_1px_rgba(125,211,252,0.2)]' : 'border-[var(--border-muted)]'
-      }`}
-      data-testid={testId}
-      data-linked-highlight={isLinkedHighlight ? 'true' : undefined}
-      title={title}
-      tabIndex={0}
-      aria-label={title}
-      aria-describedby={isActive ? tooltipTestId : undefined}
-      onMouseEnter={activateLeadRow}
-      onMouseLeave={clearLeadRow}
-      onFocus={activateLeadRow}
-      onBlur={clearLeadRow}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{t('portfolio.attribution.heroKicker')}</p>
-          <p className="mt-1 text-sm font-semibold text-foreground">{leadRow.label}</p>
-          <p className="text-xs text-secondary">{leadRow.meta ? `${leadRow.meta} · ` : ''}{leadRow.valueLabel}</p>
-        </div>
-        <div className="rounded-full border border-[rgba(125,211,252,0.32)] bg-[rgba(15,23,42,0.3)] px-3 py-1 text-sm font-mono text-foreground">
-          {leadRow.valueLabel}
-        </div>
-      </div>
-      {isActive ? (
-        <div
-          className="mt-3 rounded-lg border border-[rgba(125,211,252,0.32)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_10px_30px_rgba(15,23,42,0.18)] transition-all duration-150 ease-out motion-reduce:transition-none"
-          data-testid={tooltipTestId}
-          id={tooltipTestId}
-          role="tooltip"
-        >
-          <span className="text-foreground">{getAttributionHoverHeading(leadRow, language)}</span>
-          <span className="ml-1">{leadRow.label}</span>
-          <span className="ml-1 font-mono text-foreground">{leadRow.valueLabel}</span>
-        </div>
-      ) : null}
-      {companionRows.length ? (
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {companionRows.map((row) => (
-            <div
-              key={`${testId}-${row.label}-${row.valueLabel}`}
-              className={`rounded-lg px-3 py-2 ${row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.22)]'}`}
-              data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
-            >
-              <p className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">{row.meta || t('portfolio.attribution.secondarySignal')}</p>
-              <p className="mt-1 text-xs font-medium text-foreground">{row.label}</p>
-              <p className="text-[11px] font-mono text-secondary">{row.valueLabel}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function AttributionDistributionBand({
-  rows,
-  testId,
-  title,
-  tooltipTestId,
-  activeLinkKey,
-  onActiveLinkChange,
-}: {
-  rows: AttributionVisualRow[];
-  testId: string;
-  title?: string;
-  tooltipTestId: string;
-  activeLinkKey: string | null;
-  onActiveLinkChange: (linkKey: string | null) => void;
-}) {
-  const { t } = useI18n();
-  const [hoveredRow, setHoveredRow] = useState<AttributionVisualRow | null>(null);
-  const segments = rows
-    .filter((row) => row.percent > 0)
-    .map((row) => ({
-      ...row,
-      percent: Math.max(0, Math.min(100, row.percent)),
-    }));
-
-  if (!segments.length) return null;
-
-  const coverage = getAttributionCoverage(segments);
-  const remaining = Math.max(0, 100 - coverage);
-  const activateRow = (row: AttributionVisualRow) => {
-    setHoveredRow(row);
-    onActiveLinkChange(row.linkKey ?? null);
-  };
-  const clearRow = () => {
-    setHoveredRow(null);
-    onActiveLinkChange(null);
-  };
-  const isTooltipTriggerActive = (row: AttributionVisualRow) => (
-    hoveredRow?.label === row.label && hoveredRow?.valueLabel === row.valueLabel
-  );
-
-  return (
-    <div
-      className="mt-4 space-y-2.5"
-      data-testid={testId}
-      title={title}
-      onMouseLeave={clearRow}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{t('portfolio.attribution.distributionKicker')}</p>
-        <span className="text-[11px] font-mono text-foreground">{t('portfolio.attribution.coverage', { coverage: coverage.toFixed(2) })}</span>
-      </div>
-      {hoveredRow ? (
-        <div
-          className="rounded-lg border border-[rgba(125,211,252,0.28)] bg-[rgba(15,23,42,0.42)] px-3 py-2 text-[11px] text-secondary shadow-[0_10px_30px_rgba(15,23,42,0.16)] transition-all duration-150 ease-out motion-reduce:transition-none"
-          data-testid={tooltipTestId}
-          id={tooltipTestId}
-          role="tooltip"
-        >
-          <span className="text-foreground">{hoveredRow.label}</span>
-          {hoveredRow.meta ? <span className="ml-1">{hoveredRow.meta}</span> : null}
-          <span className="ml-1 font-mono text-foreground">{hoveredRow.valueLabel}</span>
-        </div>
-      ) : null}
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
-        {segments.map((row, index) => (
-          <div
-            key={`${testId}-${row.label}-${row.valueLabel}`}
-            className={`h-full transition-opacity ${row.linkKey && activeLinkKey === row.linkKey ? 'opacity-100' : 'opacity-80'}`}
-            data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
-            data-testid={`${testId}-segment-${index}`}
-            tabIndex={0}
-            aria-label={`${row.label} ${row.valueLabel}`}
-            aria-describedby={isTooltipTriggerActive(row) ? tooltipTestId : undefined}
-            onMouseEnter={() => activateRow(row)}
-            onFocus={() => activateRow(row)}
-            onBlur={clearRow}
-            style={{
-              width: `${row.percent}%`,
-              backgroundColor: ATTRIBUTION_VISUAL_COLORS[index % ATTRIBUTION_VISUAL_COLORS.length],
-            }}
-          />
-        ))}
-        {remaining > 0 ? (
-          <div
-            className="h-full"
-            style={{
-              width: `${remaining}%`,
-              backgroundColor: 'rgba(148, 163, 184, 0.28)',
-            }}
-          />
-        ) : null}
-      </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {segments.map((row, index) => (
-          <div
-            key={`${testId}-legend-${row.label}-${row.valueLabel}`}
-            className={`rounded-lg px-3 py-2 transition-colors ${
-              row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[var(--surface-muted)]'
-            } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
-            data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
-            data-testid={`${testId}-legend-${index}`}
-            tabIndex={0}
-            aria-label={`${row.label} ${row.valueLabel}`}
-            aria-describedby={isTooltipTriggerActive(row) ? tooltipTestId : undefined}
-            onMouseEnter={() => activateRow(row)}
-            onFocus={() => activateRow(row)}
-            onBlur={clearRow}
-          >
-            <p className="truncate text-[11px] text-foreground">{row.label}</p>
-            <p className="text-[10px] text-secondary-text">{row.meta || t('portfolio.attribution.topSlice')}</p>
-            <p className="mt-1 font-mono text-[11px] text-secondary">{row.valueLabel}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AttributionVisualList({
-  title,
-  rows,
-  testId,
-  activeLinkKey,
-}: {
-  title: string;
-  rows: AttributionVisualRow[];
-  testId: string;
-  activeLinkKey: string | null;
-}) {
-  if (!rows.length) return null;
-
-  return (
-    <div className="mt-4 space-y-2.5" data-testid={testId}>
-      <p className="text-[10px] uppercase tracking-[0.16em] text-secondary-text">{title}</p>
-      {rows.map((row, index) => (
-        <div
-          key={`${title}-${row.label}-${row.valueLabel}`}
-          className={`space-y-1 rounded-lg px-2 py-1 transition-colors ${
-            row.linkKey && activeLinkKey === row.linkKey ? 'bg-[rgba(125,211,252,0.12)]' : ''
-          }`}
-          data-linked-highlight={row.linkKey && activeLinkKey === row.linkKey ? 'true' : undefined}
-          data-testid={`${testId}-row-${index}`}
-        >
-          <div className="flex items-center justify-between gap-3 text-[11px] text-secondary">
-            <span className="truncate">
-              <span className="text-foreground">{row.label}</span>
-              {row.meta ? <span className="ml-1 text-secondary-text">{row.meta}</span> : null}
-            </span>
-            <span className="font-mono text-foreground">{row.valueLabel}</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-[var(--surface-muted)] overflow-hidden">
-            <div
-              className="h-full rounded-full bg-[var(--brand-primary)]"
-              style={{ width: `${Math.max(8, row.percent)}%` }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null): {
@@ -803,7 +408,6 @@ const PortfolioPage: React.FC = () => {
   });
   const [costMethod, setCostMethod] = useState<PortfolioCostMethod>('fifo');
   const [snapshot, setSnapshot] = useState<PortfolioSnapshotResponse | null>(null);
-  const [risk, setRisk] = useState<PortfolioRiskResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fxRefreshing, setFxRefreshing] = useState(false);
   const [fxRefreshFeedback, setFxRefreshFeedback] = useState<FxRefreshFeedback | null>(null);
@@ -821,20 +425,20 @@ const PortfolioPage: React.FC = () => {
   const [ibkrSyncing, setIbkrSyncing] = useState(false);
   const [ibkrSyncResult, setIbkrSyncResult] = useState<PortfolioIbkrSyncResponse | null>(null);
 
-  const [eventType] = useState<EventType>('trade');
+  const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync'>('trade');
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [eventType, setEventType] = useState<EventType>('trade');
   const [eventDateFrom] = useState('');
   const [eventDateTo] = useState('');
   const [eventSymbol] = useState('');
   const [eventSide] = useState<'' | PortfolioSide>('');
   const [eventDirection] = useState<'' | PortfolioCashDirection>('');
   const [eventActionType] = useState<'' | PortfolioCorporateActionType>('');
-  const [activeAttributionLinkKey, setActiveAttributionLinkKey] = useState<string | null>(null);
   const [eventPage, setEventPage] = useState(1);
   const [tradeEvents, setTradeEvents] = useState<PortfolioTradeListItem[]>([]);
   const [cashEvents, setCashEvents] = useState<PortfolioCashLedgerListItem[]>([]);
   const [corporateEvents, setCorporateEvents] = useState<PortfolioCorporateActionListItem[]>([]);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
-  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [tradeForm, setTradeForm] = useState({
@@ -863,7 +467,7 @@ const PortfolioPage: React.FC = () => {
     splitRatio: '',
     note: '',
   });
-
+  const [tradeType, setTradeType] = useState<TradeFormType>('stock');
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
   const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
@@ -958,19 +562,16 @@ const PortfolioPage: React.FC = () => {
       setError(null);
 
       try {
-        const riskData = await portfolioApi.getRisk({
+        await portfolioApi.getRisk({
           accountId: queryAccountId,
           costMethod,
         });
-        setRisk(riskData);
       } catch (riskErr) {
-        setRisk(null);
         const parsed = getParsedApiError(riskErr);
         setRiskWarning(parsed.message || copy.riskFallback);
       }
     } catch (err) {
       setSnapshot(null);
-      setRisk(null);
       setError(getParsedApiError(err));
     } finally {
       setIsLoading(false);
@@ -1015,7 +616,6 @@ const PortfolioPage: React.FC = () => {
       }
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
     }
   }, [
     eventActionType,
@@ -1102,79 +702,6 @@ const PortfolioPage: React.FC = () => {
     return rows;
   }, [snapshot]);
 
-  const portfolioTopAccount = useMemo(
-    () => getTopAttributionEntry(snapshot?.portfolioAttribution as Record<string, unknown> | null, 'account_attribution', 'accountAttribution', 'top_accounts', 'topAccounts'),
-    [snapshot?.portfolioAttribution],
-  );
-  const portfolioTopIndustry = useMemo(
-    () => getTopAttributionEntry(snapshot?.portfolioAttribution as Record<string, unknown> | null, 'industry_attribution', 'industryAttribution', 'top_industries', 'topIndustries'),
-    [snapshot?.portfolioAttribution],
-  );
-  const riskTopIndustry = useMemo(
-    () => getTopAttributionEntryFromBlock(risk?.industryAttribution as Record<string, unknown> | null, 'top_industries', 'topIndustries'),
-    [risk?.industryAttribution],
-  );
-  const riskTopAccount = useMemo(
-    () => getTopAttributionEntryFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts'),
-    [risk?.accountAttribution],
-  );
-  const portfolioDominantRows = useMemo(() => {
-    const rows: AttributionVisualRow[] = [];
-    const topAccountPercent = parseAttributionPercent(portfolioTopAccount?.equity_weight_pct ?? portfolioTopAccount?.equityWeightPct);
-    if (topAccountPercent != null) {
-      rows.push({
-        label: formatAttributionAccount(portfolioTopAccount, language),
-        meta: copy.attributionAccountMeta,
-        percent: topAccountPercent,
-        valueLabel: formatAttributionWeight(topAccountPercent),
-        linkKey: getAttributionAccountLinkKey(portfolioTopAccount),
-      });
-    }
-    const topIndustryPercent = parseAttributionPercent(portfolioTopIndustry?.weight_pct ?? portfolioTopIndustry?.weightPct);
-    if (topIndustryPercent != null) {
-      rows.push({
-        label: formatAttributionIndustry(portfolioTopIndustry, language),
-        meta: copy.attributionIndustryMeta,
-        percent: topIndustryPercent,
-        valueLabel: formatAttributionWeight(topIndustryPercent),
-        linkKey: getAttributionIndustryLinkKey(portfolioTopIndustry),
-      });
-    }
-    return rows;
-  }, [copy.attributionAccountMeta, copy.attributionIndustryMeta, language, portfolioTopAccount, portfolioTopIndustry]);
-  const riskAccountRows = useMemo(
-    () => getAttributionEntriesFromBlock(risk?.accountAttribution as Record<string, unknown> | null, 'top_accounts', 'topAccounts')
-      .flatMap((entry) => {
-        const percent = parseAttributionPercent(entry.equity_weight_pct ?? entry.equityWeightPct);
-        if (percent == null) return [];
-        return [{
-          label: formatAttributionAccount(entry, language),
-          meta: translate(language, 'portfolio.attribution.accountFallback', {
-            id: formatAttributionCount(entry.account_id ?? entry.accountId),
-          }),
-          percent,
-          valueLabel: formatAttributionWeight(percent),
-          linkKey: getAttributionAccountLinkKey(entry),
-        } satisfies AttributionVisualRow];
-      }),
-    [language, risk?.accountAttribution],
-  );
-  const riskIndustryRows = useMemo(
-    () => getAttributionEntriesFromBlock(risk?.industryAttribution as Record<string, unknown> | null, 'top_industries', 'topIndustries')
-      .flatMap((entry) => {
-        const percent = parseAttributionPercent(entry.weight_pct ?? entry.weightPct);
-        if (percent == null) return [];
-        return [{
-          label: formatAttributionIndustry(entry, language),
-          meta: copy.attributionPositionCountValue(formatAttributionCount(entry.symbol_count ?? entry.symbolCount)),
-          percent,
-          valueLabel: formatAttributionWeight(percent),
-          linkKey: getAttributionIndustryLinkKey(entry),
-        } satisfies AttributionVisualRow];
-      }),
-    [copy, language, risk?.industryAttribution],
-  );
-
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!writableAccountId) {
@@ -1219,7 +746,7 @@ const PortfolioPage: React.FC = () => {
         note: cashForm.note || undefined,
       });
       await refreshPortfolioData();
-      setCashForm((prev) => ({ ...prev, note: '' }));
+      setCashForm((prev) => ({ ...prev, amount: '', note: '' }));
     } catch (err) {
       setError(getParsedApiError(err));
     }
@@ -1243,7 +770,7 @@ const PortfolioPage: React.FC = () => {
         note: corpForm.note || undefined,
       });
       await refreshPortfolioData();
-      setCorpForm((prev) => ({ ...prev, symbol: '', note: '' }));
+      setCorpForm((prev) => ({ ...prev, symbol: '', cashDividendPerShare: '', splitRatio: '', note: '' }));
     } catch (err) {
       setError(getParsedApiError(err));
     }
@@ -1377,20 +904,18 @@ const PortfolioPage: React.FC = () => {
       setError(null);
 
       try {
-        const riskData = await portfolioApi.getRisk({
+        await portfolioApi.getRisk({
           accountId: requestedAccountId,
           costMethod: requestedCostMethod,
         });
         if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
           return false;
         }
-        setRisk(riskData);
         setRiskWarning(null);
       } catch (riskErr) {
         if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
           return false;
         }
-        setRisk(null);
         const parsed = getParsedApiError(riskErr);
         setRiskWarning(parsed.message || copy.riskFallback);
       }
@@ -1400,7 +925,6 @@ const PortfolioPage: React.FC = () => {
         return false;
       }
       setSnapshot(null);
-      setRisk(null);
       setError(getParsedApiError(err));
       return false;
     }
@@ -1450,62 +974,32 @@ const PortfolioPage: React.FC = () => {
       }
     }
   };
-  const heroItems: BentoHeroItem[] = [];
+
   const snapshotCurrency = snapshot?.currency || 'CNY';
   const totalEquity = snapshot?.totalEquity ?? 0;
   const totalCash = snapshot?.totalCash ?? 0;
   const totalMarketValue = snapshot?.totalMarketValue ?? 0;
   const totalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
+  const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
+  const totalAssetsTitle = '总资产 Total Assets';
+  const historyDrawerLabel = language === 'en' ? 'History ↗' : '历史记录 ↗';
+  const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
+
+  useEffect(() => {
+    if (!isHistoryDrawerOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsHistoryDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isHistoryDrawerOpen]);
 
   return (
-    <PageChrome
-      pageTestId="portfolio-bento-page"
-      pageClassName="workspace-page workspace-page--portfolio gemini-bento-page--portfolio"
-      eyebrow={copy.eyebrow}
-      title={copy.title}
-      description={copy.description}
-      actions={(
-        <>
-          <button
-            type="button"
-            className={CARD_BUTTON_CLASS}
-            data-testid="portfolio-bento-drawer-trigger"
-            onClick={() => setIsBriefDrawerOpen(true)}
-          >
-            <PanelRightOpen className="h-4 w-4" />
-            <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-          </button>
-          {hasAccounts ? (
-            <>
-              <button
-                type="button"
-                className="btn-secondary text-sm"
-                onClick={() => {
-                  setShowCreateAccount((prev) => !prev);
-                  setAccountCreateError(null);
-                  setAccountCreateSuccess(null);
-                }}
-              >
-                {showCreateAccount ? copy.collapseCreate : copy.createAccount}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleRefresh()}
-                disabled={isLoading || fxRefreshing}
-                className="btn-secondary text-sm"
-              >
-                {isLoading ? copy.refreshingData : copy.refreshData}
-              </button>
-            </>
-          ) : (
-            <p className="workspace-header-actions-note">{copy.noAccounts}</p>
-          )}
-        </>
-      )}
-      heroItems={heroItems}
-      heroTestId="portfolio-bento-hero"
-      headerChildren={null}
-    >
+    <>
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
       {riskWarning ? (
         <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
@@ -1518,53 +1012,28 @@ const PortfolioPage: React.FC = () => {
         </div>
       ) : null}
 
-      <div className="w-full max-w-[1400px] mx-auto px-8 py-6 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent gap-6">
-        <section data-testid="portfolio-bento-hero" className="shrink-0 flex items-end gap-6">
-          <div className="text-xs text-white/30 uppercase tracking-[0.3em]">{copy.totalEquity}</div>
-          <div
-            data-testid="portfolio-bento-hero-equity-value"
-            className="text-[6rem] font-bold text-white leading-none tracking-tighter drop-shadow-2xl tabular-nums"
-            style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
-          >
-            {formatMoney(totalEquity, snapshotCurrency)}
-          </div>
-          <div
-            className={totalUnrealizedPnl >= 0
-              ? 'text-3xl font-medium text-emerald-400 drop-shadow-[0_0_24px_rgba(52,211,153,0.4)] tabular-nums'
-              : 'text-3xl font-medium text-rose-400 drop-shadow-[0_0_24px_rgba(248,113,113,0.35)] tabular-nums'}
-          >
-            {formatSignedMoney(totalUnrealizedPnl, snapshotCurrency)}
-          </div>
-        </section>
-
-        <section className="shrink-0 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-[28px] bg-white/[0.015] px-5 py-4">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.drawdownTitle}</h3>
-            <div className="text-xs text-secondary space-y-1.5">
-              <div className="flex justify-between"><span>{copy.maxDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.maxDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>{copy.currentDrawdown}:</span> <span className="text-foreground font-mono">{formatPct(risk?.drawdown?.currentDrawdownPct)}</span></div>
-              <div className="flex justify-between"><span>{copy.alert}:</span> <span className={risk?.drawdown?.alert ? 'text-danger font-medium' : 'text-success font-medium'}>{risk?.drawdown?.alert ? copy.yes : copy.no}</span></div>
-            </div>
-          </div>
-        </section>
-
-        <section className="flex-1 min-h-0 grid grid-cols-12 gap-8 overflow-hidden">
-          <div className="col-span-12 md:col-span-4 flex flex-col bg-white/[0.02] backdrop-blur-2xl border border-white/5 p-6 rounded-[32px] overflow-y-auto no-scrollbar">
-            <div className="space-y-5">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h3>
+      <div
+        data-testid="portfolio-bento-page"
+        data-bento-surface="true"
+        className="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-2 pb-2 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent text-gray-300"
+      >
+        <main className="w-full flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-6">
+          <section className="md:col-span-5 h-full flex flex-col bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-[24px] overflow-hidden">
+            <div className="shrink-0 px-6 pt-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h2>
+                </div>
                 <button
                   type="button"
-                  className="btn-secondary !px-3 !py-1 !text-[11px] uppercase tracking-widest shrink-0"
+                  className="shrink-0 whitespace-nowrap text-xs px-3 py-1.5 bg-white/5 border border-white/10 rounded-md hover:bg-white/10 transition-colors"
                   onClick={() => void handleRefreshFx()}
                   disabled={!hasAccounts || isLoading || fxRefreshing}
                 >
                   {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
                 </button>
               </div>
-
-              <div>
-                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-white/30">{copy.accountView}</p>
+              <div className="grid grid-cols-2 gap-4 mt-4">
                 <select
                   value={String(selectedAccount)}
                   onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
@@ -1573,14 +1042,10 @@ const PortfolioPage: React.FC = () => {
                   <option value="all">{copy.allAccounts}</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name} · {formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} (#{account.id})
+                      {account.name}
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-white/30">{copy.costMethod}</p>
                 <select
                   value={costMethod}
                   onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
@@ -1590,69 +1055,229 @@ const PortfolioPage: React.FC = () => {
                   <option value="avg">{copy.costAvg}</option>
                 </select>
               </div>
-
-              <div className="grid grid-cols-1 gap-2 text-sm text-white/45">
-                <div className="flex items-center justify-between gap-3"><span>{copy.totalCash}</span><span className="text-white tabular-nums">{formatMoney(totalCash, snapshotCurrency)}</span></div>
-                <div className="flex items-center justify-between gap-3"><span>{copy.totalMarketValue}</span><span className="text-white tabular-nums">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
-                <div className="flex items-center justify-between gap-3"><span>{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className="text-white">{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
+              <div data-testid="portfolio-trade-station-summary" className="flex flex-col gap-1 py-2 border-y border-white/5 mt-4">
+                <div className="flex justify-between text-xs"><span className="text-white/40">{copy.totalCash}</span><span className="text-white">{formatMoney(totalCash, snapshotCurrency)}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-white/40">{copy.totalMarketValue}</span><span className="text-white">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-white/40">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
+              {fxRefreshFeedback ? (
+                <p className={`mt-3 text-xs ${
+                  fxRefreshFeedback.tone === 'success'
+                    ? 'text-emerald-300'
+                    : fxRefreshFeedback.tone === 'warning'
+                      ? 'text-amber-200'
+                      : 'text-white/55'
+                }`}>
+                  {fxRefreshFeedback.text}
+                </p>
+              ) : null}
+            </div>
 
-              {(showCreateAccount || !hasAccounts) ? (
-                <section className="space-y-4">
+            <div className="shrink-0 flex gap-6 border-b border-white/5 px-6 pt-2">
+              <button type="button" onClick={() => setLeftTab('trade')} className={`pb-3 text-sm ${leftTab === 'trade' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Trade' : '交易'}</button>
+              <button type="button" onClick={() => setLeftTab('account')} className={`pb-3 text-sm ${leftTab === 'account' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Account' : '账户'}</button>
+              <button type="button" onClick={() => setLeftTab('sync')} className={`pb-3 text-sm ${leftTab === 'sync' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Sync' : '同步'}</button>
+            </div>
+
+            <div
+              data-testid="portfolio-trade-station-scroll"
+              className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5"
+            >
+              {leftTab === 'trade' ? (
+                <div className="flex flex-col gap-3">
+                  <div
+                    data-testid="portfolio-trade-type-switcher"
+                    className="flex bg-white/[0.05] p-1 rounded-lg mb-4 shrink-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setTradeType('stock')}
+                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'stock' ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+                    >
+                      {language === 'en' ? 'Stock Trade' : '股票买卖'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTradeType('fund')}
+                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'fund' ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+                    >
+                      {language === 'en' ? 'Cash Transfer' : '资金划转'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTradeType('corporate')}
+                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'corporate' ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+                    >
+                      {language === 'en' ? 'Corporate Action' : '公司行为'}
+                    </button>
+                  </div>
+                  {tradeType === 'stock' ? (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualTrade}</p>
+                      <form className="space-y-2" onSubmit={handleTradeSubmit}>
+                        <div className="grid grid-cols-2 gap-4">
+                          <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
+                            <option value="buy">{copy.buy}</option>
+                            <option value="sell">{copy.sell}</option>
+                          </select>
+                          <input className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.tradeUidPlaceholder} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+                        </div>
+                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitTrade}</button>
+                      </form>
+                    </div>
+                  ) : null}
+
+                  {tradeType === 'fund' ? (
+                    <div className="space-y-2 rounded-[24px] border border-white/8 bg-black/20 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCash}</p>
+                      <form className="space-y-2" onSubmit={handleCashSubmit}>
+                        <div className="grid grid-cols-2 gap-4">
+                          <input className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+                          <select className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
+                            <option value="in">{copy.cashIn}</option>
+                            <option value="out">{copy.cashOut}</option>
+                          </select>
+                        </div>
+                        <div data-testid="portfolio-cash-amount-currency-grid" className="grid grid-cols-2 gap-4">
+                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder={copy.amount} value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+                          <select
+                            data-testid="portfolio-cash-currency-select"
+                            className={PORTFOLIO_SELECT_CLASS}
+                            value={cashForm.currency}
+                            onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))}
+                          >
+                            <option value="">{copy.currencyOptional(snapshotCurrency)}</option>
+                            {CASH_CURRENCY_OPTIONS.map((currency) => (
+                              <option key={currency} value={currency}>
+                                {currency}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCash}</button>
+                      </form>
+                    </div>
+                  ) : null}
+
+                  {tradeType === 'corporate' ? (
+                    <div className="space-y-2 rounded-[24px] border border-white/8 bg-black/20 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCorporate}</p>
+                      <form className="space-y-2" onSubmit={handleCorporateSubmit}>
+                        <div className="grid grid-cols-2 gap-4">
+                          <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.stockCode} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <input className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                        </div>
+                        <select className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
+                          <option value="cash_dividend">{copy.cashDividend}</option>
+                          <option value="split_adjustment">{copy.splitAdjustment}</option>
+                        </select>
+                        <div className="grid grid-cols-2 gap-4">
+                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.dividendPerShare} value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
+                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.splitRatio} value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
+                        </div>
+                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCorporate}</button>
+                      </form>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {leftTab === 'account' ? (
+                <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-xs uppercase tracking-[0.2em] text-white/30">{copy.createAccountTitle}</h3>
-                    {hasAccounts ? (
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.createAccountTitle}</p>
+                    <div className="flex gap-2">
                       <button
                         type="button"
-                        className="btn-secondary text-xs px-3 py-1"
+                        className={PORTFOLIO_BUTTON_CLASS}
                         onClick={() => {
-                          setShowCreateAccount(false);
+                          setShowCreateAccount((prev) => !prev);
                           setAccountCreateError(null);
                           setAccountCreateSuccess(null);
                         }}
                       >
-                        {copy.collapseCreate}
+                        {showCreateAccount ? copy.collapseCreate : copy.createAccount}
                       </button>
-                    ) : null}
-                  </div>
-                  {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
-                  {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
-                  <form className="grid grid-cols-1 gap-3" onSubmit={handleCreateAccount}>
-                    <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
-                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
+                      <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
+                        {isLoading ? copy.refreshingData : copy.refreshData}
+                      </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                  </div>
+                  <div className="space-y-2">
+                    {accounts.map((account) => (
+                      <div key={account.id} className="rounded-[20px] border border-white/8 bg-black/20 px-4 py-3 text-sm text-white/75">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-white">{account.name}</span>
+                          <span className="text-white/40">#{account.id}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-white/40">{formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} · {account.broker || '--'}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {(showCreateAccount || !hasAccounts) ? (
+                    <form className="space-y-3 rounded-[24px] border border-white/8 bg-black/20 p-4" onSubmit={handleCreateAccount}>
+                      {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
+                      {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
+                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
+                      <div className="grid grid-cols-2 gap-4">
+                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
+                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
+                      </div>
                       <select className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}>
                         <option value="cn">{copy.marketCn}</option>
                         <option value="hk">{copy.marketHk}</option>
                         <option value="us">{copy.marketUs}</option>
                         <option value="global">{copy.marketGlobal}</option>
                       </select>
-                      <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</button>
-                    </div>
-                  </form>
-                </section>
+                      <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</button>
+                    </form>
+                  ) : null}
+                </div>
               ) : null}
 
-              <section className="space-y-4">
-                <h3 className="text-sm text-white/40 uppercase tracking-widest">{copy.dataSyncTitle}</h3>
-                <div className="text-xs text-secondary-text space-y-1">
-                  <p>{copy.brokerImport}</p>
-                  <p>{copy.currentImportAccount}</p>
-                  <p>{writableAccount ? `${writableAccount.name} (#${writableAccount.id})` : copy.brokerFallbackEmpty}</p>
-                  <p>{selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
-                </div>
-                <div className="grid grid-cols-1 gap-3">
+              {leftTab === 'sync' ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.dataSyncTitle}</p>
+                    <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
+                      {isLoading ? copy.refreshingData : copy.refreshData}
+                    </button>
+                  </div>
+                  <div className="text-xs text-secondary-text space-y-1">
+                    <p>{copy.currentImportAccount}</p>
+                    <p>{writableAccount ? `${writableAccount.name} (#${writableAccount.id})` : copy.brokerFallbackEmpty}</p>
+                    <p>{selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
+                  </div>
                   <select className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
                     {brokers.map((broker) => (
                       <option key={broker.broker} value={broker.broker}>{formatBrokerLabel(broker.broker, broker.displayName, language)}</option>
                     ))}
                   </select>
                   {selectedBroker === 'ibkr' ? (
-                    <>
-                      {ibkrConnection ? <p className="text-xs text-secondary-text">{ibkrConnection.connectionName}</p> : null}
+                    <div className="space-y-3 rounded-[24px] border border-white/8 bg-black/20 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-1 text-xs text-secondary-text">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{copy.ibkrReadOnlyTitle}</p>
+                          <p>{copy.ibkrReadOnlyBody}</p>
+                        </div>
+                        <Badge variant="info">{copy.readOnlyBadge}</Badge>
+                      </div>
+                      {ibkrConnection ? <p className="text-sm text-white">{ibkrConnection.connectionName}</p> : null}
                       <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
                       <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
                       <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
@@ -1660,121 +1285,223 @@ const PortfolioPage: React.FC = () => {
                         <input type="checkbox" checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySsl(e.target.checked)} />
                         <span>{copy.verifyIbkrSsl}</span>
                       </label>
-                      <button type="button" className="btn-secondary text-sm" onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>{ibkrSyncing ? copy.syncing : copy.syncIbkr}</button>
+                      <button type="button" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
+                        {ibkrSyncing ? copy.syncing : copy.syncIbkr}
+                      </button>
                       {ibkrSyncResult ? (
-                        <div className="text-xs text-secondary-text">
-                          <div>{copy.syncResult}</div>
-                          <div>{copy.positionsCountLabel} <span className="text-foreground font-mono">{ibkrSyncResult.positionCount ?? '--'}</span></div>
-                          <div>{copy.cashCurrenciesLabel} <span className="text-foreground font-mono">{ibkrSyncResult.cashBalanceCount ?? 0}</span></div>
-                          <div>{copy.accountRef}: <span className="text-foreground font-mono">{ibkrSyncResult.brokerAccountRef || ibkrBrokerAccountRef || '--'}</span></div>
-                          <div>{copy.syncedAt}: <span className="text-foreground font-mono">{ibkrSyncResult.syncedAt ? ibkrSyncResult.syncedAt.replace('T', ' ') : '--'}</span></div>
-                          <span className="text-foreground">{ibkrSyncResult.snapshotOverlayActive ? copy.syncOverlay : copy.syncSaved}</span>
-                          <div>{copy.totalEquity} <span className="text-foreground font-mono">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span></div>
+                        <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3 text-xs text-secondary-text space-y-1">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{copy.syncResult}</p>
+                          <div>{copy.positionsCountLabel} <span className="text-white">{ibkrSyncResult.positionCount ?? '--'}</span></div>
+                          <div>{copy.cashCurrenciesLabel} <span className="text-white">{ibkrSyncResult.cashBalanceCount ?? 0}</span></div>
+                          <div>{copy.syncedAt}: <span className="text-white">{ibkrSyncResult.syncedAt ? ibkrSyncResult.syncedAt.replace('T', ' ') : '--'}</span></div>
+                          <div>{copy.totalEquity} <span className="text-white">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span></div>
                         </div>
                       ) : null}
-                    </>
-                  ) : null}
-                </div>
-              </section>
-
-              <Disclosure summary={copy.manualAdjustments} defaultOpen={false}>
-                <div className="mt-4 flex flex-col gap-6">
-                  <div>
-                    <h3 className="mb-4 text-xs uppercase tracking-[0.2em] text-white/30">{copy.manualTrade}</h3>
-                    <form className="space-y-4" onSubmit={handleTradeSubmit}>
-                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                      <div className="grid grid-cols-2 gap-3">
-                        <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
-                        <select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
-                          <option value="buy">{copy.buy}</option>
-                          <option value="sell">{copy.sell}</option>
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                        <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
-                      </div>
-                      <button type="submit" className="btn-secondary w-full text-[11px]" disabled={!writableAccountId}>{copy.submitTrade}</button>
-                    </form>
-                  </div>
-                </div>
-              </Disclosure>
-            </div>
-          </div>
-
-          <div className="col-span-12 md:col-span-8 flex flex-col gap-4 overflow-hidden">
-            <div className="shrink-0 flex items-center justify-between px-4">
-              <h3 className="text-sm text-white/40 uppercase tracking-widest">{copy.positionsTitle}</h3>
-              <span className="text-xs uppercase tracking-[0.2em] text-white/30">{copy.positionsCount(positionRows.length)}</span>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
-              <div className="flex flex-col gap-2">
-                {positionRows.length === 0 ? (
-                  <div className="px-6 py-5 rounded-3xl bg-white/[0.02] text-sm text-white/45">{copy.noPositions}</div>
-                ) : (
-                  positionRows.map((row) => (
-                    <div
-                      key={`${row.accountId}-${row.symbol}-${row.market}`}
-                      className="flex justify-between items-center px-6 py-5 rounded-3xl hover:bg-white/[0.03] transition-colors cursor-pointer group"
-                    >
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-xl text-white font-medium truncate">{row.symbol}</span>
-                        <span className="text-xs text-white/40 tracking-wider">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</span>
-                      </div>
-                      <div className="flex items-center gap-8">
-                        <div className="text-right">
-                          <div className="text-xs text-white/35 uppercase tracking-[0.16em]">{copy.positionMarketValue}</div>
-                          <div className="text-lg text-white tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
-                        </div>
-                        <div className={row.unrealizedPnlBase >= 0
-                          ? 'text-xl text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.3)] tabular-nums'
-                          : 'text-xl text-rose-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.3)] tabular-nums'}>
-                          {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                        </div>
-                      </div>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    <div className="rounded-[24px] border border-white/8 bg-black/20 px-4 py-4 text-xs text-secondary-text">
+                      {copy.brokerImportHint}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="md:col-span-7 h-full flex flex-col gap-6 min-h-0">
+            <div
+              data-testid="portfolio-total-assets-card"
+              className="shrink-0 bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-[24px] p-6 flex justify-between items-end gap-4"
+            >
+              <div className="min-w-0">
+                <h1 className="text-xs text-white/40 uppercase tracking-widest mb-2">{totalAssetsTitle}</h1>
+                <div
+                  data-testid="portfolio-total-assets-value"
+                  className="text-[4rem] md:text-[5.5rem] font-bold text-white leading-none tracking-tight tabular-nums"
+                  style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
+                >
+                  {formatMoney(totalEquity, snapshotCurrency)}
+                </div>
+              </div>
+              <div
+                className={`text-2xl tabular-nums pb-2 ${
+                  totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                {totalUnrealizedPnl >= 0 ? '+ ' : '- '}
+                {formatMoney(Math.abs(totalUnrealizedPnl), snapshotCurrency)}
               </div>
             </div>
 
-            <div className="shrink-0 grid grid-cols-1 gap-3 md:grid-cols-3" data-testid="portfolio-attribution-dashboard">
-              <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionPortfolioTitle}</h3>
-                <AttributionHero rows={portfolioDominantRows} testId="portfolio-attribution-hero" title={copy.attributionPortfolioHeroTitle} tooltipTestId="portfolio-attribution-hover-tooltip" activeLinkKey={activeAttributionLinkKey} onActiveLinkChange={setActiveAttributionLinkKey} />
-                <AttributionVisualList title={copy.attributionDominantMix} rows={portfolioDominantRows} testId="portfolio-attribution-visual-summary" activeLinkKey={activeAttributionLinkKey} />
-              </Card>
-              <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionAccountTitle}</h3>
-                <AttributionDistributionBand rows={riskAccountRows} testId="account-attribution-distribution-band" title={copy.attributionAccountDistributionTitle(getAttributionCoverage(riskAccountRows).toFixed(2))} tooltipTestId="account-attribution-distribution-band-tooltip" activeLinkKey={activeAttributionLinkKey} onActiveLinkChange={setActiveAttributionLinkKey} />
-                <AttributionVisualList title={copy.attributionAccountTopList} rows={riskAccountRows} testId="account-attribution-top-list" activeLinkKey={activeAttributionLinkKey} />
-              </Card>
-              <Card padding="md">
-                <h3 className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-3">{copy.attributionIndustryTitle}</h3>
-                <AttributionDistributionBand rows={riskIndustryRows} testId="industry-attribution-distribution-band" title={copy.attributionIndustryDistributionTitle(getAttributionCoverage(riskIndustryRows).toFixed(2))} tooltipTestId="industry-attribution-distribution-band-tooltip" activeLinkKey={activeAttributionLinkKey} onActiveLinkChange={setActiveAttributionLinkKey} />
-                <AttributionVisualList title={copy.attributionIndustryTopList} rows={riskIndustryRows} testId="industry-attribution-top-list" activeLinkKey={activeAttributionLinkKey} />
-              </Card>
-            </div>
+            <div
+              data-testid="portfolio-current-holdings-panel"
+              className="flex-1 min-h-0 flex flex-col bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-[24px] overflow-hidden"
+            >
+              <div className="shrink-0 p-5 border-b border-white/5 flex justify-between items-center gap-4">
+                <h2 className="min-w-0 text-xs text-white/40 uppercase tracking-widest">
+                  Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryDrawerOpen(true)}
+                  className="shrink-0 text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/[0.05] transition-colors"
+                >
+                  {historyDrawerLabel}
+                </button>
+              </div>
 
-            <div className="shrink-0 rounded-[24px] border border-white/5 bg-white/[0.02] px-5 py-4">
-              <Disclosure summary={copy.ledgerAudit} defaultOpen={false}>
-                <div className="mt-4 space-y-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <select className="input-terminal text-sm" value={eventType} onChange={() => {}}>
-                      <option value="trade">{copy.tradeLedger}</option>
-                      <option value="cash">{copy.cashLedger}</option>
-                      <option value="corporate">{copy.corporateLedger}</option>
-                    </select>
-                    <button type="button" className="btn-secondary text-[11px] uppercase tracking-widest" onClick={() => void loadEvents()}>
-                      {copy.refreshLedger}
-                    </button>
-                  </div>
+              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5">
+                <div className="flex flex-col gap-2">
+                  {positionRows.length === 0 ? (
+                    <div className="px-6 py-5 rounded-3xl bg-white/[0.02] text-sm text-white/45">{copy.noPositions}</div>
+                  ) : (
+                    positionRows.map((row) => (
+                      <div
+                        key={`${row.accountId}-${row.symbol}-${row.market}`}
+                        className="flex items-center justify-between gap-4 px-5 py-4 rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-lg text-white font-medium truncate">{row.symbol}</div>
+                          <div className="text-xs text-white/40">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-white/30">{copy.positionMarketValue}</div>
+                            <div className="text-white tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
+                          </div>
+                          <div className={`text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-              </Disclosure>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </main>
       </div>
+
+      {isHistoryDrawerOpen ? (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label={language === 'en' ? 'Close history drawer' : '关闭历史抽屉'}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsHistoryDrawerOpen(false)}
+          />
+          <aside
+            data-testid="portfolio-history-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={historyDrawerTitle}
+            className="absolute inset-y-0 right-0 flex w-full justify-end"
+          >
+            <div className="flex h-full w-full max-w-md flex-col bg-[#0a0a0a] border-l border-white/10 shadow-2xl">
+              <div className="flex items-center justify-between gap-3 border-b border-white/10 px-6 py-5">
+                <div>
+                  <h2 className="text-xs text-white/40 uppercase tracking-widest">{historyDrawerTitle}</h2>
+                  <p className="mt-2 text-sm text-white/45">{copy.pageLabel} {eventPage}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void loadEvents()}>{copy.refreshLedger}</button>
+                  <button
+                    type="button"
+                    onClick={() => setIsHistoryDrawerOpen(false)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-white"
+                    aria-label={language === 'en' ? 'Close order history' : '关闭历史记录'}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-6">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setEventType('trade')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'trade' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.tradeLedger}</button>
+                      <button type="button" onClick={() => setEventType('cash')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'cash' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.cashLedger}</button>
+                      <button type="button" onClick={() => setEventType('corporate')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'corporate' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.corporateLedger}</button>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-white/45">
+                      <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</button>
+                      <span>{copy.pageLabel} {eventPage}</span>
+                      <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</button>
+                    </div>
+                  </div>
+
+                  {eventType === 'trade' ? (
+                    tradeEvents.length === 0 ? (
+                      <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+                    ) : (
+                      tradeEvents.map((item) => (
+                        <div key={`trade-${item.id}`} className="rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] px-5 py-4 transition-colors">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatSideLabel(item.side, language)}</span></div>
+                              <div className="mt-1 text-xs text-white/40">{item.tradeDate} · {item.quantity} @ {item.price}</div>
+                            </div>
+                            <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })}>
+                              {copy.deleteConfirm}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )
+                  ) : null}
+
+                  {eventType === 'cash' ? (
+                    cashEvents.length === 0 ? (
+                      <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+                    ) : (
+                      cashEvents.map((item) => (
+                        <div key={`cash-${item.id}`} className="rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] px-5 py-4 transition-colors">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-white">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-white/40">{item.currency}</span></div>
+                              <div className="mt-1 text-xs text-white/40">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
+                            </div>
+                            <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })}>
+                              {copy.deleteConfirm}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )
+                  ) : null}
+
+                  {eventType === 'corporate' ? (
+                    corporateEvents.length === 0 ? (
+                      <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+                    ) : (
+                      corporateEvents.map((item) => (
+                        <div key={`corporate-${item.id}`} className="rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] px-5 py-4 transition-colors">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatCorporateActionLabel(item.actionType, language)}</span></div>
+                              <div className="mt-1 text-xs text-white/40">
+                                {item.effectiveDate}
+                                {item.cashDividendPerShare != null ? ` · ${copy.dividendPerShare} ${item.cashDividendPerShare}` : ''}
+                                {item.splitRatio != null ? ` · ${copy.splitRatio} ${item.splitRatio}` : ''}
+                              </div>
+                            </div>
+                            <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })}>
+                              {copy.deleteConfirm}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}
         title={copy.deleteTitle}
@@ -1789,28 +1516,7 @@ const PortfolioPage: React.FC = () => {
           }
         }}
       />
-      <PageBriefDrawer
-        isOpen={isBriefDrawerOpen}
-        onClose={() => setIsBriefDrawerOpen(false)}
-        title={language === 'en' ? 'Portfolio surface brief' : '持仓页面摘要'}
-        testId="portfolio-bento-drawer"
-        summary={language === 'en'
-          ? 'The portfolio shell now follows the same Bento rhythm as Home while preserving account, ledger, and import flows exactly as before.'
-          : '持仓页现在沿用与首页一致的 Bento 节奏，但账户、账本和导入流程保持原样。'}
-        metrics={[
-          { label: language === 'en' ? 'Accounts' : '账户数', value: String(snapshot?.accountCount ?? accounts.length) },
-          { label: language === 'en' ? 'Cost method' : '成本法', value: costMethod === 'fifo' ? copy.costFifo : copy.costAvg },
-          { label: language === 'en' ? 'FX status' : '汇率状态', value: snapshot?.fxStale ? copy.fxStale : copy.fxFresh, tone: snapshot?.fxStale ? 'bearish' : 'bullish' },
-          { label: language === 'en' ? 'Writable scope' : '写入范围', value: selectedAccount === 'all' ? copy.allAccounts : `#${selectedAccount}` },
-        ]}
-        bullets={[
-          language === 'en' ? 'Snapshot, cash buffer, account count, and FX freshness move into the hero strip so the page state reads quickly on first load.' : '总权益、现金缓冲、账户数和汇率新鲜度被抬进 Hero strip，让页面状态在首屏就能读明白。',
-          language === 'en' ? 'Manual adjustments, sync, and ledger disclosures stay where they were, so existing write paths and backend contracts are untouched.' : '手工录入、同步和账本 disclosure 仍保留在原位，因此现有写入路径和后端契约不受影响。',
-          language === 'en' ? 'This refactor is visual convergence plus test hooks, not a data rewrite.' : '这次重构是视觉收敛和测试钩子补齐，不是数据重写。',
-        ]}
-        footnote={language === 'en' ? 'Segment scope: layout and smoke hooks only.' : '本段范围：仅布局和 smoke 钩子。'}
-      />
-    </PageChrome>
+    </>
   );
 };
 

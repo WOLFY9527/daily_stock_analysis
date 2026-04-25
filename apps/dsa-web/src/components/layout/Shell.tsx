@@ -7,6 +7,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { Drawer } from '../common/Drawer';
 import { SidebarNav } from './SidebarNav';
 import { ShellRailContext } from './ShellRailContext';
@@ -171,7 +172,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   <Menu className="h-4 w-4" />
                 </button>
                 <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
-                  <span className="shell-wordmark">WolfyStock</span>
+                  <span className="inline-flex min-w-0 items-center gap-3">
+                    <BrandLogo />
+                    <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
+                  </span>
                   <span className="shell-mobile-brand__note">{t('nav.terminal')}</span>
                 </NavLink>
                 <span className="shell-mobile-placeholder" aria-hidden="true" />
