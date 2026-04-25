@@ -1,12 +1,9 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Search } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
 import {
   BENTO_SURFACE_ROOT_CLASS,
   BentoGrid,
-  CARD_BUTTON_CLASS,
-  CARD_KICKER_CLASS,
   DecisionCard,
   DeepReportDrawer,
   FundamentalsCard,
@@ -16,7 +13,6 @@ import {
   getToneBorderClass,
 } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { buildLocalizedPath } from '../utils/localeRouting';
 
 type DrawerMetric = {
   label: string;
@@ -51,11 +47,6 @@ const CONTENT: Record<DashboardLocale, {
   ticker: string;
   sessionBadge: string;
   regimeBadge: string;
-  topActions: {
-    scanner: string;
-    portfolio: string;
-    backtest: string;
-  };
   decision: {
     eyebrow: string;
     company: string;
@@ -106,11 +97,6 @@ const CONTENT: Record<DashboardLocale, {
     ticker: 'NVDA',
     sessionBadge: '美股 AI 基础设施',
     regimeBadge: '动量回升',
-    topActions: {
-      scanner: '扫描器',
-      portfolio: '持仓',
-      backtest: '回测',
-    },
     decision: {
       eyebrow: 'WOLFY AI 决断',
       company: '英伟达',
@@ -281,11 +267,6 @@ const CONTENT: Record<DashboardLocale, {
     ticker: 'NVDA',
     sessionBadge: 'US AI infrastructure',
     regimeBadge: 'Momentum rebuilding',
-    topActions: {
-      scanner: 'Scanner',
-      portfolio: 'Portfolio',
-      backtest: 'Backtest',
-    },
     decision: {
       eyebrow: 'WOLFY AI DECISION',
       company: 'NVIDIA',
@@ -458,78 +439,57 @@ const HomeBentoDashboardPage: React.FC = () => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
 
-  const topActions = useMemo(
-    () => ([
-      { label: copy.topActions.scanner, to: buildLocalizedPath('/scanner', language) },
-      { label: copy.topActions.portfolio, to: buildLocalizedPath('/portfolio', language) },
-      { label: copy.topActions.backtest, to: buildLocalizedPath('/backtest', language) },
-    ]),
-    [copy.topActions, language],
-  );
-
   return (
     <div
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      className={`${BENTO_SURFACE_ROOT_CLASS} space-y-6`}
+      className={`${BENTO_SURFACE_ROOT_CLASS} flex min-h-0 flex-col gap-6 md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)] md:overflow-hidden`}
     >
-      <section className="space-y-6">
-        <div className="mb-12 max-w-2xl">
-          <p className={CARD_KICKER_CLASS}>{copy.eyebrow}</p>
-          <label
-            className="mt-4 flex w-full max-w-2xl items-center gap-3 rounded-full border border-white/5 bg-white/[0.02] px-5 py-3.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
-            data-testid="home-bento-omnibar"
-          >
-            <Search className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
-            <span className="sr-only">{copy.omnibarPlaceholder}</span>
-            <input
-              type="search"
-              className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/20 focus:outline-none"
-              placeholder={copy.omnibarPlaceholder}
-              aria-label={copy.omnibarPlaceholder}
-              autoComplete="off"
-            />
-            <span className="shrink-0 rounded-md bg-white/5 px-2 py-1 font-mono text-[10px] text-white/30">
-              ↵ Enter
-            </span>
-          </label>
+      <header className="shrink-0 flex flex-col gap-5 mb-6 mt-2" data-testid="home-bento-header">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+            {copy.heading}
+          </h1>
         </div>
 
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
-            <h1 className="mt-3 text-[2rem] font-semibold tracking-tight text-white sm:text-[2.4rem]">
-              {copy.heading}
-            </h1>
-            <p className="mt-4 text-sm leading-relaxed text-white/62">{copy.description}</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="w-full md:max-w-xl">
+            <label
+              className="flex w-full items-center gap-3 rounded-full border border-white/5 bg-white/[0.02] px-5 py-3.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
+              data-testid="home-bento-omnibar"
+            >
+              <Search className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+              <span className="sr-only">{copy.omnibarPlaceholder}</span>
+              <input
+                type="search"
+                className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/20 focus:outline-none"
+                placeholder={copy.omnibarPlaceholder}
+                aria-label={copy.omnibarPlaceholder}
+                autoComplete="off"
+              />
+              <span className="shrink-0 rounded-md bg-white/5 px-2 py-1 font-mono text-[10px] text-white/30">
+                ↵ Enter
+              </span>
+            </label>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {topActions.map((action) => (
-              <Link
-                key={action.label}
-                to={action.to}
-                className={CARD_BUTTON_CLASS}
-              >
-                <span>{action.label}</span>
-                <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            ))}
+
+          <div className="flex flex-wrap gap-3 shrink-0">
+            <div className="rounded-full border border-white/[0.08] bg-white/[0.02] px-4 py-2 text-sm text-white/86 backdrop-blur-xl">
+              <span className="font-medium text-white">{copy.instrument}</span>
+              <span className="ml-2 font-mono text-white/40">{copy.ticker}</span>
+            </div>
+            <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('bullish')}`}>
+              {copy.sessionBadge}
+            </div>
+            <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('neutral')}`}>
+              {copy.regimeBadge}
+            </div>
           </div>
         </div>
+      </header>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-full border border-white/[0.08] bg-white/[0.02] px-4 py-2 text-sm text-white/86 backdrop-blur-xl">
-            <span className="font-medium text-white">{copy.instrument}</span>
-            <span className="ml-2 font-mono text-white/40">{copy.ticker}</span>
-          </div>
-          <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('bullish')}`}>
-            {copy.sessionBadge}
-          </div>
-          <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('neutral')}`}>
-            {copy.regimeBadge}
-          </div>
-        </div>
-
-        <BentoGrid testId="home-bento-grid">
+      <main className="flex-1 min-h-0 md:overflow-hidden" data-testid="home-bento-main">
+        <BentoGrid testId="home-bento-grid" className="h-full auto-rows-fr">
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}
@@ -548,33 +508,38 @@ const HomeBentoDashboardPage: React.FC = () => {
             onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
           />
 
-          <StrategyCard
-            title={copy.strategy.title}
-            subtitle={copy.strategy.subtitle}
-            metrics={copy.strategy.metrics}
-            positionLabel={copy.strategy.positionLabel}
-            positionBody={copy.strategy.positionBody}
-            detailLabel={copy.strategy.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
-          />
-
-          <div data-testid="home-bento-sibling-row" className="xl:col-span-5 grid grid-cols-12 gap-6 self-start">
-            <TechCard
-              title={copy.tech.title}
-              signals={copy.tech.signals}
-              detailLabel={copy.tech.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+          <section
+            data-testid="home-bento-right-rail"
+            className="md:col-span-5 xl:col-span-5 flex h-full min-h-0 flex-col gap-4 overflow-y-auto no-scrollbar"
+          >
+            <StrategyCard
+              title={copy.strategy.title}
+              subtitle={copy.strategy.subtitle}
+              metrics={copy.strategy.metrics}
+              positionLabel={copy.strategy.positionLabel}
+              positionBody={copy.strategy.positionBody}
+              detailLabel={copy.strategy.detailLabel}
+              onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
             />
 
-            <FundamentalsCard
-              title={copy.fundamentals.title}
-              metrics={copy.fundamentals.metrics}
-              detailLabel={copy.fundamentals.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
-            />
-          </div>
+            <div data-testid="home-bento-sibling-row" className="grid grid-cols-12 gap-4">
+              <TechCard
+                title={copy.tech.title}
+                signals={copy.tech.signals}
+                detailLabel={copy.tech.detailLabel}
+                onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+              />
+
+              <FundamentalsCard
+                title={copy.fundamentals.title}
+                metrics={copy.fundamentals.metrics}
+                detailLabel={copy.fundamentals.detailLabel}
+                onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
+              />
+            </div>
+          </section>
         </BentoGrid>
-      </section>
+      </main>
 
       <DeepReportDrawer
         isOpen={Boolean(activeDrawer)}
