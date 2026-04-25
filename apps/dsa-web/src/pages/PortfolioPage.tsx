@@ -427,6 +427,7 @@ const PortfolioPage: React.FC = () => {
 
   const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync'>('trade');
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [isXlViewport, setIsXlViewport] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth >= 1280));
   const [eventType, setEventType] = useState<EventType>('trade');
   const [eventDateFrom] = useState('');
   const [eventDateTo] = useState('');
@@ -998,6 +999,119 @@ const PortfolioPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isHistoryDrawerOpen]);
 
+  useEffect(() => {
+    const syncViewport = () => {
+      setIsXlViewport(window.innerWidth >= 1280);
+    };
+
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
+
+  const historyPanelContent = (
+    <div className="flex h-full min-h-0 flex-col bg-[#0a0a0a] xl:bg-transparent">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4">
+        <div>
+          <h2 className="text-xs text-white/40 uppercase tracking-widest">{historyDrawerTitle}</h2>
+          <p className="mt-2 text-sm text-white/45">{copy.pageLabel} {eventPage}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void loadEvents()}>{copy.refreshLedger}</button>
+          <button
+            type="button"
+            onClick={() => setIsHistoryDrawerOpen(false)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/5 text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white xl:hidden"
+            aria-label={language === 'en' ? 'Close order history' : '关闭历史记录'}
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setEventType('trade')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'trade' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.tradeLedger}</button>
+              <button type="button" onClick={() => setEventType('cash')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'cash' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.cashLedger}</button>
+              <button type="button" onClick={() => setEventType('corporate')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'corporate' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.corporateLedger}</button>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-white/45">
+              <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</button>
+              <span>{copy.pageLabel} {eventPage}</span>
+              <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</button>
+            </div>
+          </div>
+
+          {eventType === 'trade' ? (
+            tradeEvents.length === 0 ? (
+              <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+            ) : (
+              tradeEvents.map((item) => (
+                <div key={`trade-${item.id}`} className="rounded-[24px] bg-white/[0.02] px-5 py-4 transition-colors hover:bg-white/[0.04]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatSideLabel(item.side, language)}</span></div>
+                      <div className="mt-1 text-xs text-white/40">{item.tradeDate} · {item.quantity} @ {item.price}</div>
+                    </div>
+                    <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })}>
+                      {copy.deleteConfirm}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )
+          ) : null}
+
+          {eventType === 'cash' ? (
+            cashEvents.length === 0 ? (
+              <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+            ) : (
+              cashEvents.map((item) => (
+                <div key={`cash-${item.id}`} className="rounded-[24px] bg-white/[0.02] px-5 py-4 transition-colors hover:bg-white/[0.04]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-white">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-white/40">{item.currency}</span></div>
+                      <div className="mt-1 text-xs text-white/40">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
+                    </div>
+                    <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })}>
+                      {copy.deleteConfirm}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )
+          ) : null}
+
+          {eventType === 'corporate' ? (
+            corporateEvents.length === 0 ? (
+              <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+            ) : (
+              corporateEvents.map((item) => (
+                <div key={`corporate-${item.id}`} className="rounded-[24px] bg-white/[0.02] px-5 py-4 transition-colors hover:bg-white/[0.04]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatCorporateActionLabel(item.actionType, language)}</span></div>
+                      <div className="mt-1 text-xs text-white/40">
+                        {item.effectiveDate}
+                        {item.cashDividendPerShare != null ? ` · ${copy.dividendPerShare} ${item.cashDividendPerShare}` : ''}
+                        {item.splitRatio != null ? ` · ${copy.splitRatio} ${item.splitRatio}` : ''}
+                      </div>
+                    </div>
+                    <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })}>
+                      {copy.deleteConfirm}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
@@ -1015,10 +1129,10 @@ const PortfolioPage: React.FC = () => {
       <div
         data-testid="portfolio-bento-page"
         data-bento-surface="true"
-        className="mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-col overflow-hidden bg-transparent px-4 py-2 text-gray-300 md:px-6"
+        className="workspace-width-wide mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-col overflow-hidden bg-transparent px-4 py-2 text-gray-300 md:px-8 xl:px-12 2xl:max-w-full"
       >
-        <main className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-12">
-          <section className="md:col-span-5 h-full flex flex-col bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] overflow-hidden">
+        <main className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-12 xl:grid-cols-10">
+          <section className="lg:col-span-4 xl:col-span-2 h-full flex flex-col bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] overflow-hidden">
             <div className="shrink-0 px-4 pt-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1308,7 +1422,7 @@ const PortfolioPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="md:col-span-7 h-full flex flex-col gap-4 min-h-0">
+          <section className="lg:col-span-8 xl:col-span-5 h-full flex flex-col gap-4 min-h-0">
             <div
               data-testid="portfolio-total-assets-card"
               className="shrink-0 bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] p-4 flex justify-between items-end gap-3"
@@ -1344,7 +1458,7 @@ const PortfolioPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsHistoryDrawerOpen(true)}
-                  className="shrink-0 rounded-full border border-white/5 px-3 py-1.5 text-xs text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white"
+                  className="shrink-0 rounded-full border border-white/5 px-3 py-1.5 text-xs text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white xl:hidden"
                 >
                   {historyDrawerLabel}
                 </button>
@@ -1380,6 +1494,14 @@ const PortfolioPage: React.FC = () => {
               </div>
             </div>
           </section>
+
+          {isXlViewport ? (
+            <section className="hidden xl:flex xl:col-span-3 xl:min-h-0">
+            <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[18px] border border-white/5 bg-white/[0.01] backdrop-blur-2xl">
+              {historyPanelContent}
+            </div>
+            </section>
+          ) : null}
         </main>
       </div>
 
@@ -1398,105 +1520,8 @@ const PortfolioPage: React.FC = () => {
             aria-label={historyDrawerTitle}
             className="absolute inset-y-0 right-0 flex w-full justify-end"
           >
-            <div className="flex h-full w-full max-w-md flex-col bg-[#0a0a0a] border-l border-white/5 shadow-2xl">
-              <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4">
-                <div>
-                  <h2 className="text-xs text-white/40 uppercase tracking-widest">{historyDrawerTitle}</h2>
-                  <p className="mt-2 text-sm text-white/45">{copy.pageLabel} {eventPage}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void loadEvents()}>{copy.refreshLedger}</button>
-                  <button
-                    type="button"
-                    onClick={() => setIsHistoryDrawerOpen(false)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/5 text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white"
-                    aria-label={language === 'en' ? 'Close order history' : '关闭历史记录'}
-                  >
-                    <span aria-hidden="true">×</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5">
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => setEventType('trade')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'trade' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.tradeLedger}</button>
-                      <button type="button" onClick={() => setEventType('cash')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'cash' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.cashLedger}</button>
-                      <button type="button" onClick={() => setEventType('corporate')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'corporate' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.corporateLedger}</button>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-white/45">
-                      <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</button>
-                      <span>{copy.pageLabel} {eventPage}</span>
-                      <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</button>
-                    </div>
-                  </div>
-
-                  {eventType === 'trade' ? (
-                    tradeEvents.length === 0 ? (
-                      <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
-                    ) : (
-                      tradeEvents.map((item) => (
-                        <div key={`trade-${item.id}`} className="rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] px-5 py-4 transition-colors">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatSideLabel(item.side, language)}</span></div>
-                              <div className="mt-1 text-xs text-white/40">{item.tradeDate} · {item.quantity} @ {item.price}</div>
-                            </div>
-                            <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })}>
-                              {copy.deleteConfirm}
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )
-                  ) : null}
-
-                  {eventType === 'cash' ? (
-                    cashEvents.length === 0 ? (
-                      <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
-                    ) : (
-                      cashEvents.map((item) => (
-                        <div key={`cash-${item.id}`} className="rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] px-5 py-4 transition-colors">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="text-white">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-white/40">{item.currency}</span></div>
-                              <div className="mt-1 text-xs text-white/40">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
-                            </div>
-                            <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })}>
-                              {copy.deleteConfirm}
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )
-                  ) : null}
-
-                  {eventType === 'corporate' ? (
-                    corporateEvents.length === 0 ? (
-                      <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
-                    ) : (
-                      corporateEvents.map((item) => (
-                        <div key={`corporate-${item.id}`} className="rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] px-5 py-4 transition-colors">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatCorporateActionLabel(item.actionType, language)}</span></div>
-                              <div className="mt-1 text-xs text-white/40">
-                                {item.effectiveDate}
-                                {item.cashDividendPerShare != null ? ` · ${copy.dividendPerShare} ${item.cashDividendPerShare}` : ''}
-                                {item.splitRatio != null ? ` · ${copy.splitRatio} ${item.splitRatio}` : ''}
-                              </div>
-                            </div>
-                            <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })}>
-                              {copy.deleteConfirm}
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )
-                  ) : null}
-                </div>
-              </div>
+            <div className="flex h-full w-full max-w-md flex-col border-l border-white/5 shadow-2xl">
+              {historyPanelContent}
             </div>
           </aside>
         </div>

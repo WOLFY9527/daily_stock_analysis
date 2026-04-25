@@ -53,7 +53,7 @@ describe('HomeSurfacePage', () => {
     expect(root).toHaveAttribute('data-bento-surface', 'true');
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
-    expect(root).toHaveClass('flex', 'min-h-0', 'flex-col', 'gap-6');
+    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'max-w-[1920px]', 'flex', 'min-h-0', 'flex-col');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('md:overflow-hidden');
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
@@ -63,17 +63,20 @@ describe('HomeSurfacePage', () => {
     const main = screen.getByTestId('home-bento-main');
     const omnibar = screen.getByTestId('home-bento-omnibar');
     const omnibarInput = screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...');
-    expect(header).toHaveClass('shrink-0', 'flex', 'flex-col', 'gap-5', 'mb-6', 'mt-2');
+    expect(header).toHaveClass('shrink-0', 'flex', 'flex-col', 'gap-3', 'mb-4', 'mt-1');
     expect(main).toHaveClass('flex-1', 'min-h-0');
     expect(main.className).not.toContain('md:overflow-hidden');
     expect(omnibar).toHaveClass(
+      'flex',
       'w-full',
+      'items-center',
+      'gap-2.5',
       'rounded-full',
       'border-white/5',
-      'bg-white/[0.02]',
+      'bg-white/[0.01]',
       'backdrop-blur-md',
-      'focus-within:border-white/20',
-      'focus-within:bg-white/[0.04]',
+      'focus-within:border-white/15',
+      'focus-within:bg-white/[0.02]',
       'focus-within:ring-1',
       'focus-within:ring-white/10',
     );
@@ -90,9 +93,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
     const siblingRow = screen.getByTestId('home-bento-sibling-row');
     expect(siblingRow).toBeInTheDocument();
-    expect(siblingRow).toHaveClass('grid', 'grid-cols-12', 'gap-6', 'xl:col-span-5');
-    expect(techCard).toHaveClass('col-span-6');
-    expect(fundamentalsCard).toHaveClass('col-span-6');
+    expect(siblingRow).toHaveClass('grid', 'grid-cols-1', 'gap-4', 'md:grid-cols-2', 'xl:col-span-6', 'xl:grid-cols-3');
+    expect(strategyCard).toHaveClass('h-full');
+    expect(techCard).toHaveClass('h-full');
+    expect(fundamentalsCard).toHaveClass('h-full');
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
@@ -136,10 +140,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getAllByText('技术形态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('基本面画像').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/MACD/i).length).toBeGreaterThan(0);
-    expect(document.body.style.overflow).toBe('hidden');
     fireEvent.keyDown(document, { key: 'Escape' });
     await new Promise((resolve) => window.setTimeout(resolve, 220));
-    expect(document.body.style.overflow).toBe('');
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 });

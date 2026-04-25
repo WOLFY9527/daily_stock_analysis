@@ -256,7 +256,7 @@ const UserScannerPage: React.FC = () => {
   return (
     <>
       <div data-testid="user-scanner-bento-page" className="h-[calc(100vh-80px)] overflow-hidden bg-[#030303] text-white">
-        <div className="w-full max-w-[1400px] mx-auto px-8 pt-0 pb-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-transparent">
+        <div className="workspace-width-wide w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12 pt-0 pb-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-transparent">
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
               <h1 className="text-[2rem] tracking-[-0.04em] text-white">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
@@ -306,7 +306,7 @@ const UserScannerPage: React.FC = () => {
             <div className="shrink-0">
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'My candidates' : '我的候选'}</p>
             </div>
-            <div className="grid grid-cols-4 xl:grid-cols-6 gap-2 content-start overflow-y-auto no-scrollbar">
+            <div className="grid grid-cols-1 gap-2 content-start overflow-y-auto no-scrollbar md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
               {renderedWatchlistCards.map((candidate) => (
                 <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
                   <div>

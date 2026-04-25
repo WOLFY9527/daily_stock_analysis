@@ -24,7 +24,7 @@ export const TechCard: React.FC<TechCardProps> = ({
 }) => (
   <BentoCard
     eyebrow={title}
-    className="col-span-6 xl:col-span-6"
+    className="h-full"
     testId="home-bento-card-tech"
     action={(
       <button

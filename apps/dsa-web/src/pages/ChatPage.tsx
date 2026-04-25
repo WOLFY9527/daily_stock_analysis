@@ -10,6 +10,8 @@ import {
   PageBriefDrawer,
   PageChrome,
   type BentoHeroItem,
+  getToneTextClass,
+  getToneTextStyle,
 } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
@@ -608,7 +610,7 @@ const ChatPage: React.FC = () => {
   return (
     <PageChrome
       pageTestId="chat-bento-page"
-      pageClassName="workspace-page workspace-page--chat gemini-bento-page--chat"
+      pageClassName="workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12"
       scrollMode="page"
       eyebrow={chat('eyebrow')}
       title={(
@@ -737,12 +739,10 @@ const ChatPage: React.FC = () => {
           ) : null}
         </>
       )}
-      heroItems={heroItems}
-      heroTestId="chat-bento-hero"
     >
       <div
         data-testid="chat-workspace"
-        className="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-4 pb-24 min-h-screen flex flex-col bg-transparent gap-6 md:gap-8"
+        className="flex min-h-screen w-full flex-col gap-6 bg-transparent pb-24 pt-4 md:gap-8 xl:flex-row xl:items-start"
       >
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
@@ -755,13 +755,42 @@ const ChatPage: React.FC = () => {
           onCancel={() => setDeleteConfirmId(null)}
         />
 
-        <main data-testid="chat-main" className="flex flex-col">
-          <div
-            ref={messagesViewportRef}
-            data-testid="chat-message-scroll"
-            className="flex w-full justify-center"
-          >
-            <div data-testid="chat-message-stream" className="flex w-full max-w-4xl flex-col gap-8">
+        <aside
+          data-testid="chat-status-sidebar"
+          className="hidden xl:flex xl:w-80 xl:flex-col xl:gap-4 xl:self-stretch xl:border-r xl:border-white/5 xl:pr-6"
+        >
+          {heroItems.map((item, index) => {
+            const tone = item.tone || 'neutral';
+            return (
+              <div
+                key={`${item.label}-${index}`}
+                data-testid={item.testId}
+                className="relative overflow-hidden rounded-[18px] border border-white/5 bg-white/[0.01] px-4 py-4 backdrop-blur-2xl"
+              >
+                <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">{item.label}</p>
+                <p
+                  data-testid={item.valueTestId}
+                  className={`mt-2.5 text-[1.35rem] font-semibold ${getToneTextClass(tone)} ${item.valueClassName || ''}`}
+                  style={getToneTextStyle(tone, tone !== 'neutral')}
+                >
+                  {item.value}
+                </p>
+                {item.detail ? (
+                  <p className="mt-1.5 text-xs leading-5 text-white/56">{item.detail}</p>
+                ) : null}
+              </div>
+            );
+          })}
+        </aside>
+
+        <section className="flex flex-1 flex-col items-center">
+          <main data-testid="chat-main" className="flex w-full flex-col">
+            <div
+              ref={messagesViewportRef}
+              data-testid="chat-message-scroll"
+              className="flex w-full justify-center"
+            >
+              <div data-testid="chat-message-stream" className="flex w-full max-w-4xl flex-col gap-8">
               {skillsLoadError ? (
                 <ApiErrorAlert
                   error={skillsLoadError}
@@ -986,16 +1015,15 @@ const ChatPage: React.FC = () => {
               )}
 
               <div ref={messagesEndRef} />
+              </div>
             </div>
-          </div>
+          </main>
 
-        </main>
-
-        <footer
-          data-testid="chat-input-shell"
-          className="sticky bottom-0 z-50 w-full py-4 bg-[#030303]/80 backdrop-blur-xl border-t border-white/5"
-        >
-          <div className="mx-auto w-full max-w-4xl">
+          <footer
+            data-testid="chat-input-shell"
+            className="sticky bottom-0 z-50 mt-6 w-full border-t border-white/5 bg-[#030303]/80 py-4 backdrop-blur-xl"
+          >
+            <div className="mx-auto w-full max-w-4xl">
             {chatError ? (
               <ApiErrorAlert
                 error={chatError}
@@ -1050,8 +1078,9 @@ const ChatPage: React.FC = () => {
                 {chat('followUpContextLoading')}
               </p>
             )}
-          </div>
-        </footer>
+            </div>
+          </footer>
+        </section>
       </div>
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}

@@ -13,6 +13,7 @@ import { SidebarNav } from './SidebarNav';
 import { ShellRailContext } from './ShellRailContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useIsDesktopViewport } from './useIsDesktopViewport';
+import { stripLocalePrefix } from '../../utils/localeRouting';
 
 type ShellProps = {
   children?: React.ReactNode;
@@ -55,8 +56,13 @@ const ShellRailPanel: React.FC<{
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { t } = useI18n();
   const location = useLocation();
-  const isBacktestRoute = location.pathname.startsWith('/backtest');
-  const isScannerRoute = location.pathname.startsWith('/scanner');
+  const surfacePathname = stripLocalePrefix(location.pathname);
+  const isBacktestRoute = surfacePathname.startsWith('/backtest');
+  const isScannerRoute = surfacePathname.startsWith('/scanner');
+  const isWideRoute = surfacePathname === '/'
+    || surfacePathname.startsWith('/scanner')
+    || surfacePathname.startsWith('/chat')
+    || surfacePathname.startsWith('/portfolio');
   const isDesktop = useIsDesktopViewport();
   const previousPathnameRef = useRef(location.pathname);
   const didInitializeViewportRef = useRef(false);
@@ -149,7 +155,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   return (
     <ShellRailContext.Provider value={railContextValue}>
       <div
-        className={`theme-shell h-screen flex flex-col overflow-hidden text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}`}
+        className={`theme-shell h-screen flex flex-col overflow-hidden text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
         <header className="shell-masthead shrink-0">
@@ -185,7 +191,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame flex flex-1 min-h-0 overflow-hidden${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}`}
+          className={`shell-content-frame flex flex-1 min-h-0 overflow-hidden${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}`}
         >
           <main className={`theme-main-lane shell-main-column flex-1 min-h-0 overflow-hidden${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
             <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 flex-col">

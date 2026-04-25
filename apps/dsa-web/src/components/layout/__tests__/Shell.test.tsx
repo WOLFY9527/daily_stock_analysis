@@ -250,11 +250,29 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.theme-shell--scanner')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--scanner')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('flex');
     expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
     expect(document.documentElement.dataset.scannerShell).toBe('true');
     expect(document.body.dataset.scannerShell).toBe('true');
+  });
+
+  it('adds wide-shell modifiers for the home route without enabling backtest mode', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
   });
 
   it('adds a dedicated content-frame modifier for the backtest route', () => {

@@ -180,12 +180,13 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('min-h-full', 'overflow-visible');
     expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
-    expect(screen.getByTestId('chat-bento-hero')).toBeInTheDocument();
-    expect(await screen.findByTestId('chat-bento-hero-skill-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'max-w-[1400px]', 'mx-auto', 'px-4', 'md:px-8', 'pt-4', 'pb-24', 'min-h-screen', 'flex', 'flex-col', 'bg-transparent', 'gap-6', 'md:gap-8');
-    expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'flex-col');
+    expect(screen.getByTestId('chat-workspace')).toHaveClass('min-h-screen', 'w-full', 'flex', 'flex-col', 'gap-6', 'bg-transparent', 'pt-4', 'pb-24', 'xl:flex-row');
+    expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'w-full', 'flex-col');
     expect(screen.getByTestId('chat-main')).not.toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('chat-status-sidebar')).toHaveClass('hidden', 'xl:flex', 'xl:w-80', 'xl:flex-col', 'xl:gap-4');
+    expect(await screen.findByTestId('chat-bento-hero-skill')).toBeInTheDocument();
+    expect(await screen.findByTestId('chat-bento-hero-skill-value')).toHaveTextContent(canonicalBullTrendLabel('zh'));
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex', 'w-full', 'justify-center');

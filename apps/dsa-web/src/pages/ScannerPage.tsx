@@ -603,7 +603,7 @@ const ScannerPage: React.FC = () => {
     <>
       <PageChrome
         pageTestId="scanner-bento-page"
-        pageClassName="gemini-bento-page--scanner gemini-bento-page--scanner-admin space-y-6"
+        pageClassName="workspace-width-wide gemini-bento-page--scanner gemini-bento-page--scanner-admin w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12 space-y-6"
         eyebrow={t('scanner.eyebrow')}
         title={language === 'en' ? 'MARKET SCANNER' : '市场扫描'}
         description={selectedMarketCopy.subtitle}
@@ -890,7 +890,7 @@ const ScannerPage: React.FC = () => {
 
               {!isLoadingRun && watchlistCards.length ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
                     {watchlistCards.map((candidate) => (
                       <div
                         key={`watchlist-card-${candidate.symbol}`}

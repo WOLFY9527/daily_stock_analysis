@@ -42,7 +42,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
     eyebrow={eyebrow}
     tone={signalTone}
     accentGlow
-    className="xl:col-span-7 xl:row-span-2"
+    className="xl:col-span-6"
     testId="home-bento-card-decision"
     action={(
       <button

@@ -328,7 +328,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('max-w-[1400px]');
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('max-w-[1920px]');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-card')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();

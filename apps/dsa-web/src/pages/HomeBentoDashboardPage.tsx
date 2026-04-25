@@ -443,7 +443,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     <div
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      className={`${BENTO_SURFACE_ROOT_CLASS} flex h-full min-h-0 flex-col gap-4`}
+      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-col gap-4 bg-transparent px-4 md:px-8 xl:px-12 2xl:max-w-full`}
     >
       <header className="shrink-0 flex flex-col gap-3 mb-4 mt-1" data-testid="home-bento-header">
         <div>
@@ -508,17 +508,16 @@ const HomeBentoDashboardPage: React.FC = () => {
             onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
           />
 
-          <StrategyCard
-            title={copy.strategy.title}
-            subtitle={copy.strategy.subtitle}
-            metrics={copy.strategy.metrics}
-            positionLabel={copy.strategy.positionLabel}
-            positionBody={copy.strategy.positionBody}
-            detailLabel={copy.strategy.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
-          />
-
-          <div data-testid="home-bento-sibling-row" className="xl:col-span-5 grid h-full grid-cols-12 gap-4 self-stretch">
+          <div data-testid="home-bento-sibling-row" className="grid h-full grid-cols-1 gap-4 self-stretch md:grid-cols-2 xl:col-span-6 xl:grid-cols-3">
+            <StrategyCard
+              title={copy.strategy.title}
+              subtitle={copy.strategy.subtitle}
+              metrics={copy.strategy.metrics}
+              positionLabel={copy.strategy.positionLabel}
+              positionBody={copy.strategy.positionBody}
+              detailLabel={copy.strategy.detailLabel}
+              onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
+            />
             <TechCard
               title={copy.tech.title}
               signals={copy.tech.signals}

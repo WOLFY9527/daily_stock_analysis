@@ -14888,6 +14888,11 @@ html[data-theme='spacex'] .shell-content-frame {
   padding-inline: clamp(0.8rem, 1.8vw, 1.6rem);
 }
 
+html[data-theme='spacex'] .theme-shell--wide .shell-masthead__inner,
+html[data-theme='spacex'] .shell-content-frame--wide {
+  max-width: min(1920px, 100%);
+}
+
 html[data-theme='spacex'] .shell-masthead__inner {
   padding-block: 0.2rem 0.72rem;
 }
@@ -16965,6 +16970,10 @@ html[data-theme='spacex'] :is(.workspace-page, .bento-surface-root, .gemini-bent
   flex: 1;
   min-height: 0;
   flex-direction: column;
+}
+
+html[data-theme='spacex'] .workspace-width-wide {
+  --layout-page-max: 1920px;
 }
 
 html[data-theme='spacex'] .workspace-page {

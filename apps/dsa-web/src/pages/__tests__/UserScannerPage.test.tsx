@@ -245,19 +245,16 @@ describe('UserScannerPage', () => {
   it('shows user-facing copy without admin jargon in zh', async () => {
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('user-scanner-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('user-scanner-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('user-scanner-bento-hero')).toBeInTheDocument();
+    expect(await screen.findByTestId('user-scanner-bento-page')).toHaveClass('bg-[#030303]', 'text-white');
     expect((await screen.findAllByText('我的手动扫描：600001 算力龙头')).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('user-scanner-bento-hero-run-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByText('这个页面只保留手动运行、候选名单详情和登录后功能跳转，面向普通登录用户。')).toBeInTheDocument();
-    expect(screen.getByText('运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。')).toBeInTheDocument();
     expect(screen.queryByText(/运营空间|产品面|运营界面/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('user-scanner-bento-drawer-trigger'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('user-scanner-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByText('扫描器页面说明')).toBeInTheDocument();
+    expect(screen.getByText('这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。')).toBeInTheDocument();
+    expect(screen.getByText('运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。')).toBeInTheDocument();
+    expect(screen.getByText('历史记录与页面边界')).toBeInTheDocument();
   });
 
   it('reuses shared market defaults and cn option labels after switching language', async () => {
