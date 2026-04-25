@@ -54,6 +54,8 @@ describe('HomeSurfacePage', () => {
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
     expect(root).toHaveClass('flex', 'min-h-0', 'flex-col', 'gap-6');
+    expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
+    expect(root.className).not.toContain('md:overflow-hidden');
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
     expect(screen.getByTestId('home-bento-grid')).toHaveClass('bento-grid-root');
     expect(screen.getByText('WolfyStock 决策面板')).toBeInTheDocument();
@@ -63,6 +65,7 @@ describe('HomeSurfacePage', () => {
     const omnibarInput = screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...');
     expect(header).toHaveClass('shrink-0', 'flex', 'flex-col', 'gap-5', 'mb-6', 'mt-2');
     expect(main).toHaveClass('flex-1', 'min-h-0');
+    expect(main.className).not.toContain('md:overflow-hidden');
     expect(omnibar).toHaveClass(
       'w-full',
       'rounded-full',
@@ -85,16 +88,11 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
-    const rightRail = screen.getByTestId('home-bento-right-rail');
     const siblingRow = screen.getByTestId('home-bento-sibling-row');
-    expect(rightRail).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col', 'gap-4', 'overflow-y-auto', 'no-scrollbar');
     expect(siblingRow).toBeInTheDocument();
-    expect(siblingRow).toHaveClass('grid', 'grid-cols-12', 'gap-4');
+    expect(siblingRow).toHaveClass('grid', 'grid-cols-12', 'gap-6', 'xl:col-span-5');
     expect(techCard).toHaveClass('col-span-6');
     expect(fundamentalsCard).toHaveClass('col-span-6');
-    expect(strategyCard).toHaveClass('p-5', 'sm:p-5');
-    expect(techCard).toHaveClass('p-4', 'sm:p-5');
-    expect(fundamentalsCard).toHaveClass('p-4', 'sm:p-5');
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
