@@ -3,6 +3,7 @@ import unittest
 import sys
 import os
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 # Ensure src module can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -11,6 +12,7 @@ from src.storage import DatabaseManager
 from src.analyzer import AnalysisResult
 from src.repositories.analysis_repo import AnalysisRepository
 from src.repositories.scanner_repo import ScannerRepository
+from src.storage import AppUserSession
 
 class TestStorage(unittest.TestCase):
 
@@ -163,6 +165,63 @@ class TestStorage(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertIsNotNone(row.last_seen_at)
         self.assertIsNotNone(row.revoked_at)
+
+        DatabaseManager.reset_instance()
+
+    def test_revoke_all_app_user_sessions_counts_distinct_phase_a_and_legacy_sessions(self):
+        class _FakePhaseAStore:
+            def __init__(self) -> None:
+                self._user = SimpleNamespace(id="user-1")
+                self.revoked_user_ids = []
+
+            def get_app_user(self, user_id: str):
+                if user_id == "user-1":
+                    return self._user
+                return None
+
+            def list_active_app_user_session_ids(self, user_id: str) -> list[str]:
+                if user_id == "user-1":
+                    return ["phase-a-session"]
+                return []
+
+            def get_app_user_session(self, session_id: str):
+                return None
+
+            def revoke_all_app_user_sessions(self, user_id: str) -> int:
+                self.revoked_user_ids.append(user_id)
+                return 1
+
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        db.create_or_update_app_user(
+            user_id="user-1",
+            username="user-1",
+            display_name="User 1",
+            role="user",
+            password_hash=None,
+            is_active=True,
+        )
+        db.create_app_user_session(
+            session_id="legacy-session",
+            user_id="user-1",
+            expires_at=datetime.now() + timedelta(hours=1),
+        )
+
+        db._phase_a_enabled = True
+        db._phase_a_store = _FakePhaseAStore()
+
+        revoked = db.revoke_all_app_user_sessions("user-1")
+
+        self.assertEqual(revoked, 2)
+        self.assertEqual(db._phase_a_store.revoked_user_ids, ["user-1"])
+        with db.get_session() as session:
+            legacy_row = (
+                session.query(AppUserSession)
+                .filter(AppUserSession.session_id == "legacy-session")
+                .first()
+            )
+        self.assertIsNotNone(legacy_row)
+        self.assertIsNotNone(legacy_row.revoked_at)
 
         DatabaseManager.reset_instance()
 

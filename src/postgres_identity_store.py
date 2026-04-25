@@ -411,6 +411,19 @@ class PostgresPhaseAStore:
                 row.last_seen_at = now
             return len(rows)
 
+    def list_active_app_user_session_ids(self, user_id: str) -> list[str]:
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            return []
+        with self.get_session() as session:
+            rows = session.execute(
+                select(PhaseAAppUserSession.session_id).where(
+                    PhaseAAppUserSession.user_id == normalized_user_id,
+                    PhaseAAppUserSession.revoked_at.is_(None),
+                )
+            ).scalars().all()
+            return [str(value) for value in rows if str(value or "").strip()]
+
     def get_user_notification_preferences(self, user_id: str) -> Dict[str, Any]:
         normalized_user_id = str(user_id or "").strip()
         if not normalized_user_id:

@@ -1828,6 +1828,19 @@ class DatabaseManager:
             session.commit()
             return len(rows)
 
+    def _sqlite_list_active_app_user_session_ids(self, user_id: str) -> List[str]:
+        resolved_user_id = self.require_user_id(user_id)
+        with self.get_session() as session:
+            rows = session.execute(
+                select(AppUserSession.session_id).where(
+                    and_(
+                        AppUserSession.user_id == resolved_user_id,
+                        AppUserSession.revoked_at.is_(None),
+                    )
+                )
+            ).scalars().all()
+            return [str(value) for value in rows if str(value or "").strip()]
+
     def _sqlite_get_user_preference_row(self, user_id: str) -> Optional[UserPreference]:
         normalized_user_id = str(user_id or "").strip()
         if not normalized_user_id:
@@ -2066,8 +2079,18 @@ class DatabaseManager:
     def revoke_all_app_user_sessions(self, user_id: str) -> int:
         resolved_user_id = self.require_user_id(user_id)
         if self._phase_a_enabled and self._phase_a_store is not None:
+            active_session_ids = set(self._sqlite_list_active_app_user_session_ids(resolved_user_id))
+            list_phase_a_active_ids = getattr(self._phase_a_store, "list_active_app_user_session_ids", None)
+            if callable(list_phase_a_active_ids):
+                active_session_ids.update(
+                    str(value)
+                    for value in list_phase_a_active_ids(resolved_user_id)
+                    if str(value or "").strip()
+                )
             phase_a_count = self._phase_a_store.revoke_all_app_user_sessions(resolved_user_id)
             legacy_count = self._sqlite_revoke_all_app_user_sessions(resolved_user_id)
+            if active_session_ids:
+                return len(active_session_ids)
             return max(phase_a_count, legacy_count)
         return self._sqlite_revoke_all_app_user_sessions(resolved_user_id)
 

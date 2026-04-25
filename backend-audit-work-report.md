@@ -32,6 +32,10 @@
    - `src/repositories/scanner_repo.py`
    - `tests/test_storage.py`
    - `docs/superpowers/plans/2026-04-25-storage-seam-audit.md`
+8. 修复第二批 `storage / phase-a` 会话计数问题：
+   - `src/storage.py`
+   - `src/postgres_identity_store.py`
+   - `tests/test_storage.py`
 
 ## 为什么这么改
 
@@ -47,6 +51,11 @@
 - 将 SQLite app-user session 单条查询统一收敛到 `_sqlite_find_app_user_session_row(...)`，减少 `_sqlite_get_app_user_session`、`_sqlite_touch_app_user_session`、`_sqlite_revoke_app_user_session` 的重复查询代码。
 - 顺手消除了 `revoke_app_user_session()` 在 Phase A 回退路径中对同一 legacy session 的重复读取。
 
+## 第二批代码级收敛
+
+- 修复 `revoke_all_app_user_sessions()` 在 Phase A 开启时的返回计数低报问题：原实现使用 `max(phase_a_count, legacy_count)`，当同一用户同时存在 Phase A 新会话与 legacy 旧会话时会只返回较大一侧的数量。
+- 新增 SQLite / Phase A 的“活跃 session id 列表”读取，用 union 计数后再执行 revoke，保证返回值反映本次真正撤销的逻辑 session 数量，而不是单侧存储数量。
+
 ## 验证情况
 
 - `python3 scripts/check_ai_assets.py`
@@ -61,6 +70,10 @@
   - PASS
 - `python3 -m pytest tests/test_auth_api.py -q`
   - PASS
+- `PYTHONPYCACHEPREFIX=/tmp/dsa-pyc python3 -m py_compile src/storage.py src/postgres_identity_store.py tests/test_storage.py`
+  - PASS
+- `python3 -m pytest tests/test_postgres_phase_a.py -q`
+  - PASS
 
 ## 未验证项
 
@@ -74,6 +87,7 @@
 
 - 本次主要是仓库治理与文档收敛，不等于完成整仓后端代码级性能审计。
 - 第一批代码改动属于 seam 级别收敛，不等于 `DatabaseManager` 架构性拆分。
+- 第二批修复改变了 `revoke_all_app_user_sessions()` 的返回计数语义，使其更接近“实际撤销的逻辑 session 数”；如果有上游调用错误依赖旧的低报值，需要同步注意。
 - 历史审计报告已移动到归档目录；若有外部脚本硬编码根目录路径，需要同步改为新路径。
 - 由于本次故意避开前端，README 中与产品功能有关的旧表述仍可能存在后续需继续修订的内容。
 
