@@ -122,6 +122,8 @@ export const PageChrome: React.FC<PageChromeProps> = ({
       {heroItems?.length ? <BentoHeroStrip items={heroItems} testId={heroTestId} /> : null}
       {headerChildren}
     </WorkspacePageHeader>
-    {children}
+    <div className="flex flex-1 min-h-0 flex-col">
+      {children}
+    </div>
   </div>
 );
