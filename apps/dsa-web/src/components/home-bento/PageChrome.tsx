@@ -28,7 +28,7 @@ type BentoHeroStripProps = {
 export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className, testId }) => (
   <div
     data-testid={testId}
-    className={cn('grid gap-4 md:grid-cols-2 xl:grid-cols-4', className)}
+    className={cn('grid gap-3 md:grid-cols-2 xl:grid-cols-4', className)}
   >
     {items.map((item, index) => {
       const tone = item.tone || 'neutral';
@@ -37,7 +37,7 @@ export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className
         <div
           key={`${item.label}-${index}`}
           data-testid={item.testId}
-          className="group relative overflow-hidden rounded-[40px] border border-white/[0.08] bg-white/[0.02] px-6 py-6 backdrop-blur-3xl transition-all duration-200 ease-out hover:-translate-y-[2px] hover:border-white/[0.12] hover:bg-white/[0.03] sm:px-7 sm:py-7"
+          className="group relative overflow-hidden rounded-[18px] border border-white/5 bg-white/[0.01] px-4 py-4 backdrop-blur-2xl transition-all duration-200 ease-out hover:-translate-y-[1px] hover:border-white/[0.08] hover:bg-white/[0.02] sm:px-5 sm:py-5"
         >
           {tone !== 'neutral' ? (
             <div
@@ -53,7 +53,7 @@ export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className
             <p
               data-testid={item.valueTestId}
               className={cn(
-                'mt-3 text-[1.65rem] font-semibold tracking-[-0.03em] text-white sm:text-[1.85rem]',
+                'mt-2.5 text-[1.35rem] font-semibold text-white sm:text-[1.55rem]',
                 getToneTextClass(tone),
                 item.valueClassName,
               )}
@@ -62,7 +62,7 @@ export const BentoHeroStrip: React.FC<BentoHeroStripProps> = ({ items, className
               {item.value}
             </p>
             {item.detail ? (
-              <p className="mt-2 text-sm leading-6 text-white/56">{item.detail}</p>
+              <p className="mt-1.5 text-xs leading-5 text-white/56">{item.detail}</p>
             ) : null}
           </div>
         </div>
@@ -107,7 +107,7 @@ export const PageChrome: React.FC<PageChromeProps> = ({
   <div
     data-testid={pageTestId}
     data-bento-surface="true"
-    className={cn('gemini-bento-page bg-black', BENTO_SURFACE_ROOT_CLASS, pageClassName)}
+    className={cn('gemini-bento-page flex h-full min-h-0 flex-col overflow-hidden bg-black', BENTO_SURFACE_ROOT_CLASS, pageClassName)}
   >
     <WorkspacePageHeader
       eyebrow={eyebrow}

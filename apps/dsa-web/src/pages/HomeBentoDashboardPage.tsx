@@ -443,19 +443,19 @@ const HomeBentoDashboardPage: React.FC = () => {
     <div
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      className={`${BENTO_SURFACE_ROOT_CLASS} flex min-h-0 flex-col gap-6`}
+      className={`${BENTO_SURFACE_ROOT_CLASS} flex h-full min-h-0 flex-col gap-4`}
     >
-      <header className="shrink-0 flex flex-col gap-5 mb-6 mt-2" data-testid="home-bento-header">
+      <header className="shrink-0 flex flex-col gap-3 mb-4 mt-1" data-testid="home-bento-header">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
             {copy.heading}
           </h1>
         </div>
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div className="w-full md:max-w-xl">
             <label
-              className="flex w-full items-center gap-3 rounded-full border border-white/5 bg-white/[0.02] px-5 py-3.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
+              className="flex w-full items-center gap-2.5 rounded-full border border-white/5 bg-white/[0.01] px-4 py-2.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/15 focus-within:bg-white/[0.02] focus-within:ring-1 focus-within:ring-white/10"
               data-testid="home-bento-omnibar"
             >
               <Search className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
@@ -467,28 +467,28 @@ const HomeBentoDashboardPage: React.FC = () => {
                 aria-label={copy.omnibarPlaceholder}
                 autoComplete="off"
               />
-              <span className="shrink-0 rounded-md bg-white/5 px-2 py-1 font-mono text-[10px] text-white/30">
+              <span className="shrink-0 rounded-md bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/30">
                 ↵ Enter
               </span>
             </label>
           </div>
 
-          <div className="flex flex-wrap gap-3 shrink-0">
-            <div className="rounded-full border border-white/[0.08] bg-white/[0.02] px-4 py-2 text-sm text-white/86 backdrop-blur-xl">
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <div className="rounded-full border border-white/5 bg-white/[0.01] px-3 py-1.5 text-xs text-white/86 backdrop-blur-xl">
               <span className="font-medium text-white">{copy.instrument}</span>
               <span className="ml-2 font-mono text-white/40">{copy.ticker}</span>
             </div>
-            <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('bullish')}`}>
+            <div className={`rounded-full border px-3 py-1.5 text-xs ${getToneBorderClass('bullish')}`}>
               {copy.sessionBadge}
             </div>
-            <div className={`rounded-full border px-4 py-2 text-sm ${getToneBorderClass('neutral')}`}>
+            <div className={`rounded-full border px-3 py-1.5 text-xs ${getToneBorderClass('neutral')}`}>
               {copy.regimeBadge}
             </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 min-h-0" data-testid="home-bento-main">
+      <main className="flex-1 min-h-0 overflow-hidden" data-testid="home-bento-main">
         <BentoGrid testId="home-bento-grid" className="h-full auto-rows-fr">
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
@@ -518,7 +518,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
           />
 
-          <div data-testid="home-bento-sibling-row" className="xl:col-span-5 grid h-full grid-cols-12 gap-6 self-stretch">
+          <div data-testid="home-bento-sibling-row" className="xl:col-span-5 grid h-full grid-cols-12 gap-4 self-stretch">
             <TechCard
               title={copy.tech.title}
               signals={copy.tech.signals}

@@ -45,6 +45,6 @@ export const WorkspacePageHeader: React.FC<WorkspacePageHeaderProps> = ({
         </div>
       ) : null}
     </div>
-    {children ? <div className="mt-5 space-y-4 md:mt-6">{children}</div> : null}
+    {children ? <div className="mt-4 space-y-3 md:mt-5">{children}</div> : null}
   </header>
 );

@@ -239,21 +239,21 @@ const AdminLogsPage: React.FC = () => {
   }, [selectedSessionId]);
 
   return (
-    <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 px-4 py-4 md:px-6">
-      <section className="theme-panel-solid rounded-[1rem] border border-border/60 p-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,56rem)] xl:items-end">
+    <main className="mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-col gap-3 overflow-hidden px-4 py-3 md:px-5">
+      <section className="theme-panel-solid shrink-0 rounded-[0.85rem] border border-white/5 bg-white/[0.01] p-3">
+        <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_minmax(0,56rem)] xl:items-end">
           <div>
             <h1 className="text-lg font-semibold text-foreground">{t('adminLogs.pageTitle')}</h1>
-            <p className="text-sm text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
+            <p className="text-xs text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
             <p className="mt-2 text-xs text-muted-text">{t('adminLogs.scopeTitle')}</p>
             <p className="mt-2 text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[10rem_9rem_12rem_minmax(0,1fr)_9rem_auto]">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[9rem_8rem_10rem_minmax(0,1fr)_8rem_auto]">
             <label className="sr-only" htmlFor="admin-logs-activity-type">{t('adminLogs.activityTypeLabel')}</label>
             <select
               id="admin-logs-activity-type"
               aria-label={t('adminLogs.activityTypeLabel')}
-              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={activityTypeFilter}
               onChange={(e) => setActivityTypeFilter(e.target.value as 'all' | 'admin_action' | 'user_activity')}
             >
@@ -265,7 +265,7 @@ const AdminLogsPage: React.FC = () => {
             <input
               id="admin-logs-stock-filter"
               aria-label={t('adminLogs.stockFilterLabel')}
-              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               placeholder={t('adminLogs.stockFilterPlaceholder')}
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value)}
@@ -274,7 +274,7 @@ const AdminLogsPage: React.FC = () => {
             <select
               id="admin-logs-category-filter"
               aria-label={t('adminLogs.categoryFilterLabel')}
-              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -293,7 +293,7 @@ const AdminLogsPage: React.FC = () => {
             <input
               id="admin-logs-provider-filter"
               aria-label={t('adminLogs.providerFilterLabel')}
-              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               placeholder={t('adminLogs.providerFilterPlaceholder')}
               value={keywordFilter}
               onChange={(e) => setKeywordFilter(e.target.value)}
@@ -302,7 +302,7 @@ const AdminLogsPage: React.FC = () => {
             <select
               id="admin-logs-status-filter"
               aria-label={t('adminLogs.statusFilterLabel')}
-              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-9 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -313,7 +313,7 @@ const AdminLogsPage: React.FC = () => {
             </select>
             <button
               type="button"
-              className="btn-secondary h-10 px-3 py-1.5 text-sm sm:col-span-2 xl:col-span-1"
+              className="btn-secondary h-9 px-3 py-1.5 text-sm sm:col-span-2 xl:col-span-1"
               onClick={() => void loadSessions()}
               disabled={isLoadingList}
             >
@@ -325,8 +325,8 @@ const AdminLogsPage: React.FC = () => {
 
       {error ? <ApiErrorAlert error={error} /> : null}
 
-      <section className="grid gap-4 lg:grid-cols-[420px,minmax(0,1fr)]">
-        <div className="theme-panel-solid rounded-[1rem] border border-border/60 p-3 lg:max-h-[72vh] lg:overflow-y-auto">
+      <section className="grid flex-1 min-h-0 gap-3 lg:grid-cols-[360px,minmax(0,1fr)]">
+        <div className="theme-panel-solid flex min-h-0 flex-col rounded-[0.85rem] border border-white/5 bg-white/[0.01] p-3">
           <div className="border-b border-border/50 px-2 pb-3">
             <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
             <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionListHint')}</p>
@@ -337,7 +337,7 @@ const AdminLogsPage: React.FC = () => {
               <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
             </div>
           ) : (
-            <div className="space-y-2 pt-3">
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pt-2">
               {filteredSessions.map((item) => {
                 const cls = STATUS_CLASS[item.overallStatus] || STATUS_CLASS.running;
                 const selected = selectedSessionId === item.sessionId;
@@ -395,7 +395,7 @@ const AdminLogsPage: React.FC = () => {
           )}
         </div>
 
-        <div className="theme-panel-solid rounded-[1rem] border border-border/60 p-4 lg:max-h-[72vh] lg:overflow-y-auto">
+        <div className="theme-panel-solid flex min-h-0 flex-col rounded-[0.85rem] border border-white/5 bg-white/[0.01] p-3">
           <div className="border-b border-border/50 pb-3">
             <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionDetailTitle')}</h2>
             <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionDetailHint')}</p>
@@ -404,7 +404,7 @@ const AdminLogsPage: React.FC = () => {
           {isLoadingDetail ? (
             <p className="pt-3 text-sm text-muted-text">{t('adminLogs.loading')}</p>
           ) : detail ? (
-            <div className="space-y-4 pt-3">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pt-2">
               {(() => {
                 const readable = detail.readableSummary || {};
                 const events = Array.isArray(detail.events) ? detail.events : [];

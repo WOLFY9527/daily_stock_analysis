@@ -1,5 +1,6 @@
 ## 2026-04-25
 
+- 🧭 **Web 全系统 UI 密度重置与视口锁定收口** — `apps/dsa-web` 现已对共享 `Shell / PreviewShell / PageChrome / Input / Select`、SpaceX 主题末端覆盖层，以及高密度的 Home Bento / Portfolio / Admin Logs 页面执行统一降密：正文与标签层级整体缩小、卡片与控件间距压缩、输入高度收口到 `h-9`、表格行高下降、导航与 tab 样式改为更薄的仪表盘节奏，同时把壳层主链路改成 `h-screen + flex + min-h-0 + overflow-hidden`，将页面滚动收口到内容区内部而不是继续把整个 body 撑长。此次调整保持现有路由、数据流和后端契约不变，目标是减少首屏纵向占用和多重滚动条。
 - 🗂️ **Portfolio 持仓页右侧改为持仓主面板 + 历史抽屉** — `apps/dsa-web/src/pages/PortfolioPage.tsx` 移除了右侧 `Current Holdings / Order History` tabs，右栏现在固定聚焦当前持仓，历史委托/资金流水/公司行为改为通过右上角“历史记录 ↗”按钮呼出的页面级右侧抽屉承载。该调整保持现有数据流、分页、删除动作和左侧交易/账户/同步工作台不变，只收口右侧信息密度与滚动行为。
 - 🎯 **WolfyStock 品牌图标正式接入 Web 平台** — `apps/dsa-web` 新增独立 `WolfyStock` mark 资源，并把它接到顶栏品牌位、移动端品牌位、预览壳、首页 `WolfyStock` 标题旁、启动 splash fallback 与运行时 loading screen，同时把浏览器 favicon 切到该品牌图标。此次改动只更新前端品牌呈现，不改变现有路由、数据流或后端契约。
 - 🧹 **后端大审计仓库收敛（文档与审计产物治理）** — 将根目录一次性审计报告 `backend-final-audit-report.*` 与 `backend-frontend-global-audit-report.*` 归档到 `docs/architecture/archive/audits/`，删除本地切片交接产物 `slice_report_*.json`，并在 `README.md` 中补充当前项目文档真源入口，减少仓库根目录噪音，降低后续维护时的检索成本。

@@ -51,7 +51,7 @@ export const Select: React.FC<SelectProps> = ({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           className={cn(
-            'select-surface input-surface theme-focus-ring h-12 w-full appearance-none rounded-[var(--theme-control-radius)] border bg-transparent px-4 py-2.5 pr-10 text-sm text-foreground',
+            'select-surface input-surface theme-focus-ring h-9 w-full appearance-none rounded-[var(--theme-control-radius)] border bg-transparent px-3.5 py-2 pr-9 text-sm text-foreground',
             'theme-focus-ring transition-all duration-200',
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
           )}
@@ -69,7 +69,7 @@ export const Select: React.FC<SelectProps> = ({
         </select>
 
         {/* Dropdown arrow */}
-        <div className="select-field__icon absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+        <div className="select-field__icon absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none">
           <svg
             className="h-4 w-4 text-secondary-text"
             fill="none"

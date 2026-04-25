@@ -67,7 +67,7 @@ export const Input = ({
     ? {
       ...props.style,
       ['--input-surface-border-focus' as string]: 'hsla(var(--destructive), 0.4)',
-      ['--input-surface-focus-ring' as string]: '0 0 0 4px hsla(var(--destructive), 0.1)',
+      ['--input-surface-focus-ring' as string]: '0 0 0 2px hsla(var(--destructive), 0.12)',
     }
     : props.style;
 
@@ -75,7 +75,7 @@ export const Input = ({
     <button
       type="button"
       className={cn(
-        'input-surface__toggle inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent bg-transparent transition-all duration-200 focus:outline-none focus:ring-2',
+        'input-surface__toggle inline-flex h-7 w-7 items-center justify-center rounded-full border border-transparent bg-transparent transition-all duration-200 focus:outline-none focus:ring-2',
         visible
           ? 'text-foreground'
           : 'text-muted-text focus:ring-[var(--focus-ring)]'
@@ -102,7 +102,7 @@ export const Input = ({
       {label ? <label htmlFor={inputId} className="theme-field-label mb-2">{label}</label> : null}
       <div className="input-field__control relative flex items-center">
         {leadingIcon && (
-          <div className="input-field__icon absolute left-3.5 z-10 pointer-events-none">
+          <div className="input-field__icon absolute left-3 z-10 pointer-events-none">
             {leadingIcon}
           </div>
         )}
@@ -112,11 +112,11 @@ export const Input = ({
           aria-invalid={ariaInvalid}
           style={inputStyle}
           className={cn(
-            'input-surface input-focus-glow h-12 w-full rounded-[var(--theme-control-radius)] border bg-transparent px-4 text-sm transition-all',
+            'input-surface input-focus-glow h-9 w-full rounded-[var(--theme-control-radius)] border bg-transparent px-3.5 text-sm transition-all',
             'focus:outline-none',
             error ? 'border-danger/30' : '',
-            leadingIcon ? 'pl-10' : '',
-            finalTrailingAction ? 'pr-12' : '',
+            leadingIcon ? 'pl-9' : '',
+            finalTrailingAction ? 'pr-11' : '',
             'disabled:cursor-not-allowed disabled:opacity-60',
             className,
           )}
@@ -124,7 +124,7 @@ export const Input = ({
           type={effectiveType}
         />
         {finalTrailingAction ? (
-          <div className="input-field__trailing absolute inset-y-0 right-2 flex items-center">
+          <div className="input-field__trailing absolute inset-y-0 right-1.5 flex items-center">
             {finalTrailingAction}
           </div>
         ) : null}

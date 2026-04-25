@@ -16847,3 +16847,254 @@ html[lang='en'][data-theme='spacex'] .report-price-chart[data-language='en'] .th
 .backtest-entry-shell__disclosure-body {
   padding-top: 0.2rem;
 }
+
+/* Dense dashboard reset: shared viewport lock and control compaction. */
+html[data-theme='spacex'] {
+  --shell-masthead-height: 4.45rem;
+  --layout-page-max: 1480px;
+  --theme-label-font-size: 0.625rem;
+  --theme-label-letter-spacing: 0.16em;
+  --theme-panel-radius-lg: 0.85rem;
+  --theme-panel-radius-md: 0.72rem;
+  --theme-control-radius: 0.72rem;
+  --theme-button-padding-y: 0.48rem;
+  --theme-button-padding-x: 0.85rem;
+  --layout-shell-gap: 0.9rem;
+  --layout-content-gap: 0.75rem;
+  --theme-panel-backdrop-blur: blur(14px);
+}
+
+html[data-theme='spacex'] body {
+  font-size: 0.875rem;
+}
+
+html[data-theme='spacex'] #root,
+html[data-theme='spacex'] .theme-shell {
+  height: 100vh;
+}
+
+html[data-theme='spacex'] :is(
+  #root,
+  .theme-shell,
+  .shell-content-frame,
+  .theme-main-lane,
+  .shell-main-column,
+  .theme-page-transition,
+  .workspace-page,
+  .bento-surface-root,
+  .gemini-bento-page
+) {
+  min-height: 0;
+}
+
+html[data-theme='spacex'] .theme-shell {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+html[data-theme='spacex'] .shell-masthead {
+  flex: 0 0 auto;
+  padding-top: max(0.28rem, env(safe-area-inset-top));
+}
+
+html[data-theme='spacex'] .shell-masthead__inner {
+  padding-block: 0.1rem 0.4rem;
+}
+
+html[data-theme='spacex'] .shell-nav-strip,
+html[data-theme='spacex'] .shell-mobile-strip {
+  min-height: calc(var(--shell-masthead-height) - 0.55rem);
+  gap: 0.75rem;
+}
+
+html[data-theme='spacex'] .shell-content-frame {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0.65rem;
+}
+
+html[data-theme='spacex'] .theme-main-lane,
+html[data-theme='spacex'] .shell-main-column {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html[data-theme='spacex'] .theme-page-transition {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+
+html[data-theme='spacex'] :is(.workspace-page, .bento-surface-root, .gemini-bento-page) {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+html[data-theme='spacex'] .workspace-page {
+  padding: 0.85rem 0 1.15rem;
+}
+
+html[data-theme='spacex'] .workspace-header-panel {
+  flex: 0 0 auto;
+  padding: 0.8rem 0.9rem;
+}
+
+html[data-theme='spacex'] .workspace-header-layout {
+  gap: 0.75rem;
+}
+
+html[data-theme='spacex'] .workspace-header-title,
+html[data-theme='spacex'] .home-workspace-intro__title {
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  letter-spacing: 0.06em;
+}
+
+html[data-theme='spacex'] .workspace-header-description,
+html[data-theme='spacex'] .home-workspace-intro__body {
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+html[data-theme='spacex'] :is(
+  .theme-panel-solid,
+  .theme-panel-glass,
+  .theme-panel-subtle,
+  .theme-inline-banner,
+  .theme-modal-panel,
+  .theme-menu-panel,
+  .theme-dropdown-panel,
+  .theme-floating-control,
+  .theme-history-item,
+  .theme-list-item,
+  .workspace-header-panel,
+  .workspace-surface,
+  .workspace-surface-muted,
+  .settings-surface,
+  .theme-card-surface,
+  .product-banner,
+  .product-command-card,
+  .product-section-card,
+  .metric-card,
+  .preview-card,
+  .summary-block,
+  .product-disclosure
+) {
+  background: rgba(255, 255, 255, 0.01);
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+  backdrop-filter: blur(14px);
+}
+
+html[data-theme='spacex'] .shell-header-nav {
+  min-height: 3rem;
+  gap: 0.75rem;
+  grid-template-columns: minmax(8.5rem, auto) minmax(0, 1fr) auto;
+}
+
+html[data-theme='spacex'] .shell-header-links,
+html[data-theme='spacex'] .shell-header-actions,
+html[data-theme='spacex'] .shell-header-utilities {
+  gap: 0.2rem;
+}
+
+html[data-theme='spacex'] .shell-header-link,
+html[data-theme='spacex'] .shell-header-action {
+  min-height: 2rem;
+  padding: 0.35rem 0.45rem;
+}
+
+html[data-theme='spacex'] .shell-header-link__label,
+html[data-theme='spacex'] .shell-header-action,
+html[data-theme='spacex'] .shell-nav-item__label,
+html[data-theme='spacex'] .shell-nav-item__value {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+}
+
+html[data-theme='spacex'] .shell-mobile-button {
+  height: 2.25rem;
+  width: 2.25rem;
+}
+
+html[data-theme='spacex'] .shell-drawer-links,
+html[data-theme='spacex'] .shell-drawer-nav {
+  gap: 0.5rem;
+}
+
+html[data-theme='spacex'] .shell-drawer-link,
+html[data-theme='spacex'] .shell-nav-item {
+  min-height: 2.4rem;
+  padding-block: 0.45rem;
+}
+
+html[data-theme='spacex'] :is(.input-surface, select, textarea) {
+  font-size: 0.875rem;
+}
+
+html[data-theme='spacex'] .input-surface,
+html[data-theme='spacex'] select {
+  min-height: 2.25rem;
+  height: 2.25rem;
+  padding-inline: 0.75rem;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+html[data-theme='spacex'] textarea {
+  min-height: 5rem;
+  padding: 0.7rem 0.75rem;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+html[data-theme='spacex'] .input-surface__toggle {
+  height: 1.75rem;
+  width: 1.75rem;
+}
+
+html[data-theme='spacex'] .backtest-mode-toggle {
+  gap: 0.2rem;
+  padding: 0.18rem;
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+html[data-theme='spacex'] .backtest-mode-toggle__button {
+  min-height: 2rem;
+  padding: 0.38rem 0.72rem;
+  font-size: 0.72rem;
+}
+
+html[data-theme='spacex'] .product-table-shell {
+  border-color: rgba(255, 255, 255, 0.05);
+  border-radius: 0.85rem;
+}
+
+html[data-theme='spacex'] .product-table {
+  min-width: 780px;
+  font-size: 0.8125rem;
+}
+
+html[data-theme='spacex'] .product-table th,
+html[data-theme='spacex'] .product-table td {
+  padding: 0.62rem 0.75rem;
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme='spacex'] .product-table thead th {
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+}
+
+html[data-theme='spacex'] .product-table__stack {
+  gap: 0.28rem;
+}

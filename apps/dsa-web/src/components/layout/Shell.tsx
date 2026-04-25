@@ -149,10 +149,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   return (
     <ShellRailContext.Provider value={railContextValue}>
       <div
-        className={`theme-shell min-h-screen overflow-x-hidden text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}`}
+        className={`theme-shell h-screen flex flex-col overflow-hidden text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
-        <header className="shell-masthead">
+        <header className="shell-masthead shrink-0">
           <div className="shell-masthead__inner">
             {isDesktop ? (
               <SidebarNav
@@ -185,10 +185,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}`}
+          className={`shell-content-frame flex-1 min-h-0 overflow-hidden${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
-            <div key={location.pathname} className="theme-page-transition">
+          <main className={`theme-main-lane shell-main-column flex-1 min-h-0 overflow-hidden${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+            <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 flex-col">
               {children ?? <Outlet />}
             </div>
           </main>

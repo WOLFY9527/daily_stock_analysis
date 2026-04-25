@@ -1065,23 +1065,23 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const pageShell = screen.getByTestId('portfolio-bento-page');
-    expect(pageShell.className).toContain('h-[calc(100vh-80px)]');
+    expect(pageShell.className).toContain('h-full');
+    expect(pageShell.className).toContain('min-h-0');
     expect(pageShell.className).toContain('flex');
     expect(pageShell.className).toContain('flex-col');
     expect(pageShell.className).toContain('overflow-hidden');
     expect(pageShell.className).toContain('bg-transparent');
-    expect(pageShell.className).toContain('pt-2');
-    expect(pageShell.className).toContain('pb-2');
+    expect(pageShell.className).toContain('py-2');
 
     const scrollContainer = screen.getByTestId('portfolio-trade-station-scroll');
     expect(scrollContainer.className).toContain('min-h-0');
     expect(scrollContainer.className).toContain('overflow-y-auto');
     expect(scrollContainer.className).toContain('no-scrollbar');
-    expect(scrollContainer.className).toContain('p-4');
+    expect(scrollContainer.className).toContain('p-3.5');
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     expect(totalAssetsCard.className).toContain('shrink-0');
-    expect(totalAssetsCard.className).toContain('rounded-[24px]');
+    expect(totalAssetsCard.className).toContain('rounded-[18px]');
 
     const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');
     expect(summaryBlock.className).toContain('flex');
@@ -1108,8 +1108,8 @@ describe('PortfolioPage FX refresh', () => {
 
     const cashCurrencySelect = screen.getByTestId('portfolio-cash-currency-select');
     expect(cashCurrencySelect.tagName).toBe('SELECT');
-    expect(cashCurrencySelect.className).toContain('py-1.5');
-    expect(cashCurrencySelect.className).toContain('h-8');
+    expect(cashCurrencySelect.className).toContain('py-2');
+    expect(cashCurrencySelect.className).toContain('h-9');
     expect(cashCurrencySelect.className).toContain('text-sm');
 
     fireEvent.click(screen.getByRole('button', { name: '公司行为' }));

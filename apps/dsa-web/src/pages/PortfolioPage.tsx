@@ -25,9 +25,9 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_INPUT_CLASS = 'h-8 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-white placeholder:text-white/28 focus:border-white/30 focus:outline-none';
-const PORTFOLIO_SELECT_CLASS = 'h-8 w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-white focus:border-white/30 focus:outline-none';
-const PORTFOLIO_BUTTON_CLASS = 'btn-secondary h-8 px-3 py-1.5 text-sm';
+const PORTFOLIO_INPUT_CLASS = 'h-9 w-full rounded-xl border border-white/5 bg-white/[0.01] px-3 py-2 text-sm text-white placeholder:text-white/28 backdrop-blur-xl focus:border-white/18 focus:outline-none';
+const PORTFOLIO_SELECT_CLASS = 'h-9 w-full rounded-xl border border-white/5 bg-white/[0.01] px-3 py-2 text-sm text-white backdrop-blur-xl focus:border-white/18 focus:outline-none';
+const PORTFOLIO_BUTTON_CLASS = 'btn-secondary h-9 border-white/5 bg-white/[0.01] px-3 py-1.5 text-sm';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -535,7 +535,7 @@ const PortfolioPage: React.FC = () => {
           : FALLBACK_BROKERS[0].broker
       ));
     }
-  }, [copy.brokerFallbackEmpty, copy.brokerFallbackUnavailable]);
+  }, []);
 
   const loadBrokerConnections = useCallback(async (accountId?: number) => {
     if (!accountId) {
@@ -1015,25 +1015,25 @@ const PortfolioPage: React.FC = () => {
       <div
         data-testid="portfolio-bento-page"
         data-bento-surface="true"
-        className="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-2 pb-2 h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent text-gray-300"
+        className="mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-col overflow-hidden bg-transparent px-4 py-2 text-gray-300 md:px-6"
       >
-        <main className="w-full flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-6">
-          <section className="md:col-span-5 h-full flex flex-col bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-[24px] overflow-hidden">
-            <div className="shrink-0 px-5 pt-5">
+        <main className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-12">
+          <section className="md:col-span-5 h-full flex flex-col bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] overflow-hidden">
+            <div className="shrink-0 px-4 pt-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h2>
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 whitespace-nowrap text-xs px-3 py-1.5 bg-white/5 border border-white/10 rounded-md hover:bg-white/10 transition-colors"
+                  className="shrink-0 whitespace-nowrap rounded-md border border-white/5 bg-white/[0.01] px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.04]"
                   onClick={() => void handleRefreshFx()}
                   disabled={!hasAccounts || isLoading || fxRefreshing}
                 >
                   {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
                 </button>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-3 grid grid-cols-2 gap-2.5">
                 <select
                   value={String(selectedAccount)}
                   onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
@@ -1073,40 +1073,40 @@ const PortfolioPage: React.FC = () => {
               ) : null}
             </div>
 
-            <div className="shrink-0 flex gap-4 border-b border-white/5 px-5 pt-1">
-              <button type="button" onClick={() => setLeftTab('trade')} className={`pb-2 text-sm ${leftTab === 'trade' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Trade' : '交易'}</button>
-              <button type="button" onClick={() => setLeftTab('account')} className={`pb-2 text-sm ${leftTab === 'account' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Account' : '账户'}</button>
-              <button type="button" onClick={() => setLeftTab('sync')} className={`pb-2 text-sm ${leftTab === 'sync' ? 'text-white border-b-2 border-white' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Sync' : '同步'}</button>
+            <div className="shrink-0 flex gap-3 border-b border-white/5 px-4 pt-1">
+              <button type="button" onClick={() => setLeftTab('trade')} className={`pb-2 text-xs uppercase tracking-[0.14em] ${leftTab === 'trade' ? 'text-white border-b border-white/70' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Trade' : '交易'}</button>
+              <button type="button" onClick={() => setLeftTab('account')} className={`pb-2 text-xs uppercase tracking-[0.14em] ${leftTab === 'account' ? 'text-white border-b border-white/70' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Account' : '账户'}</button>
+              <button type="button" onClick={() => setLeftTab('sync')} className={`pb-2 text-xs uppercase tracking-[0.14em] ${leftTab === 'sync' ? 'text-white border-b border-white/70' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Sync' : '同步'}</button>
             </div>
 
             <div
               data-testid="portfolio-trade-station-scroll"
-              className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4"
+              className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-3.5"
             >
               {leftTab === 'trade' ? (
                 <div className="flex flex-col gap-2">
                   <div
                     data-testid="portfolio-trade-type-switcher"
-                    className="mb-3 flex shrink-0 rounded-lg bg-white/[0.05] p-1"
+                    className="mb-3 flex shrink-0 rounded-lg bg-white/[0.04] p-1"
                   >
                     <button
                       type="button"
                       onClick={() => setTradeType('stock')}
-                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'stock' ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'stock' ? 'bg-white/[0.08] text-white' : 'text-white/40'}`}
                     >
                       {language === 'en' ? 'Stock Trade' : '股票买卖'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setTradeType('fund')}
-                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'fund' ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'fund' ? 'bg-white/[0.08] text-white' : 'text-white/40'}`}
                     >
                       {language === 'en' ? 'Cash Transfer' : '资金划转'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setTradeType('corporate')}
-                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'corporate' ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'corporate' ? 'bg-white/[0.08] text-white' : 'text-white/40'}`}
                     >
                       {language === 'en' ? 'Corporate Action' : '公司行为'}
                     </button>
@@ -1141,7 +1141,7 @@ const PortfolioPage: React.FC = () => {
                   ) : null}
 
                   {tradeType === 'fund' ? (
-                    <div className="space-y-1.5 rounded-[24px] border border-white/8 bg-black/20 p-3">
+                    <div className="space-y-1.5 rounded-[18px] border border-white/5 bg-white/[0.01] p-3">
                       <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCash}</p>
                       <form className="space-y-1.5" onSubmit={handleCashSubmit}>
                         <div className="grid grid-cols-2 gap-3">
@@ -1174,7 +1174,7 @@ const PortfolioPage: React.FC = () => {
                   ) : null}
 
                   {tradeType === 'corporate' ? (
-                    <div className="space-y-1.5 rounded-[24px] border border-white/8 bg-black/20 p-3">
+                    <div className="space-y-1.5 rounded-[18px] border border-white/5 bg-white/[0.01] p-3">
                       <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCorporate}</p>
                       <form className="space-y-1.5" onSubmit={handleCorporateSubmit}>
                         <div className="grid grid-cols-2 gap-3">
@@ -1220,7 +1220,7 @@ const PortfolioPage: React.FC = () => {
                   </div>
                   <div className="space-y-2">
                     {accounts.map((account) => (
-                      <div key={account.id} className="rounded-[20px] border border-white/8 bg-black/20 px-4 py-3 text-sm text-white/75">
+                      <div key={account.id} className="rounded-[16px] border border-white/5 bg-white/[0.01] px-4 py-3 text-sm text-white/75">
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-white">{account.name}</span>
                           <span className="text-white/40">#{account.id}</span>
@@ -1230,7 +1230,7 @@ const PortfolioPage: React.FC = () => {
                     ))}
                   </div>
                   {(showCreateAccount || !hasAccounts) ? (
-                    <form className="space-y-3 rounded-[24px] border border-white/8 bg-black/20 p-4" onSubmit={handleCreateAccount}>
+                    <form className="space-y-3 rounded-[18px] border border-white/5 bg-white/[0.01] p-4" onSubmit={handleCreateAccount}>
                       {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
                       {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
                       <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
@@ -1269,7 +1269,7 @@ const PortfolioPage: React.FC = () => {
                     ))}
                   </select>
                   {selectedBroker === 'ibkr' ? (
-                    <div className="space-y-3 rounded-[24px] border border-white/8 bg-black/20 p-4">
+                    <div className="space-y-3 rounded-[18px] border border-white/5 bg-white/[0.01] p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="space-y-1 text-xs text-secondary-text">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{copy.ibkrReadOnlyTitle}</p>
@@ -1289,7 +1289,7 @@ const PortfolioPage: React.FC = () => {
                         {ibkrSyncing ? copy.syncing : copy.syncIbkr}
                       </button>
                       {ibkrSyncResult ? (
-                        <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3 text-xs text-secondary-text space-y-1">
+                        <div className="rounded-[16px] border border-white/5 bg-white/[0.01] px-4 py-3 text-xs text-secondary-text space-y-1">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{copy.syncResult}</p>
                           <div>{copy.positionsCountLabel} <span className="text-white">{ibkrSyncResult.positionCount ?? '--'}</span></div>
                           <div>{copy.cashCurrenciesLabel} <span className="text-white">{ibkrSyncResult.cashBalanceCount ?? 0}</span></div>
@@ -1299,7 +1299,7 @@ const PortfolioPage: React.FC = () => {
                       ) : null}
                     </div>
                   ) : (
-                    <div className="rounded-[24px] border border-white/8 bg-black/20 px-4 py-4 text-xs text-secondary-text">
+                    <div className="rounded-[18px] border border-white/5 bg-white/[0.01] px-4 py-4 text-xs text-secondary-text">
                       {copy.brokerImportHint}
                     </div>
                   )}
@@ -1308,16 +1308,16 @@ const PortfolioPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="md:col-span-7 h-full flex flex-col gap-6 min-h-0">
+          <section className="md:col-span-7 h-full flex flex-col gap-4 min-h-0">
             <div
               data-testid="portfolio-total-assets-card"
-              className="shrink-0 bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-[24px] p-6 flex justify-between items-end gap-4"
+              className="shrink-0 bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] p-4 flex justify-between items-end gap-3"
             >
               <div className="min-w-0">
                 <h1 className="text-xs text-white/40 uppercase tracking-widest mb-2">{totalAssetsTitle}</h1>
                 <div
                   data-testid="portfolio-total-assets-value"
-                  className="text-[4rem] md:text-[5.5rem] font-bold text-white leading-none tracking-tight tabular-nums"
+                  className="text-[3rem] md:text-[4rem] font-bold text-white leading-none tracking-tight tabular-nums"
                   style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
                 >
                   {formatMoney(totalEquity, snapshotCurrency)}
@@ -1335,22 +1335,22 @@ const PortfolioPage: React.FC = () => {
 
             <div
               data-testid="portfolio-current-holdings-panel"
-              className="flex-1 min-h-0 flex flex-col bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-[24px] overflow-hidden"
+              className="flex-1 min-h-0 flex flex-col bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] overflow-hidden"
             >
-              <div className="shrink-0 p-5 border-b border-white/5 flex justify-between items-center gap-4">
+              <div className="shrink-0 p-4 border-b border-white/5 flex justify-between items-center gap-3">
                 <h2 className="min-w-0 text-xs text-white/40 uppercase tracking-widest">
                   Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
                 </h2>
                 <button
                   type="button"
                   onClick={() => setIsHistoryDrawerOpen(true)}
-                  className="shrink-0 text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-full border border-white/10 hover:bg-white/[0.05] transition-colors"
+                  className="shrink-0 rounded-full border border-white/5 px-3 py-1.5 text-xs text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white"
                 >
                   {historyDrawerLabel}
                 </button>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5">
+              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4">
                 <div className="flex flex-col gap-2">
                   {positionRows.length === 0 ? (
                     <div className="px-6 py-5 rounded-3xl bg-white/[0.02] text-sm text-white/45">{copy.noPositions}</div>
@@ -1358,7 +1358,7 @@ const PortfolioPage: React.FC = () => {
                     positionRows.map((row) => (
                       <div
                         key={`${row.accountId}-${row.symbol}-${row.market}`}
-                        className="flex items-center justify-between gap-4 px-5 py-4 rounded-[24px] bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+                        className="flex items-center justify-between gap-4 px-4 py-3 rounded-[18px] bg-white/[0.01] hover:bg-white/[0.03] transition-colors"
                       >
                         <div className="min-w-0">
                           <div className="text-lg text-white font-medium truncate">{row.symbol}</div>
@@ -1398,8 +1398,8 @@ const PortfolioPage: React.FC = () => {
             aria-label={historyDrawerTitle}
             className="absolute inset-y-0 right-0 flex w-full justify-end"
           >
-            <div className="flex h-full w-full max-w-md flex-col bg-[#0a0a0a] border-l border-white/10 shadow-2xl">
-              <div className="flex items-center justify-between gap-3 border-b border-white/10 px-6 py-5">
+            <div className="flex h-full w-full max-w-md flex-col bg-[#0a0a0a] border-l border-white/5 shadow-2xl">
+              <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4">
                 <div>
                   <h2 className="text-xs text-white/40 uppercase tracking-widest">{historyDrawerTitle}</h2>
                   <p className="mt-2 text-sm text-white/45">{copy.pageLabel} {eventPage}</p>
@@ -1409,7 +1409,7 @@ const PortfolioPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsHistoryDrawerOpen(false)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/50 transition-colors hover:bg-white/[0.05] hover:text-white"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/5 text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white"
                     aria-label={language === 'en' ? 'Close order history' : '关闭历史记录'}
                   >
                     <span aria-hidden="true">×</span>
@@ -1417,7 +1417,7 @@ const PortfolioPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-6">
+              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5">
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap gap-2">
