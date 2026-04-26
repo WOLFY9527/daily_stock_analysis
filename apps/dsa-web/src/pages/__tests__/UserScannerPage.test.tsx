@@ -247,6 +247,13 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('user-scanner-bento-page')).not.toHaveClass('bg-[#030303]');
     expect(screen.getByTestId('user-scanner-bento-drawer-trigger')).toHaveAttribute('data-variant', 'secondary');
+    expect(screen.getByRole('button', { name: /运行扫描|Run scanner/i })).toHaveClass(
+      'bg-white',
+      'text-black',
+      'font-bold',
+      'rounded-xl',
+      'shadow-[0_0_20px_rgba(255,255,255,0.1)]',
+    );
     expect((await screen.findAllByText('我的手动扫描：600001 算力龙头')).length).toBeGreaterThan(0);
     expect(screen.queryByText(/运营空间|产品面|运营界面/)).not.toBeInTheDocument();
 
@@ -275,7 +282,14 @@ describe('UserScannerPage', () => {
 
     const historySymbols = screen.getByTestId('scanner-history-symbols-11');
     expect(historySymbols).toHaveClass('product-chip-list', 'product-chip-list--tight', 'w-full');
-    expect(historyTitle.closest('button')).toHaveClass('w-full', 'max-w-full', 'overflow-hidden');
+    expect(historyTitle.closest('button')).toHaveClass(
+      'w-full',
+      'flex',
+      'flex-col',
+      'gap-3',
+      'rounded-2xl',
+      'p-5',
+    );
   });
 
   it('reuses shared market defaults and cn option labels after switching language', async () => {
@@ -344,14 +358,17 @@ describe('UserScannerPage', () => {
     expect(screen.getAllByText(/前 5|Top 5/i).length).toBeGreaterThan(0);
 
     expect(screen.getByText(/A股盘前候选名单|A-share pre-open candidates/i)).toBeInTheDocument();
-    expect(screen.getByText(/当前还没有可展示的 A 股个人扫描结果。|No personal A-share scanner result is available yet./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/当前无匹配的扫描结果|No matching scanner results/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/请调整左侧参数或稍后再试|Adjust the filters on the left or try again later/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/当前还没有可展示的 A 股个人扫描结果。|No personal A-share scanner result is available yet./i)).not.toBeInTheDocument();
     expect(screen.queryByText('NVIDIA')).not.toBeInTheDocument();
     expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /港股|HK/i }));
 
     expect(await screen.findByText(/港股盘前候选名单|Hong Kong pre-open candidates/i)).toBeInTheDocument();
-    expect(screen.getByText(/当前还没有可展示的港股个人扫描结果。|No personal Hong Kong scanner result is available yet./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/当前无匹配的扫描结果|No matching scanner results/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/当前还没有可展示的港股个人扫描结果。|No personal Hong Kong scanner result is available yet./i)).not.toBeInTheDocument();
     expect(screen.queryByText('NVIDIA')).not.toBeInTheDocument();
     expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
   });

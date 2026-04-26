@@ -18,6 +18,28 @@ const HISTORY_PAGE_SIZE = 8;
 
 type PillOption = { value: string; label: string };
 
+function ScannerEmptyState({
+  title,
+  body,
+  className = '',
+}: {
+  title: string;
+  body: string;
+  className?: string;
+}) {
+  return (
+    <div className={`w-full flex flex-col items-center justify-center py-16 px-4 border border-white/5 border-dashed rounded-2xl bg-white/[0.01] ${className}`.trim()}>
+      <div className="w-12 h-12 rounded-full bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4">
+        <svg className="w-6 h-6 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <p className="text-white/40 text-sm font-medium text-center">{title}</p>
+      <p className="text-white/20 text-xs mt-1 text-center">{body}</p>
+    </div>
+  );
+}
+
 function normalizeTacticalLabel(label?: string | null): string {
   return (label || '').trim().toLowerCase();
 }
@@ -385,6 +407,8 @@ const UserScannerPage: React.FC = () => {
       historyHeadline: formatHistoryHeadline(item.headline, item.topSymbols, fallbackTitle),
     };
   }), [historyItems, t]);
+  const emptyStateTitle = language === 'en' ? 'No matching scanner results' : '当前无匹配的扫描结果';
+  const emptyStateBody = language === 'en' ? 'Adjust the filters on the left or try again later' : '请调整左侧参数或稍后再试';
 
   return (
     <>
@@ -421,9 +445,22 @@ const UserScannerPage: React.FC = () => {
                   <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
                   <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
                   <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
-                    <Button type="button" onClick={() => void handleRun()} isLoading={isRunning} loadingText={t('scanner.running')}>{t('scanner.run')}</Button>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
+                      <button
+                        type="button"
+                        onClick={() => void handleRun()}
+                        disabled={isRunning}
+                        aria-busy={isRunning}
+                        className="w-full md:w-auto mt-4 px-8 py-3.5 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] shrink-0 disabled:pointer-events-none disabled:opacity-60 disabled:transform-none"
+                      >
+                        {isRunning ? t('scanner.running') : t('scanner.run')}
+                      </button>
+                    </div>
+                    {!tacticalCards.length ? (
+                      <ScannerEmptyState title={emptyStateTitle} body={emptyStateBody} />
+                    ) : null}
                   </div>
                 </div>
               </SectionShell>
@@ -501,9 +538,10 @@ const UserScannerPage: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm text-secondary-text">
-                  {pageError?.message || selectedMarketCopy.emptyState}
-                </div>
+                <ScannerEmptyState
+                  title={emptyStateTitle}
+                  body={pageError?.message || emptyStateBody}
+                />
               )}
             </section>
           </main>
@@ -528,12 +566,11 @@ const UserScannerPage: React.FC = () => {
             {!isLoadingHistory && historyCards.length ? (
               <div className="space-y-3">
                 {historyCards.map((item) => (
-                  <Button
+                  <button
                     key={item.id}
                     type="button"
-                    variant={item.id === selectedRunId ? 'secondary' : 'ghost'}
                     onClick={() => void loadRun(item.id)}
-                    className={`theme-panel-subtle h-auto w-full max-w-full overflow-hidden rounded-[28px] px-4 py-3 text-left ${item.id === selectedRunId ? 'border-[var(--border-strong)] bg-[var(--surface-2)]/88' : 'hover:bg-[var(--overlay-hover)]'}`}
+                    className={`w-full flex flex-col gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors text-left ${item.id === selectedRunId ? 'border-white/15 bg-white/[0.05]' : ''}`}
                   >
                     <div className="flex w-full max-w-full items-start gap-3 overflow-hidden">
                       <div className="flex-1 min-w-0">
@@ -569,11 +606,11 @@ const UserScannerPage: React.FC = () => {
                         ) : null}
                       </div>
                     </div>
-                  </Button>
+                  </button>
                 ))}
               </div>
             ) : null}
-            {!isLoadingHistory && !historyItems.length ? <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm leading-6 text-secondary-text">{language === 'en' ? 'No personal scanner history yet.' : '你还没有个人扫描历史。'}</div> : null}
+            {!isLoadingHistory && !historyItems.length ? <ScannerEmptyState title={emptyStateTitle} body={emptyStateBody} className="py-12" /> : null}
             {totalHistoryPages > 1 ? <div className="pt-2"><Pagination currentPage={historyPage} totalPages={totalHistoryPages} onPageChange={(page) => void fetchHistory(page)} /></div> : null}
           </div>
         </div>
