@@ -23,13 +23,13 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 
 const assistantMarkdownComponents = {
-  h1: ({ children }: React.PropsWithChildren) => <h1 className="mb-3 mt-5 text-lg font-semibold text-white">{children}</h1>,
-  h2: ({ children }: React.PropsWithChildren) => <h2 className="mb-2 mt-4 text-base font-semibold text-white">{children}</h2>,
-  h3: ({ children }: React.PropsWithChildren) => <h3 className="mb-2 mt-4 text-sm font-semibold text-white">{children}</h3>,
-  p: ({ children }: React.PropsWithChildren) => <p className="mb-3 leading-[1.6] last:mb-0">{children}</p>,
-  ul: ({ children }: React.PropsWithChildren) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
-  ol: ({ children }: React.PropsWithChildren) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
-  li: ({ children }: React.PropsWithChildren) => <li className="mb-1 break-words leading-[1.6]">{children}</li>,
+  h1: ({ children }: React.PropsWithChildren) => <h1 className="mb-3 text-lg font-bold text-white">{children}</h1>,
+  h2: ({ children }: React.PropsWithChildren) => <h2 className="mb-3 mt-5 text-base font-semibold text-white">{children}</h2>,
+  h3: ({ children }: React.PropsWithChildren) => <h3 className="mb-3 mt-4 text-sm font-semibold text-white">{children}</h3>,
+  p: ({ children }: React.PropsWithChildren) => <p className="mb-4 leading-[1.7] last:mb-0">{children}</p>,
+  ul: ({ children }: React.PropsWithChildren) => <ul className="mb-4 list-disc space-y-1.5 pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }: React.PropsWithChildren) => <ol className="mb-4 list-decimal space-y-1.5 pl-5 last:mb-0">{children}</ol>,
+  li: ({ children }: React.PropsWithChildren) => <li className="mb-1.5 break-words leading-[1.7]">{children}</li>,
   strong: ({ children }: React.PropsWithChildren) => <strong className="font-semibold text-white">{children}</strong>,
   a: ({ children, href }: React.PropsWithChildren<{ href?: string }>) => (
     <a className="text-[hsl(var(--accent-primary-hsl))] underline-offset-2 hover:underline" href={href} target="_blank" rel="noreferrer">
@@ -37,7 +37,7 @@ const assistantMarkdownComponents = {
     </a>
   ),
   blockquote: ({ children }: React.PropsWithChildren) => (
-    <blockquote className="my-3 text-white/72 first:mt-0 last:mb-0">{children}</blockquote>
+    <blockquote className="my-4 text-white/72 first:mt-0 last:mb-0">{children}</blockquote>
   ),
   code: ({ children, className }: React.PropsWithChildren<{ className?: string }>) => {
     if (className) {
@@ -50,12 +50,12 @@ const assistantMarkdownComponents = {
     );
   },
   pre: ({ children }: React.PropsWithChildren) => (
-    <pre className="mb-3 overflow-x-auto rounded-xl border border-white/8 bg-black/30 p-3 text-xs leading-6 text-white/88 last:mb-0">
+    <pre className="mb-4 overflow-x-auto rounded-xl border border-white/8 bg-black/30 p-3 text-xs leading-6 text-white/88 last:mb-0">
       {children}
     </pre>
   ),
   table: ({ children }: React.PropsWithChildren) => (
-    <div className="mb-3 overflow-x-auto last:mb-0">
+    <div className="mb-4 overflow-x-auto last:mb-0">
       <table className="w-full min-w-max border-collapse text-sm">{children}</table>
     </div>
   ),
@@ -114,7 +114,7 @@ const SKILL_TEXT_ALIAS_TO_ID: Record<string, string> = CANONICAL_SKILL_IDS.reduc
   {} as Record<string, string>,
 );
 
-const ASSISTANT_MESSAGE_SURFACE_CLASS = 'w-full markdown-body text-[15px] leading-[1.6] text-white/90 break-words whitespace-pre-wrap [&>p]:mb-3 [&>ul]:mb-3 [&>ul]:pl-5 [&>li]:mb-1';
+const ASSISTANT_MESSAGE_SURFACE_CLASS = 'w-full markdown-body text-[14px] leading-[1.7] text-white/90 break-words whitespace-pre-wrap [&>p]:mb-4 [&>ul]:mb-4 [&>li]:mb-1.5 [&>h1]:mb-3 [&>h1]:text-lg [&>h1]:font-bold';
 
 function getLocalizedSkillLabel(rawLabel: string, t: (key: string, vars?: Record<string, string | number | undefined>) => string): string {
   const matchedSkillId = SKILL_TEXT_ALIAS_TO_ID[rawLabel];
@@ -167,7 +167,6 @@ const ChatPage: React.FC = () => {
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
   const [animatedAssistantMessageId, setAnimatedAssistantMessageId] = useState<string | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const scrollRef = useRef<HTMLElement | null>(null);
   const isAutoScroll = useRef(true);
   const isMountedRef = useRef(true);
   const followUpHydrationTokenRef = useRef(0);
@@ -609,8 +608,21 @@ const ChatPage: React.FC = () => {
         </aside>
 
         <main
+          id="chat-scroll-container"
           data-testid="chat-main"
-          className="relative flex min-w-0 flex-1 flex-col"
+          onWheel={() => {
+            isAutoScroll.current = false;
+          }}
+          onTouchMove={() => {
+            isAutoScroll.current = false;
+          }}
+          onScroll={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+              isAutoScroll.current = true;
+            }
+          }}
+          className="relative flex min-w-0 flex-1 flex-col w-full overflow-y-auto no-scrollbar"
         >
           <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4 md:px-8">
             <div className="min-w-0">
@@ -684,26 +696,11 @@ const ChatPage: React.FC = () => {
 
           <div
             data-testid="chat-message-scroll"
-            ref={(node) => {
-              scrollRef.current = node;
-            }}
-            onWheel={() => {
-              isAutoScroll.current = false;
-            }}
-            onTouchMove={() => {
-              isAutoScroll.current = false;
-            }}
-            onScroll={(e) => {
-              const target = e.target as HTMLElement;
-              if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
-                isAutoScroll.current = true;
-              }
-            }}
-            className="flex-1 overflow-y-auto no-scrollbar"
+            className="flex-1"
           >
             <div
               data-testid="chat-message-stream"
-              className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-[280px] pt-8 md:px-8"
+              className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-56 pt-8 md:px-8"
             >
               {skillsLoadError ? (
                 <ApiErrorAlert
@@ -776,9 +773,16 @@ const ChatPage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="flex w-full flex-col gap-8">
-                  {messages.map((msg) => (
-                    msg.role === 'user' ? (
+                <div className="flex w-full flex-col gap-6">
+                  {messages.map((msg, index) => {
+                    const isLast = index === messages.length - 1;
+                    const shouldStream = isGenerating
+                      && msg.role === 'assistant'
+                      && isLast
+                      && msg.id === latestAssistantMessageId
+                      && msg.id === animatedAssistantMessageId;
+
+                    return msg.role === 'user' ? (
                       <div
                         key={msg.id}
                         data-testid={`chat-user-message-${msg.id}`}
@@ -801,7 +805,7 @@ const ChatPage: React.FC = () => {
                         <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
                           AI
                         </div>
-                        <div className="flex-1 min-w-0 bg-transparent text-[15px] leading-[1.6] text-white/90 break-words whitespace-pre-wrap [&>p]:mb-3 [&>ul]:mb-3 [&>ul]:pl-5 [&>li]:mb-1">
+                        <div className="flex-1 min-w-0 bg-transparent">
                           {msg.skillName ? (
                             <div className="mb-2">
                               <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
@@ -824,14 +828,13 @@ const ChatPage: React.FC = () => {
                           ) : null}
                           {renderThinkingBlock(msg)}
                           {expandedThinking.has(msg.id) && msg.thinkingSteps ? renderThinkingDetails(msg.thinkingSteps) : null}
-                          {msg.id === latestAssistantMessageId && msg.id === animatedAssistantMessageId ? (
+                          {shouldStream ? (
                             <TypewriterText
                               as="div"
                               className={ASSISTANT_MESSAGE_SURFACE_CLASS}
                               testId={`chat-typewriter-${msg.id}`}
                               text={msg.content}
                               autoScrollRef={isAutoScroll}
-                              scrollContainerRef={scrollRef}
                               onComplete={() => {
                                 setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
                               }}
@@ -845,8 +848,8 @@ const ChatPage: React.FC = () => {
                           )}
                         </div>
                       </div>
-                    )
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -877,7 +880,7 @@ const ChatPage: React.FC = () => {
           >
             <div
               data-testid="chat-console-inner"
-              className="flex w-full max-w-5xl flex-col gap-4 px-4 pointer-events-auto md:px-8"
+              className="flex w-full max-w-5xl flex-col gap-3 px-4 pointer-events-auto md:px-8"
             >
               {sendToast ? (
                 <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
@@ -902,7 +905,7 @@ const ChatPage: React.FC = () => {
 
               <div
                 data-testid="chat-skill-toolbar"
-                className="flex items-center gap-3 overflow-x-auto no-scrollbar"
+                className="flex w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1 mask-linear-fade"
               >
                 <span className="shrink-0 text-[10px] uppercase tracking-[0.28em] text-white/40">{engineSwitcherLabel}</span>
                 <button
@@ -927,7 +930,7 @@ const ChatPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedSkill(s.id)}
-                      className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
                         selectedSkill === s.id
                           ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
                           : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'

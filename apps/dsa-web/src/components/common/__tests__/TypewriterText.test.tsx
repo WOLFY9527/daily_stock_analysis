@@ -27,13 +27,19 @@ describe('TypewriterText', () => {
   });
 
   it('reveals text in token-like chunks and auto-scrolls only while sticky follow is enabled', async () => {
-    const scrollTo = vi.fn();
-    const scrollContainer = {
-      scrollHeight: 640,
-      scrollTo,
-    } as unknown as HTMLElement;
-    const scrollContainerRef = { current: scrollContainer };
     const autoScrollRef = { current: true };
+    const scrollContainer = document.createElement('main');
+    scrollContainer.id = 'chat-scroll-container';
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      configurable: true,
+      value: 640,
+    });
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: 0,
+    });
+    document.body.appendChild(scrollContainer);
 
     render(
       <TypewriterText
@@ -41,7 +47,6 @@ describe('TypewriterText', () => {
         testId="typewriter"
         text="最新回复正在涌现"
         autoScrollRef={autoScrollRef}
-        scrollContainerRef={scrollContainerRef}
       />
     );
 
@@ -54,9 +59,9 @@ describe('TypewriterText', () => {
     const partialText = node.textContent ?? '';
     expect(partialText.length).toBeGreaterThan(0);
     expect(partialText.length).toBeLessThan('最新回复正在涌现'.length);
-    expect(scrollTo).toHaveBeenCalled();
+    expect(scrollContainer.scrollTop).toBe(scrollContainer.scrollHeight);
 
-    scrollTo.mockClear();
+    scrollContainer.scrollTop = 0;
     autoScrollRef.current = false;
 
     await act(async () => {
@@ -64,6 +69,7 @@ describe('TypewriterText', () => {
     });
 
     expect(node).toHaveTextContent('最新回复正在涌现');
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollContainer.scrollTop).toBe(0);
+    scrollContainer.remove();
   });
 });

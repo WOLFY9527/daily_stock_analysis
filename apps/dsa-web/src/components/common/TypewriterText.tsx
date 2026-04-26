@@ -7,7 +7,6 @@ type TypewriterTextProps = {
   className?: string;
   onComplete?: () => void;
   autoScrollRef?: React.RefObject<boolean>;
-  scrollContainerRef?: React.RefObject<HTMLElement | null>;
 };
 
 export const TypewriterText: React.FC<TypewriterTextProps> = ({
@@ -17,7 +16,6 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
   className,
   onComplete,
   autoScrollRef,
-  scrollContainerRef,
 }) => {
   const textRef = useRef<HTMLElement | null>(null);
   const renderedLengthRef = useRef(0);
@@ -65,15 +63,11 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
       renderText(text.slice(0, targetLength));
       renderedLengthRef.current = targetLength;
 
-      if (
-        autoScrollRef?.current
-        && scrollContainerRef?.current
-        && typeof scrollContainerRef.current.scrollTo === 'function'
-      ) {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
-          behavior: 'smooth',
-        });
+      if (autoScrollRef?.current) {
+        const scrollContainer = document.getElementById('chat-scroll-container');
+        if (scrollContainer) {
+          scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }
       }
 
       if (renderedLengthRef.current < text.length) {
@@ -88,7 +82,7 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [text]);
+  }, [autoScrollRef, text]);
 
   const Component = as as 'div' | 'span';
 

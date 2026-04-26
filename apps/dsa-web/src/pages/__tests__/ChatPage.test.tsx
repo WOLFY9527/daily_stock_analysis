@@ -191,14 +191,16 @@ describe('ChatPage', () => {
     expect(historyPane).toHaveClass('w-64', 'shrink-0', 'hidden', 'md:flex', 'flex-col', 'border-r', 'border-white/5', 'bg-white/[0.01]');
     expect(screen.getByTestId('chat-history-list')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'px-3', 'pb-4', 'flex', 'flex-col', 'gap-1');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
-    expect(screen.getByTestId('chat-main')).toHaveClass('relative', 'flex-1', 'min-w-0', 'flex', 'flex-col');
+    expect(screen.getByTestId('chat-main')).toHaveAttribute('id', 'chat-scroll-container');
+    expect(screen.getByTestId('chat-main')).toHaveClass('relative', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'w-full', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-5xl', 'mx-auto', 'px-4', 'md:px-8', 'pt-8', 'pb-[280px]', 'flex', 'flex-col', 'gap-8');
+    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex-1');
+    expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('overflow-y-auto');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-5xl', 'mx-auto', 'px-4', 'md:px-8', 'pt-8', 'pb-56', 'flex', 'flex-col', 'gap-6');
     expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-[#050505]/95', 'backdrop-blur-3xl', 'border-t', 'border-white/5', 'pt-6', 'pb-8', 'justify-center', 'pointer-events-none');
-    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'max-w-5xl', 'px-4', 'md:px-8', 'flex', 'flex-col', 'gap-4', 'pointer-events-auto');
-    expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-3', 'overflow-x-auto', 'no-scrollbar');
+    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'max-w-5xl', 'px-4', 'md:px-8', 'flex', 'flex-col', 'gap-3', 'pointer-events-auto');
+    expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-2', 'overflow-x-auto', 'no-scrollbar', 'w-full', 'pb-1', 'mask-linear-fade');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
       'rounded-[24px]',
@@ -281,7 +283,7 @@ describe('ChatPage', () => {
     expect(screen.queryByTestId('chat-footer-quick-questions')).not.toBeInTheDocument();
   });
 
-  it('animates only a newly appended latest assistant reply with the typewriter effect', async () => {
+  it('animates only the latest assistant reply while generation is active', async () => {
     vi.useFakeTimers();
     mockStoreState.messages = [
       {
@@ -312,6 +314,7 @@ describe('ChatPage', () => {
         skillName: canonicalBullTrendLabel('zh'),
       },
     ];
+    mockStoreState.loading = true;
 
     await act(async () => {
       view.rerender(
@@ -353,7 +356,37 @@ describe('ChatPage', () => {
 
     expect(streamingNode).toHaveTextContent('最新回复正在涌现，请继续观察成交量与关键价位变化');
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+    mockStoreState.loading = false;
     vi.useRealTimers();
+  });
+
+  it('keeps historical assistant replies static when generation is idle', async () => {
+    mockStoreState.messages = [
+      {
+        id: 'assistant-history',
+        role: 'assistant',
+        content: '第一条历史回复',
+        skillName: canonicalBullTrendLabel('zh'),
+      },
+      {
+        id: 'assistant-latest',
+        role: 'assistant',
+        content: '最后一条历史回复也必须静态渲染',
+        skillName: canonicalBullTrendLabel('zh'),
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('第一条历史回复')).toBeInTheDocument();
+    expect(screen.getByText('最后一条历史回复也必须静态渲染')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-typewriter-assistant-latest')).not.toBeInTheDocument();
   });
 
   it('renders full-width bubbles and removes quote rails from assistant content surfaces', async () => {
@@ -396,9 +429,10 @@ describe('ChatPage', () => {
 
     const quoteText = screen.getByText('不应再出现引用竖线');
     const assistantBubble = screen.getByTestId('chat-assistant-message-assistant-1').lastElementChild;
-    expect(assistantBubble).toHaveClass('flex-1', 'min-w-0', 'bg-transparent', 'text-[15px]', 'leading-[1.6]', 'text-white/90', 'break-words', 'whitespace-pre-wrap');
+    expect(assistantBubble).toHaveClass('flex-1', 'min-w-0', 'bg-transparent');
 
     const markdownSurface = quoteText.closest('div[class*="markdown-body"]');
+    expect(markdownSurface).toHaveClass('text-[14px]', 'leading-[1.7]', 'text-white/90', 'break-words', 'whitespace-pre-wrap');
     expect(markdownSurface?.className).not.toContain('prose-blockquote:border');
 
     const thinkingStep = screen.getByText('quote-check (0.1s)');
@@ -456,6 +490,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: canonicalBullTrendLabel('zh') })).toBeInTheDocument();
 
     const sendButton = screen.getByRole('button', {
       name: new RegExp(`${translate('zh', 'chat.notifyAction')}|${translate('zh', 'chat.notifySending').replace(/\./g, '\\.')}`),
