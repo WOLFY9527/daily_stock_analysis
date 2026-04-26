@@ -69,7 +69,8 @@ describe('HomeSurfacePage', () => {
     expect(root).toHaveAttribute('data-bento-surface', 'true');
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
-    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'max-w-[1920px]', 'flex', 'min-h-[calc(100vh-80px)]', 'flex-col', 'items-center', 'overflow-x-hidden');
+    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'flex', 'min-h-[calc(100vh-80px)]', 'flex-col', 'overflow-x-hidden', 'px-6', 'py-8');
+    expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
@@ -80,7 +81,7 @@ describe('HomeSurfacePage', () => {
     const omnibar = screen.getByTestId('home-bento-omnibar');
     const omnibarInput = screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...');
     const omnibarSubmit = screen.getByTestId('home-bento-omnibar-submit');
-    expect(header).toHaveClass('shrink-0', 'flex', 'w-full', 'flex-col', 'gap-3');
+    expect(header).toHaveClass('shrink-0', 'flex', 'w-full', 'flex-col', 'gap-4');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-h-0');
     expect(main.className).not.toContain('overflow-hidden');
     expect(omnibar).toHaveClass(
@@ -113,13 +114,12 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-breakout-pill')).toHaveClass('bg-emerald-500', 'text-black', 'rounded-full');
     expect(screen.getByTestId('home-bento-breakout-reason')).toBeInTheDocument();
     expect(screen.getByText('AI 突破归因')).toBeInTheDocument();
-    const siblingRow = screen.getByTestId('home-bento-sibling-row');
-    expect(siblingRow).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'max-w-6xl', 'grid-cols-1', 'gap-6', 'md:grid-cols-2', 'xl:grid-cols-3');
-    expect(siblingRow).toHaveClass('grid', 'grid-cols-1', 'gap-6', 'md:col-span-2', 'md:grid-cols-2', 'xl:col-span-2', 'xl:grid-cols-3');
-    expect(strategyCard).toHaveClass('h-full');
-    expect(techCard).toHaveClass('h-full');
-    expect(fundamentalsCard).toHaveClass('h-full');
+    expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'grid-cols-1', 'lg:grid-cols-3', 'xl:grid-cols-5', 'gap-6', 'xl:gap-8', 'mt-8');
+    expect(strategyCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
+    expect(techCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
+    expect(fundamentalsCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('w-full', 'h-full', 'lg:col-span-3', 'xl:col-span-2', 'rounded-[24px]');
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
@@ -144,7 +144,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('+18.2%')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByText('$16.4B')).toHaveStyle({ textShadow: 'none' });
     expect(strategyCard.compareDocumentPosition(techCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(strategyCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(techCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
     expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
   });

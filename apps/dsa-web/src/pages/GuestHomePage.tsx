@@ -139,11 +139,11 @@ const GuestHomePage: React.FC = () => {
 
   return (
     <main
-      className="w-full min-h-[calc(100vh-80px)] flex flex-col items-center py-6 md:py-10 px-4 md:px-8 overflow-x-hidden"
+      className="w-full min-h-[calc(100vh-80px)] flex flex-col py-8 px-6 md:px-8 xl:px-12 overflow-x-hidden"
       data-testid="guest-home-page"
     >
-      <div className="flex w-full max-w-6xl flex-col gap-8">
-        <div className="text-center">
+      <div className="flex w-full flex-col gap-8">
+        <div className="w-full">
           <h1 className="text-2xl font-bold text-white mb-2">{copy.title}</h1>
           <p className="text-sm text-white/40">{copy.subtitle}</p>
         </div>
@@ -152,7 +152,7 @@ const GuestHomePage: React.FC = () => {
           className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] p-6 shadow-2xl backdrop-blur-3xl"
           data-testid="guest-home-search-card"
         >
-          <div className="flex flex-col gap-3 md:flex-row">
+          <div className="flex max-w-3xl flex-col gap-3 md:flex-row">
             <div className="min-w-0 flex-1">
               <StockAutocomplete
                 value={query}

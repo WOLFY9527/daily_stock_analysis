@@ -34,7 +34,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   <BentoCard
     eyebrow={title}
     subtitle={subtitle}
-    className="h-full"
+    className="w-full h-full rounded-[24px] lg:col-span-1 xl:col-span-1"
     testId="home-bento-card-strategy"
     action={(
       <button

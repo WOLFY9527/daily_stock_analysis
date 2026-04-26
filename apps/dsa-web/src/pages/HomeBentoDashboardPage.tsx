@@ -499,17 +499,17 @@ const HomeBentoDashboardPage: React.FC = () => {
     <div
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide mx-auto flex w-full min-h-[calc(100vh-80px)] max-w-[1920px] flex-col items-center gap-4 overflow-x-hidden bg-transparent px-4 py-6 md:px-8 md:py-10 xl:px-12 2xl:max-w-full`}
+      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex flex-col py-8 px-6 md:px-8 xl:px-12 overflow-x-hidden bg-transparent`}
     >
-      <header className="mb-2 flex w-full shrink-0 flex-col gap-3" data-testid="home-bento-header">
+      <header className="flex w-full shrink-0 flex-col gap-4" data-testid="home-bento-header">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
             {copy.heading}
           </h1>
         </div>
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-          <div className="w-full md:max-w-xl">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="w-full max-w-3xl">
             <form
               onSubmit={handleSubmit}
               className="flex w-full items-center gap-2.5 rounded-full border border-white/5 bg-white/[0.01] px-4 py-2.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/15 focus-within:bg-white/[0.02] focus-within:ring-1 focus-within:ring-white/10"
@@ -555,7 +555,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       </header>
 
       <main className="w-full flex-1 min-h-0" data-testid="home-bento-main">
-        <BentoGrid testId="home-bento-grid" className="w-full max-w-6xl grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 auto-rows-[minmax(220px,auto)]">
+        <BentoGrid testId="home-bento-grid" className="w-full grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-5 gap-6 xl:gap-8 mt-8 auto-rows-[minmax(220px,auto)]">
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}
@@ -576,31 +576,27 @@ const HomeBentoDashboardPage: React.FC = () => {
             detailLabel={copy.decision.detailLabel}
             onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
           />
-
-          <div data-testid="home-bento-sibling-row" className="grid grid-cols-1 gap-6 self-stretch md:col-span-2 md:grid-cols-2 xl:col-span-2 xl:grid-cols-3">
-            <StrategyCard
-              title={copy.strategy.title}
-              subtitle={copy.strategy.subtitle}
-              metrics={copy.strategy.metrics}
-              positionLabel={copy.strategy.positionLabel}
-              positionBody={copy.strategy.positionBody}
-              detailLabel={copy.strategy.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
-            />
-            <TechCard
-              title={copy.tech.title}
-              signals={copy.tech.signals}
-              detailLabel={copy.tech.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
-            />
-
-            <FundamentalsCard
-              title={copy.fundamentals.title}
-              metrics={copy.fundamentals.metrics}
-              detailLabel={copy.fundamentals.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
-            />
-          </div>
+          <StrategyCard
+            title={copy.strategy.title}
+            subtitle={copy.strategy.subtitle}
+            metrics={copy.strategy.metrics}
+            positionLabel={copy.strategy.positionLabel}
+            positionBody={copy.strategy.positionBody}
+            detailLabel={copy.strategy.detailLabel}
+            onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
+          />
+          <TechCard
+            title={copy.tech.title}
+            signals={copy.tech.signals}
+            detailLabel={copy.tech.detailLabel}
+            onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+          />
+          <FundamentalsCard
+            title={copy.fundamentals.title}
+            metrics={copy.fundamentals.metrics}
+            detailLabel={copy.fundamentals.detailLabel}
+            onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
+          />
         </BentoGrid>
       </main>
 

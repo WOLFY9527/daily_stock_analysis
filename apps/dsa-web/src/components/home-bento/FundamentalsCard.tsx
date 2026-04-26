@@ -24,7 +24,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
 }) => (
   <BentoCard
     eyebrow={title}
-    className="h-full"
+    className="w-full h-full rounded-[24px] lg:col-span-1 xl:col-span-1"
     testId="home-bento-card-fundamentals"
     action={(
       <button
