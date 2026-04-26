@@ -63,13 +63,14 @@ function parseFirstNumericValue(value?: string | null): number | null {
 
 function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number]): string[] {
   const tags = [
-    candidate.qualityHint,
-    ...candidate.featureSignals.map((signal) => signal.value || signal.label),
+    ...candidate.featureSignals.flatMap((signal) => [signal.value, signal.label]),
     ...candidate.boards,
+    candidate.qualityHint,
+    candidate.aiInterpretation.opportunityType,
   ]
     .map((tag) => tag?.trim())
-    .filter((tag): tag is string => Boolean(tag));
-  return Array.from(new Set(tags)).slice(0, 2);
+    .filter((tag): tag is string => typeof tag === 'string' && tag.length > 0 && !['行业', '主线', 'board', 'theme'].includes(tag.toLowerCase()));
+  return Array.from(new Set(tags)).slice(0, 3);
 }
 
 function shouldRenderDisplayName(symbol?: string | null, name?: string | null): boolean {
@@ -159,6 +160,41 @@ function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): s
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function formatDuration(start?: string | null, end?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!start || !end) return '--';
+  const startTime = new Date(start).getTime();
+  const endTime = new Date(end).getTime();
+  if (Number.isNaN(startTime) || Number.isNaN(endTime) || endTime <= startTime) return '--';
+  const totalSeconds = Math.round((endTime - startTime) / 1000);
+  if (totalSeconds < 60) {
+    return language === 'en' ? `${totalSeconds}s` : `${totalSeconds}秒`;
+  }
+  const totalMinutes = Math.round(totalSeconds / 60);
+  if (totalMinutes < 60) {
+    return language === 'en' ? `${totalMinutes}m` : `${totalMinutes}分钟`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return language === 'en' ? `${hours}h ${minutes}m` : `${hours}小时${minutes}分钟`;
+}
+
+function formatAiScore(score: number): number {
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function scoreBadgeClass(score: number): string {
+  if (score >= 90) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20';
+  if (score >= 80) return 'bg-amber-500/18 text-amber-300 border-amber-500/20';
+  return 'bg-sky-500/18 text-sky-300 border-sky-500/20';
+}
+
+function formatForecastValue(candidate: ScannerRunDetail['shortlist'][number]): string {
+  const explicitForecast = findCandidateValue(candidate, ['年化收益', '收益预测', 'forecast', 'expected return']);
+  if (explicitForecast) return explicitForecast;
+  const forecastValue = candidate.score >= 0 ? candidate.score : 0;
+  return `+${forecastValue.toFixed(1)}%`;
 }
 
 function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
@@ -266,32 +302,6 @@ const UserScannerPage: React.FC = () => {
   const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
   const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
 
-  const selectedMarketCopy = useMemo(() => (
-    market === 'us'
-      ? {
-        runHint: t('scanner.runHintUs'),
-        currentRunFallback: t('scanner.currentRunFallbackUs'),
-        emptyState: language === 'en'
-          ? 'No personal US scanner result is available yet.'
-          : '当前还没有可展示的美股个人扫描结果。',
-      }
-      : market === 'hk'
-        ? {
-          runHint: t('scanner.runHintHk'),
-          currentRunFallback: t('scanner.currentRunFallbackHk'),
-          emptyState: language === 'en'
-            ? 'No personal Hong Kong scanner result is available yet.'
-            : '当前还没有可展示的港股个人扫描结果。',
-        }
-      : {
-        runHint: t('scanner.runHintCn'),
-        currentRunFallback: t('scanner.currentRunFallbackCn'),
-        emptyState: language === 'en'
-          ? 'No personal A-share scanner result is available yet.'
-          : '当前还没有可展示的 A 股个人扫描结果。',
-      }
-  ), [language, market, t]);
-
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
     const defaults = SCANNER_PROFILE_DEFAULTS[normalizedMarket];
@@ -380,12 +390,14 @@ const UserScannerPage: React.FC = () => {
     [historyTotal],
   );
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
+  const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
+  const elapsedTime = formatDuration(runDetail?.runAt, runDetail?.completedAt, language);
   const tacticalCards = runDetail?.shortlist.map((candidate) => ({
     symbol: candidate.symbol,
     name: candidate.name,
+    aiScore: formatAiScore(candidate.score),
     tags: formatCandidateTags(candidate),
-    signalValue: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
-    signalLabel: candidate.qualityHint || (language === 'en' ? 'Signal score' : '综合强度'),
+    forecastValue: formatForecastValue(candidate),
     insight: candidate.aiInterpretation.summary || candidate.reasonSummary || candidate.reasons[0] || (language === 'en' ? 'Awaiting AI insight generation.' : '等待 AI 生成更完整的战术解读。'),
     entryZone: formatEntryZone(candidate, language),
     targetLevel: formatTargetLevel(candidate, language),
@@ -441,7 +453,6 @@ const UserScannerPage: React.FC = () => {
                   <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
                   <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                   <div className="flex flex-col gap-4">
-                    <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
                     <button
                       type="button"
                       onClick={() => void handleRun()}
@@ -458,14 +469,24 @@ const UserScannerPage: React.FC = () => {
             </section>
 
             <section className="flex-1 min-w-0 flex flex-col min-h-0 gap-4 overflow-hidden">
-              <div data-testid="user-scanner-bento-hero" className="flex justify-between items-center gap-3 pb-2 border-b border-white/5 shrink-0">
+              <div data-testid="user-scanner-bento-hero" className="flex items-end justify-between gap-3 border-b border-white/5 pb-4 mb-2 shrink-0">
                 <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-white">{language === 'en' ? 'Scanner results and execution plan' : '扫描结果与执行计划'}</h2>
-                  <p className="mt-1 truncate text-sm text-secondary-text">{runDetail?.headline || selectedMarketCopy.currentRunFallback}</p>
+                  <h2 className="text-xl font-bold text-white mb-1">{language === 'en' ? 'Scanner results and tactical plan' : '扫描结果与战术计划'}</h2>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-white/40">
+                    <span>
+                      {language === 'en' ? 'Generated:' : '生成时间：'}
+                      {generatedAt ? ` ${formatTimestamp(generatedAt, language)}` : ' --'}
+                    </span>
+                    <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
+                    <span>
+                      {language === 'en' ? 'Elapsed:' : '耗时：'}
+                      {` ${elapsedTime}`}
+                    </span>
+                  </div>
                 </div>
                 <span
                   data-testid="user-scanner-bento-hero-shortlist-value"
-                  className="shrink-0 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full"
+                  className="shrink-0 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full"
                   style={{ textShadow: '0 0 30px rgba(52, 211, 153, 0.45)' }}
                 >
                   {language === 'en' ? `${shortlistCount} symbols hit` : `命中 ${shortlistCount} 只标的`}
@@ -480,24 +501,34 @@ const UserScannerPage: React.FC = () => {
                       className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors"
                     >
                       <div className="flex justify-between items-start gap-4 mb-4">
-                        <div className="min-w-0">
-                          <h3 className="text-xl font-bold text-white tracking-tight">
-                            {candidate.symbol}
+                        <div className="min-w-0 flex flex-col gap-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-bold text-white tracking-tight">
+                              {candidate.symbol}
+                            </h3>
+                            <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(candidate.aiScore)}`}>
+                              {language === 'en' ? `AI score ${candidate.aiScore}/100` : `AI 评分 ${candidate.aiScore}/100`}
+                            </span>
                             {shouldRenderDisplayName(candidate.symbol, candidate.name) ? (
-                              <span className="ml-2 text-sm font-normal text-white/40">{candidate.name}</span>
+                              <span className="text-xs font-medium text-white/35">{candidate.name}</span>
                             ) : null}
-                          </h3>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {candidate.tags.map((tag) => (
-                              <span key={`${candidate.symbol}-${tag}`} className="text-[10px] px-2 py-0.5 rounded border border-indigo-500/30 text-indigo-400 bg-indigo-500/10">
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {candidate.tags.map((tag, index) => (
+                              <span
+                                key={`${candidate.symbol}-${tag}`}
+                                className={index === 0
+                                  ? 'text-[10px] px-2 py-0.5 rounded bg-white/[0.05] border border-white/5 text-white/50'
+                                  : 'text-[10px] px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'}
+                              >
                                 {tag}
                               </span>
                             ))}
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <div className="text-emerald-400 font-bold">{candidate.signalValue}</div>
-                          <div className="text-xs text-white/30 mt-1">{candidate.signalLabel}</div>
+                          <div className="text-emerald-400 font-bold">{candidate.forecastValue}</div>
+                          <div className="text-xs text-white/30 mt-1">{language === 'en' ? 'Annualized return forecast' : '年化收益预测'}</div>
                         </div>
                       </div>
 
@@ -540,7 +571,7 @@ const UserScannerPage: React.FC = () => {
         title={language === 'en' ? 'Run history' : '历史运行记录'}
         width="max-w-4xl"
       >
-        <div data-testid="user-scanner-bento-drawer" className="theme-panel-glass ml-auto h-full w-full max-w-4xl rounded-l-[40px] p-6 text-foreground sm:p-8">
+        <div data-testid="user-scanner-bento-drawer" className="ml-auto w-full max-w-4xl rounded-l-[40px] bg-transparent p-6 text-foreground sm:p-8">
           <div className="grid gap-6">
             <div>
               <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Run history' : '运行历史'}</p>
