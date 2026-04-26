@@ -1,5 +1,23 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLoginPath, buildRegistrationPath } from '../useProductSurface';
+import { buildLoginPath, buildRegistrationPath, resolveProductSurfaceRole } from '../useProductSurface';
+
+describe('resolveProductSurfaceRole', () => {
+  it('treats any logged-out session as guest even when auth is disabled', () => {
+    expect(resolveProductSurfaceRole({
+      authEnabled: false,
+      loggedIn: false,
+      currentUser: null,
+    })).toBe('guest');
+  });
+
+  it('keeps admin accounts on the admin surface', () => {
+    expect(resolveProductSurfaceRole({
+      authEnabled: false,
+      loggedIn: false,
+      currentUser: { isAdmin: true },
+    })).toBe('admin');
+  });
+});
 
 describe('useProductSurface locale-aware auth paths', () => {
   afterEach(() => {

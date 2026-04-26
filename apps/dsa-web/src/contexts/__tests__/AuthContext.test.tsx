@@ -139,12 +139,14 @@ describe('AuthContext', () => {
     expect(login).not.toHaveBeenCalled();
   });
 
-  it('refreshes auth state after logout', async () => {
+  it('wipes browser and in-memory state after logout', async () => {
     window.localStorage.setItem('dsa_chat_session_id', 'chat-session-1');
     window.localStorage.setItem('dsa-selected-history-id', '42');
     window.localStorage.setItem('dsa-task-queue-v1', '[{"taskId":"task-1"}]');
     window.localStorage.setItem('dsa-ui-language', 'en');
+    window.localStorage.setItem('theme-preference', 'dark');
     window.sessionStorage.setItem('dsa-admin-surface-mode', 'admin');
+    window.sessionStorage.setItem('temp-flag', '1');
 
     getStatus
       .mockResolvedValueOnce({
@@ -178,7 +180,10 @@ describe('AuthContext', () => {
     expect(window.localStorage.getItem('dsa_chat_session_id')).toBeNull();
     expect(window.localStorage.getItem('dsa-selected-history-id')).toBeNull();
     expect(window.localStorage.getItem('dsa-task-queue-v1')).toBeNull();
-    expect(window.localStorage.getItem('dsa-ui-language')).toBe('en');
+    expect(window.localStorage.getItem('dsa-ui-language')).toBeNull();
+    expect(window.localStorage.getItem('theme-preference')).toBeNull();
+    expect(window.sessionStorage.getItem('dsa-admin-surface-mode')).toBeNull();
+    expect(window.sessionStorage.getItem('temp-flag')).toBeNull();
   });
 
   it('does not reset dashboard state when auth is disabled', async () => {

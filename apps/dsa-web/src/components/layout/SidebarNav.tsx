@@ -17,13 +17,14 @@ import {
   ShieldCheck,
   TestTubeDiagonal,
 } from 'lucide-react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { agentApi } from '../../api/agent';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
 import { useAgentChatStore } from '../../stores/agentChatStore';
 import { cn } from '../../utils/cn';
+import { hardRedirect } from '../../utils/browserRedirect';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -112,7 +113,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   hasArchive = false,
 }) => {
   const location = useLocation();
-  const navigate = useNavigate();
   const { authEnabled, logout } = useAuth();
   const { isGuest, isAdminAccount } = useProductSurface();
   const { language, t, toggleLanguage } = useI18n();
@@ -382,7 +382,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           void (async () => {
             try {
               await logout();
-              navigate(logoutPath, { replace: true });
+              hardRedirect(logoutPath);
             } catch {
               return;
             }

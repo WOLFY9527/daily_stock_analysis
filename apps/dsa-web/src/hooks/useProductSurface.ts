@@ -24,7 +24,7 @@ export function resolveProductSurfaceRole(params: {
   if (params.currentUser?.isAdmin) {
     return 'admin';
   }
-  if (params.authEnabled && !params.loggedIn) {
+  if (!params.loggedIn) {
     return 'guest';
   }
   return 'user';

@@ -23,10 +23,30 @@ const guestHomeMessages = {
     'guestHome.helper': '游客可以先查看一份简版分析；完整报告、后续交流、回测、持仓和历史记录需要登录后使用。',
     'guestHome.previewTitle': '即时分析预览',
     'guestHome.previewNote': '该结果仅用于游客预览，不写入历史记录，也不开放后续交流。',
+    'guestHome.previewDrawerAction': '打开预览说明',
+    'guestHome.decisionPanelEyebrow': 'WOLFY AI 决断',
     'guestHome.decisionSnapshot': '决策快照',
     'guestHome.unlockTitle': '登录后继续完整功能',
     'guestHome.unlockSubtitle': '继续深入',
     'guestHome.unlockBody': '登录后，你的分析结果、交流记录、持仓、回测和历史都会保存在你自己的账户下。',
+    'guestHome.strategyPanelTitle': '执行策略',
+    'guestHome.strategyPositionLabel': '仓位节奏',
+    'guestHome.strategyPositionBody': '建仓区间、止损位和目标位会在登录后变成可执行建议，因为那时系统才能把你的分析历史和风险决策稳定绑定到你自己的账户。',
+    'guestHome.techPanelTitle': '技术形态',
+    'guestHome.techSignalMacd': '零轴上方金叉',
+    'guestHome.techSignalMa': 'MA20 / MA60 扩张',
+    'guestHome.techSignalVolume': '回踩缩量，突破放量',
+    'guestHome.fundamentalsPanelTitle': '基本面画像',
+    'guestHome.fundamentalMetricGrowth': '收入增速',
+    'guestHome.fundamentalMetricCashFlow': '自由现金流',
+    'guestHome.fundamentalMetricMargin': '毛利率',
+    'guestHome.frostedLockTitle': '解锁高阶策略与深度指标',
+    'guestHome.frostedLockBody': '登录后获取建仓点位、止损建议和完整基本面上下文，并把每次查询都保存在你自己的历史里。',
+    'guestHome.frostedLockCta': '立即登录 / 注册',
+    'guestHome.drawerSummary': '游客模式保留左侧决策面板可用，但高阶模块会在真实账户接管前保持毛玻璃锁定。',
+    'guestHome.drawerBulletDecision': '左侧 Wolfy AI 决断面板保持可交互，游客可以输入股票代码并立即看到核心评分。',
+    'guestHome.drawerBulletLock': '执行策略、技术形态和基本面画像保持可见但模糊，所有点击都会被上层遮罩拦截。',
+    'guestHome.drawerBulletRedirect': '受保护路由仍会在任何个人化或可保存页面加载前，把游客打回这个转化漏斗。',
     'guestHome.decision': '动作建议',
     'guestHome.trend': '趋势判断',
     'guestHome.score': '情绪分数',
@@ -69,10 +89,30 @@ const guestHomeMessages = {
     'guestHome.helper': 'Guests can generate one lightweight analysis snapshot. Full reports, follow-up chat, backtests, portfolio tools, and saved history unlock after sign-in.',
     'guestHome.previewTitle': 'Instant Analysis Snapshot',
     'guestHome.previewNote': 'This preview is intentionally limited. It is not saved and does not unlock follow-up chat.',
+    'guestHome.previewDrawerAction': 'Open preview guide',
+    'guestHome.decisionPanelEyebrow': 'WOLFY AI DECISION',
     'guestHome.decisionSnapshot': 'Decision Snapshot',
     'guestHome.unlockTitle': 'Sign in for the full app',
     'guestHome.unlockSubtitle': 'Next Step',
     'guestHome.unlockBody': 'Once you sign in, your analysis, chat history, portfolio, backtests, and saved history stay attached to your own account.',
+    'guestHome.strategyPanelTitle': 'Execution Strategy',
+    'guestHome.strategyPositionLabel': 'Position Plan',
+    'guestHome.strategyPositionBody': 'Entry, stop-loss, and target levels become actionable only after sign-in, when the app can keep your analysis history and risk decisions under your own account.',
+    'guestHome.techPanelTitle': 'Technical Structure',
+    'guestHome.techSignalMacd': 'Bullish crossover above zero line',
+    'guestHome.techSignalMa': 'MA20 / MA60 expanding',
+    'guestHome.techSignalVolume': 'Quiet pullback, strong breakout volume',
+    'guestHome.fundamentalsPanelTitle': 'Fundamental Profile',
+    'guestHome.fundamentalMetricGrowth': 'Revenue Growth',
+    'guestHome.fundamentalMetricCashFlow': 'Free Cash Flow',
+    'guestHome.fundamentalMetricMargin': 'Gross Margin',
+    'guestHome.frostedLockTitle': 'Unlock advanced strategy and deep indicators',
+    'guestHome.frostedLockBody': 'Sign in to reveal entry zones, stop-loss guidance, and full fundamental context, then keep every query attached to your own history.',
+    'guestHome.frostedLockCta': 'Sign in / Register now',
+    'guestHome.drawerSummary': 'Guest mode keeps the decision panel live, but advanced modules stay behind a frosted lock until the session belongs to a real account.',
+    'guestHome.drawerBulletDecision': 'The left-side Wolfy AI decision panel stays interactive, so guests can test a ticker and see the core score immediately.',
+    'guestHome.drawerBulletLock': 'Execution strategy, technical structure, and fundamentals remain visible but blurred, with all clicks intercepted by the paywall overlay.',
+    'guestHome.drawerBulletRedirect': 'Protected routes still bounce guests back into this funnel before any personal or saved surfaces load.',
     'guestHome.decision': 'Action',
     'guestHome.trend': 'Trend',
     'guestHome.score': 'Sentiment',
@@ -147,7 +187,7 @@ describe('GuestHomePage', () => {
     window.history.replaceState(window.history.state, '', '/zh');
   });
 
-  it('renders simplified guest guidance and generates a guest preview snapshot', async () => {
+  it('renders the home-style guest funnel and generates a live preview snapshot', async () => {
     previewMock.mockResolvedValue({
       queryId: 'preview-q1',
       stockCode: 'AAPL',
@@ -184,12 +224,14 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('guest-home-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('guest-home-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('guest-home-bento-hero')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-bento-hero-unlock-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByTestId('guest-home-preview-card')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-bento-hero-unlock-value')).toHaveTextContent('3 个锁定模块');
+    expect(screen.getByTestId('guest-home-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-frosted-lock')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '解锁高阶策略与深度指标' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成简版判断' })).toHaveAttribute('data-variant', 'primary');
     expect(screen.getByTestId('guest-home-bento-drawer-trigger')).toHaveAttribute('data-variant', 'secondary');
-    expect(screen.getByText('完整分析报告')).toBeInTheDocument();
-    expect(screen.getByText('后续交流')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '立即登录 / 注册' })).toHaveAttribute('href', '/zh/login?redirect=%2Fzh');
     expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/zh/login?mode=create&redirect=%2Fzh');
 
     fireEvent.change(screen.getByLabelText('guest-stock-input'), { target: { value: 'AAPL' } });
@@ -206,7 +248,7 @@ describe('GuestHomePage', () => {
     expect(await screen.findByText('趋势延续但需要等待更好的介入点。')).toBeInTheDocument();
     expect(screen.getAllByText('等待回踩').length).toBeGreaterThan(0);
     expect(screen.getAllByText('偏强震荡').length).toBeGreaterThan(0);
-    expect(screen.getByText('184-186')).toBeInTheDocument();
+    expect(screen.getByText('72')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('guest-home-bento-drawer-trigger'));
     expect(await screen.findByTestId('guest-home-bento-drawer')).toBeInTheDocument();
@@ -228,11 +270,12 @@ describe('GuestHomePage', () => {
     expect(screen.getAllByText('Guest Preview').length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: 'Guest Preview Mode' })).toBeInTheDocument();
     expect(screen.getByText('Start with a lightweight analysis snapshot, then sign in if you want to keep going. Guest previews are never saved to an account.')).toBeInTheDocument();
-    expect(screen.getAllByText('Instant Analysis Snapshot').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Unlock advanced strategy and deep indicators' })).toBeInTheDocument();
     expect(screen.getAllByText('Guests can generate one lightweight analysis snapshot. Full reports, follow-up chat, backtests, portfolio tools, and saved history unlock after sign-in.').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/en/login?mode=create&redirect=%2Fen');
-    expect(screen.getAllByText('Sign in for the full app').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Unlock saved reports, chat, portfolio, and backtests').length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Sign in / Register now' })).toHaveAttribute('href', '/en/login?redirect=%2Fen');
+    expect(screen.getByText('Execution Strategy')).toBeInTheDocument();
     expect(screen.getAllByText('Guest limits').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Guest previews do not create an account record and do not unlock saved cross-page features.').length).toBeGreaterThan(0);
   });

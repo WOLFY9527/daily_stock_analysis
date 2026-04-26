@@ -1,16 +1,16 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../../i18n/core';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Shell } from '../Shell';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useShellRailSlot } from '../useShellRailSlot';
-import { translate } from '../../../i18n/core';
 
-const { mockLogout, mockGetAgentStatus, useAuthMock } = vi.hoisted(() => ({
+const { mockLogout, mockGetAgentStatus, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
   mockLogout: vi.fn().mockResolvedValue(undefined),
   mockGetAgentStatus: vi.fn().mockResolvedValue({ enabled: true }),
+  mockHardRedirect: vi.fn(),
   useAuthMock: vi.fn(),
 }));
 
@@ -37,6 +37,10 @@ vi.mock('../../../api/agent', () => ({
   },
 }));
 
+vi.mock('../../../utils/browserRedirect', () => ({
+  hardRedirect: (...args: unknown[]) => mockHardRedirect(...args),
+}));
+
 beforeAll(() => {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -61,11 +65,6 @@ afterEach(() => {
 const ShellRailFixture = () => {
   useShellRailSlot(<div>archive content</div>);
   return <div>page content</div>;
-};
-
-const LocationProbe = () => {
-  const location = useLocation();
-  return <div data-testid="location-path">{location.pathname}</div>;
 };
 
 const settleDrawerMotion = () => new Promise((resolve) => window.setTimeout(resolve, 260));
@@ -132,7 +131,7 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
   });
 
-  it('keeps a logout path visible for non-guest shell states even when auth is disabled', () => {
+  it('falls back to the guest-safe shell when auth is disabled and no user is logged in', () => {
     useAuthMock.mockReturnValue({
       authEnabled: false,
       loggedIn: false,
@@ -150,8 +149,9 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '扫描器' })).not.toBeInTheDocument();
   });
 
   it('hides the Ask Stock navigation entry when the agent runtime is unavailable', async () => {
@@ -172,12 +172,12 @@ describe('Shell', () => {
     });
   });
 
-  it('shows a confirmation dialog before logout and returns to the guest page', async () => {
+  it('shows a confirmation dialog before logout and hard-redirects to the guest page', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ThemeProvider>
           <Shell>
-            <LocationProbe />
+            <div>page content</div>
           </Shell>
         </ThemeProvider>
       </MemoryRouter>
@@ -189,7 +189,7 @@ describe('Shell', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logoutConfirm') }));
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/guest'));
+    expect(mockHardRedirect).toHaveBeenCalledWith('/guest');
   });
 
   it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
