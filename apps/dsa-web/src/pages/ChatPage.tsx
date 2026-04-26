@@ -1,17 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ArrowUp, PanelRightOpen } from 'lucide-react';
+import { ArrowUp, Download, PanelRightOpen, SendHorizontal } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { agentApi } from '../api/agent';
-import { ApiErrorAlert, ConfirmDialog, ScrollArea } from '../components/common';
+import { ApiErrorAlert, ConfirmDialog, ScrollArea, TypewriterText } from '../components/common';
 import {
   CARD_BUTTON_CLASS,
   PageBriefDrawer,
-  PageChrome,
   type BentoHeroItem,
-  getToneTextClass,
-  getToneTextStyle,
 } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
@@ -120,6 +117,8 @@ const ChatPage: React.FC = () => {
   const followUpContextRef = useRef<ChatFollowUpContext | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const pendingScrollBehaviorRef = useRef<ScrollBehavior>('auto');
+  const seenAssistantMessageIdsRef = useRef<Set<string>>(new Set());
+  const hasHydratedAssistantMessagesRef = useRef(false);
   const { closeMobileRail } = useShellRail();
   const chat = useCallback(
     (key: string, vars?: Record<string, string | number | undefined>) => t(`chat.${key}`, vars),
@@ -152,13 +151,13 @@ const ChatPage: React.FC = () => {
   } = useAgentChatStore();
 
   const syncScrollState = useCallback(() => {
-    if (typeof window === 'undefined') return;
+    const viewport = messagesViewportRef.current;
+    if (!viewport) return;
 
-    const doc = document.documentElement;
     shouldStickToBottomRef.current = isNearBottom({
-      scrollTop: window.scrollY || doc.scrollTop,
-      clientHeight: window.innerHeight || doc.clientHeight,
-      scrollHeight: Math.max(doc.scrollHeight, document.body.scrollHeight),
+      scrollTop: viewport.scrollTop,
+      clientHeight: viewport.clientHeight,
+      scrollHeight: viewport.scrollHeight,
     });
   }, []);
 
@@ -178,13 +177,6 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     syncScrollState();
   }, [syncScrollState, sessionId]);
-
-  useEffect(() => {
-    window.addEventListener('scroll', handleMessagesScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', handleMessagesScroll);
-    };
-  }, [handleMessagesScroll]);
 
   useEffect(() => {
     const behavior = pendingScrollBehaviorRef.current;
@@ -608,144 +600,45 @@ const ChatPage: React.FC = () => {
     },
   ];
 
+  const latestAssistantMessageId = useMemo(
+    () => [...messages].reverse().find((msg) => msg.role === 'assistant')?.id ?? null,
+    [messages],
+  );
+  const [animatedAssistantMessageId, setAnimatedAssistantMessageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const assistantIds = messages
+      .filter((msg) => msg.role === 'assistant')
+      .map((msg) => msg.id);
+    const seenAssistantIds = seenAssistantMessageIdsRef.current;
+
+    if (!hasHydratedAssistantMessagesRef.current) {
+      assistantIds.forEach((id) => seenAssistantIds.add(id));
+      hasHydratedAssistantMessagesRef.current = true;
+      return;
+    }
+
+    const newAssistantIds = assistantIds.filter((id) => !seenAssistantIds.has(id));
+
+    if (newAssistantIds.length > 0) {
+      const newestAssistantId = newAssistantIds[newAssistantIds.length - 1];
+      setAnimatedAssistantMessageId(newestAssistantId);
+      newAssistantIds.forEach((id) => seenAssistantIds.add(id));
+      return;
+    }
+
+    assistantIds.forEach((id) => seenAssistantIds.add(id));
+  }, [messages]);
+
   return (
-    <PageChrome
-      pageTestId="chat-bento-page"
-      heroTestId="chat-bento-hero"
-      pageClassName="workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12"
-      scrollMode="page"
-      eyebrow={chat('eyebrow')}
-      title={(
-        <span className="mb-2 mt-2 flex items-center gap-2">
-          <svg
-            className="h-6 w-6 text-[hsl(var(--accent-primary-hsl))]"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-            />
-          </svg>
-          <span>{chat('title')}</span>
-        </span>
-      )}
-      titleClassName="text-2xl font-bold"
-      description={chat('description')}
-      heroItems={heroItems}
-      actions={(
-        <>
-          <button
-            type="button"
-            onClick={() => setIsBriefDrawerOpen(true)}
-            data-testid="chat-bento-drawer-trigger"
-            className={CARD_BUTTON_CLASS}
-          >
-            <PanelRightOpen className="h-4 w-4" />
-            <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-          </button>
-          {messages.length > 0 ? (
-            <>
-              <button
-                type="button"
-                onClick={() => downloadSession(messages)}
-                className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
-                title={chat('exportTitle')}
-              >
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                  />
-                </svg>
-                {chat('exportAction')}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (sending) return;
-                  setSending(true);
-                  setSendToast(null);
-                  try {
-                    const content = formatSessionAsMarkdown(messages);
-                    await agentApi.sendChat(content);
-                    setSendToast({ type: 'success', message: chat('notifySuccess') });
-                    setTimeout(() => setSendToast(null), 3000);
-                  } catch (err) {
-                    const parsed = getParsedApiError(err);
-                    setSendToast({
-                      type: 'error',
-                      message: parsed.message || chat('notifyFailed'),
-                    });
-                    setTimeout(() => setSendToast(null), 5000);
-                  } finally {
-                    setSending(false);
-                  }
-                }}
-                disabled={sending}
-                className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                title={chat('notifyTitle')}
-              >
-                {sending ? (
-                  <svg
-                    className="h-4 w-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                    />
-                  </svg>
-                )}
-                {sending ? chat('notifySending') : chat('notifyAction')}
-              </button>
-              {sendToast ? (
-                <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                  {sendToast.message}
-                </span>
-              ) : null}
-            </>
-          ) : null}
-        </>
-      )}
+    <div
+      data-testid="chat-bento-page"
+      data-bento-surface="true"
+      className="gemini-bento-page bento-surface-root workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat mx-auto flex w-full max-w-[1920px] flex-col bg-black px-4 md:px-8 xl:px-12 2xl:max-w-full"
     >
       <div
         data-testid="chat-workspace"
-        className="flex min-h-screen w-full flex-col gap-6 bg-transparent pb-24 pt-4 md:gap-8 xl:flex-row xl:items-start"
+        className="flex h-[calc(100vh-80px)] w-full flex-col overflow-hidden bg-transparent"
       >
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
@@ -758,42 +651,99 @@ const ChatPage: React.FC = () => {
           onCancel={() => setDeleteConfirmId(null)}
         />
 
-        <aside
-          data-testid="chat-status-sidebar"
-          className="hidden xl:flex xl:w-80 xl:flex-col xl:gap-4 xl:self-stretch xl:border-r xl:border-white/5 xl:pr-6"
+        <header
+          data-testid="chat-status-header"
+          className="shrink-0 border-b border-white/5 p-4"
         >
-          {heroItems.map((item, index) => {
-            const tone = item.tone || 'neutral';
-            return (
-              <div
-                key={`${item.label}-${index}`}
-                data-testid={item.testId}
-                className="relative overflow-hidden rounded-[18px] border border-white/5 bg-white/[0.01] px-4 py-4 backdrop-blur-2xl"
-              >
-                <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">{item.label}</p>
-                <p
-                  data-testid={item.valueTestId}
-                  className={`mt-2.5 text-[1.35rem] font-semibold ${getToneTextClass(tone)} ${item.valueClassName || ''}`}
-                  style={getToneTextStyle(tone, tone !== 'neutral')}
+          <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-white/50">
+              {heroItems.map((item, index) => (
+                <div
+                  key={`${item.label}-${index}`}
+                  data-testid={item.testId}
+                  className="flex items-center gap-2"
                 >
-                  {item.value}
-                </p>
-                {item.detail ? (
-                  <p className="mt-1.5 text-xs leading-5 text-white/56">{item.detail}</p>
-                ) : null}
-              </div>
-            );
-          })}
-        </aside>
+                  <span className="uppercase tracking-[0.16em] text-white/32">{item.label}</span>
+                  <span
+                    data-testid={item.valueTestId}
+                    className="font-medium text-white/78"
+                  >
+                    {item.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsBriefDrawerOpen(true)}
+                data-testid="chat-bento-drawer-trigger"
+                className={CARD_BUTTON_CLASS}
+                title={language === 'en' ? 'Open brief' : '查看摘要'}
+              >
+                <PanelRightOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+              </button>
+              {messages.length > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => downloadSession(messages)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-border/70 text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
+                    title={chat('exportTitle')}
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (sending) return;
+                      setSending(true);
+                      setSendToast(null);
+                      try {
+                        const content = formatSessionAsMarkdown(messages);
+                        await agentApi.sendChat(content);
+                        setSendToast({ type: 'success', message: chat('notifySuccess') });
+                        setTimeout(() => setSendToast(null), 3000);
+                      } catch (err) {
+                        const parsed = getParsedApiError(err);
+                        setSendToast({
+                          type: 'error',
+                          message: parsed.message || chat('notifyFailed'),
+                        });
+                        setTimeout(() => setSendToast(null), 5000);
+                      } finally {
+                        setSending(false);
+                      }
+                    }}
+                    disabled={sending}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-border/70 text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    title={chat('notifyTitle')}
+                  >
+                    {sending ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+                    ) : (
+                      <SendHorizontal className="h-4 w-4" />
+                    )}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+          {sendToast ? (
+            <p className={`mx-auto mt-2 w-full max-w-6xl text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
+              {sendToast.message}
+            </p>
+          ) : null}
+        </header>
 
-        <section className="flex flex-1 flex-col items-center">
-          <section data-testid="chat-main" className="flex min-h-0 w-full flex-col">
-            <div
-              ref={messagesViewportRef}
-              data-testid="chat-message-scroll"
-              className="flex w-full justify-center"
-            >
-              <div data-testid="chat-message-stream" className="flex w-full max-w-4xl flex-col gap-8">
+        <main
+          ref={messagesViewportRef}
+          data-testid="chat-main"
+          onScroll={handleMessagesScroll}
+          className="no-scrollbar flex flex-1 min-h-0 flex-col items-center overflow-y-auto p-4 md:p-8"
+        >
+          <div data-testid="chat-message-stream" className="flex w-full max-w-3xl flex-col gap-8 pb-10">
               {skillsLoadError ? (
                 <ApiErrorAlert
                   error={skillsLoadError}
@@ -914,7 +864,7 @@ const ChatPage: React.FC = () => {
                 messages.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+                    className={`flex w-full gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
                   >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
@@ -926,7 +876,7 @@ const ChatPage: React.FC = () => {
                     {msg.role === 'user' ? 'U' : 'AI'}
                   </div>
                   <div
-                    className={`min-w-0 w-fit max-w-[min(100%,56rem)] overflow-hidden rounded-2xl px-5 py-3.5 ${
+                    className={`min-w-0 w-fit max-w-[min(100%,100%-3rem)] overflow-hidden rounded-2xl px-5 py-3.5 ${
                       msg.role === 'user'
                         ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground border border-[hsl(var(--accent-primary-hsl)/0.32)] rounded-tr-sm'
                         : 'theme-panel-subtle text-secondary-text rounded-tl-sm'
@@ -977,9 +927,23 @@ const ChatPage: React.FC = () => {
                       [&_img]:max-w-full
                     "
                       >
-                        <Markdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </Markdown>
+                        {msg.id === latestAssistantMessageId && msg.id === animatedAssistantMessageId ? (
+                          <TypewriterText
+                            as="div"
+                            speed={15}
+                            testId={`chat-typewriter-${msg.id}`}
+                            text={msg.content}
+                            render={(displayedText) => (
+                              <Markdown remarkPlugins={[remarkGfm]}>
+                                {displayedText}
+                              </Markdown>
+                            )}
+                          />
+                        ) : (
+                          <Markdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </Markdown>
+                        )}
                       </div>
                     ) : (
                       msg.content
@@ -1018,15 +982,14 @@ const ChatPage: React.FC = () => {
               )}
 
               <div ref={messagesEndRef} />
-              </div>
-            </div>
-          </section>
+          </div>
+        </main>
 
-          <footer
-            data-testid="chat-input-shell"
-            className="sticky bottom-0 z-50 mt-6 w-full border-t border-white/5 bg-[#030303]/80 py-4 backdrop-blur-xl"
-          >
-            <div className="mx-auto w-full max-w-4xl">
+        <footer
+          data-testid="chat-input-shell"
+          className="flex shrink-0 justify-center bg-gradient-to-t from-[#030303] via-[#030303] to-transparent p-4 md:pb-8"
+        >
+          <div className="w-full max-w-3xl">
             {chatError ? (
               <ApiErrorAlert
                 error={chatError}
@@ -1043,7 +1006,7 @@ const ChatPage: React.FC = () => {
             ) : null}
             <div
               data-testid="chat-composer-omnibar"
-              className="rounded-full border border-white/5 bg-white/[0.02] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-xl transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
+              className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-xl transition-colors duration-150 focus-within:border-white/20 focus-within:bg-white/[0.04] focus-within:ring-1 focus-within:ring-white/10"
             >
               <div className="flex items-end gap-3">
                 <textarea
@@ -1081,9 +1044,8 @@ const ChatPage: React.FC = () => {
                 {chat('followUpContextLoading')}
               </p>
             )}
-            </div>
-          </footer>
-        </section>
+          </div>
+        </footer>
       </div>
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}
@@ -1127,7 +1089,7 @@ const ChatPage: React.FC = () => {
         ]}
         footnote={language === 'en' ? 'Session and agent APIs unchanged.' : '会话和 agent API 保持不变。'}
       />
-    </PageChrome>
+    </div>
   );
 };
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { historyApi } from '../../api/history';
@@ -167,7 +167,7 @@ beforeEach(() => {
 });
 
 describe('ChatPage', () => {
-  it('renders a native page-scroll chat shell with a sticky composer footer', async () => {
+  it('renders a locked-height chat shell with a dedicated message viewport and docked composer', async () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -178,26 +178,23 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('chat-bento-page')).toHaveClass('min-h-full', 'overflow-visible');
-    expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
-    expect(container.querySelectorAll('main')).toHaveLength(0);
+    expect(screen.getByTestId('chat-bento-page')).toHaveClass('flex', 'flex-col', 'bg-black', 'workspace-page--chat');
+    expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-full', 'overflow-hidden');
+    expect(container.querySelectorAll('main')).toHaveLength(1);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-workspace')).toHaveClass('min-h-screen', 'w-full', 'flex', 'flex-col', 'gap-6', 'bg-transparent', 'pt-4', 'pb-24', 'xl:flex-row');
-    expect(screen.getByTestId('chat-main').tagName).toBe('SECTION');
-    expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'min-h-0', 'w-full', 'flex-col');
-    expect(screen.getByTestId('chat-main')).not.toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('chat-status-sidebar')).toHaveClass('hidden', 'xl:flex', 'xl:w-80', 'xl:flex-col', 'xl:gap-4');
+    expect(screen.getByTestId('chat-workspace')).toHaveClass('h-[calc(100vh-80px)]', 'w-full', 'flex', 'flex-col', 'overflow-hidden', 'bg-transparent');
+    expect(screen.getByTestId('chat-status-header')).toHaveClass('shrink-0', 'border-b', 'border-white/5', 'p-4');
+    expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
+    expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar', 'flex', 'flex-col', 'items-center');
+    expect(screen.queryByTestId('chat-status-sidebar')).not.toBeInTheDocument();
     expect((await screen.findAllByTestId('chat-bento-hero-skill')).length).toBeGreaterThan(0);
     const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
     expect(skillValues[0]).toHaveTextContent(canonicalBullTrendLabel('zh'));
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex', 'w-full', 'justify-center');
-    expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('min-h-full');
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-4xl', 'flex-col');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('sticky', 'bottom-0', 'z-50', 'w-full', 'py-4', 'bg-[#030303]/80', 'backdrop-blur-xl', 'border-t', 'border-white/5');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-3xl', 'flex-col', 'gap-8', 'pb-10');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('shrink-0', 'p-4', 'md:pb-8', 'bg-gradient-to-t', 'from-[#030303]', 'via-[#030303]', 'to-transparent', 'flex', 'justify-center');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
-      'rounded-full',
+      'rounded-[28px]',
       'border-white/5',
       'bg-white/[0.02]',
       'backdrop-blur-xl',
@@ -240,7 +237,67 @@ describe('ChatPage', () => {
     expect(screen.getByText(translate('zh', 'chat.starterCards.entryDecision.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'chat.starterCards.positionReview.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'chat.starterCards.eventFollowUp.title'))).toBeInTheDocument();
-    expect(screen.getAllByText(translate('zh', 'chat.description')).length).toBeGreaterThan(0);
+    expect(screen.getByText(translate('zh', 'chat.emptyBody'))).toBeInTheDocument();
+  });
+
+  it('animates only a newly appended latest assistant reply with the typewriter effect', async () => {
+    vi.useFakeTimers();
+    mockStoreState.messages = [
+      {
+        id: 'assistant-history',
+        role: 'assistant',
+        content: '历史回复保持完整显示',
+        skillName: canonicalBullTrendLabel('zh'),
+      },
+    ];
+
+    const view = render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('chat-main').textContent).toContain('历史回复保持完整显示');
+    expect(screen.queryByTestId('chat-typewriter-assistant-history')).not.toBeInTheDocument();
+
+    mockStoreState.messages = [
+      ...mockStoreState.messages,
+      {
+        id: 'assistant-latest',
+        role: 'assistant',
+        content: '最新回复正在涌现',
+        skillName: canonicalBullTrendLabel('zh'),
+      },
+    ];
+
+    await act(async () => {
+      view.rerender(
+        <MemoryRouter initialEntries={['/chat']}>
+          <ShellRailHarness>
+            <ChatPage />
+          </ShellRailHarness>
+        </MemoryRouter>
+      );
+    });
+
+    const streamingNode = screen.getByTestId('chat-typewriter-assistant-latest');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(90);
+    });
+
+    expect(streamingNode.textContent?.length ?? 0).toBeGreaterThan(0);
+    expect(streamingNode.textContent?.length ?? 0).toBeLessThan('最新回复正在涌现'.length);
+    expect(screen.getByTestId('chat-main').textContent).toContain('历史回复保持完整显示');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(streamingNode).toHaveTextContent('最新回复正在涌现');
+    vi.useRealTimers();
   });
 
   it('switches session when clicking anywhere on the session card', async () => {

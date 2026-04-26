@@ -19,3 +19,4 @@ export * from './SectionShell';
 export * from './MetricCard';
 export * from './PillBadge';
 export * from './SegmentedControl';
+export * from './TypewriterText';
