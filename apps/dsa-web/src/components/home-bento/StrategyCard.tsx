@@ -49,7 +49,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     )}
   >
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-2 gap-y-4 gap-x-4 w-full">
+      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3">
       {metrics.map((metric) => (
         <div
           key={metric.label}
@@ -66,9 +66,9 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
         </div>
       ))}
       </div>
-      <div className="mt-8 flex-1 border-t border-white/[0.08] pt-6">
+      <div className="mt-6 flex-1 border-t border-white/[0.08] pt-4">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{positionLabel}</p>
-        <p className="mt-4 text-sm leading-relaxed text-white/68">{positionBody}</p>
+        <p className="mt-1 text-[11px] text-white/60 leading-tight" data-testid="home-bento-strategy-position-body">{positionBody}</p>
       </div>
     </div>
   </BentoCard>

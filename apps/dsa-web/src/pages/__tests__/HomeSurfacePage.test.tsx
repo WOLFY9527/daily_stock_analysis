@@ -69,7 +69,18 @@ describe('HomeSurfacePage', () => {
     expect(root).toHaveAttribute('data-bento-surface', 'true');
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
-    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'flex', 'min-h-[calc(100vh-80px)]', 'flex-col', 'overflow-x-hidden', 'px-6', 'py-8');
+    expect(root).toHaveClass(
+      'workspace-width-wide',
+      'w-full',
+      'flex',
+      'min-h-[calc(100vh-80px)]',
+      'flex-1',
+      'flex-col',
+      'overflow-x-hidden',
+      'px-6',
+      'pt-4',
+      'pb-2',
+    );
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
@@ -115,15 +126,19 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-breakout-reason')).toBeInTheDocument();
     expect(screen.getByText('AI 突破归因')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'grid-cols-1', 'lg:grid-cols-3', 'xl:grid-cols-5', 'gap-6', 'xl:gap-8', 'mt-8');
+    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'grid-cols-1', 'lg:grid-cols-3', 'xl:grid-cols-5', 'gap-5', 'mt-5');
     expect(strategyCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(techCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(fundamentalsCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('w-full', 'h-full', 'lg:col-span-3', 'xl:col-span-2', 'rounded-[24px]');
+    expect(strategyCard).toHaveClass('p-5');
+    expect(techCard).toHaveClass('p-5');
+    expect(fundamentalsCard).toHaveClass('p-5');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('p-5');
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
-    expect(strategyMetricsGrid).toHaveClass('grid', 'grid-cols-2', 'gap-y-4', 'gap-x-4', 'w-full');
+    expect(strategyMetricsGrid).toHaveClass('grid', 'grid-cols-2', 'gap-y-3', 'gap-x-4', 'w-full');
     expect(entryMetric).toHaveClass('col-span-2', 'flex', 'flex-col', 'gap-1');
     expect(targetMetric).not.toHaveClass('col-span-2');
     expect(stopLossMetric).not.toHaveClass('col-span-2');
@@ -131,6 +146,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('118.40 - 121.00')).toHaveClass('text-xl', 'sm:text-2xl');
     expect(screen.getByText('136.00')).toHaveClass('text-xl', 'sm:text-2xl', 'font-medium');
     expect(screen.getByText('111.80')).toHaveClass('text-xl', 'sm:text-2xl', 'font-medium');
+    expect(screen.getByTestId('home-bento-strategy-position-body')).toHaveClass('text-[11px]', 'leading-tight', 'mt-1', 'text-white/60');
+    expect(screen.getByTestId('home-bento-decision-chart-shell')).toHaveClass('relative', 'mt-4', 'flex-1', 'min-h-0');
+    expect(screen.getByTestId('home-bento-decision-chart-frame')).toHaveClass('absolute', 'inset-0', 'h-full', 'w-full');
     expect(screen.getByText('零轴上方金叉')).toHaveClass('text-xl', 'font-medium');
     expect(screen.getByText('+18.2%')).toHaveClass('text-2xl', 'font-medium');
     expect(screen.getByText('65.4')).toBeInTheDocument();

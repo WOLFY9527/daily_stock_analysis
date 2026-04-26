@@ -32,7 +32,7 @@ export const BentoCard: React.FC<BentoCardProps> = ({
   <section
     data-testid={testId}
     className={cn(
-      'group relative overflow-hidden rounded-[36px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl transition-transform duration-200 ease-out hover:-translate-y-[2px] sm:p-8',
+      'group relative overflow-hidden rounded-[36px] border border-white/5 bg-white/[0.02] p-5 backdrop-blur-2xl transition-transform duration-200 ease-out hover:-translate-y-[2px]',
       className,
     )}
   >
@@ -50,11 +50,11 @@ export const BentoCard: React.FC<BentoCardProps> = ({
         <div className="min-w-0">
           <p className={CARD_KICKER_CLASS}>{eyebrow}</p>
           {title ? <h2 className="mt-3 text-lg font-semibold text-white">{title}</h2> : null}
-          {subtitle ? <p className="mt-4 text-sm leading-relaxed text-white/58">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-3 text-sm leading-snug text-white/58">{subtitle}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="relative z-10 mt-5 flex-1">{children}</div>
+      <div className="relative z-10 mt-4 flex-1 min-h-0">{children}</div>
     </div>
   </section>
 );
