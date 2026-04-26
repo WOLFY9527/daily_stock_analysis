@@ -1048,10 +1048,11 @@ describe('PortfolioPage FX refresh', () => {
   });
 
   it('renders the rebuilt two-column portfolio shell without the legacy attribution dashboard', async () => {
-    render(<PortfolioPage />);
+    const { container } = render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
+    expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(screen.queryByTestId('portfolio-attribution-dashboard')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Trade Station' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();

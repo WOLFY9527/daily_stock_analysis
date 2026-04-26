@@ -103,12 +103,13 @@ describe('PersonalSettingsPage', () => {
       currentUser: null,
     });
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <PersonalSettingsPage />
       </MemoryRouter>,
     );
 
+    expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
     expect(screen.getByText(zh('settings.personalGuestPreferencesBody'))).toBeInTheDocument();
     expect(screen.getByRole('link', { name: zh('settings.personalGuestSignInAction') })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
@@ -144,12 +145,13 @@ describe('PersonalSettingsPage', () => {
       updatedAt: '2026-04-15T09:00:00Z',
     });
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <PersonalSettingsPage />
       </MemoryRouter>,
     );
 
+    expect(container.querySelectorAll('main')).toHaveLength(0);
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('link', { name: zh('nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
     expect(screen.getByRole('link', { name: zh('adminNav.logs') })).toHaveAttribute('href', '/admin/logs');

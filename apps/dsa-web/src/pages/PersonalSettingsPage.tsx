@@ -137,7 +137,7 @@ const PersonalSettingsPage: React.FC = () => {
   };
 
   return (
-    <main className="w-full max-w-4xl mx-auto flex flex-col gap-6">
+    <section className="mx-auto flex w-full max-w-4xl flex-1 min-h-0 flex-col gap-6">
       <WorkspacePageHeader
         eyebrow={t('settings.personalEyebrow')}
         title={t('settings.personalTitle')}
@@ -403,7 +403,7 @@ const PersonalSettingsPage: React.FC = () => {
       </div>
 
       {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}
-    </main>
+    </section>
   );
 };
 

@@ -117,8 +117,9 @@ describe('AdminLogsPage', () => {
   });
 
   it('renders global admin observability metadata for both admin actions and user activity', async () => {
-    render(<AdminLogsPage />);
+    const { container } = render(<AdminLogsPage />);
 
+    expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(await screen.findByText(translate('zh', 'adminLogs.scopeTitle'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'adminLogs.sessionListTitle'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'adminLogs.sessionDetailTitle'))).toBeInTheDocument();

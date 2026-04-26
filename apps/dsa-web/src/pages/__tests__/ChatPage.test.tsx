@@ -168,7 +168,7 @@ beforeEach(() => {
 
 describe('ChatPage', () => {
   it('renders a native page-scroll chat shell with a sticky composer footer', async () => {
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
           <ChatPage />
@@ -180,10 +180,12 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('min-h-full', 'overflow-visible');
     expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
+    expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('chat-workspace')).toHaveClass('min-h-screen', 'w-full', 'flex', 'flex-col', 'gap-6', 'bg-transparent', 'pt-4', 'pb-24', 'xl:flex-row');
-    expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'w-full', 'flex-col');
-    expect(screen.getByTestId('chat-main')).not.toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('chat-main').tagName).toBe('SECTION');
+    expect(screen.getByTestId('chat-main')).toHaveClass('flex', 'min-h-0', 'w-full', 'flex-col');
+    expect(screen.getByTestId('chat-main')).not.toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-status-sidebar')).toHaveClass('hidden', 'xl:flex', 'xl:w-80', 'xl:flex-col', 'xl:gap-4');
     expect((await screen.findAllByTestId('chat-bento-hero-skill')).length).toBeGreaterThan(0);
     const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
@@ -208,6 +210,19 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByTestId('chat-bento-drawer-trigger'));
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: translate('zh', 'chat.title') })).toBeInTheDocument();
+  });
+
+  it('keeps the empty state anchored instead of auto-scrolling to the footer on first paint', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 
   it('shows research-focused starter cards in the empty state', async () => {

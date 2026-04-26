@@ -472,12 +472,13 @@ describe('SettingsPage', () => {
   });
 
   it('renders category navigation and auth settings modules', async () => {
-    render(<SettingsPage />);
+    const { container } = render(<SettingsPage />);
 
     expect(screen.getByTestId('settings-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('settings-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();
     expect(await screen.findByText('认证与登录保护')).toBeInTheDocument();
     expect(await screen.findByText('修改密码')).toBeInTheDocument();

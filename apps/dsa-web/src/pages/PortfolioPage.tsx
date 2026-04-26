@@ -1131,7 +1131,7 @@ const PortfolioPage: React.FC = () => {
         data-bento-surface="true"
         className="workspace-width-wide mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-col overflow-hidden bg-transparent px-4 py-2 text-gray-300 md:px-8 xl:px-12 2xl:max-w-full"
       >
-        <main className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-12 xl:grid-cols-10">
+        <section className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-12 xl:grid-cols-10">
           <section className="lg:col-span-4 xl:col-span-2 h-full flex flex-col bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] overflow-hidden">
             <div className="shrink-0 px-4 pt-4">
               <div className="flex items-start justify-between gap-3">
@@ -1503,7 +1503,7 @@ const PortfolioPage: React.FC = () => {
             </div>
             </section>
           ) : null}
-        </main>
+        </section>
       </div>
 
       {isHistoryDrawerOpen ? (

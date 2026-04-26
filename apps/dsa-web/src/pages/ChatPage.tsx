@@ -189,7 +189,8 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     const behavior = pendingScrollBehaviorRef.current;
     const shouldAutoScroll = shouldStickToBottomRef.current;
-    if (!shouldAutoScroll) return;
+    const hasRenderableChatContent = messages.length > 0 || progressSteps.length > 0 || loading;
+    if (!shouldAutoScroll || !hasRenderableChatContent) return;
 
     const frame = window.requestAnimationFrame(() => {
       scrollToBottom(behavior);
@@ -786,7 +787,7 @@ const ChatPage: React.FC = () => {
         </aside>
 
         <section className="flex flex-1 flex-col items-center">
-          <main data-testid="chat-main" className="flex w-full flex-col">
+          <section data-testid="chat-main" className="flex min-h-0 w-full flex-col">
             <div
               ref={messagesViewportRef}
               data-testid="chat-message-scroll"
@@ -1019,7 +1020,7 @@ const ChatPage: React.FC = () => {
               <div ref={messagesEndRef} />
               </div>
             </div>
-          </main>
+          </section>
 
           <footer
             data-testid="chat-input-shell"

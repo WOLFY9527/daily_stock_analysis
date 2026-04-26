@@ -239,7 +239,7 @@ const AdminLogsPage: React.FC = () => {
   }, [selectedSessionId]);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-6 px-4 py-8 md:px-8">
+    <section className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-6 overflow-y-auto px-4 py-8 md:px-8">
       <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,64rem)] xl:items-end">
           <div>
@@ -548,7 +548,7 @@ const AdminLogsPage: React.FC = () => {
             </div>
           )}
       </section>
-    </main>
+    </section>
   );
 };
 
