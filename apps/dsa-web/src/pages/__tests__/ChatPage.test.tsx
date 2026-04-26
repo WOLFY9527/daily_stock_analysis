@@ -209,15 +209,18 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-input-shell').parentElement).not.toBe(screen.getByTestId('chat-main'));
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
-      'rounded-2xl',
+      'rounded-[24px]',
       'border-white/10',
-      'bg-white/[0.03]',
-      'backdrop-blur-2xl',
+      'bg-white/[0.02]',
+      'backdrop-blur-3xl',
       'border',
+      'flex',
+      'flex-col',
     );
+    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('text-[10px]', 'font-medium', 'tracking-wide', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'w-full', 'lg:w-[280px]', 'xl:w-[320px]', 'shrink-0', 'flex-col', 'gap-8', 'overflow-y-auto', 'no-scrollbar', 'bg-white/[0.01]', 'p-6');
-    expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('flex', 'flex-wrap', 'gap-2');
+    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'w-full', 'lg:w-[280px]', 'xl:w-[320px]', 'shrink-0', 'flex-col', 'gap-6', 'overflow-y-auto', 'no-scrollbar', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-6');
+    expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('flex', 'flex-wrap', 'gap-2.5');
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
 
@@ -432,7 +435,7 @@ describe('ChatPage', () => {
 
     await screen.findByText('这是用户问题');
     const userBubble = screen.getByTestId('chat-user-message-user-1').firstElementChild;
-    expect(userBubble).toHaveClass('max-w-[min(88%,72rem)]', 'bg-white/[0.08]', 'text-white', 'px-5', 'py-3', 'rounded-2xl', 'rounded-tr-sm', 'text-sm', 'break-words');
+    expect(userBubble).toHaveClass('max-w-[80%]', 'bg-white/[0.05]', 'backdrop-blur-md', 'border', 'border-white/10', 'text-white/90', 'px-5', 'py-3.5', 'rounded-2xl', 'rounded-tr-[4px]', 'shadow-lg', 'text-[15px]', 'leading-relaxed', 'break-words');
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.thinking.toggleLabel') }));
 

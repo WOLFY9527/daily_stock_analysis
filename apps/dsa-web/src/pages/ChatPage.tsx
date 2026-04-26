@@ -795,9 +795,9 @@ const ChatPage: React.FC = () => {
                         <div
                           key={msg.id}
                           data-testid={`chat-user-message-${msg.id}`}
-                          className="mb-4 flex w-full justify-end"
+                          className="mb-6 flex w-full justify-end"
                         >
-                          <div className="max-w-[min(88%,72rem)] rounded-2xl rounded-tr-sm bg-white/[0.08] px-5 py-3 text-sm text-white break-words">
+                          <div className="max-w-[80%] rounded-2xl rounded-tr-[4px] border border-white/10 bg-white/[0.05] px-5 py-3.5 text-[15px] leading-relaxed text-white/90 shadow-lg backdrop-blur-md break-words">
                             {msg.content.split('\n').map((line, i) => (
                               <p key={i} className="mb-1 leading-relaxed last:mb-0">
                                 {line || '\u00A0'}
@@ -919,7 +919,7 @@ const ChatPage: React.FC = () => {
 
                   <div
                     data-testid="chat-composer-omnibar"
-                    className="relative w-full rounded-2xl border border-white/10 bg-white/[0.03] p-2 text-white shadow-2xl backdrop-blur-2xl transition-all focus-within:border-white/30 focus-within:bg-white/[0.05]"
+                    className="relative flex w-full flex-col rounded-[24px] border border-white/10 bg-white/[0.02] p-2 text-white backdrop-blur-3xl transition-all duration-300 hover:border-white/20 focus-within:border-indigo-500/50 focus-within:bg-white/[0.04] focus-within:shadow-[0_0_30px_rgba(99,102,241,0.1)]"
                   >
                     <div className="flex items-end gap-3">
                       <textarea
@@ -930,22 +930,27 @@ const ChatPage: React.FC = () => {
                         placeholder={chat('inputPlaceholder')}
                         disabled={loading}
                         rows={1}
-                        className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 pr-16 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
                         onInput={(e) => {
                           const textarea = e.target as HTMLTextAreaElement;
                           textarea.style.height = 'auto';
                           textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
                         }}
                       />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between px-4 pb-2">
+                      <span className="text-[10px] font-medium tracking-wide text-white/30">
+                        {composerDisclaimer}
+                      </span>
                       {isGenerating ? (
                         <button
                           type="button"
                           onClick={handleStopGeneration}
-                          className="group absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                          className="group flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors active:scale-95 hover:bg-indigo-400/30 hover:text-white"
                           aria-label={chat('stopGeneration')}
                           title={chat('stopGeneration')}
                         >
-                          <div className="h-3 w-3 rounded-sm bg-white/70 transition-colors group-hover:bg-white" />
+                          <div className="h-3 w-3 rounded-sm bg-current transition-colors" />
                         </button>
                       ) : (
                         <button
@@ -954,11 +959,11 @@ const ChatPage: React.FC = () => {
                             void handleSend();
                           }}
                           disabled={!input.trim() || loading}
-                          className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                           aria-label={chat('notifyAction')}
                           title={chat('notifyAction')}
                         >
-                          <ArrowUp className="h-5 w-5" />
+                          <ArrowUp className="h-4 w-4" />
                         </button>
                       )}
                     </div>
@@ -969,10 +974,6 @@ const ChatPage: React.FC = () => {
                       {chat('followUpContextLoading')}
                     </p>
                   ) : null}
-
-                  <div className="mt-3 text-center text-[10px] text-white/30">
-                    {composerDisclaimer}
-                  </div>
                 </div>
               </div>
             </footer>
@@ -980,18 +981,21 @@ const ChatPage: React.FC = () => {
 
           <aside
             data-testid="chat-strategy-panel"
-            className="hidden w-full shrink-0 flex-col gap-8 overflow-y-auto bg-white/[0.01] p-6 no-scrollbar lg:flex lg:w-[280px] xl:w-[320px]"
+            className="hidden h-full w-full shrink-0 flex-col gap-6 overflow-y-auto border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-6 no-scrollbar lg:flex lg:w-[280px] xl:w-[320px]"
           >
-            <div>
-              <h3 className="mb-4 text-xs font-bold uppercase tracking-[0.24em] text-white/40">{engineSwitcherLabel}</h3>
-              <div data-testid="chat-strategy-grid" className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-4">
+              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-white/50">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                {engineSwitcherLabel}
+              </h3>
+              <div data-testid="chat-strategy-grid" className="flex flex-wrap gap-2.5">
                 <button
                   type="button"
                   onClick={() => setSelectedSkill('')}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  className={`rounded-full border px-4 py-2 text-xs font-medium transition-all ${
                     selectedSkill === ''
-                      ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                      : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                      ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.1)]'
+                      : 'border-white/10 bg-transparent text-white/50 hover:bg-white/[0.05] hover:text-white/90'
                   }`}
                 >
                   <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
@@ -1007,10 +1011,10 @@ const ChatPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedSkill(s.id)}
-                      className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      className={`rounded-full border px-4 py-2 text-xs font-medium transition-all ${
                         selectedSkill === s.id
-                          ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                          : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                          ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.1)]'
+                          : 'border-white/10 bg-transparent text-white/50 hover:bg-white/[0.05] hover:text-white/90'
                       }`}
                     >
                       <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-indigo-300' : 'bg-white/35'}`} />
