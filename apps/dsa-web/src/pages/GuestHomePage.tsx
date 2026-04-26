@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, BriefcaseBusiness, History, LockKeyhole, MessageSquareText, PanelRightOpen, TestTubeDiagonal } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { publicAnalysisApi } from '../api/publicAnalysis';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert, Button, MetricCard, PillBadge, SectionShell } from '../components/common';
 import { StockAutocomplete } from '../components/StockAutocomplete';
 import { LockedFeatureCard } from '../components/access/LockedFeatureCard';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -109,15 +109,16 @@ const GuestHomePage: React.FC = () => {
       description={t('guestHome.description')}
       actions={(
         <div className="flex flex-wrap items-center gap-3">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             className={CARD_BUTTON_CLASS}
             data-testid="guest-home-bento-drawer-trigger"
             onClick={() => setIsBriefDrawerOpen(true)}
           >
             <PanelRightOpen className="h-4 w-4" />
             <span>{language === 'en' ? 'Preview guide' : '查看预览说明'}</span>
-          </button>
+          </Button>
           <Link to={loginPath} className={CARD_BUTTON_CLASS}>
             {t('guestHome.signIn')}
           </Link>
@@ -148,20 +149,21 @@ const GuestHomePage: React.FC = () => {
                       disabled={isLoading}
                     />
                   </div>
-                  <button
+                  <Button
                     type="button"
+                    variant="primary"
                     onClick={() => void handlePreview()}
                     disabled={!query.trim() || isLoading}
-                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)] disabled:pointer-events-none disabled:opacity-50"
+                    className="bg-[var(--pill-active-bg)] text-foreground hover:border-[var(--border-strong)]"
                   >
                     {isLoading ? t('guestHome.submitting') : t('guestHome.submit')}
-                  </button>
+                  </Button>
                 </div>
               </label>
 
               {error ? <ApiErrorAlert error={error} /> : null}
 
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 p-4">
+              <SectionShell className="rounded-[var(--theme-panel-radius-md)] px-4 py-4" contentClassName="space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.16em] text-secondary-text">
@@ -174,9 +176,9 @@ const GuestHomePage: React.FC = () => {
                       ) : null}
                     </h2>
                   </div>
-                  <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]">
+                  <PillBadge variant="warning">
                     {t('guestHome.eyebrow')}
-                  </span>
+                  </PillBadge>
                 </div>
 
                 <p className="mt-4 text-sm leading-6 text-secondary-text">
@@ -184,39 +186,19 @@ const GuestHomePage: React.FC = () => {
                 </p>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.decision')}</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.operationAdvice || t('guestHome.noValue')}</p>
-                  </div>
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.trend')}</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">{previewSummary?.trendPrediction || t('guestHome.noValue')}</p>
-                  </div>
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-1)]/65 px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.score')}</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">
-                      {previewSummary?.sentimentScore != null ? `${previewSummary.sentimentScore}` : t('guestHome.noValue')}
-                    </p>
-                  </div>
+                  <MetricCard label={t('guestHome.decision')} value={previewSummary?.operationAdvice || t('guestHome.noValue')} />
+                  <MetricCard label={t('guestHome.trend')} value={previewSummary?.trendPrediction || t('guestHome.noValue')} />
+                  <MetricCard label={t('guestHome.score')} value={previewSummary?.sentimentScore != null ? `${previewSummary.sentimentScore}` : t('guestHome.noValue')} />
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.entry')}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.idealBuy || t('guestHome.noValue')}</p>
-                  </div>
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.stopLoss')}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.stopLoss || t('guestHome.noValue')}</p>
-                  </div>
-                  <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('guestHome.target')}</p>
-                    <p className="mt-2 text-sm text-foreground">{previewStrategy?.takeProfit || t('guestHome.noValue')}</p>
-                  </div>
+                  <MetricCard label={t('guestHome.entry')} value={previewStrategy?.idealBuy || t('guestHome.noValue')} className="border border-dashed border-[var(--theme-panel-subtle-border)]" />
+                  <MetricCard label={t('guestHome.stopLoss')} value={previewStrategy?.stopLoss || t('guestHome.noValue')} className="border border-dashed border-[var(--theme-panel-subtle-border)]" />
+                  <MetricCard label={t('guestHome.target')} value={previewStrategy?.takeProfit || t('guestHome.noValue')} className="border border-dashed border-[var(--theme-panel-subtle-border)]" />
                 </div>
 
                 <p className="mt-4 text-xs leading-5 text-muted-text">{t('guestHome.previewNote')}</p>
-              </div>
+              </SectionShell>
             </div>
           </BentoCard>
 
@@ -227,15 +209,15 @@ const GuestHomePage: React.FC = () => {
             testId="guest-home-unlock-card"
           >
             <div className="space-y-4">
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
+              <SectionShell className="rounded-[var(--theme-panel-radius-md)] px-4 py-4">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/6 text-foreground">
+                  <div className="theme-panel-subtle flex h-10 w-10 items-center justify-center rounded-full text-foreground">
                     <LockKeyhole className="h-4 w-4" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground">{t('guestHome.unlockPrimary')}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-text">
-                      {t('guestHome.unlockSecondary')}
+                    {t('guestHome.unlockSecondary')}
                     </p>
                   </div>
                 </div>
@@ -250,7 +232,7 @@ const GuestHomePage: React.FC = () => {
                     {t('guestHome.createAccount')}
                   </Link>
                 </div>
-              </div>
+              </SectionShell>
             </div>
           </BentoCard>
         </div>
@@ -307,15 +289,9 @@ const GuestHomePage: React.FC = () => {
         testId="guest-home-limits-card"
       >
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {t('guestHome.limits.accountIsolation')}
-          </div>
-          <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {t('guestHome.limits.persistence')}
-          </div>
-          <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4 text-sm leading-6 text-secondary-text">
-            {t('guestHome.limits.admin')}
-          </div>
+          <MetricCard label={t('guestHome.limits.title')} value={t('guestHome.limits.accountIsolation')} />
+          <MetricCard label={t('guestHome.unlockTitle')} value={t('guestHome.limits.persistence')} />
+          <MetricCard label={t('guestHome.lockedLabel')} value={t('guestHome.limits.admin')} />
         </div>
       </BentoCard>
       <PageBriefDrawer

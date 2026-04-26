@@ -15,3 +15,7 @@ export * from './Pagination';
 export * from './ConfirmDialog';
 export * from './WorkspacePageHeader';
 export * from './SupportSurface';
+export * from './SectionShell';
+export * from './MetricCard';
+export * from './PillBadge';
+export * from './SegmentedControl';

@@ -112,7 +112,7 @@ export const Input = ({
           aria-invalid={ariaInvalid}
           style={inputStyle}
           className={cn(
-            'input-surface input-focus-glow h-10 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white transition-all',
+            'input-surface input-focus-glow h-10 w-full rounded-xl border px-4 text-sm text-foreground transition-all placeholder:text-muted-text',
             'focus:outline-none',
             error ? 'border-danger/30' : '',
             leadingIcon ? 'pl-9' : '',

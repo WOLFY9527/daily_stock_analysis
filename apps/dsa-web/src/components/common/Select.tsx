@@ -12,14 +12,13 @@ interface SelectOption {
   label: string;
 }
 
-interface SelectProps {
+interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'onChange' | 'value'> {
   id?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
   label?: string;
   placeholder?: string;
-  disabled?: boolean;
   className?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -35,6 +34,7 @@ export const Select: React.FC<SelectProps> = ({
   placeholder,
   disabled = false,
   className = '',
+  ...props
 }) => {
   const { t } = useI18n();
   const selectId = useId();
@@ -50,8 +50,9 @@ export const Select: React.FC<SelectProps> = ({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
+          {...props}
           className={cn(
-            'select-surface input-surface theme-focus-ring h-10 w-full appearance-none rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 pr-9 text-sm text-white',
+            'select-surface input-surface theme-focus-ring h-10 w-full appearance-none rounded-xl border px-4 py-2 pr-9 text-sm text-foreground',
             'theme-focus-ring transition-all duration-200',
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
           )}

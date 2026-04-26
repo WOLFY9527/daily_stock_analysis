@@ -245,7 +245,8 @@ describe('UserScannerPage', () => {
   it('shows user-facing copy without admin jargon in zh', async () => {
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('user-scanner-bento-page')).toHaveClass('bg-[#030303]', 'text-white');
+    expect(await screen.findByTestId('user-scanner-bento-page')).not.toHaveClass('bg-[#030303]');
+    expect(screen.getByTestId('user-scanner-bento-drawer-trigger')).toHaveAttribute('data-variant', 'secondary');
     expect((await screen.findAllByText('我的手动扫描：600001 算力龙头')).length).toBeGreaterThan(0);
     expect(screen.queryByText(/运营空间|产品面|运营界面/)).not.toBeInTheDocument();
 

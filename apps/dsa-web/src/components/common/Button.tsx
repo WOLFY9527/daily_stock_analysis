@@ -50,7 +50,7 @@ export const Button: React.FC<ButtonProps> = ({
 }) => {
   const { t } = useI18n();
   const glowStyles = glow ? 'theme-accent-glow settings-glow-accent-hover' : '';
-  const resolvedLoadingText = loadingText || t('common.processing');
+  const resolvedLoadingText = loadingText || (isLoading ? t('common.processing') : '');
 
   return (
     <button

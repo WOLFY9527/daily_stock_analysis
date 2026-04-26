@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Badge, ConfirmDialog } from '../components/common';
+import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
@@ -25,9 +25,10 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_INPUT_CLASS = 'h-9 w-full rounded-xl border border-white/5 bg-white/[0.01] px-3 py-2 text-sm text-white placeholder:text-white/28 backdrop-blur-xl focus:border-white/18 focus:outline-none';
-const PORTFOLIO_SELECT_CLASS = 'h-9 w-full rounded-xl border border-white/5 bg-white/[0.01] px-3 py-2 text-sm text-white backdrop-blur-xl focus:border-white/18 focus:outline-none';
-const PORTFOLIO_BUTTON_CLASS = 'btn-secondary h-9 border-white/5 bg-white/[0.01] px-3 py-1.5 text-sm';
+const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl';
+const PORTFOLIO_SELECT_CLASS = 'w-full';
+const PORTFOLIO_BUTTON_CLASS = 'theme-panel-subtle border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/72 px-3 py-1.5 text-sm text-foreground hover:bg-[var(--overlay-hover)]';
+const PORTFOLIO_GHOST_BUTTON_CLASS = 'border-transparent bg-transparent px-0 py-0 text-xs text-secondary-text hover:text-foreground';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -1010,54 +1011,61 @@ const PortfolioPage: React.FC = () => {
   }, []);
 
   const historyPanelContent = (
-    <div className="flex h-full min-h-0 flex-col bg-[#0a0a0a] xl:bg-transparent">
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] xl:bg-transparent">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--theme-panel-subtle-border)] px-5 py-4">
         <div>
-          <h2 className="text-xs text-white/40 uppercase tracking-widest">{historyDrawerTitle}</h2>
-          <p className="mt-2 text-sm text-white/45">{copy.pageLabel} {eventPage}</p>
+          <h2 className="text-xs text-muted-text uppercase tracking-widest">{historyDrawerTitle}</h2>
+          <p className="mt-2 text-sm text-secondary-text">{copy.pageLabel} {eventPage}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void loadEvents()}>{copy.refreshLedger}</button>
-          <button
+          <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void loadEvents()}>{copy.refreshLedger}</Button>
+          <Button
             type="button"
+            variant="ghost"
             onClick={() => setIsHistoryDrawerOpen(false)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/5 text-white/50 transition-colors hover:bg-white/[0.04] hover:text-white xl:hidden"
+            className="h-9 w-9 rounded-full border border-[var(--theme-panel-subtle-border)] text-secondary-text hover:bg-[var(--overlay-hover)] hover:text-foreground xl:hidden"
             aria-label={language === 'en' ? 'Close order history' : '关闭历史记录'}
           >
             <span aria-hidden="true">×</span>
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setEventType('trade')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'trade' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.tradeLedger}</button>
-              <button type="button" onClick={() => setEventType('cash')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'cash' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.cashLedger}</button>
-              <button type="button" onClick={() => setEventType('corporate')} className={`rounded-full px-3 py-1.5 text-xs ${eventType === 'corporate' ? 'bg-white text-black' : 'bg-white/5 text-white/50 hover:text-white'}`}>{copy.corporateLedger}</button>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-white/45">
-              <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</button>
+            <SegmentedControl
+              value={eventType}
+              onChange={(next) => setEventType(next as EventType)}
+              options={[
+                { value: 'trade', label: copy.tradeLedger },
+                { value: 'cash', label: copy.cashLedger },
+                { value: 'corporate', label: copy.corporateLedger },
+              ]}
+              listClassName="w-auto"
+              buttonClassName="flex-none text-xs"
+            />
+            <div className="flex items-center gap-2 text-xs text-secondary-text">
+              <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</Button>
               <span>{copy.pageLabel} {eventPage}</span>
-              <button type="button" className={PORTFOLIO_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</button>
+              <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</Button>
             </div>
           </div>
 
           {eventType === 'trade' ? (
             tradeEvents.length === 0 ? (
-              <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+              <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
             ) : (
               tradeEvents.map((item) => (
-                <div key={`trade-${item.id}`} className="rounded-[24px] bg-white/[0.02] px-5 py-4 transition-colors hover:bg-white/[0.04]">
+                <div key={`trade-${item.id}`} className="theme-panel-subtle rounded-[24px] px-5 py-4 transition-colors hover:bg-[var(--overlay-hover)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatSideLabel(item.side, language)}</span></div>
-                      <div className="mt-1 text-xs text-white/40">{item.tradeDate} · {item.quantity} @ {item.price}</div>
+                      <div className="text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span></div>
+                      <div className="mt-1 text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
                     </div>
-                    <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })}>
+                    <Button type="button" variant="ghost" className={PORTFOLIO_GHOST_BUTTON_CLASS} onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })}>
                       {copy.deleteConfirm}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
@@ -1066,18 +1074,18 @@ const PortfolioPage: React.FC = () => {
 
           {eventType === 'cash' ? (
             cashEvents.length === 0 ? (
-              <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+              <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
             ) : (
               cashEvents.map((item) => (
-                <div key={`cash-${item.id}`} className="rounded-[24px] bg-white/[0.02] px-5 py-4 transition-colors hover:bg-white/[0.04]">
+                <div key={`cash-${item.id}`} className="theme-panel-subtle rounded-[24px] px-5 py-4 transition-colors hover:bg-[var(--overlay-hover)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-white">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-white/40">{item.currency}</span></div>
-                      <div className="mt-1 text-xs text-white/40">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
+                      <div className="text-foreground">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-muted-text">{item.currency}</span></div>
+                      <div className="mt-1 text-xs text-muted-text">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
                     </div>
-                    <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })}>
+                    <Button type="button" variant="ghost" className={PORTFOLIO_GHOST_BUTTON_CLASS} onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })}>
                       {copy.deleteConfirm}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
@@ -1086,22 +1094,22 @@ const PortfolioPage: React.FC = () => {
 
           {eventType === 'corporate' ? (
             corporateEvents.length === 0 ? (
-              <div className="rounded-[24px] bg-white/[0.02] px-5 py-6 text-sm text-white/45">{copy.emptyEventsBody}</div>
+              <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
             ) : (
               corporateEvents.map((item) => (
-                <div key={`corporate-${item.id}`} className="rounded-[24px] bg-white/[0.02] px-5 py-4 transition-colors hover:bg-white/[0.04]">
+                <div key={`corporate-${item.id}`} className="theme-panel-subtle rounded-[24px] px-5 py-4 transition-colors hover:bg-[var(--overlay-hover)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-white">{item.symbol} <span className="text-xs text-white/40">{formatCorporateActionLabel(item.actionType, language)}</span></div>
-                      <div className="mt-1 text-xs text-white/40">
+                      <div className="text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatCorporateActionLabel(item.actionType, language)}</span></div>
+                      <div className="mt-1 text-xs text-muted-text">
                         {item.effectiveDate}
                         {item.cashDividendPerShare != null ? ` · ${copy.dividendPerShare} ${item.cashDividendPerShare}` : ''}
                         {item.splitRatio != null ? ` · ${copy.splitRatio} ${item.splitRatio}` : ''}
                       </div>
                     </div>
-                    <button type="button" className="text-xs text-white/45 hover:text-rose-300" onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })}>
+                    <Button type="button" variant="ghost" className={PORTFOLIO_GHOST_BUTTON_CLASS} onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })}>
                       {copy.deleteConfirm}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
@@ -1132,47 +1140,46 @@ const PortfolioPage: React.FC = () => {
         className="workspace-width-wide mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-col overflow-hidden bg-transparent px-4 py-2 text-gray-300 md:px-8 xl:px-12 2xl:max-w-full"
       >
         <section className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-12 xl:grid-cols-10">
-          <section className="lg:col-span-4 xl:col-span-2 h-full flex flex-col bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] overflow-hidden">
+          <section className="theme-panel-glass lg:col-span-4 xl:col-span-2 h-full flex flex-col rounded-[18px] overflow-hidden">
             <div className="shrink-0 px-4 pt-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-sm text-white/40 uppercase tracking-widest">Trade Station</h2>
+                  <h2 className="text-sm text-muted-text uppercase tracking-widest">Trade Station</h2>
                 </div>
-                <button
+                <Button
                   type="button"
-                  className="shrink-0 whitespace-nowrap rounded-md border border-white/5 bg-white/[0.01] px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.04]"
+                  variant="secondary"
+                  className="shrink-0 whitespace-nowrap rounded-md border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/72 px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-[var(--overlay-hover)]"
                   onClick={() => void handleRefreshFx()}
                   disabled={!hasAccounts || isLoading || fxRefreshing}
                 >
                   {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
-                </button>
+                </Button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2.5">
-                <select
+                <Select
                   value={String(selectedAccount)}
-                  onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
+                  options={[
+                    { value: 'all', label: copy.allAccounts },
+                    ...accounts.map((account) => ({ value: String(account.id), label: account.name })),
+                  ]}
                   className={PORTFOLIO_SELECT_CLASS}
-                >
-                  <option value="all">{copy.allAccounts}</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-                <select
+                />
+                <Select
                   value={costMethod}
-                  onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
+                  onChange={(value) => setCostMethod(value as PortfolioCostMethod)}
+                  options={[
+                    { value: 'fifo', label: copy.costFifo },
+                    { value: 'avg', label: copy.costAvg },
+                  ]}
                   className={PORTFOLIO_SELECT_CLASS}
-                >
-                  <option value="fifo">{copy.costFifo}</option>
-                  <option value="avg">{copy.costAvg}</option>
-                </select>
+                />
               </div>
-              <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-white/5 py-2">
-                <div className="flex justify-between text-xs"><span className="text-white/40">{copy.totalCash}</span><span className="text-white">{formatMoney(totalCash, snapshotCurrency)}</span></div>
-                <div className="flex justify-between text-xs"><span className="text-white/40">{copy.totalMarketValue}</span><span className="text-white">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
-                <div className="flex justify-between text-xs"><span className="text-white/40">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
+              <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-[var(--theme-panel-subtle-border)] py-2">
+                <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="text-foreground">{formatMoney(totalCash, snapshotCurrency)}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="text-foreground">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
               {fxRefreshFeedback ? (
                 <p className={`mt-2 text-xs ${
@@ -1180,17 +1187,27 @@ const PortfolioPage: React.FC = () => {
                     ? 'text-emerald-300'
                     : fxRefreshFeedback.tone === 'warning'
                       ? 'text-amber-200'
-                      : 'text-white/55'
+                      : 'text-secondary-text'
                 }`}>
                   {fxRefreshFeedback.text}
                 </p>
               ) : null}
             </div>
 
-            <div className="shrink-0 flex gap-3 border-b border-white/5 px-4 pt-1">
-              <button type="button" onClick={() => setLeftTab('trade')} className={`pb-2 text-xs uppercase tracking-[0.14em] ${leftTab === 'trade' ? 'text-white border-b border-white/70' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Trade' : '交易'}</button>
-              <button type="button" onClick={() => setLeftTab('account')} className={`pb-2 text-xs uppercase tracking-[0.14em] ${leftTab === 'account' ? 'text-white border-b border-white/70' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Account' : '账户'}</button>
-              <button type="button" onClick={() => setLeftTab('sync')} className={`pb-2 text-xs uppercase tracking-[0.14em] ${leftTab === 'sync' ? 'text-white border-b border-white/70' : 'text-white/40 hover:text-white/70'}`}>{language === 'en' ? 'Sync' : '同步'}</button>
+            <div className="shrink-0 border-b border-[var(--theme-panel-subtle-border)] px-4 pt-1">
+              <SegmentedControl
+                value={leftTab}
+                onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync')}
+                options={[
+                  { value: 'trade', label: language === 'en' ? 'Trade' : '交易' },
+                  { value: 'account', label: language === 'en' ? 'Account' : '账户' },
+                  { value: 'sync', label: language === 'en' ? 'Sync' : '同步' },
+                ]}
+                listClassName="w-full justify-start rounded-none border-0 bg-transparent p-0"
+                buttonClassName="flex-none rounded-none border-b-2 border-transparent px-0 py-2 text-xs uppercase tracking-[0.14em]"
+                activeButtonClassName="border-b-[var(--border-strong)] bg-transparent shadow-none"
+                inactiveButtonClassName="bg-transparent shadow-none"
+              />
             </div>
 
             <div
@@ -1201,112 +1218,88 @@ const PortfolioPage: React.FC = () => {
                 <div className="flex flex-col gap-2">
                   <div
                     data-testid="portfolio-trade-type-switcher"
-                    className="mb-3 flex shrink-0 rounded-lg bg-white/[0.04] p-1"
+                    className="mb-3"
                   >
-                    <button
-                      type="button"
-                      onClick={() => setTradeType('stock')}
-                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'stock' ? 'bg-white/[0.08] text-white' : 'text-white/40'}`}
-                    >
-                      {language === 'en' ? 'Stock Trade' : '股票买卖'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTradeType('fund')}
-                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'fund' ? 'bg-white/[0.08] text-white' : 'text-white/40'}`}
-                    >
-                      {language === 'en' ? 'Cash Transfer' : '资金划转'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTradeType('corporate')}
-                      className={`flex-1 rounded-md py-1.5 text-xs ${tradeType === 'corporate' ? 'bg-white/[0.08] text-white' : 'text-white/40'}`}
-                    >
-                      {language === 'en' ? 'Corporate Action' : '公司行为'}
-                    </button>
+                    <SegmentedControl
+                      value={tradeType}
+                      onChange={(value) => setTradeType(value as TradeFormType)}
+                      options={[
+                        { value: 'stock', label: language === 'en' ? 'Stock Trade' : '股票买卖' },
+                        { value: 'fund', label: language === 'en' ? 'Cash Transfer' : '资金划转' },
+                        { value: 'corporate', label: language === 'en' ? 'Corporate Action' : '公司行为' },
+                      ]}
+                      listClassName="w-full"
+                      buttonClassName="text-xs"
+                    />
                   </div>
                   {tradeType === 'stock' ? (
                     <div className="space-y-1.5">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualTrade}</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualTrade}</p>
                       <form className="space-y-1.5" onSubmit={handleTradeSubmit}>
                         <div className="grid grid-cols-2 gap-3">
-                          <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+                          <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
-                            <option value="buy">{copy.buy}</option>
-                            <option value="sell">{copy.sell}</option>
-                          </select>
-                          <input className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.tradeUidPlaceholder} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                          <Select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.tradeUidPlaceholder} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                         </div>
-                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitTrade}</button>
+                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitTrade}</Button>
                       </form>
                     </div>
                   ) : null}
 
                   {tradeType === 'fund' ? (
-                    <div className="space-y-1.5 rounded-[18px] border border-white/5 bg-white/[0.01] p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCash}</p>
+                    <SectionShell className="rounded-[18px] p-3" contentClassName="space-y-1.5">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCash}</p>
                       <form className="space-y-1.5" onSubmit={handleCashSubmit}>
                         <div className="grid grid-cols-2 gap-3">
-                          <input className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
-                          <select className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
-                            <option value="in">{copy.cashIn}</option>
-                            <option value="out">{copy.cashOut}</option>
-                          </select>
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+                          <Select className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
                         </div>
                         <div data-testid="portfolio-cash-amount-currency-grid" className="grid grid-cols-2 gap-3">
-                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder={copy.amount} value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
-                          <select
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder={copy.amount} value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+                          <Select
                             data-testid="portfolio-cash-currency-select"
                             className={PORTFOLIO_SELECT_CLASS}
                             value={cashForm.currency}
-                            onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))}
-                          >
-                            <option value="">{copy.currencyOptional(snapshotCurrency)}</option>
-                            {CASH_CURRENCY_OPTIONS.map((currency) => (
-                              <option key={currency} value={currency}>
-                                {currency}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(value) => setCashForm((prev) => ({ ...prev, currency: value }))}
+                            options={CASH_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+                            placeholder={copy.currencyOptional(snapshotCurrency)}
+                          />
                         </div>
-                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCash}</button>
+                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCash}</Button>
                       </form>
-                    </div>
+                    </SectionShell>
                   ) : null}
 
                   {tradeType === 'corporate' ? (
-                    <div className="space-y-1.5 rounded-[18px] border border-white/5 bg-white/[0.01] p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.manualCorporate}</p>
+                    <SectionShell className="rounded-[18px] p-3" contentClassName="space-y-1.5">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCorporate}</p>
                       <form className="space-y-1.5" onSubmit={handleCorporateSubmit}>
                         <div className="grid grid-cols-2 gap-3">
-                          <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.stockCode} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <input className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                          <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.stockCode} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
                         </div>
-                        <select className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
-                          <option value="cash_dividend">{copy.cashDividend}</option>
-                          <option value="split_adjustment">{copy.splitAdjustment}</option>
-                        </select>
+                        <Select className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
                         <div className="grid grid-cols-2 gap-3">
-                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.dividendPerShare} value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
-                          <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.splitRatio} value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.dividendPerShare} value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
+                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.splitRatio} value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
                         </div>
-                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCorporate}</button>
+                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
                       </form>
-                    </div>
+                    </SectionShell>
                   ) : null}
                 </div>
               ) : null}
@@ -1314,10 +1307,11 @@ const PortfolioPage: React.FC = () => {
               {leftTab === 'account' ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.createAccountTitle}</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.createAccountTitle}</p>
                     <div className="flex gap-2">
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
                         className={PORTFOLIO_BUTTON_CLASS}
                         onClick={() => {
                           setShowCreateAccount((prev) => !prev);
@@ -1326,39 +1320,34 @@ const PortfolioPage: React.FC = () => {
                         }}
                       >
                         {showCreateAccount ? copy.collapseCreate : copy.createAccount}
-                      </button>
-                      <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
+                      </Button>
+                      <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
                         {isLoading ? copy.refreshingData : copy.refreshData}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   <div className="space-y-2">
                     {accounts.map((account) => (
-                      <div key={account.id} className="rounded-[16px] border border-white/5 bg-white/[0.01] px-4 py-3 text-sm text-white/75">
+                      <div key={account.id} className="theme-panel-subtle rounded-[16px] px-4 py-3 text-sm text-secondary-text">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-white">{account.name}</span>
-                          <span className="text-white/40">#{account.id}</span>
+                          <span className="text-foreground">{account.name}</span>
+                          <span className="text-muted-text">#{account.id}</span>
                         </div>
-                        <div className="mt-1 text-xs text-white/40">{formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} · {account.broker || '--'}</div>
+                        <div className="mt-1 text-xs text-muted-text">{formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} · {account.broker || '--'}</div>
                       </div>
                     ))}
                   </div>
                   {(showCreateAccount || !hasAccounts) ? (
-                    <form className="space-y-3 rounded-[18px] border border-white/5 bg-white/[0.01] p-4" onSubmit={handleCreateAccount}>
+                    <form className="theme-panel-subtle space-y-3 rounded-[18px] p-4" onSubmit={handleCreateAccount}>
                       {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
                       {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
-                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
+                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
                       <div className="grid grid-cols-2 gap-4">
-                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
-                        <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
+                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
+                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
                       </div>
-                      <select className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'global' }))}>
-                        <option value="cn">{copy.marketCn}</option>
-                        <option value="hk">{copy.marketHk}</option>
-                        <option value="us">{copy.marketUs}</option>
-                        <option value="global">{copy.marketGlobal}</option>
-                      </select>
-                      <button type="submit" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</button>
+                      <Select className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(value) => setAccountForm((prev) => ({ ...prev, market: value as 'cn' | 'hk' | 'us' | 'global' }))} options={[{ value: 'cn', label: copy.marketCn }, { value: 'hk', label: copy.marketHk }, { value: 'us', label: copy.marketUs }, { value: 'global', label: copy.marketGlobal }]} />
+                      <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</Button>
                     </form>
                   ) : null}
                 </div>
@@ -1367,53 +1356,46 @@ const PortfolioPage: React.FC = () => {
               {leftTab === 'sync' ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/35">{copy.dataSyncTitle}</p>
-                    <button type="button" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.dataSyncTitle}</p>
+                    <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
                       {isLoading ? copy.refreshingData : copy.refreshData}
-                    </button>
+                    </Button>
                   </div>
                   <div className="text-xs text-secondary-text space-y-1">
                     <p>{copy.currentImportAccount}</p>
                     <p>{writableAccount ? `${writableAccount.name} (#${writableAccount.id})` : copy.brokerFallbackEmpty}</p>
                     <p>{selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
                   </div>
-                  <select className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
-                    {brokers.map((broker) => (
-                      <option key={broker.broker} value={broker.broker}>{formatBrokerLabel(broker.broker, broker.displayName, language)}</option>
-                    ))}
-                  </select>
+                  <Select className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={setSelectedBroker} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} />
                   {selectedBroker === 'ibkr' ? (
-                    <div className="space-y-3 rounded-[18px] border border-white/5 bg-white/[0.01] p-4">
+                    <SectionShell className="rounded-[18px] p-4" contentClassName="space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="space-y-1 text-xs text-secondary-text">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{copy.ibkrReadOnlyTitle}</p>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{copy.ibkrReadOnlyTitle}</p>
                           <p>{copy.ibkrReadOnlyBody}</p>
                         </div>
-                        <Badge variant="info">{copy.readOnlyBadge}</Badge>
+                        <PillBadge variant="info">{copy.readOnlyBadge}</PillBadge>
                       </div>
-                      {ibkrConnection ? <p className="text-sm text-white">{ibkrConnection.connectionName}</p> : null}
-                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
-                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
-                      <input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
-                      <label className="flex items-center gap-2 text-xs text-secondary-text">
-                        <input type="checkbox" checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySsl(e.target.checked)} />
-                        <span>{copy.verifyIbkrSsl}</span>
-                      </label>
-                      <button type="button" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
+                      {ibkrConnection ? <p className="text-sm text-foreground">{ibkrConnection.connectionName}</p> : null}
+                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
+                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
+                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
+                      <Checkbox checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySsl(e.target.checked)} label={copy.verifyIbkrSsl} containerClassName="text-xs text-secondary-text" />
+                      <Button type="button" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
                         {ibkrSyncing ? copy.syncing : copy.syncIbkr}
-                      </button>
+                      </Button>
                       {ibkrSyncResult ? (
-                        <div className="rounded-[16px] border border-white/5 bg-white/[0.01] px-4 py-3 text-xs text-secondary-text space-y-1">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{copy.syncResult}</p>
-                          <div>{copy.positionsCountLabel} <span className="text-white">{ibkrSyncResult.positionCount ?? '--'}</span></div>
-                          <div>{copy.cashCurrenciesLabel} <span className="text-white">{ibkrSyncResult.cashBalanceCount ?? 0}</span></div>
-                          <div>{copy.syncedAt}: <span className="text-white">{ibkrSyncResult.syncedAt ? ibkrSyncResult.syncedAt.replace('T', ' ') : '--'}</span></div>
-                          <div>{copy.totalEquity} <span className="text-white">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span></div>
+                        <div className="theme-panel-subtle rounded-[16px] px-4 py-3 text-xs text-secondary-text space-y-1">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{copy.syncResult}</p>
+                          <div>{copy.positionsCountLabel} <span className="text-foreground">{ibkrSyncResult.positionCount ?? '--'}</span></div>
+                          <div>{copy.cashCurrenciesLabel} <span className="text-foreground">{ibkrSyncResult.cashBalanceCount ?? 0}</span></div>
+                          <div>{copy.syncedAt}: <span className="text-foreground">{ibkrSyncResult.syncedAt ? ibkrSyncResult.syncedAt.replace('T', ' ') : '--'}</span></div>
+                          <div>{copy.totalEquity} <span className="text-foreground">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span></div>
                         </div>
                       ) : null}
-                    </div>
+                    </SectionShell>
                   ) : (
-                    <div className="rounded-[18px] border border-white/5 bg-white/[0.01] px-4 py-4 text-xs text-secondary-text">
+                    <div className="theme-panel-subtle rounded-[18px] px-4 py-4 text-xs text-secondary-text">
                       {copy.brokerImportHint}
                     </div>
                   )}
@@ -1425,13 +1407,13 @@ const PortfolioPage: React.FC = () => {
           <section className="lg:col-span-8 xl:col-span-5 h-full flex flex-col gap-4 min-h-0">
             <div
               data-testid="portfolio-total-assets-card"
-              className="shrink-0 bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] p-4 flex justify-between items-end gap-3"
+              className="theme-panel-glass shrink-0 rounded-[18px] p-4 flex justify-between items-end gap-3"
             >
               <div className="min-w-0">
-                <h1 className="text-xs text-white/40 uppercase tracking-widest mb-2">{totalAssetsTitle}</h1>
+                <h1 className="text-xs text-muted-text uppercase tracking-widest mb-2">{totalAssetsTitle}</h1>
                 <div
                   data-testid="portfolio-total-assets-value"
-                  className="text-[3rem] md:text-[4rem] font-bold text-white leading-none tracking-tight tabular-nums"
+                  className="text-[3rem] md:text-[4rem] font-bold text-foreground leading-none tracking-tight tabular-nums"
                   style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
                 >
                   {formatMoney(totalEquity, snapshotCurrency)}
@@ -1449,40 +1431,41 @@ const PortfolioPage: React.FC = () => {
 
             <div
               data-testid="portfolio-current-holdings-panel"
-              className="flex-1 min-h-0 flex flex-col bg-white/[0.01] backdrop-blur-2xl border border-white/5 rounded-[18px] overflow-hidden"
+              className="theme-panel-glass flex-1 min-h-0 flex flex-col rounded-[18px] overflow-hidden"
             >
-              <div className="shrink-0 p-4 border-b border-white/5 flex justify-between items-center gap-3">
-                <h2 className="min-w-0 text-xs text-white/40 uppercase tracking-widest">
+              <div className="shrink-0 p-4 border-b border-[var(--theme-panel-subtle-border)] flex justify-between items-center gap-3">
+                <h2 className="min-w-0 text-xs text-muted-text uppercase tracking-widest">
                   Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
                 </h2>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={() => setIsHistoryDrawerOpen(true)}
                   data-testid="portfolio-history-drawer-trigger"
-                  className="shrink-0 rounded-full border border-white/5 px-3 py-1.5 text-xs text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white xl:hidden"
+                  className="shrink-0 rounded-full border border-[var(--theme-panel-subtle-border)] px-3 py-1.5 text-xs text-secondary-text hover:bg-[var(--overlay-hover)] hover:text-foreground xl:hidden"
                 >
                   {historyDrawerLabel}
-                </button>
+                </Button>
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4">
                 <div className="flex flex-col gap-2">
                   {positionRows.length === 0 ? (
-                    <div className="px-6 py-5 rounded-3xl bg-white/[0.02] text-sm text-white/45">{copy.noPositions}</div>
+                    <div className="theme-panel-subtle px-6 py-5 rounded-3xl text-sm text-secondary-text">{copy.noPositions}</div>
                   ) : (
                     positionRows.map((row) => (
                       <div
                         key={`${row.accountId}-${row.symbol}-${row.market}`}
-                        className="flex items-center justify-between gap-4 px-4 py-3 rounded-[18px] bg-white/[0.01] hover:bg-white/[0.03] transition-colors"
+                        className="theme-panel-subtle flex items-center justify-between gap-4 px-4 py-3 rounded-[18px] hover:bg-[var(--overlay-hover)] transition-colors"
                       >
                         <div className="min-w-0">
-                          <div className="text-lg text-white font-medium truncate">{row.symbol}</div>
-                          <div className="text-xs text-white/40">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
+                          <div className="text-lg text-foreground font-medium truncate">{row.symbol}</div>
+                          <div className="text-xs text-muted-text">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
                         </div>
                         <div className="flex items-center gap-6">
                           <div className="text-right">
-                            <div className="text-[11px] uppercase tracking-[0.16em] text-white/30">{copy.positionMarketValue}</div>
-                            <div className="text-white tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{copy.positionMarketValue}</div>
+                            <div className="text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
                           </div>
                           <div className={`text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
@@ -1498,7 +1481,7 @@ const PortfolioPage: React.FC = () => {
 
           {isXlViewport ? (
             <section className="hidden xl:flex xl:col-span-3 xl:min-h-0">
-            <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[18px] border border-white/5 bg-white/[0.01] backdrop-blur-2xl">
+            <div className="theme-panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[18px]">
               {historyPanelContent}
             </div>
             </section>
@@ -1521,7 +1504,7 @@ const PortfolioPage: React.FC = () => {
             aria-label={historyDrawerTitle}
             className="absolute inset-y-0 right-0 flex w-full justify-end"
           >
-            <div className="flex h-full w-full max-w-md flex-col border-l border-white/5 shadow-2xl">
+            <div className="flex h-full w-full max-w-md flex-col border-l border-[var(--theme-panel-subtle-border)] shadow-2xl">
               {historyPanelContent}
             </div>
           </aside>

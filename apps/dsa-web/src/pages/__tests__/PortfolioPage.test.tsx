@@ -336,8 +336,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
     const refreshFxButton = screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') });
     expect(refreshFxButton).toBeInTheDocument();
+    expect(refreshFxButton).toHaveAttribute('data-variant', 'secondary');
     expect(refreshFxButton.className).toContain('shrink-0');
-    expect(refreshFxButton.className).toContain('whitespace-nowrap');
     expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '交易' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '账户' })).toBeInTheDocument();
@@ -1109,9 +1109,10 @@ describe('PortfolioPage FX refresh', () => {
 
     const cashCurrencySelect = screen.getByTestId('portfolio-cash-currency-select');
     expect(cashCurrencySelect.tagName).toBe('SELECT');
-    expect(cashCurrencySelect.className).toContain('py-2');
-    expect(cashCurrencySelect.className).toContain('h-9');
-    expect(cashCurrencySelect.className).toContain('text-sm');
+    expect(cashCurrencySelect.className).toContain('select-surface');
+
+    const amountInput = screen.getByPlaceholderText(translate('zh', 'portfolio.amount'));
+    expect(amountInput.className).toContain('input-surface');
 
     fireEvent.click(screen.getByRole('button', { name: '公司行为' }));
     expect(screen.getByText(translate('zh', 'portfolio.manualCorporate'))).toBeInTheDocument();

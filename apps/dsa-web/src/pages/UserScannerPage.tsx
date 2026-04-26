@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
-import { ApiErrorAlert, Badge, Button, Drawer, Pagination } from '../components/common';
+import { ApiErrorAlert, Button, Drawer, Pagination, PillBadge, SectionShell, SegmentedControl } from '../components/common';
 import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
@@ -45,21 +45,13 @@ function PillTagGroup({
           ))}
         </select>
       </label>
-      <div className="flex flex-wrap gap-2">
-        {options.map((option) => {
-          const active = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              className={`rounded-full border border-white/5 px-3 py-1.5 text-sm transition-colors ${active ? 'bg-white/10 text-white shadow-[0_0_20px_rgba(255,255,255,0.08)]' : 'bg-transparent text-white/40 hover:bg-white/[0.03] hover:text-white/70'}`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedControl
+        value={value}
+        options={options}
+        onChange={onChange}
+        listClassName="w-full justify-start bg-[var(--surface-2)]/72"
+        buttonClassName="grow-0 basis-auto"
+      />
     </div>
   );
 }
@@ -252,27 +244,28 @@ const UserScannerPage: React.FC = () => {
       <div
         data-testid="user-scanner-bento-page"
         data-bento-surface="true"
-        className="bento-surface-root h-[calc(100vh-80px)] overflow-hidden bg-[#030303] text-white"
+        className="bento-surface-root h-[calc(100vh-80px)] overflow-hidden bg-transparent text-foreground"
       >
         <div className="workspace-width-wide w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12 pt-0 pb-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-transparent">
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
-              <h1 className="text-[2rem] tracking-[-0.04em] text-white">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
+              <h1 className="text-[2rem] tracking-[-0.04em] text-foreground">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
             </div>
-            <button
+            <Button
               type="button"
+              variant="secondary"
               className={CARD_BUTTON_CLASS}
               data-testid="user-scanner-bento-drawer-trigger"
               onClick={() => setIsRationaleDrawerOpen(true)}
             >
               <PanelRightOpen className="h-4 w-4" />
               <span>{language === 'en' ? 'Run history' : '历史运行记录'}</span>
-            </button>
+            </Button>
           </header>
 
           <section className="shrink-0 grid grid-cols-12 gap-5">
             <div className="col-span-8 flex flex-col gap-3">
-              <div className="bg-white/[0.02] rounded-[32px] p-4 border border-white/5 backdrop-blur-2xl">
+              <SectionShell className="rounded-[32px] p-4">
                 <div className="space-y-2">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
@@ -286,13 +279,13 @@ const UserScannerPage: React.FC = () => {
                     <Button type="button" onClick={() => void handleRun()} isLoading={isRunning} loadingText={t('scanner.running')}>{t('scanner.run')}</Button>
                   </div>
                 </div>
-              </div>
+              </SectionShell>
 
             </div>
 
             <div
               data-testid="user-scanner-bento-hero"
-              className="col-span-4 bg-white/[0.02] backdrop-blur-3xl border border-white/5 rounded-[40px] p-5 flex flex-col items-center justify-center relative overflow-hidden group"
+              className="theme-panel-glass col-span-4 rounded-[40px] p-5 flex flex-col items-center justify-center relative overflow-hidden group"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.14),transparent_68%)] opacity-80" aria-hidden="true" />
               <p className="relative z-10 text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.shortlistLabel')}</p>
@@ -315,17 +308,17 @@ const UserScannerPage: React.FC = () => {
             {watchlistCards.length ? (
               <div className="grid grid-cols-1 gap-2 content-start overflow-y-auto no-scrollbar md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
                 {watchlistCards.map((candidate) => (
-                  <div key={`watchlist-${candidate.symbol}`} className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-white/[0.05] transition cursor-pointer">
+                  <div key={`watchlist-${candidate.symbol}`} className="theme-panel-subtle rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-[var(--overlay-hover)] transition cursor-pointer">
                     <div>
-                      <p className="text-sm text-white">{candidate.name}</p>
-                      <p className="text-white/50 text-[11px] mt-0.5">{candidate.symbol}</p>
+                      <p className="text-sm text-foreground">{candidate.name}</p>
+                      <p className="text-muted-text text-[11px] mt-0.5">{candidate.symbol}</p>
                     </div>
                     <span className="text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{candidate.changeText}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">
+              <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm text-secondary-text">
                 {pageError?.message || selectedMarketCopy.currentRunFallback}
               </div>
             )}
@@ -340,23 +333,29 @@ const UserScannerPage: React.FC = () => {
         title={language === 'en' ? 'Run history and ownership' : '历史记录与页面边界'}
         width="max-w-4xl"
       >
-        <div data-testid="user-scanner-bento-drawer" className="ml-auto h-full w-full max-w-4xl rounded-l-[40px] border border-white/5 bg-white/[0.02] p-6 text-white backdrop-blur-3xl sm:p-8">
+        <div data-testid="user-scanner-bento-drawer" className="theme-panel-glass ml-auto h-full w-full max-w-4xl rounded-l-[40px] p-6 text-foreground sm:p-8">
           <div className="grid gap-6">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'Run history' : '运行历史'}</p>
-              <h2 className="mt-1 text-xl text-white">{language === 'en' ? 'Recent scanner runs' : '近期扫描记录'}</h2>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Run history' : '运行历史'}</p>
+              <h2 className="mt-1 text-xl text-foreground">{language === 'en' ? 'Recent scanner runs' : '近期扫描记录'}</h2>
             </div>
 
             {historyError ? <ApiErrorAlert error={historyError} /> : null}
-            {isLoadingHistory ? <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-secondary-text backdrop-blur-2xl">{t('scanner.loadingHistory')}</div> : null}
+            {isLoadingHistory ? <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm text-secondary-text">{t('scanner.loadingHistory')}</div> : null}
             {!isLoadingHistory && historyItems.length ? (
               <div className="space-y-3">
                 {historyItems.map((item) => (
-                  <button key={item.id} type="button" onClick={() => void loadRun(item.id)} className={`w-full rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-3 text-left transition-colors backdrop-blur-2xl ${item.id === selectedRunId ? 'border-white/10 bg-white/[0.05]' : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.035]'}`}>
+                  <Button
+                    key={item.id}
+                    type="button"
+                    variant={item.id === selectedRunId ? 'secondary' : 'ghost'}
+                    onClick={() => void loadRun(item.id)}
+                    className={`theme-panel-subtle h-auto w-full rounded-[28px] px-4 py-3 text-left ${item.id === selectedRunId ? 'border-[var(--border-strong)] bg-[var(--surface-2)]/88' : 'hover:bg-[var(--overlay-hover)]'}`}
+                  >
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</Badge>
-                      <Badge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
-                      {item.watchlistDate ? <Badge variant="history">{formatDateOnly(item.watchlistDate, language)}</Badge> : null}
+                      <PillBadge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</PillBadge>
+                      <PillBadge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</PillBadge>
+                      {item.watchlistDate ? <PillBadge variant="history">{formatDateOnly(item.watchlistDate, language)}</PillBadge> : null}
                     </div>
                     <p className="mt-3 text-sm font-semibold text-foreground">{item.headline || (item.market === 'us' ? t('scanner.currentRunFallbackUs') : item.market === 'hk' ? t('scanner.currentRunFallbackHk') : t('scanner.currentRunFallbackCn'))}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
@@ -364,30 +363,30 @@ const UserScannerPage: React.FC = () => {
                       <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
                       <span>{formatTimestamp(item.runAt, language)}</span>
                     </div>
-                  </button>
+                  </Button>
                 ))}
               </div>
             ) : null}
-            {!isLoadingHistory && !historyItems.length ? <div className="rounded-[28px] border border-white/5 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-secondary-text backdrop-blur-2xl">{language === 'en' ? 'No personal scanner history yet.' : '你还没有个人扫描历史。'}</div> : null}
+            {!isLoadingHistory && !historyItems.length ? <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm leading-6 text-secondary-text">{language === 'en' ? 'No personal scanner history yet.' : '你还没有个人扫描历史。'}</div> : null}
             {totalHistoryPages > 1 ? <div className="pt-2"><Pagination currentPage={historyPage} totalPages={totalHistoryPages} onPageChange={(page) => void fetchHistory(page)} /></div> : null}
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'User scope' : '用户范围'}</p>
-                <p className="mt-3 text-sm leading-6 text-white/70">
+              <SectionShell className="rounded-[24px] px-4 py-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'User scope' : '用户范围'}</p>
+                <p className="mt-3 text-sm leading-6 text-secondary-text">
                   {language === 'en'
                     ? 'This surface keeps manual runs, shortlist review, and downstream actions inside the signed-in user account.'
                     : '这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。'}
                 </p>
-              </div>
-              <div className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-2xl">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">{language === 'en' ? 'Admin boundary' : '管理员边界'}</p>
-                <p className="mt-3 text-sm leading-6 text-white/70">
+              </SectionShell>
+              <SectionShell className="rounded-[24px] px-4 py-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Admin boundary' : '管理员边界'}</p>
+                <p className="mt-3 text-sm leading-6 text-secondary-text">
                   {language === 'en'
                     ? 'Run status, system watchlists, schedules, and channel settings stay in admin-only pages.'
                     : '运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。'}
                 </p>
-              </div>
+              </SectionShell>
             </div>
           </div>
         </div>

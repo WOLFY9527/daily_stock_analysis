@@ -186,6 +186,8 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('guest-home-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-bento-hero-unlock-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('guest-home-preview-card')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成简版判断' })).toHaveAttribute('data-variant', 'primary');
+    expect(screen.getByTestId('guest-home-bento-drawer-trigger')).toHaveAttribute('data-variant', 'secondary');
     expect(screen.getByText('完整分析报告')).toBeInTheDocument();
     expect(screen.getByText('后续交流')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '创建账户' })).toHaveAttribute('href', '/zh/login?mode=create&redirect=%2Fzh');
