@@ -16,17 +16,74 @@ import {
 
 const HISTORY_PAGE_SIZE = 8;
 
-
 type PillOption = { value: string; label: string };
 
-const FALLBACK_WATCHLIST_CARDS = [
-  { symbol: 'NVDA', name: 'NVIDIA', changeText: '+4.8%' },
-  { symbol: 'TSLA', name: 'Tesla', changeText: '+3.1%' },
-  { symbol: 'META', name: 'Meta', changeText: '+2.7%' },
-  { symbol: 'AAPL', name: 'Apple', changeText: '+1.9%' },
-  { symbol: 'MSFT', name: 'Microsoft', changeText: '+1.5%' },
-  { symbol: 'AMD', name: 'AMD', changeText: '+5.2%' },
-] as const;
+function normalizeTacticalLabel(label?: string | null): string {
+  return (label || '').trim().toLowerCase();
+}
+
+function findCandidateValue(
+  candidate: ScannerRunDetail['shortlist'][number],
+  keywords: string[],
+): string | null {
+  const entries = [...candidate.keyMetrics, ...candidate.watchContext, ...candidate.featureSignals];
+  const match = entries.find((entry) => keywords.some((keyword) => normalizeTacticalLabel(entry.label).includes(keyword)));
+  return match?.value?.trim() || null;
+}
+
+function parseFirstNumericValue(value?: string | null): number | null {
+  if (!value) return null;
+  const match = value.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number.parseFloat(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number]): string[] {
+  const tags = [
+    candidate.qualityHint,
+    ...candidate.featureSignals.map((signal) => signal.value || signal.label),
+    ...candidate.boards,
+  ]
+    .map((tag) => tag?.trim())
+    .filter((tag): tag is string => Boolean(tag));
+  return Array.from(new Set(tags)).slice(0, 2);
+}
+
+function formatEntryZone(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
+  const explicitEntry = findCandidateValue(candidate, ['建仓', '入场', 'entry', 'buy', 'support']);
+  if (explicitEntry) return explicitEntry;
+  const latestMetric = candidate.keyMetrics.find((metric) => ['最新价', '现价', 'close', 'price', 'last'].some((keyword) => normalizeTacticalLabel(metric.label).includes(keyword)));
+  const latestValue = parseFirstNumericValue(latestMetric?.value);
+  if (latestValue != null) {
+    const lower = latestValue * 0.992;
+    const upper = latestValue * 1.006;
+    return `${lower.toFixed(2)} - ${upper.toFixed(2)}`;
+  }
+  return language === 'en' ? 'Wait for open support' : '等待开盘承接';
+}
+
+function formatTargetLevel(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
+  const explicitTarget = findCandidateValue(candidate, ['目标', 'target', 'tp', 'resistance']);
+  if (explicitTarget) return explicitTarget;
+  const latestMetric = candidate.keyMetrics.find((metric) => ['最新价', '现价', 'close', 'price', 'last'].some((keyword) => normalizeTacticalLabel(metric.label).includes(keyword)));
+  const latestValue = parseFirstNumericValue(latestMetric?.value);
+  if (latestValue != null) {
+    return (latestValue * 1.04).toFixed(2);
+  }
+  return language === 'en' ? 'Breakout follow-through' : '放量突破后上看';
+}
+
+function formatStopLevel(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
+  const explicitStop = findCandidateValue(candidate, ['止损', 'stop', 'risk', 'invalid']);
+  if (explicitStop) return explicitStop;
+  const latestMetric = candidate.keyMetrics.find((metric) => ['最新价', '现价', 'close', 'price', 'last'].some((keyword) => normalizeTacticalLabel(metric.label).includes(keyword)));
+  const latestValue = parseFirstNumericValue(latestMetric?.value);
+  if (latestValue != null) {
+    return (latestValue * 0.982).toFixed(2);
+  }
+  return candidate.riskNotes[0] || (language === 'en' ? 'Exit on failed support' : '跌破承接位离场');
+}
 
 function PillTagGroup({
   label,
@@ -135,6 +192,9 @@ const UserScannerPage: React.FC = () => {
           : '以你的个人账户执行手动扫描。系统观察名单和调度仍只在管理员页面中可见。',
         runHint: t('scanner.runHintUs'),
         currentRunFallback: t('scanner.currentRunFallbackUs'),
+        emptyState: language === 'en'
+          ? 'No personal US scanner result is available yet.'
+          : '当前还没有可展示的美股个人扫描结果。',
       }
       : market === 'hk'
         ? {
@@ -143,6 +203,9 @@ const UserScannerPage: React.FC = () => {
             : '以你的个人账户执行港股手动扫描。系统观察名单和调度继续保留在仅管理员可见的页面中。',
           runHint: t('scanner.runHintHk'),
           currentRunFallback: t('scanner.currentRunFallbackHk'),
+          emptyState: language === 'en'
+            ? 'No personal Hong Kong scanner result is available yet.'
+            : '当前还没有可展示的港股个人扫描结果。',
         }
       : {
         subtitle: language === 'en'
@@ -150,6 +213,9 @@ const UserScannerPage: React.FC = () => {
           : '生成个人扫描结果，并将候选名单历史限制在你自己的账户范围内。',
         runHint: t('scanner.runHintCn'),
         currentRunFallback: t('scanner.currentRunFallbackCn'),
+        emptyState: language === 'en'
+          ? 'No personal A-share scanner result is available yet.'
+          : '当前还没有可展示的 A 股个人扫描结果。',
       }
   ), [language, market, t]);
 
@@ -241,20 +307,22 @@ const UserScannerPage: React.FC = () => {
     [historyTotal],
   );
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
-  const watchlistCards = runDetail
-    ? runDetail.shortlist.slice(0, 8).map((candidate) => ({
-      symbol: candidate.symbol,
-      name: candidate.name,
-      changeText: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
-    }))
-    : pageError
-      ? []
-      : [...FALLBACK_WATCHLIST_CARDS];
   const watchlistTitle = market === 'us'
     ? (language === 'en' ? 'US pre-market candidates' : '美股盘前候选名单')
     : market === 'hk'
       ? (language === 'en' ? 'Hong Kong pre-open candidates' : '港股盘前候选名单')
       : (language === 'en' ? 'A-share pre-open candidates' : 'A股盘前候选名单');
+  const tacticalCards = runDetail?.shortlist.map((candidate) => ({
+    symbol: candidate.symbol,
+    name: candidate.name,
+    tags: formatCandidateTags(candidate),
+    signalValue: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
+    signalLabel: candidate.qualityHint || (language === 'en' ? 'Signal score' : '综合强度'),
+    insight: candidate.aiInterpretation.summary || candidate.reasonSummary || candidate.reasons[0] || (language === 'en' ? 'Awaiting AI insight generation.' : '等待 AI 生成更完整的战术解读。'),
+    entryZone: formatEntryZone(candidate, language),
+    targetLevel: formatTargetLevel(candidate, language),
+    stopLevel: formatStopLevel(candidate, language),
+  })) || [];
 
   return (
     <>
@@ -280,9 +348,11 @@ const UserScannerPage: React.FC = () => {
             </Button>
           </header>
 
-          <section className="shrink-0 grid grid-cols-12 gap-5">
-            <div className="col-span-8 flex flex-col gap-3">
-              <SectionShell className="rounded-[32px] p-4">
+          {pageError ? <ApiErrorAlert error={pageError} /> : null}
+
+          <main className="w-full flex-1 flex min-h-0 flex-col gap-6 min-w-0 mt-6 lg:flex-row">
+            <section className="w-full lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 h-fit">
+              <SectionShell className="rounded-[24px] p-0 bg-transparent shadow-none">
                 <div className="flex flex-col gap-6">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
@@ -296,50 +366,84 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </SectionShell>
 
-            </div>
-
-            <div
-              data-testid="user-scanner-bento-hero"
-              className="theme-panel-glass col-span-4 rounded-[40px] p-5 flex flex-col items-center justify-center relative overflow-hidden group"
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.14),transparent_68%)] opacity-80" aria-hidden="true" />
-              <p className="relative z-10 text-[11px] uppercase tracking-[0.18em] text-secondary-text">{t('scanner.shortlistLabel')}</p>
-              <div
-                data-testid="user-scanner-bento-hero-shortlist-value"
-                className="relative z-10 mt-2 text-[9rem] font-bold text-emerald-400 leading-none drop-shadow-[0_0_60px_rgba(52,211,153,0.8)]"
-              >
-                {shortlistCount}
+              <div className="rounded-[20px] border border-white/5 bg-[#050505] px-4 py-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'Current mode' : '当前模式'}</p>
+                <h2 className="mt-2 text-base font-semibold text-foreground">{watchlistTitle}</h2>
+                <p className="mt-2 text-sm leading-6 text-secondary-text">{selectedMarketCopy.subtitle}</p>
               </div>
-              <p className="relative z-10 mt-2 text-center text-xs leading-4 text-secondary-text">{runDetail?.headline || (language === 'en' ? 'Personal threshold triggered' : '个人阈值触发')}</p>
-            </div>
-          </section>
+            </section>
 
-          {pageError ? <ApiErrorAlert error={pageError} /> : null}
-
-          <section className="flex-1 min-h-0 flex flex-col mt-3 overflow-hidden">
-            <div className="shrink-0">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'My candidates' : '我的候选'}</p>
-              <h2 className="mt-2 text-lg text-foreground">{watchlistTitle}</h2>
-            </div>
-            {watchlistCards.length ? (
-              <div className="mt-4 grid grid-cols-2 gap-4 content-start overflow-y-auto no-scrollbar md:grid-cols-4 xl:grid-cols-6">
-                {watchlistCards.map((candidate) => (
-                  <div key={`watchlist-${candidate.symbol}`} className="theme-panel-subtle rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-[var(--overlay-hover)] transition cursor-pointer">
-                    <div>
-                      <p className="text-sm text-foreground">{candidate.name}</p>
-                      <p className="text-muted-text text-[11px] mt-0.5">{candidate.symbol}</p>
-                    </div>
-                    <span className="text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{candidate.changeText}</span>
-                  </div>
-                ))}
+            <section className="flex-1 min-w-0 min-h-0 flex flex-col gap-4 overflow-hidden">
+              <div data-testid="user-scanner-bento-hero" className="flex justify-between items-center gap-3 pb-2 border-b border-white/5 shrink-0">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-white">{language === 'en' ? 'Scanner results and execution plan' : '扫描结果与执行计划'}</h2>
+                  <p className="mt-1 truncate text-sm text-secondary-text">{runDetail?.headline || selectedMarketCopy.currentRunFallback}</p>
+                </div>
+                <span
+                  data-testid="user-scanner-bento-hero-shortlist-value"
+                  className="shrink-0 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full"
+                  style={{ textShadow: '0 0 30px rgba(52, 211, 153, 0.45)' }}
+                >
+                  {language === 'en' ? `${shortlistCount} symbols hit` : `命中 ${shortlistCount} 只标的`}
+                </span>
               </div>
-            ) : (
-              <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm text-secondary-text">
-                {pageError?.message || selectedMarketCopy.currentRunFallback}
-              </div>
-            )}
-          </section>
 
+              {tacticalCards.length ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 overflow-y-auto no-scrollbar pb-10 pr-1">
+                  {tacticalCards.map((candidate) => (
+                    <article
+                      key={`watchlist-${candidate.symbol}`}
+                      className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors"
+                    >
+                      <div className="flex justify-between items-start gap-4 mb-4">
+                        <div className="min-w-0">
+                          <h3 className="text-xl font-bold text-white tracking-tight">
+                            {candidate.symbol}
+                            <span className="text-sm font-normal text-white/40 ml-2">{candidate.name}</span>
+                          </h3>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {candidate.tags.map((tag) => (
+                              <span key={`${candidate.symbol}-${tag}`} className="text-[10px] px-2 py-0.5 rounded border border-indigo-500/30 text-indigo-400 bg-indigo-500/10">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-emerald-400 font-bold">{candidate.signalValue}</div>
+                          <div className="text-xs text-white/30 mt-1">{candidate.signalLabel}</div>
+                        </div>
+                      </div>
+
+                      <p className="text-sm text-white/60 mb-5 leading-relaxed">
+                        {language === 'en' ? 'AI insight: ' : 'AI 洞察：'}
+                        {candidate.insight}
+                      </p>
+
+                      <div className="grid grid-cols-1 gap-2 p-3 bg-[#050505] rounded-xl border border-white/5 sm:grid-cols-3">
+                        <div>
+                          <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Entry zone' : '建仓区间'}</div>
+                          <div className="text-sm text-white font-medium">{candidate.entryZone}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Target' : '目标位'}</div>
+                          <div className="text-sm text-emerald-400 font-medium">{candidate.targetLevel}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Hard stop' : '严格止损'}</div>
+                          <div className="text-sm text-red-400 font-medium">{candidate.stopLevel}</div>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm text-secondary-text">
+                  {pageError?.message || selectedMarketCopy.emptyState}
+                </div>
+              )}
+            </section>
+          </main>
         </div>
       </div>
 
