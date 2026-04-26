@@ -24,12 +24,12 @@ import { translate } from '../i18n/core';
 
 const assistantMarkdownComponents = {
   h1: ({ children }: React.PropsWithChildren) => <h1 className="mb-3 text-lg font-bold text-white">{children}</h1>,
-  h2: ({ children }: React.PropsWithChildren) => <h2 className="mb-3 mt-5 text-base font-semibold text-white">{children}</h2>,
-  h3: ({ children }: React.PropsWithChildren) => <h3 className="mb-3 mt-4 text-sm font-semibold text-white">{children}</h3>,
-  p: ({ children }: React.PropsWithChildren) => <p className="mb-4 leading-[1.7] last:mb-0">{children}</p>,
-  ul: ({ children }: React.PropsWithChildren) => <ul className="mb-4 list-disc space-y-1.5 pl-5 last:mb-0">{children}</ul>,
-  ol: ({ children }: React.PropsWithChildren) => <ol className="mb-4 list-decimal space-y-1.5 pl-5 last:mb-0">{children}</ol>,
-  li: ({ children }: React.PropsWithChildren) => <li className="mb-1.5 break-words leading-[1.7]">{children}</li>,
+  h2: ({ children }: React.PropsWithChildren) => <h2 className="mb-3 mt-4 text-base font-semibold text-white">{children}</h2>,
+  h3: ({ children }: React.PropsWithChildren) => <h3 className="mb-2 mt-4 text-base font-semibold text-white">{children}</h3>,
+  p: ({ children }: React.PropsWithChildren) => <p className="mb-2 leading-[1.6] last:mb-0">{children}</p>,
+  ul: ({ children }: React.PropsWithChildren) => <ul className="my-2 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }: React.PropsWithChildren) => <ol className="my-2 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+  li: ({ children }: React.PropsWithChildren) => <li className="mb-1 break-words leading-[1.6]">{children}</li>,
   strong: ({ children }: React.PropsWithChildren) => <strong className="font-semibold text-white">{children}</strong>,
   a: ({ children, href }: React.PropsWithChildren<{ href?: string }>) => (
     <a className="text-[hsl(var(--accent-primary-hsl))] underline-offset-2 hover:underline" href={href} target="_blank" rel="noreferrer">
@@ -37,7 +37,7 @@ const assistantMarkdownComponents = {
     </a>
   ),
   blockquote: ({ children }: React.PropsWithChildren) => (
-    <blockquote className="my-4 text-white/72 first:mt-0 last:mb-0">{children}</blockquote>
+    <blockquote className="my-3 text-white/72 first:mt-0 last:mb-0">{children}</blockquote>
   ),
   code: ({ children, className }: React.PropsWithChildren<{ className?: string }>) => {
     if (className) {
@@ -50,7 +50,7 @@ const assistantMarkdownComponents = {
     );
   },
   pre: ({ children }: React.PropsWithChildren) => (
-    <pre className="mb-4 overflow-x-auto rounded-xl border border-white/8 bg-black/30 p-3 text-xs leading-6 text-white/88 last:mb-0">
+    <pre className="mb-3 overflow-x-auto rounded-xl border border-white/8 bg-black/30 p-3 text-[13px] leading-6 text-white/88 last:mb-0">
       {children}
     </pre>
   ),
@@ -114,7 +114,8 @@ const SKILL_TEXT_ALIAS_TO_ID: Record<string, string> = CANONICAL_SKILL_IDS.reduc
   {} as Record<string, string>,
 );
 
-const ASSISTANT_MESSAGE_SURFACE_CLASS = 'w-full markdown-body text-[14px] leading-[1.7] text-white/90 break-words whitespace-pre-wrap [&>p]:mb-4 [&>ul]:mb-4 [&>li]:mb-1.5 [&>h1]:mb-3 [&>h1]:text-lg [&>h1]:font-bold';
+const ASSISTANT_MESSAGE_SURFACE_CLASS = 'w-full markdown-body text-[15px] leading-[1.6] text-white/90 break-words [&>p]:mb-3 [&>ul]:my-2 [&>ul]:pl-5 [&>li]:mb-1 [&>h3]:text-base [&>h3]:font-bold [&>h3]:mt-4 [&>h3]:mb-2';
+const STREAMING_ASSISTANT_MESSAGE_SURFACE_CLASS = `${ASSISTANT_MESSAGE_SURFACE_CLASS} whitespace-pre-wrap`;
 
 function getLocalizedSkillLabel(rawLabel: string, t: (key: string, vars?: Record<string, string | number | undefined>) => string): string {
   const matchedSkillId = SKILL_TEXT_ALIAS_TO_ID[rawLabel];
@@ -243,7 +244,7 @@ const ChatPage: React.FC = () => {
   const quickQuestions = QUICK_QUESTIONS.filter(
     (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
   );
-  const engineSwitcherLabel = language === 'en' ? 'Current engine' : '当前分析引擎';
+  const engineSwitcherLabel = language === 'en' ? 'Analysis engines & perspectives' : '分析引擎与视角';
   const composerDisclaimer = language === 'en'
     ? 'AI insights are for reference only and are not investment advice. Confirm your risk tolerance before trading.'
     : 'AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。';
@@ -609,79 +610,13 @@ const ChatPage: React.FC = () => {
 
         <div
           data-testid="chat-main-shell"
-          className="relative flex min-w-0 flex-1 flex-col h-[calc(100vh-80px)] overflow-hidden bg-transparent"
+          className="flex flex-1 min-w-0 overflow-hidden"
         >
-          <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4 md:px-8">
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.28em] text-white/30">WolfyStock</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white md:text-3xl">{chat('title')}</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleStartNewChat}
-                className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white transition-colors hover:bg-white/[0.08] md:hidden"
-              >
-                + {language === 'en' ? 'New' : '新建'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsBriefDrawerOpen(true)}
-                data-testid="chat-bento-brief-trigger"
-                className={CARD_BUTTON_CLASS}
-                title={language === 'en' ? 'Open brief' : '查看摘要'}
-              >
-                <PanelRightOpen className="h-4 w-4" />
-                <span className="hidden sm:inline">{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-              </button>
-              {messages.length > 0 ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => downloadSession(messages)}
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground"
-                    title={chat('exportTitle')}
-                  >
-                    <Download className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (sending) return;
-                      setSending(true);
-                      setSendToast(null);
-                      try {
-                        const content = formatSessionAsMarkdown(messages);
-                        await agentApi.sendChat(content);
-                        setSendToast({ type: 'success', message: chat('notifySuccess') });
-                        setTimeout(() => setSendToast(null), 3000);
-                      } catch (err) {
-                        const parsed = getParsedApiError(err);
-                        setSendToast({
-                          type: 'error',
-                          message: parsed.message || chat('notifyFailed'),
-                        });
-                        setTimeout(() => setSendToast(null), 5000);
-                      } finally {
-                        setSending(false);
-                      }
-                    }}
-                    disabled={sending}
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                    title={chat('notifyTitle')}
-                  >
-                    {sending ? (
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white" />
-                    ) : (
-                      <SendHorizontal className="h-4 w-4" />
-                    )}
-                  </button>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          <main
+          <section
+            data-testid="chat-main-panel"
+            className="relative flex flex-1 min-w-0 flex-col border-r border-white/5"
+          >
+            <main
             id="chat-scroll-container"
             data-testid="chat-main"
             onWheel={() => {
@@ -704,8 +639,78 @@ const ChatPage: React.FC = () => {
             >
               <div
                 data-testid="chat-message-stream"
-                className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-56 pt-8 md:px-8"
+                className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 pb-48 pt-8"
               >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.28em] text-white/30">WolfyStock</p>
+                    <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white md:text-3xl">{chat('title')}</h1>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartNewChat}
+                      className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white transition-colors hover:bg-white/[0.08] md:hidden"
+                    >
+                      + {language === 'en' ? 'New' : '新建'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsBriefDrawerOpen(true)}
+                      data-testid="chat-bento-brief-trigger"
+                      className={CARD_BUTTON_CLASS}
+                      title={language === 'en' ? 'Open brief' : '查看摘要'}
+                    >
+                      <PanelRightOpen className="h-4 w-4" />
+                      <span className="hidden sm:inline">{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+                    </button>
+                    {messages.length > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => downloadSession(messages)}
+                          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground"
+                          title={chat('exportTitle')}
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (sending) return;
+                            setSending(true);
+                            setSendToast(null);
+                            try {
+                              const content = formatSessionAsMarkdown(messages);
+                              await agentApi.sendChat(content);
+                              setSendToast({ type: 'success', message: chat('notifySuccess') });
+                              setTimeout(() => setSendToast(null), 3000);
+                            } catch (err) {
+                              const parsed = getParsedApiError(err);
+                              setSendToast({
+                                type: 'error',
+                                message: parsed.message || chat('notifyFailed'),
+                              });
+                              setTimeout(() => setSendToast(null), 5000);
+                            } finally {
+                              setSending(false);
+                            }
+                          }}
+                          disabled={sending}
+                          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                          title={chat('notifyTitle')}
+                        >
+                          {sending ? (
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+                          ) : (
+                            <SendHorizontal className="h-4 w-4" />
+                          )}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
                 {skillsLoadError ? (
                   <ApiErrorAlert
                     error={skillsLoadError}
@@ -835,7 +840,7 @@ const ChatPage: React.FC = () => {
                             {shouldStream ? (
                               <TypewriterText
                                 as="div"
-                                className={ASSISTANT_MESSAGE_SURFACE_CLASS}
+                                className={STREAMING_ASSISTANT_MESSAGE_SURFACE_CLASS}
                                 testId={`chat-typewriter-${msg.id}`}
                                 text={msg.content}
                                 autoScrollRef={isAutoScroll}
@@ -877,146 +882,151 @@ const ChatPage: React.FC = () => {
                 ) : null}
               </div>
             </div>
-          </main>
+            </main>
 
-          <footer
-            data-testid="chat-input-shell"
-            className="pointer-events-none absolute bottom-0 left-0 w-full z-50"
-          >
-            <div
-              data-testid="chat-input-gradient"
-              className="w-full bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent pt-32 pb-8 flex justify-center"
+            <footer
+              data-testid="chat-input-shell"
+              className="pointer-events-none absolute bottom-0 left-0 w-full z-50"
             >
               <div
-                data-testid="chat-console-inner"
-                className="flex w-full max-w-5xl flex-col gap-3 px-4 pointer-events-auto md:px-8"
+                data-testid="chat-input-gradient"
+                className="w-full bg-gradient-to-t from-[#030303] via-[#030303]/95 to-transparent px-6 pt-20 pb-8"
               >
-                {sendToast ? (
-                  <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                    {sendToast.message}
-                  </p>
-                ) : null}
-
-                {chatError ? (
-                  <ApiErrorAlert
-                    error={chatError}
-                    className="mb-1"
-                    actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
-                    onAction={
-                      chatError.category === 'local_connection_failed'
-                        ? () => {
-                            window.location.reload();
-                          }
-                        : undefined
-                    }
-                  />
-                ) : null}
-
                 <div
-                  data-testid="chat-skill-toolbar"
-                  className="flex w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1 mask-linear-fade"
+                  data-testid="chat-console-inner"
+                  className="mx-auto w-full max-w-4xl pointer-events-auto"
                 >
-                  <span className="shrink-0 text-[10px] uppercase tracking-[0.28em] text-white/40">{engineSwitcherLabel}</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSkill('')}
-                    className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      selectedSkill === ''
-                        ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                        : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
-                    }`}
-                  >
-                    <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
-                    {chat('skills.general')}
-                  </button>
-                  {skills.map((s) => (
-                    <div
-                      key={s.id}
-                      className="relative shrink-0"
-                      onMouseEnter={() => setShowSkillDesc(s.id)}
-                      onMouseLeave={() => setShowSkillDesc(null)}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSkill(s.id)}
-                        className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                          selectedSkill === s.id
-                            ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                            : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
-                        }`}
-                      >
-                        <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-indigo-300' : 'bg-white/35'}`} />
-                        {getLocalizedSkillNameById(s.id, s.name, t)}
-                      </button>
-                      {showSkillDesc === s.id && s.description ? (
-                        <div className="theme-menu-panel pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl animate-fade-in">
-                          <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
-                          <p>{s.description}</p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
+                  {sendToast ? (
+                    <p className={`mb-3 text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                      {sendToast.message}
+                    </p>
+                  ) : null}
 
-                <div
-                  data-testid="chat-composer-omnibar"
-                  className="relative w-full rounded-[24px] border border-white/10 bg-white/[0.03] p-2 text-white shadow-2xl backdrop-blur-2xl transition-all focus-within:border-white/30 focus-within:bg-white/[0.05]"
-                >
-                  <div className="flex items-end gap-3">
-                    <textarea
-                      ref={composerTextareaRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={chat('inputPlaceholder')}
-                      disabled={loading}
-                      rows={1}
-                      className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 pr-16 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
-                      onInput={(e) => {
-                        const textarea = e.target as HTMLTextAreaElement;
-                        textarea.style.height = 'auto';
-                        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-                      }}
+                  {chatError ? (
+                    <ApiErrorAlert
+                      error={chatError}
+                      className="mb-3"
+                      actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
+                      onAction={
+                        chatError.category === 'local_connection_failed'
+                          ? () => {
+                              window.location.reload();
+                            }
+                          : undefined
+                      }
                     />
-                    {isGenerating ? (
-                      <button
-                        type="button"
-                        onClick={handleStopGeneration}
-                        className="group absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-                        aria-label={chat('stopGeneration')}
-                        title={chat('stopGeneration')}
-                      >
-                        <div className="h-3 w-3 rounded-sm bg-white/70 transition-colors group-hover:bg-white" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleSend();
+                  ) : null}
+
+                  <div
+                    data-testid="chat-composer-omnibar"
+                    className="relative w-full rounded-2xl border border-white/10 bg-white/[0.03] p-2 text-white shadow-2xl backdrop-blur-2xl transition-all focus-within:border-white/30 focus-within:bg-white/[0.05]"
+                  >
+                    <div className="flex items-end gap-3">
+                      <textarea
+                        ref={composerTextareaRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={chat('inputPlaceholder')}
+                        disabled={loading}
+                        rows={1}
+                        className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 pr-16 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                        onInput={(e) => {
+                          const textarea = e.target as HTMLTextAreaElement;
+                          textarea.style.height = 'auto';
+                          textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
                         }}
-                        disabled={!input.trim() || loading}
-                        className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
-                        aria-label={chat('notifyAction')}
-                        title={chat('notifyAction')}
-                      >
-                        <ArrowUp className="h-5 w-5" />
-                      </button>
-                    )}
+                      />
+                      {isGenerating ? (
+                        <button
+                          type="button"
+                          onClick={handleStopGeneration}
+                          className="group absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                          aria-label={chat('stopGeneration')}
+                          title={chat('stopGeneration')}
+                        >
+                          <div className="h-3 w-3 rounded-sm bg-white/70 transition-colors group-hover:bg-white" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleSend();
+                          }}
+                          disabled={!input.trim() || loading}
+                          className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                          aria-label={chat('notifyAction')}
+                          title={chat('notifyAction')}
+                        >
+                          <ArrowUp className="h-5 w-5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isFollowUpContextLoading ? (
+                    <p className="mt-3 text-xs text-secondary-text">
+                      {chat('followUpContextLoading')}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-3 text-center text-[10px] text-white/30">
+                    {composerDisclaimer}
                   </div>
                 </div>
+              </div>
+            </footer>
+          </section>
 
-                {isFollowUpContextLoading ? (
-                  <p className="text-xs text-secondary-text">
-                    {chat('followUpContextLoading')}
-                  </p>
-                ) : null}
-
-                <div className="text-center text-[10px] text-white/30">
-                  {composerDisclaimer}
-                </div>
+          <aside
+            data-testid="chat-strategy-panel"
+            className="hidden w-full shrink-0 flex-col gap-8 overflow-y-auto bg-white/[0.01] p-6 no-scrollbar lg:flex lg:w-[280px] xl:w-[320px]"
+          >
+            <div>
+              <h3 className="mb-4 text-xs font-bold uppercase tracking-[0.24em] text-white/40">{engineSwitcherLabel}</h3>
+              <div data-testid="chat-strategy-grid" className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSkill('')}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                    selectedSkill === ''
+                      ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
+                      : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                  }`}
+                >
+                  <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
+                  {chat('skills.general')}
+                </button>
+                {skills.map((s) => (
+                  <div
+                    key={s.id}
+                    className="relative"
+                    onMouseEnter={() => setShowSkillDesc(s.id)}
+                    onMouseLeave={() => setShowSkillDesc(null)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSkill(s.id)}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                        selectedSkill === s.id
+                          ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
+                          : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                      }`}
+                    >
+                      <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-indigo-300' : 'bg-white/35'}`} />
+                      {getLocalizedSkillNameById(s.id, s.name, t)}
+                    </button>
+                    {showSkillDesc === s.id && s.description ? (
+                      <div className="theme-menu-panel absolute left-0 top-full z-50 mt-2 w-64 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl animate-fade-in">
+                        <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
+                        <p>{s.description}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             </div>
-          </footer>
+          </aside>
         </div>
       </div>
 
@@ -1026,8 +1036,8 @@ const ChatPage: React.FC = () => {
         title={chat('title')}
         testId="chat-bento-drawer"
         summary={language === 'en'
-          ? 'The chat surface now behaves like a real two-pane research workspace with persistent history, a wide answer canvas, and a docked command center.'
-          : '问股页现在是一套真正的双栏研究工作台，保留历史上下文、释放宽画布，并把指挥中心固定在底部。'}
+          ? 'The chat surface now behaves like a dense three-column research desk with persistent history, a wide answer canvas, and a dedicated strategy console.'
+          : '问股页现在是一套高密度三栏研究工作台：左侧历史、中间回答画布、右侧独立策略控制台。'}
         metrics={[
           {
             label: language === 'en' ? 'Engine' : '分析引擎',
@@ -1051,14 +1061,14 @@ const ChatPage: React.FC = () => {
         ]}
         bullets={[
           language === 'en'
-            ? 'Desktop now keeps session history on the left while the answer stream stays full-width on the right.'
-            : '桌面端把历史对话固定在左侧，右侧回答流保持真正的全宽研究画布。',
+            ? 'Desktop keeps history on the left, the answer stream in the center, and strategy switches in an isolated right rail.'
+            : '桌面端把历史对话固定在左侧，中间保留纯回答画布，右侧单独承载策略切换。',
           language === 'en'
-            ? 'The docked bottom console uses a solid blurred shield so long replies no longer bleed under the input area.'
-            : '吸底指挥中心使用实心毛玻璃遮罩，长回复不会再从输入区下方穿透。',
+            ? 'The docked bottom composer uses a stronger gradient shield and bottom-safe padding so long replies no longer bleed under the input area.'
+            : '吸底输入区现在配合更强的渐变遮罩与底部安全留白，长回复不会再钻进输入框下方。',
           language === 'en'
-            ? 'Typewriter rendering stays incremental without stealing scroll control back from the user.'
-            : '打字机仍保持增量渲染，但不会再把滚动控制权从用户手里抢走。',
+            ? 'Assistant typography is compressed to a denser 15px/1.6 reading rhythm without sacrificing streaming behavior.'
+            : 'AI 文本被压到更高密度的 15px/1.6 阅读节奏，同时保留流式输出体验。',
         ]}
         footnote={language === 'en' ? 'Session and agent APIs unchanged.' : '会话与 agent API 保持不变。'}
       />
