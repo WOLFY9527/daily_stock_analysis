@@ -607,22 +607,9 @@ const ChatPage: React.FC = () => {
           </div>
         </aside>
 
-        <main
-          id="chat-scroll-container"
-          data-testid="chat-main"
-          onWheel={() => {
-            isAutoScroll.current = false;
-          }}
-          onTouchMove={() => {
-            isAutoScroll.current = false;
-          }}
-          onScroll={(e) => {
-            const target = e.target as HTMLElement;
-            if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
-              isAutoScroll.current = true;
-            }
-          }}
-          className="relative flex min-w-0 flex-1 flex-col w-full overflow-y-auto no-scrollbar"
+        <div
+          data-testid="chat-main-shell"
+          className="relative flex min-w-0 flex-1 flex-col h-[calc(100vh-80px)] overflow-hidden bg-transparent"
         >
           <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4 md:px-8">
             <div className="min-w-0">
@@ -694,320 +681,343 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
 
-          <div
-            data-testid="chat-message-scroll"
-            className="flex-1"
+          <main
+            id="chat-scroll-container"
+            data-testid="chat-main"
+            onWheel={() => {
+              isAutoScroll.current = false;
+            }}
+            onTouchMove={() => {
+              isAutoScroll.current = false;
+            }}
+            onScroll={(e) => {
+              const target = e.target as HTMLElement;
+              if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+                isAutoScroll.current = true;
+              }
+            }}
+            className="flex-1 overflow-y-auto no-scrollbar w-full"
           >
             <div
-              data-testid="chat-message-stream"
-              className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-56 pt-8 md:px-8"
+              data-testid="chat-message-scroll"
+              className="w-full"
             >
-              {skillsLoadError ? (
-                <ApiErrorAlert
-                  error={skillsLoadError}
-                  actionLabel={chat('retryLoadSkills')}
-                  onAction={() => {
-                    void loadSkills();
-                  }}
-                />
-              ) : null}
+              <div
+                data-testid="chat-message-stream"
+                className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-56 pt-8 md:px-8"
+              >
+                {skillsLoadError ? (
+                  <ApiErrorAlert
+                    error={skillsLoadError}
+                    actionLabel={chat('retryLoadSkills')}
+                    onAction={() => {
+                      void loadSkills();
+                    }}
+                  />
+                ) : null}
 
-              {messages.length === 0 && !loading ? (
-                <div data-testid="chat-empty-state" className="w-full">
-                  <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
-                    <div className="text-center">
-                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
-                        <svg
-                          className="h-7 w-7"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          aria-hidden="true"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                          />
-                        </svg>
-                      </div>
-                      <h3 className="mt-5 text-3xl font-medium tracking-tight text-foreground">{chat('emptyTitle')}</h3>
-                      <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-secondary-text md:text-base">
-                        {chat('emptyBody')}
-                      </p>
-                    </div>
-
-                    <div className="grid place-items-stretch gap-4 lg:grid-cols-3">
-                      {starterPromptCards.map((card) => (
-                        <button
-                          key={card.id}
-                          type="button"
-                          data-testid={`chat-starter-card-${card.id}`}
-                          onClick={() => {
-                            void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
-                          }}
-                          className="rounded-[28px] border border-white/8 bg-white/[0.03] px-5 py-5 text-left backdrop-blur-2xl transition-colors duration-150 hover:bg-white/[0.05]"
-                        >
-                          <p className="text-sm font-medium tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
-                          <p className="mt-3 text-sm leading-relaxed text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
-                          <p className="mt-4 text-xs leading-relaxed text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
-                        </button>
-                      ))}
-                    </div>
-
-                    {quickQuestions.length > 0 ? (
-                      <div className="flex flex-wrap justify-center gap-2.5">
-                        {quickQuestions.map((q) => (
-                          <button
-                            key={q.id}
-                            type="button"
-                            onClick={() => handleQuickQuestion(q)}
-                            className="rounded-full border border-white/8 bg-white/[0.02] px-4 py-2 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.05] hover:text-foreground"
+                {messages.length === 0 && !loading ? (
+                  <div data-testid="chat-empty-state" className="w-full">
+                    <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
+                      <div className="text-center">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
+                          <svg
+                            className="h-7 w-7"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
                           >
-                            {chat(`quickQuestions.${q.id}`)}
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                            />
+                          </svg>
+                        </div>
+                        <h3 className="mt-5 text-3xl font-medium tracking-tight text-foreground">{chat('emptyTitle')}</h3>
+                        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-secondary-text md:text-base">
+                          {chat('emptyBody')}
+                        </p>
+                      </div>
+
+                      <div className="grid place-items-stretch gap-4 lg:grid-cols-3">
+                        {starterPromptCards.map((card) => (
+                          <button
+                            key={card.id}
+                            type="button"
+                            data-testid={`chat-starter-card-${card.id}`}
+                            onClick={() => {
+                              void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
+                            }}
+                            className="rounded-[28px] border border-white/8 bg-white/[0.03] px-5 py-5 text-left backdrop-blur-2xl transition-colors duration-150 hover:bg-white/[0.05]"
+                          >
+                            <p className="text-sm font-medium tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
+                            <p className="mt-3 text-sm leading-relaxed text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
+                            <p className="mt-4 text-xs leading-relaxed text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
                           </button>
                         ))}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex w-full flex-col gap-6">
-                  {messages.map((msg, index) => {
-                    const isLast = index === messages.length - 1;
-                    const shouldStream = isGenerating
-                      && msg.role === 'assistant'
-                      && isLast
-                      && msg.id === latestAssistantMessageId
-                      && msg.id === animatedAssistantMessageId;
 
-                    return msg.role === 'user' ? (
-                      <div
-                        key={msg.id}
-                        data-testid={`chat-user-message-${msg.id}`}
-                        className="mb-4 flex w-full justify-end"
-                      >
-                        <div className="max-w-[min(88%,72rem)] rounded-2xl rounded-tr-sm bg-white/[0.08] px-5 py-3 text-sm text-white break-words">
-                          {msg.content.split('\n').map((line, i) => (
-                            <p key={i} className="mb-1 leading-relaxed last:mb-0">
-                              {line || '\u00A0'}
-                            </p>
+                      {quickQuestions.length > 0 ? (
+                        <div className="flex flex-wrap justify-center gap-2.5">
+                          {quickQuestions.map((q) => (
+                            <button
+                              key={q.id}
+                              type="button"
+                              onClick={() => handleQuickQuestion(q)}
+                              className="rounded-full border border-white/8 bg-white/[0.02] px-4 py-2 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.05] hover:text-foreground"
+                            >
+                              {chat(`quickQuestions.${q.id}`)}
+                            </button>
                           ))}
                         </div>
-                      </div>
-                    ) : (
-                      <div
-                        key={msg.id}
-                        data-testid={`chat-assistant-message-${msg.id}`}
-                        className="flex w-full gap-4"
-                      >
-                        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
-                          AI
-                        </div>
-                        <div className="flex-1 min-w-0 bg-transparent">
-                          {msg.skillName ? (
-                            <div className="mb-2">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
-                                <svg
-                                  className="h-3 w-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                                  />
-                                </svg>
-                                {getLocalizedSkillLabel(msg.skillName, t)}
-                              </span>
-                            </div>
-                          ) : null}
-                          {renderThinkingBlock(msg)}
-                          {expandedThinking.has(msg.id) && msg.thinkingSteps ? renderThinkingDetails(msg.thinkingSteps) : null}
-                          {shouldStream ? (
-                            <TypewriterText
-                              as="div"
-                              className={ASSISTANT_MESSAGE_SURFACE_CLASS}
-                              testId={`chat-typewriter-${msg.id}`}
-                              text={msg.content}
-                              autoScrollRef={isAutoScroll}
-                              onComplete={() => {
-                                setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
-                              }}
-                            />
-                          ) : (
-                            <div className={ASSISTANT_MESSAGE_SURFACE_CLASS}>
-                              <Markdown components={assistantMarkdownComponents} remarkPlugins={[remarkGfm]}>
-                                {msg.content}
-                              </Markdown>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {loading ? (
-                <div className="flex w-full gap-4 pt-2">
-                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
-                    AI
-                  </div>
-                  <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
-                    <div className="flex items-center gap-2.5 text-sm text-secondary-text">
-                      <div className="relative h-4 w-4 flex-shrink-0">
-                        <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
-                        <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
-                      </div>
-                      <span className="text-secondary-text">
-                        {getCurrentStage(progressSteps)}
-                      </span>
+                      ) : null}
                     </div>
                   </div>
-                </div>
-              ) : null}
+                ) : (
+                  <div className="flex w-full flex-col gap-6">
+                    {messages.map((msg, index) => {
+                      const isLast = index === messages.length - 1;
+                      const shouldStream = isGenerating
+                        && msg.role === 'assistant'
+                        && isLast
+                        && msg.id === latestAssistantMessageId
+                        && msg.id === animatedAssistantMessageId;
+
+                      return msg.role === 'user' ? (
+                        <div
+                          key={msg.id}
+                          data-testid={`chat-user-message-${msg.id}`}
+                          className="mb-4 flex w-full justify-end"
+                        >
+                          <div className="max-w-[min(88%,72rem)] rounded-2xl rounded-tr-sm bg-white/[0.08] px-5 py-3 text-sm text-white break-words">
+                            {msg.content.split('\n').map((line, i) => (
+                              <p key={i} className="mb-1 leading-relaxed last:mb-0">
+                                {line || '\u00A0'}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          key={msg.id}
+                          data-testid={`chat-assistant-message-${msg.id}`}
+                          className="flex w-full gap-4"
+                        >
+                          <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
+                            AI
+                          </div>
+                          <div className="flex-1 min-w-0 bg-transparent">
+                            {msg.skillName ? (
+                              <div className="mb-2">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
+                                  <svg
+                                    className="h-3 w-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                                    />
+                                  </svg>
+                                  {getLocalizedSkillLabel(msg.skillName, t)}
+                                </span>
+                              </div>
+                            ) : null}
+                            {renderThinkingBlock(msg)}
+                            {expandedThinking.has(msg.id) && msg.thinkingSteps ? renderThinkingDetails(msg.thinkingSteps) : null}
+                            {shouldStream ? (
+                              <TypewriterText
+                                as="div"
+                                className={ASSISTANT_MESSAGE_SURFACE_CLASS}
+                                testId={`chat-typewriter-${msg.id}`}
+                                text={msg.content}
+                                autoScrollRef={isAutoScroll}
+                                onComplete={() => {
+                                  setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
+                                }}
+                              />
+                            ) : (
+                              <div className={ASSISTANT_MESSAGE_SURFACE_CLASS}>
+                                <Markdown components={assistantMarkdownComponents} remarkPlugins={[remarkGfm]}>
+                                  {msg.content}
+                                </Markdown>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {loading ? (
+                  <div className="flex w-full gap-4 pt-2">
+                    <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
+                      AI
+                    </div>
+                    <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
+                      <div className="flex items-center gap-2.5 text-sm text-secondary-text">
+                        <div className="relative h-4 w-4 flex-shrink-0">
+                          <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
+                          <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+                        </div>
+                        <span className="text-secondary-text">
+                          {getCurrentStage(progressSteps)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
+          </main>
 
           <footer
             data-testid="chat-input-shell"
-            className="pointer-events-none absolute bottom-0 left-0 z-50 flex w-full justify-center border-t border-white/5 bg-[#050505]/95 pt-6 pb-8 backdrop-blur-3xl"
+            className="pointer-events-none absolute bottom-0 left-0 w-full z-50"
           >
             <div
-              data-testid="chat-console-inner"
-              className="flex w-full max-w-5xl flex-col gap-3 px-4 pointer-events-auto md:px-8"
+              data-testid="chat-input-gradient"
+              className="w-full bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent pt-32 pb-8 flex justify-center"
             >
-              {sendToast ? (
-                <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                  {sendToast.message}
-                </p>
-              ) : null}
-
-              {chatError ? (
-                <ApiErrorAlert
-                  error={chatError}
-                  className="mb-1"
-                  actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
-                  onAction={
-                    chatError.category === 'local_connection_failed'
-                      ? () => {
-                          window.location.reload();
-                        }
-                      : undefined
-                  }
-                />
-              ) : null}
-
               <div
-                data-testid="chat-skill-toolbar"
-                className="flex w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1 mask-linear-fade"
+                data-testid="chat-console-inner"
+                className="flex w-full max-w-5xl flex-col gap-3 px-4 pointer-events-auto md:px-8"
               >
-                <span className="shrink-0 text-[10px] uppercase tracking-[0.28em] text-white/40">{engineSwitcherLabel}</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSkill('')}
-                  className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                    selectedSkill === ''
-                      ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                      : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
-                  }`}
-                >
-                  <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
-                  {chat('skills.general')}
-                </button>
-                {skills.map((s) => (
-                  <div
-                    key={s.id}
-                    className="relative shrink-0"
-                    onMouseEnter={() => setShowSkillDesc(s.id)}
-                    onMouseLeave={() => setShowSkillDesc(null)}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSkill(s.id)}
-                      className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                        selectedSkill === s.id
-                          ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                          : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
-                      }`}
-                    >
-                      <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-indigo-300' : 'bg-white/35'}`} />
-                      {getLocalizedSkillNameById(s.id, s.name, t)}
-                    </button>
-                    {showSkillDesc === s.id && s.description ? (
-                      <div className="theme-menu-panel pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl animate-fade-in">
-                        <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
-                        <p>{s.description}</p>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
+                {sendToast ? (
+                  <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                    {sendToast.message}
+                  </p>
+                ) : null}
 
-              <div
-                data-testid="chat-composer-omnibar"
-                className="relative w-full rounded-[24px] border border-white/10 bg-white/[0.03] p-2 text-white shadow-2xl backdrop-blur-2xl transition-all focus-within:border-white/30 focus-within:bg-white/[0.05]"
-              >
-                <div className="flex items-end gap-3">
-                  <textarea
-                    ref={composerTextareaRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={chat('inputPlaceholder')}
-                    disabled={loading}
-                    rows={1}
-                    className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 pr-16 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
-                    onInput={(e) => {
-                      const textarea = e.target as HTMLTextAreaElement;
-                      textarea.style.height = 'auto';
-                      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-                    }}
+                {chatError ? (
+                  <ApiErrorAlert
+                    error={chatError}
+                    className="mb-1"
+                    actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
+                    onAction={
+                      chatError.category === 'local_connection_failed'
+                        ? () => {
+                            window.location.reload();
+                          }
+                        : undefined
+                    }
                   />
-                  {isGenerating ? (
-                    <button
-                      type="button"
-                      onClick={handleStopGeneration}
-                      className="group absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-                      aria-label={chat('stopGeneration')}
-                      title={chat('stopGeneration')}
+                ) : null}
+
+                <div
+                  data-testid="chat-skill-toolbar"
+                  className="flex w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1 mask-linear-fade"
+                >
+                  <span className="shrink-0 text-[10px] uppercase tracking-[0.28em] text-white/40">{engineSwitcherLabel}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSkill('')}
+                    className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      selectedSkill === ''
+                        ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
+                        : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                    }`}
+                  >
+                    <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
+                    {chat('skills.general')}
+                  </button>
+                  {skills.map((s) => (
+                    <div
+                      key={s.id}
+                      className="relative shrink-0"
+                      onMouseEnter={() => setShowSkillDesc(s.id)}
+                      onMouseLeave={() => setShowSkillDesc(null)}
                     >
-                      <div className="h-3 w-3 rounded-sm bg-white/70 transition-colors group-hover:bg-white" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleSend();
-                      }}
-                      disabled={!input.trim() || loading}
-                      className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
-                      aria-label={chat('notifyAction')}
-                      title={chat('notifyAction')}
-                    >
-                      <ArrowUp className="h-5 w-5" />
-                    </button>
-                  )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSkill(s.id)}
+                        className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                          selectedSkill === s.id
+                            ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
+                            : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                        }`}
+                      >
+                        <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-indigo-300' : 'bg-white/35'}`} />
+                        {getLocalizedSkillNameById(s.id, s.name, t)}
+                      </button>
+                      {showSkillDesc === s.id && s.description ? (
+                        <div className="theme-menu-panel pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl animate-fade-in">
+                          <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
+                          <p>{s.description}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
-              </div>
 
-              {isFollowUpContextLoading ? (
-                <p className="text-xs text-secondary-text">
-                  {chat('followUpContextLoading')}
-                </p>
-              ) : null}
+                <div
+                  data-testid="chat-composer-omnibar"
+                  className="relative w-full rounded-[24px] border border-white/10 bg-white/[0.03] p-2 text-white shadow-2xl backdrop-blur-2xl transition-all focus-within:border-white/30 focus-within:bg-white/[0.05]"
+                >
+                  <div className="flex items-end gap-3">
+                    <textarea
+                      ref={composerTextareaRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={chat('inputPlaceholder')}
+                      disabled={loading}
+                      rows={1}
+                      className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 pr-16 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                      onInput={(e) => {
+                        const textarea = e.target as HTMLTextAreaElement;
+                        textarea.style.height = 'auto';
+                        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+                      }}
+                    />
+                    {isGenerating ? (
+                      <button
+                        type="button"
+                        onClick={handleStopGeneration}
+                        className="group absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                        aria-label={chat('stopGeneration')}
+                        title={chat('stopGeneration')}
+                      >
+                        <div className="h-3 w-3 rounded-sm bg-white/70 transition-colors group-hover:bg-white" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleSend();
+                        }}
+                        disabled={!input.trim() || loading}
+                        className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                        aria-label={chat('notifyAction')}
+                        title={chat('notifyAction')}
+                      >
+                        <ArrowUp className="h-5 w-5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-              <div className="text-center text-[10px] text-white/30">
-                {composerDisclaimer}
+                {isFollowUpContextLoading ? (
+                  <p className="text-xs text-secondary-text">
+                    {chat('followUpContextLoading')}
+                  </p>
+                ) : null}
+
+                <div className="text-center text-[10px] text-white/30">
+                  {composerDisclaimer}
+                </div>
               </div>
             </div>
           </footer>
-        </main>
+        </div>
       </div>
 
       <PageBriefDrawer

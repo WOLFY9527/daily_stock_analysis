@@ -190,17 +190,23 @@ describe('ChatPage', () => {
     const historyPane = screen.getByTestId('chat-history-pane');
     expect(historyPane).toHaveClass('w-64', 'shrink-0', 'hidden', 'md:flex', 'flex-col', 'border-r', 'border-white/5', 'bg-white/[0.01]');
     expect(screen.getByTestId('chat-history-list')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'px-3', 'pb-4', 'flex', 'flex-col', 'gap-1');
+    expect(screen.getByTestId('chat-main-shell')).toHaveClass('relative', 'flex-1', 'flex', 'flex-col', 'min-w-0', 'h-[calc(100vh-80px)]', 'overflow-hidden', 'bg-transparent');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
     expect(screen.getByTestId('chat-main')).toHaveAttribute('id', 'chat-scroll-container');
-    expect(screen.getByTestId('chat-main')).toHaveClass('relative', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'w-full', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'w-full');
+    expect(screen.getByTestId('chat-main')).not.toHaveClass('relative');
     expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex-1');
-    expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('overflow-y-auto');
+    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('w-full');
+    expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('flex-1', 'overflow-y-auto');
     expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-5xl', 'mx-auto', 'px-4', 'md:px-8', 'pt-8', 'pb-56', 'flex', 'flex-col', 'gap-6');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-[#050505]/95', 'backdrop-blur-3xl', 'border-t', 'border-white/5', 'pt-6', 'pb-8', 'justify-center', 'pointer-events-none');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'pointer-events-none');
+    expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('bg-[#050505]/95', 'border-t');
+    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/95', 'to-transparent', 'pt-32', 'pb-8', 'flex', 'justify-center');
     expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'max-w-5xl', 'px-4', 'md:px-8', 'flex', 'flex-col', 'gap-3', 'pointer-events-auto');
     expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-2', 'overflow-x-auto', 'no-scrollbar', 'w-full', 'pb-1', 'mask-linear-fade');
+    expect(screen.getByTestId('chat-input-shell').parentElement).toBe(screen.getByTestId('chat-main-shell'));
+    expect(screen.getByTestId('chat-input-shell').parentElement).not.toBe(screen.getByTestId('chat-main'));
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
       'rounded-[24px]',

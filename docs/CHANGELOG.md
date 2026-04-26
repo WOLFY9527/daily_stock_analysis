@@ -1,3 +1,7 @@
+## 2026-04-27
+
+- 💬 **问股 Chat 强制重排为“滚动画布 / 悬浮输入”物理分层** — `apps/dsa-web/src/pages/ChatPage.tsx` 对 `/chat` 的右侧主工作区执行了一次结构级修复：新增独立的 `chat-main-shell` 作为唯一定位上下文，顶部标题操作区、滚动画布层与底部悬浮输入层不再混在同一个滚动/定位系统里；`main#chat-scroll-container` 现在只负责消息与欢迎卡片滚动，底部输入控制台改为它的绝对定位兄弟节点，并通过新的渐变遮罩层承接策略胶囊、Textarea 与发送按钮；消息画布继续保留 `pb-56` 安全留白，避免最后一行文字被吸底输入层遮挡。此次改动不调整 agent API、会话历史或技能逻辑，只修复 `/chat` 的 DOM 层级错乱、吸底失效和底部遮挡问题。
+
 ## 2026-04-26
 
 - 💬 **问股 Chat 彻底释放宽度并修复历史流式/滚动抖动** — `apps/dsa-web/src/pages/ChatPage.tsx` 与 `src/components/common/TypewriterText.tsx` 对 `/chat` 做了严格限域热修复：主消息流与底部控制台统一收口到更宽的 `max-w-5xl` 画布，底部策略胶囊栏改为可横向滑动且禁止 pill 被压缩截断；assistant 历史消息现在只做静态 Markdown 渲染，只有“最后一条 assistant 且当前仍在生成”的消息才使用打字机效果，避免切会话或刷新后历史消息重复打字；滚动跟随也从 `scrollIntoView({ behavior: "smooth" })` 改为直接锚定 `#chat-scroll-container.scrollTop`，消除流式输出期间的明显卡顿。此次改动不调整 agent API、会话持久化或技能语义，只修复问股页的宽度、历史恢复和滚动手感。
