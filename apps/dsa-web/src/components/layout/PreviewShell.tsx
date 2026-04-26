@@ -30,8 +30,8 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
 
   return (
     <div className="theme-shell flex h-screen flex-col overflow-hidden text-foreground" data-testid="preview-shell">
-      <header className="shell-masthead shrink-0">
-        <div className="shell-masthead__inner">
+      <header className="shell-masthead shrink-0 w-full">
+        <div className="shell-masthead__inner w-full">
           {isDesktop ? (
             <div className="shell-nav-strip">
               <div className="shell-nav-brand">
@@ -70,9 +70,9 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
         </div>
       </header>
 
-      <div className="shell-content-frame flex flex-1 min-h-0 overflow-hidden">
-        <main className="theme-main-lane flex-1 min-h-0 overflow-hidden">
-          <div className="theme-page-transition flex h-full min-h-0 flex-col">
+      <div className="shell-content-frame flex flex-1 min-h-0 min-w-0 w-full overflow-hidden">
+        <main className="theme-main-lane flex-1 min-h-0 min-w-0 w-full overflow-hidden">
+          <div className="theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col">
             {children}
           </div>
         </main>

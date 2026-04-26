@@ -1,7 +1,7 @@
 /**
- * SpaceX live refactor: preserves routing, archive access, language toggling,
- * completion badge, and logout confirmation while shifting navigation to a
- * restrained text-first shell with subtle active/hover states and no boxed tabs.
+ * WolfyStock shell phase 1 preserves routing, archive access, language
+ * toggling, completion badge, and logout confirmation while aligning nav
+ * controls to the shared glass tokens.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -287,7 +287,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       to={signInPath}
       onClick={onNavigate}
       className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : 'shell-header-action',
+        isDrawer ? 'shell-drawer-action shell-drawer-action--primary' : 'shell-header-action shell-header-action--primary',
         isActive ? 'is-active' : '',
       )}
       aria-label={signInLabel}

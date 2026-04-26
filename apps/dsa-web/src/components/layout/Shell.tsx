@@ -1,7 +1,7 @@
 /**
- * SpaceX live refactor: keeps routing, drawer orchestration, and rail injection
- * unchanged while tightening the masthead and content shell around a more
- * restrained text-first navigation system.
+ * WolfyStock shell phase 1 keeps routing, drawer orchestration, and rail
+ * injection unchanged while moving the shared workspace frame to edge-to-edge
+ * layout tokens and calmer glass navigation controls.
  */
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -158,8 +158,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         className={`theme-shell h-screen flex flex-col overflow-hidden text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
-        <header className="shell-masthead shrink-0">
-          <div className="shell-masthead__inner">
+        <header className="shell-masthead shrink-0 w-full">
+          <div className="shell-masthead__inner w-full">
             {isDesktop ? (
               <SidebarNav
                 layout="header"
@@ -191,10 +191,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame flex flex-1 min-h-0 overflow-hidden${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}`}
+          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full overflow-hidden${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column flex-1 min-h-0 overflow-hidden${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
-            <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 flex-col">
+          <main className={`theme-main-lane shell-main-column flex-1 min-h-0 min-w-0 w-full overflow-hidden${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+            <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col">
               {children ?? <Outlet />}
             </div>
           </main>

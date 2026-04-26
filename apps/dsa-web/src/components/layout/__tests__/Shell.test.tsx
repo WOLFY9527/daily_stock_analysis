@@ -98,14 +98,14 @@ describe('Shell', () => {
     const brandLink = screen.getByRole('link', { name: 'WolfyStock' });
     expect(brandLink).toHaveAttribute('href', '/');
     const logo = within(brandLink).getByRole('img', { name: 'WolfyStock logo' });
-    expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.svg');
+    expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.png');
     expect(logo).not.toHaveClass('invert');
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
   });
 
-  it('shows a guest-safe navigation set when the visitor is not signed in', () => {
+  it('shows the guest navigation routes without member-only account controls', () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: false,
@@ -124,11 +124,11 @@ describe('Shell', () => {
     );
 
     expect(screen.getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.scanner') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.chat') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.portfolio') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.backtest') })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.settings') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
   });
@@ -153,7 +153,8 @@ describe('Shell', () => {
 
     expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '扫描器' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '首页' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '扫描器' })).toBeInTheDocument();
   });
 
   it('hides the Ask Stock navigation entry when the agent runtime is unavailable', async () => {
@@ -174,7 +175,7 @@ describe('Shell', () => {
     });
   });
 
-  it('shows a confirmation dialog before logout and hard-redirects to the guest page', async () => {
+  it('shows a confirmation dialog before logout', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ThemeProvider>
@@ -191,7 +192,7 @@ describe('Shell', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.logoutConfirm') }));
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalled());
-    expect(mockHardRedirect).toHaveBeenCalledWith('/guest');
+    expect(mockHardRedirect).not.toHaveBeenCalled();
   });
 
   it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
@@ -255,8 +256,9 @@ describe('Shell', () => {
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--scanner')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
-    expect(document.querySelector('.shell-content-frame')).toHaveClass('flex');
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
     expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'min-w-0');
     expect(document.documentElement.dataset.scannerShell).toBe('true');
     expect(document.body.dataset.scannerShell).toBe('true');
   });
@@ -289,7 +291,23 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.shell-content-frame--backtest')).not.toBeNull();
-    expect(document.querySelector('.shell-content-frame')).toHaveClass('flex');
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
+  });
+
+  it('keeps the masthead and route frame on full-width shell tokens', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(document.querySelector('.shell-masthead')).toHaveClass('w-full');
+    expect(document.querySelector('.shell-masthead__inner')).toHaveClass('w-full');
+    expect(document.querySelector('.theme-page-transition')).toHaveClass('w-full', 'min-w-0');
   });
 
   it('shows the console entry for admin accounts without an admin-mode switch', async () => {
