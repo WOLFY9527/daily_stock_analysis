@@ -20,7 +20,6 @@ import {
 import { downloadSession, formatSessionAsMarkdown } from '../utils/chatExport';
 import type { ChatFollowUpContext } from '../utils/chatFollowUp';
 import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFollowUp';
-import { isNearBottom } from '../utils/chatScroll';
 import { useShellRail } from '../components/layout/ShellRailContext';
 import { useShellRailSlot } from '../components/layout/useShellRailSlot';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -152,14 +151,10 @@ const ChatPage: React.FC = () => {
   } | null>(null);
   const [skillsLoadError, setSkillsLoadError] = useState<ParsedApiError | null>(null);
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
-  const messagesViewportRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
   const isMountedRef = useRef(true);
   const followUpHydrationTokenRef = useRef(0);
   const followUpContextRef = useRef<ChatFollowUpContext | null>(null);
-  const shouldStickToBottomRef = useRef(true);
-  const pendingScrollBehaviorRef = useRef<ScrollBehavior>('auto');
   const seenAssistantMessageIdsRef = useRef<Set<string>>(new Set());
   const hasHydratedAssistantMessagesRef = useRef(false);
   const { closeMobileRail } = useShellRail();
@@ -192,54 +187,6 @@ const ChatPage: React.FC = () => {
     startStream,
     clearCompletionBadge,
   } = useAgentChatStore();
-
-  const syncScrollState = useCallback(() => {
-    const viewport = messagesViewportRef.current;
-    if (!viewport) return;
-
-    shouldStickToBottomRef.current = isNearBottom({
-      scrollTop: viewport.scrollTop,
-      clientHeight: viewport.clientHeight,
-      scrollHeight: viewport.scrollHeight,
-    });
-  }, []);
-
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
-  }, []);
-
-  const requestScrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    shouldStickToBottomRef.current = true;
-    pendingScrollBehaviorRef.current = behavior;
-  }, []);
-
-  const handleMessagesScroll = useCallback(() => {
-    syncScrollState();
-  }, [syncScrollState]);
-
-  useEffect(() => {
-    syncScrollState();
-  }, [syncScrollState, sessionId]);
-
-  useEffect(() => {
-    const behavior = pendingScrollBehaviorRef.current;
-    const shouldAutoScroll = shouldStickToBottomRef.current;
-    const hasRenderableChatContent = messages.length > 0 || progressSteps.length > 0 || loading;
-    if (!shouldAutoScroll || !hasRenderableChatContent) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      scrollToBottom(behavior);
-      pendingScrollBehaviorRef.current = loading ? 'auto' : 'smooth';
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [messages, progressSteps, loading, sessionId, scrollToBottom]);
-
-  useEffect(() => {
-    if (!loading) {
-      pendingScrollBehaviorRef.current = 'smooth';
-    }
-  }, [loading]);
 
   useEffect(() => {
     clearCompletionBadge();
@@ -291,16 +238,14 @@ const ChatPage: React.FC = () => {
 
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
-    requestScrollToBottom('auto');
     useAgentChatStore.getState().startNewChat();
     closeMobileRail();
-  }, [closeMobileRail, requestScrollToBottom]);
+  }, [closeMobileRail]);
 
   const handleSwitchSession = useCallback((targetSessionId: string) => {
-    requestScrollToBottom('auto');
     switchSession(targetSessionId);
     closeMobileRail();
-  }, [closeMobileRail, requestScrollToBottom, switchSession]);
+  }, [closeMobileRail, switchSession]);
 
   const confirmDelete = useCallback(() => {
     if (!deleteConfirmId) return;
@@ -369,10 +314,9 @@ const ChatPage: React.FC = () => {
       setIsFollowUpContextLoading(false);
 
       setInput('');
-      requestScrollToBottom('smooth');
       await startStream(payload, { skillName: usedSkillName });
     },
-    [chat, input, loading, requestScrollToBottom, selectedSkill, skills, sessionId, startStream, t],
+    [chat, input, loading, selectedSkill, skills, sessionId, startStream, t],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -729,6 +673,14 @@ const ChatPage: React.FC = () => {
           <div className="pointer-events-auto flex items-start gap-2">
             <button
               type="button"
+              onClick={handleStartNewChat}
+              className="rounded-full border border-white/5 bg-white/10 px-4 py-2 text-sm text-white transition-colors hover:bg-white/20"
+              title={chat('newChatTitle')}
+            >
+              + {chat('newChatTitle')}
+            </button>
+            <button
+              type="button"
               onClick={() => setIsBriefDrawerOpen(true)}
               data-testid="chat-bento-drawer-trigger"
               className={CARD_BUTTON_CLASS}
@@ -785,14 +737,12 @@ const ChatPage: React.FC = () => {
         </div>
 
         <main
-          ref={messagesViewportRef}
           data-testid="chat-main"
-          onScroll={handleMessagesScroll}
           className="flex-1 w-full overflow-y-auto no-scrollbar"
         >
           <div
             data-testid="chat-message-stream"
-            className="mx-auto flex w-full max-w-[1440px] flex-col gap-10 px-4 pt-16 pb-[15rem] md:px-6 md:pb-[14rem]"
+            className="mx-auto flex w-full max-w-[1000px] flex-col gap-10 px-6 pt-16 pb-[15rem] md:px-10 md:pb-[14rem]"
           >
             {skillsLoadError ? (
               <ApiErrorAlert
@@ -964,7 +914,6 @@ const ChatPage: React.FC = () => {
               </div>
             )}
 
-            <div ref={messagesEndRef} />
           </div>
         </main>
 
@@ -972,7 +921,7 @@ const ChatPage: React.FC = () => {
           data-testid="chat-input-shell"
           className="pointer-events-none absolute bottom-0 left-0 z-50 flex w-full justify-center bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent px-4 pt-20 pb-8 md:px-6"
         >
-          <div className="relative flex w-full max-w-[1440px] flex-col gap-3 pointer-events-auto">
+          <div className="relative flex w-full max-w-[1000px] flex-col gap-3 px-6 pointer-events-auto md:px-10">
             {sendToast ? (
               <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
                 {sendToast.message}

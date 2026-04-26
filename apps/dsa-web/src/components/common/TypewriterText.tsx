@@ -11,70 +11,64 @@ type TypewriterTextProps = {
 
 export const TypewriterText: React.FC<TypewriterTextProps> = ({
   text,
-  speed = 15,
+  speed = 4,
   testId,
   as = 'span',
   className,
   onComplete,
 }) => {
   const textRef = useRef<HTMLElement | null>(null);
+  const renderedLengthRef = useRef(0);
+  const onCompleteRef = useRef(onComplete);
   const setTextRef = useCallback((node: HTMLElement | null) => {
     textRef.current = node;
   }, []);
 
   useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
     const node = textRef.current;
     if (!node) return;
 
-    let index = 0;
-    let lastTime = performance.now();
-    let animationFrameId = 0;
-    let isCancelled = false;
-
-    node.innerHTML = '';
-
-    const appendChunk = (chunk: string) => {
-      for (const char of chunk) {
-        if (char === '\n') {
-          node.appendChild(document.createElement('br'));
-        } else {
-          node.appendChild(document.createTextNode(char));
-        }
-      }
-      node.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const renderText = (value: string) => {
+      node.innerHTML = value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br/>');
     };
 
+    if (text.length <= renderedLengthRef.current) {
+      renderText(text);
+      renderedLengthRef.current = text.length;
+      onCompleteRef.current?.();
+      return;
+    }
+
+    let animationFrameId = 0;
+
     const type = () => {
-      if (isCancelled) return;
+      const charsPerFrame = Math.max(3, Math.min(5, Math.round(speed)));
+      const targetLength = Math.min(renderedLengthRef.current + charsPerFrame, text.length);
 
-      const currentTime = performance.now();
-      const elapsed = currentTime - lastTime;
+      renderText(text.slice(0, targetLength));
+      renderedLengthRef.current = targetLength;
 
-      if (elapsed >= speed) {
-        const nextChunkSize = Math.max(1, Math.floor(elapsed / speed));
-        const chunk = text.slice(index, index + nextChunkSize);
-
-        if (chunk) {
-          appendChunk(chunk);
-          index += chunk.length;
-          lastTime = currentTime;
-        }
-      }
-
-      if (index < text.length) {
+      if (renderedLengthRef.current < text.length) {
         animationFrameId = window.requestAnimationFrame(type);
       } else {
-        onComplete?.();
+        onCompleteRef.current?.();
       }
     };
 
     animationFrameId = window.requestAnimationFrame(type);
 
     return () => {
-      isCancelled = true;
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [onComplete, speed, text]);
+  }, [speed, text]);
 
   const Component = as as 'div' | 'span';
 

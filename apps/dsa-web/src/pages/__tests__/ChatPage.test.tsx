@@ -192,7 +192,8 @@ describe('ChatPage', () => {
     const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
     expect(skillValues[0]).toHaveTextContent(canonicalBullTrendLabel('zh'));
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-[1440px]', 'mx-auto', 'flex-col', 'gap-10', 'px-4', 'pt-16');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-[1000px]', 'mx-auto', 'flex-col', 'gap-10', 'px-6', 'pt-16');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('md:px-10');
     expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/95', 'to-transparent', 'pt-20', 'pb-8', 'justify-center', 'pointer-events-none');
     expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'flex-wrap', 'items-center', 'gap-2');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
@@ -209,6 +210,21 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByTestId('chat-bento-drawer-trigger'));
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: translate('zh', 'chat.title') })).toBeInTheDocument();
+  });
+
+  it('exposes a prominent new-chat action in the header and clears the current thread', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    const newChatButton = await screen.findByRole('button', { name: translate('zh', 'chat.newChatTitle') });
+    fireEvent.click(newChatButton);
+
+    expect(mockStartNewChat).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the empty state anchored instead of auto-scrolling to the footer on first paint', async () => {
@@ -274,7 +290,7 @@ describe('ChatPage', () => {
       {
         id: 'assistant-latest',
         role: 'assistant',
-        content: '最新回复正在涌现',
+        content: '最新回复正在涌现，请继续观察成交量与关键价位变化',
         skillName: canonicalBullTrendLabel('zh'),
       },
     ];
@@ -292,18 +308,33 @@ describe('ChatPage', () => {
     const streamingNode = screen.getByTestId('chat-typewriter-assistant-latest');
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(90);
+      await vi.advanceTimersToNextTimerAsync();
     });
 
-    expect(streamingNode.textContent?.length ?? 0).toBeGreaterThan(0);
-    expect(streamingNode.textContent?.length ?? 0).toBeLessThan('最新回复正在涌现'.length);
+    const partialLength = streamingNode.textContent?.length ?? 0;
+    expect(partialLength).toBeGreaterThan(0);
+    expect(partialLength).toBeLessThan('最新回复正在涌现，请继续观察成交量与关键价位变化'.length);
     expect(screen.getByTestId('chat-main').textContent).toContain('历史回复保持完整显示');
+
+    await act(async () => {
+      view.rerender(
+        <MemoryRouter initialEntries={['/chat']}>
+          <ShellRailHarness>
+            <ChatPage />
+          </ShellRailHarness>
+        </MemoryRouter>
+      );
+    });
+
+    expect((streamingNode.textContent?.length ?? 0)).toBeGreaterThanOrEqual(partialLength);
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(400);
     });
 
-    expect(streamingNode).toHaveTextContent('最新回复正在涌现');
+    expect(streamingNode).toHaveTextContent('最新回复正在涌现，请继续观察成交量与关键价位变化');
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
