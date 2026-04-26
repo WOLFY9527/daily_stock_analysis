@@ -10,8 +10,8 @@ vi.mock('../../hooks/useProductSurface', () => ({
   useProductSurface: () => useProductSurfaceMock(),
 }));
 
-vi.mock('../GuestScannerPage', () => ({
-  default: () => <div>guest scanner page</div>,
+vi.mock('../../components/access/PremiumPaywall', () => ({
+  PremiumPaywall: ({ moduleName }: { moduleName: string }) => <div>{`premium-paywall:${moduleName}`}</div>,
 }));
 
 vi.mock('../UserScannerPage', () => ({
@@ -23,10 +23,10 @@ describe('ScannerSurfacePage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders guest teaser for guests', () => {
+  it('renders the premium paywall for guests on scanner', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true, isAdminMode: false });
     render(<ScannerSurfacePage />);
-    expect(screen.getByText('guest scanner page')).toBeInTheDocument();
+    expect(screen.getByText('premium-paywall:全市场扫描仪')).toBeInTheDocument();
   });
 
   it('renders user scanner surface for normal signed-in users', () => {

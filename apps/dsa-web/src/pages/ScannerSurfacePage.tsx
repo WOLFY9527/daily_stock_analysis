@@ -1,13 +1,15 @@
 import type React from 'react';
-import GuestScannerPage from './GuestScannerPage';
+import { PremiumPaywall } from '../components/access/PremiumPaywall';
 import UserScannerPage from './UserScannerPage';
+import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 
 const ScannerSurfacePage: React.FC = () => {
   const { isGuest } = useProductSurface();
+  const { language } = useI18n();
 
   if (isGuest) {
-    return <GuestScannerPage />;
+    return <PremiumPaywall moduleName={language === 'en' ? 'Market Scanner' : '全市场扫描仪'} />;
   }
 
   return <UserScannerPage />;

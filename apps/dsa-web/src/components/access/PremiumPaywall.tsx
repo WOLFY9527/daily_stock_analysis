@@ -14,40 +14,33 @@ export const PremiumPaywall: React.FC<PremiumPaywallProps> = ({ moduleName }) =>
   const loginPath = buildLoginPath(`${location.pathname}${location.search}`);
   const title = language === 'en' ? `Sign in to unlock ${moduleName}` : `登录解锁 ${moduleName} 功能`;
   const body = language === 'en'
-    ? 'Guest mode keeps the navigation open, but personal data, saved workspaces, and deeper tools stay behind account-bound access.'
-    : '游客模式可以继续浏览导航，但个人数据、可保存工作区和深度工具仍然绑定在真实账户之后。';
-  const buttonLabel = language === 'en' ? `Unlock ${moduleName}` : `登录解锁 ${moduleName}`;
+    ? 'Guest mode only includes the home preview. Personal workspaces, deeper historical review, and advanced metrics stay behind a real account.'
+    : '游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。';
+  const buttonLabel = language === 'en' ? 'Sign in / Create account' : '登录 / 创建账户';
 
   return (
-    <div
-      className="relative flex min-h-full flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.16),transparent_38%),linear-gradient(180deg,#09111b_0%,#060b12_100%)]"
-      data-testid="premium-paywall"
-    >
-      <div aria-hidden="true" className="absolute inset-0 opacity-60">
-        <div className="absolute inset-x-10 top-12 h-24 rounded-[28px] border border-white/6 bg-white/[0.03] blur-sm" />
-        <div className="absolute inset-x-16 top-44 h-32 rounded-[32px] border border-white/5 bg-white/[0.025] blur-md" />
-        <div className="absolute inset-x-24 bottom-16 h-28 rounded-[30px] border border-white/5 bg-white/[0.02] blur-lg" />
-      </div>
-
-      <div className="absolute inset-0 bg-slate-950/52 backdrop-blur-xl" />
-
-      <div className="relative z-10 flex w-full items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-white/[0.06] px-8 py-9 text-center shadow-[0_30px_120px_rgba(3,7,18,0.55)]">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-200">
-            <LockKeyhole className="h-6 w-6" />
+    <div className="w-full h-[calc(100vh-80px)] flex items-center justify-center p-4" data-testid="premium-paywall-shell">
+      <div
+        className="relative w-full max-w-md overflow-hidden rounded-[24px] border border-white/5 bg-white/[0.02] p-8 text-center shadow-2xl backdrop-blur-3xl"
+        data-testid="premium-paywall-card"
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-indigo-500/10 blur-3xl"
+        />
+        <div className="mb-6 flex items-center justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
+            <LockKeyhole className="h-5 w-5 text-white/50" />
           </div>
-          <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/38">
-            {language === 'en' ? 'Premium surface' : '高级模块'}
-          </p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">{title}</h1>
-          <p className="mt-3 text-sm leading-6 text-white/58">{body}</p>
-          <Link
-            to={loginPath}
-            className="mt-7 inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
-          >
-            {buttonLabel}
-          </Link>
         </div>
+        <h1 className="mb-2 text-xl font-bold text-white">{title}</h1>
+        <p className="mb-8 text-sm leading-relaxed text-white/40">{body}</p>
+        <Link
+          to={loginPath}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] py-3.5 text-white transition-colors hover:bg-white/[0.1]"
+        >
+          {buttonLabel}
+        </Link>
       </div>
     </div>
   );

@@ -111,6 +111,7 @@ const GuestHomePage: React.FC = () => {
   const chartPoints = buildChartSeries(summary?.sentimentScore);
   const chartLastPoint = chartPoints.split(' ').slice(-1)[0];
   const chartLastY = chartLastPoint ? chartLastPoint.split(',')[1] : '52';
+  const waitingToneClass = 'text-white/40';
 
   return (
     <main
@@ -123,7 +124,10 @@ const GuestHomePage: React.FC = () => {
           <p className="text-sm text-white/40">{copy.subtitle}</p>
         </div>
 
-        <section className="rounded-3xl border border-white/8 bg-[#0b1119] px-5 py-5 shadow-[0_22px_80px_rgba(0,0,0,0.34)]">
+        <section
+          className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] p-6 shadow-2xl backdrop-blur-3xl"
+          data-testid="guest-home-search-card"
+        >
           <div className="flex flex-col gap-3 md:flex-row">
             <div className="min-w-0 flex-1">
               <StockAutocomplete
@@ -134,12 +138,13 @@ const GuestHomePage: React.FC = () => {
                 }}
                 placeholder={copy.inputPlaceholder}
                 disabled={isLoading}
+                className="border border-white/10 bg-white/[0.04] text-white placeholder:text-white/30"
               />
             </div>
             <button
               type="button"
               onClick={() => void handlePreview()}
-              className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-cyan-300 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="shrink-0 rounded-xl border border-white/10 bg-white/[0.05] px-6 py-3.5 text-white font-medium transition-colors hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isLoading}
             >
               {isLoading ? copy.submittingLabel : copy.submitLabel}
@@ -148,11 +153,14 @@ const GuestHomePage: React.FC = () => {
           {error ? <div className="mt-4"><ApiErrorAlert error={error} /></div> : null}
         </section>
 
-        <section className="rounded-[30px] border border-cyan-400/12 bg-[#0d1520] p-6 shadow-[0_28px_100px_rgba(3,7,18,0.45)]">
+        <section
+          className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] p-6 shadow-2xl backdrop-blur-3xl"
+          data-testid="guest-home-preview-card"
+        >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch">
             <div className="flex min-w-0 flex-1 flex-col justify-between">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/14 bg-cyan-400/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-100/82">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
                   <TrendingUp className="h-3.5 w-3.5" />
                   <span>AI Decision</span>
                 </div>
@@ -163,11 +171,21 @@ const GuestHomePage: React.FC = () => {
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
                     <p className="text-[11px] uppercase tracking-[0.22em] text-white/36">{copy.actionLabel}</p>
-                    <p className="mt-2 text-base font-medium text-white">{summary?.operationAdvice || copy.waitingLabel}</p>
+                    <p
+                      className={`mt-2 text-base font-medium ${summary?.operationAdvice ? 'text-white' : waitingToneClass}`}
+                      data-testid="guest-home-waiting-action"
+                    >
+                      {summary?.operationAdvice || copy.waitingLabel}
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
                     <p className="text-[11px] uppercase tracking-[0.22em] text-white/36">{copy.trendLabel}</p>
-                    <p className="mt-2 text-base font-medium text-white">{summary?.trendPrediction || copy.waitingLabel}</p>
+                    <p
+                      className={`mt-2 text-base font-medium ${summary?.trendPrediction ? 'text-white' : waitingToneClass}`}
+                      data-testid="guest-home-waiting-trend"
+                    >
+                      {summary?.trendPrediction || copy.waitingLabel}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -178,10 +196,10 @@ const GuestHomePage: React.FC = () => {
                   {summary?.analysisSummary || copy.subtitle}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <Link to={loginPath} className="inline-flex min-h-10 items-center justify-center rounded-2xl bg-cyan-300 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200">
+                  <Link to={loginPath} className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-medium text-white transition-colors hover:bg-white/[0.1]">
                     {copy.lockedCta}
                   </Link>
-                  <Link to={registrationPath} className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-white/10 px-4 text-sm font-medium text-white/78 transition hover:bg-white/[0.05] hover:text-white">
+                  <Link to={registrationPath} className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/10 px-4 text-sm font-medium text-white/78 transition hover:bg-white/[0.05] hover:text-white">
                     {copy.createAccount}
                   </Link>
                 </div>
@@ -189,7 +207,7 @@ const GuestHomePage: React.FC = () => {
             </div>
 
             <div className="lg:w-[320px]">
-              <div className="h-full rounded-[26px] border border-white/6 bg-[#09111a] p-4">
+              <div className="h-full rounded-[26px] border border-white/6 bg-white/[0.03] p-4">
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.22em] text-white/34">
                   <span>{copy.scoreLabel}</span>
                   <span>{preview?.report.meta.stockCode || '--'}</span>
@@ -197,8 +215,8 @@ const GuestHomePage: React.FC = () => {
                 <svg viewBox="0 0 320 136" className="mt-5 h-40 w-full">
                   <defs>
                     <linearGradient id="guest-home-line" x1="0%" x2="100%" y1="0%" y2="0%">
-                      <stop offset="0%" stopColor="rgba(56,189,248,0.45)" />
-                      <stop offset="100%" stopColor="rgba(103,232,249,0.95)" />
+                      <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
+                      <stop offset="100%" stopColor="rgba(255,255,255,0.7)" />
                     </linearGradient>
                   </defs>
                   <path d="M16 112 H304" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
@@ -212,11 +230,18 @@ const GuestHomePage: React.FC = () => {
                     strokeLinejoin="round"
                     points={chartPoints}
                   />
-                  <circle cx="296" cy={chartLastY} r="5" fill="#67e8f9" />
+                  <circle cx="296" cy={chartLastY} r="5" fill="rgba(255,255,255,0.72)" />
                 </svg>
                 <div className="mt-3 flex items-center justify-between text-xs text-white/40">
-                  <span>{preview?.report.meta.stockName || copy.waitingLabel}</span>
-                  <span>{summary?.trendPrediction || copy.waitingLabel}</span>
+                  <span
+                    className={preview?.report.meta.stockName ? 'text-white/40' : waitingToneClass}
+                    data-testid="guest-home-waiting-chart"
+                  >
+                    {preview?.report.meta.stockName || copy.waitingLabel}
+                  </span>
+                  <span className={summary?.trendPrediction ? 'text-white/40' : waitingToneClass}>
+                    {summary?.trendPrediction || copy.waitingLabel}
+                  </span>
                 </div>
               </div>
             </div>

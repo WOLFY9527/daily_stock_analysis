@@ -82,9 +82,31 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('guest-home-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 决策面板' })).toBeInTheDocument();
     expect(screen.getAllByText('输入股票代码，唤醒 AI 深度分析...').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('guest-home-search-card')).toHaveClass(
+      'w-full',
+      'bg-white/[0.02]',
+      'backdrop-blur-3xl',
+      'border-white/5',
+      'rounded-[24px]',
+      'p-6',
+      'shadow-2xl',
+    );
+    expect(screen.getByRole('button', { name: '生成简版判断' })).toHaveClass(
+      'shrink-0',
+      'bg-white/[0.05]',
+      'hover:bg-white/[0.1]',
+      'border-white/10',
+      'text-white',
+      'rounded-xl',
+      'px-6',
+      'py-3.5',
+    );
     expect(screen.queryByTestId('guest-home-grid')).not.toBeInTheDocument();
     expect(screen.queryByTestId('guest-home-frosted-lock')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成简版判断' })).toBeEnabled();
+    expect(screen.getByTestId('guest-home-waiting-action')).toHaveClass('text-white/40');
+    expect(screen.getByTestId('guest-home-waiting-trend')).toHaveClass('text-white/40');
+    expect(screen.getByTestId('guest-home-waiting-chart')).toHaveClass('text-white/40');
 
     fireEvent.change(screen.getByLabelText('guest-stock-input'), { target: { value: 'AAPL' } });
     fireEvent.click(screen.getByRole('button', { name: '生成简版判断' }));
