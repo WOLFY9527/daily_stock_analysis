@@ -36,7 +36,27 @@ type DrawerPayload = {
   modules: DrawerModule[];
 };
 
+type DecisionChartPoint = {
+  label: string;
+  value: number;
+};
+
 type DashboardLocale = 'zh' | 'en';
+
+const DECISION_CHART_POINTS: DecisionChartPoint[] = [
+  { label: '09:30', value: 116.2 },
+  { label: '10:00', value: 117.4 },
+  { label: '10:30', value: 116.8 },
+  { label: '11:00', value: 117.9 },
+  { label: '11:30', value: 116.5 },
+  { label: '12:00', value: 117.2 },
+  { label: '12:30', value: 116.1 },
+  { label: '13:00', value: 117.6 },
+  { label: '13:30', value: 118.1 },
+  { label: '14:00', value: 120.4 },
+  { label: '14:30', value: 123.1 },
+  { label: '15:00', value: 125.0 },
+];
 
 const CONTENT: Record<DashboardLocale, {
   documentTitle: string;
@@ -62,6 +82,8 @@ const CONTENT: Record<DashboardLocale, {
     badge: string;
     chartLabel: string;
     summary: string;
+    reasonTitle: string;
+    reasonBody: string;
     detailLabel: string;
   };
   strategy: {
@@ -111,8 +133,10 @@ const CONTENT: Record<DashboardLocale, {
       scoreLabel: '信号方向',
       scoreValue: '72H 继续偏强',
       badge: '动能回升 · 机构跟进',
-      chartLabel: '突破准备完成',
+      chartLabel: '突破完成',
       summary: '订单动能回升，价格重新贴近强趋势区间，适合用回踩确认来组织仓位。',
+      reasonTitle: 'AI 突破归因',
+      reasonBody: '盘中监测到大级别资金吸筹，价格成功站稳 MA60 关键支撑位，并伴随 MACD 零轴上方金叉，确认箱体突破有效。',
       detailLabel: '查看完整判断',
     },
     strategy: {
@@ -286,8 +310,10 @@ const CONTENT: Record<DashboardLocale, {
       scoreLabel: 'Signal Direction',
       scoreValue: 'Bias stays constructive for 72H',
       badge: 'Momentum rebuild · institutional follow-through',
-      chartLabel: 'Breakout setup intact',
+      chartLabel: 'Breakout Confirmed',
       summary: 'Order momentum is improving and price is moving back into a strong-trend zone, so the cleaner plan is still a pullback confirmation entry.',
+      reasonTitle: 'AI Breakout Why',
+      reasonBody: 'Intraday flow points to institutional accumulation, price reclaimed MA60 support, and the MACD bullish cross stayed above zero to validate the range escape.',
       detailLabel: 'Open Decision Brief',
     },
     strategy: {
@@ -473,9 +499,9 @@ const HomeBentoDashboardPage: React.FC = () => {
     <div
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-col gap-4 bg-transparent px-4 md:px-8 xl:px-12 2xl:max-w-full`}
+      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide mx-auto flex w-full min-h-[calc(100vh-80px)] max-w-[1920px] flex-col items-center gap-4 overflow-x-hidden bg-transparent px-4 py-6 md:px-8 md:py-10 xl:px-12 2xl:max-w-full`}
     >
-      <header className="mb-4 mt-8 flex shrink-0 flex-col gap-3" data-testid="home-bento-header">
+      <header className="mb-2 flex w-full shrink-0 flex-col gap-3" data-testid="home-bento-header">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
             {copy.heading}
@@ -528,8 +554,8 @@ const HomeBentoDashboardPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-hidden" data-testid="home-bento-main">
-        <BentoGrid testId="home-bento-grid" className="h-full auto-rows-fr">
+      <main className="w-full flex-1 min-h-0" data-testid="home-bento-main">
+        <BentoGrid testId="home-bento-grid" className="w-full max-w-6xl grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 auto-rows-[minmax(220px,auto)]">
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}
@@ -544,11 +570,14 @@ const HomeBentoDashboardPage: React.FC = () => {
             badge={copy.decision.badge}
             chartLabel={copy.decision.chartLabel}
             summary={copy.decision.summary}
+            chartPoints={DECISION_CHART_POINTS}
+            breakoutPointIndex={9}
+            reason={{ title: copy.decision.reasonTitle, body: copy.decision.reasonBody }}
             detailLabel={copy.decision.detailLabel}
             onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
           />
 
-          <div data-testid="home-bento-sibling-row" className="grid h-full grid-cols-1 gap-4 self-stretch md:grid-cols-2 xl:col-span-6 xl:grid-cols-3">
+          <div data-testid="home-bento-sibling-row" className="grid grid-cols-1 gap-6 self-stretch md:col-span-2 md:grid-cols-2 xl:col-span-2 xl:grid-cols-3">
             <StrategyCard
               title={copy.strategy.title}
               subtitle={copy.strategy.subtitle}

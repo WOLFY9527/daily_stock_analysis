@@ -80,6 +80,7 @@ describe('GuestHomePage', () => {
     );
 
     expect(screen.getByTestId('guest-home-page')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-page')).toHaveClass('w-full', 'min-h-[calc(100vh-80px)]', 'overflow-x-hidden');
     expect(screen.getByRole('heading', { name: 'WolfyStock 决策面板' })).toBeInTheDocument();
     expect(screen.getAllByText('输入股票代码，唤醒 AI 深度分析...').length).toBeGreaterThan(0);
     expect(screen.getByTestId('guest-home-search-card')).toHaveClass(
@@ -123,6 +124,8 @@ describe('GuestHomePage', () => {
     expect(screen.getByText('等待回踩')).toBeInTheDocument();
     expect(screen.getAllByText('偏强震荡').length).toBeGreaterThan(0);
     expect(screen.getByText('72')).toBeInTheDocument();
+    expect(screen.getAllByText('突破观察').length).toBeGreaterThan(0);
+    expect(screen.getByText('AI 归因')).toBeInTheDocument();
   });
 
   it('renders the English minimalist guest funnel copy', () => {

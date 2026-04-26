@@ -58,7 +58,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
         >
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
           <p
-            className={`font-medium leading-tight text-2xl ${getToneTextClass(metric.tone || 'neutral')}`}
+            className={`font-medium leading-tight text-xl sm:text-2xl ${getToneTextClass(metric.tone || 'neutral')}`}
             style={getToneTextStyle(metric.tone || 'neutral', false)}
           >
             {metric.value}
