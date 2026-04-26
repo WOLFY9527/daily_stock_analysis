@@ -6542,7 +6542,7 @@ body::after {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding-inline: clamp(0.8rem, 1.5vw, 1.75rem);
+  padding-inline: 0;
 }
 
 .backtest-v1-page,
@@ -6911,7 +6911,7 @@ body::after {
 
 @media (min-width: 1440px) {
   .shell-content-frame.shell-content-frame--backtest {
-    padding-inline: clamp(1rem, 1.3vw, 2rem);
+    padding-inline: 0;
   }
 
   .backtest-workbench-shell {
@@ -11535,7 +11535,7 @@ html[data-theme='spacex'] .shell-content-frame.shell-content-frame--backtest {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding-inline: clamp(0.8rem, 1.5vw, 1.75rem);
+  padding-inline: 0;
 }
 
 @media (min-width: 1600px) {

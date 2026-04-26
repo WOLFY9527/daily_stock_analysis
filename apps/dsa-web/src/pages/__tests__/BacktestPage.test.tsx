@@ -884,16 +884,15 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByTestId('backtest-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('min-h-full', 'overflow-visible');
-    expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
+    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'min-h-screen', 'flex', 'flex-col', 'bg-transparent');
+    expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('container', 'mx-auto', 'max-w-[1600px]');
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'border-b', 'border-white/5', 'bg-transparent', 'px-4', 'md:px-6', 'xl:px-8');
-    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'px-4', 'md:px-6', 'xl:px-8', 'py-6', 'flex', 'flex-col', 'gap-8', 'bg-transparent');
-    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'px-4', 'md:px-8', 'xl:px-12', 'flex', 'flex-col', 'xl:flex-row', 'gap-8', 'xl:gap-12', 'mt-8', 'mb-24', 'min-w-0');
-    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'xl:w-[400px]', '2xl:w-[480px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'border-b', 'border-white/5', 'bg-[#030303]', 'px-6', 'xl:px-10');
+    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'gap-10', 'px-6', 'xl:px-10', 'py-8', 'bg-transparent');
+    expect(screen.getByTestId('backtest-summary-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'flex', 'flex-col', 'xl:flex-row', 'gap-10', 'min-w-0');
+    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'xl:w-[400px]', 'shrink-0', 'flex', 'flex-col', 'gap-6', 'min-w-0');
     expect(screen.getByTestId('backtest-cockpit-console')).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'rounded-[32px]', 'p-8', 'shadow-2xl', 'relative', 'overflow-hidden', 'backtest-setup-main');
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('min-h-0', 'overflow-y-auto', 'no-scrollbar');
@@ -1128,7 +1127,7 @@ describe('BacktestPage', () => {
     );
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-page-hero')).toHaveTextContent('ORCL');
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
     expect(screen.getByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();

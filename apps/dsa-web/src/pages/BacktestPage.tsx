@@ -7,9 +7,9 @@ import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import {
+  BentoHeroStrip,
   CARD_BUTTON_CLASS,
   PageBriefDrawer,
-  PageChrome,
   type BentoHeroItem,
 } from '../components/home-bento';
 import DeterministicBacktestFlow, {
@@ -1034,45 +1034,54 @@ const BacktestPage: React.FC = () => {
   );
 
   return (
-    <PageChrome
-      pageTestId="backtest-bento-page"
-      pageClassName="backtest-v1-page workspace-page--backtest gemini-bento-page--backtest"
-      scrollMode="page"
-      eyebrow={bt(language, 'page.headerEyebrow')}
-      title={bt(language, 'page.headerTitle')}
-      description={bt(language, 'page.headerDescription', {
-        benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
-      })}
-      headerClassName="backtest-v1-header"
-      headerContentClassName="backtest-v1-header__layout"
-      descriptionClassName="backtest-v1-header__description"
-      actions={(
-        <button
-          type="button"
-          className={CARD_BUTTON_CLASS}
-          data-testid="backtest-bento-drawer-trigger"
-          onClick={() => setIsBriefDrawerOpen(true)}
-        >
-          <PanelRightOpen className="h-4 w-4" />
-          <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-        </button>
-      )}
-      heroItems={heroItems}
-      heroTestId="backtest-bento-hero"
+    <div
+      data-testid="backtest-bento-page"
+      className="w-full min-h-screen flex flex-col bg-transparent"
     >
+      <header className="w-full px-6 pt-6 xl:px-10">
+        <div className="relative overflow-hidden rounded-[32px] border border-white/8 bg-white/[0.02] px-6 py-6 backdrop-blur-2xl xl:px-8">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="min-w-0 max-w-4xl">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-white/44">
+                {bt(language, 'page.headerEyebrow')}
+              </p>
+              <h1 className="mt-3 max-w-[14ch] text-[clamp(2.1rem,3.2vw,3.7rem)] font-bold uppercase tracking-[0.1em] text-white">
+                {bt(language, 'page.headerTitle')}
+              </h1>
+              <p className="mt-3 max-w-4xl text-sm leading-7 text-white/62">
+                {bt(language, 'page.headerDescription', {
+                  benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
+                })}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                className={CARD_BUTTON_CLASS}
+                data-testid="backtest-bento-drawer-trigger"
+                onClick={() => setIsBriefDrawerOpen(true)}
+              >
+                <PanelRightOpen className="h-4 w-4" />
+                <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
       <div
         data-testid="backtest-subnav"
-        className="w-full border-b border-white/5 bg-transparent px-4 md:px-6 xl:px-8"
+        className="mt-6 w-full border-b border-white/5 bg-[#030303] px-6 xl:px-10"
       >
         <div className="flex flex-col gap-3 py-2 xl:flex-row xl:items-center xl:justify-between">
           <nav
-            className="flex items-center gap-2 md:gap-6 h-14 overflow-x-auto no-scrollbar"
+            className="flex h-14 items-center gap-6 overflow-x-auto no-scrollbar"
             aria-label={bt(language, 'page.moduleTabsLabel')}
           >
             {moduleTabs}
           </nav>
           <nav
-            className="flex items-center gap-2 md:gap-6 h-14 overflow-x-auto no-scrollbar xl:justify-end"
+            className="flex h-14 items-center gap-6 overflow-x-auto no-scrollbar xl:justify-end"
             aria-label={bt(language, 'page.controlModeLabel')}
           >
             {controlModeTabs}
@@ -1080,10 +1089,17 @@ const BacktestPage: React.FC = () => {
         </div>
       </div>
 
-      <div
+      <main
         data-testid="backtest-v1-page"
-        className="w-full flex-1 px-4 md:px-6 xl:px-8 py-6 flex flex-col gap-8 bg-transparent"
+        className="w-full flex-1 flex flex-col gap-10 bg-transparent px-6 py-8 xl:px-10"
       >
+        <section data-testid="backtest-summary-strip" className="w-full">
+          <BentoHeroStrip
+            items={heroItems}
+            testId="backtest-bento-hero"
+            className="w-full gap-6"
+          />
+        </section>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={activeModule}
@@ -1205,7 +1221,7 @@ const BacktestPage: React.FC = () => {
             )}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </main>
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}
         onClose={() => setIsBriefDrawerOpen(false)}
@@ -1247,7 +1263,7 @@ const BacktestPage: React.FC = () => {
         ]}
         footnote={language === 'en' ? 'No strategy-engine or API changes in this pass.' : '本次不改策略引擎和 API。'}
       />
-    </PageChrome>
+    </div>
   );
 };
 

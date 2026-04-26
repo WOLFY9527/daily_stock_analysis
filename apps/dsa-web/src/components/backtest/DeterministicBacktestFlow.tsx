@@ -1513,7 +1513,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   );
 
   const renderSetupSidebar = () => (
-    <aside className="w-full xl:w-[400px] 2xl:w-[480px] shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
+    <aside className="w-full min-w-0 shrink-0 flex flex-col gap-6 xl:w-[400px]" data-testid="backtest-cockpit-console">
       <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-entry-shell">
         <SectionEyebrow>{language === 'en' ? 'Deterministic backtest' : '确定性回测'}</SectionEyebrow>
         <h2 className="mt-2 text-[1.35rem] font-semibold leading-tight text-white">{language === 'en' ? 'Setup console' : '回测启动面板'}</h2>
@@ -1544,7 +1544,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
 
   if (!isProfessionalMode) {
     return (
-      <div className="w-full px-4 md:px-8 xl:px-12 flex flex-col xl:flex-row gap-8 xl:gap-12 mt-8 mb-24 min-w-0" data-testid="backtest-cockpit">
+      <div className="w-full min-w-0 flex flex-col gap-10 xl:flex-row" data-testid="backtest-cockpit">
         {renderSetupSidebar()}
         <main className="flex-1 min-w-0 bg-white/[0.02] border border-white/5 rounded-[32px] p-8 md:p-10 shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
           <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -1603,7 +1603,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   }
 
   return (
-      <div className="w-full px-4 md:px-8 xl:px-12 flex flex-col xl:flex-row gap-8 xl:gap-12 mt-8 mb-24 min-w-0" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
+      <div className="w-full min-w-0 flex flex-col gap-10 xl:flex-row" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
       {renderSetupSidebar()}
       <main className="flex-1 min-w-0 bg-white/[0.02] border border-white/5 rounded-[32px] p-8 md:p-10 shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
