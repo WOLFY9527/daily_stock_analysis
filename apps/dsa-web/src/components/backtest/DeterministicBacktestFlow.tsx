@@ -1657,7 +1657,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   }
 
   return (
-    <div className="space-y-6" data-testid="backtest-unified-shell" data-module="rule" data-panel-mode={panelMode}>
+    <div className="space-y-6 min-w-0" data-testid="backtest-unified-shell" data-module="rule" data-panel-mode={panelMode}>
       <Card title={language === 'en' ? 'Professional-mode setup' : '专业版配置'} subtitle={language === 'en' ? 'Config page' : '配置页'} className="product-section-card product-section-card--backtest-result">
         <p className="product-section-copy">
           {language === 'en' ? 'Professional mode keeps the full control surface, but the full analysis still lives on `/backtest/results/:runId` rather than inside the config page.' : '专业版保留完整配置控制，但完整分析结果统一落在 `/backtest/results/:runId`。这里不再承载全宽图表工作区。'}

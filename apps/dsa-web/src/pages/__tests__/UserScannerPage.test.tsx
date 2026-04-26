@@ -308,8 +308,8 @@ describe('UserScannerPage', () => {
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
   });
 
-  it('renders compact pill filters and the fallback mock candidate grid before any manual run', async () => {
-    getRuns.mockResolvedValueOnce({
+  it('keeps pre-run candidates market-scoped instead of leaking fabricated us tickers into hk', async () => {
+    getRuns.mockResolvedValue({
       total: 0,
       page: 1,
       limit: 8,
@@ -324,10 +324,15 @@ describe('UserScannerPage', () => {
     expect(screen.getAllByText(/前 5|Top 5/i).length).toBeGreaterThan(0);
 
     expect(screen.getByText(/A股盘前候选名单|A-share pre-open candidates/i)).toBeInTheDocument();
-    expect(screen.getByText('NVIDIA')).toBeInTheDocument();
-    expect(screen.getByText('Tesla')).toBeInTheDocument();
-    expect(screen.getByText('Meta')).toBeInTheDocument();
-    expect(screen.getByText('Apple')).toBeInTheDocument();
-    expect(screen.queryByText(/当前还没有可展示的 A 股个人扫描结果。|No personal A-share scanner result is available yet./i)).not.toBeInTheDocument();
+    expect(screen.getByText(/当前还没有可展示的 A 股个人扫描结果。|No personal A-share scanner result is available yet./i)).toBeInTheDocument();
+    expect(screen.queryByText('NVIDIA')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /港股|HK/i }));
+
+    expect(await screen.findByText(/港股盘前候选名单|Hong Kong pre-open candidates/i)).toBeInTheDocument();
+    expect(screen.getByText(/当前还没有可展示的港股个人扫描结果。|No personal Hong Kong scanner result is available yet./i)).toBeInTheDocument();
+    expect(screen.queryByText('NVIDIA')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
   });
 });

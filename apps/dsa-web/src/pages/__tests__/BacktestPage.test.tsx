@@ -895,9 +895,9 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'max-w-[1400px]', 'mx-auto', 'px-4', 'md:px-8', 'pt-4', 'pb-24', 'min-h-screen', 'flex', 'flex-col', 'bg-transparent', 'gap-6', 'md:gap-8');
-    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'flex', 'flex-col', 'lg:flex-row', 'gap-8', 'min-w-0', 'mt-6');
-    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'lg:w-[360px]', 'xl:w-[400px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'min-h-screen', 'px-4', 'md:px-6', '2xl:px-10', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
+    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'xl:flex-row', 'gap-6', 'min-w-0', 'mt-6');
+    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'xl:w-[360px]', '2xl:w-[400px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
     expect(screen.getByTestId('backtest-cockpit-console')).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6');
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('min-h-0', 'overflow-y-auto', 'no-scrollbar');
@@ -1065,13 +1065,15 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'page.normalMode') })).toHaveAttribute('aria-selected', 'true');
 
     const controlPanel = screen.getByTestId('backtest-control-panel');
+    const inspectionPanel = screen.getByTestId('historical-inspection-panel');
     const displayBoard = screen.getByTestId('backtest-display-board');
     expect(screen.getByTestId('backtest-control-window')).toBeInTheDocument();
     expect(unifiedShell).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
-    expect(controlPanel).toHaveClass('flex', 'flex-col');
+    expect(controlPanel).toHaveClass('w-full', 'xl:w-[360px]', '2xl:w-[400px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
     expect(controlPanel).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(displayBoard).toHaveClass('flex', 'flex-col');
-    expect(displayBoard).not.toHaveClass('h-full', 'flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
+    expect(inspectionPanel).toHaveClass('w-full', 'xl:w-[320px]', '2xl:w-[360px]', 'shrink-0', 'flex', 'flex-col', 'gap-6', 'min-w-[250px]');
+    expect(displayBoard).toHaveClass('flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6');
+    expect(displayBoard).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
 
     expect(within(screen.getByTestId('historical-control-section-scope-samples')).getByText('范围与样本')).toBeInTheDocument();
     expect(screen.queryByTestId('historical-control-section-params')).not.toBeInTheDocument();
@@ -1081,6 +1083,7 @@ describe('BacktestPage', () => {
     expect(within(displayBoard).getByText('评估概览')).toBeInTheDocument();
     expect(within(displayBoard).getByText('评估结果')).toBeInTheDocument();
     expect(within(displayBoard).getByText('历史记录')).toBeInTheDocument();
+    expect(within(inspectionPanel).getByText('历史评估显示面板')).toBeInTheDocument();
     expect(within(displayBoard).queryByRole('button', { name: '运行历史评估' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') }));
@@ -1154,10 +1157,9 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(runBacktest).toHaveBeenCalledTimes(1));
 
-    expect(screen.queryByTestId('backtest-monitor-empty')).not.toBeInTheDocument();
-    expect(screen.getByTestId('backtest-monitor-result-state')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-equity-monitor')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-monitor-metrics')).toBeInTheDocument();
+    expect(screen.getByTestId('historical-display-section-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('historical-inspection-panel')).toBeInTheDocument();
+    expect(screen.getByText('评估概览')).toBeInTheDocument();
   });
 
   it('opens deterministic history items in the dedicated result page route', async () => {

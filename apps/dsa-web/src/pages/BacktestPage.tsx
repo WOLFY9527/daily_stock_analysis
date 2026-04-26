@@ -1131,28 +1131,20 @@ const BacktestPage: React.FC = () => {
 
       <div
         data-testid="backtest-v1-page"
-        className="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-4 pb-24 min-h-screen flex flex-col bg-transparent gap-6 md:gap-8"
+        className="w-full min-h-screen px-4 md:px-6 2xl:px-10 flex flex-col gap-6 bg-transparent"
       >
-        <main
-          className="backtest-cockpit w-full flex flex-col lg:flex-row gap-8 min-w-0 mt-6"
-          data-testid="backtest-cockpit"
-        >
-          <section
-            className="backtest-cockpit__console backtest-control-rail w-full lg:w-[360px] xl:w-[400px] shrink-0 flex flex-col gap-6"
-            data-testid="backtest-cockpit-console"
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeModule}
+            className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full min-w-0`}
+            data-testid="backtest-v1-stage"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={WORKBENCH_PANEL_TRANSITION}
           >
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={activeModule}
-                className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full`}
-                data-testid="backtest-v1-stage"
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={WORKBENCH_PANEL_TRANSITION}
-              >
-                {activeModule === 'historical' ? (
-                  <HistoricalEvaluationPanel
+            {activeModule === 'historical' ? (
+              <HistoricalEvaluationPanel
               normalizedCode={normalizedCode}
               codeFilter={codeFilter}
               onCodeChange={setCodeFilter}
@@ -1210,7 +1202,15 @@ const BacktestPage: React.FC = () => {
               isLoadingHistory={isLoadingHistory}
               panelMode={controlPanelMode}
             />
-                ) : (
+            ) : (
+              <main
+                className="backtest-cockpit w-full flex-1 flex flex-col xl:flex-row gap-6 min-w-0 mt-6"
+                data-testid="backtest-cockpit"
+              >
+                <section
+                  className="backtest-cockpit__console backtest-control-rail w-full xl:w-[360px] 2xl:w-[400px] shrink-0 flex flex-col gap-6"
+                  data-testid="backtest-cockpit-console"
+                >
                   <DeterministicBacktestFlow
               code={normalizedCode}
               onCodeChange={setCodeFilter}
@@ -1259,69 +1259,69 @@ const BacktestPage: React.FC = () => {
               appliedRewriteText={appliedRewriteText}
               panelMode={controlPanelMode}
             />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </section>
-          <section
-            className="backtest-cockpit__monitor backtest-result-rail flex-1 min-w-0 flex flex-col gap-6"
-            data-testid="backtest-cockpit-monitor"
-          >
-            {!hasRunBacktest ? (
-              <div className="backtest-monitor-empty" data-testid="backtest-monitor-empty">
-                <svg className="backtest-monitor-empty__icon" viewBox="0 0 96 96" aria-hidden="true">
-                  <path d="M10 66C22 54 30 58 40 46s18-9 24-18 10-13 22-18" />
-                  <path className="backtest-monitor-empty__axis" d="M10 80h76" />
-                </svg>
-                <h3>{language === 'en' ? 'Finish the setup on the left, then launch the backtest.' : '完成左侧参数配置，启动回测'}</h3>
-                <p>{language === 'en' ? 'The equity curve and KPI console appear here only after a run starts.' : '资金曲线与绩效评估将在此处生成'}</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-6 animate-in fade-in duration-500" data-testid="backtest-monitor-result-state">
-                <div className="backtest-equity-monitor" data-testid="backtest-equity-monitor">
-                  <div className="backtest-equity-monitor__header">
-                    <span>{language === 'en' ? 'Equity Signal' : '资金曲线'}</span>
-                    <strong>{normalizedCode || (language === 'en' ? 'No symbol' : '待选择')}</strong>
-                  </div>
-                  <svg className="backtest-equity-monitor__chart" viewBox="0 0 720 320" role="img" aria-label={language === 'en' ? 'Equity curve preview' : '资金曲线预览'}>
-                    <defs>
-                      <linearGradient id="backtest-equity-signal" x1="0" x2="1" y1="0" y2="0">
-                        <stop offset="0%" stopColor="#22d3ee" />
-                        <stop offset="48%" stopColor="#34d399" />
-                        <stop offset="100%" stopColor="#f8fafc" />
-                      </linearGradient>
-                      <filter id="backtest-equity-glow" x="-20%" y="-40%" width="140%" height="180%">
-                        <feGaussianBlur stdDeviation="7" result="blur" />
-                        <feMerge>
-                          <feMergeNode in="blur" />
-                          <feMergeNode in="SourceGraphic" />
-                        </feMerge>
-                      </filter>
-                    </defs>
-                    <path
-                      className="backtest-equity-monitor__area"
-                      d="M26 238 C84 230 111 210 158 216 C216 224 242 167 301 178 C367 190 393 118 456 132 C514 146 544 91 606 100 C655 107 681 77 702 62 L702 320 L26 320 Z"
-                    />
-                    <path
-                      className="backtest-equity-monitor__line"
-                      d="M26 238 C84 230 111 210 158 216 C216 224 242 167 301 178 C367 190 393 118 456 132 C514 146 544 91 606 100 C655 107 681 77 702 62"
-                      pathLength="1"
-                    />
-                  </svg>
-                </div>
-                <div className="backtest-monitor-metrics" data-testid="backtest-monitor-metrics">
-                  {monitorMetrics.map((metric) => (
-                    <article className="backtest-monitor-metric" key={metric.label}>
-                      <span>{metric.label}</span>
-                      <strong>{metric.value}</strong>
-                      <small>{metric.note}</small>
-                    </article>
-                  ))}
-                </div>
-              </div>
+                </section>
+                <section
+                  className="backtest-cockpit__monitor backtest-result-rail flex-1 min-w-0 flex flex-col gap-6"
+                  data-testid="backtest-cockpit-monitor"
+                >
+                  {!hasRunBacktest ? (
+                    <div className="backtest-monitor-empty" data-testid="backtest-monitor-empty">
+                      <svg className="backtest-monitor-empty__icon" viewBox="0 0 96 96" aria-hidden="true">
+                        <path d="M10 66C22 54 30 58 40 46s18-9 24-18 10-13 22-18" />
+                        <path className="backtest-monitor-empty__axis" d="M10 80h76" />
+                      </svg>
+                      <h3>{language === 'en' ? 'Finish the setup on the left, then launch the backtest.' : '完成左侧参数配置，启动回测'}</h3>
+                      <p>{language === 'en' ? 'The equity curve and KPI console appear here only after a run starts.' : '资金曲线与绩效评估将在此处生成'}</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-6 animate-in fade-in duration-500" data-testid="backtest-monitor-result-state">
+                      <div className="backtest-equity-monitor" data-testid="backtest-equity-monitor">
+                        <div className="backtest-equity-monitor__header">
+                          <span>{language === 'en' ? 'Equity Signal' : '资金曲线'}</span>
+                          <strong>{normalizedCode || (language === 'en' ? 'No symbol' : '待选择')}</strong>
+                        </div>
+                        <svg className="backtest-equity-monitor__chart" viewBox="0 0 720 320" role="img" aria-label={language === 'en' ? 'Equity curve preview' : '资金曲线预览'}>
+                          <defs>
+                            <linearGradient id="backtest-equity-signal" x1="0" x2="1" y1="0" y2="0">
+                              <stop offset="0%" stopColor="#22d3ee" />
+                              <stop offset="48%" stopColor="#34d399" />
+                              <stop offset="100%" stopColor="#f8fafc" />
+                            </linearGradient>
+                            <filter id="backtest-equity-glow" x="-20%" y="-40%" width="140%" height="180%">
+                              <feGaussianBlur stdDeviation="7" result="blur" />
+                              <feMerge>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
+                              </feMerge>
+                            </filter>
+                          </defs>
+                          <path
+                            className="backtest-equity-monitor__area"
+                            d="M26 238 C84 230 111 210 158 216 C216 224 242 167 301 178 C367 190 393 118 456 132 C514 146 544 91 606 100 C655 107 681 77 702 62 L702 320 L26 320 Z"
+                          />
+                          <path
+                            className="backtest-equity-monitor__line"
+                            d="M26 238 C84 230 111 210 158 216 C216 224 242 167 301 178 C367 190 393 118 456 132 C514 146 544 91 606 100 C655 107 681 77 702 62"
+                            pathLength="1"
+                          />
+                        </svg>
+                      </div>
+                      <div className="backtest-monitor-metrics" data-testid="backtest-monitor-metrics">
+                        {monitorMetrics.map((metric) => (
+                          <article className="backtest-monitor-metric" key={metric.label}>
+                            <span>{metric.label}</span>
+                            <strong>{metric.value}</strong>
+                            <small>{metric.note}</small>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </main>
             )}
-          </section>
-        </main>
+          </motion.div>
+        </AnimatePresence>
       </div>
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}

@@ -410,148 +410,208 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
     execute: executeSection,
     results: resultsSection,
   };
+  const inspectionTone = performanceNotice?.tone || sourceSummary.tone;
+  const inspectionTitle = performanceNotice
+    ? (performanceNotice.tone === 'danger' ? '当前结果存在阻断' : '当前结果需要复核')
+    : sourceSummary.title;
+  const inspectionBody = performanceNotice?.message || sourceSummary.body;
+  const inspectionDetail = performanceNotice ? '请先处理数据完整性或执行状态，再继续判断样本表现。' : sourceSummary.detail;
 
   return (
     <div
-      className="backtest-unified-shell backtest-unified-shell--historical"
+      className="w-full min-w-0 flex flex-col gap-6 mt-6"
       data-testid="backtest-unified-shell"
       data-module="historical"
       data-panel-mode={panelMode}
     >
-      <aside className="backtest-control-panel flex flex-col" data-testid="backtest-control-panel" data-panel-mode={panelMode}>
-        <div className="backtest-control-panel__header shrink-0">
-          <SectionEyebrow>控制面板</SectionEyebrow>
-          <h2 className="backtest-control-panel__title">历史评估</h2>
-          <p className="backtest-control-panel__description">
-            {isProfessionalMode
-              ? '专业模式会展开全部历史评估控制区。'
-              : '普通模式按步骤收口历史评估流程，先控制样本与参数，再执行并查看结果。'}
+      <div className="grid gap-3 min-w-0">
+        <SectionEyebrow>Historical Evaluation</SectionEyebrow>
+        <div className="grid gap-2 min-w-0">
+          <h1 className="m-0 text-[clamp(1.5rem,1.1vw+1.2rem,2.2rem)] leading-tight text-[var(--text-primary)]">历史评估工作台</h1>
+          <p className="m-0 text-sm leading-7 text-[var(--text-secondary)]">
+            全宽工作台现在把样本控制、诊断说明和结果区彻底拆开。左侧专注操作，中间专注说明，右侧专注汇总与结果，
+            不再把整块历史评估内容塞进 400px 的外层控制栏里。
           </p>
         </div>
+      </div>
 
-        {!isProfessionalMode ? (
-          <nav className="backtest-control-stepper" aria-label="历史评估步骤">
-            {[
-              { key: 'scope', title: '范围与样本', short: '范围' },
-              { key: 'params', title: '评估参数', short: '参数' },
-              { key: 'execute', title: '执行评估', short: '执行' },
-              { key: 'results', title: '结果复查', short: '结果' },
-            ].map((step, index) => {
-              const stepKey = step.key as HistoricalWizardStep;
-              const stepOrder: HistoricalWizardStep[] = ['scope', 'params', 'execute', 'results'];
-              const isDone = stepOrder.indexOf(stepKey) < stepOrder.indexOf(currentStep);
-              return (
-                <button
-                  key={step.key}
-                  type="button"
-                  className={`backtest-control-step${currentStep === stepKey ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
-                  onClick={() => setCurrentStep(stepKey)}
+      <div className="w-full flex-1 flex flex-col xl:flex-row gap-6 min-w-0">
+        <section
+          className="w-full xl:w-[360px] 2xl:w-[400px] shrink-0 flex flex-col gap-6"
+          data-testid="backtest-control-panel"
+          data-panel-mode={panelMode}
+        >
+          <div className="backtest-control-panel__header shrink-0">
+            <SectionEyebrow>控制面板</SectionEyebrow>
+            <h2 className="backtest-control-panel__title">历史评估</h2>
+            <p className="backtest-control-panel__description">
+              {isProfessionalMode
+                ? '专业模式会展开全部历史评估控制区。'
+                : '普通模式按步骤收口历史评估流程，先控制样本与参数，再执行并查看结果。'}
+            </p>
+          </div>
+
+          {!isProfessionalMode ? (
+            <nav className="backtest-control-stepper" aria-label="历史评估步骤">
+              {[
+                { key: 'scope', title: '范围与样本', short: '范围' },
+                { key: 'params', title: '评估参数', short: '参数' },
+                { key: 'execute', title: '执行评估', short: '执行' },
+                { key: 'results', title: '结果复查', short: '结果' },
+              ].map((step, index) => {
+                const stepKey = step.key as HistoricalWizardStep;
+                const stepOrder: HistoricalWizardStep[] = ['scope', 'params', 'execute', 'results'];
+                const isDone = stepOrder.indexOf(stepKey) < stepOrder.indexOf(currentStep);
+                return (
+                  <button
+                    key={step.key}
+                    type="button"
+                    className={`backtest-control-step${currentStep === stepKey ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+                    onClick={() => setCurrentStep(stepKey)}
+                  >
+                    <span className="backtest-control-step__index">{index + 1}</span>
+                    <span className="backtest-control-step__copy">
+                      <strong>{step.title}</strong>
+                      <small>{step.short}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          ) : null}
+
+          {isProfessionalMode ? (
+            <div className="backtest-control-panel__stack" data-testid="backtest-control-panel-expanded">
+              {scopeSamplesSection}
+              {paramsSection}
+              {executeSection}
+              {resultsSection}
+            </div>
+          ) : (
+            <div className="backtest-control-window" data-testid="backtest-control-window">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={currentStep}
+                  className="backtest-control-window__frame"
+                  initial={{ opacity: 0, x: 18 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -14 }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <span className="backtest-control-step__index">{index + 1}</span>
-                  <span className="backtest-control-step__copy">
-                    <strong>{step.title}</strong>
-                    <small>{step.short}</small>
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-        ) : null}
+                  {historicalSections[currentStep]}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
 
-        {isProfessionalMode ? (
-          <div className="backtest-control-panel__stack" data-testid="backtest-control-panel-expanded">
-            {scopeSamplesSection}
-            {paramsSection}
-            {executeSection}
-            {resultsSection}
+        <section
+          className="w-full xl:w-[320px] 2xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 min-w-[250px]"
+          data-testid="historical-inspection-panel"
+        >
+          <div className="grid gap-3 min-w-0">
+            <SectionEyebrow>Inspection</SectionEyebrow>
+            <h2 className="m-0 text-[1.2rem] leading-tight text-[var(--text-primary)]">历史评估显示面板</h2>
+            <p className="m-0 text-sm leading-7 text-[var(--text-secondary)]">
+              这个中间栏只放说明、口径和假设，固定宽度后不再被右侧结果表和左侧控制区共同挤压。
+            </p>
           </div>
-        ) : (
-          <div className="backtest-control-window" data-testid="backtest-control-window">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={currentStep}
-                className="backtest-control-window__frame"
-                initial={{ opacity: 0, x: 18 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -14 }}
-                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+
+          <Banner
+            tone={inspectionTone}
+            title={inspectionTitle}
+            body={(
+              <>
+                {inspectionBody}
+                <span className="product-banner__meta">{inspectionDetail}</span>
+              </>
+            )}
+          />
+
+          <SummaryStrip items={modeSummaryItems} />
+
+          <Disclosure summary="查看数据源诊断">
+            <div className="preview-grid">
+              <div className="preview-card">
+                <p className="metric-card__label">requested_mode</p>
+                <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode)}</p>
+              </div>
+              <div className="preview-card">
+                <p className="metric-card__label">resolved_source</p>
+                <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource)}</p>
+              </div>
+              <div className="preview-card">
+                <p className="metric-card__label">fallback_used</p>
+                <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed)}</p>
+              </div>
+            </div>
+            <p className="product-footnote mt-4">{historicalSampleTransparency}</p>
+          </Disclosure>
+
+          <Disclosure summary="查看执行假设">
+            <AssumptionList assumptions={historicalAssumptions || undefined} emptyText="运行一次历史分析评估后，这里会显示固定执行假设。" />
+          </Disclosure>
+        </section>
+
+        <section className="flex-1 min-w-0 flex flex-col gap-6" data-testid="backtest-display-board">
+          <div className="backtest-display-board__header shrink-0">
+            <SectionEyebrow>显示面板</SectionEyebrow>
+            <h2 className="backtest-display-board__title">结果与记录</h2>
+            <p className="backtest-display-board__description">
+              右侧吸收所有剩余宽度，承载汇总、结果表和历史记录，图表或大表格都只在这里伸展。
+            </p>
+          </div>
+
+          <div className="backtest-display-board__stack flex flex-col min-w-0">
+            <section className="backtest-display-section min-w-0" data-testid="historical-display-section-summary">
+              <Card title="评估概览" subtitle="关键指标" className="product-section-card product-section-card--backtest-result">
+                <p className="product-section-copy">这里只做历史信号验证，不展示账户权益曲线，也不表示完整策略盈亏回放。</p>
+                {(isLoadingSampleStatus || isLoadingPerf)
+                  ? <div className="product-empty-state product-empty-state--compact">正在汇总历史分析评估概览…</div>
+                  : <SummaryStrip items={historicalSummaryItems} />}
+                {sampleStatusError ? <ApiErrorAlert error={sampleStatusError} className="mt-4" /> : null}
+                {runResult ? <HistoricalRunSummary data={runResult} /> : null}
+              </Card>
+            </section>
+
+            <section className="backtest-display-section min-w-0" data-testid="historical-display-section-results">
+              <Card
+                title="评估结果"
+                subtitle={selectedRunId ? `评估结果 #${selectedRunId}` : '结果表'}
+                className="product-section-card product-section-card--backtest-result"
               >
-                {historicalSections[currentStep]}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        )}
-      </aside>
-
-      <section className="backtest-display-board flex flex-col" data-testid="backtest-display-board">
-        <div className="backtest-display-board__header shrink-0">
-          <SectionEyebrow>显示面板</SectionEyebrow>
-          <h2 className="backtest-display-board__title">历史评估显示板</h2>
-          <p className="backtest-display-board__description">
-            右侧显示汇总、结果表与历史，不再分裂成另一套 workstation 语言。
-          </p>
-        </div>
-
-        <div className="backtest-display-board__stack flex flex-col">
-          <section className="backtest-display-section" data-testid="historical-display-section-summary">
-            <Card title="评估概览" subtitle="关键指标" className="product-section-card product-section-card--backtest-result">
-              <p className="product-section-copy">这里只做历史信号验证，不展示账户权益曲线，也不表示完整策略盈亏回放。</p>
-              {(isLoadingSampleStatus || isLoadingPerf)
-                ? <div className="product-empty-state product-empty-state--compact">正在汇总历史分析评估概览…</div>
-                : <SummaryStrip items={historicalSummaryItems} />}
-              {sampleStatusError ? <ApiErrorAlert error={sampleStatusError} className="mt-4" /> : null}
-              {performanceNotice ? (
-                <Banner
-                  tone={performanceNotice.tone}
-                  className="mt-4"
-                  title={performanceNotice.tone === 'danger' ? '概览数据不可用' : '概览数据不完整'}
-                  body={performanceNotice.message}
+                {pageError ? <ApiErrorAlert error={pageError} className="mb-4" /> : null}
+                {isLoadingResults ? <div className="product-empty-state">正在加载历史分析评估结果…</div> : <HistoricalResultsTable rows={results} />}
+                <Pagination
+                  className="mt-5"
+                  currentPage={currentPage}
+                  totalPages={Math.max(1, Math.ceil(totalResults / pageSize))}
+                  onPageChange={onChangeResultsPage}
                 />
-              ) : null}
-              {runResult ? <HistoricalRunSummary data={runResult} /> : null}
-              <Disclosure summary="查看执行假设">
-                <AssumptionList assumptions={historicalAssumptions || undefined} emptyText="运行一次历史分析评估后，这里会显示固定执行假设。" />
-              </Disclosure>
-            </Card>
-          </section>
+                <p className="product-footnote">共 {totalResults} 条历史分析评估结果。</p>
+              </Card>
+            </section>
 
-          <section className="backtest-display-section" data-testid="historical-display-section-results">
-            <Card
-              title="评估结果"
-              subtitle={selectedRunId ? `评估结果 #${selectedRunId}` : '结果表'}
-              className="product-section-card product-section-card--backtest-result"
-            >
-              {pageError ? <ApiErrorAlert error={pageError} className="mb-4" /> : null}
-              {isLoadingResults ? <div className="product-empty-state">正在加载历史分析评估结果…</div> : <HistoricalResultsTable rows={results} />}
-              <Pagination
-                className="mt-5"
-                currentPage={currentPage}
-                totalPages={Math.max(1, Math.ceil(totalResults / pageSize))}
-                onPageChange={onChangeResultsPage}
-              />
-              <p className="product-footnote">共 {totalResults} 条历史分析评估结果。</p>
-            </Card>
-          </section>
-
-          <section className="backtest-display-section" data-testid="historical-display-section-history">
-            <Card title="历史记录" subtitle="次级区域" className="product-section-card product-section-card--backtest-secondary">
-              {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
-              {isLoadingHistory ? (
-                <div className="product-empty-state">正在加载历史分析评估运行记录…</div>
-              ) : (
-                <HistoricalRunsTable rows={historyItems} selectedRunId={selectedRunId} onOpen={(run) => void handleOpenHistoricalRun(run)} />
-              )}
-              <Pagination
-                className="mt-5"
-                currentPage={historyPage}
-                totalPages={Math.max(1, Math.ceil(historyTotal / historyPageSize))}
-                onPageChange={onChangeHistoryPage}
-              />
-              <p className="product-footnote">共 {historyTotal} 条历史分析评估运行记录。</p>
-            </Card>
-          </section>
-        </div>
-      </section>
+            <section className="backtest-display-section min-w-0" data-testid="historical-display-section-history">
+              <Card title="历史记录" subtitle="次级区域" className="product-section-card product-section-card--backtest-secondary">
+                {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
+                {isLoadingHistory ? (
+                  <div className="product-empty-state">正在加载历史分析评估运行记录…</div>
+                ) : (
+                  <HistoricalRunsTable rows={historyItems} selectedRunId={selectedRunId} onOpen={(run) => void handleOpenHistoricalRun(run)} />
+                )}
+                <Pagination
+                  className="mt-5"
+                  currentPage={historyPage}
+                  totalPages={Math.max(1, Math.ceil(historyTotal / historyPageSize))}
+                  onPageChange={onChangeHistoryPage}
+                />
+                <p className="product-footnote">共 {historyTotal} 条历史分析评估运行记录。</p>
+              </Card>
+            </section>
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

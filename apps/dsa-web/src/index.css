@@ -7564,7 +7564,7 @@ body::after {
   }
 
   .backtest-normal-workspace {
-    grid-template-columns: minmax(31rem, 0.95fr) minmax(0, 1.05fr);
+    grid-template-columns: 360px minmax(0, 1fr);
   }
 
   .backtest-normal-guided-pane {
@@ -7588,7 +7588,7 @@ body::after {
   }
 
   .backtest-normal-workspace {
-    grid-template-columns: minmax(33rem, 0.96fr) minmax(0, 1.14fr);
+    grid-template-columns: 400px minmax(0, 1fr);
   }
 
   .backtest-normal-wizard__active-frame .backtest-control-section > .product-section-card {
@@ -15234,14 +15234,17 @@ html[lang='en'][data-theme='spacex'] .report-price-chart[data-language='en'] .th
 
 .backtest-entry-shell__workspace {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 1rem;
   min-height: 34rem;
+  min-width: 0;
 }
 
 .backtest-entry-shell__sidebar {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   gap: 0.75rem;
   padding: 1rem;
   border-radius: 1.4rem;
