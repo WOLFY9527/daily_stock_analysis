@@ -11,7 +11,10 @@ import {
   type BentoHeroItem,
 } from '../components/home-bento';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
-import { ApiSourceCard } from '../components/settings/ApiSourceCard';
+import AIProviderConfig from '../components/settings/AIProviderConfig';
+import DataSourceConfig from '../components/settings/DataSourceConfig';
+import SystemControlPlane from '../components/settings/SystemControlPlane';
+import SystemLogsConfig from '../components/settings/SystemLogsConfig';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useAuth, useSystemConfig } from '../hooks';
 import type { SystemConfigCategory } from '../types/systemConfig';
@@ -2797,6 +2800,92 @@ const SettingsPage: React.FC = () => {
         : t('settings.dataSourceNoUsableSources'),
     },
   ]), [aiSummary.configuredProviders, dataSourceLibrary, t]);
+  const configuredProvidersText = aiSummary.configuredProviders.length
+    ? aiSummary.configuredProviders.map(([name, count]) => `${providerLabel(name)} (${count})`).join(' · ')
+    : t('settings.notConfigured');
+  const aiRouteRows = useMemo(() => ([
+    {
+      key: 'analysis',
+      title: t('settings.aiTaskName.analysis'),
+      routeMode: t(`settings.aiRouteModelMode.${aiRouteModelMode.primary}`),
+      route: formatRouteLine(aiSummary.primaryChannel, primarySummaryModel),
+      backup: aiSummary.backupChannel
+        ? formatRouteLine(aiSummary.backupChannel, backupSummaryModel)
+        : '',
+      summary: `${t('settings.aiRouteStatusLabel')}: ${t(`settings.aiRouteStatus.${aiSummary.routeStatus}`)}`,
+      actionLabel: t('settings.aiTaskEditAction'),
+      highlighted: true,
+    },
+    {
+      key: 'stock_chat',
+      title: t('settings.aiTaskName.stock_chat'),
+      routeMode: t(`settings.aiAskStockRouteMode.${askStockRouteMode}`),
+      route: formatRouteLine(askStockEffectiveGateway, askStockEffectiveModel),
+      backup: '',
+      summary: askStockRouteSummary,
+      actionLabel: t('settings.aiTaskEditAction'),
+      highlighted: false,
+    },
+    {
+      key: 'backtest',
+      title: t('settings.aiTaskName.backtest'),
+      routeMode: t(`settings.aiTaskRouteMode.${backtestRouteMode}`),
+      route: formatRouteLine(backtestEffectiveGateway, backtestEffectiveModel),
+      backup: '',
+      summary: backtestOverrideModel
+        ? t('settings.aiBacktestRouteDedicatedSummary', {
+          model: backtestOverrideModel,
+          route: formatRouteLine(backtestEffectiveGateway, backtestOverrideModel),
+        })
+        : t('settings.aiBacktestRouteSharedSummary', {
+          route: formatRouteLine(aiSummary.primaryChannel, aiSummary.primaryModel),
+        }),
+      actionLabel: t('settings.aiTaskEditAction'),
+      highlighted: false,
+    },
+  ]), [
+    aiRouteModelMode.primary,
+    aiSummary.backupChannel,
+    aiSummary.primaryChannel,
+    aiSummary.primaryModel,
+    aiSummary.routeStatus,
+    askStockEffectiveGateway,
+    askStockEffectiveModel,
+    askStockRouteMode,
+    askStockRouteSummary,
+    backupSummaryModel,
+    backtestEffectiveGateway,
+    backtestEffectiveModel,
+    backtestOverrideModel,
+    backtestRouteMode,
+    formatRouteLine,
+    primarySummaryModel,
+    t,
+  ]);
+  const quickProviderCards = useMemo(() => (
+    PROVIDER_LIBRARY_ITEMS.map((provider) => {
+      const providerState = providerReadinessByGateway.get(provider.key);
+      const quickApiConfigured = hasConfigValue(resolveQuickProviderCredential(provider.key));
+      const quickTestState = quickProviderTestState[provider.key];
+      return {
+        key: provider.key,
+        label: provider.label,
+        isReady: quickApiConfigured || Boolean(providerState?.credentialReady),
+        presetCount: providerState?.presetCount || (KNOWN_GATEWAY_MODEL_PRESETS[provider.key] || []).length,
+        quickApiConfigured,
+        advancedChannelCount: (advancedChannelsByProvider[provider.key] || []).length,
+        suggestedTestModel: resolveQuickProviderTestModel(provider.key),
+        quickTestStatus: quickTestState.status,
+        quickTestText: quickTestState.text,
+      };
+    })
+  ), [
+    advancedChannelsByProvider,
+    providerReadinessByGateway,
+    quickProviderTestState,
+    resolveQuickProviderCredential,
+    resolveQuickProviderTestModel,
+  ]);
   const activeDomainTitle = domainNavItems.find((item) => item.domain === activeDomain)?.title || activeDomain;
   const dataRoutingGroups = [
     {
@@ -2971,135 +3060,16 @@ const SettingsPage: React.FC = () => {
 
         <section className="flex min-h-0 flex-1 flex-col gap-8">
 
-      <SettingsSectionCard
-        title={t('settings.controlPlaneTitle')}
-        description={t('settings.controlPlaneDesc')}
-      >
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
-          <div className={GLASS_SUBCARD_CLASS}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-positive-hsl))]">
-                  {t('settings.adminSurfaceActiveLabel')}
-                </p>
-                <p className="mt-1 text-base font-semibold text-foreground">{t('settings.adminSurfaceActiveTitle')}</p>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('settings.adminSurfaceActiveDesc')}</p>
-              </div>
-              <span className="rounded-full border border-[hsl(var(--accent-positive-hsl)/0.36)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-positive-hsl))]">
-                {t('settings.adminSurfaceGlobalScope')}
-              </span>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {globalAdminStats.map((item) => (
-                <div key={item.key} className="rounded-xl bg-white/[0.03] px-3 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-muted-text">{item.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-foreground">{item.value}</p>
-                  <p className="mt-2 text-xs leading-5 text-secondary-text">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <Disclosure
-            summary={(
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-warning-hsl))]">
-                    {t('settings.controlPlaneMaintenanceTitle')}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.controlPlaneMaintenanceSummary')}</p>
-                  <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.controlPlaneMaintenanceDesc')}</p>
-                </div>
-                <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]">
-                  {t('settings.controlPlaneMaintenanceBadge')}
-                </span>
-              </div>
-            )}
-            className="rounded-2xl border border-white/5 bg-white/[0.02]"
-            summaryClassName="px-4 py-4"
-            bodyClassName="space-y-4 px-4 pb-4"
-          >
-            <div className={GLASS_SUBCARD_CLASS}>
-              <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.controlPlaneLogsTitle')}</p>
-              <p className="mt-2 text-sm leading-6 text-secondary-text">{t('settings.controlPlaneLogsDesc')}</p>
-              <div className="mt-4 flex justify-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="settings-secondary"
-                  onClick={() => window.location.assign(buildAdminLogsPath())}
-                >
-                  {t('settings.viewAdminLogs')}
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-[hsl(var(--accent-warning-hsl)/0.08)] px-4 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-warning-hsl))]">
-                    {t('settings.adminActionsTitle')}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.adminActionsDesc')}</p>
-                  <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.adminActionsSafetyDesc')}</p>
-                </div>
-              </div>
-              <div className="mt-4 divide-y divide-white/5 rounded-2xl bg-white/[0.03]">
-                <div className="px-3 py-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{t('settings.adminMaintenanceTitle')}</p>
-                      <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminMaintenanceDesc')}</p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="settings-secondary"
-                      onClick={() => setAdminActionDialog('runtime_cache')}
-                      disabled={isRunningAdminAction}
-                    >
-                      {isRunningAdminAction && adminActionDialog === 'runtime_cache'
-                        ? t('settings.saving')
-                        : t('settings.adminActionResetRuntimeCaches')}
-                    </Button>
-                  </div>
-                  <p className="mt-3 text-xs text-secondary-text">{t('settings.adminActionResetRuntimeCachesHint')}</p>
-                </div>
-                <div className="px-3 py-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{t('settings.adminFactoryResetTitle')}</p>
-                      <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminFactoryResetDesc')}</p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="danger-subtle"
-                      onClick={() => setAdminActionDialog('factory_reset')}
-                      disabled={isRunningAdminAction}
-                    >
-                      {isRunningAdminAction && adminActionDialog === 'factory_reset'
-                        ? t('settings.saving')
-                        : t('settings.adminActionFactoryReset')}
-                    </Button>
-                  </div>
-                  <p className="mt-3 text-xs text-[hsl(var(--accent-danger-hsl))]">{t('settings.adminActionFactoryResetHint')}</p>
-                </div>
-              </div>
-              {adminActionMessage ? (
-                <div className="mt-3">
-                  <SettingsAlert
-                    title={adminActionTone === 'success' ? t('settings.success') : t('settings.adminActionErrorTitle')}
-                    message={adminActionMessage}
-                    variant={adminActionTone === 'success' ? 'success' : 'error'}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </Disclosure>
-        </div>
-      </SettingsSectionCard>
+      <SystemControlPlane
+        t={t}
+        globalAdminStats={globalAdminStats}
+        isRunningAdminAction={isRunningAdminAction}
+        adminActionDialog={adminActionDialog}
+        adminActionMessage={adminActionMessage}
+        adminActionTone={adminActionTone}
+        onOpenAdminLogs={() => window.location.assign(buildAdminLogsPath())}
+        onSetAdminActionDialog={setAdminActionDialog}
+      />
 
       {loadError ? (
         <ApiErrorAlert
@@ -3115,424 +3085,54 @@ const SettingsPage: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {activeDomain === 'ai_models' ? (
-            <SettingsSectionCard
-              title={t('settings.aiAnalysisRouteTitle')}
-              description={t('settings.aiEffectiveDesc')}
-            >
-              <div className="space-y-3">
-                <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyTaskTitle')}</p>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="mt-1 text-xs text-secondary-text">
-                        {t('settings.aiRouteScopeLabel')}: {t(`settings.aiRouteScope.${aiRoutingScope}`)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      {aiSummary.routeMissingButApiConfigured ? (
-                        <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.48)] bg-[hsl(var(--accent-warning-hsl)/0.18)] px-2.5 py-1 text-[11px] font-semibold text-[hsl(var(--accent-warning-hsl))]">
-                          {t('settings.aiConfiguredNoRoute')}
-                        </span>
-                      ) : null}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="settings-primary"
-                        onClick={openAiRoutingDrawer}
-                        disabled={adminLocked || isSaving}
-                      >
-                        {t('settings.aiRoutingDrawerOpen')}
-                      </Button>
-                    </div>
-                  </div>
-                  {aiSelectorReadinessMismatch ? (
-                    <p className="mt-2 rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.4)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2 text-xs text-[hsl(var(--accent-warning-hsl))]">
-                      {t('settings.aiGatewaySelectorMismatchWarning')}
-                    </p>
-                  ) : null}
-                  <div className="mt-3 space-y-2" data-testid="ai-effective-summary">
-                    {[
-                      {
-                        key: 'analysis' as const,
-                        title: t('settings.aiTaskName.analysis'),
-                        routeMode: t(`settings.aiRouteModelMode.${aiRouteModelMode.primary}`),
-                        route: formatRouteLine(aiSummary.primaryChannel, primarySummaryModel),
-                        backup: aiSummary.backupChannel
-                          ? formatRouteLine(aiSummary.backupChannel, backupSummaryModel)
-                          : '',
-                        summary: t('settings.aiRouteStatusLabel') + ': ' + t(`settings.aiRouteStatus.${aiSummary.routeStatus}`),
-                        actionLabel: t('settings.aiTaskEditAction'),
-                        highlighted: true,
-                      },
-                      {
-                        key: 'stock_chat' as const,
-                        title: t('settings.aiTaskName.stock_chat'),
-                        routeMode: t(`settings.aiAskStockRouteMode.${askStockRouteMode}`),
-                        route: formatRouteLine(askStockEffectiveGateway, askStockEffectiveModel),
-                        backup: '',
-                        summary: askStockRouteSummary,
-                        actionLabel: t('settings.aiTaskEditAction'),
-                        highlighted: false,
-                      },
-                      {
-                        key: 'backtest' as const,
-                        title: t('settings.aiTaskName.backtest'),
-                        routeMode: t(`settings.aiTaskRouteMode.${backtestRouteMode}`),
-                        route: formatRouteLine(backtestEffectiveGateway, backtestEffectiveModel),
-                        backup: '',
-                        summary: backtestOverrideModel
-                          ? t('settings.aiBacktestRouteDedicatedSummary', {
-                            model: backtestOverrideModel,
-                            route: formatRouteLine(backtestEffectiveGateway, backtestOverrideModel),
-                          })
-                          : t('settings.aiBacktestRouteSharedSummary', {
-                            route: formatRouteLine(aiSummary.primaryChannel, aiSummary.primaryModel),
-                          }),
-                        actionLabel: t('settings.aiTaskEditAction'),
-                        highlighted: false,
-                      },
-                    ].map((routeRow) => (
-                      <div
-                        key={routeRow.key}
-                        data-testid={`ai-task-row-${routeRow.key}`}
-                        className={routeRow.highlighted
-                          ? 'flex items-start gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--pill-active-bg)]/35 px-3 py-3'
-                          : 'flex items-start gap-3 rounded-2xl border border-border/50 bg-base/40 px-3 py-3'}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground">{routeRow.title}</p>
-                            <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] text-secondary-text">
-                              {routeRow.routeMode}
-                            </span>
-                          </div>
-                          <p className="mt-2 break-words text-sm font-semibold text-foreground">{routeRow.route}</p>
-                          {routeRow.backup ? (
-                            <p className="mt-1 break-words text-xs text-secondary-text">
-                              {t('settings.aiBackupRoute')}: {routeRow.backup}
-                            </p>
-                          ) : null}
-                          <p className="mt-1 text-xs text-secondary-text">{routeRow.summary}</p>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="settings-secondary"
-                          onClick={openAiRoutingDrawer}
-                          disabled={adminLocked || isSaving}
-                        >
-                          {routeRow.actionLabel}
-                        </Button>
-                      </div>
-                    ))}
-                    <div className="px-1 pt-1 text-xs text-secondary-text">
-                      {t('settings.aiConfiguredProviders')}: {aiSummary.configuredProviders.length
-                        ? aiSummary.configuredProviders.map(([name, count]) => `${providerLabel(name)} (${count})`).join(' · ')
-                        : t('settings.notConfigured')}
-                    </div>
-                  </div>
-                  {aiRoutingError ? (
-                    <p className="mt-2 rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.4)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2 text-xs text-[hsl(var(--accent-warning-hsl))]">
-                      {aiRoutingError}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="settings-surface rounded-xl border settings-border px-4 py-4" data-testid="ai-provider-quick-section">
-                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyProviderTitle')}</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.aiDirectProviderTitle')}</p>
-                  <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-                    {PROVIDER_LIBRARY_ITEMS.map((provider) => {
-                      const providerState = providerReadinessByGateway.get(provider.key);
-                      const quickApiConfigured = hasConfigValue(resolveQuickProviderCredential(provider.key));
-                      const isReady = quickApiConfigured || Boolean(providerState?.credentialReady);
-                      const presetCount = providerState?.presetCount || (KNOWN_GATEWAY_MODEL_PRESETS[provider.key] || []).length;
-                      const quickTestState = quickProviderTestState[provider.key];
-                      const suggestedTestModel = resolveQuickProviderTestModel(provider.key);
-                      const advancedChannelCount = (advancedChannelsByProvider[provider.key] || []).length;
-                      return (
-                        <div
-                          key={provider.key}
-                          className="rounded-[var(--theme-panel-radius-md)] bg-white/[0.02] px-3 py-3"
-                          data-testid={`ai-provider-card-${provider.key}`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-foreground">{provider.label}</p>
-                            <span className={isReady
-                              ? 'rounded-full bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
-                              : 'rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-muted-text'}
-                            >
-                              {isReady ? t('settings.aiProviderReady') : t('settings.aiProviderMissingCredential')}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[11px] text-muted-text">
-                            {t('settings.aiPresetModels')}: {presetCount}
-                          </p>
-                          <p className="mt-1 text-[11px] text-secondary-text">
-                            {t('settings.aiProviderQuickApiStatusLabel')}: {quickApiConfigured ? t('settings.enabledState') : t('settings.disabledState')}
-                            {' · '}
-                            {t('settings.aiProviderAdvancedChannelCountLabel')}: {advancedChannelCount}
-                          </p>
-                          <p className="mt-1 text-[11px] text-muted-text">
-                            {t('settings.aiProviderTestModelLabel')}: {suggestedTestModel || t('settings.aiProviderTestModelMissing')}
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="settings-secondary"
-                              onClick={() => openQuickProviderDrawer(provider.key)}
-                              disabled={adminLocked || isSaving}
-                            >
-                              {t('settings.aiProviderQuickSetupOpen')}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="settings-secondary"
-                              onClick={() => jumpToProviderAdvancedConfig(provider.key)}
-                              disabled={adminLocked || isSaving}
-                            >
-                              {t('settings.aiDirectProviderAdvancedEntryForProvider', { provider: provider.label })}
-                            </Button>
-                          </div>
-                          {quickTestState.status !== 'idle' ? (
-                            <p className={quickTestState.status === 'success'
-                              ? 'mt-2 text-xs text-[hsl(var(--accent-positive-hsl))]'
-                              : quickTestState.status === 'error'
-                                ? 'mt-2 text-xs text-[hsl(var(--accent-warning-hsl))]'
-                                : 'mt-2 text-xs text-muted-text'}
-                            >
-                              {quickTestState.text}
-                            </p>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex justify-end">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="settings-primary"
-                      onClick={() => void saveDirectProviderKeys()}
-                      disabled={adminLocked || isSaving}
-                    >
-                      {t('settings.aiDirectProviderSave')}
-                    </Button>
-                  </div>
-                </div>
-
-                <div ref={aiChannelConfigRef} className="rounded-[var(--theme-panel-radius-md)] border border-border/40 bg-muted/10 px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-text">{t('settings.aiHierarchyAdvancedTitle')}</p>
-                      <p className="mt-1 text-sm font-semibold text-secondary-text">{t('settings.aiAdvancedChannelLayerTitle')}</p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="settings-secondary"
-                      onClick={jumpToAiChannelConfig}
-                      disabled={adminLocked || isSaving}
-                    >
-                      {t('settings.aiAdvancedJump')}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </SettingsSectionCard>
+            <AIProviderConfig
+              t={t}
+              aiRoutingScope={aiRoutingScope}
+              aiRouteRows={aiRouteRows}
+              configuredProvidersText={configuredProvidersText}
+              routeStatus={t(`settings.aiRouteStatus.${aiSummary.routeStatus}`)}
+              routeMissingButApiConfigured={aiSummary.routeMissingButApiConfigured}
+              selectorReadinessMismatch={aiSelectorReadinessMismatch}
+              aiRoutingError={aiRoutingError}
+              providerCards={quickProviderCards}
+              aiChannelConfigRef={aiChannelConfigRef}
+              adminLocked={adminLocked}
+              isSaving={isSaving}
+              onOpenAiRoutingDrawer={openAiRoutingDrawer}
+              onOpenQuickProviderDrawer={openQuickProviderDrawer}
+              onJumpToProviderAdvancedConfig={jumpToProviderAdvancedConfig}
+              onSaveDirectProviderKeys={() => void saveDirectProviderKeys()}
+              onJumpToAiChannelConfig={jumpToAiChannelConfig}
+            />
           ) : null}
 
           {activeDomain === 'data_sources' ? (
-            <SettingsSectionCard
-              title={t('settings.dataEffectiveTitle')}
-              description={t('settings.dataEffectiveDesc')}
-            >
-              <div className="space-y-3">
-                <div className={GLASS_SUBCARD_CLASS}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
-                        {t('settings.dataRoutingLayerTitle')}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.dataRoutingCompactTitle')}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-                    {dataRoutingGroups.map((group) => (
-                      <div key={group.role} className="rounded-2xl bg-white/[0.02] p-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground">{group.role}</p>
-                            <span className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-secondary-text">
-                              {group.values.length ? t('settings.configuredNoPriority') : t('settings.notConfigured')}
-                            </span>
-                          </div>
-                          <p className="mt-2 break-words text-sm font-semibold text-foreground">
-                            {group.values.length
-                              ? group.values.map((source) => prettySourceLabel(source)).join(' -> ')
-                              : t('settings.notConfigured')}
-                          </p>
-                          {group.values.length ? (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {group.values.map((source, index) => (
-                                <span
-                                  key={`${group.role}-${source}-${index}`}
-                                  className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-secondary-text"
-                                >
-                                  <span className={sourceToneClass(index)}>{priorityLabel(index)}</span>
-                                  {' · '}
-                                  {prettySourceLabel(source)}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                          <p className="mt-2 text-xs text-secondary-text">
-                            {group.available.length
-                              ? group.available.map((source) => prettySourceLabel(source)).join(' · ')
-                              : t('settings.dataSourceNotRouted')}
-                          </p>
-                        </div>
-                        <div className="mt-4 flex items-center justify-between gap-2">
-                          <p className="text-[11px] leading-5 text-muted-text">
-                            {group.available.length
-                              ? t('settings.dataRoutingSelectableCount', { count: group.available.length })
-                              : t('settings.dataSourceNoUsableSources')}
-                          </p>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="settings-secondary"
-                            disabled={adminLocked || isSaving || group.available.length === 0}
-                            data-testid={`data-routing-manage-${group.key}`}
-                            onClick={() => setDataRoutingDrawerKey(group.key)}
-                          >
-                            {t('settings.dataSourceManageAction')}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className={GLASS_SUBCARD_CLASS}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
-                        {t('settings.dataLibraryLayerTitle')}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.dataSourceLibraryCompactTitle')}</p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="settings-primary"
-                      onClick={openCreateDataSourceDrawer}
-                    >
-                      {t('settings.dataSourceAddAction')}
-                    </Button>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-                    {dataSourceLibrary.map((source) => (
-                      <ApiSourceCard
-                        key={source.key}
-                        testId={`data-source-card-${source.key}`}
-                        label={source.label}
-                        kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
-                        validationLabel={source.validationState === 'builtin'
-                          ? t('settings.dataSourceValidationBuiltin')
-                          : source.validationState === 'validated'
-                            ? t('settings.dataSourceValidated')
-                            : source.validationState === 'failed'
-                              ? t('settings.dataSourceValidationFailed')
-                              : source.configured
-                                ? t('settings.dataSourceConfiguredPending')
-                                : t('settings.notConfigured')}
-                        validationTone={source.validationState === 'failed'
-                          ? 'warning'
-                          : source.validationState === 'validated'
-                            ? 'success'
-                            : 'default'}
-                        capabilities={source.capabilityLabels}
-                        statusText={source.configured
-                          ? t('settings.dataSourceStatusConfigured')
-                          : t('settings.dataSourceStatusMissing')}
-                        validationMessage={source.validationMessage}
-                        usedByText={`${t('settings.dataSourceUsedByLabel')}: ${source.routeUsage.length
-                          ? source.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
-                          : t('settings.dataSourceNotRouted')}`}
-                        endpointText={`${t('settings.dataSourceEndpointNameLabel')}: ${source.key}`}
-                        internalFlagText={`${t('settings.dataSourceInternalFlagLabel')}: ${source.builtin
-                          ? t('settings.dataSourceInternalFlagBuiltin')
-                          : t('settings.dataSourceInternalFlagExternal')}`}
-                        description={source.description}
-                        manageLabel={source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
-                        validateLabel={t('settings.dataSourceValidateAction')}
-                        validateDisabled={!source.usable}
-                        onManage={() => openEditDataSourceDrawer(source.key)}
-                        onValidate={() => {
-                          const nextStatus: DataSourceValidationState = source.validationState === 'validated'
-                            ? 'validated'
-                            : source.validationState === 'failed'
-                              ? 'failed'
-                              : source.builtin
-                                ? 'builtin'
-                                : 'validated';
-                          setDataSourceValidationStatus((prev) => ({
-                            ...prev,
-                            [source.key]: nextStatus,
-                          }));
-                          if (source.customRecord) {
-                            const validation: CustomDataSourceValidation = nextStatus === 'failed'
-                              ? { status: 'failed', message: t('settings.dataSourceValidationFailed') }
-                              : nextStatus === 'validated'
-                                ? { status: 'validated', message: t('settings.dataSourceValidationLocalSuccess') }
-                                : { status: 'pending' };
-                            const nextLibrary = customDataSourceLibraryDraft.map((record) => (
-                              record.id === source.key
-                                ? { ...record, validation }
-                                : record
-                            ));
-                            setCustomDataSourceLibraryDraft(nextLibrary);
-                            void saveExternalItems([
-                              { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
-                            ], t('settings.dataSourceValidationSaved'));
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </SettingsSectionCard>
+            <DataSourceConfig
+              t={t}
+              dataRoutingGroups={dataRoutingGroups}
+              dataSourceLibrary={dataSourceLibrary}
+              adminLocked={adminLocked}
+              isSaving={isSaving}
+              prettySourceLabel={prettySourceLabel}
+              sourceToneClass={sourceToneClass}
+              priorityLabel={priorityLabel}
+              onOpenDataRoutingDrawer={setDataRoutingDrawerKey}
+              onOpenCreateDataSourceDrawer={openCreateDataSourceDrawer}
+              onOpenEditDataSourceDrawer={openEditDataSourceDrawer}
+              onValidateDataSource={(sourceId) => {
+                void validateDataSourceEntry(sourceId);
+              }}
+            />
           ) : null}
 
           {activeDomain === 'advanced' ? (
-            <SettingsSectionCard
-              title={t('settings.runtimeSummaryVisibilityTitle')}
-              description={t('settings.runtimeSummaryVisibilityDesc')}
-            >
-              <div className={GLASS_SUBCARD_CLASS}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {showRuntimeExecutionSummary ? t('settings.runtimeSummaryVisibleOn') : t('settings.runtimeSummaryVisibleOff')}
-                    </p>
-                    <p className="mt-1 text-xs text-secondary-text">{t('settings.runtimeSummaryVisibilityDesc')}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="settings-secondary"
-                    onClick={() => setRuntimeVisibilityDrawerOpen(true)}
-                    disabled={adminLocked || isSaving}
-                  >
-                    {t('settings.dataSourceManageAction')}
-                  </Button>
-                </div>
-              </div>
-            </SettingsSectionCard>
+            <SystemLogsConfig
+              t={t}
+              showRuntimeExecutionSummary={showRuntimeExecutionSummary}
+              adminLocked={adminLocked}
+              isSaving={isSaving}
+              onOpenRuntimeVisibilityDrawer={() => setRuntimeVisibilityDrawerOpen(true)}
+            />
           ) : null}
 
           {!isDesktopViewport ? (
