@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PanelRightOpen } from 'lucide-react';
+import { PanelRightOpen, Play } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
 import { ApiErrorAlert, Button, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
@@ -380,11 +380,6 @@ const UserScannerPage: React.FC = () => {
     [historyTotal],
   );
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
-  const watchlistTitle = market === 'us'
-    ? (language === 'en' ? 'US pre-market candidates' : '美股盘前候选名单')
-    : market === 'hk'
-      ? (language === 'en' ? 'Hong Kong pre-open candidates' : '港股盘前候选名单')
-      : (language === 'en' ? 'A-share pre-open candidates' : 'A股盘前候选名单');
   const tacticalCards = runDetail?.shortlist.map((candidate) => ({
     symbol: candidate.symbol,
     name: candidate.name,
@@ -437,7 +432,7 @@ const UserScannerPage: React.FC = () => {
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
           <main className="w-full flex-1 flex flex-col lg:flex-row gap-6 min-h-0 min-w-0 mt-6">
-            <section className="w-full lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 h-fit">
+            <section className="w-full lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 sticky top-8 h-fit max-h-[calc(100vh-100px)] overflow-y-auto no-scrollbar">
               <SectionShell className="rounded-[24px] p-0 bg-transparent shadow-none">
                 <div className="flex flex-col gap-6">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
@@ -446,29 +441,20 @@ const UserScannerPage: React.FC = () => {
                   <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
                   <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                   <div className="flex flex-col gap-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
-                      <button
-                        type="button"
-                        onClick={() => void handleRun()}
-                        disabled={isRunning}
-                        aria-busy={isRunning}
-                        className="w-full md:w-auto mt-4 px-8 py-3.5 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] shrink-0 disabled:pointer-events-none disabled:opacity-60 disabled:transform-none"
-                      >
-                        {isRunning ? t('scanner.running') : t('scanner.run')}
-                      </button>
-                    </div>
-                    {!tacticalCards.length ? (
-                      <ScannerEmptyState title={emptyStateTitle} body={emptyStateBody} />
-                    ) : null}
+                    <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
+                    <button
+                      type="button"
+                      onClick={() => void handleRun()}
+                      disabled={isRunning}
+                      aria-busy={isRunning}
+                      className="w-full mt-6 px-8 py-3.5 bg-emerald-500/10 text-emerald-400 font-bold text-sm rounded-xl border border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] active:scale-95 transition-all shrink-0 flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60 disabled:transform-none"
+                    >
+                      <Play className="h-4 w-4" />
+                      <span>{isRunning ? t('scanner.running') : t('scanner.run')}</span>
+                    </button>
                   </div>
                 </div>
               </SectionShell>
-
-              <div className="rounded-[20px] border border-white/5 bg-[#050505] px-4 py-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'Current mode' : '当前模式'}</p>
-                <h2 className="mt-2 text-base font-semibold text-foreground">{watchlistTitle}</h2>
-              </div>
             </section>
 
             <section className="flex-1 min-w-0 flex flex-col min-h-0 gap-4 overflow-hidden">
