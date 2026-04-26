@@ -891,8 +891,8 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'min-h-screen', 'px-4', 'md:px-6', '2xl:px-10', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
-    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'max-w-6xl', 'mx-auto', 'flex', 'flex-col', 'lg:flex-row', 'gap-10', 'mt-8', 'mb-24', 'min-w-0');
-    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'lg:w-[380px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'px-4', 'md:px-8', 'xl:px-12', 'flex', 'flex-col', 'xl:flex-row', 'gap-8', 'xl:gap-12', 'mt-8', 'mb-24', 'min-w-0');
+    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'xl:w-[400px]', '2xl:w-[480px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
     expect(screen.getByTestId('backtest-cockpit-console')).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'rounded-[32px]', 'p-8', 'shadow-2xl', 'relative', 'overflow-hidden', 'backtest-setup-main');
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('min-h-0', 'overflow-y-auto', 'no-scrollbar');
@@ -915,8 +915,8 @@ describe('BacktestPage', () => {
 
     const activeStage = screen.getByTestId('backtest-normal-active-stage');
     expect(within(activeStage).getByTestId('backtest-control-section-symbol')).toHaveAttribute('data-active', 'true');
-    expect(screen.getByTestId('backtest-base-params-layout')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-base-date-range')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-base-params-layout')).toHaveClass('backtest-base-params-layout');
+    expect(screen.getByTestId('backtest-base-date-range')).toHaveClass('backtest-date-range-grid');
     expect(screen.getByLabelText('对比基准')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-control-section-setup')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-control-section-strategy')).not.toBeInTheDocument();
