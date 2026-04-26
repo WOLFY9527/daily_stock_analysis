@@ -1595,41 +1595,104 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
 
   if (!isProfessionalMode) {
     return (
-      <div className="space-y-6" data-testid="backtest-normal-wizard">
-        {renderEmptyStage()}
-
-        <div className="backtest-entry-shell__compact-actions">
-          <Disclosure
-            key="page-help"
-            summary={language === 'en' ? 'How this page works' : '页面说明'}
-            className="backtest-entry-shell__disclosure"
-            summaryClassName="backtest-entry-shell__disclosure-summary"
-            bodyClassName="backtest-entry-shell__disclosure-body"
-          >
-            <p className="product-section-copy">
-              {language === 'en' ? 'Normal mode keeps only the active setup step on the page. History, presets, and extra explanation are now folded away so the start surface stays clean.' : '普通模式现在只在首屏保留当前正在操作的步骤。历史记录、预设和补充说明已被收纳，避免启动面板继续堆满信息。'}
+      <div className="w-full flex-1 flex flex-col xl:flex-row gap-8 min-w-0 mt-6" data-testid="backtest-cockpit">
+        <section className="w-full xl:w-[380px] 2xl:w-[420px] shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
+          <div className="backtest-control-panel__header shrink-0">
+            <SectionEyebrow>{language === 'en' ? 'Control panel' : '控制台'}</SectionEyebrow>
+            <h2 className="backtest-control-panel__title">{language === 'en' ? 'Deterministic backtest' : '确定性回测'}</h2>
+            <p className="backtest-control-panel__description">
+              {language === 'en'
+                ? 'Normal mode keeps the active setup step on the left and releases guidance, presets, and history into the main workspace.'
+                : '普通模式把当前操作步骤固定在左侧，把说明、预设和历史记录释放到主工作区。'}
             </p>
-          </Disclosure>
-          {renderPresetSection()}
-          {renderHistorySection()}
-        </div>
+          </div>
 
-        <nav className="backtest-normal-stepper" aria-label={language === 'en' ? 'Deterministic backtest wizard steps' : '确定性回测向导步骤'}>
-          {NORMAL_STEP_ORDER.map((step, index) => {
-            const stepMeta = normalStepLabels[step];
-            const isActive = normalCurrentStep === step;
-            const isDone = index < normalCurrentStepIndex;
-            const summary = getNormalStepSummary(step);
+          <nav className="backtest-normal-stepper" aria-label={language === 'en' ? 'Deterministic backtest wizard steps' : '确定性回测向导步骤'}>
+            {NORMAL_STEP_ORDER.map((step, index) => {
+              const stepMeta = normalStepLabels[step];
+              const isActive = normalCurrentStep === step;
+              const isDone = index < normalCurrentStepIndex;
+              const summary = getNormalStepSummary(step);
+              return (
+                <button
+                  key={step}
+                  type="button"
+                  className={`backtest-normal-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+                  onClick={() => !summary.disabled && handleStepSelect(step)}
+                  disabled={summary.disabled}
+                >
+                  <span className="backtest-normal-step__index">{index + 1}</span>
+                  <span className="backtest-normal-step__copy">
+                    <strong>{stepMeta.title}</strong>
+                    <small>{stepMeta.short}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div data-testid="backtest-normal-wizard">
+            <div data-testid="backtest-normal-active-stage">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={normalCurrentStep}
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -12 }}
+                  transition={FLOW_PANEL_TRANSITION}
+                >
+                  {normalControlSections[normalCurrentStep]}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+        </section>
+
+        <section className="flex-1 min-w-0 flex flex-col gap-6" data-testid="backtest-cockpit-monitor">
+          {renderEmptyStage()}
+          <div className="backtest-entry-shell__compact-actions">
+            <Disclosure
+              key="page-help"
+              summary={language === 'en' ? 'How this page works' : '页面说明'}
+              className="backtest-entry-shell__disclosure"
+              summaryClassName="backtest-entry-shell__disclosure-summary"
+              bodyClassName="backtest-entry-shell__disclosure-body"
+            >
+              <p className="product-section-copy">
+                {language === 'en' ? 'Normal mode keeps only the active step on the left. History, presets, and extra explanation stay in the right workspace instead of squeezing the form rail.' : '普通模式只把当前操作步骤放在左侧，历史、预设和补充说明回到右侧工作区，不再继续挤压表单栏。'}
+              </p>
+            </Disclosure>
+            {renderPresetSection()}
+            {renderHistorySection()}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full flex-1 flex flex-col xl:flex-row gap-8 min-w-0 mt-6" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
+      <section className="w-full xl:w-[380px] 2xl:w-[420px] shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
+        <Card title={language === 'en' ? 'Professional-mode setup' : '专业版配置'} subtitle={language === 'en' ? 'Config page' : '配置页'} className="product-section-card product-section-card--backtest-result">
+          <p className="product-section-copy">
+            {language === 'en' ? 'Professional mode keeps the full control surface, but the full analysis still lives on `/backtest/results/:runId` rather than inside the config page.' : '专业版保留完整配置控制，但完整分析结果统一落在 `/backtest/results/:runId`。这里不再承载全宽图表工作区。'}
+          </p>
+        </Card>
+
+        <nav className="backtest-control-stepper backtest-control-stepper--secondary" aria-label={language === 'en' ? 'Deterministic backtest steps' : '确定性回测步骤'}>
+          {PROFESSIONAL_STEP_ORDER.map((step, index) => {
+            const stepMeta = professionalStepLabels[step];
+            const isActive = currentStep === step;
+            const isDone = index < professionalCurrentStepIndex;
             return (
               <button
                 key={step}
                 type="button"
-                className={`backtest-normal-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
-                onClick={() => !summary.disabled && handleStepSelect(step)}
-                disabled={summary.disabled}
+                className={`backtest-control-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+                onClick={() => handleStepSelect(step)}
               >
-                <span className="backtest-normal-step__index">{index + 1}</span>
-                <span className="backtest-normal-step__copy">
+                <span className="backtest-control-step__index">{index + 1}</span>
+                <span className="backtest-control-step__copy">
                   <strong>{stepMeta.title}</strong>
                   <small>{stepMeta.short}</small>
                 </span>
@@ -1638,63 +1701,18 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           })}
         </nav>
 
-        <div data-testid="backtest-normal-active-stage">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={normalCurrentStep}
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -12 }}
-              transition={FLOW_PANEL_TRANSITION}
-            >
-              {normalControlSections[normalCurrentStep]}
-            </motion.div>
-          </AnimatePresence>
+        <div className="space-y-6" data-testid="backtest-control-panel-expanded">
+          {PROFESSIONAL_STEP_ORDER.map((step) => (
+            <Fragment key={step}>{professionalControlSections[step]}</Fragment>
+          ))}
         </div>
+      </section>
 
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6 min-w-0" data-testid="backtest-unified-shell" data-module="rule" data-panel-mode={panelMode}>
-      <Card title={language === 'en' ? 'Professional-mode setup' : '专业版配置'} subtitle={language === 'en' ? 'Config page' : '配置页'} className="product-section-card product-section-card--backtest-result">
-        <p className="product-section-copy">
-          {language === 'en' ? 'Professional mode keeps the full control surface, but the full analysis still lives on `/backtest/results/:runId` rather than inside the config page.' : '专业版保留完整配置控制，但完整分析结果统一落在 `/backtest/results/:runId`。这里不再承载全宽图表工作区。'}
-        </p>
-      </Card>
-
-      {renderPresetSection()}
-
-      <nav className="backtest-control-stepper backtest-control-stepper--secondary" aria-label={language === 'en' ? 'Deterministic backtest steps' : '确定性回测步骤'}>
-        {PROFESSIONAL_STEP_ORDER.map((step, index) => {
-          const stepMeta = professionalStepLabels[step];
-          const isActive = currentStep === step;
-          const isDone = index < professionalCurrentStepIndex;
-          return (
-            <button
-              key={step}
-              type="button"
-              className={`backtest-control-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
-              onClick={() => handleStepSelect(step)}
-            >
-              <span className="backtest-control-step__index">{index + 1}</span>
-              <span className="backtest-control-step__copy">
-                <strong>{stepMeta.title}</strong>
-                <small>{stepMeta.short}</small>
-              </span>
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="space-y-6" data-testid="backtest-control-panel-expanded">
-        {PROFESSIONAL_STEP_ORDER.map((step) => (
-          <Fragment key={step}>{professionalControlSections[step]}</Fragment>
-        ))}
-      </div>
-
-      {renderHistorySection()}
+      <section className="flex-1 min-w-0 flex flex-col gap-6" data-testid="backtest-cockpit-monitor">
+        {renderEmptyStage()}
+        {renderPresetSection()}
+        {renderHistorySection()}
+      </section>
     </div>
   );
 };
