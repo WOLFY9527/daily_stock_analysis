@@ -1134,17 +1134,17 @@ const BacktestPage: React.FC = () => {
         className="w-full max-w-[1400px] mx-auto px-4 md:px-8 pt-4 pb-24 min-h-screen flex flex-col bg-transparent gap-6 md:gap-8"
       >
         <main
-          className="backtest-cockpit mt-6 grid min-h-0 w-full flex-1 grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8"
+          className="backtest-cockpit w-full flex flex-col lg:flex-row gap-8 min-w-0 mt-6"
           data-testid="backtest-cockpit"
         >
           <section
-            className="backtest-cockpit__console backtest-control-rail flex flex-col gap-6 lg:col-span-4 xl:col-span-3"
+            className="backtest-cockpit__console backtest-control-rail w-full lg:w-[360px] xl:w-[400px] shrink-0 flex flex-col gap-6"
             data-testid="backtest-cockpit-console"
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={activeModule}
-                className={`backtest-v1-stage backtest-v1-stage--${activeModule}`}
+                className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full`}
                 data-testid="backtest-v1-stage"
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1264,7 +1264,7 @@ const BacktestPage: React.FC = () => {
             </AnimatePresence>
           </section>
           <section
-            className="backtest-cockpit__monitor backtest-result-rail flex min-w-0 flex-col gap-6 lg:col-span-8 xl:col-span-9"
+            className="backtest-cockpit__monitor backtest-result-rail flex-1 min-w-0 flex flex-col gap-6"
             data-testid="backtest-cockpit-monitor"
           >
             {!hasRunBacktest ? (

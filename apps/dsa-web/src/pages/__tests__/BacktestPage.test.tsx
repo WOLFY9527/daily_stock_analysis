@@ -896,11 +896,11 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'max-w-[1400px]', 'mx-auto', 'px-4', 'md:px-8', 'pt-4', 'pb-24', 'min-h-screen', 'flex', 'flex-col', 'bg-transparent', 'gap-6', 'md:gap-8');
-    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('mt-6', 'grid', 'min-h-0', 'w-full', 'flex-1', 'grid-cols-1', 'gap-6', 'lg:grid-cols-12', 'lg:gap-8');
-    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('flex', 'flex-col', 'gap-6', 'lg:col-span-4', 'xl:col-span-3');
+    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'flex', 'flex-col', 'lg:flex-row', 'gap-8', 'min-w-0', 'mt-6');
+    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'lg:w-[360px]', 'xl:w-[400px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
     expect(screen.getByTestId('backtest-cockpit-console')).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex', 'min-w-0', 'flex-col', 'gap-6', 'lg:col-span-8', 'xl:col-span-9');
-    expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('backtest-monitor-empty')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-equity-monitor')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-monitor-metrics')).not.toBeInTheDocument();
