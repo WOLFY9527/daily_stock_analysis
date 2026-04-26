@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ApiErrorAlert, Badge, Button, Card, Disclosure } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
@@ -12,10 +12,7 @@ import {
   AssumptionList,
   Banner,
   RULE_BENCHMARK_OPTIONS,
-  RuleRunsTable,
   SectionEyebrow,
-  MetricCard,
-  SummaryStrip,
   buildPeriodicAssumptionLabels,
   getBenchmarkModeLabel,
   type RuleBenchmarkMode,
@@ -749,45 +746,6 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     setPresets(deleteRuleBacktestPreset(presetId));
   }, []);
 
-  const renderPresetSection = () => {
-    if (presets.length === 0) return null;
-
-    return (
-      <Disclosure
-        summary={language === 'en' ? `Presets (${presets.length})` : `预设（${presets.length}）`}
-        className="backtest-entry-shell__disclosure"
-        summaryClassName="backtest-entry-shell__disclosure-summary"
-        bodyClassName="backtest-entry-shell__disclosure-body"
-      >
-        <div className="comparison-card-grid">
-          {presets.map((preset) => (
-            <div key={preset.id} className="comparison-card">
-              <div className="comparison-card__header">
-                <div>
-                  <p className="metric-card__label">{preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}</p>
-                  <h3 className="comparison-card__title">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</h3>
-                </div>
-                <span className="product-chip">{preset.code}</span>
-              </div>
-              <p className="comparison-card__meta">{preset.startDate || '--'} {'->'} {preset.endDate || '--'} · lookback {preset.lookbackBars}</p>
-              <div className="product-chip-list product-chip-list--tight">
-                <span className="product-chip">{preset.benchmarkMode || 'auto'}</span>
-                <span className="product-chip">{language === 'en' ? 'Fee' : '费'} {preset.feeBps}bp</span>
-                <span className="product-chip">{language === 'en' ? 'Slippage' : '滑'} {preset.slippageBps}bp</span>
-              </div>
-              <div className="product-action-row mt-4">
-                <Button size="sm" variant="secondary" onClick={() => handleApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
-                {preset.kind === 'saved' ? (
-                  <Button size="sm" variant="ghost" onClick={() => handleDeletePreset(preset.id)}>{language === 'en' ? 'Delete' : '删除'}</Button>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Disclosure>
-    );
-  };
-
   const baseParamsSection = (
     <section
       ref={setStepRef('symbol')}
@@ -1384,11 +1342,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <p className="preview-card__text">{getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language)}</p>
           </div>
         </div>
-        <div className="product-action-row backtest-control-actions backtest-control-actions--footer mt-4">
-          <Button variant="ghost" onClick={() => handleStepSelect(isProfessionalMode ? 'confirm' : 'strategy')}>
-            {language === 'en' ? 'Back' : '返回'}
-          </Button>
+        <div className="flex flex-col gap-4 mt-4">
           <Button
+            size="xl"
+            className="w-full backtest-launch-button"
             onClick={() => void onRun()}
             isLoading={isSubmitting}
             loadingText={language === 'en' ? 'Opening result page…' : '正在打开结果页…'}
@@ -1396,10 +1353,15 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           >
             {language === 'en' ? 'Run backtest and open result' : '运行回测并打开结果页'}
           </Button>
-          <Button variant="ghost" onClick={onReset}>{language === 'en' ? 'Reset' : '重置'}</Button>
-          <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
-            {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh history' : '刷新历史')}
-          </Button>
+          <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
+            <Button variant="ghost" onClick={() => handleStepSelect(isProfessionalMode ? 'confirm' : 'strategy')}>
+            {language === 'en' ? 'Back' : '返回'}
+            </Button>
+            <Button variant="ghost" onClick={onReset}>{language === 'en' ? 'Reset' : '重置'}</Button>
+            <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
+              {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh history' : '刷新历史')}
+            </Button>
+          </div>
         </div>
         {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
       </Card>
@@ -1458,180 +1420,169 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
 
 
   const isEmptyHistory = historyItems.length === 0 && !isLoadingHistory && !historyError;
-  const backtestEntryMetrics = useMemo(() => ([
-    {
-      label: language === 'en' ? 'Strategy return' : '策略收益',
-      value: '--',
-      tone: 'accent' as const,
-      note: language === 'en' ? 'Run a backtest to populate the result page.' : '运行一次回测后在结果页展示。',
-    },
-    {
-      label: language === 'en' ? 'Benchmark return' : '基准收益',
-      value: '--',
-      tone: 'default' as const,
-      note: language === 'en' ? 'Resolved after the instrument and benchmark are confirmed.' : '确认标的与基准后生成。',
-    },
-    {
-      label: language === 'en' ? 'Max drawdown' : '最大回撤',
-      value: '--',
-      tone: 'negative' as const,
-      note: language === 'en' ? 'Shown only after a completed run.' : '完成回测后显示。',
-    },
-    {
-      label: language === 'en' ? 'Sharpe ratio' : '夏普比率',
-      value: '--',
-      tone: 'default' as const,
-      note: language === 'en' ? 'Risk-adjusted signal stays empty before execution.' : '运行前不显示风险调整信号。',
-    },
-  ]), [language]);
+  const visiblePresets = presets.slice(0, 3);
+  const visibleHistoryItems = historyItems.slice(0, 3);
 
-  const renderEmptyStage = () => (
-    <section className="backtest-entry-shell" data-testid="backtest-entry-shell">
-      <div className="backtest-entry-shell__hero">
-        <div className="backtest-entry-shell__hero-copy">
-          <SectionEyebrow>{language === 'en' ? 'Deterministic backtest' : '确定性回测'}</SectionEyebrow>
-          <h2 className="backtest-entry-shell__hero-title">{language === 'en' ? 'Set up the run, then move into the dedicated result console.' : '先完成配置，再进入独立结果控制台。'}</h2>
-          <p className="product-section-copy">
-            {language === 'en'
-              ? 'The config page now behaves like a launch surface. You choose the symbol, window, capital, and strategy here; once you submit, the full KPI and chart workspace open on the result page.'
-              : '配置页现在更像回测启动面板：先在这里选择标的、区间、资金和策略，提交后再进入独立结果页查看 KPI 与三图联动图表。'}
+  const renderPresetQuickList = () => (
+    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-presets">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Preset shortcuts' : '快速预设'}</h3>
+          <p className="mt-2 text-sm text-white/50 leading-relaxed">
+            {language === 'en' ? 'Apply a saved setup and continue editing in the launch panel.' : '直接复用最近预设，再在右侧发射台继续微调参数。'}
           </p>
         </div>
-        <SummaryStrip
-          items={[
-            {
-              label: language === 'en' ? 'Current symbol' : '当前标的',
-              value: code || '--',
-              note: language === 'en' ? 'Fill the ticker before parsing the strategy.' : '先填写代码，再解析策略。',
-            },
-            {
-              label: language === 'en' ? 'Benchmark' : '对比基准',
-              value: getBenchmarkModeLabel(benchmarkMode, code, undefined, language),
-              note: language === 'en' ? 'Used later on the result page.' : '用于结果页的基准对比。',
-            },
-            {
-              label: language === 'en' ? 'History' : '历史记录',
-              value: historyTotal > 0 ? `${historyTotal}` : '--',
-              note: historyTotal > 0
-                ? (language === 'en' ? 'Previous runs can be reopened directly.' : '已有历史结果可直接打开。')
-                : (language === 'en' ? 'No saved runs yet.' : '当前还没有已保存结果。'),
-            },
-          ]}
-        />
+        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/45">{presets.length}</span>
       </div>
-      <div className="backtest-entry-shell__metrics">
-        {backtestEntryMetrics.map((item) => (
-          <MetricCard key={item.label} label={item.label} value={item.value} tone={item.tone} note={item.note} />
-        ))}
-      </div>
-      <div className="backtest-entry-shell__workspace">
-        <aside className="backtest-entry-shell__sidebar">
-          <div className="backtest-entry-shell__sidebar-block">
-            <span className="backtest-entry-shell__sidebar-label">{language === 'en' ? 'Flow' : '流程'}</span>
-            <strong>{language === 'en' ? 'Setup → Parse → Run' : '配置 → 解析 → 运行'}</strong>
-          </div>
-          <div className="backtest-entry-shell__sidebar-block">
-            <span className="backtest-entry-shell__sidebar-label">{language === 'en' ? 'Mode' : '模式'}</span>
-            <strong>{language === 'en' ? 'Pre-run' : '未运行'}</strong>
-          </div>
-          <div className="backtest-entry-shell__sidebar-block">
-            <span className="backtest-entry-shell__sidebar-label">{language === 'en' ? 'Window' : '区间'}</span>
-            <strong>{startDate || '--'} → {endDate || '--'}</strong>
-          </div>
-        </aside>
-        <div className="backtest-entry-shell__workspace-card">
-          <div className="backtest-entry-shell__workspace-head">
-            <div>
-              <p className="backtest-entry-shell__workspace-eyebrow">{language === 'en' ? 'Result workspace' : '结果工作区'}</p>
-              <h3>{language === 'en' ? 'The chart console appears after you run the backtest.' : '运行后这里会切换成三图联动结果控制台。'}</h3>
-            </div>
-            <div className="backtest-entry-shell__workspace-tags">
-              <span>{language === 'en' ? 'Hero metrics' : 'Hero 指标'}</span>
-              <span>{language === 'en' ? 'Triple-linked charts' : '三图联动'}</span>
-              <span>{language === 'en' ? 'History reopen' : '历史重开'}</span>
-            </div>
-          </div>
-          <div className="backtest-entry-shell__workspace-preview" aria-hidden="true">
-            <div className="backtest-entry-shell__preview-line" />
-            <div className="backtest-entry-shell__preview-grid backtest-entry-shell__preview-grid--mid">
-              <span className="is-pos" /><span className="is-neg" /><span className="is-pos" /><span className="is-neg" /><span className="is-pos" />
-            </div>
-            <div className="backtest-entry-shell__preview-grid backtest-entry-shell__preview-grid--bottom">
-              <span /><span /><span /><span /><span /><span />
-            </div>
-          </div>
-          <div className="backtest-entry-shell__workspace-empty">
-            <strong>{language === 'en' ? 'No active run yet' : '当前还没有进行中的结果'}</strong>
-            <p>{language === 'en' ? 'Finish the form on the left, submit the run, and this area will turn into the full result console.' : '先完成左侧步骤并提交回测，这里会切换成完整结果页中的 KPI 与三图联动图表。'}</p>
-          </div>
+      {visiblePresets.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm text-white/45">
+          {language === 'en' ? 'No saved presets yet. Recent drafts will appear here after your first run.' : '当前还没有保存的预设。完成一次回测后，最近草稿会显示在这里。'}
         </div>
-      </div>
-    </section>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {visiblePresets.map((preset) => (
+            <div key={preset.id} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">
+                    {preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}
+                  </p>
+                  <div className="mt-2 text-sm font-medium text-white">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</div>
+                  <div className="mt-1 text-xs text-white/35">{preset.startDate || '--'} {'->'} {preset.endDate || '--'}</div>
+                </div>
+                <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/55">{preset.code}</span>
+              </div>
+              <div className="product-action-row mt-4">
+                <Button size="sm" variant="secondary" onClick={() => handleApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
+                {preset.kind === 'saved' ? (
+                  <Button size="sm" variant="ghost" onClick={() => handleDeletePreset(preset.id)}>{language === 'en' ? 'Delete' : '删除'}</Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 
-  const renderHistorySection = () => (
-    <Disclosure
-      summary={language === 'en' ? `History (${historyTotal})` : `历史（${historyTotal}）`}
-      className="backtest-entry-shell__disclosure"
-      summaryClassName="backtest-entry-shell__disclosure-summary"
-      bodyClassName="backtest-entry-shell__disclosure-body"
-    >
-      <div className="summary-block__header">
+  const renderHistoryQuickList = () => (
+    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-history">
+      <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <SectionEyebrow>{language === 'en' ? 'History' : '历史记录'}</SectionEyebrow>
-          <h3 className="summary-block__title">{language === 'en' ? 'Rule backtest history' : '规则回测历史'}</h3>
+          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Recent history' : '最近历史回测'}</h3>
+          <p className="mt-2 text-sm text-white/50 leading-relaxed">
+            {language === 'en' ? 'Reopen the latest result pages directly from here.' : '最近完成的回测可以从这里直接重开独立结果页。'}
+          </p>
         </div>
-        <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
+        <Button size="sm" variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
           {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh' : '刷新')}
         </Button>
       </div>
-      <p className="product-section-copy">{language === 'en' ? 'Opening any historical item sends you to `/backtest/results/:runId`, where the dedicated result page carries KPI, charts, audit, and trade analysis.' : '点击任意历史项会打开 `/backtest/results/:runId`，由独立结果页承载相同的 KPI、图表、审计与交易分析。'}</p>
       {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
-      <RuleRunsTable rows={historyItems} selectedRunId={selectedRunId} onOpen={onOpenHistoryRun} />
-      {isEmptyHistory ? <div className="product-empty-state product-empty-state--compact">{language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here and can reopen the dedicated result console.' : '当前还没有已保存的规则回测记录。完成第一次回测后，历史结果会出现在这里，并可直接重开独立结果页。'}</div> : null}
-      <p className="product-footnote">{language === 'en' ? `${historyTotal} deterministic rule-backtest runs. Page ${historyPage}.` : `共 ${historyTotal} 条确定性规则回测记录。当前页 ${historyPage}。`}</p>
-    </Disclosure>
+      {visibleHistoryItems.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm text-white/45">
+          {isEmptyHistory
+            ? (language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here.' : '当前还没有已保存的规则回测记录。完成第一次回测后，最近历史会显示在这里。')
+            : (language === 'en' ? 'History is loading or temporarily unavailable.' : '历史记录正在加载，或暂时不可用。')}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {visibleHistoryItems.map((item) => (
+            <div key={item.id} className={`rounded-2xl border bg-white/[0.02] p-4 ${selectedRunId === item.id ? 'border-emerald-500/40' : 'border-white/8'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-white">{item.code || '--'} / {language === 'en' ? 'Rule backtest' : '规则回测'}</div>
+                  <div className="mt-1 text-xs text-white/35">{item.runAt?.slice(0, 10) || '--'} {'->'} {item.completedAt?.slice(0, 10) || item.runAt?.slice(0, 10) || '--'}</div>
+                  <div className="mt-2 text-xs text-white/45">{language === 'en' ? 'Status' : '状态'}: {item.status || '--'}</div>
+                </div>
+                <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/55">#{item.id}</span>
+              </div>
+              <div className="product-action-row mt-4">
+                <Button size="sm" variant="secondary" onClick={() => onOpenHistoryRun(item)}>
+                  {language === 'en' ? 'Open' : '查看'}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-4 text-xs text-white/35">
+        {language === 'en' ? `${historyTotal} deterministic runs in history. Page ${historyPage}.` : `历史中共 ${historyTotal} 条确定性回测记录。当前页 ${historyPage}。`}
+      </p>
+    </div>
+  );
+
+  const renderSetupSidebar = () => (
+    <aside className="w-full lg:w-[380px] shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
+      <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-entry-shell">
+        <SectionEyebrow>{language === 'en' ? 'Deterministic backtest' : '确定性回测'}</SectionEyebrow>
+        <h2 className="mt-2 text-[1.35rem] font-semibold leading-tight text-white">{language === 'en' ? 'Setup console' : '回测启动面板'}</h2>
+        <p className="mt-3 text-sm text-white/50 leading-relaxed">
+          {language === 'en'
+            ? 'The config page now behaves like a launch surface. Choose the symbol, window, capital, and strategy here, then jump into the dedicated result page for KPI, charts, audit, and trades.'
+            : '配置页现在更像回测启动面板：先在这里选择标的、区间、资金和策略，提交后将进入独立结果页查看 KPI、图表、审计与交易。'}
+        </p>
+        <div className="mt-6 grid gap-3">
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Flow' : '流程'}</p>
+            <p className="mt-2 text-sm text-white">{language === 'en' ? 'Setup -> Parse -> Launch' : '配置 -> 解析 -> 发射'}</p>
+          </div>
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Current symbol' : '当前标的'}</p>
+            <p className="mt-2 text-sm text-white">{code || '--'}</p>
+          </div>
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Window' : '区间'}</p>
+            <p className="mt-2 text-sm text-white">{startDate || '--'} {'->'} {endDate || '--'}</p>
+          </div>
+        </div>
+      </div>
+      {renderPresetQuickList()}
+      {renderHistoryQuickList()}
+    </aside>
   );
 
   if (!isProfessionalMode) {
     return (
-      <div className="w-full flex-1 flex flex-col xl:flex-row gap-8 min-w-0 mt-6" data-testid="backtest-cockpit">
-        <section className="w-full xl:w-[380px] 2xl:w-[420px] shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
-          <div className="backtest-control-panel__header shrink-0">
-            <SectionEyebrow>{language === 'en' ? 'Control panel' : '控制台'}</SectionEyebrow>
-            <h2 className="backtest-control-panel__title">{language === 'en' ? 'Deterministic backtest' : '确定性回测'}</h2>
-            <p className="backtest-control-panel__description">
-              {language === 'en'
-                ? 'Normal mode keeps the active setup step on the left and releases guidance, presets, and history into the main workspace.'
-                : '普通模式把当前操作步骤固定在左侧，把说明、预设和历史记录释放到主工作区。'}
-            </p>
-          </div>
-
-          <nav className="backtest-normal-stepper" aria-label={language === 'en' ? 'Deterministic backtest wizard steps' : '确定性回测向导步骤'}>
-            {NORMAL_STEP_ORDER.map((step, index) => {
-              const stepMeta = normalStepLabels[step];
-              const isActive = normalCurrentStep === step;
-              const isDone = index < normalCurrentStepIndex;
-              const summary = getNormalStepSummary(step);
-              return (
-                <button
-                  key={step}
-                  type="button"
-                  className={`backtest-normal-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
-                  onClick={() => !summary.disabled && handleStepSelect(step)}
-                  disabled={summary.disabled}
-                >
-                  <span className="backtest-normal-step__index">{index + 1}</span>
-                  <span className="backtest-normal-step__copy">
-                    <strong>{stepMeta.title}</strong>
-                    <small>{stepMeta.short}</small>
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-
-          <div data-testid="backtest-normal-wizard">
+      <div className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row gap-10 mt-8 mb-24 min-w-0" data-testid="backtest-cockpit">
+        {renderSetupSidebar()}
+        <main className="flex-1 min-w-0 bg-white/[0.02] border border-white/5 rounded-[32px] p-8 md:p-10 shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+          <div className="flex flex-col gap-10 backtest-setup-form-stack" data-testid="backtest-normal-wizard">
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-3">
+                <SectionEyebrow>{language === 'en' ? 'Launch workflow' : '发射流程'}</SectionEyebrow>
+                <h3 className="text-[1.45rem] font-semibold leading-tight text-white">{language === 'en' ? 'Deterministic setup' : '确定性回测配置'}</h3>
+                <p className="text-sm text-white/50 leading-relaxed">
+                  {language === 'en'
+                    ? 'The form becomes the only primary workspace here. Fill the core setup, parse the strategy, and launch directly into the dedicated result page.'
+                    : '表单现在是页面唯一主角：完成基础参数、解析策略，然后直接进入独立结果页查看完整结果。'}
+                </p>
+              </div>
+              <nav className="backtest-normal-stepper" aria-label={language === 'en' ? 'Deterministic backtest wizard steps' : '确定性回测向导步骤'}>
+                {NORMAL_STEP_ORDER.map((step, index) => {
+                  const stepMeta = normalStepLabels[step];
+                  const isActive = normalCurrentStep === step;
+                  const isDone = index < normalCurrentStepIndex;
+                  const summary = getNormalStepSummary(step);
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      className={`backtest-normal-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+                      onClick={() => !summary.disabled && handleStepSelect(step)}
+                      disabled={summary.disabled}
+                    >
+                      <span className="backtest-normal-step__index">{index + 1}</span>
+                      <span className="backtest-normal-step__copy">
+                        <strong>{stepMeta.title}</strong>
+                        <small>{stepMeta.short}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
             <div data-testid="backtest-normal-active-stage">
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -1646,73 +1597,54 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
               </AnimatePresence>
             </div>
           </div>
-        </section>
-
-        <section className="flex-1 min-w-0 flex flex-col gap-6" data-testid="backtest-cockpit-monitor">
-          {renderEmptyStage()}
-          <div className="backtest-entry-shell__compact-actions">
-            <Disclosure
-              key="page-help"
-              summary={language === 'en' ? 'How this page works' : '页面说明'}
-              className="backtest-entry-shell__disclosure"
-              summaryClassName="backtest-entry-shell__disclosure-summary"
-              bodyClassName="backtest-entry-shell__disclosure-body"
-            >
-              <p className="product-section-copy">
-                {language === 'en' ? 'Normal mode keeps only the active step on the left. History, presets, and extra explanation stay in the right workspace instead of squeezing the form rail.' : '普通模式只把当前操作步骤放在左侧，历史、预设和补充说明回到右侧工作区，不再继续挤压表单栏。'}
-              </p>
-            </Disclosure>
-            {renderPresetSection()}
-            {renderHistorySection()}
-          </div>
-        </section>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="w-full flex-1 flex flex-col xl:flex-row gap-8 min-w-0 mt-6" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
-      <section className="w-full xl:w-[380px] 2xl:w-[420px] shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
-        <Card title={language === 'en' ? 'Professional-mode setup' : '专业版配置'} subtitle={language === 'en' ? 'Config page' : '配置页'} className="product-section-card product-section-card--backtest-result">
-          <p className="product-section-copy">
-            {language === 'en' ? 'Professional mode keeps the full control surface, but the full analysis still lives on `/backtest/results/:runId` rather than inside the config page.' : '专业版保留完整配置控制，但完整分析结果统一落在 `/backtest/results/:runId`。这里不再承载全宽图表工作区。'}
-          </p>
-        </Card>
+    <div className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row gap-10 mt-8 mb-24 min-w-0" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
+      {renderSetupSidebar()}
+      <main className="flex-1 min-w-0 bg-white/[0.02] border border-white/5 rounded-[32px] p-8 md:p-10 shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        <div className="flex flex-col gap-10 backtest-setup-form-stack">
+          <div className="flex flex-col gap-3">
+            <SectionEyebrow>{language === 'en' ? 'Professional mode' : '专业模式'}</SectionEyebrow>
+            <h3 className="text-[1.45rem] font-semibold leading-tight text-white">{language === 'en' ? 'Expanded deterministic setup' : '展开式确定性回测配置'}</h3>
+            <p className="text-sm text-white/50 leading-relaxed">
+              {language === 'en' ? 'Professional mode keeps the full control surface, but the full analysis still opens on `/backtest/results/:runId` instead of rendering inside the setup page.' : '专业模式保留完整配置控制，但完整分析仍然统一打开 `/backtest/results/:runId`，不再在配置页内预留空结果区。'}
+            </p>
+          </div>
 
-        <nav className="backtest-control-stepper backtest-control-stepper--secondary" aria-label={language === 'en' ? 'Deterministic backtest steps' : '确定性回测步骤'}>
-          {PROFESSIONAL_STEP_ORDER.map((step, index) => {
-            const stepMeta = professionalStepLabels[step];
-            const isActive = currentStep === step;
-            const isDone = index < professionalCurrentStepIndex;
-            return (
-              <button
-                key={step}
-                type="button"
-                className={`backtest-control-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
-                onClick={() => handleStepSelect(step)}
-              >
-                <span className="backtest-control-step__index">{index + 1}</span>
-                <span className="backtest-control-step__copy">
-                  <strong>{stepMeta.title}</strong>
-                  <small>{stepMeta.short}</small>
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+          <nav className="backtest-control-stepper backtest-control-stepper--secondary" aria-label={language === 'en' ? 'Deterministic backtest steps' : '确定性回测步骤'}>
+            {PROFESSIONAL_STEP_ORDER.map((step, index) => {
+              const stepMeta = professionalStepLabels[step];
+              const isActive = currentStep === step;
+              const isDone = index < professionalCurrentStepIndex;
+              return (
+                <button
+                  key={step}
+                  type="button"
+                  className={`backtest-control-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
+                  onClick={() => handleStepSelect(step)}
+                >
+                  <span className="backtest-control-step__index">{index + 1}</span>
+                  <span className="backtest-control-step__copy">
+                    <strong>{stepMeta.title}</strong>
+                    <small>{stepMeta.short}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
 
-        <div className="space-y-6" data-testid="backtest-control-panel-expanded">
-          {PROFESSIONAL_STEP_ORDER.map((step) => (
-            <Fragment key={step}>{professionalControlSections[step]}</Fragment>
-          ))}
+          <div className="space-y-10" data-testid="backtest-control-panel-expanded">
+            {PROFESSIONAL_STEP_ORDER.map((step) => (
+              <Fragment key={step}>{professionalControlSections[step]}</Fragment>
+            ))}
+          </div>
         </div>
-      </section>
-
-      <section className="flex-1 min-w-0 flex flex-col gap-6" data-testid="backtest-cockpit-monitor">
-        {renderEmptyStage()}
-        {renderPresetSection()}
-        {renderHistorySection()}
-      </section>
+      </main>
     </div>
   );
 };

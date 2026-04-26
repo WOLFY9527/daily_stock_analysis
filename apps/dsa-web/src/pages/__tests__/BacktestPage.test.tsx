@@ -128,11 +128,6 @@ function renderBacktestRoutes(
   );
 }
 
-function expectCollapsedHistoryDisclosure(language: 'zh' | 'en' = 'zh') {
-  const label = language === 'en' ? /^History \(\d+\)$/ : /^历史（\d+）$/;
-  expect(screen.getByText(label)).toBeInTheDocument();
-}
-
 function makeRunResponse(overrides: Partial<BacktestRunResponse> = {}): BacktestRunResponse {
   return {
     runId: 1,
@@ -896,10 +891,10 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'min-h-screen', 'px-4', 'md:px-6', '2xl:px-10', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
-    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'xl:flex-row', 'gap-8', 'min-w-0', 'mt-6');
-    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'xl:w-[380px]', '2xl:w-[420px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'max-w-6xl', 'mx-auto', 'flex', 'flex-col', 'lg:flex-row', 'gap-10', 'mt-8', 'mb-24', 'min-w-0');
+    expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'lg:w-[380px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
     expect(screen.getByTestId('backtest-cockpit-console')).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'rounded-[32px]', 'p-8', 'shadow-2xl', 'relative', 'overflow-hidden', 'backtest-setup-main');
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
@@ -912,9 +907,11 @@ describe('BacktestPage', () => {
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
     expect(screen.getByTestId('backtest-entry-shell')).toBeInTheDocument();
-    expect(screen.getByText('先完成配置，再进入独立结果控制台。')).toBeInTheDocument();
-    expect(screen.getByText('当前还没有进行中的结果')).toBeInTheDocument();
-    expect(screen.getByText('普通模式把当前操作步骤固定在左侧，把说明、预设和历史记录释放到主工作区。')).toBeInTheDocument();
+    expect(screen.getByText('回测启动面板')).toBeInTheDocument();
+    expect(screen.getByText('配置页现在更像回测启动面板：先在这里选择标的、区间、资金和策略，提交后将进入独立结果页查看 KPI、图表、审计与交易。')).toBeInTheDocument();
+    expect(screen.getByText('表单现在是页面唯一主角：完成基础参数、解析策略，然后直接进入独立结果页查看完整结果。')).toBeInTheDocument();
+    expect(screen.queryByText('当前还没有进行中的结果')).not.toBeInTheDocument();
+    expect(screen.queryByText('页面说明')).not.toBeInTheDocument();
 
     const activeStage = screen.getByTestId('backtest-normal-active-stage');
     expect(within(activeStage).getByTestId('backtest-control-section-symbol')).toHaveAttribute('data-active', 'true');
@@ -924,8 +921,8 @@ describe('BacktestPage', () => {
     expect(screen.queryByTestId('backtest-control-section-setup')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-control-section-strategy')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-control-section-run')).not.toBeInTheDocument();
-    expect(screen.getByText('页面说明')).toBeInTheDocument();
-    expectCollapsedHistoryDisclosure();
+    expect(screen.getByTestId('backtest-setup-presets')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-setup-history')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('backtest-bento-drawer-trigger'));
     expect(await screen.findByTestId('backtest-bento-drawer')).toBeInTheDocument();
@@ -1009,7 +1006,6 @@ describe('BacktestPage', () => {
     expect(screen.getByText('默认补全与提醒')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.getAllByLabelText(/我已确认当前解析结果与执行假设/i)).toHaveLength(1);
-    expectCollapsedHistoryDisclosure();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1107,7 +1103,6 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-control-section-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-confirm')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-run')).toBeInTheDocument();
-    expectCollapsedHistoryDisclosure();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1213,7 +1208,7 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看' }));
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: `${bt('zh', 'resultPage.documentTitle')} #123` })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
   }, 10000);
@@ -1223,15 +1218,15 @@ describe('BacktestPage', () => {
     renderBacktestRoutes(['/en/backtest/results/99']);
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: `${bt('en', 'resultPage.documentTitle')} #99` })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: bt('en', 'resultPage.hero.backToConfig') })).toBeInTheDocument();
     expect(await screen.findByRole('tab', { name: bt('en', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.audit') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.trades') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.parameters') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'resultPage.tabs.history') })).toBeInTheDocument();
-    expect(screen.getByText(bt('en', 'resultPage.resultView.keyMetrics'))).toBeInTheDocument();
-    expect(screen.getAllByText(bt('en', 'resultPage.buyAndHoldDefault')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Selected benchmark').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('QQQ').length).toBeGreaterThan(0);
   }, 10000);
 
   it('applies saved presets on the configuration page', async () => {
@@ -1257,7 +1252,7 @@ describe('BacktestPage', () => {
 
     renderBacktestRoutes();
 
-    expect(await screen.findByText((content) => content.includes('预设') || content.includes('Presets'))).toBeInTheDocument();
+    expect(await screen.findByTestId('backtest-setup-presets')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
     expect(screen.getByDisplayValue('ORCL')).toBeInTheDocument();

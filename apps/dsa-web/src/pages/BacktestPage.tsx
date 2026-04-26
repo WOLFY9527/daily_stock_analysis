@@ -163,7 +163,7 @@ const BacktestPage: React.FC = () => {
   const [appliedRewriteText, setAppliedRewriteText] = useState<string | null>(null);
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
 
-  const normalizedCode = codeFilter.trim().toUpperCase();
+  const normalizedCode = String(codeFilter || '').trim().toUpperCase();
   const resolvedSampleCount = samplePreset === 'custom'
     ? parsePositiveInt(customSampleCount, 252)
     : parsePositiveInt(samplePreset, 60);
