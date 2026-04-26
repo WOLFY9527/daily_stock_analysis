@@ -97,7 +97,9 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
     const brandLink = screen.getByRole('link', { name: 'WolfyStock' });
     expect(brandLink).toHaveAttribute('href', '/');
-    expect(within(brandLink).getByRole('img', { name: 'WolfyStock logo' })).toHaveClass('brightness-0', 'invert');
+    const logo = within(brandLink).getByRole('img', { name: 'WolfyStock logo' });
+    expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.svg');
+    expect(logo).not.toHaveClass('invert');
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();

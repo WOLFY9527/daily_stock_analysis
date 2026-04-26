@@ -179,7 +179,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 </button>
                 <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                   <span className="inline-flex min-w-0 items-center gap-3">
-                    <BrandLogo />
+                    <BrandLogo className="h-8 w-8" />
                     <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
                   </span>
                   <span className="shell-mobile-brand__note">{t('nav.terminal')}</span>

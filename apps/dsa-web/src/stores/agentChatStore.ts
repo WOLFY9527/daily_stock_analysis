@@ -55,6 +55,7 @@ interface AgentChatActions {
   setCurrentRoute: (path: string) => void;
   clearCompletionBadge: () => void;
   resetSessionState: () => void;
+  stopStream: () => void;
   loadSessions: () => Promise<void>;
   loadInitialSession: () => Promise<void>;
   switchSession: (targetSessionId: string) => Promise<void>;
@@ -102,6 +103,15 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
       chatError: null,
       completionBadge: false,
       hasInitialLoad: false,
+      abortController: null,
+    });
+  },
+
+  stopStream: () => {
+    get().abortController?.abort();
+    set({
+      loading: false,
+      progressSteps: [],
       abortController: null,
     });
   },

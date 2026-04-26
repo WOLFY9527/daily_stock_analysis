@@ -482,10 +482,10 @@ body[data-scanner-shell='true'],
   place-items: center;
   overflow: hidden;
   background:
-    radial-gradient(circle at 16% 14%, rgb(247 39 154 / 0.28), transparent 40%),
-    radial-gradient(circle at 82% -6%, rgb(123 41 255 / 0.3), transparent 46%),
-    radial-gradient(circle at 50% 100%, rgb(6 16 36 / 0.82), transparent 62%),
-    linear-gradient(180deg, rgb(9 11 21 / 0.98), rgb(5 7 13 / 0.99));
+    radial-gradient(circle at 18% 18%, rgb(255 76 108 / 0.18), transparent 34%),
+    radial-gradient(circle at 82% 16%, rgb(52 243 208 / 0.16), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgb(6 16 36 / 0.52), transparent 58%),
+    linear-gradient(180deg, rgb(5 7 12 / 0.98), rgb(0 0 0 / 1));
   transition:
     opacity 0.38s ease,
     visibility 0.38s ease;
@@ -497,13 +497,20 @@ body[data-scanner-shell='true'],
   inset: 0;
   background:
     repeating-linear-gradient(
-      155deg,
-      transparent 0 22px,
-      rgb(196 88 255 / 0.06) 22px 24px,
-      transparent 24px 46px
+      90deg,
+      transparent 0 38px,
+      rgb(255 255 255 / 0.04) 38px 39px,
+      transparent 39px 78px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 38px,
+      rgb(255 255 255 / 0.03) 38px 39px,
+      transparent 39px 78px
     );
-  opacity: 0.46;
+  opacity: 0.28;
   pointer-events: none;
+  animation: boot-grid-drift 12s linear infinite;
 }
 
 .app-boot-splash.is-fading {
@@ -514,63 +521,87 @@ body[data-scanner-shell='true'],
 .app-boot-splash__inner {
   position: relative;
   z-index: 2;
-  width: min(92vw, 380px);
+  width: min(92vw, 420px);
   text-align: center;
 }
 
 .app-boot-splash__logo-wrap {
   position: relative;
   margin: 0 auto;
-  width: clamp(156px, 35vw, 224px);
+  width: clamp(144px, 28vw, 196px);
   aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
 }
 
-.app-boot-splash__halo {
+.app-boot-splash__ring {
   position: absolute;
-  inset: 11%;
+  inset: 8%;
   border-radius: 999px;
-  border: 1px solid rgb(253 70 184 / 0.44);
-  box-shadow:
-    0 0 22px rgb(255 67 180 / 0.32),
-    0 0 42px rgb(127 39 255 / 0.25);
+  border: 1px solid rgb(255 90 126 / 0.2);
+  box-shadow: 0 0 22px rgb(255 90 126 / 0.12);
+  animation: boot-ring-pulse 2.8s ease-in-out infinite;
 }
 
-.app-boot-splash__halo--outer {
-  animation: boot-halo-spin 8.8s linear infinite;
-}
-
-.app-boot-splash__halo--inner {
-  inset: 18%;
-  border-color: rgb(122 205 255 / 0.24);
-  box-shadow: 0 0 20px rgb(122 205 255 / 0.16);
-  animation: boot-halo-pulse 2.2s ease-in-out infinite;
+.app-boot-splash__ring--secondary {
+  inset: 16%;
+  border-color: rgb(57 240 203 / 0.16);
+  box-shadow: 0 0 24px rgb(57 240 203 / 0.12);
+  animation-delay: 1.4s;
 }
 
 .app-boot-splash__logo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  position: relative;
+  z-index: 2;
+  width: clamp(112px, 22vw, 156px);
+  height: clamp(112px, 22vw, 156px);
   filter:
-    drop-shadow(0 0 28px rgb(255 66 184 / 0.24))
-    drop-shadow(0 0 46px rgb(122 43 255 / 0.22));
-  animation: boot-logo-float 2.7s ease-in-out infinite;
+    drop-shadow(0 0 24px rgb(255 87 120 / 0.18))
+    drop-shadow(0 0 34px rgb(57 240 203 / 0.14));
+  animation: boot-logo-lift 2.6s ease-in-out infinite;
 }
 
-.app-boot-splash__scan {
+.app-boot-splash__chart {
   position: absolute;
-  left: 18%;
-  right: 18%;
-  top: 50%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgb(252 116 220 / 0.86), transparent);
-  box-shadow: 0 0 14px rgb(252 116 220 / 0.66);
-  animation: boot-scan-line 2.3s ease-in-out infinite;
+  left: 8%;
+  right: 8%;
+  bottom: 12%;
+  height: 42px;
+  overflow: visible;
+  opacity: 0.92;
+}
+
+.app-boot-splash__chart-path {
+  fill: none;
+  stroke: rgb(104 243 221 / 0.72);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: boot-chart-draw 2.4s ease-in-out infinite;
+}
+
+.app-boot-splash__chart-dot {
+  fill: rgb(96 245 220);
+  filter: drop-shadow(0 0 10px rgb(96 245 220 / 0.72));
+  animation: boot-chart-pulse 2.4s ease-in-out infinite;
+}
+
+.app-boot-splash__wordmark {
+  margin: 1rem 0 0;
+}
+
+.app-boot-splash__market {
+  margin: 0.4rem 0 0;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
 }
 
 .app-boot-splash__text {
-  margin: 20px 0 0;
+  margin: 1rem 0 0;
   font:
     600 15px/1.2 "Sora", "Inter", "Segoe UI", system-ui,
     sans-serif;
@@ -587,83 +618,110 @@ body[data-scanner-shell='true'],
 
 .app-boot-splash__progress {
   position: relative;
-  margin: 18px auto 0;
-  width: min(220px, 72vw);
-  height: 4px;
+  margin: 1.2rem auto 0;
+  width: min(240px, 74vw);
+  height: 3px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.08);
 }
 
 .app-boot-splash__progress-bar {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgb(255 46 176), rgb(169 48 255), rgb(89 227 255));
-  animation: boot-progress-slide 1.8s linear infinite;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgb(255 84 124 / 0.16) 0%,
+    rgb(255 90 126) 22%,
+    rgb(141 250 222) 76%,
+    rgb(83 244 210 / 0.12) 100%
+  );
+  animation: boot-progress-scan 1.55s linear infinite;
 }
 
-@keyframes boot-logo-float {
+@keyframes boot-logo-lift {
   0%,
   100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-7px);
+    transform: translateY(-6px);
   }
 }
 
-@keyframes boot-halo-pulse {
+@keyframes boot-ring-pulse {
   0%,
   100% {
-    opacity: 0.5;
-    transform: scale(0.98);
+    opacity: 0.42;
+    transform: scale(0.985);
   }
   50% {
-    opacity: 1;
-    transform: scale(1.02);
+    opacity: 0.86;
+    transform: scale(1.015);
   }
 }
 
-@keyframes boot-halo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes boot-scan-line {
+@keyframes boot-chart-draw {
   0% {
-    opacity: 0.2;
-    transform: translateY(-50px);
+    opacity: 0.16;
+    stroke-dashoffset: 220;
   }
-  40%,
-  60% {
-    opacity: 0.96;
-    transform: translateY(0);
+  32%,
+  68% {
+    opacity: 0.88;
+    stroke-dashoffset: 0;
   }
   100% {
     opacity: 0.18;
-    transform: translateY(50px);
+    stroke-dashoffset: -28;
   }
 }
 
-@keyframes boot-progress-slide {
+@keyframes boot-chart-pulse {
+  0% {
+    opacity: 0.3;
+    transform: scale(0.9);
+  }
+  40%,
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.36;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes boot-grid-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(18px, 0, 0);
+  }
+}
+
+@keyframes boot-progress-scan {
   0% {
     transform: translateX(-72%);
   }
   100% {
-    transform: translateX(72%);
+    transform: translateX(180%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-boot-splash,
   .app-boot-splash::after,
-  .app-boot-splash__halo,
+  .app-boot-splash__ring,
   .app-boot-splash__logo,
-  .app-boot-splash__scan,
+  .app-boot-splash__chart-path,
+  .app-boot-splash__chart-dot,
   .app-boot-splash__progress-bar {
     animation: none !important;
     transition: none !important;
@@ -8898,7 +8956,7 @@ button[data-variant='danger-subtle']:hover {
 }
 
 .app-boot-splash__inner {
-  width: min(92vw, 24rem);
+  width: min(92vw, 26rem);
   text-align: center;
 }
 
@@ -8908,18 +8966,18 @@ button[data-variant='danger-subtle']:hover {
 
 .app-boot-splash__logo-wrap {
   position: relative;
-  width: clamp(132px, 24vw, 180px);
+  width: clamp(144px, 28vw, 196px);
   aspect-ratio: 1;
-  margin: 1.3rem auto 0;
+  margin: 1.15rem auto 0;
+  display: grid;
+  place-items: center;
 }
 
 .app-boot-splash__logo {
-  position: absolute;
-  inset: 18%;
-  width: 64%;
-  height: 64%;
-  object-fit: contain;
-  filter: grayscale(1) contrast(1.1);
+  position: relative;
+  z-index: 2;
+  width: clamp(112px, 22vw, 156px);
+  height: clamp(112px, 22vw, 156px);
 }
 
 .app-boot-splash__line {
@@ -8939,7 +8997,7 @@ button[data-variant='danger-subtle']:hover {
 }
 
 .app-boot-splash__text {
-  margin: 1.35rem 0 0;
+  margin: 1rem 0 0;
   font-family: var(--font-display);
   font-size: 0.82rem;
   letter-spacing: 0.18em;
@@ -8953,19 +9011,23 @@ button[data-variant='danger-subtle']:hover {
 }
 
 .app-boot-splash__progress {
-  margin-top: 1rem;
-  height: 2px;
+  position: relative;
+  margin: 1.2rem auto 0;
+  width: min(240px, 74vw);
+  height: 3px;
   border-radius: 999px;
-  background: hsl(var(--accent-primary-hsl) / 0.08);
   overflow: hidden;
 }
 
 .app-boot-splash__progress-bar {
   display: block;
-  width: 36%;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
   height: 100%;
-  background: hsl(var(--accent-primary-hsl) / 0.88);
-  animation: boot-progress 1.6s var(--motion-ease-soft) infinite;
+  animation: boot-progress-scan 1.55s linear infinite;
 }
 
 @keyframes boot-progress {
@@ -10682,21 +10744,29 @@ html[data-theme='spacex'] .app-boot-splash {
 
 html[data-theme='spacex'] .app-boot-splash__inner {
   width: min(92vw, 26rem);
-  padding: 1.3rem;
+  padding: 1.4rem 1.3rem;
   text-align: center;
 }
 
 html[data-theme='spacex'] .app-boot-splash__wordmark {
-  margin: 0.65rem 0 0;
+  margin: 0.95rem 0 0;
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 5vw, 2.6rem);
-  letter-spacing: 0.22em;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: #f0f0fa;
+  background: linear-gradient(92deg, #ff6d8e 0%, #ffeef1 44%, #73f7dc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+html[data-theme='spacex'] .app-boot-splash__market {
+  color: rgba(240, 240, 250, 0.44);
 }
 
 html[data-theme='spacex'] .app-boot-splash__text {
-  margin: 0.95rem 0 0;
+  margin: 1rem 0 0;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -10712,7 +10782,7 @@ html[data-theme='spacex'] .app-boot-splash__progress {
 }
 
 html[data-theme='spacex'] .app-boot-splash__progress-bar {
-  background: linear-gradient(90deg, transparent 0%, rgba(240, 240, 250, 0.94) 50%, transparent 100%);
+  background: linear-gradient(90deg, rgba(255, 84, 124, 0.18) 0%, #ff6d8e 24%, #bfffee 50%, #73f7dc 78%, rgba(83, 244, 210, 0.16) 100%);
 }
 
 html[data-theme='spacex'] .theme-inline-banner--warning,
@@ -13548,10 +13618,15 @@ html[data-theme='spacex'] .shell-header-utilities {
 }
 
 html[data-theme='spacex'] .shell-wordmark {
-  color: #f0f0fa;
+  background: linear-gradient(90deg, rgba(255, 111, 145, 0.98) 0%, rgba(244, 244, 250, 0.96) 48%, rgba(108, 248, 221, 0.98) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
   font-size: 0.94rem;
   font-weight: 700;
   letter-spacing: 0.2em;
+  text-shadow: 0 0 18px rgba(108, 248, 221, 0.1);
   text-transform: uppercase;
 }
 

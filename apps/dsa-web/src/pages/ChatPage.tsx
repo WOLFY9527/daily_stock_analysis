@@ -26,10 +26,10 @@ const assistantMarkdownComponents = {
   h1: ({ children }: React.PropsWithChildren) => <h1 className="mb-3 mt-5 text-lg font-semibold text-white">{children}</h1>,
   h2: ({ children }: React.PropsWithChildren) => <h2 className="mb-2 mt-4 text-base font-semibold text-white">{children}</h2>,
   h3: ({ children }: React.PropsWithChildren) => <h3 className="mb-2 mt-4 text-sm font-semibold text-white">{children}</h3>,
-  p: ({ children }: React.PropsWithChildren) => <p className="mb-3 leading-relaxed last:mb-0">{children}</p>,
+  p: ({ children }: React.PropsWithChildren) => <p className="mb-3 leading-[1.6] last:mb-0">{children}</p>,
   ul: ({ children }: React.PropsWithChildren) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
   ol: ({ children }: React.PropsWithChildren) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
-  li: ({ children }: React.PropsWithChildren) => <li className="break-words leading-relaxed">{children}</li>,
+  li: ({ children }: React.PropsWithChildren) => <li className="mb-1 break-words leading-[1.6]">{children}</li>,
   strong: ({ children }: React.PropsWithChildren) => <strong className="font-semibold text-white">{children}</strong>,
   a: ({ children, href }: React.PropsWithChildren<{ href?: string }>) => (
     <a className="text-[hsl(var(--accent-primary-hsl))] underline-offset-2 hover:underline" href={href} target="_blank" rel="noreferrer">
@@ -114,6 +114,8 @@ const SKILL_TEXT_ALIAS_TO_ID: Record<string, string> = CANONICAL_SKILL_IDS.reduc
   {} as Record<string, string>,
 );
 
+const ASSISTANT_MESSAGE_SURFACE_CLASS = 'w-full markdown-body text-[15px] leading-[1.6] text-white/90 break-words whitespace-pre-wrap [&>p]:mb-3 [&>ul]:mb-3 [&>ul]:pl-5 [&>li]:mb-1';
+
 function getLocalizedSkillLabel(rawLabel: string, t: (key: string, vars?: Record<string, string | number | undefined>) => string): string {
   const matchedSkillId = SKILL_TEXT_ALIAS_TO_ID[rawLabel];
   if (matchedSkillId) {
@@ -165,6 +167,8 @@ const ChatPage: React.FC = () => {
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
   const [animatedAssistantMessageId, setAnimatedAssistantMessageId] = useState<string | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLElement | null>(null);
+  const isAutoScroll = useRef(true);
   const isMountedRef = useRef(true);
   const followUpHydrationTokenRef = useRef(0);
   const followUpContextRef = useRef<ChatFollowUpContext | null>(null);
@@ -196,6 +200,7 @@ const ChatPage: React.FC = () => {
     loadInitialSession,
     switchSession,
     startStream,
+    stopStream,
     clearCompletionBadge,
   } = useAgentChatStore();
 
@@ -298,6 +303,7 @@ const ChatPage: React.FC = () => {
     async (overrideMessage?: string, overrideSkill?: string) => {
       const msgText = overrideMessage || input.trim();
       if (!msgText || loading) return;
+      isAutoScroll.current = true;
       const usedSkill = overrideSkill || selectedSkill;
       const skill = skills.find((s) => s.id === usedSkill);
       const usedSkillName = skill
@@ -318,6 +324,10 @@ const ChatPage: React.FC = () => {
     },
     [chat, input, loading, selectedSkill, sessionId, skills, startStream, t],
   );
+
+  const handleStopGeneration = useCallback(() => {
+    stopStream();
+  }, [stopStream]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -423,6 +433,8 @@ const ChatPage: React.FC = () => {
     () => [...messages].reverse().find((msg) => msg.role === 'assistant')?.id ?? null,
     [messages],
   );
+
+  const isGenerating = loading;
 
   const groupedSessions = useMemo(() => {
     const buckets = new Map<string, typeof sessions>();
@@ -672,11 +684,26 @@ const ChatPage: React.FC = () => {
 
           <div
             data-testid="chat-message-scroll"
+            ref={(node) => {
+              scrollRef.current = node;
+            }}
+            onWheel={() => {
+              isAutoScroll.current = false;
+            }}
+            onTouchMove={() => {
+              isAutoScroll.current = false;
+            }}
+            onScroll={(e) => {
+              const target = e.target as HTMLElement;
+              if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+                isAutoScroll.current = true;
+              }
+            }}
             className="flex-1 overflow-y-auto no-scrollbar"
           >
             <div
               data-testid="chat-message-stream"
-              className="mx-auto flex w-full max-w-[1200px] flex-col gap-8 px-4 pb-[280px] pt-8 md:px-8 xl:max-w-[1400px]"
+              className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pb-[280px] pt-8 md:px-8"
             >
               {skillsLoadError ? (
                 <ApiErrorAlert
@@ -774,7 +801,7 @@ const ChatPage: React.FC = () => {
                         <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
                           AI
                         </div>
-                        <div className="flex-1 min-w-0 bg-transparent text-sm leading-relaxed text-white/90 break-words whitespace-pre-wrap md:text-base">
+                        <div className="flex-1 min-w-0 bg-transparent text-[15px] leading-[1.6] text-white/90 break-words whitespace-pre-wrap [&>p]:mb-3 [&>ul]:mb-3 [&>ul]:pl-5 [&>li]:mb-1">
                           {msg.skillName ? (
                             <div className="mb-2">
                               <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
@@ -800,15 +827,17 @@ const ChatPage: React.FC = () => {
                           {msg.id === latestAssistantMessageId && msg.id === animatedAssistantMessageId ? (
                             <TypewriterText
                               as="div"
-                              className="w-full markdown-body text-white/90 leading-relaxed break-words whitespace-pre-wrap"
+                              className={ASSISTANT_MESSAGE_SURFACE_CLASS}
                               testId={`chat-typewriter-${msg.id}`}
                               text={msg.content}
+                              autoScrollRef={isAutoScroll}
+                              scrollContainerRef={scrollRef}
                               onComplete={() => {
                                 setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
                               }}
                             />
                           ) : (
-                            <div className="w-full markdown-body break-words whitespace-pre-wrap">
+                            <div className={ASSISTANT_MESSAGE_SURFACE_CLASS}>
                               <Markdown components={assistantMarkdownComponents} remarkPlugins={[remarkGfm]}>
                                 {msg.content}
                               </Markdown>
@@ -848,7 +877,7 @@ const ChatPage: React.FC = () => {
           >
             <div
               data-testid="chat-console-inner"
-              className="flex w-full max-w-[1200px] flex-col gap-4 px-4 pointer-events-auto md:px-8 xl:max-w-[1400px]"
+              className="flex w-full max-w-5xl flex-col gap-4 px-4 pointer-events-auto md:px-8"
             >
               {sendToast ? (
                 <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
@@ -937,21 +966,30 @@ const ChatPage: React.FC = () => {
                       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleSend();
-                    }}
-                    disabled={!input.trim() || loading}
-                    className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
-                    aria-label={chat('notifyAction')}
-                  >
-                    {loading ? (
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
-                    ) : (
+                  {isGenerating ? (
+                    <button
+                      type="button"
+                      onClick={handleStopGeneration}
+                      className="group absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                      aria-label={chat('stopGeneration')}
+                      title={chat('stopGeneration')}
+                    >
+                      <div className="h-3 w-3 rounded-sm bg-white/70 transition-colors group-hover:bg-white" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleSend();
+                      }}
+                      disabled={!input.trim() || loading}
+                      className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                      aria-label={chat('notifyAction')}
+                      title={chat('notifyAction')}
+                    >
                       <ArrowUp className="h-5 w-5" />
-                    )}
-                  </button>
+                    </button>
+                  )}
                 </div>
               </div>
 

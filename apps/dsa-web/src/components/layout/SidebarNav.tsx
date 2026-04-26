@@ -55,7 +55,7 @@ const BrandWordmark: React.FC<{
     className={({ isActive }) => cn('shell-brand-link', className || '', isActive ? 'is-active' : '')}
   >
     <span className="inline-flex min-w-0 items-center gap-3">
-      <BrandLogo />
+      <BrandLogo className="h-8 w-8" />
       <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
     </span>
   </NavLink>

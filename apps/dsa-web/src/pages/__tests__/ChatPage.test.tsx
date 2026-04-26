@@ -21,6 +21,7 @@ const mockLoadSessions = vi.fn();
 const mockLoadInitialSession = vi.fn();
 const mockSwitchSession = vi.fn();
 const mockStartStream = vi.fn();
+const mockStopStream = vi.fn();
 const mockClearCompletionBadge = vi.fn();
 const mockStartNewChat = vi.fn();
 let currentLanguage: 'zh' | 'en' = 'zh';
@@ -44,6 +45,7 @@ const mockStoreState: {
   loadInitialSession: typeof mockLoadInitialSession;
   switchSession: typeof mockSwitchSession;
   startStream: typeof mockStartStream;
+  stopStream: typeof mockStopStream;
   clearCompletionBadge: typeof mockClearCompletionBadge;
 } = {
   messages: [],
@@ -66,6 +68,7 @@ const mockStoreState: {
   loadInitialSession: mockLoadInitialSession,
   switchSession: mockSwitchSession,
   startStream: mockStartStream,
+  stopStream: mockStopStream,
   clearCompletionBadge: mockClearCompletionBadge,
 };
 
@@ -164,6 +167,7 @@ beforeEach(() => {
   mockStoreState.sessionsLoading = false;
   mockStoreState.sessionLoadError = null;
   mockStoreState.chatError = null;
+  mockStoreState.stopStream = mockStopStream;
 });
 
 describe('ChatPage', () => {
@@ -191,9 +195,9 @@ describe('ChatPage', () => {
     expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-[1200px]', 'xl:max-w-[1400px]', 'mx-auto', 'px-4', 'md:px-8', 'pt-8', 'pb-[280px]', 'flex', 'flex-col', 'gap-8');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-5xl', 'mx-auto', 'px-4', 'md:px-8', 'pt-8', 'pb-[280px]', 'flex', 'flex-col', 'gap-8');
     expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-[#050505]/95', 'backdrop-blur-3xl', 'border-t', 'border-white/5', 'pt-6', 'pb-8', 'justify-center', 'pointer-events-none');
-    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'max-w-[1200px]', 'xl:max-w-[1400px]', 'px-4', 'md:px-8', 'flex', 'flex-col', 'gap-4', 'pointer-events-auto');
+    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'max-w-5xl', 'px-4', 'md:px-8', 'flex', 'flex-col', 'gap-4', 'pointer-events-auto');
     expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-3', 'overflow-x-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
@@ -344,7 +348,7 @@ describe('ChatPage', () => {
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(400);
+      await vi.advanceTimersByTimeAsync(1200);
     });
 
     expect(streamingNode).toHaveTextContent('最新回复正在涌现，请继续观察成交量与关键价位变化');
@@ -392,7 +396,7 @@ describe('ChatPage', () => {
 
     const quoteText = screen.getByText('不应再出现引用竖线');
     const assistantBubble = screen.getByTestId('chat-assistant-message-assistant-1').lastElementChild;
-    expect(assistantBubble).toHaveClass('flex-1', 'min-w-0', 'bg-transparent', 'text-white/90', 'text-sm', 'md:text-base', 'leading-relaxed', 'break-words', 'whitespace-pre-wrap');
+    expect(assistantBubble).toHaveClass('flex-1', 'min-w-0', 'bg-transparent', 'text-[15px]', 'leading-[1.6]', 'text-white/90', 'break-words', 'whitespace-pre-wrap');
 
     const markdownSurface = quoteText.closest('div[class*="markdown-body"]');
     expect(markdownSurface?.className).not.toContain('prose-blockquote:border');
@@ -417,6 +421,25 @@ describe('ChatPage', () => {
 
     fireEvent.click(sessionCard);
     expect(mockSwitchSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('swaps the send button for a stop control while generation is active', async () => {
+    mockStoreState.loading = true;
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    const stopButton = await screen.findByRole('button', { name: translate('zh', 'chat.stopGeneration') });
+    expect(stopButton).toHaveAttribute('title', translate('zh', 'chat.stopGeneration'));
+    expect(screen.queryByRole('button', { name: translate('zh', 'chat.notifyAction') })).not.toBeInTheDocument();
+
+    fireEvent.click(stopButton);
+    expect(mockStopStream).toHaveBeenCalledTimes(1);
   });
 
   it('allows sending with base follow-up context before report hydration completes', async () => {

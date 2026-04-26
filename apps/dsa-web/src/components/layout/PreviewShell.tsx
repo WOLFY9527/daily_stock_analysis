@@ -36,7 +36,7 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
             <div className="shell-nav-strip">
               <div className="shell-nav-brand">
                 <span className="inline-flex min-w-0 items-center gap-3">
-                  <BrandLogo />
+                  <BrandLogo className="h-8 w-8" />
                   <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
                 </span>
                 <span className="shell-nav-brand-note">{t('preview.shellNote')}</span>
@@ -59,7 +59,7 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
               </button>
               <div className="shell-mobile-brand">
                 <span className="inline-flex min-w-0 items-center gap-3">
-                  <BrandLogo />
+                  <BrandLogo className="h-8 w-8" />
                   <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>{t('preview.eyebrow')}</span>
                 </span>
                 <span className="shell-mobile-brand__note">{t('preview.shellTitle')}</span>

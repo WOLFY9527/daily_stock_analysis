@@ -120,4 +120,23 @@ describe('agentChatStore.startStream', () => {
     expect(localStorage.getItem('dsa_chat_session_id')).toBeNull();
     expect(state.sessionId).not.toBe('session-old');
   });
+
+  it('stops the active stream without clearing the current draft conversation', () => {
+    const abort = vi.fn();
+    useAgentChatStore.setState({
+      messages: [{ id: 'm-1', role: 'user', content: '分析 AAPL' }],
+      loading: true,
+      progressSteps: [{ type: 'thinking', message: '分析中' }],
+      abortController: { abort } as unknown as AbortController,
+    });
+
+    useAgentChatStore.getState().stopStream();
+
+    const state = useAgentChatStore.getState();
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(state.messages).toEqual([{ id: 'm-1', role: 'user', content: '分析 AAPL' }]);
+    expect(state.loading).toBe(false);
+    expect(state.progressSteps).toEqual([]);
+    expect(state.abortController).toBeNull();
+  });
 });

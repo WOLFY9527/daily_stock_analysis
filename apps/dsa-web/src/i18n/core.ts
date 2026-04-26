@@ -384,6 +384,7 @@ const RESOURCES = {
       inputPlaceholder: '例如：分析 600519 / 茅台现在适合买入吗？（回车发送，Shift+回车换行）',
       suggestedFocus: '优先提问：买点、止损、目标位、风险和催化。',
       followUpContextLoading: '正在补齐上一次报告的上下文；你现在就可以继续提问。',
+      stopGeneration: '停止生成',
       stage: {
         connecting: '正在连接...',
         thinking: 'AI 正在思考...',
@@ -3018,6 +3019,7 @@ This memo is for research discussion and does not constitute investment advice.`
       inputPlaceholder: 'Example: Is 600519 / Kweichow Moutai a buy right now? (Enter to send, Shift+Enter for newline)',
       suggestedFocus: 'Suggested focus: entry, stop-loss, target, risk, and catalysts.',
       followUpContextLoading: 'Loading the earlier report so your follow-up has context. You can ask now.',
+      stopGeneration: 'Stop generation',
       stage: {
         connecting: 'Connecting...',
         thinking: 'AI is thinking...',

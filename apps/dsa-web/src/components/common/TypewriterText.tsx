@@ -6,6 +6,8 @@ type TypewriterTextProps = {
   as?: keyof React.JSX.IntrinsicElements;
   className?: string;
   onComplete?: () => void;
+  autoScrollRef?: React.RefObject<boolean>;
+  scrollContainerRef?: React.RefObject<HTMLElement | null>;
 };
 
 export const TypewriterText: React.FC<TypewriterTextProps> = ({
@@ -14,6 +16,8 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
   as = 'span',
   className,
   onComplete,
+  autoScrollRef,
+  scrollContainerRef,
 }) => {
   const textRef = useRef<HTMLElement | null>(null);
   const renderedLengthRef = useRef(0);
@@ -46,13 +50,31 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
     }
 
     let animationFrameId = 0;
+    let lastFrameTime = -24;
 
-    const type = () => {
-      const charsPerFrame = 4;
-      const targetLength = Math.min(renderedLengthRef.current + charsPerFrame, text.length);
+    const type = (timestamp: number) => {
+      if (timestamp - lastFrameTime < 24) {
+        animationFrameId = window.requestAnimationFrame(type);
+        return;
+      }
+      lastFrameTime = timestamp;
+
+      const chunkSize = Math.floor(Math.random() * 3) + 1;
+      const targetLength = Math.min(renderedLengthRef.current + chunkSize, text.length);
 
       renderText(text.slice(0, targetLength));
       renderedLengthRef.current = targetLength;
+
+      if (
+        autoScrollRef?.current
+        && scrollContainerRef?.current
+        && typeof scrollContainerRef.current.scrollTo === 'function'
+      ) {
+        scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: 'smooth',
+        });
+      }
 
       if (renderedLengthRef.current < text.length) {
         animationFrameId = window.requestAnimationFrame(type);
