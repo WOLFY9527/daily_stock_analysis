@@ -17,6 +17,8 @@ import {
 const HISTORY_PAGE_SIZE = 8;
 
 type PillOption = { value: string; label: string };
+type TacticalTagTone = 'indigo' | 'emerald';
+type TacticalTag = { name: string; description: string; tone: TacticalTagTone };
 
 function ScannerEmptyState({
   title,
@@ -61,22 +63,59 @@ function parseFirstNumericValue(value?: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number]): string[] {
-  const tags = [
-    ...candidate.featureSignals.flatMap((signal) => [signal.value, signal.label]),
-    ...candidate.boards,
-    candidate.qualityHint,
-    candidate.aiInterpretation.opportunityType,
-  ]
-    .map((tag) => tag?.trim())
-    .filter((tag): tag is string => typeof tag === 'string' && tag.length > 0 && !['行业', '主线', 'board', 'theme'].includes(tag.toLowerCase()));
-  return Array.from(new Set(tags)).slice(0, 3);
+function tooltipToneClass(tone: TacticalTagTone): string {
+  return tone === 'emerald'
+    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500/20'
+    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-500/20';
 }
 
-function shouldRenderDisplayName(symbol?: string | null, name?: string | null): boolean {
-  const normalizedSymbol = (symbol || '').trim().toLowerCase();
-  const normalizedName = (name || '').trim().toLowerCase();
-  return Boolean(normalizedName && normalizedName !== normalizedSymbol);
+function tagDescriptionFor(name: string, language: 'zh' | 'en'): string {
+  const zhDescriptions: Record<string, string> = {
+    'AI 算力基建': '涵盖 GPU、光模块、液冷等核心硬件，当前处于行业高景气周期，业绩确定性极强。',
+    '半导体设备': '提供芯片制造与封测设备，是半导体产业链的上游核心。',
+    '数据中心': '受益于云厂商与企业级算力扩容，订单兑现速度快。',
+    '网络芯片': '聚焦交换、互联与高速传输，是 AI 集群扩容的关键底座。',
+    '边缘推理': '终端侧 AI 推理正在扩散，具备成本与部署速度优势。',
+    GPU: '兼具训练与推理能力，是 AI 计算平台的核心芯片。',
+  };
+  const enDescriptions: Record<string, string> = {
+    'AI infrastructure': 'Covers GPUs, optical links, and liquid cooling, with strong demand and visible earnings momentum.',
+    'Semiconductor equipment': 'Provides manufacturing and packaging equipment for the upstream semiconductor chain.',
+    'Data center': 'Benefits from cloud and enterprise compute expansion with fast order conversion.',
+    'Networking silicon': 'Powers switching and high-speed connectivity inside AI clusters.',
+    'Edge inference': 'AI inference is spreading to endpoint devices where deployment speed matters.',
+    GPU: 'Core compute silicon that serves both model training and inference workloads.',
+  };
+  const dictionary = language === 'en' ? enDescriptions : zhDescriptions;
+  return dictionary[name] || (language === 'en' ? 'Part of the current market leadership cluster with active capital attention.' : '属于当前市场主线中持续获得资金关注的方向。');
+}
+
+function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): TacticalTag[] {
+  if (candidate.tags?.length) {
+    return candidate.tags
+      .map((tag, index) => ({
+        name: tag.name.trim(),
+        description: tag.description.trim(),
+        tone: tag.tone || (index === 0 ? 'indigo' : 'emerald'),
+      }))
+      .filter((tag) => tag.name && tag.description)
+      .slice(0, 2);
+  }
+
+  const rawTags = [
+    ...candidate.featureSignals.map((signal) => signal.value?.trim()).filter(Boolean),
+    ...candidate.boards.map((board) => board.trim()),
+    candidate.qualityHint?.trim(),
+  ].filter((tag): tag is string => Boolean(tag));
+
+  return Array.from(new Set(rawTags))
+    .filter((tag) => !['行业', '主线', 'board', 'theme'].includes(tag.toLowerCase()))
+    .slice(0, 2)
+    .map((tag, index) => ({
+      name: tag,
+      description: tagDescriptionFor(tag, language),
+      tone: index === 0 ? 'indigo' : 'emerald',
+    }));
 }
 
 function formatEntryZone(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
@@ -395,8 +434,9 @@ const UserScannerPage: React.FC = () => {
   const tacticalCards = runDetail?.shortlist.map((candidate) => ({
     symbol: candidate.symbol,
     name: candidate.name,
+    companyName: candidate.companyName?.trim() || candidate.name,
     aiScore: formatAiScore(candidate.score),
-    tags: formatCandidateTags(candidate),
+    tags: formatCandidateTags(candidate, language),
     forecastValue: formatForecastValue(candidate),
     insight: candidate.aiInterpretation.summary || candidate.reasonSummary || candidate.reasons[0] || (language === 'en' ? 'Awaiting AI insight generation.' : '等待 AI 生成更完整的战术解读。'),
     entryZone: formatEntryZone(candidate, language),
@@ -502,27 +542,35 @@ const UserScannerPage: React.FC = () => {
                     >
                       <div className="flex justify-between items-start gap-4 mb-4">
                         <div className="min-w-0 flex flex-col gap-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-bold text-white tracking-tight">
+                          <div className="flex items-baseline gap-2 mb-1 min-w-0">
+                            <h3 className="text-xl font-bold text-white tracking-tight">
                               {candidate.symbol}
                             </h3>
+                            <span className="text-xs text-white/40 font-medium truncate max-w-[150px]">
+                              {candidate.companyName}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(candidate.aiScore)}`}>
                               {language === 'en' ? `AI score ${candidate.aiScore}/100` : `AI 评分 ${candidate.aiScore}/100`}
                             </span>
-                            {shouldRenderDisplayName(candidate.symbol, candidate.name) ? (
-                              <span className="text-xs font-medium text-white/35">{candidate.name}</span>
-                            ) : null}
                           </div>
                           <div className="flex flex-wrap gap-1.5 mt-1">
-                            {candidate.tags.map((tag, index) => (
-                              <span
-                                key={`${candidate.symbol}-${tag}`}
-                                className={index === 0
-                                  ? 'text-[10px] px-2 py-0.5 rounded bg-white/[0.05] border border-white/5 text-white/50'
-                                  : 'text-[10px] px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'}
+                            {candidate.tags.map((tag) => (
+                              <div
+                                key={`${candidate.symbol}-${tag.name}`}
+                                className="relative group cursor-help"
                               >
-                                {tag}
-                              </span>
+                                <span className={`text-[10px] px-2 py-1 rounded border transition-colors ${tooltipToneClass(tag.tone)}`}>
+                                  {tag.name}
+                                </span>
+                                <div className="absolute bottom-full left-0 mb-2 w-48 rounded-lg border border-white/10 bg-[#111] p-2.5 shadow-2xl opacity-0 invisible transition-all duration-200 z-50 group-hover:opacity-100 group-hover:visible">
+                                  <p className="text-[10px] text-white/70 leading-relaxed font-normal whitespace-normal">
+                                    {tag.description}
+                                  </p>
+                                  <div className="absolute top-full left-4 -mt-px border-4 border-transparent border-t-[#111]" />
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>

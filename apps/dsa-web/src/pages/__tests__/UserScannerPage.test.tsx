@@ -94,6 +94,7 @@ function makeRunDetail(): ScannerRunDetail {
       {
         symbol: 'NVDA',
         name: 'NVIDIA',
+        companyName: 'NVIDIA Corporation',
         rank: 1,
         score: 94,
         qualityHint: 'AI 算力基建',
@@ -106,6 +107,10 @@ function makeRunDetail(): ScannerRunDetail {
         featureSignals: [
           { label: '行业', value: '半导体设备' },
           { label: '主线', value: 'AI 算力基建' },
+        ],
+        tags: [
+          { name: 'AI 算力基建', description: '涵盖 GPU、光模块、液冷等核心硬件，当前处于行业高景气周期，业绩确定性极强。', tone: 'indigo' },
+          { name: '半导体设备', description: '提供芯片制造与封测设备，是半导体产业链的上游核心。', tone: 'emerald' },
         ],
         riskNotes: ['跌破 895 附近止损。'],
         watchContext: [{ label: '观察', value: '高开后看量能延续。' }],
@@ -147,6 +152,7 @@ function makeRunDetail(): ScannerRunDetail {
       {
         symbol: 'AVGO',
         name: 'Broadcom',
+        companyName: 'Broadcom Inc.',
         rank: 2,
         score: 88,
         qualityHint: '高速互联',
@@ -159,6 +165,10 @@ function makeRunDetail(): ScannerRunDetail {
         featureSignals: [
           { label: '行业', value: '网络芯片' },
           { label: '主线', value: '数据中心' },
+        ],
+        tags: [
+          { name: '数据中心', description: '受益于云厂商与企业级算力扩容，订单兑现速度快。', tone: 'indigo' },
+          { name: '网络芯片', description: '聚焦交换、互联与高速传输，是 AI 集群扩容的关键底座。', tone: 'emerald' },
         ],
         riskNotes: ['避免追高。'],
         watchContext: [{ label: '观察', value: '关注放量突破后的回踩确认。' }],
@@ -200,6 +210,7 @@ function makeRunDetail(): ScannerRunDetail {
       {
         symbol: 'AMD',
         name: 'AMD',
+        companyName: 'Advanced Micro Devices',
         rank: 3,
         score: 76,
         qualityHint: '边际转强',
@@ -212,6 +223,10 @@ function makeRunDetail(): ScannerRunDetail {
         featureSignals: [
           { label: '行业', value: 'GPU' },
           { label: '主线', value: '边缘推理' },
+        ],
+        tags: [
+          { name: '边缘推理', description: '终端侧 AI 推理正在扩散，具备成本与部署速度优势。', tone: 'indigo' },
+          { name: 'GPU', description: '兼具训练与推理能力，是 AI 计算平台的核心芯片。', tone: 'emerald' },
         ],
         riskNotes: ['跌回平台下沿则撤退。'],
         watchContext: [{ label: '观察', value: '确认开盘量能后再决定。' }],
@@ -380,6 +395,9 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByText('AVGO')).toBeInTheDocument();
     expect(screen.queryByText(/^AVGO AVGO$/)).not.toBeInTheDocument();
+    expect(screen.getByText('NVIDIA Corporation')).toBeInTheDocument();
+    expect(screen.getByText('Broadcom Inc.')).toBeInTheDocument();
+    expect(screen.getByText('Advanced Micro Devices')).toBeInTheDocument();
     expect(screen.getByText('AI 评分 94/100')).toBeInTheDocument();
     expect(screen.getByText('AI 评分 88/100')).toBeInTheDocument();
     expect(screen.getByText('AI 评分 76/100')).toBeInTheDocument();
@@ -388,6 +406,13 @@ describe('UserScannerPage', () => {
     expect(screen.getByText('边缘推理')).toBeInTheDocument();
     expect(screen.getByText('+87.1%')).toBeInTheDocument();
     expect(screen.getAllByText('年化收益预测').length).toBe(3);
+    expect(screen.queryByText('Trend')).not.toBeInTheDocument();
+    expect(screen.queryByText('20.0 / 20')).not.toBeInTheDocument();
+    expect(screen.getByText('涵盖 GPU、光模块、液冷等核心硬件，当前处于行业高景气周期，业绩确定性极强。')).toBeInTheDocument();
+    expect(screen.getByText('提供芯片制造与封测设备，是半导体产业链的上游核心。')).toBeInTheDocument();
+
+    const aiInfrastructureTag = screen.getByText('AI 算力基建').closest('div');
+    expect(aiInfrastructureTag).toHaveClass('relative', 'group', 'cursor-help');
 
     fireEvent.click(screen.getByTestId('user-scanner-bento-drawer-trigger'));
 

@@ -152,6 +152,7 @@ export interface ScannerRunDiagnostics {
 export interface ScannerCandidate {
   symbol: string;
   name: string;
+  companyName?: string | null;
   rank: number;
   score: number;
   qualityHint?: string | null;
@@ -162,6 +163,11 @@ export interface ScannerCandidate {
   riskNotes: string[];
   watchContext: ScannerLabeledValue[];
   boards: string[];
+  tags?: Array<{
+    name: string;
+    description: string;
+    tone?: 'indigo' | 'emerald';
+  }>;
   appearedInRecentRuns: number;
   lastTradeDate?: string | null;
   scanTimestamp?: string | null;
