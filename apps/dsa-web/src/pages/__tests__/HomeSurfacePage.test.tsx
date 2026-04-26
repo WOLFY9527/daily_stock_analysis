@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { analysisApi } from '../../api/analysis';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { useStockPoolStore } from '../../stores';
 import HomeSurfacePage from '../HomeSurfacePage';
 
 const { useProductSurfaceMock } = vi.hoisted(() => ({
@@ -20,10 +22,25 @@ vi.mock('../HomePage', () => ({
   default: () => <div data-testid="legacy-home-page">full home page</div>,
 }));
 
+vi.mock('../../api/analysis', () => ({
+  analysisApi: {
+    analyzeAsync: vi.fn(),
+    getTasks: vi.fn(),
+    getTaskStreamUrl: vi.fn(),
+  },
+  DuplicateTaskError: class DuplicateTaskError extends Error {},
+}));
+
 describe('HomeSurfacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    useStockPoolStore.getState().resetDashboardState();
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
+      taskId: 'task-home-bento',
+      status: 'pending',
+      message: 'submitted',
+    });
   });
 
   const renderSurface = () => render(
@@ -48,6 +65,9 @@ describe('HomeSurfacePage', () => {
     const techCard = screen.getByTestId('home-bento-card-tech');
     const fundamentalsCard = screen.getByTestId('home-bento-card-fundamentals');
     const entryMetric = screen.getByTestId('home-bento-strategy-metric-建仓区间');
+    const targetMetric = screen.getByTestId('home-bento-strategy-metric-目标位');
+    const stopLossMetric = screen.getByTestId('home-bento-strategy-metric-止损位');
+    const strategyMetricsGrid = entryMetric.parentElement;
     const techMetricTiles = Array.from(techCard.querySelectorAll('div')).filter((node) => node.className.includes('rounded-[32px]'));
     const fundamentalsMetricTiles = Array.from(fundamentalsCard.querySelectorAll('div')).filter((node) => node.className.includes('rounded-[32px]'));
     expect(root).toHaveAttribute('data-bento-surface', 'true');
@@ -84,7 +104,7 @@ describe('HomeSurfacePage', () => {
     expect(omnibarInput).toHaveAttribute('type', 'search');
     expect(omnibarSubmit).toHaveAttribute('type', 'submit');
     expect(omnibarSubmit).toHaveClass('relative', 'z-10', 'hover:bg-white/10', 'cursor-pointer');
-    expect(screen.getByText('↵ Enter')).toHaveClass('text-[10px]', 'bg-white/5');
+    expect(screen.getByText('分析')).toHaveClass('text-[10px]', 'bg-white/5');
     expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
@@ -103,9 +123,14 @@ describe('HomeSurfacePage', () => {
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
+    expect(strategyMetricsGrid).toHaveClass('grid', 'grid-cols-2', 'gap-y-4', 'gap-x-4', 'w-full');
+    expect(entryMetric).toHaveClass('col-span-2', 'flex', 'flex-col', 'gap-1');
+    expect(targetMetric).not.toHaveClass('col-span-2');
+    expect(stopLossMetric).not.toHaveClass('col-span-2');
     expect(screen.getByText('建仓区间')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40');
-    expect(screen.getByText('118.40 - 121.00')).toHaveClass('whitespace-nowrap', 'text-xl');
+    expect(screen.getByText('118.40 - 121.00')).toHaveClass('text-2xl');
     expect(screen.getByText('136.00')).toHaveClass('text-2xl', 'font-medium');
+    expect(screen.getByText('111.80')).toHaveClass('text-2xl', 'font-medium');
     expect(screen.getByText('零轴上方金叉')).toHaveClass('text-xl', 'font-medium');
     expect(screen.getByText('+18.2%')).toHaveClass('text-2xl', 'font-medium');
     expect(screen.getByText('65.4')).toBeInTheDocument();
@@ -129,6 +154,7 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     expect(screen.getByText('WolfyStock Command Center')).toBeInTheDocument();
+    expect(screen.getByText('Analyze')).toBeInTheDocument();
     expect(screen.getByText('Execution Strategy')).toBeInTheDocument();
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
     expect(screen.getByText('Fundamental Profile')).toBeInTheDocument();
@@ -153,13 +179,20 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 
-  it('submits the home omnibar through the enter button without breaking the surface', () => {
+  it('submits the home omnibar into analysis instead of navigating to chat', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     fireEvent.change(screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...'), {
       target: { value: 'NVDA' },
     });
     fireEvent.click(screen.getByTestId('home-bento-omnibar-submit'));
+    expect(analysisApi.analyzeAsync).toHaveBeenCalledWith({
+      stockCode: 'NVDA',
+      reportType: 'detailed',
+      stockName: undefined,
+      originalQuery: 'NVDA',
+      selectionSource: 'manual',
+    });
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 });

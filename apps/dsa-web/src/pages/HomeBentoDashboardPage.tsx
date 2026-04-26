@@ -1,7 +1,6 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import {
   BENTO_SURFACE_ROOT_CLASS,
   BentoGrid,
@@ -14,6 +13,7 @@ import {
   type SignalTone,
 } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
   label: string;
@@ -44,6 +44,7 @@ const CONTENT: Record<DashboardLocale, {
   heading: string;
   description: string;
   omnibarPlaceholder: string;
+  analyzeButton: string;
   instrument: string;
   ticker: string;
   sessionBadge: string;
@@ -94,6 +95,7 @@ const CONTENT: Record<DashboardLocale, {
     heading: 'WolfyStock 决策面板',
     description: '',
     omnibarPlaceholder: '输入股票代码或公司名称，唤醒 AI 深度分析...',
+    analyzeButton: '分析',
     instrument: '英伟达',
     ticker: 'NVDA',
     sessionBadge: '美股 AI 基础设施',
@@ -268,6 +270,7 @@ const CONTENT: Record<DashboardLocale, {
     heading: 'WolfyStock Command Center',
     description: '',
     omnibarPlaceholder: 'Enter a ticker or company name to wake AI deep analysis...',
+    analyzeButton: 'Analyze',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
     sessionBadge: 'US AI infrastructure',
@@ -440,11 +443,13 @@ const CONTENT: Record<DashboardLocale, {
 
 const HomeBentoDashboardPage: React.FC = () => {
   const { language } = useI18n();
-  const navigate = useNavigate();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const copy = CONTENT[locale];
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
-  const [query, setQuery] = useState('');
+  const query = useStockPoolStore((state) => state.query);
+  const setQuery = useStockPoolStore((state) => state.setQuery);
+  const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
+  const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -457,7 +462,11 @@ const HomeBentoDashboardPage: React.FC = () => {
       return;
     }
 
-    navigate(`/chat?stock=${encodeURIComponent(nextQuery)}`);
+    void submitAnalysis({
+      stockCode: nextQuery,
+      originalQuery: nextQuery,
+      selectionSource: 'manual',
+    });
   };
 
   return (
@@ -490,14 +499,16 @@ const HomeBentoDashboardPage: React.FC = () => {
                 autoComplete="off"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                disabled={isAnalyzing}
               />
               <button
                 type="submit"
                 className="relative z-10 shrink-0 rounded-md border border-white/8 bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/55 transition-colors duration-150 hover:bg-white/10 cursor-pointer"
                 data-testid="home-bento-omnibar-submit"
-                aria-label={locale === 'en' ? 'Submit stock search' : '提交股票搜索'}
+                aria-label={copy.analyzeButton}
+                disabled={!query.trim() || isAnalyzing}
               >
-                ↵ Enter
+                {copy.analyzeButton}
               </button>
             </form>
           </div>

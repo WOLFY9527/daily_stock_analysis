@@ -49,12 +49,16 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     )}
   >
     <div className="flex h-full flex-col">
-      <div className="grid gap-8 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-y-4 gap-x-4 w-full">
       {metrics.map((metric) => (
-        <div key={metric.label} className="min-w-0" data-testid={`home-bento-strategy-metric-${metric.label}`}>
+        <div
+          key={metric.label}
+          className={`${isEntryMetric(metric.label) ? 'col-span-2 flex flex-col gap-1' : 'flex flex-col gap-1'} min-w-0`}
+          data-testid={`home-bento-strategy-metric-${metric.label}`}
+        >
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
           <p
-            className={`mt-3 font-medium leading-tight ${isEntryMetric(metric.label) ? 'whitespace-nowrap text-xl' : 'text-2xl'} ${getToneTextClass(metric.tone || 'neutral')}`}
+            className={`font-medium leading-tight text-2xl ${getToneTextClass(metric.tone || 'neutral')}`}
             style={getToneTextStyle(metric.tone || 'neutral', false)}
           >
             {metric.value}
