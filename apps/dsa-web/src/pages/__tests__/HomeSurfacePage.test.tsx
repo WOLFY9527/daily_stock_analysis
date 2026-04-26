@@ -18,10 +18,6 @@ vi.mock('../GuestHomePage', () => ({
   default: () => <div>guest home page</div>,
 }));
 
-vi.mock('../HomePage', () => ({
-  default: () => <div data-testid="legacy-home-page">full home page</div>,
-}));
-
 vi.mock('../../api/analysis', () => ({
   analysisApi: {
     analyzeAsync: vi.fn(),

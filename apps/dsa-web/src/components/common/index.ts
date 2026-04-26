@@ -15,8 +15,3 @@ export * from './Pagination';
 export * from './ConfirmDialog';
 export * from './WorkspacePageHeader';
 export * from './SupportSurface';
-export * from '../layout/Shell';
-export * from '../layout/SidebarNav';
-export * from '../theme/ThemeProvider';
-export * from '../theme/ThemeToggle';
-export * from './ParticleBackground';

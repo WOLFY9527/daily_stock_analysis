@@ -64,7 +64,7 @@ vi.mock('../../hooks', () => ({
 
 vi.mock('../../components/theme/ThemeProvider', () => ({
   useThemeStyle: () => ({
-    themeStyle: 'terminal',
+    themeStyle: 'spacex',
     setThemeStyle,
   }),
 }));

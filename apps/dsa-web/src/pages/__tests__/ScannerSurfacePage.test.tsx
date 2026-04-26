@@ -18,10 +18,6 @@ vi.mock('../UserScannerPage', () => ({
   default: () => <div>user scanner page</div>,
 }));
 
-vi.mock('../ScannerPage', () => ({
-  default: () => <div>admin scanner page</div>,
-}));
-
 describe('ScannerSurfacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -43,6 +39,5 @@ describe('ScannerSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false, isAdmin: true });
     render(<ScannerSurfacePage />);
     expect(screen.getByText('user scanner page')).toBeInTheDocument();
-    expect(screen.queryByText('admin scanner page')).not.toBeInTheDocument();
   });
 });
