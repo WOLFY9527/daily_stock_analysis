@@ -167,7 +167,7 @@ beforeEach(() => {
 });
 
 describe('ChatPage', () => {
-  it('renders a locked-height chat shell with a dedicated message viewport and docked composer', async () => {
+  it('renders a two-pane workspace with a desktop history rail and bottom command console', async () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -182,32 +182,31 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-full', 'overflow-hidden');
     expect(container.querySelectorAll('main')).toHaveLength(1);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-workspace')).toHaveClass('relative', 'h-[calc(100vh-80px)]', 'w-full', 'flex', 'flex-col', 'overflow-hidden', 'bg-transparent');
-    expect(screen.getByTestId('chat-status-strip')).toHaveClass('rounded-full', 'border-white/10', 'bg-black/45', 'backdrop-blur-2xl');
+    expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'h-[calc(100vh-80px)]', 'flex', 'overflow-hidden', 'bg-transparent');
+    const historyPane = screen.getByTestId('chat-history-pane');
+    expect(historyPane).toHaveClass('w-64', 'shrink-0', 'hidden', 'md:flex', 'flex-col', 'border-r', 'border-white/5', 'bg-white/[0.01]');
+    expect(screen.getByTestId('chat-history-list')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'px-3', 'pb-4', 'flex', 'flex-col', 'gap-1');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
-    expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'w-full');
-    expect(screen.getByTestId('chat-main')).not.toHaveClass('flex', 'flex-col', 'items-center', 'justify-center');
-    expect(screen.queryByTestId('chat-status-sidebar')).not.toBeInTheDocument();
-    expect((await screen.findAllByTestId('chat-bento-hero-skill')).length).toBeGreaterThan(0);
-    const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
-    expect(skillValues[0]).toHaveTextContent(canonicalBullTrendLabel('zh'));
-    expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-[1000px]', 'mx-auto', 'flex-col', 'gap-10', 'px-6', 'pt-16');
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('md:px-10');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/95', 'to-transparent', 'pt-20', 'pb-8', 'justify-center', 'pointer-events-none');
-    expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'flex-wrap', 'items-center', 'gap-2');
+    expect(screen.getByTestId('chat-main')).toHaveClass('relative', 'flex-1', 'min-w-0', 'flex', 'flex-col');
+    expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-[1200px]', 'xl:max-w-[1400px]', 'mx-auto', 'px-4', 'md:px-8', 'pt-8', 'pb-[280px]', 'flex', 'flex-col', 'gap-8');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-[#050505]/95', 'backdrop-blur-3xl', 'border-t', 'border-white/5', 'pt-6', 'pb-8', 'justify-center', 'pointer-events-none');
+    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'max-w-[1200px]', 'xl:max-w-[1400px]', 'px-4', 'md:px-8', 'flex', 'flex-col', 'gap-4', 'pointer-events-auto');
+    expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-3', 'overflow-x-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
       'rounded-[24px]',
       'border-white/10',
       'bg-white/[0.03]',
       'backdrop-blur-2xl',
-      'focus-within:border-white/30',
+      'border',
     );
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByTestId('chat-bento-drawer-trigger'));
+    fireEvent.click(screen.getByTestId('chat-bento-brief-trigger'));
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: translate('zh', 'chat.title') })).toBeInTheDocument();
   });
@@ -225,6 +224,21 @@ describe('ChatPage', () => {
     fireEvent.click(newChatButton);
 
     expect(mockStartNewChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the floating debug status strip from the workspace', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
+    expect(screen.queryByText('技能模式')).not.toBeInTheDocument();
+    expect(screen.queryByText('消息深度')).not.toBeInTheDocument();
+    expect(screen.queryByText('跟踪对话')).not.toBeInTheDocument();
   });
 
   it('keeps the empty state anchored instead of auto-scrolling to the footer on first paint', async () => {

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef } from 'react';
 
 type TypewriterTextProps = {
   text: string;
-  speed?: number;
   testId?: string;
   as?: keyof React.JSX.IntrinsicElements;
   className?: string;
@@ -11,7 +10,6 @@ type TypewriterTextProps = {
 
 export const TypewriterText: React.FC<TypewriterTextProps> = ({
   text,
-  speed = 4,
   testId,
   as = 'span',
   className,
@@ -50,7 +48,7 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
     let animationFrameId = 0;
 
     const type = () => {
-      const charsPerFrame = Math.max(3, Math.min(5, Math.round(speed)));
+      const charsPerFrame = 4;
       const targetLength = Math.min(renderedLengthRef.current + charsPerFrame, text.length);
 
       renderText(text.slice(0, targetLength));
@@ -68,7 +66,7 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [speed, text]);
+  }, [text]);
 
   const Component = as as 'div' | 'span';
 

@@ -4,11 +4,10 @@ import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { agentApi } from '../api/agent';
-import { ApiErrorAlert, ConfirmDialog, ScrollArea, TypewriterText } from '../components/common';
+import { ApiErrorAlert, ConfirmDialog, TypewriterText } from '../components/common';
 import {
   CARD_BUTTON_CLASS,
   PageBriefDrawer,
-  type BentoHeroItem,
 } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
@@ -20,8 +19,6 @@ import {
 import { downloadSession, formatSessionAsMarkdown } from '../utils/chatExport';
 import type { ChatFollowUpContext } from '../utils/chatFollowUp';
 import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFollowUp';
-import { useShellRail } from '../components/layout/ShellRailContext';
-import { useShellRailSlot } from '../components/layout/useShellRailSlot';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 
@@ -134,6 +131,21 @@ function getLocalizedSkillNameById(
   return getLocalizedSkillLabel(fallbackName, t);
 }
 
+function getSessionBucketLabel(dateValue: string | null | undefined, language: 'zh' | 'en'): string {
+  if (!dateValue) return language === 'en' ? 'Earlier' : '更早';
+
+  const now = new Date();
+  const target = new Date(dateValue);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  const diffDays = Math.round((startOfToday.getTime() - startOfTarget.getTime()) / 86400000);
+
+  if (diffDays <= 0) return language === 'en' ? 'Today' : '今天';
+  if (diffDays <= 7) return language === 'en' ? 'Last 7 days' : '近 7 天';
+  if (diffDays <= 30) return language === 'en' ? 'Last 30 days' : '近 30 天';
+  return language === 'en' ? 'Earlier' : '更早';
+}
+
 const ChatPage: React.FC = () => {
   const { language, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -151,19 +163,18 @@ const ChatPage: React.FC = () => {
   } | null>(null);
   const [skillsLoadError, setSkillsLoadError] = useState<ParsedApiError | null>(null);
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
+  const [animatedAssistantMessageId, setAnimatedAssistantMessageId] = useState<string | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
   const isMountedRef = useRef(true);
   const followUpHydrationTokenRef = useRef(0);
   const followUpContextRef = useRef<ChatFollowUpContext | null>(null);
   const seenAssistantMessageIdsRef = useRef<Set<string>>(new Set());
   const hasHydratedAssistantMessagesRef = useRef(false);
-  const { closeMobileRail } = useShellRail();
   const chat = useCallback(
     (key: string, vars?: Record<string, string | number | undefined>) => t(`chat.${key}`, vars),
     [t],
   );
 
-  // Set page title
   useEffect(() => {
     document.title = chat('documentTitle');
   }, [chat]);
@@ -201,10 +212,7 @@ const ChatPage: React.FC = () => {
       setSkillsLoadError(null);
       const res = await agentApi.getSkills();
       setSkills(res.skills);
-      const defaultId =
-        res.default_skill_id ||
-        res.skills[0]?.id ||
-        '';
+      const defaultId = res.default_skill_id || res.skills[0]?.id || '';
       setSelectedSkill(defaultId);
     } catch (error: unknown) {
       setSkillsLoadError(getParsedApiError(error));
@@ -239,33 +247,28 @@ const ChatPage: React.FC = () => {
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
     useAgentChatStore.getState().startNewChat();
-    closeMobileRail();
-  }, [closeMobileRail]);
+  }, []);
 
   const handleSwitchSession = useCallback((targetSessionId: string) => {
     switchSession(targetSessionId);
-    closeMobileRail();
-  }, [closeMobileRail, switchSession]);
+  }, [switchSession]);
 
   const confirmDelete = useCallback(() => {
     if (!deleteConfirmId) return;
     agentApi.deleteChatSession(deleteConfirmId).then(() => {
-      loadSessions();
+      void loadSessions();
       if (deleteConfirmId === sessionId) {
         handleStartNewChat();
       }
     }).catch(() => {});
     setDeleteConfirmId(null);
-  }, [deleteConfirmId, sessionId, loadSessions, handleStartNewChat]);
+  }, [deleteConfirmId, handleStartNewChat, loadSessions, sessionId]);
 
-  // Handle follow-up from report page: ?stock=600519&name=贵州茅台&recordId=xxx
   useEffect(() => {
     const stock = searchParams.get('stock');
     const name = searchParams.get('name');
     const recordId = searchParams.get('recordId');
-    if (!stock) {
-      return;
-    }
+    if (!stock) return;
 
     const hydrationToken = ++followUpHydrationTokenRef.current;
     setInput(buildFollowUpPrompt(stock, name));
@@ -281,9 +284,7 @@ const ChatPage: React.FC = () => {
       stockName: name,
       recordId: recordId ? Number(recordId) : undefined,
     }).then((context) => {
-      if (!isMountedRef.current || followUpHydrationTokenRef.current !== hydrationToken) {
-        return;
-      }
+      if (!isMountedRef.current || followUpHydrationTokenRef.current !== hydrationToken) return;
       followUpContextRef.current = context;
     }).finally(() => {
       if (isMountedRef.current && followUpHydrationTokenRef.current === hydrationToken) {
@@ -312,23 +313,22 @@ const ChatPage: React.FC = () => {
       followUpHydrationTokenRef.current += 1;
       followUpContextRef.current = null;
       setIsFollowUpContextLoading(false);
-
       setInput('');
       await startStream(payload, { skillName: usedSkillName });
     },
-    [chat, input, loading, selectedSkill, skills, sessionId, startStream, t],
+    [chat, input, loading, selectedSkill, sessionId, skills, startStream, t],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   };
 
   const handleQuickQuestion = (q: QuickQuestion) => {
     setSelectedSkill(q.skill);
-    handleSend(chat(`quickQuestions.${q.id}`), q.skill);
+    void handleSend(chat(`quickQuestions.${q.id}`), q.skill);
   };
 
   const toggleThinking = (msgId: string) => {
@@ -344,12 +344,9 @@ const ChatPage: React.FC = () => {
     if (steps.length === 0) return chat('stage.connecting');
     const last = steps[steps.length - 1];
     if (last.type === 'thinking') return last.message || chat('stage.thinking');
-    if (last.type === 'tool_start')
-      return chat('stage.toolRunning', { tool: last.display_name || last.tool });
-    if (last.type === 'tool_done')
-      return chat('stage.toolDone', { tool: last.display_name || last.tool });
-    if (last.type === 'generating')
-      return last.message || chat('stage.generating');
+    if (last.type === 'tool_start') return chat('stage.toolRunning', { tool: last.display_name || last.tool });
+    if (last.type === 'tool_done') return chat('stage.toolDone', { tool: last.display_name || last.tool });
+    if (last.type === 'generating') return last.message || chat('stage.generating');
     return chat('stage.processing');
   };
 
@@ -357,10 +354,7 @@ const ChatPage: React.FC = () => {
     if (!msg.thinkingSteps || msg.thinkingSteps.length === 0) return null;
     const isExpanded = expandedThinking.has(msg.id);
     const toolSteps = msg.thinkingSteps.filter((s) => s.type === 'tool_done');
-    const totalDuration = toolSteps.reduce(
-      (sum, s) => sum + (s.duration || 0),
-      0,
-    );
+    const totalDuration = toolSteps.reduce((sum, s) => sum + (s.duration || 0), 0);
     const summary = chat('thinking.summary', { count: toolSteps.length, duration: totalDuration.toFixed(1) });
 
     return (
@@ -368,10 +362,10 @@ const ChatPage: React.FC = () => {
         type="button"
         aria-label={chat('thinking.toggleLabel')}
         onClick={() => toggleThinking(msg.id)}
-        className="flex items-center gap-2 text-xs text-muted-text hover:text-secondary-text transition-colors mb-2 w-full text-left"
+        className="mb-2 flex w-full items-center gap-2 text-left text-xs text-muted-text transition-colors hover:text-secondary-text"
       >
         <svg
-          className={`w-3 h-3 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
+          className={`h-3 w-3 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -416,10 +410,7 @@ const ChatPage: React.FC = () => {
           colorClass = 'text-[hsl(var(--accent-primary-hsl))]';
         }
         return (
-          <div
-            key={idx}
-            className={`flex items-center gap-2 text-xs py-0.5 ${colorClass}`}
-          >
+          <div key={idx} className={`flex items-center gap-2 py-0.5 text-xs ${colorClass}`}>
             <span className="w-4 flex-shrink-0 text-center">{icon}</span>
             <span className="leading-relaxed">{text}</span>
           </div>
@@ -428,174 +419,21 @@ const ChatPage: React.FC = () => {
     </div>
   );
 
-  const sidebarContent = useMemo(() => (
-    <div className="theme-panel-solid flex h-full min-h-0 flex-col overflow-hidden rounded-[1.2rem]">
-      <div className="theme-sidebar-divider flex items-center justify-between border-b px-3.5 py-3">
-        <h2 className="text-[11px] font-semibold text-[hsl(var(--accent-primary-hsl))] uppercase tracking-[0.2em] flex items-center gap-2">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {chat('historyTitle')}
-        </h2>
-        <button
-          type="button"
-          onClick={handleStartNewChat}
-          className="theme-panel-subtle rounded-lg p-1.5 text-muted-text transition-all duration-200 ease-out hover:text-foreground"
-          title={chat('newChatTitle')}
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-        </button>
-      </div>
-      {sessionLoadError ? (
-        <ApiErrorAlert
-          error={sessionLoadError}
-          className="m-3"
-          actionLabel={chat('retryLoadSessions')}
-          onAction={() => {
-            void loadSessions();
-          }}
-        />
-      ) : null}
-      <ScrollArea testId="chat-session-list-scroll" viewportClassName="p-3">
-        {sessionsLoading ? (
-          <div className="p-4 text-center text-xs text-muted-text">{chat('loadingSessions')}</div>
-        ) : sessions.length === 0 ? (
-          <div className="p-4 text-center text-xs text-muted-text">{chat('emptySessions')}</div>
-        ) : (
-          <div className="space-y-2">
-            {sessions.map((s) => (
-              <div
-                key={s.session_id}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSwitchSession(s.session_id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSwitchSession(s.session_id);
-                  }
-                }}
-                data-active={s.session_id === sessionId}
-                className="theme-list-item group relative flex w-full cursor-pointer items-start gap-3 overflow-hidden rounded-xl border p-2.5 transition-all duration-200 ease-out"
-                aria-label={chat('switchToConversation', { title: s.title })}
-              >
-                {/* 装饰条 */}
-                <div
-                  className={`h-10 w-1 rounded-full flex-shrink-0 transition-colors ${
-                    s.session_id === sessionId ? 'bg-[hsl(var(--accent-primary-hsl))]' : 'bg-white/10'
-                  }`}
-                />
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <span className={`block truncate text-sm font-semibold tracking-tight transition-colors ${
-                        s.session_id === sessionId ? 'text-foreground' : 'text-secondary-text group-hover:text-foreground'
-                      }`}>
-                        {s.title}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteConfirmId(s.session_id);
-                      }}
-                      className="flex-shrink-0 rounded p-1 text-muted-text opacity-0 transition-all hover:bg-white/10 hover:text-danger group-hover:opacity-100"
-                      title={chat('deleteConversationAction')}
-                    >
-                      <svg
-                        className="w-3.5 h-3.5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="text-[11px] text-muted-text">
-                      {chat('messageCount', { count: s.message_count })}
-                    </span>
-                    {s.last_active && (
-                      <>
-                        <span className="h-1 w-1 rounded-full bg-white/10" />
-                        <span className="text-[11px] text-muted-text">
-                          {new Date(s.last_active).toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
-    </div>
-  ), [chat, handleStartNewChat, handleSwitchSession, language, loadSessions, sessionId, sessionLoadError, sessions, sessionsLoading]);
-
-  useShellRailSlot(sidebarContent);
-
-  const heroItems: BentoHeroItem[] = [
-    {
-      label: language === 'en' ? 'Skill mode' : '技能模式',
-      value: selectedSkillLabel,
-      detail: chat('skills.sectionBody'),
-      tone: selectedSkill ? 'bullish' : 'neutral',
-      testId: 'chat-bento-hero-skill',
-      valueTestId: 'chat-bento-hero-skill-value',
-    },
-    {
-      label: language === 'en' ? 'Tracked threads' : '跟踪对话',
-      value: sessions.length,
-      detail: chat('newChatTitle'),
-      testId: 'chat-bento-hero-sessions',
-    },
-    {
-      label: language === 'en' ? 'Message depth' : '消息深度',
-      value: messages.length,
-      detail: loading ? getCurrentStage(progressSteps) : chat('description'),
-      tone: loading ? 'bullish' : 'neutral',
-      testId: 'chat-bento-hero-messages',
-      valueTestId: 'chat-bento-hero-messages-value',
-    },
-    {
-      label: language === 'en' ? 'Delivery' : '发送状态',
-      value: sending ? chat('notifySending') : chat('notifyAction'),
-      detail: sendToast?.message || chat('notifyTitle'),
-      tone: sendToast?.type === 'error' ? 'bearish' : sending ? 'bullish' : 'neutral',
-      testId: 'chat-bento-hero-delivery',
-      valueTestId: 'chat-bento-hero-delivery-value',
-    },
-  ];
-
   const latestAssistantMessageId = useMemo(
     () => [...messages].reverse().find((msg) => msg.role === 'assistant')?.id ?? null,
     [messages],
   );
-  const [animatedAssistantMessageId, setAnimatedAssistantMessageId] = useState<string | null>(null);
+
+  const groupedSessions = useMemo(() => {
+    const buckets = new Map<string, typeof sessions>();
+    sessions.forEach((session) => {
+      const label = getSessionBucketLabel(session.last_active || session.created_at, language);
+      const existing = buckets.get(label) ?? [];
+      existing.push(session);
+      buckets.set(label, existing);
+    });
+    return Array.from(buckets.entries());
+  }, [language, sessions]);
 
   useEffect(() => {
     const assistantIds = messages
@@ -610,7 +448,6 @@ const ChatPage: React.FC = () => {
     }
 
     const newAssistantIds = assistantIds.filter((id) => !seenAssistantIds.has(id));
-
     if (newAssistantIds.length > 0) {
       const newestAssistantId = newAssistantIds[newAssistantIds.length - 1];
       setAnimatedAssistantMessageId(newestAssistantId);
@@ -636,7 +473,7 @@ const ChatPage: React.FC = () => {
     >
       <div
         data-testid="chat-workspace"
-        className="relative w-full h-[calc(100vh-80px)] flex flex-col overflow-hidden bg-transparent"
+        className="w-full h-[calc(100vh-80px)] flex overflow-hidden bg-transparent"
       >
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
@@ -649,430 +486,530 @@ const ChatPage: React.FC = () => {
           onCancel={() => setDeleteConfirmId(null)}
         />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-between gap-3 px-4 pt-4 md:px-6">
-          <div
-            data-testid="chat-status-strip"
-            className="pointer-events-auto inline-flex max-w-[calc(100%-12rem)] flex-wrap items-center gap-x-4 gap-y-2 rounded-full border border-white/10 bg-black/45 px-4 py-2 text-[11px] text-white/50 backdrop-blur-2xl"
-          >
-            {heroItems.map((item, index) => (
-              <div
-                key={`${item.label}-${index}`}
-                data-testid={item.testId}
-                className="flex items-center gap-2"
-              >
-                <span className="uppercase tracking-[0.16em] text-white/32">{item.label}</span>
-                <span
-                  data-testid={item.valueTestId}
-                  className="font-medium text-white/78"
-                >
-                  {item.value}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="pointer-events-auto flex items-start gap-2">
+        <aside
+          data-testid="chat-history-pane"
+          className="hidden w-64 shrink-0 flex-col border-r border-white/5 bg-white/[0.01] md:flex md:flex-col"
+        >
+          <div className="p-4">
+            <p className="mb-3 text-[10px] uppercase tracking-[0.28em] text-white/30">{chat('historyTitle')}</p>
             <button
               type="button"
               onClick={handleStartNewChat}
-              className="rounded-full border border-white/5 bg-white/10 px-4 py-2 text-sm text-white transition-colors hover:bg-white/20"
-              title={chat('newChatTitle')}
+              aria-label={chat('newChatTitle')}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] py-2.5 text-sm font-medium text-white transition-all hover:bg-white/[0.1]"
             >
-              + {chat('newChatTitle')}
+              + {language === 'en' ? 'Start new analysis' : '开启新分析'}
             </button>
-            <button
-              type="button"
-              onClick={() => setIsBriefDrawerOpen(true)}
-              data-testid="chat-bento-drawer-trigger"
-              className={CARD_BUTTON_CLASS}
-              title={language === 'en' ? 'Open brief' : '查看摘要'}
-            >
-              <PanelRightOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-            </button>
-            {messages.length > 0 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => downloadSession(messages)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/45 text-secondary-text backdrop-blur-2xl transition-colors hover:bg-white/10 hover:text-foreground"
-                  title={chat('exportTitle')}
-                >
-                  <Download className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (sending) return;
-                    setSending(true);
-                    setSendToast(null);
-                    try {
-                      const content = formatSessionAsMarkdown(messages);
-                      await agentApi.sendChat(content);
-                      setSendToast({ type: 'success', message: chat('notifySuccess') });
-                      setTimeout(() => setSendToast(null), 3000);
-                    } catch (err) {
-                      const parsed = getParsedApiError(err);
-                      setSendToast({
-                        type: 'error',
-                        message: parsed.message || chat('notifyFailed'),
-                      });
-                      setTimeout(() => setSendToast(null), 5000);
-                    } finally {
-                      setSending(false);
-                    }
-                  }}
-                  disabled={sending}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/45 text-secondary-text backdrop-blur-2xl transition-colors hover:bg-white/10 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  title={chat('notifyTitle')}
-                >
-                  {sending ? (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white" />
-                  ) : (
-                    <SendHorizontal className="h-4 w-4" />
-                  )}
-                </button>
-              </>
-            ) : null}
           </div>
-        </div>
+
+          {sessionLoadError ? (
+            <ApiErrorAlert
+              error={sessionLoadError}
+              className="mx-3 mb-3"
+              actionLabel={chat('retryLoadSessions')}
+              onAction={() => {
+                void loadSessions();
+              }}
+            />
+          ) : null}
+
+          <div
+            data-testid="chat-history-list"
+            className="flex flex-1 flex-col gap-1 overflow-y-auto no-scrollbar px-3 pb-4"
+          >
+            {sessionsLoading ? (
+              <div className="rounded-2xl border border-white/6 bg-white/[0.02] px-3 py-4 text-xs text-secondary-text">
+                {chat('loadingSessions')}
+              </div>
+            ) : sessions.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-4 text-xs text-secondary-text">
+                {chat('emptySessions')}
+              </div>
+            ) : (
+              groupedSessions.map(([bucketLabel, bucketSessions]) => (
+                <section key={bucketLabel} className="flex flex-col gap-1.5 pb-3">
+                  <p className="px-2 text-[10px] uppercase tracking-[0.24em] text-white/30">{bucketLabel}</p>
+                  {bucketSessions.map((s) => (
+                    <div
+                      key={s.session_id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSwitchSession(s.session_id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSwitchSession(s.session_id);
+                        }
+                      }}
+                      className={`group rounded-2xl border px-3 py-3 transition-all ${
+                        s.session_id === sessionId
+                          ? 'border-white/14 bg-white/[0.07]'
+                          : 'border-white/6 bg-white/[0.02] hover:bg-white/[0.05]'
+                      }`}
+                      aria-label={chat('switchToConversation', { title: s.title })}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-white/88">{s.title}</p>
+                          <div className="mt-2 flex items-center gap-2 text-[11px] text-white/36">
+                            <span>{chat('messageCount', { count: s.message_count })}</span>
+                            {s.last_active ? <span className="h-1 w-1 rounded-full bg-white/14" /> : null}
+                            {s.last_active ? (
+                              <span>
+                                {new Date(s.last_active).toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmId(s.session_id);
+                          }}
+                          className="rounded-lg p-1 text-white/28 opacity-0 transition-all hover:bg-white/10 hover:text-danger group-hover:opacity-100"
+                          title={chat('deleteConversationAction')}
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+              ))
+            )}
+          </div>
+        </aside>
 
         <main
           data-testid="chat-main"
-          className="flex-1 w-full overflow-y-auto no-scrollbar"
+          className="relative flex min-w-0 flex-1 flex-col"
         >
-          <div
-            data-testid="chat-message-stream"
-            className="mx-auto flex w-full max-w-[1000px] flex-col gap-10 px-6 pt-16 pb-[15rem] md:px-10 md:pb-[14rem]"
-          >
-            {skillsLoadError ? (
-              <ApiErrorAlert
-                error={skillsLoadError}
-                actionLabel={chat('retryLoadSkills')}
-                onAction={() => {
-                  void loadSkills();
-                }}
-              />
-            ) : null}
-            {messages.length === 0 && !loading ? (
-              <div
-                data-testid="chat-empty-state"
-                className="w-full"
+          <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4 md:px-8">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-white/30">WolfyStock</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white md:text-3xl">{chat('title')}</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleStartNewChat}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white transition-colors hover:bg-white/[0.08] md:hidden"
               >
-                <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
-                  <div className="text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
-                      <svg
-                        className="h-7 w-7"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                        />
-                      </svg>
-                    </div>
-                    <h3 className="mt-5 text-3xl font-medium tracking-tight text-foreground">{chat('emptyTitle')}</h3>
-                    <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-secondary-text md:text-base">
-                      {chat('emptyBody')}
-                    </p>
-                  </div>
+                + {language === 'en' ? 'New' : '新建'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBriefDrawerOpen(true)}
+                data-testid="chat-bento-brief-trigger"
+                className={CARD_BUTTON_CLASS}
+                title={language === 'en' ? 'Open brief' : '查看摘要'}
+              >
+                <PanelRightOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+              </button>
+              {messages.length > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => downloadSession(messages)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground"
+                    title={chat('exportTitle')}
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (sending) return;
+                      setSending(true);
+                      setSendToast(null);
+                      try {
+                        const content = formatSessionAsMarkdown(messages);
+                        await agentApi.sendChat(content);
+                        setSendToast({ type: 'success', message: chat('notifySuccess') });
+                        setTimeout(() => setSendToast(null), 3000);
+                      } catch (err) {
+                        const parsed = getParsedApiError(err);
+                        setSendToast({
+                          type: 'error',
+                          message: parsed.message || chat('notifyFailed'),
+                        });
+                        setTimeout(() => setSendToast(null), 5000);
+                      } finally {
+                        setSending(false);
+                      }
+                    }}
+                    disabled={sending}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    title={chat('notifyTitle')}
+                  >
+                    {sending ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+                    ) : (
+                      <SendHorizontal className="h-4 w-4" />
+                    )}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
 
-                  <div className="grid gap-4 place-items-stretch lg:grid-cols-3">
-                    {starterPromptCards.map((card) => (
-                      <button
-                        key={card.id}
-                        type="button"
-                        data-testid={`chat-starter-card-${card.id}`}
-                        onClick={() => handleSend(chat(`starterCards.${card.id}.prompt`), card.skill)}
-                        className="rounded-[28px] border border-white/8 bg-white/[0.03] px-5 py-5 text-left backdrop-blur-2xl transition-colors duration-150 hover:bg-white/[0.05]"
-                      >
-                        <p className="text-sm font-medium tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
-                        <p className="mt-3 text-sm leading-relaxed text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
-                        <p className="mt-4 text-xs leading-relaxed text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
-                      </button>
-                    ))}
-                  </div>
+          <div
+            data-testid="chat-message-scroll"
+            className="flex-1 overflow-y-auto no-scrollbar"
+          >
+            <div
+              data-testid="chat-message-stream"
+              className="mx-auto flex w-full max-w-[1200px] flex-col gap-8 px-4 pb-[280px] pt-8 md:px-8 xl:max-w-[1400px]"
+            >
+              {skillsLoadError ? (
+                <ApiErrorAlert
+                  error={skillsLoadError}
+                  actionLabel={chat('retryLoadSkills')}
+                  onAction={() => {
+                    void loadSkills();
+                  }}
+                />
+              ) : null}
 
-                  {quickQuestions.length > 0 ? (
-                    <div className="flex flex-wrap justify-center gap-2.5">
-                      {quickQuestions.map((q) => (
-                        <button
-                          key={q.id}
-                          type="button"
-                          onClick={() => handleQuickQuestion(q)}
-                          className="rounded-full border border-white/8 bg-white/[0.02] px-4 py-2 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.05] hover:text-foreground"
+              {messages.length === 0 && !loading ? (
+                <div data-testid="chat-empty-state" className="w-full">
+                  <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
+                    <div className="text-center">
+                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
+                        <svg
+                          className="h-7 w-7"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
                         >
-                          {chat(`quickQuestions.${q.id}`)}
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="mt-5 text-3xl font-medium tracking-tight text-foreground">{chat('emptyTitle')}</h3>
+                      <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-secondary-text md:text-base">
+                        {chat('emptyBody')}
+                      </p>
+                    </div>
+
+                    <div className="grid place-items-stretch gap-4 lg:grid-cols-3">
+                      {starterPromptCards.map((card) => (
+                        <button
+                          key={card.id}
+                          type="button"
+                          data-testid={`chat-starter-card-${card.id}`}
+                          onClick={() => {
+                            void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
+                          }}
+                          className="rounded-[28px] border border-white/8 bg-white/[0.03] px-5 py-5 text-left backdrop-blur-2xl transition-colors duration-150 hover:bg-white/[0.05]"
+                        >
+                          <p className="text-sm font-medium tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
+                          <p className="mt-3 text-sm leading-relaxed text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
+                          <p className="mt-4 text-xs leading-relaxed text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
                         </button>
                       ))}
                     </div>
-                  ) : null}
+
+                    {quickQuestions.length > 0 ? (
+                      <div className="flex flex-wrap justify-center gap-2.5">
+                        {quickQuestions.map((q) => (
+                          <button
+                            key={q.id}
+                            type="button"
+                            onClick={() => handleQuickQuestion(q)}
+                            className="rounded-full border border-white/8 bg-white/[0.02] px-4 py-2 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.05] hover:text-foreground"
+                          >
+                            {chat(`quickQuestions.${q.id}`)}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex w-full flex-col gap-6">
-                {messages.map((msg) => (
-                  msg.role === 'user' ? (
-                    <div
-                      key={msg.id}
-                      data-testid={`chat-user-message-${msg.id}`}
-                      className="w-full flex justify-end mb-4"
-                    >
-                      <div className="max-w-[min(88%,72rem)] bg-white/[0.08] text-white px-5 py-3 rounded-2xl rounded-tr-sm text-sm break-words">
-                        {msg.content
-                          .split('\n')
-                          .map((line, i) => (
-                            <p
-                              key={i}
-                              className="mb-1 last:mb-0 leading-relaxed"
-                            >
+              ) : (
+                <div className="flex w-full flex-col gap-8">
+                  {messages.map((msg) => (
+                    msg.role === 'user' ? (
+                      <div
+                        key={msg.id}
+                        data-testid={`chat-user-message-${msg.id}`}
+                        className="mb-4 flex w-full justify-end"
+                      >
+                        <div className="max-w-[min(88%,72rem)] rounded-2xl rounded-tr-sm bg-white/[0.08] px-5 py-3 text-sm text-white break-words">
+                          {msg.content.split('\n').map((line, i) => (
+                            <p key={i} className="mb-1 leading-relaxed last:mb-0">
                               {line || '\u00A0'}
                             </p>
                           ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div
-                      key={msg.id}
-                      data-testid={`chat-assistant-message-${msg.id}`}
-                      className="w-full flex gap-4"
-                    >
-                      <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
-                        AI
+                    ) : (
+                      <div
+                        key={msg.id}
+                        data-testid={`chat-assistant-message-${msg.id}`}
+                        className="flex w-full gap-4"
+                      >
+                        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
+                          AI
+                        </div>
+                        <div className="flex-1 min-w-0 bg-transparent text-sm leading-relaxed text-white/90 break-words whitespace-pre-wrap md:text-base">
+                          {msg.skillName ? (
+                            <div className="mb-2">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
+                                <svg
+                                  className="h-3 w-3"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                                  />
+                                </svg>
+                                {getLocalizedSkillLabel(msg.skillName, t)}
+                              </span>
+                            </div>
+                          ) : null}
+                          {renderThinkingBlock(msg)}
+                          {expandedThinking.has(msg.id) && msg.thinkingSteps ? renderThinkingDetails(msg.thinkingSteps) : null}
+                          {msg.id === latestAssistantMessageId && msg.id === animatedAssistantMessageId ? (
+                            <TypewriterText
+                              as="div"
+                              className="w-full markdown-body text-white/90 leading-relaxed break-words whitespace-pre-wrap"
+                              testId={`chat-typewriter-${msg.id}`}
+                              text={msg.content}
+                              onComplete={() => {
+                                setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full markdown-body break-words whitespace-pre-wrap">
+                              <Markdown components={assistantMarkdownComponents} remarkPlugins={[remarkGfm]}>
+                                {msg.content}
+                              </Markdown>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0 bg-transparent text-white/90 text-sm md:text-base leading-relaxed break-words whitespace-pre-wrap">
-                        {msg.skillName && (
-                          <div className="mb-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
-                              <svg
-                                className="w-3 h-3"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                                />
-                              </svg>
-                              {getLocalizedSkillLabel(msg.skillName, t)}
-                            </span>
-                          </div>
-                        )}
-                        {renderThinkingBlock(msg)}
-                        {expandedThinking.has(msg.id) &&
-                          msg.thinkingSteps &&
-                          renderThinkingDetails(msg.thinkingSteps)}
-                        {msg.id === latestAssistantMessageId && msg.id === animatedAssistantMessageId ? (
-                          <TypewriterText
-                            as="div"
-                            className="w-full markdown-body break-words whitespace-pre-wrap"
-                            speed={20}
-                            testId={`chat-typewriter-${msg.id}`}
-                            text={msg.content}
-                            onComplete={() => {
-                              setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full markdown-body break-words whitespace-pre-wrap">
-                            <Markdown components={assistantMarkdownComponents} remarkPlugins={[remarkGfm]}>
-                              {msg.content}
-                            </Markdown>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                ))}
-              </div>
-            )}
-
-            {loading && (
-              <div className="w-full flex gap-4 pt-2">
-                <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
-                  AI
+                    )
+                  ))}
                 </div>
-                <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
-                  <div className="flex items-center gap-2.5 text-sm text-secondary-text">
-                    <div className="relative w-4 h-4 flex-shrink-0">
-                      <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
-                      <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+              )}
+
+              {loading ? (
+                <div className="flex w-full gap-4 pt-2">
+                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
+                    AI
+                  </div>
+                  <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
+                    <div className="flex items-center gap-2.5 text-sm text-secondary-text">
+                      <div className="relative h-4 w-4 flex-shrink-0">
+                        <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
+                        <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+                      </div>
+                      <span className="text-secondary-text">
+                        {getCurrentStage(progressSteps)}
+                      </span>
                     </div>
-                    <span className="text-secondary-text">
-                      {getCurrentStage(progressSteps)}
-                    </span>
                   </div>
                 </div>
-              </div>
-            )}
-
-          </div>
-        </main>
-
-        <footer
-          data-testid="chat-input-shell"
-          className="pointer-events-none absolute bottom-0 left-0 z-50 flex w-full justify-center bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent px-4 pt-20 pb-8 md:px-6"
-        >
-          <div className="relative flex w-full max-w-[1000px] flex-col gap-3 px-6 pointer-events-auto md:px-10">
-            {sendToast ? (
-              <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                {sendToast.message}
-              </p>
-            ) : null}
-            {chatError ? (
-              <ApiErrorAlert
-                error={chatError}
-                className="mb-1"
-                actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
-                onAction={
-                  chatError.category === 'local_connection_failed'
-                    ? () => {
-                        window.location.reload();
-                      }
-                    : undefined
-                }
-              />
-            ) : null}
-            <div
-              data-testid="chat-skill-toolbar"
-              className="flex flex-wrap items-center gap-2 overflow-visible px-1"
-            >
-              <span className="shrink-0 text-[10px] uppercase tracking-[0.28em] text-white/40">{engineSwitcherLabel}</span>
-              <button
-                type="button"
-                onClick={() => setSelectedSkill('')}
-                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                  selectedSkill === ''
-                    ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                    : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
-                }`}
-              >
-                <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
-                {chat('skills.general')}
-              </button>
-              {skills.map((s) => (
-                <div
-                  key={s.id}
-                  className="relative shrink-0"
-                  onMouseEnter={() => setShowSkillDesc(s.id)}
-                  onMouseLeave={() => setShowSkillDesc(null)}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSkill(s.id)}
-                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      selectedSkill === s.id
-                        ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
-                        : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
-                    }`}
-                  >
-                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-indigo-300' : 'bg-white/35'}`} />
-                    {getLocalizedSkillNameById(s.id, s.name, t)}
-                  </button>
-                  {showSkillDesc === s.id && s.description ? (
-                    <div className="theme-menu-panel absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl pointer-events-none animate-fade-in">
-                      <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
-                      <p>{s.description}</p>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+              ) : null}
             </div>
+          </div>
+
+          <footer
+            data-testid="chat-input-shell"
+            className="pointer-events-none absolute bottom-0 left-0 z-50 flex w-full justify-center border-t border-white/5 bg-[#050505]/95 pt-6 pb-8 backdrop-blur-3xl"
+          >
             <div
-              data-testid="chat-composer-omnibar"
-              className="relative w-full rounded-[24px] border border-white/10 bg-white/[0.03] p-2 text-white shadow-2xl backdrop-blur-2xl transition-all focus-within:border-white/30 focus-within:bg-white/[0.05]"
+              data-testid="chat-console-inner"
+              className="flex w-full max-w-[1200px] flex-col gap-4 px-4 pointer-events-auto md:px-8 xl:max-w-[1400px]"
             >
-              <div className="flex items-end gap-3">
-                <textarea
-                  ref={composerTextareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={chat('inputPlaceholder')}
-                  disabled={loading}
-                  rows={1}
-                  className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 pr-16 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
-                  onInput={(e) => {
-                    const textarea = e.target as HTMLTextAreaElement;
-                    textarea.style.height = 'auto';
-                    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-                  }}
+              {sendToast ? (
+                <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                  {sendToast.message}
+                </p>
+              ) : null}
+
+              {chatError ? (
+                <ApiErrorAlert
+                  error={chatError}
+                  className="mb-1"
+                  actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
+                  onAction={
+                    chatError.category === 'local_connection_failed'
+                      ? () => {
+                          window.location.reload();
+                        }
+                      : undefined
+                  }
                 />
+              ) : null}
+
+              <div
+                data-testid="chat-skill-toolbar"
+                className="flex items-center gap-3 overflow-x-auto no-scrollbar"
+              >
+                <span className="shrink-0 text-[10px] uppercase tracking-[0.28em] text-white/40">{engineSwitcherLabel}</span>
                 <button
                   type="button"
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || loading}
-                  className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
-                  aria-label={chat('notifyAction')}
+                  onClick={() => setSelectedSkill('')}
+                  className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                    selectedSkill === ''
+                      ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
+                      : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                  }`}
                 >
-                  {loading ? (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
-                  ) : (
-                    <ArrowUp className="h-5 w-5" />
-                  )}
+                  <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
+                  {chat('skills.general')}
                 </button>
+                {skills.map((s) => (
+                  <div
+                    key={s.id}
+                    className="relative shrink-0"
+                    onMouseEnter={() => setShowSkillDesc(s.id)}
+                    onMouseLeave={() => setShowSkillDesc(null)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSkill(s.id)}
+                      className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                        selectedSkill === s.id
+                          ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
+                          : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
+                      }`}
+                    >
+                      <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-indigo-300' : 'bg-white/35'}`} />
+                      {getLocalizedSkillNameById(s.id, s.name, t)}
+                    </button>
+                    {showSkillDesc === s.id && s.description ? (
+                      <div className="theme-menu-panel pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl animate-fade-in">
+                        <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
+                        <p>{s.description}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+
+              <div
+                data-testid="chat-composer-omnibar"
+                className="relative w-full rounded-[24px] border border-white/10 bg-white/[0.03] p-2 text-white shadow-2xl backdrop-blur-2xl transition-all focus-within:border-white/30 focus-within:bg-white/[0.05]"
+              >
+                <div className="flex items-end gap-3">
+                  <textarea
+                    ref={composerTextareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={chat('inputPlaceholder')}
+                    disabled={loading}
+                    rows={1}
+                    className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 pr-16 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                    onInput={(e) => {
+                      const textarea = e.target as HTMLTextAreaElement;
+                      textarea.style.height = 'auto';
+                      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleSend();
+                    }}
+                    disabled={!input.trim() || loading}
+                    className="absolute bottom-3 right-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-transform duration-150 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label={chat('notifyAction')}
+                  >
+                    {loading ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
+                    ) : (
+                      <ArrowUp className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {isFollowUpContextLoading ? (
+                <p className="text-xs text-secondary-text">
+                  {chat('followUpContextLoading')}
+                </p>
+              ) : null}
+
+              <div className="text-center text-[10px] text-white/30">
+                {composerDisclaimer}
               </div>
             </div>
-            {isFollowUpContextLoading && (
-              <p className="text-xs text-secondary-text">
-                {chat('followUpContextLoading')}
-              </p>
-            )}
-            <div className="text-center text-[10px] text-white/30">
-              {composerDisclaimer}
-            </div>
-          </div>
-        </footer>
+          </footer>
+        </main>
       </div>
+
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}
         onClose={() => setIsBriefDrawerOpen(false)}
         title={chat('title')}
         testId="chat-bento-drawer"
         summary={language === 'en'
-          ? 'Ask Stock now shares the same Bento shell as the rest of the app while keeping session state, streamed replies, and follow-up context behavior intact.'
-          : '问股页现在与其他页面共用同一套 Bento 外壳，但会话状态、流式回复和追问上下文行为保持不变。'}
+          ? 'The chat surface now behaves like a real two-pane research workspace with persistent history, a wide answer canvas, and a docked command center.'
+          : '问股页现在是一套真正的双栏研究工作台，保留历史上下文、释放宽画布，并把指挥中心固定在底部。'}
         metrics={[
           {
-            label: language === 'en' ? 'Skill mode' : '技能模式',
+            label: language === 'en' ? 'Engine' : '分析引擎',
             value: selectedSkillLabel,
             tone: selectedSkill ? 'bullish' : 'neutral',
           },
           {
-            label: language === 'en' ? 'Tracked threads' : '跟踪对话',
+            label: language === 'en' ? 'Conversations' : '历史对话',
             value: sessions.length,
           },
           {
-            label: language === 'en' ? 'Message depth' : '消息深度',
+            label: language === 'en' ? 'Visible messages' : '当前消息',
             value: messages.length,
             tone: loading ? 'bullish' : 'neutral',
           },
           {
-            label: language === 'en' ? 'Delivery' : '发送状态',
+            label: language === 'en' ? 'Console state' : '指挥中心',
             value: sending ? chat('notifySending') : chat('notifyAction'),
             tone: sendToast?.type === 'error' ? 'bearish' : sending ? 'bullish' : 'neutral',
           },
         ]}
         bullets={[
           language === 'en'
-            ? 'The hero strip surfaces mode, session count, message depth, and delivery state before you enter the conversation stream.'
-            : 'Hero strip 先抬出模式、会话数、消息深度和发送状态，再进入对话流。',
+            ? 'Desktop now keeps session history on the left while the answer stream stays full-width on the right.'
+            : '桌面端把历史对话固定在左侧，右侧回答流保持真正的全宽研究画布。',
           language === 'en'
-            ? 'The shell rail, message viewport, and composer remain separate scroll regions, so the chat workflow stays ergonomic.'
-            : '侧栏、消息区和输入区仍然保持独立滚动层，因此聊天工作流的手感不变。',
+            ? 'The docked bottom console uses a solid blurred shield so long replies no longer bleed under the input area.'
+            : '吸底指挥中心使用实心毛玻璃遮罩，长回复不会再从输入区下方穿透。',
           language === 'en'
-            ? 'This pass is visual convergence and testability, not a chat behavior rewrite.'
-            : '这次改动是视觉收敛和可测性补齐，不是聊天行为重写。',
+            ? 'Typewriter rendering stays incremental without stealing scroll control back from the user.'
+            : '打字机仍保持增量渲染，但不会再把滚动控制权从用户手里抢走。',
         ]}
-        footnote={language === 'en' ? 'Session and agent APIs unchanged.' : '会话和 agent API 保持不变。'}
+        footnote={language === 'en' ? 'Session and agent APIs unchanged.' : '会话与 agent API 保持不变。'}
       />
     </div>
   );
