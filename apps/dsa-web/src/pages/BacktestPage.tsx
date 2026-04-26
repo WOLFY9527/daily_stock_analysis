@@ -986,6 +986,53 @@ const BacktestPage: React.FC = () => {
       testId: 'backtest-bento-hero-benchmark',
     },
   ];
+
+  const moduleTabs = (
+    <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeModule === 'rule'}
+        className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
+        onClick={() => setActiveModule('rule')}
+      >
+        {bt(language, 'page.ruleTab')}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeModule === 'historical'}
+        className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
+        onClick={() => setActiveModule('historical')}
+      >
+        {bt(language, 'page.historicalTab')}
+      </button>
+    </div>
+  );
+
+  const controlModeTabs = (
+    <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={controlPanelMode === 'normal'}
+        className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
+        onClick={() => setControlPanelMode('normal')}
+      >
+        {bt(language, 'page.normalMode')}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={controlPanelMode === 'professional'}
+        className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
+        onClick={() => setControlPanelMode('professional')}
+      >
+        {bt(language, 'page.professionalMode')}
+      </button>
+    </div>
+  );
+
   return (
     <PageChrome
       pageTestId="backtest-bento-page"
@@ -1000,65 +1047,42 @@ const BacktestPage: React.FC = () => {
       headerContentClassName="backtest-v1-header__layout"
       descriptionClassName="backtest-v1-header__description"
       actions={(
-        <div className="backtest-header-toggles">
-          <button
-            type="button"
-            className={CARD_BUTTON_CLASS}
-            data-testid="backtest-bento-drawer-trigger"
-            onClick={() => setIsBriefDrawerOpen(true)}
-          >
-            <PanelRightOpen className="h-4 w-4" />
-            <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-          </button>
-          <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeModule === 'rule'}
-              className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
-              onClick={() => setActiveModule('rule')}
-            >
-              {bt(language, 'page.ruleTab')}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeModule === 'historical'}
-              className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
-              onClick={() => setActiveModule('historical')}
-            >
-              {bt(language, 'page.historicalTab')}
-            </button>
-          </div>
-          <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={controlPanelMode === 'normal'}
-              className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
-              onClick={() => setControlPanelMode('normal')}
-            >
-              {bt(language, 'page.normalMode')}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={controlPanelMode === 'professional'}
-              className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
-              onClick={() => setControlPanelMode('professional')}
-            >
-              {bt(language, 'page.professionalMode')}
-            </button>
-          </div>
-        </div>
+        <button
+          type="button"
+          className={CARD_BUTTON_CLASS}
+          data-testid="backtest-bento-drawer-trigger"
+          onClick={() => setIsBriefDrawerOpen(true)}
+        >
+          <PanelRightOpen className="h-4 w-4" />
+          <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+        </button>
       )}
       heroItems={heroItems}
       heroTestId="backtest-bento-hero"
     >
+      <div
+        data-testid="backtest-subnav"
+        className="w-full border-b border-white/5 bg-transparent px-4 md:px-6 xl:px-8"
+      >
+        <div className="flex flex-col gap-3 py-2 xl:flex-row xl:items-center xl:justify-between">
+          <nav
+            className="flex items-center gap-2 md:gap-6 h-14 overflow-x-auto no-scrollbar"
+            aria-label={bt(language, 'page.moduleTabsLabel')}
+          >
+            {moduleTabs}
+          </nav>
+          <nav
+            className="flex items-center gap-2 md:gap-6 h-14 overflow-x-auto no-scrollbar xl:justify-end"
+            aria-label={bt(language, 'page.controlModeLabel')}
+          >
+            {controlModeTabs}
+          </nav>
+        </div>
+      </div>
 
       <div
         data-testid="backtest-v1-page"
-        className="w-full min-h-screen px-4 md:px-6 2xl:px-10 flex flex-col gap-6 bg-transparent"
+        className="w-full flex-1 px-4 md:px-6 xl:px-8 py-6 flex flex-col gap-8 bg-transparent"
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
