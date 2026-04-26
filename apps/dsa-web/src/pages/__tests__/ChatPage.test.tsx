@@ -182,24 +182,25 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-full', 'overflow-hidden');
     expect(container.querySelectorAll('main')).toHaveLength(1);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-workspace')).toHaveClass('h-[calc(100vh-80px)]', 'w-full', 'flex', 'flex-col', 'overflow-hidden', 'bg-transparent');
-    expect(screen.getByTestId('chat-status-header')).toHaveClass('shrink-0', 'border-b', 'border-white/5', 'p-4');
+    expect(screen.getByTestId('chat-workspace')).toHaveClass('relative', 'h-[calc(100vh-80px)]', 'w-full', 'flex', 'flex-col', 'overflow-hidden', 'bg-transparent');
+    expect(screen.getByTestId('chat-status-strip')).toHaveClass('rounded-full', 'border-white/10', 'bg-black/45', 'backdrop-blur-2xl');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
-    expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'min-h-0', 'overflow-y-auto', 'no-scrollbar', 'flex', 'flex-col', 'items-center');
+    expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'w-full', 'flex', 'flex-col', 'items-center');
     expect(screen.queryByTestId('chat-status-sidebar')).not.toBeInTheDocument();
     expect((await screen.findAllByTestId('chat-bento-hero-skill')).length).toBeGreaterThan(0);
     const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
     expect(skillValues[0]).toHaveTextContent(canonicalBullTrendLabel('zh'));
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-3xl', 'flex-col', 'gap-8', 'pb-10');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('shrink-0', 'p-4', 'md:pb-8', 'bg-gradient-to-t', 'from-[#030303]', 'via-[#030303]', 'to-transparent', 'flex', 'justify-center');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('h-full', 'w-full', 'max-w-5xl', 'flex-col', 'px-4', 'pt-12', 'pb-48');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/90', 'to-transparent');
+    expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-3', 'overflow-x-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
-      'rounded-[28px]',
-      'border-white/5',
-      'bg-white/[0.02]',
-      'backdrop-blur-xl',
-      'focus-within:border-white/20',
-      'focus-within:ring-white/10',
+      'relative',
+      'rounded-[24px]',
+      'border-white/10',
+      'bg-white/[0.03]',
+      'backdrop-blur-2xl',
+      'focus-within:border-white/30',
     );
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
@@ -232,8 +233,9 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('min-h-full', 'items-center', 'justify-center');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
-    expect(entryDecisionCard).toHaveClass('rounded-3xl', 'bg-white/[0.02]', 'hover:bg-white/[0.04]', 'backdrop-blur-xl', 'border-white/5');
+    expect(entryDecisionCard).toHaveClass('rounded-[28px]', 'border-white/8', 'bg-white/[0.03]', 'hover:bg-white/[0.05]', 'backdrop-blur-2xl');
     expect(screen.getByText(translate('zh', 'chat.starterCards.entryDecision.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'chat.starterCards.positionReview.title'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'chat.starterCards.eventFollowUp.title'))).toBeInTheDocument();
