@@ -109,6 +109,10 @@ vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
 
+vi.mock('../components/access/PremiumPaywall', () => ({
+  PremiumPaywall: ({ moduleName }: { moduleName: string }) => <div>{`premium-paywall:${moduleName}`}</div>,
+}));
+
 vi.mock('../pages/NotFoundPage', () => ({
   default: () => <div>not-found-page</div>,
 }));
@@ -198,7 +202,7 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
 
-  it.each(['/chat', '/portfolio', '/backtest', '/scanner', '/settings', '/settings/system'])(
+  it.each(['/settings', '/settings/system'])(
     'redirects guest access from %s to the dedicated guest page',
     async (path) => {
       renderAtWithLocationProbe(path);
@@ -214,12 +218,35 @@ describe('AppContent route flows', () => {
     },
   );
 
-  it('redirects locale-prefixed guest access to the locale guest page', async () => {
+  it.each([
+    ['/chat', 'premium-paywall:Ask Stock'],
+    ['/portfolio', 'premium-paywall:Portfolio'],
+    ['/backtest', 'premium-paywall:Backtest'],
+  ])(
+    'keeps guest access on %s and renders the route-level paywall',
+    async (path, expectedPaywallText) => {
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText(expectedPaywallText)).toBeInTheDocument();
+      expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+      expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    },
+  );
+
+  it('redirects locale-prefixed guest settings access to the locale guest page', async () => {
     languageState.value = 'en';
     renderAtWithLocationProbe('/en/settings/system');
 
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/guest'));
+  });
+
+  it('keeps locale-prefixed guest portfolio access on the same route and renders the paywall', async () => {
+    languageState.value = 'en';
+    renderAtWithLocationProbe('/en/portfolio');
+
+    expect(await screen.findByText('premium-paywall:Portfolio')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/en/portfolio');
   });
 
   it('redirects away from login to the requested route after authentication succeeds', async () => {
@@ -329,13 +356,6 @@ describe('AppContent route flows', () => {
     await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
   });
 
-  it('redirects locale-prefixed guest product routes to the locale guest page', async () => {
-    renderAtWithLocationProbe('/en/chat');
-
-    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/guest'));
-  });
-
   it('keeps scanner reachable for signed-in users', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
@@ -377,14 +397,14 @@ describe('AppContent route flows', () => {
   it('redirects legacy locale guest scanner path to the guest surface', async () => {
     renderAt('/en/guest/scanner');
 
-    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 
   it('redirects legacy locale user scanner path to the guest surface for guests', async () => {
     renderAt('/zh/user/scanner');
 
-    expect(await screen.findByText('游客预览模式')).toBeInTheDocument();
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 });

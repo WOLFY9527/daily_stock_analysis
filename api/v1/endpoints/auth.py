@@ -334,8 +334,15 @@ def _persist_session_for_user(*, request: Request, user_id: str, username: str, 
     )
 
 
-def _delete_session_cookie(response: Response) -> None:
-    response.delete_cookie(key=COOKIE_NAME, path="/")
+def _delete_session_cookie(response: Response, request: Request) -> None:
+    params = _cookie_params(request)
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path=params["path"],
+        secure=params["secure"],
+        httponly=params["httponly"],
+        samesite=params["samesite"],
+    )
 
 
 def _get_auth_status_dict(request: Request | None = None) -> dict:
@@ -733,7 +740,7 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
 
     _clear_current_user_cache(request)
     resp = JSONResponse(content=_get_auth_status_dict(request))
-    _delete_session_cookie(resp)
+    _delete_session_cookie(resp, request)
     return resp
 
 
@@ -1039,5 +1046,5 @@ async def auth_logout(request: Request):
     if current_user and current_user.session_id:
         AuthRepository().revoke_app_user_session(current_user.session_id)
     resp = Response(status_code=204)
-    _delete_session_cookie(resp)
+    _delete_session_cookie(resp, request)
     return resp

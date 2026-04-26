@@ -23,6 +23,10 @@ const {
   resetAdminSurfaceMode: vi.fn(),
 }));
 
+const { hardRedirectMock } = vi.hoisted(() => ({
+  hardRedirectMock: vi.fn(),
+}));
+
 vi.mock('../../api/auth', () => ({
   authApi: {
     getStatus,
@@ -51,6 +55,10 @@ vi.mock('../../hooks/productSurfaceMode', () => ({
   resetAdminSurfaceMode,
 }));
 
+vi.mock('../../utils/browserRedirect', () => ({
+  hardRedirect: (path: string) => hardRedirectMock(path),
+}));
+
 const Probe = () => {
   const auth = useAuth();
 
@@ -74,6 +82,7 @@ const Probe = () => {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
@@ -143,25 +152,17 @@ describe('AuthContext', () => {
     window.localStorage.setItem('dsa_chat_session_id', 'chat-session-1');
     window.localStorage.setItem('dsa-selected-history-id', '42');
     window.localStorage.setItem('dsa-task-queue-v1', '[{"taskId":"task-1"}]');
+    window.localStorage.setItem('wolfystock.ruleBacktestPresets.v1', '[{"id":"preset-1"}]');
     window.localStorage.setItem('dsa-ui-language', 'en');
-    window.localStorage.setItem('theme-preference', 'dark');
+    window.localStorage.setItem('dsa-theme-style', 'spacex');
     window.sessionStorage.setItem('dsa-admin-surface-mode', 'admin');
-    window.sessionStorage.setItem('temp-flag', '1');
 
-    getStatus
-      .mockResolvedValueOnce({
-        authEnabled: true,
-        loggedIn: true,
-        passwordSet: true,
-        passwordChangeable: true,
-      })
-      .mockResolvedValueOnce({
-        authEnabled: true,
-        loggedIn: false,
-        passwordSet: true,
-        passwordChangeable: true,
-        setupState: 'enabled',
-      });
+    getStatus.mockResolvedValueOnce({
+      authEnabled: true,
+      loggedIn: true,
+      passwordSet: true,
+      passwordChangeable: true,
+    });
     logout.mockResolvedValue(undefined);
 
     render(
@@ -177,13 +178,18 @@ describe('AuthContext', () => {
     expect(resetDashboardState).toHaveBeenCalled();
     expect(resetAgentChatState).toHaveBeenCalled();
     expect(resetAdminSurfaceMode).toHaveBeenCalled();
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(getStatus).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem('dsa_chat_session_id')).toBeNull();
     expect(window.localStorage.getItem('dsa-selected-history-id')).toBeNull();
     expect(window.localStorage.getItem('dsa-task-queue-v1')).toBeNull();
-    expect(window.localStorage.getItem('dsa-ui-language')).toBeNull();
-    expect(window.localStorage.getItem('theme-preference')).toBeNull();
+    expect(window.localStorage.getItem('wolfystock.ruleBacktestPresets.v1')).toBeNull();
+    expect(window.localStorage.getItem('dsa-ui-language')).toBe('en');
+    expect(window.localStorage.getItem('dsa-theme-style')).toBe('spacex');
     expect(window.sessionStorage.getItem('dsa-admin-surface-mode')).toBeNull();
-    expect(window.sessionStorage.getItem('temp-flag')).toBeNull();
+    expect(hardRedirectMock).not.toHaveBeenCalled();
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    expect(hardRedirectMock).toHaveBeenCalledWith('/guest');
   });
 
   it('does not reset dashboard state when auth is disabled', async () => {
@@ -206,21 +212,13 @@ describe('AuthContext', () => {
   });
 
   it('treats a 401 logout as already signed out after status refresh', async () => {
-    getStatus
-      .mockResolvedValueOnce({
-        authEnabled: true,
-        loggedIn: true,
-        passwordSet: true,
-        passwordChangeable: true,
-        setupState: 'enabled',
-      })
-      .mockResolvedValueOnce({
-        authEnabled: true,
-        loggedIn: false,
-        passwordSet: true,
-        passwordChangeable: true,
-        setupState: 'enabled',
-      });
+    getStatus.mockResolvedValueOnce({
+      authEnabled: true,
+      loggedIn: true,
+      passwordSet: true,
+      passwordChangeable: true,
+      setupState: 'enabled',
+    });
     logout.mockRejectedValue(
       createApiError(
         createParsedApiError({
@@ -247,5 +245,8 @@ describe('AuthContext', () => {
     expect(resetDashboardState).toHaveBeenCalled();
     expect(resetAgentChatState).toHaveBeenCalled();
     expect(resetAdminSurfaceMode).toHaveBeenCalled();
+    expect(getStatus).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    expect(hardRedirectMock).toHaveBeenCalledWith('/guest');
   });
 });

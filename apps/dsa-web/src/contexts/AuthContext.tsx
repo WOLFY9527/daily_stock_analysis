@@ -5,6 +5,23 @@ import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
 import { resetAdminSurfaceMode } from '../hooks/productSurfaceMode';
 import { useAgentChatStore, useStockPoolStore } from '../stores';
+import { hardRedirect } from '../utils/browserRedirect';
+
+const LOCAL_STORAGE_KEYS_TO_CLEAR = [
+  'dsa_chat_session_id',
+  'dsa-selected-history-id',
+  'dsa-task-queue-v1',
+  'wolfystock.ruleBacktestPresets.v1',
+] as const;
+
+const SESSION_STORAGE_KEYS_TO_CLEAR = [
+  'dsa-admin-surface-mode',
+] as const;
+
+const COOKIE_KEYS_TO_CLEAR = [
+  'dsa_session',
+  'wolfystock_guest_session',
+] as const;
 
 type AuthContextValue = {
   authEnabled: boolean;
@@ -32,12 +49,32 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-function clearAuthRelatedBrowserStorage(): void {
+
+async function clearAuthRelatedBrowserStorage(): Promise<void> {
   if (typeof window === 'undefined') {
     return;
   }
-  window.localStorage.clear();
-  window.sessionStorage.clear();
+
+  LOCAL_STORAGE_KEYS_TO_CLEAR.forEach((key) => {
+    window.localStorage.removeItem(key);
+  });
+  SESSION_STORAGE_KEYS_TO_CLEAR.forEach((key) => {
+    window.sessionStorage.removeItem(key);
+  });
+
+  if (typeof document !== 'undefined') {
+    COOKIE_KEYS_TO_CLEAR.forEach((key) => {
+      document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+    });
+  }
+
+  await Promise.resolve();
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function extractLoginError(err: unknown): ParsedApiError {
@@ -70,7 +107,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSetupState('no_password');
     setCurrentUser(null);
     setLoadError(null);
-    clearAuthRelatedBrowserStorage();
     useStockPoolStore.getState().resetDashboardState();
     useAgentChatStore.getState().resetSessionState();
     resetAdminSurfaceMode();
@@ -157,19 +193,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     let logoutError: unknown = null;
-    clearSessionState();
+
     try {
       await authApi.logout();
     } catch (err) {
       logoutError = err;
-    } finally {
-      await fetchStatus();
     }
+
+    await clearAuthRelatedBrowserStorage();
+    clearSessionState();
+    await wait(100);
+    hardRedirect('/guest');
 
     if (logoutError && getParsedApiError(logoutError).status !== 401) {
       throw logoutError;
     }
-  }, [clearSessionState, fetchStatus]);
+  }, [clearSessionState]);
 
   return (
     <AuthContext.Provider

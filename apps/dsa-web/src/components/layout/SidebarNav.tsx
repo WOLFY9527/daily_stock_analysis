@@ -24,7 +24,6 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
 import { useAgentChatStore } from '../../stores/agentChatStore';
 import { cn } from '../../utils/cn';
-import { hardRedirect } from '../../utils/browserRedirect';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -125,7 +124,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const consoleLabel = t('nav.independentConsole');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
-  const logoutPath = routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest';
 
   useEffect(() => {
     if (isGuest) {
@@ -156,10 +154,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const visibleNavItems = useMemo(
     () => NAV_ITEMS.filter((item) => {
       if (item.key === 'chat') {
-        return !isGuest && agentEnabled;
-      }
-      if (item.key === 'scanner' || item.key === 'portfolio' || item.key === 'backtest') {
-        return !isGuest;
+        return isGuest || agentEnabled;
       }
       return true;
     }),
@@ -382,7 +377,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           void (async () => {
             try {
               await logout();
-              hardRedirect(logoutPath);
             } catch {
               return;
             }

@@ -21,11 +21,11 @@ export function resolveProductSurfaceRole(params: {
   loggedIn: boolean;
   currentUser: { isAdmin?: boolean } | null;
 }): ProductSurfaceRole {
-  if (params.currentUser?.isAdmin) {
-    return 'admin';
-  }
   if (!params.loggedIn) {
     return 'guest';
+  }
+  if (params.currentUser?.isAdmin) {
+    return 'admin';
   }
   return 'user';
 }

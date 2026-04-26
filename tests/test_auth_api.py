@@ -228,6 +228,9 @@ class AuthApiTestCase(unittest.TestCase):
         response = asyncio.run(auth_endpoint.auth_logout(self._build_request()))
         self.assertEqual(response.status_code, 204)
         self.assertIn("dsa_session=", response.headers["set-cookie"])
+        self.assertIn("Max-Age=0", response.headers["set-cookie"])
+        self.assertIn("HttpOnly", response.headers["set-cookie"])
+        self.assertIn("SameSite=lax", response.headers["set-cookie"])
 
     def test_logout_invalidates_existing_session(self) -> None:
         login_response = self._login_admin(password="passwd6")
@@ -248,6 +251,7 @@ class AuthApiTestCase(unittest.TestCase):
         response = asyncio.run(auth_endpoint.auth_logout(self._build_request()))
         self.assertEqual(response.status_code, 204)
         self.assertIn("dsa_session=", response.headers["set-cookie"])
+        self.assertIn("Max-Age=0", response.headers["set-cookie"])
 
     def test_reset_password_request_requires_identifier(self) -> None:
         response = asyncio.run(

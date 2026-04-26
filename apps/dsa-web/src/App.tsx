@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApiErrorAlert } from './components/common/ApiErrorAlert';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
+import { PremiumPaywall } from './components/access/PremiumPaywall';
 import { Shell } from './components/layout/Shell';
 import { PreviewShell } from './components/layout/PreviewShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -52,173 +53,6 @@ type GateCopy = {
   secondaryAction?: { label: string; to: string };
   tertiaryAction?: { label: string; to: string };
 };
-
-function getRegisteredSurfaceCopy(pathname: string, redirectTarget: string, language: UiLanguage): GateCopy {
-  const isEnglish = language === 'en';
-
-  if (pathname.startsWith('/chat')) {
-    return {
-      eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
-      statusLabel: isEnglish ? 'Guest Preview Only' : '仅限游客预览',
-      title: isEnglish ? 'Sign in to continue Ask Stock follow-up' : '登录后继续问股追问',
-      description: isEnglish
-        ? 'Follow-up chat depends on a real account identity so report context, conversation memory, and saved sessions stay attached to you.'
-        : '问股追问依赖真实账户身份，这样报告上下文、会话记忆和保存记录才会稳定绑定到你本人。',
-      bullets: isEnglish
-        ? [
-          'Guest access stops at preview analysis and locked follow-up features.',
-          'Authenticated chat sessions reuse your own saved report context and conversation history.',
-          'Access rules are still enforced by the backend.',
-        ]
-        : [
-          '游客模式只保留分析预览和锁定的追问入口，不直接进入深度问股。',
-          '登录后的问股会复用你自己的报告上下文和会话历史。',
-          '实际访问权限仍以后端规则为准。',
-        ],
-      note: isEnglish
-        ? 'After sign-in, we will bring you back here automatically.'
-        : '登录成功后，系统会自动把你带回当前页面。',
-      secondaryAction: {
-        label: isEnglish ? 'Create account' : '创建账户',
-        to: buildRegistrationPath(redirectTarget),
-      },
-      tertiaryAction: {
-        label: isEnglish ? 'Back to guest preview' : '返回游客预览',
-        to: '/guest',
-      },
-    };
-  }
-
-  if (pathname.startsWith('/portfolio')) {
-    return {
-      eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
-      statusLabel: isEnglish ? 'Personal Data Required' : '需要个人数据身份',
-      title: isEnglish ? 'Sign in to open your portfolio' : '登录后查看你的持仓',
-      description: isEnglish
-        ? 'Portfolio accounts, trades, cash events, and risk snapshots are personal and never shown in guest mode.'
-        : '持仓账户、交易、资金流水和风险快照都属于个人账户范围，游客模式不会暴露这些数据。',
-      bullets: isEnglish
-        ? [
-          'Portfolio data stays tied to your signed-in account.',
-          'Guest mode does not create shared ledgers or placeholder portfolio state.',
-          'Sign in or create an account to keep positions, cash events, and risk snapshots under your own name.',
-        ]
-        : [
-          '持仓数据属于个人空间，只会绑定到已认证身份。',
-          '游客模式不会创建共享账本或伪造持仓状态。',
-          '登录或创建账户后，持仓、流水和风险快照才会归到你自己的名下。',
-        ],
-      note: isEnglish
-        ? 'After sign-in, we will bring you back to your portfolio page.'
-        : '登录成功后，系统会把你带回你的持仓页面。',
-      secondaryAction: {
-        label: isEnglish ? 'Create account' : '创建账户',
-        to: buildRegistrationPath(redirectTarget),
-      },
-      tertiaryAction: {
-        label: isEnglish ? 'Back to guest preview' : '返回游客预览',
-        to: '/guest',
-      },
-    };
-  }
-
-  if (pathname.startsWith('/backtest/results/')) {
-    return {
-      eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
-      statusLabel: isEnglish ? 'Saved Result Locked' : '已保存结果已锁定',
-      title: isEnglish ? 'Sign in to reopen saved backtest results' : '登录后重新打开已保存的回测结果',
-      description: isEnglish
-        ? 'Historical backtest results remain bound to authenticated identity so one user never reopens another user’s saved result.'
-        : '历史回测结果会绑定到已认证身份，避免一个用户重新打开另一个用户保存的回测记录。',
-      bullets: isEnglish
-        ? [
-          'Backtest results and history remain protected by account-based backend checks.',
-          'Guest mode does not expose saved result details or historical metrics.',
-          'Sign in to reopen the results saved under your own account.',
-        ]
-        : [
-          '回测结果与历史已经由基于归属的后端规则保护。',
-          '游客模式不会暴露已保存回测记录的细节和历史指标。',
-          '登录后才可以重新打开保存在你自己账户下的结果。',
-        ],
-      note: isEnglish
-        ? 'If this result belongs to another account, the backend will continue to block access after sign-in.'
-        : '如果这个结果属于其他账户，登录后后端仍会继续阻止访问。',
-      secondaryAction: {
-        label: isEnglish ? 'Create account' : '创建账户',
-        to: buildRegistrationPath(redirectTarget),
-      },
-      tertiaryAction: {
-        label: isEnglish ? 'Open scanner teaser' : '查看扫描器预告',
-        to: '/scanner',
-      },
-    };
-  }
-
-  if (pathname.startsWith('/backtest')) {
-    return {
-      eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
-      statusLabel: isEnglish ? 'Backtests Locked' : '回测功能已锁定',
-      title: isEnglish ? 'Sign in to open backtests' : '登录后进入回测',
-      description: isEnglish
-        ? 'Backtests, saved result history, and follow-up analysis all depend on a real user identity.'
-        : '回测、已保存结果历史和后续分析都依赖真实用户身份。',
-      bullets: isEnglish
-        ? [
-          'Guest access stops before saved backtests and result history.',
-          'Signed-in users can run and revisit their own backtests without shared state.',
-          'Access rules continue to be enforced by the backend.',
-        ]
-        : [
-          '游客模式不会开放可保存的回测和结果历史。',
-          '登录用户可以运行并重新查看属于自己的回测结果，而不是共享状态。',
-          '实际访问权限仍继续由后端执行。',
-        ],
-      note: isEnglish
-        ? 'After sign-in, we will take you back to backtests.'
-        : '登录成功后，系统会把你带回回测页面。',
-      secondaryAction: {
-        label: isEnglish ? 'Create account' : '创建账户',
-        to: buildRegistrationPath(redirectTarget),
-      },
-      tertiaryAction: {
-        label: isEnglish ? 'Open scanner teaser' : '查看扫描器预告',
-        to: '/scanner',
-      },
-    };
-  }
-
-  return {
-    eyebrow: isEnglish ? 'Registered User Only' : '仅限注册用户',
-    statusLabel: isEnglish ? 'Guest Preview Only' : '仅限游客预览',
-    title: isEnglish ? 'Sign in to continue' : '登录后继续使用',
-    description: isEnglish
-      ? 'This page depends on a real account for saved history and personal data.'
-      : '这个页面依赖真实账户来承载保存历史与个人数据。',
-    bullets: isEnglish
-      ? [
-        'Chat, portfolio, backtests, and saved history stay tied to signed-in users.',
-        'Guest access stays limited to preview flows and locked pages.',
-        'Access rules are still enforced by the backend.',
-      ]
-      : [
-        '问股、持仓、回测和保存历史都必须绑定到已认证用户。',
-        '游客模式只保留预览流和锁定页面。',
-        '实际访问权限仍以后端规则为准。',
-      ],
-    note: isEnglish
-      ? 'After sign-in, we will return you to this page automatically.'
-      : '登录成功后，系统会自动把你带回当前页面。',
-    secondaryAction: {
-      label: isEnglish ? 'Create account' : '创建账户',
-      to: buildRegistrationPath(redirectTarget),
-    },
-    tertiaryAction: {
-      label: isEnglish ? 'Back to guest preview' : '返回游客预览',
-      to: '/guest',
-    },
-  };
-}
 
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
@@ -333,29 +167,21 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
   const routePathname = stripLocalePrefix(location.pathname);
-  const routeTarget = `${routePathname}${location.search}`;
-  const gateCopy = getRegisteredSurfaceCopy(routePathname, routeTarget, language);
+  let moduleName = language === 'en' ? 'Premium module' : '高级模块';
+
+  if (routePathname.startsWith('/chat')) {
+    moduleName = language === 'en' ? 'Ask Stock' : '问股';
+  } else if (routePathname.startsWith('/portfolio')) {
+    moduleName = language === 'en' ? 'Portfolio' : '持仓管理';
+  } else if (routePathname.startsWith('/backtest')) {
+    moduleName = language === 'en' ? 'Backtest' : '回测';
+  }
 
   if (!isGuest) {
     return <>{children}</>;
   }
 
-  return (
-    <AccessGatePage
-      eyebrow={gateCopy.eyebrow}
-      title={gateCopy.title}
-      description={gateCopy.description}
-      bullets={gateCopy.bullets}
-      statusLabel={gateCopy.statusLabel}
-      note={gateCopy.note}
-      primaryAction={{
-        label: language === 'en' ? 'Sign in now' : '立即登录',
-        to: buildLoginPath(routeTarget),
-      }}
-      secondaryAction={gateCopy.secondaryAction}
-      tertiaryAction={gateCopy.tertiaryAction}
-    />
-  );
+  return <PremiumPaywall moduleName={moduleName} />;
 };
 
 export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -401,15 +227,7 @@ export const AppContent: React.FC = () => {
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const localizedGuestPath = routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest';
   const isGuestRestrictedPath = (
-    routePathname === '/chat'
-    || routePathname.startsWith('/chat/')
-    || routePathname === '/portfolio'
-    || routePathname.startsWith('/portfolio/')
-    || routePathname === '/backtest'
-    || routePathname.startsWith('/backtest/')
-    || routePathname === '/scanner'
-    || routePathname.startsWith('/scanner/')
-    || routePathname === '/settings'
+    routePathname === '/settings'
     || routePathname.startsWith('/settings/')
     || routePathname === '/admin/logs'
     || routePathname.startsWith('/admin/logs/')

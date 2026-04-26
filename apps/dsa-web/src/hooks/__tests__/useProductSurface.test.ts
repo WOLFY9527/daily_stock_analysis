@@ -10,10 +10,18 @@ describe('resolveProductSurfaceRole', () => {
     })).toBe('guest');
   });
 
-  it('keeps admin accounts on the admin surface', () => {
+  it('treats an unauthenticated bootstrap admin payload as guest', () => {
     expect(resolveProductSurfaceRole({
       authEnabled: false,
       loggedIn: false,
+      currentUser: { isAdmin: true },
+    })).toBe('guest');
+  });
+
+  it('keeps authenticated admin accounts on the admin surface', () => {
+    expect(resolveProductSurfaceRole({
+      authEnabled: true,
+      loggedIn: true,
       currentUser: { isAdmin: true },
     })).toBe('admin');
   });
