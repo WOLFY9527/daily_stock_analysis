@@ -50,6 +50,12 @@ function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number]): 
   return Array.from(new Set(tags)).slice(0, 2);
 }
 
+function shouldRenderDisplayName(symbol?: string | null, name?: string | null): boolean {
+  const normalizedSymbol = (symbol || '').trim().toLowerCase();
+  const normalizedName = (name || '').trim().toLowerCase();
+  return Boolean(normalizedName && normalizedName !== normalizedSymbol);
+}
+
 function formatEntryZone(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
   const explicitEntry = findCandidateValue(candidate, ['建仓', '入场', 'entry', 'buy', 'support']);
   if (explicitEntry) return explicitEntry;
@@ -187,9 +193,6 @@ const UserScannerPage: React.FC = () => {
   const selectedMarketCopy = useMemo(() => (
     market === 'us'
       ? {
-        subtitle: language === 'en'
-          ? 'Run manual scanner sessions in your own account. System watchlists and schedules stay in admin-only pages.'
-          : '以你的个人账户执行手动扫描。系统观察名单和调度仍只在管理员页面中可见。',
         runHint: t('scanner.runHintUs'),
         currentRunFallback: t('scanner.currentRunFallbackUs'),
         emptyState: language === 'en'
@@ -198,9 +201,6 @@ const UserScannerPage: React.FC = () => {
       }
       : market === 'hk'
         ? {
-          subtitle: language === 'en'
-            ? 'Run personal Hong Kong scanner sessions in your own account. System watchlists and schedules remain admin-only.'
-            : '以你的个人账户执行港股手动扫描。系统观察名单和调度继续保留在仅管理员可见的页面中。',
           runHint: t('scanner.runHintHk'),
           currentRunFallback: t('scanner.currentRunFallbackHk'),
           emptyState: language === 'en'
@@ -208,9 +208,6 @@ const UserScannerPage: React.FC = () => {
             : '当前还没有可展示的港股个人扫描结果。',
         }
       : {
-        subtitle: language === 'en'
-          ? 'Generate personal scanner runs and keep your shortlist history in your own account.'
-          : '生成个人扫描结果，并将候选名单历史限制在你自己的账户范围内。',
         runHint: t('scanner.runHintCn'),
         currentRunFallback: t('scanner.currentRunFallbackCn'),
         emptyState: language === 'en'
@@ -350,7 +347,7 @@ const UserScannerPage: React.FC = () => {
 
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
-          <main className="w-full flex-1 flex min-h-0 flex-col gap-6 min-w-0 mt-6 lg:flex-row">
+          <main className="w-full flex-1 flex flex-col lg:flex-row gap-6 min-h-0 min-w-0 mt-6">
             <section className="w-full lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 h-fit">
               <SectionShell className="rounded-[24px] p-0 bg-transparent shadow-none">
                 <div className="flex flex-col gap-6">
@@ -369,11 +366,10 @@ const UserScannerPage: React.FC = () => {
               <div className="rounded-[20px] border border-white/5 bg-[#050505] px-4 py-4">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'Current mode' : '当前模式'}</p>
                 <h2 className="mt-2 text-base font-semibold text-foreground">{watchlistTitle}</h2>
-                <p className="mt-2 text-sm leading-6 text-secondary-text">{selectedMarketCopy.subtitle}</p>
               </div>
             </section>
 
-            <section className="flex-1 min-w-0 min-h-0 flex flex-col gap-4 overflow-hidden">
+            <section className="flex-1 min-w-0 flex flex-col min-h-0 gap-4 overflow-hidden">
               <div data-testid="user-scanner-bento-hero" className="flex justify-between items-center gap-3 pb-2 border-b border-white/5 shrink-0">
                 <div className="min-w-0">
                   <h2 className="text-lg font-bold text-white">{language === 'en' ? 'Scanner results and execution plan' : '扫描结果与执行计划'}</h2>
@@ -389,7 +385,7 @@ const UserScannerPage: React.FC = () => {
               </div>
 
               {tacticalCards.length ? (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 overflow-y-auto no-scrollbar pb-10 pr-1">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 overflow-y-auto no-scrollbar pb-24">
                   {tacticalCards.map((candidate) => (
                     <article
                       key={`watchlist-${candidate.symbol}`}
@@ -399,7 +395,9 @@ const UserScannerPage: React.FC = () => {
                         <div className="min-w-0">
                           <h3 className="text-xl font-bold text-white tracking-tight">
                             {candidate.symbol}
-                            <span className="text-sm font-normal text-white/40 ml-2">{candidate.name}</span>
+                            {shouldRenderDisplayName(candidate.symbol, candidate.name) ? (
+                              <span className="ml-2 text-sm font-normal text-white/40">{candidate.name}</span>
+                            ) : null}
                           </h3>
                           <div className="flex flex-wrap gap-2 mt-2">
                             {candidate.tags.map((tag) => (
@@ -450,7 +448,7 @@ const UserScannerPage: React.FC = () => {
       <Drawer
         isOpen={isRationaleDrawerOpen}
         onClose={() => setIsRationaleDrawerOpen(false)}
-        title={language === 'en' ? 'Run history and ownership' : '历史记录与页面边界'}
+        title={language === 'en' ? 'Run history' : '历史运行记录'}
         width="max-w-4xl"
       >
         <div data-testid="user-scanner-bento-drawer" className="theme-panel-glass ml-auto h-full w-full max-w-4xl rounded-l-[40px] p-6 text-foreground sm:p-8">
@@ -483,31 +481,24 @@ const UserScannerPage: React.FC = () => {
                       <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
                       <span>{formatTimestamp(item.runAt, language)}</span>
                     </div>
+                    {item.topSymbols.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {Array.from(new Set(item.topSymbols)).map((symbol) => (
+                          <span
+                            key={`${item.id}-${symbol}`}
+                            className="rounded border border-white/5 bg-white/[0.05] px-2 py-1 text-[10px] text-white/60"
+                          >
+                            {symbol}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </Button>
                 ))}
               </div>
             ) : null}
             {!isLoadingHistory && !historyItems.length ? <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm leading-6 text-secondary-text">{language === 'en' ? 'No personal scanner history yet.' : '你还没有个人扫描历史。'}</div> : null}
             {totalHistoryPages > 1 ? <div className="pt-2"><Pagination currentPage={historyPage} totalPages={totalHistoryPages} onPageChange={(page) => void fetchHistory(page)} /></div> : null}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <SectionShell className="rounded-[24px] px-4 py-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'User scope' : '用户范围'}</p>
-                <p className="mt-3 text-sm leading-6 text-secondary-text">
-                  {language === 'en'
-                    ? 'This surface keeps manual runs, shortlist review, and downstream actions inside the signed-in user account.'
-                    : '这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。'}
-                </p>
-              </SectionShell>
-              <SectionShell className="rounded-[24px] px-4 py-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Admin boundary' : '管理员边界'}</p>
-                <p className="mt-3 text-sm leading-6 text-secondary-text">
-                  {language === 'en'
-                    ? 'Run status, system watchlists, schedules, and channel settings stay in admin-only pages.'
-                    : '运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。'}
-                </p>
-              </SectionShell>
-            </div>
           </div>
         </div>
       </Drawer>
