@@ -160,6 +160,21 @@ const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
   onSavePreset,
   onOpenScenarioRun,
 }) => {
+  const denseParameterItems = [
+    { label: resultPage('parameters.metricInitialCapital'), value: formatNumber(run.initialCapital) },
+    { label: resultPage('parameters.metricLookback'), value: String(run.lookbackBars) },
+    { label: resultPage('parameters.metricFeesSlippage'), value: `${formatNumber(run.feeBps, 1)}bp / ${formatNumber(run.slippageBps, 1)}bp` },
+    { label: resultPage('parameters.metricParseConfidence'), value: run.parsedConfidence == null ? '--' : pct(run.parsedConfidence * 100) },
+    { label: resultPage('parameters.instrument'), value: run.code },
+    { label: resultPage('parameters.timeframe'), value: run.timeframe || '--' },
+    { label: resultPage('parameters.backtestWindow'), value: `${run.startDate || '--'} -> ${run.endDate || '--'}` },
+    { label: resultPage('parameters.submittedAt'), value: formatDateTime(run.runAt) },
+    { label: resultPage('parameters.completedAt'), value: formatDateTime(run.completedAt) },
+    { label: resultPage('parameters.chipStrategyFamily'), value: getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language) },
+    { label: resultPage('parameters.chipSpecSource'), value: getRuleStrategySpecSourceLabel(run.parsedStrategy, language) },
+    { label: resultPage('parameters.chipNormalization'), value: formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState, language) },
+  ];
+
   if (activeTab === 'audit') {
     return (
       <section
@@ -200,14 +215,14 @@ const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
         aria-labelledby="deterministic-result-tab-parameters"
       >
         <Card title={resultPage('parameters.title')} subtitle={resultPage('parameters.subtitle')} className="product-section-card product-section-card--backtest-secondary">
-          <SummaryStrip
-            items={[
-              { label: resultPage('parameters.metricInitialCapital'), value: formatNumber(run.initialCapital) },
-              { label: resultPage('parameters.metricLookback'), value: String(run.lookbackBars) },
-              { label: resultPage('parameters.metricFeesSlippage'), value: `${formatNumber(run.feeBps, 1)}bp / ${formatNumber(run.slippageBps, 1)}bp` },
-              { label: resultPage('parameters.metricParseConfidence'), value: run.parsedConfidence == null ? '--' : pct(run.parsedConfidence * 100) },
-            ]}
-          />
+          <div className="backtest-parameter-matrix" data-testid="backtest-parameter-matrix">
+            {denseParameterItems.map((item) => (
+              <div key={item.label} className="backtest-parameter-matrix__cell">
+                <span className="backtest-parameter-matrix__label">{item.label}</span>
+                <span className="backtest-parameter-matrix__value">{item.value}</span>
+              </div>
+            ))}
+          </div>
           <div className="backtest-result-page__tab-stack">
             <Disclosure summary={resultPage('parameters.snapshotDisclosure')}>
               <div className="preview-grid">

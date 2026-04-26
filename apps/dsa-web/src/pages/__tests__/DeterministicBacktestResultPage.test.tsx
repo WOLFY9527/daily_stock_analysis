@@ -398,7 +398,8 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.queryByText('交易 / 事件日志')).not.toBeInTheDocument();
     expect(screen.queryByText('同标的历史回测')).not.toBeInTheDocument();
     expect(screen.queryByText('参数快照')).not.toBeInTheDocument();
-    expect(screen.getByText('回测已完成')).toBeInTheDocument();
+    expect(screen.getByText('已完成')).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-kpi-bento')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-audit')).toBeInTheDocument();
@@ -1331,7 +1332,7 @@ describe('DeterministicBacktestResultPage', () => {
     window.history.replaceState(window.history.state, '', '/en/backtest/results/99');
     renderResultPage(['/en/backtest/results/99']);
 
-    expect(await screen.findByRole('heading', { name: `${translate('en', 'backtest.resultPage.documentTitle')} #99` })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.hero.backToConfig') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'backtest.resultPage.hero.refreshResult') })).toBeInTheDocument();
     expect(await screen.findByRole('tablist', { name: translate('en', 'backtest.resultPage.tabsAria') })).toBeInTheDocument();

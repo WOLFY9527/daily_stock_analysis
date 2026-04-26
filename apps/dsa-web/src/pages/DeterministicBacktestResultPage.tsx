@@ -19,6 +19,7 @@ import { normalizeDeterministicBacktestResult } from '../components/backtest/nor
 import {
   Banner,
   Disclosure,
+  MetricCard,
   RuleRunStatusBanner,
   SummaryStrip,
   canCancelRuleRun,
@@ -139,6 +140,13 @@ function getFiniteNumber(value: unknown): number | null {
 function clampRatio(value: number | null): number {
   if (value == null || !Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
+}
+
+function getRunStatusTone(status?: string | null): 'positive' | 'negative' | 'accent' | 'default' {
+  if (status === 'completed') return 'positive';
+  if (status === 'failed' || status === 'cancelled') return 'negative';
+  if (status === 'running' || status === 'parsing' || status === 'summarizing') return 'accent';
+  return 'default';
 }
 
 function btr(language: UiLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
@@ -679,6 +687,49 @@ const DeterministicBacktestResultPage: React.FC = () => {
         : resultPage('statusSummary.nextStepExportPendingNote'),
     },
   ] : [];
+  const completedHeroMetrics = run && normalized ? [
+    {
+      label: resultPage('resultView.totalReturn'),
+      value: pct(normalized.metrics.totalReturnPct),
+      tone: getRunStatusTone(run.status),
+      note: benchmarkSummary
+        ? `${selectedBenchmarkLabel} ${pct(normalized.metrics.benchmarkReturnPct)}`
+        : buyAndHoldLabel,
+    },
+    {
+      label: resultPage('resultView.annualizedReturn'),
+      value: pct(normalized.metrics.annualizedReturnPct),
+      tone: 'accent' as const,
+      note: resultPage('resultView.sharpe'),
+    },
+    {
+      label: resultPage('resultView.maxDrawdown'),
+      value: pct(normalized.metrics.maxDrawdownPct),
+      tone: 'negative' as const,
+      note: resultPage('resultView.drawdownFeel'),
+    },
+    {
+      label: resultPage('resultView.trades'),
+      value: String(normalized.metrics.tradeCount),
+      tone: 'default' as const,
+      note: resultPage('resultView.tradeRecord', {
+        wins: normalized.metrics.winCount,
+        losses: normalized.metrics.lossCount,
+      }),
+    },
+    {
+      label: resultPage('resultView.winRate'),
+      value: pct(normalized.metrics.winRatePct),
+      tone: normalized.metrics.winRatePct != null && normalized.metrics.winRatePct >= 50 ? 'positive' as const : 'default' as const,
+      note: resultPage('resultView.averageTrade', { value: pct(normalized.metrics.avgTradeReturnPct) }),
+    },
+    {
+      label: resultPage('resultView.endingEquity'),
+      value: formatNumber(normalized.metrics.finalEquity),
+      tone: 'default' as const,
+      note: resultPage('resultView.initialCapital', { value: formatNumber(run.initialCapital) }),
+    },
+  ] : [];
 
   const handleToggleCompareRun = useCallback((item: RuleBacktestHistoryItem) => {
     setCompareRunIds((current) => {
@@ -971,6 +1022,93 @@ const DeterministicBacktestResultPage: React.FC = () => {
     );
   };
 
+  const renderCompletedHero = () => {
+    if (!run || !normalized) return null;
+
+    const statusTone = run.status === 'completed'
+      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/25'
+      : run.status === 'failed' || run.status === 'cancelled'
+        ? 'bg-rose-500/10 text-rose-300 border-rose-400/25'
+        : 'bg-sky-500/10 text-sky-300 border-sky-400/25';
+    const strategyLabel = getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language);
+    const headline = `${run.code} ${strategyLabel}`;
+    const statusAt = run.completedAt || run.runAt || null;
+
+    return (
+      <section
+        className="backtest-display-section"
+        data-testid="deterministic-result-page-bento-hero"
+      >
+        <div className="backtest-result-bento">
+          <div className="backtest-result-bento__intro" data-testid="deterministic-result-page-hero">
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.18em] uppercase ${statusTone}`}>
+                  {getRuleRunStatusLabel(run.status, language)}
+                </span>
+                <span className="text-sm text-white/40">{formatDateTime(statusAt)}</span>
+              </div>
+              <div className="space-y-2">
+                <p className="backtest-result-bento__eyebrow">WolfyStock</p>
+                <h1 className="backtest-result-bento__title">{headline}</h1>
+                <p className="backtest-result-bento__meta">
+                  {run.startDate || '--'} {'->'} {run.endDate || '--'}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm text-white/72">
+                <div className="backtest-result-bento__fact">
+                  <span>{resultPage('overview.selectedBenchmark')}</span>
+                  <strong>{selectedBenchmarkLabel}</strong>
+                </div>
+                <div className="backtest-result-bento__fact">
+                  <span>{resultPage('parameters.metricInitialCapital')}</span>
+                  <strong>{formatNumber(run.initialCapital)}</strong>
+                </div>
+                <div className="backtest-result-bento__fact">
+                  <span>{resultPage('parameters.metricLookback')}</span>
+                  <strong>{String(run.lookbackBars)}</strong>
+                </div>
+                <div className="backtest-result-bento__fact">
+                  <span>{resultPage('statusSummary.lastRefreshLabel')}</span>
+                  <strong>{lastStatusRefreshAt ? formatDateTime(lastStatusRefreshAt) : '--'}</strong>
+                </div>
+              </div>
+            </div>
+            <div className="backtest-result-bento__actions">
+              <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
+                {resultPage('hero.backToConfig')}
+              </Button>
+              <Button
+                variant="secondary"
+                size={density.buttonSize}
+                onClick={() => navigate('/backtest', { state: { draftRun: run } })}
+              >
+                {resultPage('hero.rerunSameParameters')}
+              </Button>
+              <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+                {resultPage('hero.savePreset')}
+              </Button>
+              <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
+                {resultPage('hero.refreshResult')}
+              </Button>
+            </div>
+          </div>
+          <div className="backtest-result-bento__metrics" data-testid="deterministic-result-kpi-bento">
+            {completedHeroMetrics.map((metric) => (
+              <MetricCard
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+                tone={metric.tone}
+                note={metric.note}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div
       className="theme-page-transition backtest-v1-page workspace-page--backtest backtest-result-page"
@@ -978,39 +1116,41 @@ const DeterministicBacktestResultPage: React.FC = () => {
       data-density={density.mode}
       style={getDeterministicResultDensityCssVars(density)}
     >
-      <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
-        <div className="backtest-result-page__hero-copy">
-          <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
-          <h1 className="backtest-result-page__hero-title">
-            {hasValidRunId
-              ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
-              : backtestCopy('resultPage.documentTitle')}
-          </h1>
-          <p className="backtest-result-page__hero-meta">{headerDescription}</p>
-        </div>
-        <div className="backtest-result-page__hero-actions">
-          <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
-            {resultPage('hero.backToConfig')}
-          </Button>
-          {run ? (
-            <Button
-              variant="secondary"
-              size={density.buttonSize}
-              onClick={() => navigate('/backtest', { state: { draftRun: run } })}
-            >
-              {resultPage('hero.rerunSameParameters')}
+      {run?.status === 'completed' && normalized ? renderCompletedHero() : (
+        <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
+          <div className="backtest-result-page__hero-copy">
+            <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
+            <h1 className="backtest-result-page__hero-title">
+              {hasValidRunId
+                ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
+                : backtestCopy('resultPage.documentTitle')}
+            </h1>
+            <p className="backtest-result-page__hero-meta">{headerDescription}</p>
+          </div>
+          <div className="backtest-result-page__hero-actions">
+            <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
+              {resultPage('hero.backToConfig')}
             </Button>
-          ) : null}
-          {run ? (
-            <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
-              {resultPage('hero.savePreset')}
+            {run ? (
+              <Button
+                variant="secondary"
+                size={density.buttonSize}
+                onClick={() => navigate('/backtest', { state: { draftRun: run } })}
+              >
+                {resultPage('hero.rerunSameParameters')}
+              </Button>
+            ) : null}
+            {run ? (
+              <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+                {resultPage('hero.savePreset')}
+              </Button>
+            ) : null}
+            <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
+              {resultPage('hero.refreshResult')}
             </Button>
-          ) : null}
-          <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
-            {resultPage('hero.refreshResult')}
-          </Button>
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
       {!hasValidRunId ? (
         <section className="backtest-display-section">
@@ -1020,7 +1160,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
         </section>
       ) : null}
 
-      {renderRunStatusSection()}
+      {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
 
       {run?.status === 'completed' && normalized ? (
         <>

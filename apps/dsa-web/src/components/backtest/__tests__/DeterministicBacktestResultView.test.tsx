@@ -128,8 +128,8 @@ describe('DeterministicBacktestResultView', () => {
     expect(resultView).toHaveAttribute('data-kpi-count', '6');
     expect(resultView).toHaveAttribute('data-density', 'dense');
     expect(dashboard).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'backtest.resultPage.resultView.keyMetrics'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'backtest.resultPage.resultView.sharpe'))).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-chart-shell')).toBeInTheDocument();
+    expect(screen.getByText('三图联动')).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'backtest.resultPage.auditTable.title'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'backtest.resultPage.tradeEventTable.title'))).not.toBeInTheDocument();
     expect(workspace).toHaveAttribute('data-row-count', '70');

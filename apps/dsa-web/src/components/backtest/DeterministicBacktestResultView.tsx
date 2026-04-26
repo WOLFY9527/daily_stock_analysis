@@ -8,12 +8,7 @@ import {
   type DeterministicResultDensityConfig,
   useDeterministicResultDensity,
 } from './deterministicResultDensity';
-import {
-  MetricCard,
-  SummaryStrip,
-  formatNumber,
-  pct,
-} from './shared';
+import { formatNumber, pct } from './shared';
 import {
   formatDeterministicActionLabel,
   normalizeDeterministicBacktestResult,
@@ -26,10 +21,6 @@ import {
   downloadExecutionTraceJson,
   hasExecutionTraceRows,
 } from './executionTraceUtils';
-import {
-  describeRuleRunNarrative,
-  getRuleRunExecutionNotes,
-} from './ruleBacktestP6';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { translate } from '../../i18n/core';
 
@@ -160,27 +151,8 @@ export const DeterministicBacktestResultView: React.FC<{
     () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
     [providedNormalized, run, language],
   );
-  const { metrics, benchmarkMeta, viewerMeta } = normalized;
-  const annualizedReturn = metrics.annualizedReturnPct != null ? pct(metrics.annualizedReturnPct) : '--';
-  const sharpeRatio = metrics.sharpeRatio != null ? formatNumber(metrics.sharpeRatio, 2) : '--';
-  const comparisonLabel = benchmarkMeta.showBenchmark
-    ? bt(language, 'resultPage.resultView.comparisonAgainst', { label: benchmarkMeta.benchmarkLabel })
-    : benchmarkMeta.showBuyHold
-      ? bt(language, 'resultPage.resultView.comparisonAgainst', { label: benchmarkMeta.buyHoldLabel })
-      : bt(language, 'resultPage.resultView.relativeComparisonFallback');
-  const comparisonValue = benchmarkMeta.showBenchmark
-    ? metrics.excessReturnVsBenchmarkPct
-    : benchmarkMeta.showBuyHold
-      ? metrics.excessReturnVsBuyAndHoldPct
-      : null;
-  const comparisonNote = benchmarkMeta.showBenchmark
-    ? bt(language, 'resultPage.resultView.benchmarkReturn', { value: pct(metrics.benchmarkReturnPct) })
-    : benchmarkMeta.showBuyHold
-      ? bt(language, 'resultPage.resultView.buyAndHoldReturn', { value: pct(metrics.buyAndHoldReturnPct) })
-      : bt(language, 'resultPage.resultView.noComparableBenchmarkReturn');
+  const { viewerMeta } = normalized;
   const workspaceKey = `${viewerMeta.runId}:${viewerMeta.rowCount}:${viewerMeta.firstDate ?? 'empty'}:${viewerMeta.lastDate ?? 'empty'}`;
-  const narrative = describeRuleRunNarrative(run, language);
-  const executionNotes = getRuleRunExecutionNotes(run, language);
 
   return (
     <div
@@ -197,123 +169,12 @@ export const DeterministicBacktestResultView: React.FC<{
     >
       <section className="backtest-display-section" data-testid="backtest-display-section-dashboard">
         <div data-testid="deterministic-result-dashboard">
-          <Card
-            className="product-section-card product-section-card--backtest-result backtest-result-viewer__dashboard"
-            padding="none"
+          <div
+            className="backtest-result-viewer__chart-stage backtest-result-viewer__chart-stage--void"
+            data-testid="deterministic-result-chart-shell"
           >
-            <div className="backtest-result-viewer__metric-stage" data-testid="deterministic-result-kpi-row">
-              <div className="backtest-result-viewer__metric-stage-header">
-                <div>
-                  <span className="product-kicker">{bt(language, 'resultPage.resultView.summary')}</span>
-                  <h2 className="backtest-result-viewer__metric-stage-title">{bt(language, 'resultPage.resultView.keyMetrics')}</h2>
-                </div>
-                <div className="product-chip-list product-chip-list--tight">
-                  <span className="product-chip">{bt(language, 'resultPage.resultView.sampleDays', { count: viewerMeta.rowCount })}</span>
-                  <span className="product-chip">{bt(language, 'resultPage.resultView.tradesChip', { count: metrics.tradeCount })}</span>
-                  <span className="product-chip">{bt(language, 'resultPage.resultView.equityChip', { value: formatNumber(metrics.finalEquity) })}</span>
-                </div>
-              </div>
-              <SummaryStrip
-                items={[
-                  {
-                    label: bt(language, 'resultPage.resultView.verdict'),
-                    value: narrative.verdict,
-                    note: benchmarkMeta.showBenchmark ? benchmarkMeta.benchmarkLabel : benchmarkMeta.buyHoldLabel,
-                  },
-                  {
-                    label: bt(language, 'resultPage.resultView.drawdownFeel'),
-                    value: narrative.drawdownLabel,
-                    note: pct(metrics.maxDrawdownPct),
-                  },
-                  {
-                    label: bt(language, 'resultPage.resultView.tradingActivity'),
-                    value: narrative.activityLabel,
-                    note: bt(language, 'resultPage.resultView.tradeActivityNote', { count: metrics.tradeCount }),
-                  },
-                  {
-                    label: bt(language, 'resultPage.resultView.signalQuality'),
-                    value: narrative.qualityLabel,
-                    note: pct(metrics.winRatePct),
-                  },
-                ]}
-              />
-              {executionNotes.length > 0 ? (
-                <p className="product-footnote">{executionNotes[0]}</p>
-              ) : null}
-              <div className="backtest-result-viewer__hero-metrics">
-                <MetricCard
-                  label={bt(language, 'resultPage.resultView.totalReturn')}
-                  value={pct(metrics.totalReturnPct)}
-                  tone="accent"
-                  note={comparisonNote}
-                />
-                <MetricCard
-                  label={comparisonLabel}
-                  value={pct(comparisonValue)}
-                  tone={comparisonValue != null
-                    ? (comparisonValue >= 0 ? 'positive' : 'negative')
-                    : 'default'}
-                  note={benchmarkMeta.showBenchmark
-                    ? bt(language, 'resultPage.resultView.buyAndHoldReturn', { value: pct(metrics.buyAndHoldReturnPct) })
-                    : comparisonNote}
-                />
-                <MetricCard
-                  label={bt(language, 'resultPage.resultView.maxDrawdown')}
-                  value={pct(metrics.maxDrawdownPct)}
-                  tone="negative"
-                  note={bt(language, 'resultPage.resultView.annualizedReturn', { value: annualizedReturn })}
-                />
-                <MetricCard
-                  label={bt(language, 'resultPage.resultView.trades')}
-                  value={String(metrics.tradeCount)}
-                  note={metrics.tradeCount > 0
-                    ? bt(language, 'resultPage.resultView.tradeRecord', { wins: metrics.winCount, losses: metrics.lossCount })
-                    : bt(language, 'resultPage.resultView.noFilledTrades')}
-                />
-                <MetricCard
-                  label={bt(language, 'resultPage.resultView.winRate')}
-                  value={pct(metrics.winRatePct)}
-                  note={metrics.avgTradeReturnPct != null
-                    ? bt(language, 'resultPage.resultView.averageTrade', { value: pct(metrics.avgTradeReturnPct) })
-                    : bt(language, 'resultPage.resultView.basedOnFilledTrades')}
-                />
-                <MetricCard
-                  label={bt(language, 'resultPage.resultView.endingEquity')}
-                  value={formatNumber(metrics.finalEquity)}
-                  note={bt(language, 'resultPage.resultView.initialCapital', { value: formatNumber(run.initialCapital) })}
-                />
-              </div>
-              <SummaryStrip
-                items={[
-                  {
-                    label: benchmarkMeta.benchmarkLabel,
-                    value: benchmarkMeta.showBenchmark ? pct(metrics.benchmarkReturnPct) : '--',
-                    note: bt(language, 'resultPage.resultView.sameBacktestWindow'),
-                  },
-                  {
-                    label: benchmarkMeta.buyHoldLabel,
-                    value: pct(metrics.buyAndHoldReturnPct),
-                    note: bt(language, 'resultPage.resultView.currentInstrumentBuyAndHold'),
-                  },
-                  {
-                    label: bt(language, 'resultPage.resultView.sharpe'),
-                    value: sharpeRatio,
-                    note: bt(language, 'resultPage.resultView.annualized', { value: annualizedReturn }),
-                  },
-                  {
-                    label: bt(language, 'resultPage.resultView.averageHolding'),
-                    value: metrics.avgHoldingBars == null ? '--' : bt(language, 'resultPage.resultView.holdingBars', { value: formatNumber(metrics.avgHoldingBars, 1) }),
-                    note: metrics.avgHoldingCalendarDays == null
-                      ? bt(language, 'resultPage.resultView.measuredInTradingDays')
-                      : bt(language, 'resultPage.resultView.holdingDays', { value: formatNumber(metrics.avgHoldingCalendarDays, 1) }),
-                  },
-                ]}
-              />
-            </div>
-            <div className="backtest-result-viewer__chart-stage backtest-result-viewer__chart-stage--void">
-              <DeterministicBacktestChartWorkspace key={workspaceKey} normalized={normalized} run={run} densityConfig={resolvedDensity} />
-            </div>
-          </Card>
+            <DeterministicBacktestChartWorkspace key={workspaceKey} normalized={normalized} run={run} densityConfig={resolvedDensity} />
+          </div>
         </div>
       </section>
     </div>
