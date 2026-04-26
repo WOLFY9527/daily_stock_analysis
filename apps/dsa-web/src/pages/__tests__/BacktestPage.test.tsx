@@ -558,8 +558,8 @@ function makeRuleRunResponse(overrides: Partial<RuleBacktestRunResponse> = {}): 
 describe('BacktestPage', () => {
   async function openDeterministicStrategyInput() {
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', { name: '继续' }));
-    expect(screen.getByTestId('backtest-control-section-setup')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
   }
 
   async function parseDeterministicStrategy() {
@@ -894,7 +894,7 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-cockpit')).toHaveClass('w-full', 'flex', 'flex-col', 'xl:flex-row', 'gap-10', 'min-w-0');
     expect(screen.getByTestId('backtest-cockpit-console')).toHaveClass('w-full', 'xl:w-[400px]', 'shrink-0', 'flex', 'flex-col', 'gap-6', 'min-w-0');
     expect(screen.getByTestId('backtest-cockpit-console')).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'rounded-[32px]', 'p-8', 'shadow-2xl', 'relative', 'overflow-hidden', 'backtest-setup-main');
+    expect(screen.getByTestId('backtest-cockpit-monitor')).toHaveClass('flex-1', 'min-w-0', 'bg-[#030303]', 'border', 'border-white/5', 'rounded-[32px]', 'shadow-2xl', 'relative', 'overflow-hidden', 'backtest-setup-main');
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
@@ -902,25 +902,30 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'page.normalMode') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'false');
 
-    expect(screen.getByTestId('backtest-normal-wizard')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-parameter-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-sticky-action-bar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('确定性回测向导步骤')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('确定性回测步骤')).not.toBeInTheDocument();
+    expect(screen.queryByText('查看解析细节')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-unified-shell')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
     expect(screen.getByTestId('backtest-entry-shell')).toBeInTheDocument();
     expect(screen.getByText('回测启动面板')).toBeInTheDocument();
     expect(screen.getByText('配置页现在更像回测启动面板：先在这里选择标的、区间、资金和策略，提交后将进入独立结果页查看 KPI、图表、审计与交易。')).toBeInTheDocument();
-    expect(screen.getByText('表单现在是页面唯一主角：完成基础参数、解析策略，然后直接进入独立结果页查看完整结果。')).toBeInTheDocument();
+    expect(screen.getByText('所有关键参数在同一块高密度看板里平铺展开，完成校验后直接从底部操作台发起回测。')).toBeInTheDocument();
     expect(screen.queryByText('当前还没有进行中的结果')).not.toBeInTheDocument();
     expect(screen.queryByText('页面说明')).not.toBeInTheDocument();
 
-    const activeStage = screen.getByTestId('backtest-normal-active-stage');
-    expect(within(activeStage).getByTestId('backtest-control-section-symbol')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('backtest-control-section-symbol')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-confirm')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-run')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-base-params-layout')).toHaveClass('backtest-base-params-layout');
     expect(screen.getByTestId('backtest-base-date-range')).toHaveClass('backtest-date-range-grid');
     expect(screen.getByLabelText('对比基准')).toBeInTheDocument();
-    expect(screen.queryByTestId('backtest-control-section-setup')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('backtest-control-section-strategy')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('backtest-control-section-run')).not.toBeInTheDocument();
     expect(screen.getByTestId('backtest-setup-presets')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-setup-history')).toBeInTheDocument();
 
@@ -935,18 +940,19 @@ describe('BacktestPage', () => {
     expect(await screen.findByDisplayValue('600001')).toBeInTheDocument();
   });
 
-  it('updates the visible deterministic step in Normal Mode', async () => {
+  it('keeps the deterministic setup fully expanded in Normal Mode', async () => {
     renderBacktestRoutes();
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole('button', { name: '继续' }));
-    expect(screen.getByTestId('backtest-control-section-setup')).toHaveAttribute('data-active', 'true');
-    expect(screen.queryByTestId('backtest-control-section-symbol')).not.toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-symbol')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-confirm')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-control-section-run')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '解析策略' }));
-    expect(await screen.findByTestId('backtest-control-section-strategy')).toHaveAttribute('data-active', 'true');
-    expect(screen.queryByTestId('backtest-control-section-setup')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('confirm-status-section')).toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -956,10 +962,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
     expect(screen.getByText('确认当前解析')).toBeInTheDocument();
 
-    fireEvent.click(within(screen.getByLabelText('确定性回测向导步骤')).getByRole('button', { name: /基础参数/i }));
     fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2025-11-30' } });
-
-    fireEvent.click(within(screen.getByLabelText('确定性回测向导步骤')).getByRole('button', { name: /策略确认/i }));
     expect(await screen.findByText('输入已变更。请重新解析后再继续。')).toBeInTheDocument();
   });
 
@@ -1001,7 +1004,8 @@ describe('BacktestPage', () => {
     expect(within(executableSpecSection).getAllByText('默认/推断').length).toBeGreaterThan(0);
     expect(within(executableSpecSection).getByText('每个交易日')).toBeInTheDocument();
     expect(within(executableSpecSection).getByText('100 股 / 次')).toBeInTheDocument();
-    expect(screen.getByText('查看解析细节')).toBeInTheDocument();
+    expect(screen.getByText('原始输入与归一化表达')).toBeInTheDocument();
+    expect(screen.queryByText('查看解析细节')).not.toBeInTheDocument();
     expect(screen.getByTestId('confirm-assumptions-section')).toBeInTheDocument();
     expect(screen.getByText('默认补全与提醒')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
@@ -1096,7 +1100,8 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('backtest-cockpit')).toHaveAttribute('data-module', 'rule');
     expect(screen.getByTestId('backtest-cockpit')).toHaveAttribute('data-panel-mode', 'professional');
-    expect(screen.getByTestId('backtest-control-panel-expanded')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
+    expect(screen.queryByLabelText('确定性回测步骤')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-symbol')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
@@ -1112,7 +1117,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
 
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('backtest-control-section-strategy')).getByRole('button', { name: '确认并查看结果' }));
+    fireEvent.click(within(screen.getByTestId('backtest-sticky-action-bar')).getByRole('button', { name: '开始执行回测' }));
 
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
     expect(runRuleBacktest).toHaveBeenCalledWith(
@@ -1268,9 +1273,9 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('en', 'page.ruleTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'page.historicalTab') })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: bt('en', 'page.controlModeLabel') })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Strategy input' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Strategy engine and rule input' })).toBeInTheDocument();
     expect(screen.getByLabelText('Strategy text')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Parse strategy' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Capital and execution settings' })).toBeInTheDocument();
   });
 });

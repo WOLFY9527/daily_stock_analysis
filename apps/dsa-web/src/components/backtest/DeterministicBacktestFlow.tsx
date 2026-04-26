@@ -1,7 +1,7 @@
 import type React from 'react';
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ApiErrorAlert, Badge, Button, Card, Disclosure } from '../../components/common';
+import { ApiErrorAlert, Badge, Button } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
 import type {
   AssumptionMap,
@@ -34,44 +34,7 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 
 export type RuleWizardStep = 'symbol' | 'setup' | 'strategy' | 'confirm' | 'run';
 
-type ProfessionalStep = RuleWizardStep;
-type NormalStep = Exclude<RuleWizardStep, 'confirm'>;
 type BacktestLanguage = 'zh' | 'en';
-
-const PROFESSIONAL_STEP_ORDER: ProfessionalStep[] = ['symbol', 'setup', 'strategy', 'confirm', 'run'];
-const NORMAL_STEP_ORDER: NormalStep[] = ['symbol', 'setup', 'strategy', 'run'];
-
-const PROFESSIONAL_STEP_LABELS: Record<BacktestLanguage, Record<ProfessionalStep, { title: string; short: string }>> = {
-  zh: {
-    symbol: { title: '基础参数', short: '参数' },
-    setup: { title: '策略输入', short: '输入' },
-    strategy: { title: '解析确认', short: '确认' },
-    confirm: { title: '执行设置', short: '执行' },
-    run: { title: '运行控制', short: '运行' },
-  },
-  en: {
-    symbol: { title: 'Core setup', short: 'Setup' },
-    setup: { title: 'Strategy input', short: 'Input' },
-    strategy: { title: 'Parse review', short: 'Review' },
-    confirm: { title: 'Execution settings', short: 'Exec' },
-    run: { title: 'Run controls', short: 'Run' },
-  },
-};
-
-const NORMAL_STEP_LABELS: Record<BacktestLanguage, Record<NormalStep, { title: string; short: string }>> = {
-  zh: {
-    symbol: { title: '基础参数', short: '参数' },
-    setup: { title: '策略输入', short: '输入' },
-    strategy: { title: '策略确认', short: '确认' },
-    run: { title: '开始运行', short: '运行' },
-  },
-  en: {
-    symbol: { title: 'Core setup', short: 'Setup' },
-    setup: { title: 'Strategy input', short: 'Input' },
-    strategy: { title: 'Strategy review', short: 'Review' },
-    run: { title: 'Run backtest', short: 'Run' },
-  },
-};
 
 const STRATEGY_EXAMPLES: Record<BacktestLanguage, string[]> = {
   zh: [
@@ -636,24 +599,6 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   panelMode,
 }) => {
   const { language } = useI18n();
-  const stepRefs = useRef<Partial<Record<RuleWizardStep, HTMLDivElement | null>>>({});
-  const setStepRef = useCallback(
-    (step: RuleWizardStep) => (node: HTMLDivElement | null) => {
-      stepRefs.current[step] = node;
-    },
-    [],
-  );
-
-  const focusStep = useCallback((step: RuleWizardStep) => {
-    onStepChange(step);
-    const node = stepRefs.current[step];
-    node?.scrollIntoView?.({ block: 'nearest' });
-    const focusable = node?.querySelector<HTMLElement>(
-      'input, textarea, select, button, [tabindex]:not([tabindex="-1"])',
-    );
-    focusable?.focus();
-  }, [onStepChange]);
-
   const parseState = getParseState(parsedStrategy, parseStale);
   const parseMeta = getParseStateMeta(parseState, language);
   const strategySpec = getStrategyPreviewSpec(parsedStrategy);
@@ -687,32 +632,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     && (benchmarkMode !== 'custom_code' || benchmarkCode.trim()),
   );
   const canProceedFromConfirm = (parseState === 'ready' || parseState === 'assumed') && confirmed && !parseStale;
-  const isProfessionalMode = panelMode === 'professional';
-  const professionalCurrentStepIndex = PROFESSIONAL_STEP_ORDER.indexOf(currentStep);
-  const professionalStepLabels = PROFESSIONAL_STEP_LABELS[language];
-  const normalCurrentStep = currentStep === 'confirm' ? 'strategy' : currentStep;
-  const normalCurrentStepIndex = NORMAL_STEP_ORDER.indexOf(normalCurrentStep);
-  const normalStepLabels = NORMAL_STEP_LABELS[language];
   const [presets, setPresets] = useState<RuleBacktestPreset[]>(() => loadRuleBacktestPresets());
-
-  const handleStepSelect = useCallback((step: RuleWizardStep) => {
-    if (isProfessionalMode) {
-      focusStep(step);
-      return;
-    }
-    onStepChange(step);
-  }, [focusStep, isProfessionalMode, onStepChange]);
-
-  const handleNormalRun = useCallback(async () => {
-    onStepChange('run');
-    await onRun();
-  }, [onRun, onStepChange]);
-
-  useEffect(() => {
-    if (!isProfessionalMode && currentStep === 'confirm') {
-      onStepChange('strategy');
-    }
-  }, [currentStep, isProfessionalMode, onStepChange]);
 
   const handleApplyPreset = useCallback((preset: RuleBacktestPreset) => {
     onCodeChange(preset.code);
@@ -746,20 +666,120 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     setPresets(deleteRuleBacktestPreset(presetId));
   }, []);
 
+  const compactInputClass = 'input-surface input-focus-glow product-command-input !px-3 !py-2.5 !text-sm';
+  const denseCardClass = 'bg-white/[0.02] border border-white/5 rounded-[24px] p-6 flex flex-col gap-5';
+  const stickyStatusTitle = language === 'en'
+    ? `Ready: ${code || 'Pending symbol'} ${parsedStrategy ? `· ${getLocalizedStrategyTypeLabel(parsedStrategy, language)}` : ''}`
+    : `就绪: ${code || '--'} ${parsedStrategy ? getLocalizedStrategyTypeLabel(parsedStrategy, language) : '待解析策略'}`;
+  const stickyStatusNote = isSubmitting
+    ? (language === 'en' ? 'Submitting deterministic backtest and opening the dedicated result page.' : '正在提交确定性回测，并打开独立结果页。')
+    : parseStale
+      ? (language === 'en' ? 'Inputs changed. Parse again before launch.' : '输入已变更，启动前需要重新解析。')
+      : (language === 'en' ? 'The result page still owns KPI, chart, audit, and trade inspection.' : '结果页仍然承载 KPI、图表、审计与交易明细。');
+
+  const executionSettingsFields = (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <label className="product-field gap-1.5">
+        <span className="theme-field-label">{language === 'en' ? 'Initial capital' : '初始资金'}</span>
+        <input
+          type="number"
+          min={1}
+          value={initialCapital}
+          onChange={(event) => onInitialCapitalChange(event.target.value)}
+          onFocus={() => onStepChange('confirm')}
+          className={compactInputClass}
+          aria-label={language === 'en' ? 'Initial capital' : '初始资金'}
+        />
+      </label>
+      <label className="product-field gap-1.5">
+        <span className="theme-field-label">{language === 'en' ? 'Lookback window' : '回看范围'}</span>
+        <input
+          type="number"
+          min={10}
+          max={5000}
+          value={lookbackBars}
+          onChange={(event) => onLookbackBarsChange(event.target.value)}
+          onFocus={() => onStepChange('confirm')}
+          className={compactInputClass}
+          aria-label={language === 'en' ? 'Lookback window' : '回看范围'}
+        />
+      </label>
+      <label className="product-field gap-1.5 md:col-span-2">
+        <span className="theme-field-label">{language === 'en' ? 'Benchmark' : '对比基准'}</span>
+        <select
+          value={benchmarkMode}
+          onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
+          onFocus={() => onStepChange('confirm')}
+          className={compactInputClass}
+          aria-label={language === 'en' ? 'Benchmark' : '对比基准'}
+        >
+          {RULE_BENCHMARK_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {getBenchmarkModeLabel(option.value, code, benchmarkCode, language)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {benchmarkMode === 'custom_code' ? (
+        <label className="product-field gap-1.5 md:col-span-2">
+          <span className="theme-field-label">{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
+          <input
+            type="text"
+            value={benchmarkCode}
+            onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())}
+            onFocus={() => onStepChange('confirm')}
+            placeholder={language === 'en' ? 'For example QQQ / SPY / ^NDX / 000300' : '例如 QQQ / SPY / ^NDX / 000300'}
+            className={compactInputClass}
+            aria-label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}
+          />
+        </label>
+      ) : null}
+      <label className="product-field gap-1.5">
+        <span className="theme-field-label">{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
+        <input
+          type="number"
+          min={0}
+          max={500}
+          value={feeBps}
+          onChange={(event) => onFeeBpsChange(event.target.value)}
+          onFocus={() => onStepChange('confirm')}
+          className={compactInputClass}
+          aria-label={language === 'en' ? 'Fee per side (bp)' : '单边手续费 (bp)'}
+        />
+      </label>
+      <label className="product-field gap-1.5">
+        <span className="theme-field-label">{language === 'en' ? 'Slippage (bp)' : '滑点 (bp)'}</span>
+        <input
+          type="number"
+          min={0}
+          max={500}
+          value={slippageBps}
+          onChange={(event) => onSlippageBpsChange(event.target.value)}
+          onFocus={() => onStepChange('confirm')}
+          className={compactInputClass}
+          aria-label={language === 'en' ? 'Slippage per side (bp)' : '单边滑点 (bp)'}
+        />
+      </label>
+    </div>
+  );
+
   const baseParamsSection = (
     <section
-      ref={setStepRef('symbol')}
       id="backtest-control-section-symbol"
-      className="backtest-control-section"
+      className="min-w-0"
       data-testid="backtest-control-section-symbol"
       data-active={currentStep === 'symbol' ? 'true' : 'false'}
     >
-      <Card title={language === 'en' ? 'Core setup' : '基础参数'} subtitle={language === 'en' ? 'Step 1' : '步骤 1'} className="product-section-card product-section-card--backtest-standard">
-        {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">{language === 'en' ? 'Set the instrument, capital, and date range first, then move to the strategy input.' : '先确定标的、资金规模和回测区间，再进入策略输入。'}</p>
-        ) : null}
-        <div className="backtest-base-params-layout" data-testid="backtest-base-params-layout">
-          <label className="product-field product-field--full">
+      <div className={denseCardClass}>
+        <div className="flex items-start gap-3">
+          <span className="mt-1 h-3 w-1 rounded-full bg-emerald-500" />
+          <div>
+            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Instrument and date window' : '基础标的与区间'}</h3>
+            <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Keep the symbol and date window visible at a glance.' : '标的与时间窗口保持常驻可见，不再折叠切换。'}</p>
+          </div>
+        </div>
+        <div className="backtest-base-params-layout grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="backtest-base-params-layout">
+          <label className="product-field product-field--full gap-1.5 md:col-span-2">
             <span className="theme-field-label">{language === 'en' ? 'Ticker' : '标的代码'}</span>
             <input
               type="text"
@@ -768,104 +788,70 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
               onFocus={() => onStepChange('symbol')}
               onKeyDown={onCodeEnter}
               placeholder={language === 'en' ? 'For example ORCL / AAPL / 600519' : '例如 ORCL / AAPL / 600519'}
-              className="input-surface input-focus-glow product-command-input"
+              className={compactInputClass}
               aria-label={language === 'en' ? 'Ticker' : '股票代码'}
             />
           </label>
-          <div className="backtest-date-range-grid" data-testid="backtest-base-date-range">
-            <label className="product-field">
+          <div className="backtest-date-range-grid grid grid-cols-1 gap-4 md:grid-cols-2 md:col-span-2" data-testid="backtest-base-date-range">
+            <label className="product-field gap-1.5">
               <span className="theme-field-label">{language === 'en' ? 'Start date' : '开始日期'}</span>
               <input
                 type="date"
                 value={startDate}
                 onChange={(event) => onStartDateChange(event.target.value)}
                 onFocus={() => onStepChange('symbol')}
-                className="input-surface input-focus-glow product-command-input"
+                className={compactInputClass}
                 aria-label={language === 'en' ? 'Start date' : '开始日期'}
               />
             </label>
-            <label className="product-field">
+            <label className="product-field gap-1.5">
               <span className="theme-field-label">{language === 'en' ? 'End date' : '结束日期'}</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={(event) => onEndDateChange(event.target.value)}
                 onFocus={() => onStepChange('symbol')}
-                className="input-surface input-focus-glow product-command-input"
+                className={compactInputClass}
                 aria-label={language === 'en' ? 'End date' : '结束日期'}
               />
             </label>
           </div>
-          <label className="product-field product-field--full">
-            <span className="theme-field-label">{language === 'en' ? 'Initial capital' : '初始资金'}</span>
-            <input
-              type="number"
-              min={1}
-              value={initialCapital}
-              onChange={(event) => onInitialCapitalChange(event.target.value)}
-              onFocus={() => onStepChange('symbol')}
-              className="input-surface input-focus-glow product-command-input"
-              aria-label={language === 'en' ? 'Initial capital' : '初始资金'}
-            />
-          </label>
-          <label className="product-field product-field--full">
-            <span className="theme-field-label">{language === 'en' ? 'Benchmark' : '对比基准'}</span>
-            <select
-              value={benchmarkMode}
-              onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
-              onFocus={() => onStepChange('symbol')}
-              className="input-surface input-focus-glow product-command-input"
-              aria-label={language === 'en' ? 'Benchmark' : '对比基准'}
-            >
-              {RULE_BENCHMARK_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {getBenchmarkModeLabel(option.value, code, benchmarkCode, language)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {benchmarkMode === 'custom_code' ? (
-            <label className="product-field product-field--full">
-              <span className="theme-field-label">{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
-              <input
-                type="text"
-                value={benchmarkCode}
-                onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())}
-                onFocus={() => onStepChange('symbol')}
-                placeholder={language === 'en' ? 'For example QQQ / SPY / ^NDX / 000300' : '例如 QQQ / SPY / ^NDX / 000300'}
-                className="input-surface input-focus-glow product-command-input"
-                aria-label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}
-              />
-            </label>
-          ) : null}
         </div>
         <div className="product-chip-list">
           <span className="product-chip">{language === 'en' ? 'Instrument' : '当前标的'}: {code || '--'}</span>
-          <span className="product-chip">{language === 'en' ? 'Benchmark' : '对比基准'}: {getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language)}</span>
-          <span className="product-chip">{language === 'en' ? 'Strategy type' : '策略类型'}: {parsedStrategy ? getLocalizedStrategyTypeLabel(parsedStrategy, language) : (language === 'en' ? 'Pending parse' : '待解析')}</span>
+          <span className="product-chip">{language === 'en' ? 'Window' : '当前区间'}: {startDate || '--'} {'->'} {endDate || '--'}</span>
         </div>
-        <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button onClick={() => handleStepSelect('setup')} disabled={!canProceedFromBaseParams}>
-            {language === 'en' ? 'Continue' : '继续'}
-          </Button>
-        </div>
-      </Card>
+      </div>
     </section>
   );
 
   const strategyInputSection = (
     <section
-      ref={setStepRef('setup')}
       id="backtest-control-section-setup"
-      className="backtest-control-section"
+      className="min-w-0 2xl:col-span-2"
       data-testid="backtest-control-section-setup"
       data-active={currentStep === 'setup' ? 'true' : 'false'}
     >
-      <Card title={language === 'en' ? 'Strategy input' : '策略输入'} subtitle={language === 'en' ? 'Step 2' : '步骤 2'} className="product-section-card product-section-card--backtest-flow">
-        {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">{language === 'en' ? 'Describe the rule in natural language, or start from one of the examples below.' : '用自然语言描述规则，或直接点一个示例作为确定性起点。'}</p>
-        ) : null}
-        <label className="product-field product-field--full">
+      <div className={denseCardClass}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-3 w-1 rounded-full bg-rose-500" />
+            <div>
+              <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Strategy engine and rule input' : '策略引擎与规则'}</h3>
+              <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Write or rewrite the rule in natural language, then normalize it without leaving the board.' : '自然语言策略、改写建议、解析动作都在同一块工作区内完成。'}</p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => void onParse()}
+            isLoading={isParsing}
+            loadingText={language === 'en' ? 'Parsing…' : '解析中…'}
+            disabled={!canProceedFromBaseParams || !strategyText.trim()}
+          >
+            {appliedRewriteText ? (language === 'en' ? 'Parse again' : '重新解析') : (language === 'en' ? 'Parse strategy' : '解析策略')}
+          </Button>
+        </div>
+        <label className="product-field product-field--full gap-1.5">
           <span className="theme-field-label">{language === 'en' ? 'Natural-language strategy' : '自然语言策略'}</span>
           <AnimatePresence initial={false}>
             {appliedRewriteText ? (
@@ -890,13 +876,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             value={strategyText}
             onChange={(event) => onStrategyTextChange(event.target.value)}
             onFocus={() => onStepChange('setup')}
-            rows={7}
+            rows={8}
             autoFocus={Boolean(appliedRewriteText)}
-            className="input-surface input-focus-glow product-command-input product-command-input--textarea"
+            className={`${compactInputClass} min-h-[220px] !py-3 product-command-input--textarea`}
             placeholder={language === 'en' ? 'For example: Start with 100000, buy 100 shares of ORCL every trading day from 2025-01-01 to 2025-12-31, and stop when cash runs out' : '例如：资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止'}
           />
         </label>
-
         <div className="product-chip-list wizard-example-chips">
           {STRATEGY_EXAMPLES[language].map((example) => (
             <button
@@ -912,419 +897,318 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             </button>
           ))}
         </div>
-
-        <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button variant="ghost" onClick={() => handleStepSelect('symbol')}>{language === 'en' ? 'Back' : '返回'}</Button>
-          <Button
-            variant="secondary"
-            onClick={() => void onParse()}
-            isLoading={isParsing}
-            loadingText={language === 'en' ? 'Parsing…' : '解析中…'}
-            disabled={!canProceedFromBaseParams || !strategyText.trim()}
-          >
-            {appliedRewriteText ? (language === 'en' ? 'Parse again' : '重新解析') : (language === 'en' ? 'Parse strategy' : '解析策略')}
-          </Button>
-        </div>
-        {parseError ? <ApiErrorAlert error={parseError} className="mt-4" /> : null}
-      </Card>
+        {parseError ? <ApiErrorAlert error={parseError} /> : null}
+      </div>
     </section>
   );
 
-  const executionSettingsFields = (
-    <div className="product-field-grid backtest-control-grid">
-      <label className="product-field">
-        <span className="theme-field-label">{language === 'en' ? 'Lookback window' : '回看范围'}</span>
-        <input
-          type="number"
-          min={10}
-          max={5000}
-          value={lookbackBars}
-          onChange={(event) => onLookbackBarsChange(event.target.value)}
-          onFocus={() => onStepChange(isProfessionalMode ? 'confirm' : 'strategy')}
-          className="input-surface input-focus-glow product-command-input"
-          aria-label={language === 'en' ? 'Lookback window' : '回看范围'}
-        />
-      </label>
-      <label className="product-field">
-        <span className="theme-field-label">{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
-        <input
-          type="number"
-          min={0}
-          max={500}
-          value={feeBps}
-          onChange={(event) => onFeeBpsChange(event.target.value)}
-          onFocus={() => onStepChange(isProfessionalMode ? 'confirm' : 'strategy')}
-          className="input-surface input-focus-glow product-command-input"
-          aria-label={language === 'en' ? 'Fee per side (bp)' : '单边手续费 (bp)'}
-        />
-      </label>
-      <label className="product-field execution-settings-field execution-settings-field--span-2">
-        <span className="theme-field-label">{language === 'en' ? 'Slippage (bp)' : '滑点 (bp)'}</span>
-        <input
-          type="number"
-          min={0}
-          max={500}
-          value={slippageBps}
-          onChange={(event) => onSlippageBpsChange(event.target.value)}
-          onFocus={() => onStepChange(isProfessionalMode ? 'confirm' : 'strategy')}
-          className="input-surface input-focus-glow product-command-input"
-          aria-label={language === 'en' ? 'Slippage per side (bp)' : '单边滑点 (bp)'}
-        />
-      </label>
-    </div>
+  const executionSettingsSection = (
+    <section
+      id="backtest-control-section-confirm"
+      className="min-w-0"
+      data-testid="backtest-control-section-confirm"
+      data-active={currentStep === 'confirm' ? 'true' : 'false'}
+    >
+      <div className={denseCardClass}>
+        <div className="flex items-start gap-3">
+          <span className="mt-1 h-3 w-1 rounded-full bg-indigo-500" />
+          <div>
+            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Capital and execution settings' : '资金与执行设置'}</h3>
+            <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Keep benchmark, fees, slippage, and execution defaults in the same card.' : '资金、基准、滑点和执行默认值在同一卡片内连续校对。'}</p>
+          </div>
+        </div>
+        {executionSettingsFields}
+        <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Execution defaults' : '执行默认值'}</p>
+          <div className="mt-3">
+            <AssumptionList assumptions={previewAssumptions} emptyText={language === 'en' ? 'No execution defaults are available yet.' : '暂无执行默认值。'} />
+          </div>
+        </div>
+      </div>
+    </section>
   );
 
   const parsedStrategySection = (
     <section
-      ref={setStepRef('strategy')}
       id="backtest-control-section-strategy"
-      className="backtest-control-section"
+      className="min-w-0 2xl:col-span-2"
       data-testid="backtest-control-section-strategy"
       data-active={currentStep === 'strategy' ? 'true' : 'false'}
     >
-      <Card title={isProfessionalMode ? (language === 'en' ? 'Parse review' : '解析确认') : (language === 'en' ? 'Strategy review' : '策略确认')} subtitle={language === 'en' ? 'Step 3' : '步骤 3'} className="product-section-card product-section-card--backtest-standard">
-        {!isProfessionalMode ? (
-          <p className="backtest-guided-step-helper">{language === 'en' ? 'Review the normalized rule, defaults, and unsupported parts here before opening the result page.' : '确认归一化后的规则、默认假设和不支持项，再从这里进入结果页流转。'}</p>
-        ) : null}
-        <motion.div layout className="backtest-step-stage-shell">
-          <AnimatePresence initial={false} mode="wait">
-            {parseState === 'empty' ? (
-              <motion.div
-                key="parsed-empty"
-                className="backtest-step-stage"
-                initial={{ opacity: 0, x: 16 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12 }}
-                transition={FLOW_PANEL_TRANSITION}
-              >
-                <div className="product-empty-state product-empty-state--compact">
-                  {language === 'en' ? 'Parse the strategy first, then review the normalized rule and execution defaults.' : '先完成策略解析，再继续确认归一化结果和默认假设。'}
+      <div className={denseCardClass}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-1 h-3 w-1 rounded-full bg-amber-400" />
+            <div>
+              <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Parse review and executable spec' : '解析确认与可执行规格'}</h3>
+              <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Review the normalized rule inline, without collapsing into a separate step.' : '解析状态、可执行规格、默认假设与限制说明全部平铺展开。'}</p>
+            </div>
+          </div>
+          <Badge variant={parseMeta.tone === 'success' ? 'success' : parseMeta.tone === 'danger' ? 'danger' : parseMeta.tone === 'warning' ? 'warning' : 'default'}>
+            {parseMeta.label}
+          </Badge>
+        </div>
+        {parseState === 'empty' ? (
+          <div className="product-empty-state product-empty-state--compact">
+            {language === 'en' ? 'Parse the strategy first, then review the normalized rule and execution defaults.' : '先完成策略解析，再继续确认归一化结果和默认假设。'}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="summary-block" data-testid="confirm-status-section">
+              <div className="summary-block__header">
+                <div>
+                  <SectionEyebrow>{language === 'en' ? 'Parse status' : '解析状态'}</SectionEyebrow>
+                  <h3 className="summary-block__title">{language === 'en' ? 'Review the current parse' : '确认当前解析'}</h3>
                 </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key={`parsed-${parseState}-${parseStale ? 'stale' : 'current'}`}
-                className="backtest-step-stage"
-                initial={{ opacity: 0, x: 16 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12 }}
-                transition={FLOW_PANEL_TRANSITION}
-              >
-                <div className="summary-block" data-testid="confirm-status-section">
+              </div>
+              <Banner
+                tone={parseMeta.tone}
+                title={parseMeta.title}
+                body={
+                  parseState === 'unsupported'
+                    ? getUnsupportedMessages(parsedStrategy as RuleBacktestParseResponse, language)[0]
+                    : parseState === 'stale'
+                      ? (language === 'en' ? 'The inputs changed. Parse again before continuing.' : '输入已变更。请重新解析后再继续。')
+                      : parseState === 'assumed'
+                        ? (language === 'en' ? 'The strategy is executable, but it still contains derived defaults or execution assumptions.' : '策略可执行，但包含默认值或执行假设。')
+                        : (language === 'en' ? 'The strategy is normalized and ready to continue into the dedicated result page.' : '策略已归一化，可直接进入独立结果页流转。')
+                }
+              />
+            </div>
+
+            <div className="summary-block" data-testid="confirm-compact-summary-section">
+              <div className="preview-grid">
+                <div className="preview-card">
+                  <p className="metric-card__label">{language === 'en' ? 'Strategy type' : '策略类型'}</p>
+                  <p className="preview-card__text">{getLocalizedStrategyTypeLabel(parsedStrategy, language)}</p>
+                </div>
+                <div className="preview-card">
+                  <p className="metric-card__label">{language === 'en' ? 'Ticker' : '标的'}</p>
+                  <p className="preview-card__text">{code || '--'}</p>
+                </div>
+                <div className="preview-card">
+                  <p className="metric-card__label">{language === 'en' ? 'Date range' : '区间'}</p>
+                  <p className="preview-card__text">{startDate || '--'} {'->'} {endDate || '--'}</p>
+                </div>
+                <div className="preview-card">
+                  <p className="metric-card__label">{language === 'en' ? 'Core intent' : '核心意图'}</p>
+                  <p className="preview-card__text">{coreIntentSummary || supportedPortionSummary || (language === 'en' ? 'Needs review' : '待确认')}</p>
+                </div>
+              </div>
+            </div>
+
+            {riskControlRows.length ? (
+              <div className="summary-block" data-testid="confirm-additive-dashboard">
+                <div className="summary-block" data-testid="confirm-dashboard-risk-controls" title="查看确认页风险控制 additive 摘要">
                   <div className="summary-block__header">
                     <div>
-                      <SectionEyebrow>{language === 'en' ? 'Parse status' : '解析状态'}</SectionEyebrow>
-                      <h3 className="summary-block__title">{language === 'en' ? 'Review the current parse' : '确认当前解析'}</h3>
+                      <SectionEyebrow>Dashboard</SectionEyebrow>
+                      <h3 className="summary-block__title">风险控制卡片 / Risk Controls</h3>
                     </div>
-                    <Badge variant={parseMeta.tone === 'success' ? 'success' : parseMeta.tone === 'danger' ? 'danger' : parseMeta.tone === 'warning' ? 'warning' : 'default'}>
-                      {parseMeta.label}
-                    </Badge>
+                    <div className="product-chip-list product-chip-list--tight">
+                      <span className="product-chip">已启用 {riskControlRows.length} 项</span>
+                      <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
+                    </div>
                   </div>
-                  <Banner
-                    tone={parseMeta.tone}
-                    title={parseMeta.title}
-                    body={
-                      parseState === 'unsupported'
-                        ? getUnsupportedMessages(parsedStrategy as RuleBacktestParseResponse, language)[0]
-                        : parseState === 'stale'
-                          ? (language === 'en' ? 'The inputs changed. Parse again before continuing.' : '输入已变更。请重新解析后再继续。')
-                          : parseState === 'assumed'
-                            ? (language === 'en' ? 'The strategy is executable, but it still contains derived defaults or execution assumptions.' : '策略可执行，但包含默认值或执行假设。')
-                            : (language === 'en' ? 'The strategy is normalized and ready to continue into the dedicated result page.' : '策略已归一化，可直接进入独立结果页流转。')
-                    }
-                  />
-                </div>
-
-                <div className="summary-block mt-4" data-testid="confirm-compact-summary-section">
                   <div className="preview-grid">
-                    <div className="preview-card">
-                      <p className="metric-card__label">{language === 'en' ? 'Strategy type' : '策略类型'}</p>
-                      <p className="preview-card__text">{getLocalizedStrategyTypeLabel(parsedStrategy, language)}</p>
-                    </div>
-                    <div className="preview-card">
-                      <p className="metric-card__label">{language === 'en' ? 'Ticker' : '标的'}</p>
-                      <p className="preview-card__text">{code || '--'}</p>
-                    </div>
-                    <div className="preview-card">
-                      <p className="metric-card__label">{language === 'en' ? 'Date range' : '区间'}</p>
-                      <p className="preview-card__text">{startDate || '--'} {'->'} {endDate || '--'}</p>
-                    </div>
-                    <div className="preview-card">
-                      <p className="metric-card__label">{language === 'en' ? 'Core intent' : '核心意图'}</p>
-                      <p className="preview-card__text">{coreIntentSummary || supportedPortionSummary || (language === 'en' ? 'Needs review' : '待确认')}</p>
-                    </div>
+                    {riskControlRows.map((row) => (
+                      <div key={`confirm-dashboard-risk-${row.label}`} className="preview-card">
+                        <p className="metric-card__label">{row.label}</p>
+                        <p className="preview-card__text">{row.value}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              </div>
+            ) : null}
 
-                {riskControlRows.length ? (
-                  <div className="summary-block mt-4" data-testid="confirm-additive-dashboard">
-                    <div
-                      className="summary-block"
-                      data-testid="confirm-dashboard-risk-controls"
-                      title="查看确认页风险控制 additive 摘要"
-                    >
-                      <div className="summary-block__header">
-                        <div>
-                          <SectionEyebrow>Dashboard</SectionEyebrow>
-                          <h3 className="summary-block__title">风险控制卡片 / Risk Controls</h3>
-                        </div>
-                        <div className="product-chip-list product-chip-list--tight">
-                          <span className="product-chip">已启用 {riskControlRows.length} 项</span>
-                          <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
-                        </div>
-                      </div>
-                      <div className="preview-grid">
-                        {riskControlRows.map((row) => (
-                          <div key={`confirm-dashboard-risk-${row.label}`} className="preview-card">
-                            <p className="metric-card__label">{row.label}</p>
-                            <p className="preview-card__text">{row.value}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="summary-block mt-4" data-testid="confirm-executable-spec-section">
+            <div className="summary-block" data-testid="confirm-executable-spec-section">
+              <div className="summary-block__header">
+                <div>
+                  <SectionEyebrow>{language === 'en' ? 'Executable spec' : '可执行规格'}</SectionEyebrow>
+                  <h3 className="summary-block__title">{language === 'en' ? 'What will actually run' : '实际执行内容'}</h3>
+                </div>
+              </div>
+              <p className="product-section-copy">
+                {language === 'en' ? <>The fields below come from the current canonical <code>strategy_spec</code> and directly drive the deterministic backtest.</> : <>以下字段来自当前 canonical <code>strategy_spec</code>，会直接驱动确定性回测执行。</>}
+              </p>
+              <div className="product-chip-list mb-4">
+                <span className="product-chip">{language === 'en' ? 'Strategy family' : '策略族'} · {getLocalizedStrategyTypeLabel(parsedStrategy, language)}</span>
+                <span className="product-chip">{language === 'en' ? 'Spec source' : '规格来源'} · {getStrategySpecSourceLabel(parsedStrategy, language)}</span>
+                <span className="product-chip">{language === 'en' ? 'Normalization' : '归一化'} · {formatRuleNormalizationStateLabel(getParsedNormalizationState(parsedStrategy), language)}</span>
+                <span className="product-chip">{language === 'en' ? 'Needs confirmation' : '需要确认'} · {parsedStrategy?.needsConfirmation ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
+                <span className="product-chip">{language === 'en' ? 'Executable' : '可执行'} · {getParsedExecutable(parsedStrategy) ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
+              </div>
+              <div className="product-chip-list product-chip-list--tight mb-4">
+                <span className="product-chip">{language === 'en' ? 'Explicit spec' : '显式结构化'}</span>
+                <span className="product-chip">{language === 'en' ? 'Derived / defaulted' : '默认/推断'}</span>
+                <span className="product-chip">{language === 'en' ? 'Compat setup' : '兼容 setup'}</span>
+              </div>
+              <StrategySpecSummaryCard parsed={parsedStrategy} currentCode={code} startDate={startDate} endDate={endDate} />
+              {riskControlRows.length ? (
+                <div className="summary-block mt-4">
                   <div className="summary-block__header">
                     <div>
-                      <SectionEyebrow>{language === 'en' ? 'Executable spec' : '可执行规格'}</SectionEyebrow>
-                      <h3 className="summary-block__title">{language === 'en' ? 'What will actually run' : '实际执行内容'}</h3>
+                      <SectionEyebrow>风险控制</SectionEyebrow>
+                      <h3 className="summary-block__title">风险控制 / Risk Controls</h3>
                     </div>
                   </div>
-                  <p className="product-section-copy">
-                    {language === 'en' ? <>The fields below come from the current canonical <code>strategy_spec</code> and directly drive the deterministic backtest.</> : <>以下字段来自当前 canonical <code>strategy_spec</code>，会直接驱动确定性回测执行。</>}
-                  </p>
-                  <div className="product-chip-list mb-4">
-                    <span className="product-chip">{language === 'en' ? 'Strategy family' : '策略族'} · {getLocalizedStrategyTypeLabel(parsedStrategy, language)}</span>
-                    <span className="product-chip">{language === 'en' ? 'Spec source' : '规格来源'} · {getStrategySpecSourceLabel(parsedStrategy, language)}</span>
-                    <span className="product-chip">{language === 'en' ? 'Normalization' : '归一化'} · {formatRuleNormalizationStateLabel(getParsedNormalizationState(parsedStrategy), language)}</span>
-                    <span className="product-chip">{language === 'en' ? 'Needs confirmation' : '需要确认'} · {parsedStrategy?.needsConfirmation ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
-                    <span className="product-chip">{language === 'en' ? 'Executable' : '可执行'} · {getParsedExecutable(parsedStrategy) ? (language === 'en' ? 'Yes' : '是') : (language === 'en' ? 'No' : '否')}</span>
+                  <div className="preview-grid">
+                    {riskControlRows.map((row) => (
+                      <div key={`${row.label}-${row.value}`} className="preview-card">
+                        <p className="metric-card__label">{row.label}</p>
+                        <div className="product-chip-list product-chip-list--tight">
+                          <span className="product-chip">{getFieldSourceLabel(row.source)}</span>
+                        </div>
+                        <p className="preview-card__text">{row.value}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="product-chip-list product-chip-list--tight mb-4">
-                    <span className="product-chip">{language === 'en' ? 'Explicit spec' : '显式结构化'}</span>
-                    <span className="product-chip">{language === 'en' ? 'Derived / defaulted' : '默认/推断'}</span>
-                    <span className="product-chip">{language === 'en' ? 'Compat setup' : '兼容 setup'}</span>
-                  </div>
-                  <StrategySpecSummaryCard parsed={parsedStrategy} currentCode={code} startDate={startDate} endDate={endDate} />
-                  {riskControlRows.length ? (
-                    <div className="summary-block mt-4">
-                      <div className="summary-block__header">
-                        <div>
-                          <SectionEyebrow>风险控制</SectionEyebrow>
-                          <h3 className="summary-block__title">风险控制 / Risk Controls</h3>
-                        </div>
-                      </div>
-                      <div className="preview-grid">
-                        {riskControlRows.map((row) => (
-                          <div key={`${row.label}-${row.value}`} className="preview-card">
-                            <p className="metric-card__label">{row.label}</p>
-                            <div className="product-chip-list product-chip-list--tight">
-                              <span className="product-chip">{getFieldSourceLabel(row.source)}</span>
-                            </div>
-                            <p className="preview-card__text">{row.value}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="summary-block mt-4" data-testid="confirm-risk-controls-visualization">
-                        <div className="summary-block__header">
-                          <div>
-                            <SectionEyebrow>保护摘要</SectionEyebrow>
-                            <h3 className="summary-block__title">保护梯度 / Protection Ladder</h3>
-                          </div>
-                          <div className="product-chip-list product-chip-list--tight">
-                            <span className="product-chip">已启用 {riskControlRows.length} 项</span>
-                            <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
-                          </div>
-                        </div>
-                        <div className="space-y-3">
-                          {riskControlRows.map((row) => {
-                            const width = strongestRiskControl > 0 && row.numericValue
-                              ? Math.max(16, (row.numericValue / strongestRiskControl) * 100)
-                              : 0;
-                            return (
-                              <div key={`risk-ladder-${row.label}`} className="space-y-1.5">
-                                <div className="flex items-center justify-between gap-3">
-                                  <span className="metric-card__label">{row.label}</span>
-                                  <span className="preview-card__text">{row.value}</span>
-                                </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-                                  <div
-                                    className="h-full rounded-full bg-[var(--backtest-accent,#7dd3fc)]"
-                                    style={{ width: `${width}%` }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                <Disclosure summary={language === 'en' ? 'View parse detail' : '查看解析细节'}>
-                  <StrategyParseDetails parsed={parsedStrategy} />
-                </Disclosure>
-
-                {(supportedPortionSummary || unsupportedExtensions.length > 0 || rewriteSuggestions.length > 0) && (
-                  <div className="summary-block mt-4" data-testid="confirm-guidance-section">
+                  <div className="summary-block mt-4" data-testid="confirm-risk-controls-visualization">
                     <div className="summary-block__header">
                       <div>
-                        <SectionEyebrow>{language === 'en' ? 'Limits and rewrites' : '限制与改写'}</SectionEyebrow>
-                        <h3 className="summary-block__title">{language === 'en' ? 'Rewrite suggestions and limits' : '改写建议与限制'}</h3>
+                        <SectionEyebrow>保护摘要</SectionEyebrow>
+                        <h3 className="summary-block__title">保护梯度 / Protection Ladder</h3>
+                      </div>
+                      <div className="product-chip-list product-chip-list--tight">
+                        <span className="product-chip">已启用 {riskControlRows.length} 项</span>
+                        <span className="product-chip">最高阈值 {strongestRiskControl.toFixed(2)}%</span>
                       </div>
                     </div>
-                    {supportedPortionSummary && supportedPortionSummary !== coreIntentSummary ? (
-                      <p className="product-section-copy">{supportedPortionSummary}</p>
-                    ) : null}
-                    {unsupportedExtensions.length > 0 ? (
-                      <div className="product-chip-list mb-4">
-                        {unsupportedExtensions.slice(0, 3).map((item, index) => (
-                          <span key={`${String(item.code || index)}-unsupported`} className="product-chip">
-                            {String(item.title || item.message || (language === 'en' ? 'Not supported yet' : '当前不支持'))}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {rewriteSuggestions.length > 0 ? (
-                      <div className="product-chip-list wizard-example-chips">
-                        {rewriteSuggestions.slice(0, 3).map((item, index) => {
-                          const text = String(item.strategyText || '');
-                          const label = String(item.label || text || (language === 'en' ? `Suggestion ${index + 1}` : `建议 ${index + 1}`));
-                          if (!text) return null;
-                          return (
-                            <button
-                              key={`${label}-${index}`}
-                              type="button"
-                              className="product-chip product-chip--button"
-                              onClick={() => onApplyRewriteSuggestion(text)}
-                            >
-                              {label}: {text}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-
-                {assumptionCards.length > 0 ? (
-                  <div className="summary-block mt-4" data-testid="confirm-assumptions-section">
-                    <div className="summary-block__header">
-                      <div>
-                        <SectionEyebrow>{language === 'en' ? 'Defaults and assumptions' : '默认与推断'}</SectionEyebrow>
-                        <h3 className="summary-block__title">{language === 'en' ? 'Defaults and review notes' : '默认补全与提醒'}</h3>
-                      </div>
-                    </div>
-                    <p className="product-section-copy">{language === 'en' ? 'These are not explicit canonical execution fields from the user. They are system-filled defaults, derived values, or items that still need manual review.' : '这些内容不是用户显式写出的 canonical 执行字段，而是系统补全、默认或需要人工确认的部分。'}</p>
-                    <div className="preview-grid">
-                      {assumptionCards.map((group, index) => {
+                    <div className="space-y-3">
+                      {riskControlRows.map((row) => {
+                        const width = strongestRiskControl > 0 && row.numericValue
+                          ? Math.max(16, (row.numericValue / strongestRiskControl) * 100)
+                          : 0;
                         return (
-                          <div key={`${group.label}-${index}`} className="preview-card">
-                            <p className="metric-card__label">{group.label}</p>
-                            <div className="product-chip-list">
-                              {group.items.map((item, itemIndex) => (
-                                <span key={`${group.label}-${itemIndex}`} className="product-chip">{item}</span>
-                              ))}
+                          <div key={`risk-ladder-${row.label}`} className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="metric-card__label">{row.label}</span>
+                              <span className="preview-card__text">{row.value}</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+                              <div
+                                className="h-full rounded-full bg-[var(--backtest-accent,#7dd3fc)]"
+                                style={{ width: `${width}%` }}
+                              />
                             </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
-                ) : null}
-
-                {!isProfessionalMode ? (
-                  <Disclosure summary={language === 'en' ? 'Execution settings' : '执行设置'}>
-                    {executionSettingsFields}
-                    <div className="mt-4">
-                      <AssumptionList assumptions={previewAssumptions} emptyText={language === 'en' ? 'No execution defaults are available yet.' : '暂无执行默认值。'} />
-                    </div>
-                  </Disclosure>
-                ) : null}
-
-                <label className="product-checkbox-row mt-4">
-                  <input
-                    type="checkbox"
-                    checked={confirmed}
-                    disabled={parseState === 'unsupported' || parseState === 'stale'}
-                    onChange={(event) => {
-                      onStepChange('strategy');
-                      onToggleConfirmed(event.target.checked);
-                    }}
-                  />
-                  <span>{language === 'en' ? 'I reviewed the current parse result and execution assumptions.' : '我已确认当前解析结果与执行假设。'}</span>
-                </label>
-
-                <div className="product-action-row backtest-control-actions backtest-control-actions--footer mt-4">
-                  <Button variant="ghost" onClick={() => handleStepSelect('setup')}>{language === 'en' ? 'Back to editing' : '返回修改'}</Button>
-                  <Button variant="secondary" onClick={() => void onParse()} disabled={isParsing || !strategyText.trim()}>
-                    {language === 'en' ? 'Parse again' : '重新解析'}
-                  </Button>
-                  <Button
-                    onClick={() => (isProfessionalMode ? handleStepSelect('confirm') : void handleNormalRun())}
-                    disabled={!canProceedFromConfirm}
-                    isLoading={!isProfessionalMode && isSubmitting}
-                    loadingText={language === 'en' ? 'Opening result page…' : '正在打开结果页…'}
-                  >
-                    {isProfessionalMode ? (language === 'en' ? 'Continue' : '继续') : (language === 'en' ? 'Confirm and open result' : '确认并查看结果')}
-                  </Button>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </Card>
-    </section>
-  );
+              ) : null}
+            </div>
 
-  const executionSettingsSection = (
-    <section
-      ref={setStepRef('confirm')}
-      id="backtest-control-section-confirm"
-      className="backtest-control-section"
-      data-testid="backtest-control-section-confirm"
-      data-active={currentStep === 'confirm' ? 'true' : 'false'}
-    >
-      <Card title={language === 'en' ? 'Execution settings' : '执行设置'} subtitle={language === 'en' ? 'Step 4' : '步骤 4'} className="product-section-card product-section-card--backtest-standard">
-        <p className="backtest-guided-step-helper">{language === 'en' ? 'Adjust execution defaults here. After submission, the dedicated result page will handle polling and analysis.' : '这里调整执行默认值。提交后会直接进入独立结果页进行轮询和分析。'}</p>
-        {executionSettingsFields}
-        <Disclosure summary={language === 'en' ? 'Execution defaults' : '执行默认值'}>
-          <AssumptionList assumptions={previewAssumptions} emptyText={language === 'en' ? 'No execution defaults are available yet.' : '暂无执行默认值。'} />
-        </Disclosure>
-        <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-          <Button variant="ghost" onClick={() => handleStepSelect('strategy')}>{language === 'en' ? 'Back' : '返回'}</Button>
-          <Button onClick={() => handleStepSelect('run')}>{language === 'en' ? 'Continue' : '继续'}</Button>
-        </div>
-      </Card>
+            <StrategyParseDetails parsed={parsedStrategy} />
+
+            {(supportedPortionSummary || unsupportedExtensions.length > 0 || rewriteSuggestions.length > 0) && (
+              <div className="summary-block" data-testid="confirm-guidance-section">
+                <div className="summary-block__header">
+                  <div>
+                    <SectionEyebrow>{language === 'en' ? 'Limits and rewrites' : '限制与改写'}</SectionEyebrow>
+                    <h3 className="summary-block__title">{language === 'en' ? 'Rewrite suggestions and limits' : '改写建议与限制'}</h3>
+                  </div>
+                </div>
+                {supportedPortionSummary && supportedPortionSummary !== coreIntentSummary ? (
+                  <p className="product-section-copy">{supportedPortionSummary}</p>
+                ) : null}
+                {unsupportedExtensions.length > 0 ? (
+                  <div className="product-chip-list mb-4">
+                    {unsupportedExtensions.slice(0, 3).map((item, index) => (
+                      <span key={`${String(item.code || index)}-unsupported`} className="product-chip">
+                        {String(item.title || item.message || (language === 'en' ? 'Not supported yet' : '当前不支持'))}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {rewriteSuggestions.length > 0 ? (
+                  <div className="product-chip-list wizard-example-chips">
+                    {rewriteSuggestions.slice(0, 3).map((item, index) => {
+                      const text = String(item.strategyText || '');
+                      const label = String(item.label || text || (language === 'en' ? `Suggestion ${index + 1}` : `建议 ${index + 1}`));
+                      if (!text) return null;
+                      return (
+                        <button
+                          key={`${label}-${index}`}
+                          type="button"
+                          className="product-chip product-chip--button"
+                          onClick={() => onApplyRewriteSuggestion(text)}
+                        >
+                          {label}: {text}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {assumptionCards.length > 0 ? (
+              <div className="summary-block" data-testid="confirm-assumptions-section">
+                <div className="summary-block__header">
+                  <div>
+                    <SectionEyebrow>{language === 'en' ? 'Defaults and assumptions' : '默认与推断'}</SectionEyebrow>
+                    <h3 className="summary-block__title">{language === 'en' ? 'Defaults and review notes' : '默认补全与提醒'}</h3>
+                  </div>
+                </div>
+                <p className="product-section-copy">{language === 'en' ? 'These are not explicit canonical execution fields from the user. They are system-filled defaults, derived values, or items that still need manual review.' : '这些内容不是用户显式写出的 canonical 执行字段，而是系统补全、默认或需要人工确认的部分。'}</p>
+                <div className="preview-grid">
+                  {assumptionCards.map((group, index) => (
+                    <div key={`${group.label}-${index}`} className="preview-card">
+                      <p className="metric-card__label">{group.label}</p>
+                      <div className="product-chip-list">
+                        {group.items.map((item, itemIndex) => (
+                          <span key={`${group.label}-${itemIndex}`} className="product-chip">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <label className="product-checkbox-row mt-1">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                disabled={parseState === 'unsupported' || parseState === 'stale'}
+                onChange={(event) => {
+                  onStepChange('strategy');
+                  onToggleConfirmed(event.target.checked);
+                }}
+              />
+              <span>{language === 'en' ? 'I reviewed the current parse result and execution assumptions.' : '我已确认当前解析结果与执行假设。'}</span>
+            </label>
+          </div>
+        )}
+      </div>
     </section>
   );
 
   const runControlsSection = (
     <section
-      ref={setStepRef('run')}
       id="backtest-control-section-run"
-      className="backtest-control-section"
+      className="min-w-0 2xl:col-span-2"
       data-testid="backtest-control-section-run"
       data-active={currentStep === 'run' ? 'true' : 'false'}
     >
-      <Card title={isProfessionalMode ? (language === 'en' ? 'Run controls' : '运行控制') : (language === 'en' ? 'Run backtest' : '开始运行')} subtitle={language === 'en' ? `Step ${isProfessionalMode ? '5' : '4'}` : `步骤 ${isProfessionalMode ? '5' : '4'}`} className="product-section-card product-section-card--backtest-flow">
-        <Banner
-          tone={isSubmitting ? 'info' : 'default'}
-          title={isSubmitting ? (language === 'en' ? 'Creating the backtest run' : '正在创建回测运行') : (language === 'en' ? 'Submission opens the dedicated result page' : '提交后进入独立结果页')}
-          body={isSubmitting
-            ? (language === 'en' ? 'Submitting the deterministic backtest and redirecting to the result page. The result page handles status polling, KPI display, and the full-width chart workspace.' : '正在提交规则回测并跳转到结果页。结果页会负责轮询状态、显示 KPI 和全宽图表工作区。')
-            : (language === 'en' ? 'The config page only handles setup and strategy confirmation. After you run it, the app navigates to /backtest/results/:runId for the full analysis.' : '配置页只负责参数与策略确认。点击运行后会导航到 /backtest/results/:runId，由结果页承载完整分析。')}
-        />
-        <div className="backtest-inline-status mt-4" role="status" aria-live="polite">
+      <div className={denseCardClass}>
+        <div className="flex items-start gap-3">
+          <span className="mt-1 h-3 w-1 rounded-full bg-cyan-400" />
+          <div>
+            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Launch rail and history handoff' : '发射协议与历史接力'}</h3>
+            <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'The config page only launches runs. Full inspection still lives on the dedicated result route.' : '配置页只负责发起运行，完整分析仍在独立结果页完成。'}</p>
+          </div>
+        </div>
+        <div className="backtest-inline-status" role="status" aria-live="polite">
           <span className="backtest-inline-status__pill" data-tone={parseMeta.tone}>{language === 'en' ? 'Parse' : '解析'} · {parseMeta.label}</span>
-          <span className="backtest-inline-status__pill" data-tone="info">{language === 'en' ? 'Result page' : '结果页'} · KPI / {language === 'en' ? 'Charts / Audit / Trades' : '图表 / 审计 / 交易'}</span>
+          <span className="backtest-inline-status__pill" data-tone="info">{language === 'en' ? 'History' : '历史'} · {historyTotal}</span>
           {parseStale ? <span className="backtest-inline-status__pill" data-tone="warning">{language === 'en' ? 'Preview is stale' : '预览已过期'}</span> : null}
           {appliedRewriteText ? <span className="backtest-inline-status__pill" data-tone="info">{language === 'en' ? 'Rewrite applied' : '已应用改写'}</span> : null}
         </div>
-        <div className="preview-grid mt-4">
+        <div className="preview-grid">
           <div className="preview-card">
             <p className="metric-card__label">{language === 'en' ? 'Ticker' : '标的'}</p>
             <p className="preview-card__text">{code || '--'}</p>
@@ -1342,81 +1226,15 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <p className="preview-card__text">{getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language)}</p>
           </div>
         </div>
-        <div className="flex flex-col gap-4 mt-4">
-          <Button
-            size="xl"
-            className="w-full backtest-launch-button"
-            onClick={() => void onRun()}
-            isLoading={isSubmitting}
-            loadingText={language === 'en' ? 'Opening result page…' : '正在打开结果页…'}
-            disabled={!canProceedFromConfirm}
-          >
-            {language === 'en' ? 'Run backtest and open result' : '运行回测并打开结果页'}
+        <div className="product-action-row">
+          <Button variant="ghost" onClick={onReset}>{language === 'en' ? 'Reset' : '重置'}</Button>
+          <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
+            {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh history' : '刷新历史')}
           </Button>
-          <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
-            <Button variant="ghost" onClick={() => handleStepSelect(isProfessionalMode ? 'confirm' : 'strategy')}>
-            {language === 'en' ? 'Back' : '返回'}
-            </Button>
-            <Button variant="ghost" onClick={onReset}>{language === 'en' ? 'Reset' : '重置'}</Button>
-            <Button variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
-              {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh history' : '刷新历史')}
-            </Button>
-          </div>
         </div>
-        {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
-      </Card>
+      </div>
     </section>
   );
-
-  const professionalControlSections: Record<ProfessionalStep, React.ReactNode> = {
-    symbol: baseParamsSection,
-    setup: strategyInputSection,
-    strategy: parsedStrategySection,
-    confirm: executionSettingsSection,
-    run: runControlsSection,
-  };
-
-  const normalControlSections: Record<NormalStep, React.ReactNode> = {
-    symbol: baseParamsSection,
-    setup: strategyInputSection,
-    strategy: parsedStrategySection,
-    run: runControlsSection,
-  };
-
-  const getNormalStepSummary = (step: NormalStep) => {
-    if (step === 'symbol') {
-      return {
-        title: code || (language === 'en' ? 'Instrument not set' : '未设置标的'),
-        detail: language === 'en'
-          ? `${startDate || '--'} → ${endDate || '--'} · capital ${initialCapital || '--'}`
-          : `${startDate || '--'} → ${endDate || '--'} · 资金 ${initialCapital || '--'}`,
-        disabled: false,
-      };
-    }
-    if (step === 'setup') {
-      return {
-        title: strategyText.trim() ? strategyText.trim().slice(0, 36) : (language === 'en' ? 'Enter a strategy' : '填写策略描述'),
-        detail: strategyText.trim()
-          ? (language === 'en' ? 'You can come back and keep editing the strategy text.' : '可返回继续修改策略描述。')
-          : (language === 'en' ? 'Describe the entry, exit, and cadence in natural language.' : '请用自然语言描述买卖条件与周期。'),
-        disabled: false,
-      };
-    }
-    if (step === 'strategy') {
-      return {
-        title: parseMeta.title,
-        detail: coreIntentSummary || supportedPortionSummary || (language === 'en' ? 'A confirmation summary will appear here after parsing.' : '解析后会在这里给出确认摘要。'),
-        disabled: !parsedStrategy,
-      };
-    }
-    return {
-      title: isSubmitting ? (language === 'en' ? 'Submitting' : '提交中') : (language === 'en' ? 'Open result page' : '进入结果页'),
-      detail: language === 'en'
-        ? 'Submission redirects to the dedicated result page instead of expanding the full analysis inline.'
-        : '运行提交后会跳转到独立结果页，不再在配置页内展开完整分析。',
-      disabled: !(canProceedFromConfirm || isSubmitting),
-    };
-  };
 
 
   const isEmptyHistory = historyItems.length === 0 && !isLoadingHistory && !historyError;
@@ -1542,106 +1360,61 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     </aside>
   );
 
-  if (!isProfessionalMode) {
-    return (
-      <div className="w-full min-w-0 flex flex-col gap-10 xl:flex-row" data-testid="backtest-cockpit">
-        {renderSetupSidebar()}
-        <main className="flex-1 min-w-0 bg-white/[0.02] border border-white/5 rounded-[32px] p-8 md:p-10 shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
-          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-          <div className="flex flex-col gap-10 backtest-setup-form-stack" data-testid="backtest-normal-wizard">
-            <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-3">
-                <SectionEyebrow>{language === 'en' ? 'Launch workflow' : '发射流程'}</SectionEyebrow>
-                <h3 className="text-[1.45rem] font-semibold leading-tight text-white">{language === 'en' ? 'Deterministic setup' : '确定性回测配置'}</h3>
-                <p className="text-sm text-white/50 leading-relaxed">
-                  {language === 'en'
-                    ? 'The form becomes the only primary workspace here. Fill the core setup, parse the strategy, and launch directly into the dedicated result page.'
-                    : '表单现在是页面唯一主角：完成基础参数、解析策略，然后直接进入独立结果页查看完整结果。'}
-                </p>
-              </div>
-              <nav className="backtest-normal-stepper" aria-label={language === 'en' ? 'Deterministic backtest wizard steps' : '确定性回测向导步骤'}>
-                {NORMAL_STEP_ORDER.map((step, index) => {
-                  const stepMeta = normalStepLabels[step];
-                  const isActive = normalCurrentStep === step;
-                  const isDone = index < normalCurrentStepIndex;
-                  const summary = getNormalStepSummary(step);
-                  return (
-                    <button
-                      key={step}
-                      type="button"
-                      className={`backtest-normal-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
-                      onClick={() => !summary.disabled && handleStepSelect(step)}
-                      disabled={summary.disabled}
-                    >
-                      <span className="backtest-normal-step__index">{index + 1}</span>
-                      <span className="backtest-normal-step__copy">
-                        <strong>{stepMeta.title}</strong>
-                        <small>{stepMeta.short}</small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
-            <div data-testid="backtest-normal-active-stage">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={normalCurrentStep}
-                  initial={{ opacity: 0, x: 16 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -12 }}
-                  transition={FLOW_PANEL_TRANSITION}
-                >
-                  {normalControlSections[normalCurrentStep]}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   return (
-      <div className="w-full min-w-0 flex flex-col gap-10 xl:flex-row" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
+    <div className="w-full min-w-0 flex flex-col gap-10 xl:flex-row" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
       {renderSetupSidebar()}
-      <main className="flex-1 min-w-0 bg-white/[0.02] border border-white/5 rounded-[32px] p-8 md:p-10 shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
+      <main className="flex-1 min-w-0 bg-[#030303] border border-white/5 rounded-[32px] shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-        <div className="flex flex-col gap-10 backtest-setup-form-stack">
-          <div className="flex flex-col gap-3">
-            <SectionEyebrow>{language === 'en' ? 'Professional mode' : '专业模式'}</SectionEyebrow>
-            <h3 className="text-[1.45rem] font-semibold leading-tight text-white">{language === 'en' ? 'Expanded deterministic setup' : '展开式确定性回测配置'}</h3>
-            <p className="text-sm text-white/50 leading-relaxed">
-              {language === 'en' ? 'Professional mode keeps the full control surface, but the full analysis still opens on `/backtest/results/:runId` instead of rendering inside the setup page.' : '专业模式保留完整配置控制，但完整分析仍然统一打开 `/backtest/results/:runId`，不再在配置页内预留空结果区。'}
-            </p>
+        <div className="flex-1 overflow-y-auto no-scrollbar p-6 md:p-8 xl:p-10 pb-36" data-testid="backtest-setup-dashboard">
+          <div className="flex flex-col gap-8 backtest-setup-form-stack">
+            <div className="flex flex-col gap-3">
+              <SectionEyebrow>{panelMode === 'professional' ? (language === 'en' ? 'Professional mode' : '专业模式') : (language === 'en' ? 'Launch workflow' : '发射流程')}</SectionEyebrow>
+              <h3 className="text-[1.45rem] font-semibold leading-tight text-white">{language === 'en' ? 'Deterministic setup' : '确定性回测配置'}</h3>
+              <p className="text-sm text-white/50 leading-relaxed">
+                {language === 'en'
+                  ? 'All critical parameters stay visible in one dense board, and the sticky launch rail opens the dedicated result page once the rule is confirmed.'
+                  : '所有关键参数在同一块高密度看板里平铺展开，完成校验后直接从底部操作台发起回测。'}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2" data-testid="backtest-parameter-grid">
+              {baseParamsSection}
+              {executionSettingsSection}
+              {strategyInputSection}
+              {parsedStrategySection}
+              {runControlsSection}
+            </div>
           </div>
-
-          <nav className="backtest-control-stepper backtest-control-stepper--secondary" aria-label={language === 'en' ? 'Deterministic backtest steps' : '确定性回测步骤'}>
-            {PROFESSIONAL_STEP_ORDER.map((step, index) => {
-              const stepMeta = professionalStepLabels[step];
-              const isActive = currentStep === step;
-              const isDone = index < professionalCurrentStepIndex;
-              return (
-                <button
-                  key={step}
-                  type="button"
-                  className={`backtest-control-step${isActive ? ' is-active' : ''}${isDone ? ' is-done' : ''}`}
-                  onClick={() => handleStepSelect(step)}
+        </div>
+        <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-[#050505] via-[#050505]/92 to-transparent p-4 md:p-6 pointer-events-none" data-testid="backtest-sticky-action-bar">
+          <div className="pointer-events-auto rounded-[24px] border border-white/10 bg-white/[0.05] p-4 shadow-2xl backdrop-blur-xl">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-white">{stickyStatusTitle}</div>
+                <div className="mt-1 text-xs text-white/40">{stickyStatusNote}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={onReset}>{language === 'en' ? 'Reset' : '重置'}</Button>
+                {parseStale ? (
+                  <Button variant="secondary" onClick={() => void onParse()} disabled={isParsing || !strategyText.trim()}>
+                    {language === 'en' ? 'Parse again' : '重新解析'}
+                  </Button>
+                ) : null}
+                <Button
+                  size="xl"
+                  className="backtest-launch-button"
+                  onClick={() => {
+                    onStepChange('run');
+                    void onRun();
+                  }}
+                  isLoading={isSubmitting}
+                  loadingText={language === 'en' ? 'Opening result page…' : '正在打开结果页…'}
+                  disabled={!canProceedFromConfirm}
                 >
-                  <span className="backtest-control-step__index">{index + 1}</span>
-                  <span className="backtest-control-step__copy">
-                    <strong>{stepMeta.title}</strong>
-                    <small>{stepMeta.short}</small>
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-
-          <div className="space-y-10" data-testid="backtest-control-panel-expanded">
-            {PROFESSIONAL_STEP_ORDER.map((step) => (
-              <Fragment key={step}>{professionalControlSections[step]}</Fragment>
-            ))}
+                  {language === 'en' ? 'Run backtest' : '开始执行回测'}
+                </Button>
+              </div>
+            </div>
+            {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
           </div>
         </div>
       </main>
