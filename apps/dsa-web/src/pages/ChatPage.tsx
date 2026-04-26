@@ -73,10 +73,24 @@ type StarterPromptCard = {
   skill: string;
 };
 
+type QuickQuestion = {
+  id: string;
+  skill: string;
+};
+
 const STARTER_PROMPT_CARDS: StarterPromptCard[] = [
   { id: 'entryDecision', skill: 'bull_trend' },
   { id: 'positionReview', skill: 'bull_trend' },
   { id: 'eventFollowUp', skill: 'bull_trend' },
+];
+
+const QUICK_QUESTIONS: QuickQuestion[] = [
+  { id: 'q1', skill: 'chan_theory' },
+  { id: 'q2', skill: 'wave_theory' },
+  { id: 'q3', skill: 'bull_trend' },
+  { id: 'q4', skill: 'box_oscillation' },
+  { id: 'q5', skill: 'bull_trend' },
+  { id: 'q6', skill: 'emotion_cycle' },
 ];
 
 const CANONICAL_SKILL_IDS = [
@@ -267,6 +281,9 @@ const ChatPage: React.FC = () => {
   const starterPromptCards = STARTER_PROMPT_CARDS.filter(
     (card) => availableSkillIds.size === 0 || availableSkillIds.has(card.skill),
   );
+  const quickQuestions = QUICK_QUESTIONS.filter(
+    (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
+  );
   const engineSwitcherLabel = language === 'en' ? 'Current engine' : '当前分析引擎';
   const composerDisclaimer = language === 'en'
     ? 'AI insights are for reference only and are not investment advice. Confirm your risk tolerance before trading.'
@@ -363,6 +380,11 @@ const ChatPage: React.FC = () => {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleQuickQuestion = (q: QuickQuestion) => {
+    setSelectedSkill(q.skill);
+    handleSend(chat(`quickQuestions.${q.id}`), q.skill);
   };
 
   const toggleThinking = (msgId: string) => {
@@ -770,7 +792,7 @@ const ChatPage: React.FC = () => {
         >
           <div
             data-testid="chat-message-stream"
-            className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 pt-16 pb-64"
+            className="mx-auto flex w-full max-w-[1440px] flex-col gap-10 px-4 pt-16 pb-[15rem] md:px-6 md:pb-[14rem]"
           >
             {skillsLoadError ? (
               <ApiErrorAlert
@@ -786,8 +808,8 @@ const ChatPage: React.FC = () => {
                 data-testid="chat-empty-state"
                 className="w-full"
               >
-                <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 text-center">
-                  <div>
+                <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
+                  <div className="text-center">
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
                       <svg
                         className="h-7 w-7"
@@ -810,7 +832,7 @@ const ChatPage: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="grid gap-4 place-items-stretch sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-4 place-items-stretch lg:grid-cols-3">
                     {starterPromptCards.map((card) => (
                       <button
                         key={card.id}
@@ -825,6 +847,21 @@ const ChatPage: React.FC = () => {
                       </button>
                     ))}
                   </div>
+
+                  {quickQuestions.length > 0 ? (
+                    <div className="flex flex-wrap justify-center gap-2.5">
+                      {quickQuestions.map((q) => (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => handleQuickQuestion(q)}
+                          className="rounded-full border border-white/8 bg-white/[0.02] px-4 py-2 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.05] hover:text-foreground"
+                        >
+                          {chat(`quickQuestions.${q.id}`)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -836,7 +873,7 @@ const ChatPage: React.FC = () => {
                       data-testid={`chat-user-message-${msg.id}`}
                       className="w-full flex justify-end mb-4"
                     >
-                      <div className="max-w-[80%] bg-white/[0.08] text-white px-5 py-3 rounded-2xl rounded-tr-sm text-sm break-words">
+                      <div className="max-w-[min(88%,72rem)] bg-white/[0.08] text-white px-5 py-3 rounded-2xl rounded-tr-sm text-sm break-words">
                         {msg.content
                           .split('\n')
                           .map((line, i) => (
@@ -933,9 +970,9 @@ const ChatPage: React.FC = () => {
 
         <footer
           data-testid="chat-input-shell"
-          className="pointer-events-none absolute bottom-0 left-0 z-50 flex w-full justify-center bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent px-4 pt-24 pb-8"
+          className="pointer-events-none absolute bottom-0 left-0 z-50 flex w-full justify-center bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent px-4 pt-20 pb-8 md:px-6"
         >
-          <div className="relative flex w-full max-w-4xl flex-col gap-3 pointer-events-auto">
+          <div className="relative flex w-full max-w-[1440px] flex-col gap-3 pointer-events-auto">
             {sendToast ? (
               <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
                 {sendToast.message}
@@ -957,13 +994,13 @@ const ChatPage: React.FC = () => {
             ) : null}
             <div
               data-testid="chat-skill-toolbar"
-              className="flex items-center gap-3 overflow-x-auto no-scrollbar px-1"
+              className="flex flex-wrap items-center gap-2 overflow-visible px-1"
             >
               <span className="shrink-0 text-[10px] uppercase tracking-[0.28em] text-white/40">{engineSwitcherLabel}</span>
               <button
                 type="button"
                 onClick={() => setSelectedSkill('')}
-                className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
                   selectedSkill === ''
                     ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
                     : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'
@@ -982,7 +1019,7 @@ const ChatPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedSkill(s.id)}
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs transition-colors ${
                       selectedSkill === s.id
                         ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
                         : 'border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white/80'

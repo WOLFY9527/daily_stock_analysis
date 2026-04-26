@@ -192,9 +192,9 @@ describe('ChatPage', () => {
     const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
     expect(skillValues[0]).toHaveTextContent(canonicalBullTrendLabel('zh'));
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-4xl', 'mx-auto', 'flex-col', 'gap-8', 'px-4', 'pt-16', 'pb-64');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/95', 'to-transparent', 'pt-24', 'pb-8', 'justify-center', 'pointer-events-none');
-    expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-3', 'overflow-x-auto', 'no-scrollbar');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-[1440px]', 'mx-auto', 'flex-col', 'gap-10', 'px-4', 'pt-16');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/95', 'to-transparent', 'pt-20', 'pb-8', 'justify-center', 'pointer-events-none');
+    expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'flex-wrap', 'items-center', 'gap-2');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
       'rounded-[24px]',
@@ -238,11 +238,13 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('min-h-full', 'items-center', 'justify-center');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
     expect(entryDecisionCard).toHaveClass('rounded-[28px]', 'border-white/8', 'bg-white/[0.03]', 'hover:bg-white/[0.05]', 'backdrop-blur-2xl');
-    expect(screen.getByText(translate('zh', 'chat.starterCards.entryDecision.title'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'chat.starterCards.positionReview.title'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'chat.starterCards.eventFollowUp.title'))).toBeInTheDocument();
+    expect(screen.getAllByText(translate('zh', 'chat.starterCards.entryDecision.title')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(translate('zh', 'chat.starterCards.positionReview.title')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(translate('zh', 'chat.starterCards.eventFollowUp.title')).length).toBeGreaterThan(0);
     expect(screen.getByText(translate('zh', 'chat.emptyBody'))).toBeInTheDocument();
-    expect(screen.queryByText(translate('zh', 'chat.quickQuestions.q1'))).not.toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'chat.quickQuestions.q3'))).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-footer-starter-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chat-footer-quick-questions')).not.toBeInTheDocument();
   });
 
   it('animates only a newly appended latest assistant reply with the typewriter effect', async () => {
@@ -339,7 +341,7 @@ describe('ChatPage', () => {
 
     await screen.findByText('这是用户问题');
     const userBubble = screen.getByTestId('chat-user-message-user-1').firstElementChild;
-    expect(userBubble).toHaveClass('max-w-[80%]', 'bg-white/[0.08]', 'text-white', 'px-5', 'py-3', 'rounded-2xl', 'rounded-tr-sm', 'text-sm', 'break-words');
+    expect(userBubble).toHaveClass('max-w-[min(88%,72rem)]', 'bg-white/[0.08]', 'text-white', 'px-5', 'py-3', 'rounded-2xl', 'rounded-tr-sm', 'text-sm', 'break-words');
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.thinking.toggleLabel') }));
 
