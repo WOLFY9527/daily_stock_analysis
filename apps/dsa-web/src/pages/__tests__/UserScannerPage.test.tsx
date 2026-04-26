@@ -92,8 +92,8 @@ function makeRunDetail(): ScannerRunDetail {
     },
     shortlist: [
       {
-        symbol: '600001',
-        name: '算力龙头',
+        symbol: 'AVGO',
+        name: 'AVGO',
         rank: 1,
         score: 82.1,
         qualityHint: '高优先级',
@@ -164,8 +164,8 @@ function makeHistoryResponse(): ScannerRunHistoryResponse {
         preselectedSize: 60,
         evaluatedSize: 40,
         sourceSummary: 'test',
-        headline: '我的手动扫描：600001 算力龙头',
-        topSymbols: ['600001'],
+        headline: '我的手动扫描：AVGO / AVGO / AMD',
+        topSymbols: ['AVGO', 'AVGO', 'AMD'],
         notificationStatus: 'not_attempted',
         failureReason: null,
         changeSummary: {
@@ -253,9 +253,23 @@ describe('UserScannerPage', () => {
     fireEvent.click(screen.getByTestId('user-scanner-bento-drawer-trigger'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('user-scanner-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByText('这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。')).toBeInTheDocument();
-    expect(screen.getByText('运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。')).toBeInTheDocument();
-    expect(screen.getByText('历史记录与页面边界')).toBeInTheDocument();
+    expect(screen.queryByText('这个页面把手动运行、候选复核和后续动作都限制在当前登录用户自己的账户范围内。')).not.toBeInTheDocument();
+    expect(screen.queryByText('运行状态、系统观察名单、调度和通道配置继续保留在仅管理员可见的管理页面。')).not.toBeInTheDocument();
+    expect(screen.getAllByText('历史运行记录').length).toBeGreaterThan(0);
+  });
+
+  it('deduplicates symbol/name display and renders history symbols as wrapped tags', async () => {
+    renderUserScannerPage();
+
+    expect(await screen.findByText('AVGO')).toBeInTheDocument();
+    expect(screen.queryByText(/^AVGO AVGO$/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('user-scanner-bento-drawer-trigger'));
+
+    const avgoTags = await screen.findAllByText('AVGO');
+    expect(avgoTags.length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('AMD')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('AMZN AMZN / AMD AMD')).not.toBeInTheDocument();
   });
 
   it('reuses shared market defaults and cn option labels after switching language', async () => {
