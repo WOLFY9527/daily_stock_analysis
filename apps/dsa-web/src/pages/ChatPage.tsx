@@ -68,24 +68,10 @@ const assistantMarkdownComponents = {
   hr: () => <hr className="my-4 border-white/10" />,
 } satisfies React.ComponentProps<typeof Markdown>['components'];
 
-type QuickQuestion = {
-  id: string;
-  skill: string;
-};
-
 type StarterPromptCard = {
   id: string;
   skill: string;
 };
-
-const QUICK_QUESTIONS: QuickQuestion[] = [
-  { id: 'q1', skill: 'chan_theory' },
-  { id: 'q2', skill: 'wave_theory' },
-  { id: 'q3', skill: 'bull_trend' },
-  { id: 'q4', skill: 'box_oscillation' },
-  { id: 'q5', skill: 'bull_trend' },
-  { id: 'q6', skill: 'emotion_cycle' },
-];
 
 const STARTER_PROMPT_CARDS: StarterPromptCard[] = [
   { id: 'entryDecision', skill: 'bull_trend' },
@@ -278,9 +264,6 @@ const ChatPage: React.FC = () => {
       t,
     )
     : chat('skills.general');
-  const quickQuestions = QUICK_QUESTIONS.filter(
-    (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
-  );
   const starterPromptCards = STARTER_PROMPT_CARDS.filter(
     (card) => availableSkillIds.size === 0 || availableSkillIds.has(card.skill),
   );
@@ -380,11 +363,6 @@ const ChatPage: React.FC = () => {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const handleQuickQuestion = (q: QuickQuestion) => {
-    setSelectedSkill(q.skill);
-    handleSend(chat(`quickQuestions.${q.id}`), q.skill);
   };
 
   const toggleThinking = (msgId: string) => {
@@ -788,11 +766,11 @@ const ChatPage: React.FC = () => {
           ref={messagesViewportRef}
           data-testid="chat-main"
           onScroll={handleMessagesScroll}
-          className="flex-1 overflow-y-auto no-scrollbar w-full flex flex-col items-center"
+          className="flex-1 w-full overflow-y-auto no-scrollbar"
         >
           <div
             data-testid="chat-message-stream"
-            className="w-full max-w-4xl mx-auto flex flex-col gap-6 px-4 pt-8 pb-56"
+            className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 pt-16 pb-64"
           >
             {skillsLoadError ? (
               <ApiErrorAlert
@@ -806,10 +784,10 @@ const ChatPage: React.FC = () => {
             {messages.length === 0 && !loading ? (
               <div
                 data-testid="chat-empty-state"
-                className="flex min-h-full w-full flex-1 flex-col items-center justify-center pb-12"
+                className="w-full"
               >
-                <div className="w-full">
-                  <div className="mx-auto max-w-3xl text-center">
+                <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 text-center">
+                  <div>
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
                       <svg
                         className="h-7 w-7"
@@ -832,7 +810,7 @@ const ChatPage: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="mt-10 grid gap-4 place-items-stretch sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-4 place-items-stretch sm:grid-cols-2 xl:grid-cols-3">
                     {starterPromptCards.map((card) => (
                       <button
                         key={card.id}
@@ -847,21 +825,6 @@ const ChatPage: React.FC = () => {
                       </button>
                     ))}
                   </div>
-
-                  {quickQuestions.length > 0 ? (
-                    <div className="mt-6 flex flex-wrap justify-center gap-2">
-                      {quickQuestions.slice(0, 4).map((q, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => handleQuickQuestion(q)}
-                          className="rounded-full border border-white/8 bg-white/[0.02] px-3 py-1.5 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.05] hover:text-foreground"
-                        >
-                          {chat(`quickQuestions.${q.id}`)}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               </div>
             ) : (
@@ -968,11 +931,11 @@ const ChatPage: React.FC = () => {
           </div>
         </main>
 
-        <div
+        <footer
           data-testid="chat-input-shell"
-          className="absolute bottom-0 left-0 w-full z-50 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent pt-32 pb-8 px-4 flex flex-col items-center pointer-events-none"
+          className="pointer-events-none absolute bottom-0 left-0 z-50 flex w-full justify-center bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent px-4 pt-24 pb-8"
         >
-          <div className="w-full max-w-4xl flex flex-col gap-3 pointer-events-auto relative">
+          <div className="relative flex w-full max-w-4xl flex-col gap-3 pointer-events-auto">
             {sendToast ? (
               <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
                 {sendToast.message}
@@ -1081,7 +1044,7 @@ const ChatPage: React.FC = () => {
               {composerDisclaimer}
             </div>
           </div>
-        </div>
+        </footer>
       </div>
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}
