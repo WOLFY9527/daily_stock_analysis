@@ -3,7 +3,7 @@ import { Button } from '../common';
 import { ApiSourceCard } from './ApiSourceCard';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
-const GLASS_SUBCARD_CLASS = 'rounded-2xl bg-white/[0.015] px-4 py-4';
+const GLASS_SUBCARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';

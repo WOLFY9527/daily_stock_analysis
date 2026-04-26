@@ -239,14 +239,17 @@ const AdminLogsPage: React.FC = () => {
   }, [selectedSessionId]);
 
   return (
-    <section className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-6 overflow-y-auto px-4 py-8 md:px-8">
-      <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
+    <section
+      data-testid="admin-logs-workspace"
+      className="flex h-full min-h-0 w-full flex-1 min-w-0 flex-col gap-6 overflow-y-auto px-6 py-8 md:px-8 xl:px-12"
+    >
+      <section className="rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,64rem)] xl:items-end">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">{t('adminLogs.pageTitle')}</h1>
-            <p className="mt-1 text-sm text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
-            <p className="mt-3 text-xs uppercase tracking-[0.18em] text-white/36">{t('adminLogs.scopeTitle')}</p>
-            <p className="mt-2 text-sm text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
+            <h1 className="text-[1.65rem] font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
+            <p className="mt-2 text-[14px] leading-relaxed text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
+            <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-white/36">{t('adminLogs.scopeTitle')}</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[10rem_9rem_11rem_minmax(0,1fr)_9rem_auto]">
             <label className="sr-only" htmlFor="admin-logs-activity-type">{t('adminLogs.activityTypeLabel')}</label>
@@ -325,7 +328,7 @@ const AdminLogsPage: React.FC = () => {
 
       {error ? <ApiErrorAlert error={error} /> : null}
 
-      <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
+      <section className="rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm">
         <div className="mb-4">
           <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
           <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionListHint')}</p>
@@ -411,7 +414,7 @@ const AdminLogsPage: React.FC = () => {
         )}
       </section>
 
-      <section className="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
+      <section className="rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm">
         <div className="mb-4 border-b border-white/5 pb-4">
           <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionDetailTitle')}</h2>
           <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionDetailHint')}</p>

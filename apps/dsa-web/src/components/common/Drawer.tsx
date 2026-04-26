@@ -148,9 +148,9 @@ export const Drawer: React.FC<DrawerProps> = ({
           aria-modal="true"
           aria-labelledby={titleId}
           className={cn(
-            'drawer__panel relative flex h-full w-full flex-col bg-[#0a0a0a] transition-all duration-200 ease-out',
+            'drawer__panel relative flex h-full w-full flex-col bg-white/[0.02] backdrop-blur-sm transition-all duration-200 ease-out',
             borderClass,
-            'border-white/10',
+            'border-white/5',
             panelStateClass,
           )}
           data-state={uiState}

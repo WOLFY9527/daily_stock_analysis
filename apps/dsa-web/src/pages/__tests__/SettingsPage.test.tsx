@@ -478,6 +478,8 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('settings-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(screen.getByTestId('settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('settings-workspace')).not.toHaveClass('max-w-[1600px]', 'mx-auto', 'px-4');
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();
     expect(await screen.findByText('认证与登录保护')).toBeInTheDocument();
@@ -487,6 +489,17 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByTestId('settings-bento-drawer-trigger'));
     expect(await screen.findByTestId('settings-bento-drawer')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '系统控制面' })).toBeInTheDocument();
+  });
+
+  it('uses non-green semantic toggles for runtime visibility controls', async () => {
+    render(<SettingsPage />);
+
+    const runtimeSection = await screen.findByRole('heading', { name: zh('settings.runtimeSummaryVisibilityTitle') });
+    fireEvent.click(within(runtimeSection.closest('section') as HTMLElement).getByRole('button', { name: zh('settings.dataSourceManageAction') }));
+
+    const offButton = await screen.findByRole('button', { name: zh('settings.runtimeSummaryVisibleOff') });
+    expect(offButton).toHaveClass('bg-white', 'text-black');
+    expect(offButton).not.toHaveClass('bg-emerald-500');
   });
 
   it('renders the admin control plane directly without a second unlock wall', async () => {

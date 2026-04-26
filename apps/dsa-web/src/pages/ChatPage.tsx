@@ -481,11 +481,11 @@ const ChatPage: React.FC = () => {
     <div
       data-testid="chat-bento-page"
       data-bento-surface="true"
-      className="gemini-bento-page bento-surface-root workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat flex w-full flex-col bg-black"
+      className="gemini-bento-page bento-surface-root workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat flex w-full flex-1 min-w-0 flex-col bg-[#030303]"
     >
       <div
         data-testid="chat-workspace"
-        className="w-full h-[calc(100vh-80px)] flex overflow-hidden bg-transparent"
+        className="flex h-[calc(100vh-80px)] w-full min-w-0 overflow-hidden bg-transparent"
       >
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
@@ -639,7 +639,7 @@ const ChatPage: React.FC = () => {
             >
               <div
                 data-testid="chat-message-stream"
-                className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 pb-48 pt-8"
+                className="flex w-full min-w-0 flex-col gap-6 px-6 pb-48 pt-8 md:px-8 xl:px-12"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -723,7 +723,7 @@ const ChatPage: React.FC = () => {
 
                 {messages.length === 0 && !loading ? (
                   <div data-testid="chat-empty-state" className="w-full">
-                    <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
+                    <div className="flex w-full flex-col gap-10">
                       <div className="text-center">
                         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
                           <svg
@@ -741,8 +741,8 @@ const ChatPage: React.FC = () => {
                             />
                           </svg>
                         </div>
-                        <h3 className="mt-5 text-3xl font-medium tracking-tight text-foreground">{chat('emptyTitle')}</h3>
-                        <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-secondary-text md:text-base">
+                        <h3 className="mt-5 text-2xl font-medium tracking-tight text-foreground md:text-[2rem]">{chat('emptyTitle')}</h3>
+                        <p className="mx-auto mt-3 max-w-3xl text-[14px] leading-relaxed text-secondary-text">
                           {chat('emptyBody')}
                         </p>
                       </div>
@@ -756,11 +756,11 @@ const ChatPage: React.FC = () => {
                             onClick={() => {
                               void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
                             }}
-                            className="rounded-[28px] border border-white/8 bg-white/[0.03] px-5 py-5 text-left backdrop-blur-2xl transition-colors duration-150 hover:bg-white/[0.05]"
+                            className="rounded-[28px] border border-white/8 bg-white/[0.03] px-5 py-5 text-left backdrop-blur-2xl transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.04]"
                           >
                             <p className="text-sm font-medium tracking-tight text-foreground">{chat(`starterCards.${card.id}.title`)}</p>
-                            <p className="mt-3 text-sm leading-relaxed text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
-                            <p className="mt-4 text-xs leading-relaxed text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
+                            <p className="mt-3 text-[14px] leading-relaxed text-secondary-text">{chat(`starterCards.${card.id}.description`)}</p>
+                            <p className="mt-4 text-[13px] leading-relaxed text-muted-text">{chat(`starterCards.${card.id}.prompt`)}</p>
                           </button>
                         ))}
                       </div>
@@ -890,11 +890,11 @@ const ChatPage: React.FC = () => {
             >
               <div
                 data-testid="chat-input-gradient"
-                className="w-full bg-gradient-to-t from-[#030303] via-[#030303]/95 to-transparent px-6 pt-20 pb-8"
+                className="w-full bg-gradient-to-t from-[#030303] via-[#030303]/95 to-transparent pt-20 pb-8"
               >
                 <div
                   data-testid="chat-console-inner"
-                  className="mx-auto w-full max-w-4xl pointer-events-auto"
+                  className="w-full pointer-events-auto px-6 md:px-8 xl:px-12"
                 >
                   {sendToast ? (
                     <p className={`mb-3 text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>

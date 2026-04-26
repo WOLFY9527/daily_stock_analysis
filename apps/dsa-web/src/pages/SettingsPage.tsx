@@ -102,10 +102,10 @@ type CustomDataSourceRecord = {
   validation?: CustomDataSourceValidation;
 };
 
-const GLASS_SUBCARD_CLASS = 'rounded-2xl bg-white/[0.015] px-4 py-4';
-const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.03] p-1';
+const GLASS_SUBCARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm';
+const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
-const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-lg px-3 py-2 text-left text-sm transition-colors';
+const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-xl px-3 py-2 text-left text-sm transition-colors';
 type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
 type DataSourceLibraryEntry = {
   key: string;
@@ -3011,7 +3011,10 @@ const SettingsPage: React.FC = () => {
       heroItems={heroItems}
       heroTestId="settings-bento-hero"
     >
-      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-10 px-4 py-8 md:flex-row md:px-8">
+      <div
+        data-testid="settings-workspace"
+        className="flex w-full flex-1 min-w-0 flex-col gap-8 px-6 py-8 md:flex-row md:px-8 xl:px-12"
+      >
         <aside className="w-full shrink-0 self-start md:sticky md:top-8 md:w-64">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-1">
@@ -3027,8 +3030,8 @@ const SettingsPage: React.FC = () => {
                     key={domain}
                     type="button"
                     className={isActive
-                      ? `${CONSOLE_NAV_BUTTON_CLASS} bg-white/[0.05] font-medium text-white`
-                      : `${CONSOLE_NAV_BUTTON_CLASS} text-white/60 hover:bg-white/[0.02] hover:text-white`}
+                      ? `${CONSOLE_NAV_BUTTON_CLASS} border border-white/10 bg-white/[0.08] font-medium text-white`
+                      : `${CONSOLE_NAV_BUTTON_CLASS} border border-transparent text-white/60 hover:border-white/8 hover:bg-white/[0.02] hover:text-white`}
                     onClick={() => {
                       setActiveDomain(domain);
                       const firstCategory = categories.find(
@@ -3311,7 +3314,7 @@ const SettingsPage: React.FC = () => {
               type="button"
               onClick={() => setShowRuntimeExecutionSummary(true)}
               className={showRuntimeExecutionSummary
-                ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
                 : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
               disabled={adminLocked || isSaving}
             >
@@ -3321,7 +3324,7 @@ const SettingsPage: React.FC = () => {
               type="button"
               onClick={() => setShowRuntimeExecutionSummary(false)}
               className={!showRuntimeExecutionSummary
-                ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
                 : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
               disabled={adminLocked || isSaving}
             >

@@ -110,8 +110,12 @@ describe('PersonalSettingsPage', () => {
     );
 
     expect(container.querySelectorAll('main')).toHaveLength(0);
+    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('max-w-4xl', 'mx-auto');
     expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
     expect(screen.getByText(zh('settings.personalGuestPreferencesBody'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: zh('language.zh') })).toHaveClass('bg-white', 'text-black');
+    expect(screen.getByRole('button', { name: zh('language.zh') })).not.toHaveClass('bg-emerald-500');
     expect(screen.getByRole('link', { name: zh('settings.personalGuestSignInAction') })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
     expect(screen.getByRole('link', { name: zh('settings.personalGuestCreateAccountAction') })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
     expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
@@ -152,6 +156,7 @@ describe('PersonalSettingsPage', () => {
     );
 
     expect(container.querySelectorAll('main')).toHaveLength(0);
+    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('link', { name: zh('nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
     expect(screen.getByRole('link', { name: zh('adminNav.logs') })).toHaveAttribute('href', '/admin/logs');
@@ -159,6 +164,7 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument();
     expect(screen.getByDisplayValue('https://discord.com/api/webhooks/123/token')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toHaveClass('bg-white', 'text-black');
     expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
     expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
   });

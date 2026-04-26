@@ -28,6 +28,7 @@ const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
 const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl';
 const PORTFOLIO_SELECT_CLASS = 'w-full';
 const PORTFOLIO_BUTTON_CLASS = 'theme-panel-subtle border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/72 px-3 py-1.5 text-sm text-foreground hover:bg-[var(--overlay-hover)]';
+const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'border-white/12 bg-white text-black hover:border-white/30 hover:bg-white/92';
 const PORTFOLIO_GHOST_BUTTON_CLASS = 'border-transparent bg-transparent px-0 py-0 text-xs text-secondary-text hover:text-foreground';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 
@@ -1137,7 +1138,7 @@ const PortfolioPage: React.FC = () => {
       <div
         data-testid="portfolio-bento-page"
         data-bento-surface="true"
-        className="workspace-width-wide mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-col overflow-hidden bg-transparent px-4 py-2 text-gray-300 md:px-8 xl:px-12 2xl:max-w-full"
+        className="flex h-full min-h-0 w-full flex-1 min-w-0 flex-col overflow-hidden bg-transparent px-6 py-8 text-white/72 md:px-8 xl:px-12"
       >
         <section className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-12 xl:grid-cols-10">
           <section className="theme-panel-glass lg:col-span-4 xl:col-span-2 h-full flex flex-col rounded-[18px] overflow-hidden">
@@ -1253,7 +1254,7 @@ const PortfolioPage: React.FC = () => {
                           <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                         </div>
                         <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitTrade}</Button>
+                        <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitTrade}</Button>
                       </form>
                     </div>
                   ) : null}
@@ -1278,7 +1279,7 @@ const PortfolioPage: React.FC = () => {
                           />
                         </div>
                         <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCash}</Button>
+                        <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCash}</Button>
                       </form>
                     </SectionShell>
                   ) : null}
@@ -1297,7 +1298,7 @@ const PortfolioPage: React.FC = () => {
                           <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.splitRatio} value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
                         </div>
                         <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
+                        <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
                       </form>
                     </SectionShell>
                   ) : null}
@@ -1347,7 +1348,7 @@ const PortfolioPage: React.FC = () => {
                         <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
                       </div>
                       <Select className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(value) => setAccountForm((prev) => ({ ...prev, market: value as 'cn' | 'hk' | 'us' | 'global' }))} options={[{ value: 'cn', label: copy.marketCn }, { value: 'hk', label: copy.marketHk }, { value: 'us', label: copy.marketUs }, { value: 'global', label: copy.marketGlobal }]} />
-                      <Button type="submit" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</Button>
+                      <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</Button>
                     </form>
                   ) : null}
                 </div>
@@ -1381,7 +1382,7 @@ const PortfolioPage: React.FC = () => {
                       <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
                       <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
                       <Checkbox checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySsl(e.target.checked)} label={copy.verifyIbkrSsl} containerClassName="text-xs text-secondary-text" />
-                      <Button type="button" variant="secondary" className={`${PORTFOLIO_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
+                      <Button type="button" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
                         {ibkrSyncing ? copy.syncing : copy.syncIbkr}
                       </Button>
                       {ibkrSyncResult ? (

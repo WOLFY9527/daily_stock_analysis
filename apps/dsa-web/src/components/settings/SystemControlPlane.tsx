@@ -3,7 +3,7 @@ import { Button, Disclosure } from '../common';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
-const GLASS_SUBCARD_CLASS = 'rounded-2xl bg-white/[0.015] px-4 py-4';
+const GLASS_SUBCARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm';
 
 type AdminStat = {
   key: string;

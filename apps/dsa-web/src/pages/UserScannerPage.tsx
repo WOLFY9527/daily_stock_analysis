@@ -16,7 +16,7 @@ import {
 const HISTORY_PAGE_SIZE = 8;
 
 type PillOption = { value: string; label: string };
-type TacticalTagTone = 'indigo' | 'emerald';
+type TacticalTagTone = 'indigo' | 'neutral';
 type TacticalTag = { name: string; description: string; tone: TacticalTagTone };
 type ScannerResultContext = {
   companyName: string;
@@ -29,7 +29,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     companyName: 'Broadcom Inc.',
     aiScore: 94,
     tags: [
-      { name: '半导体设备', description: '全球领先的有线和无线通信半导体公司。', tone: 'emerald' },
+      { name: '半导体设备', description: '全球领先的有线和无线通信半导体公司。', tone: 'neutral' },
       { name: 'AI 算力基建', description: '定制化 AI 芯片与网络交换芯片的核心供应商。', tone: 'indigo' },
     ],
   },
@@ -37,7 +37,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     companyName: 'NVIDIA Corp.',
     aiScore: 97,
     tags: [
-      { name: 'GPU 核心', description: '垄断全球 AI 训练端算力芯片市场。', tone: 'emerald' },
+      { name: 'GPU 核心', description: '垄断全球 AI 训练端算力芯片市场。', tone: 'neutral' },
       { name: '算力霸主', description: '数据中心业务维持三位数增长，是行业绝对龙头。', tone: 'indigo' },
     ],
   },
@@ -46,7 +46,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     aiScore: 88,
     tags: [
       { name: '边缘推理', description: '终端侧 AI 推理正在扩散，部署速度与性价比优势明显。', tone: 'indigo' },
-      { name: 'GPU 替代链', description: '在训练与推理两端持续争夺高性能算力份额。', tone: 'emerald' },
+      { name: 'GPU 替代链', description: '在训练与推理两端持续争夺高性能算力份额。', tone: 'neutral' },
     ],
   },
   AMZN: {
@@ -54,7 +54,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     aiScore: 84,
     tags: [
       { name: '云算力租赁', description: 'AWS 持续受益于企业级 AI 基础设施需求外溢。', tone: 'indigo' },
-      { name: '资本开支扩张', description: '云与物流双轮驱动，支撑中长期自由现金流修复。', tone: 'emerald' },
+      { name: '资本开支扩张', description: '云与物流双轮驱动，支撑中长期自由现金流修复。', tone: 'neutral' },
     ],
   },
   SMH: {
@@ -62,7 +62,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     aiScore: 79,
     tags: [
       { name: '板块贝塔', description: '覆盖半导体核心权重股，可快速观察板块风险偏好。', tone: 'indigo' },
-      { name: '景气温度计', description: '适合跟踪芯片产业链整体强弱与资金轮动节奏。', tone: 'emerald' },
+      { name: '景气温度计', description: '适合跟踪芯片产业链整体强弱与资金轮动节奏。', tone: 'neutral' },
     ],
   },
   NFLX: {
@@ -70,7 +70,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     aiScore: 83,
     tags: [
       { name: '流媒体龙头', description: '订阅用户与内容投入形成双重护城河，现金流改善明显。', tone: 'indigo' },
-      { name: '广告变现', description: '广告版订阅持续扩容，提升单用户收入的弹性。', tone: 'emerald' },
+      { name: '广告变现', description: '广告版订阅持续扩容，提升单用户收入的弹性。', tone: 'neutral' },
     ],
   },
   C: {
@@ -78,7 +78,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     aiScore: 82,
     tags: [
       { name: '全球银行', description: '跨境结算与投行业务覆盖全球，是美元流动性的重要受益者。', tone: 'indigo' },
-      { name: '利率敏感', description: '收益率曲线变化会直接影响净息差与估值修复节奏。', tone: 'emerald' },
+      { name: '利率敏感', description: '收益率曲线变化会直接影响净息差与估值修复节奏。', tone: 'neutral' },
     ],
   },
   INTC: {
@@ -86,7 +86,7 @@ const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
     aiScore: 82,
     tags: [
       { name: '晶圆代工转型', description: '正通过先进制程与代工战略争取产业链重新定价。', tone: 'indigo' },
-      { name: 'CPU 基座', description: 'PC 与服务器 CPU 仍是其核心现金流来源。', tone: 'emerald' },
+      { name: 'CPU 基座', description: 'PC 与服务器 CPU 仍是其核心现金流来源。', tone: 'neutral' },
     ],
   },
 };
@@ -135,9 +135,9 @@ function parseFirstNumericValue(value?: string | null): number | null {
 }
 
 function tooltipToneClass(tone: TacticalTagTone): string {
-  return tone === 'emerald'
-    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500/20'
-    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-500/20';
+  return tone === 'neutral'
+    ? 'bg-white/[0.04] border-white/10 text-white/72 group-hover:border-white/20 group-hover:bg-white/[0.07]'
+    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300 group-hover:border-indigo-400/35 group-hover:bg-indigo-500/14';
 }
 
 function tagDescriptionFor(name: string, language: 'zh' | 'en'): string {
@@ -165,11 +165,14 @@ function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number], l
   const context = SCANNER_RESULT_CONTEXT[candidate.symbol.toUpperCase()];
   if (candidate.tags?.length) {
     return candidate.tags
-      .map((tag, index) => ({
-        name: tag.name.trim(),
-        description: tag.description.trim(),
-        tone: tag.tone || (index === 0 ? 'indigo' : 'emerald'),
-      }))
+      .map((tag, index) => {
+        const tone: TacticalTagTone = tag.tone === 'indigo' ? 'indigo' : index === 0 ? 'indigo' : 'neutral';
+        return {
+          name: tag.name.trim(),
+          description: tag.description.trim(),
+          tone,
+        };
+      })
       .filter((tag) => tag.name && tag.description)
       .slice(0, 2);
   }
@@ -194,7 +197,7 @@ function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number], l
     .map((tag, index) => ({
       name: tag,
       description: tagDescriptionFor(tag, language),
-      tone: index === 0 ? 'indigo' : 'emerald',
+      tone: index === 0 ? 'indigo' : 'neutral',
     }));
 }
 
@@ -304,9 +307,9 @@ function formatAiScore(score: number): number {
 }
 
 function scoreBadgeClass(score: number): string {
-  if (score >= 90) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20';
-  if (score >= 80) return 'bg-amber-500/18 text-amber-300 border-amber-500/20';
-  return 'bg-sky-500/18 text-sky-300 border-sky-500/20';
+  if (score >= 90) return 'bg-white/[0.08] text-white border-white/12';
+  if (score >= 80) return 'bg-indigo-500/12 text-indigo-200 border-indigo-500/20';
+  return 'bg-white/[0.04] text-white/72 border-white/10';
 }
 
 function formatForecastValue(candidate: ScannerRunDetail['shortlist'][number]): string {
@@ -545,12 +548,16 @@ const UserScannerPage: React.FC = () => {
       <div
         data-testid="user-scanner-bento-page"
         data-bento-surface="true"
-        className="bento-surface-root h-[calc(100vh-80px)] overflow-hidden bg-transparent text-foreground"
+        className="bento-surface-root flex min-h-[calc(100vh-80px)] w-full flex-1 min-w-0 overflow-hidden bg-transparent text-foreground"
       >
-        <div className="workspace-width-wide w-full max-w-[1920px] 2xl:max-w-full mx-auto px-4 md:px-8 xl:px-12 pt-0 pb-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-transparent">
+        <div
+          data-testid="user-scanner-workspace"
+          className="flex h-[calc(100vh-80px)] w-full flex-1 min-w-0 flex-col overflow-hidden bg-transparent px-6 py-8 md:px-8 xl:px-12"
+        >
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
-              <h1 className="text-[2rem] tracking-[-0.04em] text-foreground">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
+              <p className="text-[10px] uppercase tracking-[0.28em] text-white/36">{language === 'en' ? 'TACTICAL ROUTER' : 'TACTICAL ROUTER'}</p>
+              <h1 className="mt-3 text-[1.7rem] tracking-[-0.03em] text-foreground md:text-[1.9rem]">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
             </div>
           </header>
 
@@ -571,7 +578,7 @@ const UserScannerPage: React.FC = () => {
                       onClick={() => void handleRun()}
                       disabled={isRunning}
                       aria-busy={isRunning}
-                      className="w-full mt-6 px-8 py-3.5 bg-emerald-500/10 text-emerald-400 font-bold text-sm rounded-xl border border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] active:scale-95 transition-all shrink-0 flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60 disabled:transform-none"
+                      className="mt-6 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-white/12 bg-white px-8 py-3.5 text-sm font-bold text-black transition-all hover:border-white/35 hover:bg-white/92 hover:shadow-[0_0_20px_rgba(255,255,255,0.12)] active:scale-95 disabled:pointer-events-none disabled:opacity-60 disabled:transform-none"
                     >
                       <Play className="h-4 w-4" />
                       <span>{isRunning ? t('scanner.running') : t('scanner.run')}</span>
@@ -600,8 +607,7 @@ const UserScannerPage: React.FC = () => {
                 <div className="flex items-center gap-4">
                   <span
                     data-testid="user-scanner-bento-hero-shortlist-value"
-                    className="shrink-0 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full"
-                    style={{ textShadow: '0 0 30px rgba(52, 211, 153, 0.45)' }}
+                    className="shrink-0 rounded-full border border-white/12 bg-white/[0.08] px-3 py-1 text-xs font-bold text-white"
                   >
                     {language === 'en' ? `${shortlistCount} symbols hit` : `命中 ${shortlistCount} 只标的`}
                   </span>
@@ -622,7 +628,7 @@ const UserScannerPage: React.FC = () => {
                   {tacticalCards.map((candidate) => (
                     <article
                       key={`watchlist-${candidate.symbol}`}
-                      className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors"
+                      className="rounded-[24px] border border-white/5 bg-white/[0.02] p-5 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
                     >
                       <div className="flex justify-between items-start gap-4 mb-4">
                         <div className="min-w-0 flex flex-col gap-1.5">
@@ -659,7 +665,7 @@ const UserScannerPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <div className="text-emerald-400 font-bold">{candidate.forecastValue}</div>
+                          <div className="font-bold text-white">{candidate.forecastValue}</div>
                           <div className="text-xs text-white/30 mt-1">{language === 'en' ? 'Annualized return forecast' : '年化收益预测'}</div>
                         </div>
                       </div>
@@ -669,14 +675,14 @@ const UserScannerPage: React.FC = () => {
                         {candidate.insight}
                       </p>
 
-                      <div className="grid grid-cols-1 gap-2 p-3 bg-[#050505] rounded-xl border border-white/5 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 rounded-[20px] border border-white/5 bg-white/[0.02] p-3 sm:grid-cols-3">
                         <div>
                           <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Entry zone' : '建仓区间'}</div>
                           <div className="text-sm text-white font-medium">{candidate.entryZone}</div>
                         </div>
                         <div>
                           <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Target' : '目标位'}</div>
-                          <div className="text-sm text-emerald-400 font-medium">{candidate.targetLevel}</div>
+                          <div className="text-sm font-medium text-white">{candidate.targetLevel}</div>
                         </div>
                         <div>
                           <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Hard stop' : '严格止损'}</div>

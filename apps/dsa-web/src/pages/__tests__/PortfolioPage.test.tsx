@@ -328,7 +328,8 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('max-w-[1920px]');
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-card')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
@@ -338,6 +339,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(refreshFxButton).toBeInTheDocument();
     expect(refreshFxButton).toHaveAttribute('data-variant', 'secondary');
     expect(refreshFxButton.className).toContain('shrink-0');
+    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).toHaveAttribute('data-variant', 'primary');
     expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '交易' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '账户' })).toBeInTheDocument();
@@ -1072,7 +1074,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(pageShell.className).toContain('flex-col');
     expect(pageShell.className).toContain('overflow-hidden');
     expect(pageShell.className).toContain('bg-transparent');
-    expect(pageShell.className).toContain('py-2');
+    expect(pageShell.className).toContain('py-8');
 
     const scrollContainer = screen.getByTestId('portfolio-trade-station-scroll');
     expect(scrollContainer.className).toContain('min-h-0');

@@ -373,15 +373,20 @@ describe('UserScannerPage', () => {
   it('shows user-facing copy without admin jargon in zh', async () => {
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('user-scanner-bento-page')).not.toHaveClass('bg-[#030303]');
+    expect(await screen.findByTestId('user-scanner-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4');
     expect(screen.getByTestId('user-scanner-bento-drawer-trigger')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /运行扫描|Run scanner/i })).toBeInTheDocument();
+    const runButton = screen.getByRole('button', { name: /运行扫描|Run scanner/i });
+    expect(runButton).toBeInTheDocument();
+    expect(runButton).toHaveClass('bg-white', 'text-black');
+    expect(runButton).not.toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/30');
     expect(screen.getByRole('heading', { name: '扫描结果与战术计划' })).toBeInTheDocument();
     expect(screen.getByText('生成时间： 04/22 08:31')).toBeInTheDocument();
     expect(screen.getByText('耗时： 1分钟')).toBeInTheDocument();
     expect(screen.queryByText('我的手动扫描：NVDA / AVGO / AMD')).not.toBeInTheDocument();
     expect(screen.queryByText('美股盘前运行，结合 Live Quote 与开盘确认执行判断。')).not.toBeInTheDocument();
     expect(screen.queryByText(/运营空间|产品面|运营界面/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('user-scanner-bento-hero-shortlist-value')).not.toHaveClass('text-emerald-400', 'bg-emerald-500/10');
 
     fireEvent.click(screen.getByTestId('user-scanner-bento-drawer-trigger'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
@@ -420,8 +425,8 @@ describe('UserScannerPage', () => {
     const avgoTags = await screen.findAllByText('AVGO');
     expect(avgoTags.length).toBeGreaterThan(0);
     expect((await screen.findAllByText('AMD')).length).toBeGreaterThan(0);
-    expect(screen.getByText('AMZN')).toBeInTheDocument();
-    expect(screen.getByText('SMH')).toBeInTheDocument();
+    expect(await screen.findByText('AMZN')).toBeInTheDocument();
+    expect(await screen.findByText('SMH')).toBeInTheDocument();
     expect(screen.queryByText('AMZN AMZN / AMD AMD')).not.toBeInTheDocument();
     const historyTitle = screen.getByRole('heading', { name: '我的手动扫描' });
     expect(historyTitle).toHaveClass('truncate');

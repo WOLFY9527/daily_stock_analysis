@@ -14,9 +14,9 @@ import { buildLoginPath, buildRegistrationPath, useProductSurface } from '../hoo
 import type { MarketColorConvention } from '../utils/marketColors';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
-const GLASS_CARD_CLASS = 'bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-2xl p-5 md:p-6';
-const GLASS_INPUT_CLASS = 'w-full bg-white/[0.03] border border-white/10 focus:border-emerald-500/50 rounded-xl px-4 py-2 text-sm text-white transition-colors outline-none';
-const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.03] p-1';
+const GLASS_CARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm md:p-7';
+const GLASS_INPUT_CLASS = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white outline-none transition-[border-color,box-shadow] focus:border-white/24 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]';
+const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'min-w-[4.5rem] rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
 
 const MARKET_COLOR_OPTIONS: Array<{
@@ -137,7 +137,10 @@ const PersonalSettingsPage: React.FC = () => {
   };
 
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-1 min-h-0 flex-col gap-6">
+    <section
+      data-testid="personal-settings-workspace"
+      className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-8 px-6 py-8 md:px-8 xl:px-12"
+    >
       <WorkspacePageHeader
         eyebrow={t('settings.personalEyebrow')}
         title={t('settings.personalTitle')}
@@ -160,7 +163,7 @@ const PersonalSettingsPage: React.FC = () => {
                   type="button"
                   onClick={() => setLanguage('zh')}
                   className={language === 'zh'
-                    ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                    ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
                     : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
                   aria-pressed={language === 'zh'}
                 >
@@ -170,7 +173,7 @@ const PersonalSettingsPage: React.FC = () => {
                   type="button"
                   onClick={() => setLanguage('en')}
                   className={language === 'en'
-                    ? `${SEGMENT_BUTTON_CLASS} bg-emerald-500 text-black`
+                    ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
                     : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
                   aria-pressed={language === 'en'}
                 >
@@ -192,7 +195,7 @@ const PersonalSettingsPage: React.FC = () => {
                       type="button"
                       onClick={() => setMarketColorConvention(option.value)}
                       className={active
-                        ? 'w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-left'
+                        ? 'w-full rounded-xl border border-white/14 bg-white/[0.08] px-3 py-3 text-left'
                         : 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left hover:border-white/20 hover:bg-white/[0.05]'}
                       aria-pressed={active}
                     >
@@ -234,7 +237,7 @@ const PersonalSettingsPage: React.FC = () => {
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link
                     to={loginPath}
-                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
+                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-white/12 bg-white px-4 text-[0.75rem] text-black transition-colors hover:border-white/30 hover:bg-white/92"
                   >
                     {t('settings.personalGuestSignInAction')}
                   </Link>
@@ -286,7 +289,7 @@ const PersonalSettingsPage: React.FC = () => {
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link
                     to={adminConsolePath}
-                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
+                    className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-white/12 bg-white px-4 text-[0.75rem] text-black transition-colors hover:border-white/30 hover:bg-white/92"
                   >
                     {t('nav.independentConsole')}
                   </Link>
@@ -371,7 +374,7 @@ const PersonalSettingsPage: React.FC = () => {
                       type="button"
                       onClick={() => void handleSaveNotificationPreferences()}
                       disabled={notificationLoading || notificationSaving}
-                      className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)] disabled:pointer-events-none disabled:opacity-50"
+                      className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-white/12 bg-white px-4 text-[0.75rem] text-black transition-colors hover:border-white/30 hover:bg-white/92 disabled:pointer-events-none disabled:opacity-50"
                     >
                       {notificationSaving ? t('settings.personalNotificationSaving') : t('settings.personalNotificationSaveAction')}
                     </button>
