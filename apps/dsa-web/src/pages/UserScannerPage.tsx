@@ -164,6 +164,60 @@ function marketVariant(market?: string | null): 'success' | 'info' | 'warning' |
   return 'history';
 }
 
+function dedupeTickerSymbols(symbols: string[]): string[] {
+  return Array.from(
+    new Set(
+      symbols
+        .map((symbol) => symbol.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function formatHistoryHeadline(
+  headline: string | null | undefined,
+  topSymbols: string[],
+  fallbackTitle: string,
+): { title: string; detail: string | null; symbols: string[] } {
+  const symbols = dedupeTickerSymbols(topSymbols);
+  const trimmedHeadline = headline?.trim() || '';
+  if (!trimmedHeadline) {
+    return { title: fallbackTitle, detail: null, symbols };
+  }
+
+  if (!symbols.length) {
+    return { title: trimmedHeadline, detail: null, symbols };
+  }
+
+  const symbolPattern = new RegExp(`\\b(?:${symbols.map(escapeRegExp).join('|')})\\b`, 'i');
+  const explicitSplit = trimmedHeadline.match(/^(.*?)[：:]\s*(.+)$/);
+  if (explicitSplit && symbolPattern.test(explicitSplit[2] || '')) {
+    return {
+      title: explicitSplit[1]?.trim() || fallbackTitle,
+      detail: null,
+      symbols,
+    };
+  }
+
+  const firstSymbolIndex = trimmedHeadline.search(symbolPattern);
+  if (firstSymbolIndex > 0) {
+    const titleCandidate = trimmedHeadline.slice(0, firstSymbolIndex).replace(/[/,，:：\-\s]+$/, '').trim();
+    if (titleCandidate) {
+      return {
+        title: titleCandidate,
+        detail: null,
+        symbols,
+      };
+    }
+  }
+
+  return { title: trimmedHeadline, detail: null, symbols };
+}
+
 const UserScannerPage: React.FC = () => {
   const { t, language } = useI18n();
   const [market, setMarket] = useState<'cn' | 'us' | 'hk'>('cn');
@@ -320,6 +374,17 @@ const UserScannerPage: React.FC = () => {
     targetLevel: formatTargetLevel(candidate, language),
     stopLevel: formatStopLevel(candidate, language),
   })) || [];
+  const historyCards = useMemo(() => historyItems.map((item) => {
+    const fallbackTitle = item.market === 'us'
+      ? t('scanner.currentRunFallbackUs')
+      : item.market === 'hk'
+        ? t('scanner.currentRunFallbackHk')
+        : t('scanner.currentRunFallbackCn');
+    return {
+      ...item,
+      historyHeadline: formatHistoryHeadline(item.headline, item.topSymbols, fallbackTitle),
+    };
+  }), [historyItems, t]);
 
   return (
     <>
@@ -460,39 +525,50 @@ const UserScannerPage: React.FC = () => {
 
             {historyError ? <ApiErrorAlert error={historyError} /> : null}
             {isLoadingHistory ? <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm text-secondary-text">{t('scanner.loadingHistory')}</div> : null}
-            {!isLoadingHistory && historyItems.length ? (
+            {!isLoadingHistory && historyCards.length ? (
               <div className="space-y-3">
-                {historyItems.map((item) => (
+                {historyCards.map((item) => (
                   <Button
                     key={item.id}
                     type="button"
                     variant={item.id === selectedRunId ? 'secondary' : 'ghost'}
                     onClick={() => void loadRun(item.id)}
-                    className={`theme-panel-subtle h-auto w-full rounded-[28px] px-4 py-3 text-left ${item.id === selectedRunId ? 'border-[var(--border-strong)] bg-[var(--surface-2)]/88' : 'hover:bg-[var(--overlay-hover)]'}`}
+                    className={`theme-panel-subtle h-auto w-full max-w-full overflow-hidden rounded-[28px] px-4 py-3 text-left ${item.id === selectedRunId ? 'border-[var(--border-strong)] bg-[var(--surface-2)]/88' : 'hover:bg-[var(--overlay-hover)]'}`}
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <PillBadge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</PillBadge>
-                      <PillBadge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</PillBadge>
-                      {item.watchlistDate ? <PillBadge variant="history">{formatDateOnly(item.watchlistDate, language)}</PillBadge> : null}
-                    </div>
-                    <p className="mt-3 text-sm font-semibold text-foreground">{item.headline || (item.market === 'us' ? t('scanner.currentRunFallbackUs') : item.market === 'hk' ? t('scanner.currentRunFallbackHk') : t('scanner.currentRunFallbackCn'))}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
-                      <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
-                      <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
-                      <span>{formatTimestamp(item.runAt, language)}</span>
-                    </div>
-                    {item.topSymbols.length ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {Array.from(new Set(item.topSymbols)).map((symbol) => (
-                          <span
-                            key={`${item.id}-${symbol}`}
-                            className="rounded border border-white/5 bg-white/[0.05] px-2 py-1 text-[10px] text-white/60"
-                          >
-                            {symbol}
-                          </span>
-                        ))}
+                    <div className="flex w-full max-w-full items-start gap-3 overflow-hidden">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <PillBadge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</PillBadge>
+                          <PillBadge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</PillBadge>
+                          {item.watchlistDate ? <PillBadge variant="history">{formatDateOnly(item.watchlistDate, language)}</PillBadge> : null}
+                        </div>
+                        <h4 className="mt-3 mb-2 w-full truncate font-bold text-white">
+                          {item.historyHeadline.title}
+                        </h4>
+                        {item.historyHeadline.detail ? (
+                          <p className="break-words whitespace-normal w-full text-sm text-white/70 leading-relaxed">
+                            {item.historyHeadline.detail}
+                          </p>
+                        ) : null}
+                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
+                          <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
+                          <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
+                          <span>{formatTimestamp(item.runAt, language)}</span>
+                        </div>
+                        {item.historyHeadline.symbols.length ? (
+                          <div className="product-chip-list product-chip-list--tight mt-3 w-full" data-testid={`scanner-history-symbols-${item.id}`}>
+                            {item.historyHeadline.symbols.map((symbol) => (
+                              <span
+                                key={`${item.id}-${symbol}`}
+                                className="product-chip shrink-0 text-[10px] px-2 py-1"
+                              >
+                                {symbol}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
+                    </div>
                   </Button>
                 ))}
               </div>

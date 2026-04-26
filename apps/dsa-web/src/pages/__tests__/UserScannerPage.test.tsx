@@ -270,6 +270,12 @@ describe('UserScannerPage', () => {
     expect(avgoTags.length).toBeGreaterThan(0);
     expect((await screen.findAllByText('AMD')).length).toBeGreaterThan(0);
     expect(screen.queryByText('AMZN AMZN / AMD AMD')).not.toBeInTheDocument();
+    const historyTitle = screen.getByRole('heading', { name: '我的手动扫描' });
+    expect(historyTitle).toHaveClass('truncate');
+
+    const historySymbols = screen.getByTestId('scanner-history-symbols-11');
+    expect(historySymbols).toHaveClass('product-chip-list', 'product-chip-list--tight', 'w-full');
+    expect(historyTitle.closest('button')).toHaveClass('w-full', 'max-w-full', 'overflow-hidden');
   });
 
   it('reuses shared market defaults and cn option labels after switching language', async () => {
