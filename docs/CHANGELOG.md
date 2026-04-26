@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🎛️ **Scanner 筛选面板恢复胶囊式紧凑交互** — `apps/dsa-web` 将已登录 `/scanner` 左侧条件区从宽大的标准表单收回为单选 pill 组，统一压缩选项组垂直间距，并恢复底部候选区在默认态下的 mock 卡片网格展示。失败运行时仍保持错误态而不会回退到占位卡片；本次改动只涉及前端页面结构与测试，不改变 scanner API、鉴权或真实运行数据契约。
+
 - 🚪 **游客漏斗 2.0 与登出链路收口** — `apps/dsa-web` 将游客首页重构为极简漏斗：首页只保留一句核心 Slogan、单个股票输入框和一张 `AI Decision` 预览卡，不再继续渲染旧的 Bento 网格与首页毛玻璃锁层；顶部导航在 guest 会话下现统一显示 `首页 / 扫描器 / 问股 / 持仓 / 回测`，但 `/chat`、`/portfolio`、`/backtest` 等受保护页面不再重定向回首页，而是原地渲染全屏毛玻璃 `PremiumPaywall`；同时登出流改为显式清理前端会话相关 storage key 与 cookie、跳过旧的状态回刷、并在 100ms 后硬跳 `/guest`，降低退出后残留已登录壳层或路由状态回流的概率。
 - 🌫️ **Web smoke script now targets the canonical smoke surface only** — `apps/dsa-web` 的 `npm run test:smoke` 现在只执行 `e2e/smoke.spec.ts`，不再把 `portfolio-ibkr-sync.spec.ts` 这类专用 e2e 一起纳入发布前 smoke。该命令同时会显式启动本地 backend + `vite preview` 后再跑 smoke，避免 `playwright webServer` 在当前环境里偶发漏起前端导致的假失败。与此同时，canonical smoke 已补齐 `/portfolio`、`/backtest` 与 `/settings -> /settings/system` 管理工具路由验证，并对本地 `authEnabled=false` 与启用认证两种登录变体保持兼容。
 - 🔐 **Web 登录恢复与 AI 渠道编辑补齐** — Web 退出登录现在会先清空本地会话态，再显式跳回登录页；登录页新增“忘记密码？”入口，并提供 `/reset-password` 请求页，通过后端 reset API 返回统一的非枚举成功提示。与此同时，AI 高级渠道编辑器现已把可编辑字段统一收口到规范化 i18n 文案，支持维护附加请求头/参数（`LLM_<CHANNEL>_EXTRA_HEADERS`），删除唯一来源渠道时也会同步清理失效的 runtime model / fallback / vision 引用，避免设置页保留悬空路由配置。

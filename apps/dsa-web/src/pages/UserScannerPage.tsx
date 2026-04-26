@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
-import { ApiErrorAlert, Button, Drawer, Pagination, PillBadge, SectionShell, SegmentedControl } from '../components/common';
+import { ApiErrorAlert, Button, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
 import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
@@ -19,6 +19,15 @@ const HISTORY_PAGE_SIZE = 8;
 
 type PillOption = { value: string; label: string };
 
+const FALLBACK_WATCHLIST_CARDS = [
+  { symbol: 'NVDA', name: 'NVIDIA', changeText: '+4.8%' },
+  { symbol: 'TSLA', name: 'Tesla', changeText: '+3.1%' },
+  { symbol: 'META', name: 'Meta', changeText: '+2.7%' },
+  { symbol: 'AAPL', name: 'Apple', changeText: '+1.9%' },
+  { symbol: 'MSFT', name: 'Microsoft', changeText: '+1.5%' },
+  { symbol: 'AMD', name: 'AMD', changeText: '+5.2%' },
+] as const;
+
 function PillTagGroup({
   label,
   value,
@@ -31,27 +40,26 @@ function PillTagGroup({
   onChange: (next: string) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <label className="block">
-        <span className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{label}</span>
-        <select
-          aria-label={label}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="sr-only"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </label>
-      <SegmentedControl
-        value={value}
-        options={options}
-        onChange={onChange}
-        listClassName="w-full justify-start bg-[var(--surface-2)]/72"
-        buttonClassName="grow-0 basis-auto"
-      />
+    <div className="flex flex-col gap-2">
+      <span className="text-xs uppercase tracking-widest text-white/40">{label}</span>
+      <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+        {options.map((option) => {
+          const isActive = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => onChange(option.value)}
+              className={isActive
+                ? 'rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors'
+                : 'rounded-full border border-white/5 bg-transparent px-4 py-1.5 text-sm text-white/50 transition-colors hover:bg-white/[0.05]'}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -233,11 +241,20 @@ const UserScannerPage: React.FC = () => {
     [historyTotal],
   );
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
-  const watchlistCards = (runDetail?.shortlist || []).slice(0, 8).map((candidate) => ({
-    symbol: candidate.symbol,
-    name: candidate.name,
-    changeText: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
-  }));
+  const watchlistCards = runDetail
+    ? runDetail.shortlist.slice(0, 8).map((candidate) => ({
+      symbol: candidate.symbol,
+      name: candidate.name,
+      changeText: `${candidate.score >= 0 ? '+' : ''}${candidate.score.toFixed(1)}%`,
+    }))
+    : pageError
+      ? []
+      : [...FALLBACK_WATCHLIST_CARDS];
+  const watchlistTitle = market === 'us'
+    ? (language === 'en' ? 'US pre-market candidates' : '美股盘前候选名单')
+    : market === 'hk'
+      ? (language === 'en' ? 'Hong Kong pre-open candidates' : '港股盘前候选名单')
+      : (language === 'en' ? 'A-share pre-open candidates' : 'A股盘前候选名单');
 
   return (
     <>
@@ -266,14 +283,12 @@ const UserScannerPage: React.FC = () => {
           <section className="shrink-0 grid grid-cols-12 gap-5">
             <div className="col-span-8 flex flex-col gap-3">
               <SectionShell className="rounded-[32px] p-4">
-                <div className="space-y-2">
+                <div className="flex flex-col gap-6">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                   <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
-                  <div className="grid grid-cols-2 gap-2">
-                    <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
-                    <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
-                  </div>
+                  <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
+                  <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-secondary-text">{selectedMarketCopy.runHint}</p>
                     <Button type="button" onClick={() => void handleRun()} isLoading={isRunning} loadingText={t('scanner.running')}>{t('scanner.run')}</Button>
@@ -304,9 +319,10 @@ const UserScannerPage: React.FC = () => {
           <section className="flex-1 min-h-0 flex flex-col mt-3 overflow-hidden">
             <div className="shrink-0">
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary-text">{language === 'en' ? 'My candidates' : '我的候选'}</p>
+              <h2 className="mt-2 text-lg text-foreground">{watchlistTitle}</h2>
             </div>
             {watchlistCards.length ? (
-              <div className="grid grid-cols-1 gap-2 content-start overflow-y-auto no-scrollbar md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
+              <div className="mt-4 grid grid-cols-2 gap-4 content-start overflow-y-auto no-scrollbar md:grid-cols-4 xl:grid-cols-6">
                 {watchlistCards.map((candidate) => (
                   <div key={`watchlist-${candidate.symbol}`} className="theme-panel-subtle rounded-2xl px-3 py-2 flex justify-between items-center hover:bg-[var(--overlay-hover)] transition cursor-pointer">
                     <div>

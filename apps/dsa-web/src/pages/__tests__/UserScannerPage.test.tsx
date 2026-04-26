@@ -261,16 +261,16 @@ describe('UserScannerPage', () => {
   it('reuses shared market defaults and cn option labels after switching language', async () => {
     renderUserScannerPage(true);
 
-    expect(await screen.findAllByRole('option', { name: '300 只' })).not.toHaveLength(0);
+    expect(await screen.findByRole('button', { name: '300 只' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'switch-language-en' }));
 
     await waitFor(() => {
-      expect(screen.queryByRole('option', { name: '300 只' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '300 只' })).not.toBeInTheDocument();
     });
-    expect(screen.getAllByRole('option', { name: '300' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '300' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Market'), { target: { value: 'us' } });
+    fireEvent.click(screen.getByRole('button', { name: 'US' }));
     fireEvent.click(screen.getByRole('button', { name: 'Run scanner' }));
 
     await waitFor(() => {
@@ -306,5 +306,28 @@ describe('UserScannerPage', () => {
     expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
     expect(screen.queryByText('Meta')).not.toBeInTheDocument();
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+  });
+
+  it('renders compact pill filters and the fallback mock candidate grid before any manual run', async () => {
+    getRuns.mockResolvedValueOnce({
+      total: 0,
+      page: 1,
+      limit: 8,
+      items: [],
+    });
+
+    renderUserScannerPage();
+
+    expect((await screen.findAllByText(/A股|A-share/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/美股|US/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/港股|HK/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/前 5|Top 5/i).length).toBeGreaterThan(0);
+
+    expect(screen.getByText(/A股盘前候选名单|A-share pre-open candidates/i)).toBeInTheDocument();
+    expect(screen.getByText('NVIDIA')).toBeInTheDocument();
+    expect(screen.getByText('Tesla')).toBeInTheDocument();
+    expect(screen.getByText('Meta')).toBeInTheDocument();
+    expect(screen.getByText('Apple')).toBeInTheDocument();
+    expect(screen.queryByText(/当前还没有可展示的 A 股个人扫描结果。|No personal A-share scanner result is available yet./i)).not.toBeInTheDocument();
   });
 });
