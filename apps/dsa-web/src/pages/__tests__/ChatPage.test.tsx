@@ -191,8 +191,8 @@ describe('ChatPage', () => {
     const skillValues = await screen.findAllByTestId('chat-bento-hero-skill-value');
     expect(skillValues[0]).toHaveTextContent(canonicalBullTrendLabel('zh'));
     expect(screen.getByTestId('chat-session-list-scroll')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('h-full', 'w-full', 'max-w-5xl', 'flex-col', 'px-4', 'pt-12', 'pb-48');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/90', 'to-transparent');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'max-w-4xl', 'mx-auto', 'flex-col', 'gap-6', 'px-4', 'pt-8', 'pb-56');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'bg-gradient-to-t', 'from-[#050505]', 'via-[#050505]/95', 'to-transparent', 'pt-32', 'pb-8');
     expect(screen.getByTestId('chat-skill-toolbar')).toHaveClass('flex', 'items-center', 'gap-3', 'overflow-x-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
@@ -300,6 +300,56 @@ describe('ChatPage', () => {
 
     expect(streamingNode).toHaveTextContent('最新回复正在涌现');
     vi.useRealTimers();
+  });
+
+  it('renders full-width bubbles and removes quote rails from assistant content surfaces', async () => {
+    mockStoreState.messages = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: '这是用户问题',
+        skillName: canonicalBullTrendLabel('zh'),
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '> 不应再出现引用竖线\n\n普通段落',
+        skillName: canonicalBullTrendLabel('zh'),
+        thinkingSteps: [
+          {
+            type: 'tool_done',
+            display_name: 'quote-check',
+            success: true,
+            duration: 0.1,
+          },
+        ],
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('这是用户问题');
+    const userBubble = screen.getByTestId('chat-user-message-user-1').firstElementChild;
+    expect(userBubble).toHaveClass('max-w-[80%]', 'bg-white/[0.08]', 'text-white', 'px-5', 'py-3', 'rounded-2xl', 'rounded-tr-sm', 'text-sm', 'break-words');
+
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.thinking.toggleLabel') }));
+
+    const quoteText = screen.getByText('不应再出现引用竖线');
+    const assistantBubble = screen.getByTestId('chat-assistant-message-assistant-1').lastElementChild;
+    expect(assistantBubble).toHaveClass('flex-1', 'min-w-0', 'bg-transparent', 'text-white/90', 'text-sm', 'md:text-base', 'leading-relaxed', 'break-words', 'whitespace-pre-wrap');
+
+    const markdownSurface = quoteText.closest('div[class*="markdown-body"]');
+    expect(markdownSurface?.className).not.toContain('prose-blockquote:border');
+
+    const thinkingStep = screen.getByText('quote-check (0.1s)');
+    const thinkingDetails = thinkingStep.closest('div[class*="animate-fade-in"]');
+    expect(thinkingDetails?.className).not.toContain('border-l');
   });
 
   it('switches session when clicking anywhere on the session card', async () => {

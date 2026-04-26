@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 💬 **问股 Chat 全宽气泡、底部遮罩与 DOM 流式输出修复** — `apps/dsa-web/src/pages/ChatPage.tsx` 与 `src/components/common/TypewriterText.tsx` 对 `/chat` 做了一轮严格限域修复：消息流主容器收口为 `max-w-4xl` 并补上 `pb-56`，防止长回复被底部输入区吃掉；assistant/user 气泡分别改为真正的全宽左流与 `max-w-[80%]` 右对话泡，移除了旧 `prose-blockquote`/思考区 `border-l` 带来的竖线与截断感；底部输入壳层改成 `z-50` 的强渐变毛玻璃遮罩，避免正文滚到输入区下方；最新一条 assistant 回复的打字机也从 `useState + setInterval` 改为 `requestAnimationFrame + ref` 直写 DOM，减少长文本流式输出时的 React 分块卡顿。此次改动不调整 agent API、会话存储、路由或技能数据流，只修正问股页面的渲染壳层与流式表现。
 - 🎛️ **Scanner 筛选面板恢复胶囊式紧凑交互** — `apps/dsa-web` 将已登录 `/scanner` 左侧条件区从宽大的标准表单收回为单选 pill 组，统一压缩选项组垂直间距，并把底部候选区在默认态下收口为按市场区分的空态说明，不再向港股/A股复用或伪造美股占位卡片。失败运行时仍保持错误态；本次改动只涉及前端页面结构与测试，不改变 scanner API、鉴权或真实运行数据契约。
 
 - 🚪 **游客漏斗 2.0 与登出链路收口** — `apps/dsa-web` 将游客首页重构为极简漏斗：首页只保留一句核心 Slogan、单个股票输入框和一张 `AI Decision` 预览卡，不再继续渲染旧的 Bento 网格与首页毛玻璃锁层；顶部导航在 guest 会话下现统一显示 `首页 / 扫描器 / 问股 / 持仓 / 回测`，但 `/chat`、`/portfolio`、`/backtest` 等受保护页面不再重定向回首页，而是原地渲染全屏毛玻璃 `PremiumPaywall`；同时登出流改为显式清理前端会话相关 storage key 与 cookie、跳过旧的状态回刷、并在 100ms 后硬跳 `/guest`，降低退出后残留已登录壳层或路由状态回流的概率。

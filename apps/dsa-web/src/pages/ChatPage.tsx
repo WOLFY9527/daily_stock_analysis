@@ -26,6 +26,48 @@ import { useShellRailSlot } from '../components/layout/useShellRailSlot';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 
+const assistantMarkdownComponents = {
+  h1: ({ children }: React.PropsWithChildren) => <h1 className="mb-3 mt-5 text-lg font-semibold text-white">{children}</h1>,
+  h2: ({ children }: React.PropsWithChildren) => <h2 className="mb-2 mt-4 text-base font-semibold text-white">{children}</h2>,
+  h3: ({ children }: React.PropsWithChildren) => <h3 className="mb-2 mt-4 text-sm font-semibold text-white">{children}</h3>,
+  p: ({ children }: React.PropsWithChildren) => <p className="mb-3 leading-relaxed last:mb-0">{children}</p>,
+  ul: ({ children }: React.PropsWithChildren) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }: React.PropsWithChildren) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+  li: ({ children }: React.PropsWithChildren) => <li className="break-words leading-relaxed">{children}</li>,
+  strong: ({ children }: React.PropsWithChildren) => <strong className="font-semibold text-white">{children}</strong>,
+  a: ({ children, href }: React.PropsWithChildren<{ href?: string }>) => (
+    <a className="text-[hsl(var(--accent-primary-hsl))] underline-offset-2 hover:underline" href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }: React.PropsWithChildren) => (
+    <blockquote className="my-3 text-white/72 first:mt-0 last:mb-0">{children}</blockquote>
+  ),
+  code: ({ children, className }: React.PropsWithChildren<{ className?: string }>) => {
+    if (className) {
+      return <code className={className}>{children}</code>;
+    }
+    return (
+      <code className="rounded bg-white/[0.08] px-1.5 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))] break-all">
+        {children}
+      </code>
+    );
+  },
+  pre: ({ children }: React.PropsWithChildren) => (
+    <pre className="mb-3 overflow-x-auto rounded-xl border border-white/8 bg-black/30 p-3 text-xs leading-6 text-white/88 last:mb-0">
+      {children}
+    </pre>
+  ),
+  table: ({ children }: React.PropsWithChildren) => (
+    <div className="mb-3 overflow-x-auto last:mb-0">
+      <table className="w-full min-w-max border-collapse text-sm">{children}</table>
+    </div>
+  ),
+  th: ({ children }: React.PropsWithChildren) => <th className="border border-white/10 bg-white/[0.05] px-3 py-1.5 text-left font-medium text-white">{children}</th>,
+  td: ({ children }: React.PropsWithChildren) => <td className="border border-white/10 px-3 py-1.5 align-top">{children}</td>,
+  hr: () => <hr className="my-4 border-white/10" />,
+} satisfies React.ComponentProps<typeof Markdown>['components'];
+
 type QuickQuestion = {
   id: string;
   skill: string;
@@ -407,7 +449,7 @@ const ChatPage: React.FC = () => {
   };
 
   const renderThinkingDetails = (steps: ProgressStep[]) => (
-    <div className="mb-3 pl-5 border-l border-border/40 space-y-0.5 animate-fade-in">
+    <div className="mb-3 space-y-0.5 animate-fade-in">
       {steps.map((step, idx) => {
         let icon = '⋯';
         let text = '';
@@ -750,7 +792,7 @@ const ChatPage: React.FC = () => {
         >
           <div
             data-testid="chat-message-stream"
-            className="flex h-full w-full max-w-5xl flex-col px-4 pt-12 pb-48"
+            className="w-full max-w-4xl mx-auto flex flex-col gap-6 px-4 pt-8 pb-56"
           >
             {skillsLoadError ? (
               <ApiErrorAlert
@@ -823,32 +865,40 @@ const ChatPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="flex w-full flex-col gap-8 pt-12">
+              <div className="flex w-full flex-col gap-6">
                 {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div className={`flex max-w-full items-start gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                      <div
-                        className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
-                          msg.role === 'user'
-                            ? 'bg-[hsl(var(--accent-primary-hsl))] text-[hsl(var(--bg-page-hsl))]'
-                            : 'bg-elevated text-foreground'
-                        }`}
-                      >
-                        {msg.role === 'user' ? 'U' : 'AI'}
+                  msg.role === 'user' ? (
+                    <div
+                      key={msg.id}
+                      data-testid={`chat-user-message-${msg.id}`}
+                      className="w-full flex justify-end mb-4"
+                    >
+                      <div className="max-w-[80%] bg-white/[0.08] text-white px-5 py-3 rounded-2xl rounded-tr-sm text-sm break-words">
+                        {msg.content
+                          .split('\n')
+                          .map((line, i) => (
+                            <p
+                              key={i}
+                              className="mb-1 last:mb-0 leading-relaxed"
+                            >
+                              {line || '\u00A0'}
+                            </p>
+                          ))}
                       </div>
-                      <div
-                        className={`min-w-0 overflow-hidden px-5 py-4 ${
-                          msg.role === 'user'
-                            ? 'max-w-[min(100%,42rem)] rounded-[28px] rounded-tr-md border border-[hsl(var(--accent-primary-hsl)/0.32)] bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground'
-                            : 'w-full max-w-[min(100%,52rem)] rounded-[28px] rounded-tl-md border border-white/6 bg-white/[0.035] text-secondary-text backdrop-blur-xl'
-                        }`}
-                      >
-                        {msg.role === 'assistant' && msg.skillName && (
+                    </div>
+                  ) : (
+                    <div
+                      key={msg.id}
+                      data-testid={`chat-assistant-message-${msg.id}`}
+                      className="w-full flex gap-4"
+                    >
+                      <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
+                        AI
+                      </div>
+                      <div className="flex-1 min-w-0 bg-transparent text-white/90 text-sm md:text-base leading-relaxed break-words whitespace-pre-wrap">
+                        {msg.skillName && (
                           <div className="mb-2">
-                            <span className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--accent-primary-hsl)/0.3)] bg-[hsl(var(--accent-primary-hsl)/0.12)] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-[hsl(var(--accent-primary-hsl))]">
                               <svg
                                 className="w-3 h-3"
                                 fill="none"
@@ -866,74 +916,41 @@ const ChatPage: React.FC = () => {
                             </span>
                           </div>
                         )}
-                        {msg.role === 'assistant' && renderThinkingBlock(msg)}
-                        {msg.role === 'assistant' &&
-                          expandedThinking.has(msg.id) &&
+                        {renderThinkingBlock(msg)}
+                        {expandedThinking.has(msg.id) &&
                           msg.thinkingSteps &&
                           renderThinkingDetails(msg.thinkingSteps)}
-                        {msg.role === 'assistant' ? (
-                          <div
-                            className="prose prose-invert prose-sm max-w-none
-                          prose-headings:text-foreground prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
-                          prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
-                          prose-p:mb-2 prose-p:last:mb-0 prose-p:leading-7 prose-p:break-words
-                          prose-strong:text-foreground prose-strong:font-semibold
-                          prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-li:break-words
-                          prose-code:text-[hsl(var(--accent-primary-hsl))] prose-code:bg-card/70 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:break-all
-                          prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:bg-black/30 prose-pre:border prose-pre:border-border/70 prose-pre:rounded-lg prose-pre:p-3
-                          prose-table:w-full prose-table:text-sm
-                          prose-th:text-foreground prose-th:font-medium prose-th:border-border prose-th:px-3 prose-th:py-1.5 prose-th:bg-card/70
-                          prose-td:border-border/70 prose-td:px-3 prose-td:py-1.5
-                          prose-hr:border-border/70 prose-hr:my-3
-                          prose-a:text-[hsl(var(--accent-primary-hsl))] prose-a:no-underline hover:prose-a:underline
-                          prose-blockquote:border-[hsl(var(--accent-primary-hsl)/0.3)] prose-blockquote:text-secondary-text
-                          [&_table]:block [&_table]:overflow-x-auto [&_table]:whitespace-nowrap
-                          [&_img]:max-w-full
-                        "
-                          >
-                            {msg.id === latestAssistantMessageId && msg.id === animatedAssistantMessageId ? (
-                              <TypewriterText
-                                as="div"
-                                speed={15}
-                                testId={`chat-typewriter-${msg.id}`}
-                                text={msg.content}
-                                render={(displayedText) => (
-                                  <Markdown remarkPlugins={[remarkGfm]}>
-                                    {displayedText}
-                                  </Markdown>
-                                )}
-                              />
-                            ) : (
-                              <Markdown remarkPlugins={[remarkGfm]}>
-                                {msg.content}
-                              </Markdown>
-                            )}
-                          </div>
+                        {msg.id === latestAssistantMessageId && msg.id === animatedAssistantMessageId ? (
+                          <TypewriterText
+                            as="div"
+                            className="w-full markdown-body break-words whitespace-pre-wrap"
+                            speed={20}
+                            testId={`chat-typewriter-${msg.id}`}
+                            text={msg.content}
+                            onComplete={() => {
+                              setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
+                            }}
+                          />
                         ) : (
-                          msg.content
-                            .split('\n')
-                            .map((line, i) => (
-                              <p
-                                key={i}
-                                className="mb-1 last:mb-0 leading-relaxed"
-                              >
-                                {line || '\u00A0'}
-                              </p>
-                            ))
+                          <div className="w-full markdown-body break-words whitespace-pre-wrap">
+                            <Markdown components={assistantMarkdownComponents} remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </Markdown>
+                          </div>
                         )}
                       </div>
                     </div>
-                  </div>
+                  )
                 ))}
               </div>
             )}
 
             {loading && (
-              <div className="flex gap-4 pt-6">
-                <div className="w-8 h-8 rounded-full bg-elevated text-foreground flex items-center justify-center flex-shrink-0 text-xs font-bold">
+              <div className="w-full flex gap-4 pt-2">
+                <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
                   AI
                 </div>
-                <div className="theme-panel-subtle min-w-[200px] max-w-[min(100%,56rem)] overflow-hidden rounded-2xl rounded-tl-sm px-5 py-4">
+                <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
                   <div className="flex items-center gap-2.5 text-sm text-secondary-text">
                     <div className="relative w-4 h-4 flex-shrink-0">
                       <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
@@ -953,9 +970,9 @@ const ChatPage: React.FC = () => {
 
         <div
           data-testid="chat-input-shell"
-          className="pointer-events-none absolute bottom-0 left-0 z-30 w-full bg-gradient-to-t from-[#050505] via-[#050505]/90 to-transparent px-4 pt-24 pb-8 flex flex-col items-center"
+          className="absolute bottom-0 left-0 w-full z-50 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent pt-32 pb-8 px-4 flex flex-col items-center pointer-events-none"
         >
-          <div className="w-full max-w-4xl flex flex-col gap-3 pointer-events-auto">
+          <div className="w-full max-w-4xl flex flex-col gap-3 pointer-events-auto relative">
             {sendToast ? (
               <p className={`text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
                 {sendToast.message}

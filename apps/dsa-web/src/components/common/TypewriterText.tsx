@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 
 type TypewriterTextProps = {
   text: string;
   speed?: number;
   testId?: string;
   as?: keyof React.JSX.IntrinsicElements;
-  render?: (displayedText: string) => React.ReactNode;
+  className?: string;
+  onComplete?: () => void;
 };
 
 export const TypewriterText: React.FC<TypewriterTextProps> = ({
@@ -13,27 +14,75 @@ export const TypewriterText: React.FC<TypewriterTextProps> = ({
   speed = 15,
   testId,
   as = 'span',
-  render,
+  className,
+  onComplete,
 }) => {
-  const [displayedText, setDisplayedText] = useState('');
+  const textRef = useRef<HTMLElement | null>(null);
+  const setTextRef = useCallback((node: HTMLElement | null) => {
+    textRef.current = node;
+  }, []);
 
   useEffect(() => {
+    const node = textRef.current;
+    if (!node) return;
+
     let index = 0;
+    let lastTime = performance.now();
+    let animationFrameId = 0;
+    let isCancelled = false;
 
-    const timer = window.setInterval(() => {
-      index += 1;
-      setDisplayedText(text.slice(0, index));
-      if (index >= text.length) {
-        window.clearInterval(timer);
+    node.innerHTML = '';
+
+    const appendChunk = (chunk: string) => {
+      for (const char of chunk) {
+        if (char === '\n') {
+          node.appendChild(document.createElement('br'));
+        } else {
+          node.appendChild(document.createTextNode(char));
+        }
       }
-    }, speed);
+      node.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    };
 
-    return () => window.clearInterval(timer);
-  }, [speed, text]);
+    const type = () => {
+      if (isCancelled) return;
 
-  return React.createElement(
-    as,
-    { 'data-testid': testId },
-    render ? render(displayedText) : displayedText,
+      const currentTime = performance.now();
+      const elapsed = currentTime - lastTime;
+
+      if (elapsed >= speed) {
+        const nextChunkSize = Math.max(1, Math.floor(elapsed / speed));
+        const chunk = text.slice(index, index + nextChunkSize);
+
+        if (chunk) {
+          appendChunk(chunk);
+          index += chunk.length;
+          lastTime = currentTime;
+        }
+      }
+
+      if (index < text.length) {
+        animationFrameId = window.requestAnimationFrame(type);
+      } else {
+        onComplete?.();
+      }
+    };
+
+    animationFrameId = window.requestAnimationFrame(type);
+
+    return () => {
+      isCancelled = true;
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [onComplete, speed, text]);
+
+  const Component = as as 'div' | 'span';
+
+  return (
+    <Component
+      ref={setTextRef}
+      className={className}
+      data-testid={testId}
+    />
   );
 };
