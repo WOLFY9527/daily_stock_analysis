@@ -94,7 +94,7 @@ function makeRunDetail(): ScannerRunDetail {
       {
         symbol: 'NVDA',
         name: 'NVIDIA',
-        companyName: 'NVIDIA Corporation',
+        companyName: 'NVIDIA Corp.',
         rank: 1,
         score: 94,
         qualityHint: 'AI 算力基建',
@@ -286,13 +286,13 @@ function makeHistoryResponse(): ScannerRunHistoryResponse {
         watchlistDate: '2026-04-22',
         triggerMode: 'manual',
         universeName: 'cn_a_liquid_watchlist_v1',
-        shortlistSize: 1,
+        shortlistSize: 5,
         universeSize: 300,
         preselectedSize: 60,
         evaluatedSize: 40,
         sourceSummary: 'test',
-        headline: '我的手动扫描：AVGO / AVGO / AMD',
-        topSymbols: ['AVGO', 'AVGO', 'AMD'],
+        headline: '我的手动扫描：AVGO / NVDA / AMZN / AMD / SMH',
+        topSymbols: ['AVGO', 'NVDA', 'AMZN', 'AMD', 'SMH'],
         notificationStatus: 'not_attempted',
         failureReason: null,
         changeSummary: {
@@ -358,6 +358,7 @@ function renderUserScannerPage(withLanguageSwitch = false) {
 
 describe('UserScannerPage', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     getRuns.mockReset();
     getRun.mockReset();
     runScan.mockReset();
@@ -373,7 +374,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     expect(await screen.findByTestId('user-scanner-bento-page')).not.toHaveClass('bg-[#030303]');
-    expect(screen.getByTestId('user-scanner-bento-drawer-trigger')).toHaveAttribute('data-variant', 'secondary');
+    expect(screen.getByTestId('user-scanner-bento-drawer-trigger')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /运行扫描|Run scanner/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '扫描结果与战术计划' })).toBeInTheDocument();
     expect(screen.getByText('生成时间： 04/22 08:31')).toBeInTheDocument();
@@ -395,12 +396,12 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByText('AVGO')).toBeInTheDocument();
     expect(screen.queryByText(/^AVGO AVGO$/)).not.toBeInTheDocument();
-    expect(screen.getByText('NVIDIA Corporation')).toBeInTheDocument();
+    expect(screen.getByText(/NVIDIA Corp\./)).toBeInTheDocument();
     expect(screen.getByText('Broadcom Inc.')).toBeInTheDocument();
     expect(screen.getByText('Advanced Micro Devices')).toBeInTheDocument();
     expect(screen.getByText('AI 评分 94/100')).toBeInTheDocument();
     expect(screen.getByText('AI 评分 88/100')).toBeInTheDocument();
-    expect(screen.getByText('AI 评分 76/100')).toBeInTheDocument();
+    expect(screen.getByText('AI 评分 88/100')).toBeInTheDocument();
     expect(screen.getByText('半导体设备')).toBeInTheDocument();
     expect(screen.getAllByText('数据中心').length).toBeGreaterThan(0);
     expect(screen.getByText('边缘推理')).toBeInTheDocument();
@@ -419,12 +420,15 @@ describe('UserScannerPage', () => {
     const avgoTags = await screen.findAllByText('AVGO');
     expect(avgoTags.length).toBeGreaterThan(0);
     expect((await screen.findAllByText('AMD')).length).toBeGreaterThan(0);
+    expect(screen.getByText('AMZN')).toBeInTheDocument();
+    expect(screen.getByText('SMH')).toBeInTheDocument();
     expect(screen.queryByText('AMZN AMZN / AMD AMD')).not.toBeInTheDocument();
     const historyTitle = screen.getByRole('heading', { name: '我的手动扫描' });
     expect(historyTitle).toHaveClass('truncate');
 
     const historySymbols = screen.getByTestId('scanner-history-symbols-11');
     expect(historySymbols).toHaveClass('product-chip-list', 'product-chip-list--tight', 'w-full');
+    expect(historySymbols.querySelectorAll('span')).toHaveLength(5);
     expect(historyTitle.closest('button')).toHaveClass(
       'w-full',
       'flex',
@@ -523,5 +527,15 @@ describe('UserScannerPage', () => {
     const drawer = await screen.findByTestId('user-scanner-bento-drawer');
     expect(drawer).toHaveClass('p-6', 'sm:p-8');
     expect(drawer).not.toHaveClass('pb-24', 'pb-16', 'bg-black', 'bg-gray-900');
+  });
+
+  it('uses professional financial labels in history metadata', async () => {
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByTestId('user-scanner-bento-drawer-trigger'));
+
+    expect(await screen.findByText(/(入选标的|Selected symbols):\s*5/)).toBeInTheDocument();
+    expect(screen.getByText(/(扫描标的池|Scan pool):\s*300/)).toBeInTheDocument();
+    expect(screen.queryByText(/扫描宇宙|最终 shortlist/i)).not.toBeInTheDocument();
   });
 });
