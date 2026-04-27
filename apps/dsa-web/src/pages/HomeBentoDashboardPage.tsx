@@ -946,7 +946,26 @@ function buildTechSignalHeadline(locale: DashboardLocale, ticker: string, label:
     return isEnglish ? 'The bullish MACD posture still supports trend continuation' : 'MACD 仍偏多头结构，趋势延续占优';
   }
 
-  if (key === '均线结构' || key === 'movingaverages' || key === 'ma20ma60' || key === 'ma5' || key === 'ma10' || key === 'ma20' || key === 'ma60') {
+  if (key === 'ma5') {
+    return isEnglish ? 'Short-term momentum is riding the five-day line higher' : '短线动能充沛，价格沿五日线攀升';
+  }
+
+  if (key === 'ma10') {
+    return isEnglish ? 'The ten-day trend line is holding, so pullbacks still screen as entryable' : '趋势支撑确认，回踩不破可视作介入点';
+  }
+
+  if (key === 'ma20') {
+    if (/pressing lower|下压|压制/i.test(raw) || (ticker === 'TSLA' && /ma20/i.test(raw))) {
+      return isEnglish ? 'MA20 is still capping price, so the repair phase is not finished' : 'MA20 仍在压制价格，趋势修复尚未完成';
+    }
+    return isEnglish ? 'MA20 is propping up MA60, keeping the medium-term bull stack intact' : 'MA20 托举 MA60，中期多头排列延续';
+  }
+
+  if (key === 'ma60') {
+    return isEnglish ? 'The long-term bull-bear divider is still rising, so the core base remains intact' : '长线牛熊分界稳步上移，中线底仓逻辑未坏';
+  }
+
+  if (key === '均线结构' || key === 'movingaverages' || key === 'ma20ma60') {
     if (/pressing lower|下压|压制/i.test(raw) || (ticker === 'TSLA' && /ma20/i.test(raw))) {
       return isEnglish ? 'MA20 is still capping price, so the repair phase is not finished' : 'MA20 仍在压制价格，趋势修复尚未完成';
     }
@@ -1480,12 +1499,14 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [fallbackToast, setFallbackToast] = useState<string | null>(null);
+  const [analysisFallbackMode, setAnalysisFallbackMode] = useState(false);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
   const [isHistoryDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
+  const selectCachedHistoryForStock = useStockPoolStore((state) => state.selectCachedHistoryForStock);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
   const recentHistory = useMemo(
     () => Array.from(new Set(historyItems.map((item) => normalizeTickerQuery(item.stockCode)).filter(Boolean))).slice(0, 8),
@@ -1493,12 +1514,31 @@ const HomeBentoDashboardPage: React.FC = () => {
   );
   const isBusy = isAnalyzing || isDashboardLoading;
   const dashboardData = useMemo<DashboardPayload>(() => {
-    if (selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker) {
-      return buildDashboardFromReport(locale, selectedReport);
+    const baseDashboard = selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker
+      ? buildDashboardFromReport(locale, selectedReport)
+      : resolveDashboardPayload(locale, activeTicker);
+
+    if (!analysisFallbackMode) {
+      return baseDashboard;
     }
 
-    return resolveDashboardPayload(locale, activeTicker);
-  }, [activeTicker, locale, selectedReport]);
+    return {
+      ...baseDashboard,
+      decision: {
+        ...baseDashboard.decision,
+        signalLabel: locale === 'en' ? 'Fallback active' : '已切换本地回溯',
+        signalTone: 'bearish',
+        scoreValue: locale === 'en' ? 'AI engine unavailable. Local recall snapshot is now loaded.' : 'AI引擎暂不可用，已切换至本地回溯快照',
+        badge: locale === 'en' ? 'LLM service degraded · local recall active' : 'AI 服务降级 · 本地回溯已接管',
+        summary: locale === 'en'
+          ? 'The live AI engine is temporarily unavailable, so the dashboard is serving the latest local recall snapshot instead of raw error text.'
+          : '当前 AI 引擎暂时不可用，首页已切换为最近一次本地回溯快照，不再展示底层报错代码。',
+        reasonBody: locale === 'en'
+          ? 'Only explicit Analyze actions may call the remote engine. This fallback view keeps the dashboard readable while upstream service is recovering.'
+          : '只有用户主动点击“分析”才会触发远端推理；当前回退视图仅用于在上游恢复前维持可读的分析快照。',
+      },
+    };
+  }, [activeTicker, analysisFallbackMode, locale, selectedReport]);
   const copy = dashboardData;
   const activeDrawerPayload = activeDrawer ? buildDrawerPayload(locale, copy, activeDrawer) : null;
 
@@ -1543,6 +1583,11 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     setFallbackToast(null);
+    setAnalysisFallbackMode(false);
+    if (selectCachedHistoryForStock(normalizedTicker)) {
+      setActiveTicker(normalizedTicker);
+      return;
+    }
     setDashboardLoading(true);
     try {
       await focusLatestHistoryForStock(normalizedTicker);
@@ -1565,6 +1610,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     setFallbackToast(null);
+    setAnalysisFallbackMode(false);
     setDashboardLoading(true);
     setSearchQuery('');
 
@@ -1580,7 +1626,10 @@ const HomeBentoDashboardPage: React.FC = () => {
       setActiveTicker(result.stockCode);
     } else if (!result.duplicate) {
       setActiveTicker(resolveDemoFallbackTicker(normalizedTicker || rawQuery));
-      setFallbackToast(locale === 'en' ? 'API request failed. Switched to demo data.' : 'API调用失败，已切换为演示数据');
+      setAnalysisFallbackMode(true);
+      setFallbackToast(locale === 'en'
+        ? 'AI engine is temporarily unavailable. Loaded local recall data.'
+        : 'AI 引擎服务暂不可用，已为您加载本地回溯数据');
     }
 
     setDashboardLoading(false);
@@ -1594,7 +1643,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     >
       {fallbackToast ? (
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
-          <div className="rounded-2xl border border-white/10 bg-black/75 px-4 py-3 text-sm font-medium text-white shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+          <div className="rounded-2xl border border-red-400/35 bg-red-950/82 px-4 py-3 text-sm font-semibold text-red-50 shadow-[0_18px_50px_rgba(127,29,29,0.35)] backdrop-blur-xl">
             {fallbackToast}
           </div>
         </div>

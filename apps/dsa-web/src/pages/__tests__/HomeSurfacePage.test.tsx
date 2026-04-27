@@ -441,6 +441,79 @@ describe('HomeSurfacePage', () => {
     expect(entryRange.className).not.toContain('text-2xl');
   });
 
+  it('renders a cached history snapshot immediately without triggering a new analyze request', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    useStockPoolStore.setState({
+      reportSnapshotsByStockCode: {
+        TSLA: {
+          ...defaultHistoryReport,
+          meta: {
+            ...defaultHistoryReport.meta,
+            id: 2,
+            queryId: 'q2',
+            stockCode: 'TSLA',
+            stockName: 'Tesla',
+          },
+          summary: {
+            ...defaultHistoryReport.summary,
+            analysisSummary: 'Tesla cached snapshot should render immediately.',
+            operationAdvice: 'Cached report only.',
+            trendPrediction: 'No re-analyze should happen.',
+            sentimentScore: 56,
+            sentimentLabel: 'Neutral',
+          },
+          strategy: {
+            idealBuy: '166.00 - 171.50',
+            stopLoss: '159.20',
+            takeProfit: '183.00',
+          },
+          details: {
+            standardReport: {
+              ...defaultHistoryReport.details.standardReport,
+              summaryPanel: {
+                ...defaultHistoryReport.details.standardReport.summaryPanel,
+                stock: 'Tesla',
+                ticker: 'TSLA',
+                oneSentence: 'Cached snapshot only.',
+              },
+              decisionPanel: {
+                ...defaultHistoryReport.details.standardReport.decisionPanel,
+                idealEntry: '166.00 - 171.50',
+                target: '183.00',
+                stopLoss: '159.20',
+              },
+              technicalFields: [
+                { label: 'MACD', value: '零轴下方收敛' },
+                { label: 'MA20', value: '167.80' },
+                { label: 'MA60', value: '161.20' },
+              ],
+              fundamentalFields: [
+                { label: '收入增速', value: '+2.7%' },
+                { label: '自由现金流', value: '$4.0B' },
+                { label: '毛利率', value: '17.4%' },
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    vi.mocked(historyApi.getDetail).mockClear();
+    vi.mocked(analysisApi.analyzeAsync).mockClear();
+
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-TSLA'));
+
+    expect(await screen.findByText('Tesla')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-tech-signal-MA20')).toHaveTextContent('MA20 托举 MA60，中期多头排列延续');
+    expect(screen.getByTestId('home-bento-tech-signal-MA60')).toHaveTextContent('长线牛熊分界稳步上移，中线底仓逻辑未坏');
+    expect(historyApi.getDetail).not.toHaveBeenCalled();
+    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
+  });
+
   it('keeps TSLA drill-down content synchronized with the active dashboard payload', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getDetail).mockImplementation((recordId) => {
@@ -554,9 +627,10 @@ describe('HomeSurfacePage', () => {
         category: 'upstream_unavailable',
       })));
 
-    expect(await screen.findByText('API调用失败，已切换为演示数据')).toBeInTheDocument();
+    expect(await screen.findByText('AI 引擎服务暂不可用，已为您加载本地回溯数据')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
     expect(screen.getByText('甲骨文')).toBeInTheDocument();
     expect(screen.queryByText('待确认股票')).not.toBeInTheDocument();
+    expect(screen.getByText('AI引擎暂不可用，已切换至本地回溯快照')).toBeInTheDocument();
   });
 });

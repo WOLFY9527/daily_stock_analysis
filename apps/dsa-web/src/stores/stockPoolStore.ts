@@ -11,6 +11,7 @@ import { isObviouslyInvalidStockQuery, looksLikeStockCode, validateStockCode } f
 const PAGE_SIZE = 20;
 const SELECTED_HISTORY_ID_STORAGE_KEY = 'dsa-selected-history-id';
 const TASK_QUEUE_STORAGE_KEY = 'dsa-task-queue-v1';
+const REPORT_SNAPSHOT_STORAGE_KEY = 'dsa-history-report-snapshots-v1';
 type SelectionSource = 'manual' | 'autocomplete' | 'import' | 'image';
 
 type FetchHistoryOptions = {
@@ -92,6 +93,36 @@ function persistTasks(tasks: TaskInfo[]): void {
   window.localStorage.setItem(TASK_QUEUE_STORAGE_KEY, JSON.stringify(persistedTasks));
 }
 
+function normalizeSnapshotKey(stockCode?: string): string {
+  return String(stockCode || '').trim().toUpperCase();
+}
+
+function readPersistedReportSnapshots(): Record<string, AnalysisReport> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  const raw = window.localStorage.getItem(REPORT_SNAPSHOT_STORAGE_KEY);
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, AnalysisReport>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistReportSnapshots(snapshots: Record<string, AnalysisReport>): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(REPORT_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshots));
+}
+
 function touchTask(task: TaskInfo): TaskInfo {
   const now = new Date().toISOString();
   return {
@@ -135,6 +166,7 @@ export interface StockPoolState {
   hasMore: boolean;
   currentPage: number;
   selectedReport: AnalysisReport | null;
+  reportSnapshotsByStockCode: Record<string, AnalysisReport>;
   isLoadingReport: boolean;
   activeTasks: TaskInfo[];
   markdownDrawerOpen: boolean;
@@ -148,6 +180,7 @@ export interface StockPoolState {
   hydrateRecentTasks: () => Promise<void>;
   loadMoreHistory: () => Promise<void>;
   selectHistoryItem: (recordId: number) => Promise<void>;
+  selectCachedHistoryForStock: (stockCode: string) => boolean;
   toggleHistorySelection: (recordId: number) => void;
   toggleSelectAllVisible: () => void;
   deleteSelectedHistory: () => Promise<void>;
@@ -177,6 +210,7 @@ const initialState = {
   hasMore: true,
   currentPage: 1,
   selectedReport: null as AnalysisReport | null,
+  reportSnapshotsByStockCode: readPersistedReportSnapshots() as Record<string, AnalysisReport>,
   isLoadingReport: false,
   activeTasks: readPersistedTasks() as TaskInfo[],
   markdownDrawerOpen: false,
@@ -191,6 +225,25 @@ function buildHistoryParams(page: number) {
 
 function isSameStockCode(left?: string, right?: string): boolean {
   return String(left || '').trim().toUpperCase() === String(right || '').trim().toUpperCase();
+}
+
+function cacheReportSnapshot(
+  get: () => StockPoolState,
+  set: (partial: Partial<StockPoolState>) => void,
+  report: AnalysisReport | null | undefined,
+): void {
+  const snapshotKey = normalizeSnapshotKey(report?.meta.stockCode);
+  if (!snapshotKey || !report) {
+    return;
+  }
+
+  const nextSnapshots = {
+    ...get().reportSnapshotsByStockCode,
+    [snapshotKey]: report,
+  };
+
+  persistReportSnapshots(nextSnapshots);
+  set({ reportSnapshotsByStockCode: nextSnapshots });
 }
 
 async function fetchHistory(
@@ -344,6 +397,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
         error: null,
         isLoadingReport: false,
       });
+      cacheReportSnapshot(get, set, report);
       persistSelectedHistoryId(report.meta.id ?? recordId);
     } catch (error) {
       if (requestId !== reportRequestSeq) {
@@ -355,6 +409,24 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
         isLoadingReport: false,
       });
     }
+  },
+
+  selectCachedHistoryForStock: (stockCode) => {
+    const snapshotKey = normalizeSnapshotKey(stockCode);
+    const report = get().reportSnapshotsByStockCode[snapshotKey];
+    if (!report) {
+      return false;
+    }
+
+    const matchedHistory = get().historyItems.find((item) => isSameStockCode(item.stockCode, stockCode));
+    set({
+      selectedReport: report,
+      highlightedHistoryId: matchedHistory?.id ?? get().highlightedHistoryId,
+      error: null,
+      isLoadingReport: false,
+    });
+    persistSelectedHistoryId(report.meta.id ?? matchedHistory?.id ?? null);
+    return true;
   },
 
   toggleHistorySelection: (recordId) => {
@@ -543,6 +615,9 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     const nextTasks = upsertTask(get().activeTasks, task);
     persistTasks(nextTasks);
     set({ activeTasks: nextTasks });
+    if (task.result?.report) {
+      cacheReportSnapshot(get, set, task.result.report);
+    }
   },
 
   syncTaskUpdated: (task) => {
@@ -556,6 +631,9 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     const nextTasks = upsertTask(get().activeTasks, task);
     persistTasks(nextTasks);
     set({ activeTasks: nextTasks });
+    if (task.result?.report) {
+      cacheReportSnapshot(get, set, task.result.report);
+    }
   },
 
   syncTaskFailed: (task) => {
@@ -578,10 +656,12 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(TASK_QUEUE_STORAGE_KEY);
       window.localStorage.removeItem(SELECTED_HISTORY_ID_STORAGE_KEY);
+      window.localStorage.removeItem(REPORT_SNAPSHOT_STORAGE_KEY);
     }
     set({
       ...initialState,
       activeTasks: [],
+      reportSnapshotsByStockCode: {},
     });
   },
 }));

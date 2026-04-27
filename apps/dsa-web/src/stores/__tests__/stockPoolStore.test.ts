@@ -279,6 +279,33 @@ describe('stockPoolStore', () => {
     expect(state.historyItems[0].id).toBe(2);
   });
 
+  it('caches a loaded report snapshot and can later select it without refetching history detail', async () => {
+    const cachedReport = {
+      ...historyReport,
+      meta: {
+        ...historyReport.meta,
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+      },
+    };
+
+    useStockPoolStore.setState({
+      historyItems: [
+        { ...historyItem, id: 2, queryId: 'q-2', stockCode: 'ORCL', stockName: 'Oracle' },
+      ],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(cachedReport);
+
+    await useStockPoolStore.getState().selectHistoryItem(2);
+    vi.mocked(historyApi.getDetail).mockClear();
+
+    const selectedFromCache = useStockPoolStore.getState().selectCachedHistoryForStock('ORCL');
+
+    expect(selectedFromCache).toBe(true);
+    expect(useStockPoolStore.getState().selectedReport?.meta.stockCode).toBe('ORCL');
+    expect(historyApi.getDetail).not.toHaveBeenCalled();
+  });
+
   it('ignores late task updates after a task has been removed', () => {
     const pendingTask = {
       taskId: 'task-1',
