@@ -13,8 +13,6 @@ type LoginLanguage = UiLanguage;
 
 type LoginCopy = {
   documentTitle: string;
-  authFacts: string[];
-  authFactsLabel: string;
   heroEyebrow: string;
   heroTitleSetup: string;
   heroTitleCreate: string;
@@ -31,11 +29,6 @@ type LoginCopy = {
   panelBodySetup: string;
   panelBodyCreate: string;
   panelBodyLogin: string;
-  continueAfterLogin: string;
-  continuePrefix: (label: string) => string;
-  continueRequiresAdmin: string;
-  continueStandard: string;
-  leaveAuthPage: string;
   usernameLabel: string;
   usernamePlaceholderCreate: string;
   usernamePlaceholderLogin: string;
@@ -72,12 +65,6 @@ function auth(language: LoginLanguage, key: string, vars?: Record<string, string
 function buildLoginCopy(language: LoginLanguage): LoginCopy {
   return {
     documentTitle: auth(language, 'documentTitle'),
-    authFacts: [
-      auth(language, 'factUnified'),
-      auth(language, 'factProtected'),
-      auth(language, 'factOwned'),
-    ],
-    authFactsLabel: auth(language, 'authFactsLabel'),
     heroEyebrow: auth(language, 'heroEyebrow'),
     heroTitleSetup: auth(language, 'heroTitleSetup'),
     heroTitleCreate: auth(language, 'heroTitleCreate'),
@@ -94,11 +81,6 @@ function buildLoginCopy(language: LoginLanguage): LoginCopy {
     panelBodySetup: auth(language, 'panelBodySetup'),
     panelBodyCreate: auth(language, 'panelBodyCreate'),
     panelBodyLogin: auth(language, 'panelBodyLogin'),
-    continueAfterLogin: auth(language, 'continueAfterLogin'),
-    continuePrefix: (label: string) => auth(language, 'continuePrefix', { label }),
-    continueRequiresAdmin: auth(language, 'continueRequiresAdmin'),
-    continueStandard: auth(language, 'continueStandard'),
-    leaveAuthPage: auth(language, 'leaveAuthPage'),
     usernameLabel: auth(language, 'usernameLabel'),
     usernamePlaceholderCreate: auth(language, 'usernamePlaceholderCreate'),
     usernamePlaceholderLogin: auth(language, 'usernamePlaceholderLogin'),
@@ -218,6 +200,7 @@ const LoginPage: React.FC = () => {
                 id="username"
                 type="text"
                 iconType="key"
+                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
                 label={copy.usernameLabel}
                 placeholder={isCreateUserMode ? copy.usernamePlaceholderCreate : copy.usernamePlaceholderLogin}
                 value={username}
@@ -232,6 +215,7 @@ const LoginPage: React.FC = () => {
               <Input
                 id="displayName"
                 type="text"
+                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pr-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
                 label={copy.displayNameLabel}
                 placeholder={copy.displayNamePlaceholder}
                 value={displayName}
@@ -246,6 +230,7 @@ const LoginPage: React.FC = () => {
               type="password"
               allowTogglePassword
               iconType="password"
+              className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pl-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
               label={isAdminBootstrap ? copy.passwordLabelSetup : copy.passwordLabelLogin}
               placeholder={isAdminBootstrap ? copy.passwordPlaceholderSetup : copy.passwordPlaceholderLogin}
               value={password}
@@ -260,6 +245,7 @@ const LoginPage: React.FC = () => {
                 type="password"
                 allowTogglePassword
                 iconType="password"
+                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl pl-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
                 label={copy.passwordConfirmLabel}
                 placeholder={isAdminBootstrap ? copy.passwordConfirmPlaceholderSetup : copy.passwordConfirmPlaceholderLogin}
                 value={passwordConfirm}
@@ -289,7 +275,7 @@ const LoginPage: React.FC = () => {
               type="submit"
               variant="primary"
               size="xl"
-              className="w-full justify-center"
+              className="w-full mt-2 py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all justify-center"
               disabled={isSubmitting}
               isLoading={isSubmitting}
               loadingText={isAdminBootstrap ? copy.loadingTextSetup : isCreateUserMode ? copy.loadingTextCreate : copy.loadingTextLogin}
@@ -314,7 +300,7 @@ const LoginPage: React.FC = () => {
 
             <button
               type="button"
-              className="btn-ghost w-full justify-center"
+              className="mt-6 text-xs text-white/30 hover:text-white/60 transition-colors cursor-pointer"
               onClick={() => navigate(guestPath, { replace: true })}
               disabled={isSubmitting}
             >

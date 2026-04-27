@@ -152,6 +152,30 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') })).toBeInTheDocument();
     expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toBeInTheDocument();
     expect(screen.getByPlaceholderText(translate('en', 'auth.login.usernamePlaceholderLogin'))).toHaveAttribute('placeholder', 'Enter email or username');
+    expect(screen.getByLabelText(translate('en', 'auth.login.usernameLabel'))).toHaveClass(
+      'pl-12',
+      'py-3',
+      'bg-white/[0.03]',
+      'border-white/10',
+    );
+    expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toHaveClass(
+      'pl-12',
+      'py-3',
+      'bg-white/[0.03]',
+      'border-white/10',
+    );
+    expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toHaveClass(
+      'mt-2',
+      'bg-white',
+      'text-black',
+      'active:scale-95',
+    );
+    expect(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') })).toHaveClass(
+      'mt-6',
+      'text-xs',
+      'text-white/30',
+      'hover:text-white/60',
+    );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toBeInTheDocument();
   });
 

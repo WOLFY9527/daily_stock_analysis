@@ -109,8 +109,8 @@ vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
 
-vi.mock('../components/access/AuthGuardPlaceholder', () => ({
-  AuthGuardPlaceholder: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
+vi.mock('../components/auth/AuthGuardOverlay', () => ({
+  AuthGuardOverlay: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
 }));
 
 vi.mock('../pages/NotFoundPage', () => ({

@@ -2,7 +2,7 @@ import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApiErrorAlert } from './components/common/ApiErrorAlert';
-import { AuthGuardPlaceholder } from './components/access/AuthGuardPlaceholder';
+import { AuthGuardOverlay } from './components/auth/AuthGuardOverlay';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
 import { Shell } from './components/layout/Shell';
 import { PreviewShell } from './components/layout/PreviewShell';
@@ -179,7 +179,11 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
     return <>{children}</>;
   }
 
-  return <AuthGuardPlaceholder moduleName={moduleName} />;
+  return (
+    <main className="flex-1 flex flex-col relative w-full h-full">
+      <AuthGuardOverlay moduleName={moduleName} />
+    </main>
+  );
 };
 
 export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {

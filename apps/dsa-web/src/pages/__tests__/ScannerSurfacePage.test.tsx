@@ -10,8 +10,8 @@ vi.mock('../../hooks/useProductSurface', () => ({
   useProductSurface: () => useProductSurfaceMock(),
 }));
 
-vi.mock('../../components/access/AuthGuardPlaceholder', () => ({
-  AuthGuardPlaceholder: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
+vi.mock('../../components/auth/AuthGuardOverlay', () => ({
+  AuthGuardOverlay: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
 }));
 
 vi.mock('../UserScannerPage', () => ({
