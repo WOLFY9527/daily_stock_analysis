@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GuestHomePage from '../GuestHomePage';
 
-const { previewMock, languageState } = vi.hoisted(() => ({
+const { previewMock, languageState, useAuthMock } = vi.hoisted(() => ({
   previewMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
+  useAuthMock: vi.fn(),
 }));
 
 vi.mock('../../api/publicAnalysis', () => ({
@@ -19,6 +20,10 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
     language: languageState.value,
     t: (key: string) => key,
   }),
+}));
+
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => useAuthMock(),
 }));
 
 vi.mock('../../components/StockAutocomplete', () => ({
@@ -47,6 +52,10 @@ describe('GuestHomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     languageState.value = 'zh';
+    useAuthMock.mockReturnValue({
+      loggedIn: false,
+      isLoading: false,
+    });
     window.history.replaceState(window.history.state, '', '/zh');
   });
 
@@ -142,5 +151,31 @@ describe('GuestHomePage', () => {
     expect(screen.getAllByText('Enter a ticker to wake up the AI analysis flow.').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Generate snapshot' })).toBeInTheDocument();
     expect(screen.queryByTestId('guest-home-grid')).not.toBeInTheDocument();
+  });
+
+  it('redirects signed-in users away from /guest and back to home', async () => {
+    useAuthMock.mockReturnValue({
+      loggedIn: true,
+      isLoading: false,
+    });
+    window.history.replaceState(window.history.state, '', '/guest');
+
+    const LocationProbe = () => {
+      const location = useLocation();
+      return <div data-testid="location-path">{location.pathname}</div>;
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/guest']}>
+        <Routes>
+          <Route path="/guest" element={<><GuestHomePage /><LocationProbe /></>} />
+          <Route path="/" element={<><div>home workspace</div><LocationProbe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('home workspace')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/'));
+    expect(screen.queryByTestId('guest-home-page')).not.toBeInTheDocument();
   });
 });

@@ -175,7 +175,7 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
 
-  it('keeps the dedicated guest route on guest copy for signed-in sessions', async () => {
+  it('redirects signed-in sessions away from the dedicated guest route back to home', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -190,10 +190,11 @@ describe('AppContent route flows', () => {
     });
 
     languageState.value = 'en';
-    renderAt('/guest');
+    renderAtWithLocationProbe('/guest');
 
-    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
-    expect(screen.queryByText('Home Workspace')).not.toBeInTheDocument();
+    expect(await screen.findByText('Home Workspace')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/'));
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
   });
 
   it('renders the locale-prefixed dedicated guest route', async () => {

@@ -1,14 +1,16 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import { ApiErrorAlert } from '../components/common';
 import { StockAutocomplete } from '../components/StockAutocomplete';
+import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLoginPath, buildRegistrationPath } from '../hooks/useProductSurface';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
 type GuestHomeCopy = {
   documentTitle: string;
@@ -94,18 +96,29 @@ function buildChartSeries(score?: number | null) {
 }
 
 const GuestHomePage: React.FC = () => {
+  const { loggedIn, isLoading: authLoading } = useAuth();
   const { language } = useI18n();
+  const location = useLocation();
+  const navigate = useNavigate();
   const copy = COPY[language];
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const routeLocale = parseLocaleFromPathname(location.pathname);
+  const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const loginPath = useMemo(() => buildLoginPath('/'), []);
   const registrationPath = useMemo(() => buildRegistrationPath('/'), []);
 
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
+
+  useEffect(() => {
+    if (!authLoading && loggedIn) {
+      navigate(homePath, { replace: true });
+    }
+  }, [authLoading, homePath, loggedIn, navigate]);
 
   const handlePreview = async (stockCode?: string, stockName?: string) => {
     const nextCode = (stockCode || query).trim();

@@ -226,6 +226,7 @@ export const AppContent: React.FC = () => {
   const routePathname = stripLocalePrefix(location.pathname);
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const localizedGuestPath = routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest';
+  const guestHomeElement = loggedIn ? <Navigate to={localizedHomePath} replace /> : <GuestHomePage />;
   const isGuestRestrictedPath = (
     routePathname === '/settings'
     || routePathname.startsWith('/settings/')
@@ -332,7 +333,7 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
             <Route element={<Shell />}>
               <Route path="/" element={<HomeSurfacePage />} />
-              <Route path="/guest" element={<GuestHomePage />} />
+              <Route path="/guest" element={guestHomeElement} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
               <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
@@ -346,7 +347,7 @@ export const AppContent: React.FC = () => {
             </Route>
             <Route path="/:locale" element={<Shell />}>
               <Route index element={<HomeSurfacePage />} />
-              <Route path="guest" element={<GuestHomePage />} />
+              <Route path="guest" element={guestHomeElement} />
               <Route path="scanner" element={<ScannerSurfacePage />} />
               <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
