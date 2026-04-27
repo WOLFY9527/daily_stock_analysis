@@ -179,7 +179,7 @@ export interface StockPoolState {
   refreshHistory: (silent?: boolean) => Promise<void>;
   hydrateRecentTasks: () => Promise<void>;
   loadMoreHistory: () => Promise<void>;
-  selectHistoryItem: (recordId: number) => Promise<void>;
+  selectHistoryItem: (recordId: number) => Promise<AnalysisReport | null>;
   selectCachedHistoryForStock: (stockCode: string) => boolean;
   toggleHistorySelection: (recordId: number) => void;
   toggleSelectAllVisible: () => void;
@@ -389,7 +389,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     try {
       const report = await historyApi.getDetail(recordId);
       if (requestId !== reportRequestSeq) {
-        return;
+        return null;
       }
 
       set({
@@ -399,15 +399,17 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       });
       cacheReportSnapshot(get, set, report);
       persistSelectedHistoryId(report.meta.id ?? recordId);
+      return report;
     } catch (error) {
       if (requestId !== reportRequestSeq) {
-        return;
+        return null;
       }
 
       set({
         error: getParsedApiError(error),
         isLoadingReport: false,
       });
+      return null;
     }
   },
 

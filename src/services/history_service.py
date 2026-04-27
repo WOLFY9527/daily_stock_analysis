@@ -740,12 +740,20 @@ class HistoryService:
         """
         raw_result = parse_json_field(record.raw_result)
         context_snapshot = self._parse_context_snapshot(record.context_snapshot)
+        persisted_report = raw_result.get("persisted_report") if isinstance(raw_result, dict) else None
+        persisted_meta = persisted_report.get("meta") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("meta"), dict) else {}
+        persisted_summary = persisted_report.get("summary") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("summary"), dict) else {}
+        persisted_strategy = persisted_report.get("strategy") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("strategy"), dict) else {}
+        persisted_details = persisted_report.get("details") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("details"), dict) else {}
         standard_report = None
-        if isinstance(raw_result, dict):
+        if isinstance(persisted_details.get("standard_report"), dict):
+            standard_report = persisted_details.get("standard_report")
+        elif isinstance(raw_result, dict):
             rebuilt = self._rebuild_analysis_result(raw_result, record, context_snapshot=context_snapshot)
             if rebuilt is not None:
                 report_language = normalize_report_language(
-                    raw_result.get("report_language")
+                    persisted_meta.get("report_language")
+                    or raw_result.get("report_language")
                     or getattr(rebuilt, "report_language", None)
                 )
                 standard_report = report_renderer.build_standard_report_payload(
@@ -753,7 +761,10 @@ class HistoryService:
                     report_language=report_language,
                 )
 
-        model_used = (raw_result or {}).get("model_used") if isinstance(raw_result, dict) else None
+        model_used = (
+            persisted_meta.get("model_used")
+            or ((raw_result or {}).get("model_used") if isinstance(raw_result, dict) else None)
+        )
         model_used = normalize_model_used(model_used)
         sniper_points = self._get_display_sniper_points(record, raw_result)
         time_contract = self._extract_time_contract(context_snapshot)
@@ -761,29 +772,34 @@ class HistoryService:
         return {
             "id": record.id,
             "query_id": record.query_id,
-            "stock_code": record.code,
-            "stock_name": record.name,
-            "report_type": record.report_type,
-            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "stock_code": persisted_meta.get("stock_code") or record.code,
+            "stock_name": persisted_meta.get("stock_name") or record.name,
+            "report_type": persisted_meta.get("report_type") or record.report_type,
+            "created_at": persisted_meta.get("created_at") or (record.created_at.isoformat() if record.created_at else None),
+            "report_language": persisted_meta.get("report_language"),
             "model_used": model_used,
-            "analysis_summary": record.analysis_summary,
-            "operation_advice": record.operation_advice,
-            "trend_prediction": record.trend_prediction,
-            "sentiment_score": record.sentiment_score,
-            "sentiment_label": self._get_sentiment_label(record.sentiment_score or 50),
-            "ideal_buy": sniper_points.get("ideal_buy"),
-            "secondary_buy": sniper_points.get("secondary_buy"),
-            "stop_loss": sniper_points.get("stop_loss"),
-            "take_profit": sniper_points.get("take_profit"),
-            "news_content": record.news_content,
+            "analysis_summary": persisted_summary.get("analysis_summary") or record.analysis_summary,
+            "operation_advice": persisted_summary.get("operation_advice") or record.operation_advice,
+            "trend_prediction": persisted_summary.get("trend_prediction") or record.trend_prediction,
+            "sentiment_score": persisted_summary.get("sentiment_score", record.sentiment_score),
+            "sentiment_label": (
+                persisted_summary.get("sentiment_label")
+                or self._get_sentiment_label(persisted_summary.get("sentiment_score", record.sentiment_score or 50))
+            ),
+            "ideal_buy": persisted_strategy.get("ideal_buy") or sniper_points.get("ideal_buy"),
+            "secondary_buy": persisted_strategy.get("secondary_buy") or sniper_points.get("secondary_buy"),
+            "stop_loss": persisted_strategy.get("stop_loss") or sniper_points.get("stop_loss"),
+            "take_profit": persisted_strategy.get("take_profit") or sniper_points.get("take_profit"),
+            "news_content": persisted_details.get("news_content") or persisted_details.get("news_summary") or record.news_content,
             "raw_result": raw_result,
             "context_snapshot": context_snapshot,
             "standard_report": standard_report,
-            "market_timestamp": time_contract.get("market_timestamp"),
-            "market_session_date": time_contract.get("market_session_date"),
-            "news_published_at": time_contract.get("news_published_at"),
-            "report_generated_at": time_contract.get("report_generated_at"),
+            "market_timestamp": persisted_meta.get("market_timestamp") or time_contract.get("market_timestamp"),
+            "market_session_date": persisted_meta.get("market_session_date") or time_contract.get("market_session_date"),
+            "news_published_at": persisted_meta.get("news_published_at") or time_contract.get("news_published_at"),
+            "report_generated_at": persisted_meta.get("report_generated_at") or time_contract.get("report_generated_at"),
             "session_type": time_contract.get("session_type"),
+            "persisted_report": persisted_report,
         }
 
     def delete_history_records(self, record_ids: List[int]) -> int:

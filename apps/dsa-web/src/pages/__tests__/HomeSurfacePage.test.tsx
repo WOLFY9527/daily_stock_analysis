@@ -342,7 +342,7 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
-    fireEvent.click(await screen.findByTestId('home-bento-history-item-ORCL'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-3'));
 
     await waitFor(() => expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument());
     expect(await screen.findByText('Oracle')).toBeInTheDocument();
@@ -373,33 +373,35 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 
-  it('re-analyzes from the history drawer when a local snapshot is missing instead of fetching history detail', async () => {
+  it('loads the clicked history record from the database instead of re-analyzing', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
-    const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
-    vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
+    const deferred = createDeferred<typeof defaultHistoryReport>();
+    vi.mocked(historyApi.getDetail).mockImplementationOnce(() => deferred.promise);
     renderSurface();
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     expect(await screen.findByTestId('home-bento-history-drawer')).toBeInTheDocument();
-    fireEvent.click(await screen.findByTestId('home-bento-history-item-TSLA'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
     expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
-    expect(analysisApi.analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
-      stockCode: 'TSLA',
-      originalQuery: 'TSLA',
-      selectionSource: 'manual',
-    }));
-    expect(historyApi.getDetail).not.toHaveBeenCalled();
+    expect(historyApi.getDetail).toHaveBeenCalledWith(2);
+    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
 
     deferred.resolve({
-      taskId: 'task-tsla-history',
-      status: 'pending',
-      message: 'submitted',
+      ...defaultHistoryReport,
+      meta: {
+        ...defaultHistoryReport.meta,
+        id: 2,
+        queryId: 'q2',
+        stockCode: 'TSLA',
+        stockName: 'Tesla',
+      },
     });
   });
 
-  it('renders a cached history snapshot immediately without triggering a new analyze request', async () => {
+  it('renders a cached history snapshot immediately and then replaces it with database detail', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
+    const deferred = createDeferred<typeof defaultHistoryReport>();
 
     useStockPoolStore.setState({
       reportSnapshotsByStockCode: {
@@ -456,18 +458,65 @@ describe('HomeSurfacePage', () => {
       },
     });
 
-    vi.mocked(historyApi.getDetail).mockClear();
+    vi.mocked(historyApi.getDetail).mockImplementationOnce(() => deferred.promise);
     vi.mocked(analysisApi.analyzeAsync).mockClear();
 
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
-    fireEvent.click(await screen.findByTestId('home-bento-history-item-TSLA'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
     expect(await screen.findByText('Tesla')).toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-tech-signal-MA20')).toHaveTextContent('MA20 托举 MA60，中期多头排列延续');
-    expect(screen.getByTestId('home-bento-tech-signal-MA60')).toHaveTextContent('长线牛熊分界稳步上移，中线底仓逻辑未坏');
-    expect(historyApi.getDetail).not.toHaveBeenCalled();
+    expect(screen.getByText('Cached snapshot only.')).toBeInTheDocument();
+    expect(historyApi.getDetail).toHaveBeenCalledWith(2);
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
+
+    deferred.resolve({
+      ...defaultHistoryReport,
+      meta: {
+        ...defaultHistoryReport.meta,
+        id: 2,
+        queryId: 'q2',
+        stockCode: 'TSLA',
+        stockName: 'Tesla',
+      },
+      summary: {
+        ...defaultHistoryReport.summary,
+        analysisSummary: 'Database detail must replace the cached snapshot.',
+        operationAdvice: 'Trust the persisted detail.',
+        trendPrediction: 'History detail is the source of truth.',
+        sentimentScore: 62,
+        sentimentLabel: 'Bullish',
+      },
+      strategy: {
+        idealBuy: '168.40 - 170.20',
+        stopLoss: '162.80',
+        takeProfit: '184.20',
+      },
+      details: {
+        standardReport: {
+          ...defaultHistoryReport.details.standardReport,
+          summaryPanel: {
+            ...defaultHistoryReport.details.standardReport.summaryPanel,
+            stock: 'Tesla',
+            ticker: 'TSLA',
+            oneSentence: 'Persisted database detail replaced the cached snapshot.',
+          },
+          decisionPanel: {
+            ...defaultHistoryReport.details.standardReport.decisionPanel,
+            idealEntry: '168.40 - 170.20',
+            target: '184.20',
+            stopLoss: '162.80',
+          },
+          technicalFields: [
+            { label: 'MACD', value: '金叉后继续放大' },
+            { label: 'MA20', value: '168.20' },
+            { label: 'MA60', value: '163.10' },
+          ],
+        },
+      },
+    });
+
+    expect(await screen.findByText('Persisted database detail replaced the cached snapshot.')).toBeInTheDocument();
+    expect(screen.queryByText('Cached snapshot only.')).not.toBeInTheDocument();
   });
 
   it('keeps TSLA drill-down content synchronized with the active dashboard payload', async () => {
@@ -537,7 +586,7 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
-    fireEvent.click(await screen.findByTestId('home-bento-history-item-TSLA'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
     expect(await screen.findByText('Tesla')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方动能收敛，反弹仍待确认');

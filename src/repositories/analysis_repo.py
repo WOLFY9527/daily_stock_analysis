@@ -185,7 +185,23 @@ class AnalysisRepository:
         except Exception as e:
             logger.error(f"保存分析结果失败: {e}")
             return 0
-    
+
+    def attach_persisted_report(
+        self,
+        query_id: str,
+        report_payload: Dict[str, Any],
+    ) -> int:
+        """Attach the canonical persisted report payload to the latest matching history record."""
+        try:
+            return self.db.attach_analysis_report_payload(
+                query_id=query_id,
+                report_payload=report_payload,
+                owner_id=self.owner_id,
+            )
+        except Exception as e:
+            logger.error(f"附加持久化报告失败: {e}")
+            return 0
+
     def count_by_code(self, code: str, days: int = 30) -> int:
         """
         统计指定股票的分析记录数

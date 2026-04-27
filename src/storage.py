@@ -5167,6 +5167,63 @@ class DatabaseManager:
                 logger.error(f"保存分析历史失败: {e}")
                 return 0
 
+    def attach_analysis_report_payload(
+        self,
+        *,
+        query_id: str,
+        report_payload: Dict[str, Any],
+        owner_id: Optional[str] = None,
+    ) -> int:
+        """Attach the canonical persisted report payload onto the latest matching history row."""
+        if not query_id or not isinstance(report_payload, dict):
+            return 0
+
+        resolved_owner_id = self.require_user_id(owner_id)
+        with self.get_session() as session:
+            try:
+                record = (
+                    session.query(AnalysisHistory)
+                    .filter(
+                        AnalysisHistory.query_id == query_id,
+                        AnalysisHistory.owner_id == resolved_owner_id,
+                    )
+                    .order_by(AnalysisHistory.id.desc())
+                    .first()
+                )
+                if record is None:
+                    return 0
+
+                try:
+                    raw_result = json.loads(record.raw_result) if record.raw_result else {}
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    raw_result = {}
+                if not isinstance(raw_result, dict):
+                    raw_result = {}
+
+                raw_result["persisted_report"] = report_payload
+
+                meta = report_payload.get("meta") if isinstance(report_payload.get("meta"), dict) else {}
+                details = report_payload.get("details") if isinstance(report_payload.get("details"), dict) else {}
+                standard_report = details.get("standard_report")
+                if isinstance(standard_report, dict):
+                    raw_result["standard_report"] = standard_report
+
+                report_language = meta.get("report_language")
+                if report_language:
+                    raw_result["report_language"] = report_language
+
+                model_used = meta.get("model_used")
+                if model_used:
+                    raw_result["model_used"] = model_used
+
+                record.raw_result = self._safe_json_dumps(raw_result)
+                session.commit()
+                return 1
+            except Exception as e:
+                session.rollback()
+                logger.error(f"附加持久化报告失败: {e}")
+                return 0
+
     def get_analysis_history(
         self,
         code: Optional[str] = None,

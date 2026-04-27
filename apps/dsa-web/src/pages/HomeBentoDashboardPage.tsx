@@ -17,7 +17,7 @@ import type {
 } from '../components/home-bento/HomeSignalCandlestickChart';
 import { Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
-import type { AnalysisReport, StandardReportField } from '../types/analysis';
+import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
 import { useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
@@ -1603,11 +1603,12 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [isHistoryDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
+  const selectHistoryItem = useStockPoolStore((state) => state.selectHistoryItem);
   const selectCachedHistoryForStock = useStockPoolStore((state) => state.selectCachedHistoryForStock);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
   const clearError = useStockPoolStore((state) => state.clearError);
-  const recentHistory = useMemo(
-    () => Array.from(new Set(historyItems.map((item) => normalizeTickerQuery(item.stockCode)).filter(Boolean))).slice(0, 8),
+  const recentHistoryItems = useMemo(
+    () => historyItems.slice(0, 8),
     [historyItems],
   );
   const isBusy = isAnalyzing || isDashboardLoading;
@@ -1636,7 +1637,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       return;
     }
 
-    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || recentHistory[0];
+    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode);
     if (!nextTicker) {
       return;
     }
@@ -1647,7 +1648,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [hasHydratedInitialTicker, recentHistory, selectedReport?.meta.stockCode]);
+  }, [hasHydratedInitialTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
     if (!fallbackToast) {
@@ -1703,8 +1704,8 @@ const HomeBentoDashboardPage: React.FC = () => {
     setDashboardLoading(false);
   };
 
-  const handleHistoryClick = async (tickerValue: string) => {
-    const normalizedTicker = normalizeTickerQuery(tickerValue);
+  const handleHistoryClick = async (historyItem: HistoryItem) => {
+    const normalizedTicker = normalizeTickerQuery(historyItem.stockCode);
     if (!normalizedTicker) {
       return;
     }
@@ -1713,11 +1714,18 @@ const HomeBentoDashboardPage: React.FC = () => {
     setFallbackToast(null);
     setAnalysisFallbackMode(false);
     clearError();
-    if (selectCachedHistoryForStock(normalizedTicker)) {
-      setActiveTicker(normalizedTicker);
-      return;
+    setActiveTicker(normalizedTicker);
+
+    const hasCachedSnapshot = selectCachedHistoryForStock(normalizedTicker);
+    if (!hasCachedSnapshot) {
+      setDashboardLoading(true);
     }
-    await handleAnalyze(normalizedTicker);
+
+    try {
+      await selectHistoryItem(historyItem.id);
+    } finally {
+      setDashboardLoading(false);
+    }
   };
 
   return (
@@ -1885,29 +1893,33 @@ const HomeBentoDashboardPage: React.FC = () => {
         width="max-w-lg"
       >
         <div className="flex flex-col gap-3" data-testid="home-bento-history-drawer">
-          {recentHistory.length > 0 ? recentHistory.map((ticker) => (
+          {recentHistoryItems.length > 0 ? recentHistoryItems.map((item) => {
+            const ticker = normalizeTickerQuery(item.stockCode);
+            const isSelected = selectedReport?.meta.id === item.id;
+            return (
             <button
-              key={ticker}
+              key={item.id}
               type="button"
-              onClick={() => { void handleHistoryClick(ticker); }}
+              onClick={() => { void handleHistoryClick(item); }}
               className={`flex min-w-0 items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors ${
-                activeTicker === ticker
+                isSelected
                   ? 'border-white/15 bg-white/[0.08] text-white'
                   : 'border-white/5 bg-white/[0.02] text-white/72 hover:bg-white/[0.05]'
               }`}
-              data-testid={`home-bento-history-item-${ticker}`}
+              data-testid={`home-bento-history-item-${item.id}`}
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{ticker}</p>
+                <p className="truncate text-sm font-semibold">{item.stockName || ticker}</p>
                 <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  {locale === 'en' ? 'Recent analysis' : '最近分析'}
+                  {ticker} · {locale === 'en' ? 'Recent analysis' : '最近分析'}
                 </p>
               </div>
               <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/35">
-                {activeTicker === ticker ? (locale === 'en' ? 'Loaded' : '当前') : (locale === 'en' ? 'Open' : '打开')}
+                {isSelected ? (locale === 'en' ? 'Loaded' : '当前') : (locale === 'en' ? 'Open' : '打开')}
               </span>
             </button>
-          )) : (
+          );
+          }) : (
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-white/48">
               {locale === 'en' ? 'No synced analysis history yet.' : '历史分析尚未同步。'}
             </div>

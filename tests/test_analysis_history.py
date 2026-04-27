@@ -197,6 +197,83 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsNotNone(detail)
         self.assertIsNone(detail.get("model_used"))
 
+    def test_history_detail_prefers_persisted_report_payload_over_rebuilt_snapshot(self) -> None:
+        """History detail should prefer the exact persisted report payload when it exists."""
+        result = self._build_result()
+        result.model_used = "gemini/gemini-2.0-flash"
+
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_persisted_report_001",
+            report_type="detailed",
+            news_content="新闻摘要",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_persisted_report_001"
+            ).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            row.raw_result = json.dumps({
+                "code": "600519",
+                "name": "贵州茅台",
+                "model_used": "gemini/gemini-2.0-flash",
+                "persisted_report": {
+                    "meta": {
+                        "query_id": "query_persisted_report_001",
+                        "stock_code": "600519",
+                        "stock_name": "贵州茅台",
+                        "report_type": "detailed",
+                        "report_language": "zh",
+                        "created_at": "2026-04-27T10:00:00Z",
+                        "model_used": "gemini/gemini-2.0-flash",
+                    },
+                    "summary": {
+                        "analysis_summary": "这是持久化后的完整报告摘要",
+                        "operation_advice": "等待更优确认",
+                        "trend_prediction": "趋势延续但要防回撤",
+                        "sentiment_score": 73,
+                        "sentiment_label": "乐观",
+                    },
+                    "strategy": {
+                        "ideal_buy": "1680 - 1705",
+                        "secondary_buy": "1660 - 1670",
+                        "stop_loss": "1628",
+                        "take_profit": "1788",
+                    },
+                    "details": {
+                        "news_summary": "持久化新闻摘要",
+                        "standard_report": {
+                            "summary_panel": {
+                                "stock": "贵州茅台",
+                                "ticker": "600519",
+                                "one_sentence": "持久化标准报告应被原样返回",
+                            },
+                            "technical_fields": [
+                                {"label": "MACD", "value": "持久化后的技术结论"}
+                            ],
+                        },
+                    },
+                },
+            })
+            record_id = row.id
+            session.commit()
+
+        service = HistoryService(self.db)
+        detail = service.get_history_detail_by_id(record_id)
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.get("analysis_summary"), "这是持久化后的完整报告摘要")
+        self.assertEqual(detail.get("ideal_buy"), "1680 - 1705")
+        self.assertEqual(detail.get("news_content"), "持久化新闻摘要")
+        self.assertEqual(
+            detail.get("standard_report", {}).get("summary_panel", {}).get("one_sentence"),
+            "持久化标准报告应被原样返回",
+        )
+
     def test_history_detail_accepts_dict_raw_result(self) -> None:
         """_record_to_detail_dict should handle dict raw_result without json.loads errors."""
         result = self._build_result()

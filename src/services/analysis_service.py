@@ -65,6 +65,7 @@ class AnalysisService:
             from src.config import get_config
             from src.core.pipeline import StockAnalysisPipeline
             from src.enums import ReportType
+            from src.repositories.analysis_repo import AnalysisRepository
             
             # 生成 query_id
             if query_id is None:
@@ -101,7 +102,18 @@ class AnalysisService:
                 return None
             
             # 构建响应
-            return self._build_analysis_response(result, query_id, report_type=rt.value)
+            response = self._build_analysis_response(result, query_id, report_type=rt.value)
+            if persist_history:
+                resolved_query_id = str(response.get("query_id") or query_id or "")
+                report_payload = response.get("report")
+                if resolved_query_id and isinstance(report_payload, dict):
+                    saved = AnalysisRepository(owner_id=owner_id).attach_persisted_report(
+                        resolved_query_id,
+                        report_payload,
+                    )
+                    if saved <= 0:
+                        logger.warning("附加持久化报告失败: query_id=%s stock_code=%s", resolved_query_id, stock_code)
+            return response
             
         except Exception as e:
             logger.error(f"分析股票 {stock_code} 失败: {e}", exc_info=True)

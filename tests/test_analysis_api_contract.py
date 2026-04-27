@@ -222,6 +222,48 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response["query_id"], "q-top-level")
         self.assertIs(response["notification_result"], notification_result)
 
+    def test_analyze_stock_attaches_persisted_report_after_successful_completion(self) -> None:
+        service = AnalysisService()
+        pipeline_instance = MagicMock()
+        pipeline_instance.process_single_stock.return_value = SimpleNamespace(
+            code="NVDA",
+            name="NVIDIA",
+            query_id="q-persisted-report",
+            current_price=125.3,
+            change_pct=1.87,
+            model_used="test-model",
+            analysis_summary="等待确认",
+            operation_advice="持有",
+            trend_prediction="看多",
+            sentiment_score=78,
+            news_summary="news",
+            technical_analysis="tech",
+            fundamental_analysis="fundamental",
+            risk_warning="risk",
+            report_language="zh",
+            runtime_execution={"steps": []},
+            notification_result={"status": "ok"},
+            get_sniper_points=lambda: {},
+        )
+
+        with patch("src.config.get_config", return_value=SimpleNamespace()), \
+             patch("src.core.pipeline.StockAnalysisPipeline", return_value=pipeline_instance), \
+             patch("src.repositories.analysis_repo.AnalysisRepository.attach_persisted_report") as attach_report:
+            attach_report.return_value = 1
+            response = service.analyze_stock(
+                "NVDA",
+                report_type="detailed",
+                query_id="q-persisted-report",
+                send_notification=False,
+                owner_id="user-1",
+            )
+
+        self.assertIsNotNone(response)
+        attach_report.assert_called_once_with(
+            "q-persisted-report",
+            response["report"],
+        )
+
     def test_build_analysis_report_extracts_fundamental_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")
