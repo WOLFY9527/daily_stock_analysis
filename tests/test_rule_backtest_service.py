@@ -87,7 +87,13 @@ class RuleBacktestTestCase(unittest.TestCase):
         self._temp_dir.cleanup()
 
     @staticmethod
-    def _make_bars(closes: list[float], *, start: date = date(2024, 1, 1)) -> list[SimpleNamespace]:
+    def _make_bars(
+        closes: list[float],
+        *,
+        start: date = date(2024, 1, 1),
+        volumes: list[float] | None = None,
+    ) -> list[SimpleNamespace]:
+        resolved_volumes = volumes or [1000.0] * len(closes)
         return [
             SimpleNamespace(
                 code="TEST",
@@ -96,6 +102,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 high=float(close) + 0.2,
                 low=max(0.01, float(close) - 0.3),
                 close=float(close),
+                volume=float(resolved_volumes[index]),
             )
             for index, close in enumerate(closes)
         ]
@@ -3691,6 +3698,108 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(result.metrics["trade_count"], 0)
         self.assertGreater(len(result.equity_curve), 0)
         self.assertEqual(result.parsed_strategy.strategy_spec["strategy_type"], "rsi_threshold")
+
+    def test_engine_executes_new_classic_template_strategies_from_catalog_text(self) -> None:
+        service = RuleBacktestService(self.db)
+        engine = RuleBacktestEngine()
+        cases = [
+            {
+                "strategy_type": "bollinger_breakout",
+                "text": "收盘价突破布林带上轨买入，跌回中轨卖出",
+                "closes": [10.0, 10.1, 10.0, 10.2, 10.1, 10.0, 10.2, 10.1, 10.0, 10.2, 10.1, 10.0, 10.2, 10.1, 10.0, 10.3, 10.7, 11.1, 11.4, 11.0, 10.7, 10.4, 10.1, 9.9, 10.2, 10.5, 10.8, 10.6, 10.3, 10.0],
+            },
+            {
+                "strategy_type": "atr_breakout",
+                "text": "ATR14 扩张且价格突破前高时买入，跌回突破位下方卖出",
+                "closes": [10.0, 10.02, 10.01, 10.03, 10.02, 10.01, 10.03, 10.02, 10.01, 10.04, 10.03, 10.02, 10.08, 10.7, 11.4, 12.0, 11.6, 11.1, 10.7, 10.2, 10.0, 10.4, 10.9, 11.2, 10.8, 10.4, 10.1],
+            },
+            {
+                "strategy_type": "obv_trend_confirmation",
+                "text": "价格站上均线且 OBV 同步创新高时买入，OBV 转弱时卖出",
+                "closes": [10.0, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9, 11.0, 11.2, 11.5, 11.8, 12.1, 12.3, 12.0, 11.7, 11.3, 11.0, 10.7, 10.5, 10.8, 11.0],
+                "volumes": [100, 105, 110, 115, 120, 125, 130, 140, 150, 160, 170, 220, 260, 300, 340, 360, 180, 160, 140, 120, 110, 100, 130, 150],
+            },
+            {
+                "strategy_type": "support_resistance_bounce",
+                "text": "回踩支撑企稳买入，接近阻力位卖出",
+                "closes": [12.0, 11.6, 11.2, 10.8, 10.3, 10.0, 10.2, 10.6, 11.0, 11.4, 11.8, 12.0, 11.7, 11.3, 10.9, 10.4, 10.1, 10.0, 10.3, 10.7, 11.1, 11.5, 11.9, 11.6],
+            },
+            {
+                "strategy_type": "macd_rsi_combo",
+                "text": "MACD金叉且RSI14上穿50买入，任一信号走弱卖出",
+                "closes": [10.0, 9.8, 9.6, 9.5, 9.4, 9.5, 9.7, 10.0, 10.4, 10.9, 11.3, 11.7, 12.0, 11.8, 11.4, 11.0, 10.6, 10.3, 10.0, 9.8, 10.0, 10.3, 10.7, 11.0],
+            },
+            {
+                "strategy_type": "sma_bollinger_combo",
+                "text": "SMA20 在 SMA60 上方且价格重回布林带中轨上方时买入",
+                "closes": [10.0, 10.1, 10.2, 10.4, 10.5, 10.7, 10.8, 11.0, 11.1, 11.2, 11.4, 11.5, 11.7, 11.8, 11.9, 12.0, 12.1, 12.2, 12.3, 12.4, 12.2, 12.0, 11.8, 11.9, 12.1, 12.4, 12.7, 12.5, 12.2, 11.9],
+            },
+            {
+                "strategy_type": "trend_momentum_volume_mix",
+                "text": "均线多头、RSI 强势且放量突破同时出现时买入",
+                "closes": [10.0, 10.1, 10.3, 10.4, 10.6, 10.7, 10.9, 11.0, 11.2, 11.3, 11.5, 11.6, 11.8, 11.9, 12.1, 12.2, 12.4, 12.5, 12.7, 12.8, 13.3, 13.7, 14.0, 13.8, 13.4, 13.0, 12.7, 12.9],
+                "volumes": [100, 100, 105, 110, 110, 115, 120, 120, 125, 130, 130, 135, 140, 145, 145, 150, 155, 160, 160, 165, 320, 360, 340, 200, 180, 160, 150, 155],
+            },
+            {
+                "strategy_type": "multi_indicator_trend_filter",
+                "text": "价格位于长期均线上方、MACD 为正且波动率扩张时才允许入场",
+                "closes": [10.0, 10.1, 10.2, 10.4, 10.5, 10.7, 10.8, 11.0, 11.1, 11.3, 11.4, 11.6, 11.7, 11.9, 12.0, 12.2, 12.3, 12.5, 12.7, 12.8, 13.1, 13.5, 13.9, 14.2, 13.8, 13.3, 12.9, 12.6],
+            },
+            {
+                "strategy_type": "bollinger_rsi_reversion_combo",
+                "text": "价格跌破布林带下轨且 RSI2 低于10时买入，回到中轨或 RSI 回到60卖出",
+                "closes": [12.0, 12.1, 12.2, 12.1, 12.0, 11.9, 11.8, 11.6, 11.3, 10.9, 10.4, 10.0, 9.7, 9.5, 9.8, 10.2, 10.7, 11.1, 11.4, 11.7, 11.5, 11.2, 11.0],
+            },
+            {
+                "strategy_type": "triple_moving_average_trend_stack",
+                "text": "SMA20 大于 SMA60 且 SMA60 大于 SMA120，价格回踩 SMA20 转强时买入",
+                "closes": [10.0, 10.1, 10.2, 10.4, 10.5, 10.7, 10.8, 11.0, 11.1, 11.3, 11.4, 11.6, 11.7, 11.9, 12.0, 12.2, 12.3, 12.5, 12.6, 12.8, 12.6, 12.4, 12.2, 12.3, 12.6, 12.9, 13.2, 13.0, 12.7, 12.4],
+            },
+            {
+                "strategy_type": "support_resistance_macd_combo",
+                "text": "价格在支撑位企稳且 MACD 金叉时买入，接近阻力位或 MACD 死叉时卖出",
+                "closes": [12.0, 11.6, 11.1, 10.7, 10.2, 10.0, 10.1, 10.4, 10.8, 11.2, 11.7, 12.0, 11.8, 11.4, 10.9, 10.5, 10.1, 10.0, 10.2, 10.6, 11.0, 11.5, 11.9, 11.6],
+            },
+            {
+                "strategy_type": "vwap_volume_breakout_combo",
+                "text": "价格重回 VWAP 上方且突破平台高点并放量时买入，跌回 VWAP 下方卖出",
+                "closes": [10.0, 9.9, 10.0, 10.1, 10.2, 10.1, 10.0, 10.1, 10.2, 10.1, 10.2, 10.3, 10.4, 10.3, 10.4, 10.5, 10.6, 10.8, 11.2, 11.6, 11.9, 11.7, 11.4, 11.0, 10.7],
+                "volumes": [120, 118, 122, 125, 128, 126, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 145, 150, 320, 360, 340, 220, 180, 160, 150],
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(strategy_type=case["strategy_type"]):
+                closes = case["closes"]
+                bars = self._make_bars(
+                    closes,
+                    volumes=case.get("volumes"),
+                )
+                parsed_dict = service.parse_strategy(
+                    case["text"],
+                    code="TEST",
+                    start_date="2024-01-01",
+                    end_date=(date(2024, 1, 1) + timedelta(days=len(closes) - 1)).isoformat(),
+                    initial_capital=100000,
+                )
+                parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+
+                result = engine.run(
+                    code="TEST",
+                    parsed_strategy=parsed,
+                    bars=bars,
+                    initial_capital=100000.0,
+                    lookback_bars=len(closes),
+                    start_date=date(2024, 1, 1),
+                    end_date=date(2024, 1, 1) + timedelta(days=len(closes) - 1),
+                )
+
+                self.assertEqual(result.parsed_strategy.strategy_spec["strategy_type"], case["strategy_type"])
+                self.assertTrue(result.parsed_strategy.executable)
+                self.assertGreater(len(result.equity_curve), 0)
+                self.assertIn(result.no_result_reason, {None, "no_trades", "no_entry_signals"})
+                self.assertIn("final_equity", result.metrics)
+                self.assertIn("total_return_pct", result.metrics)
 
     def test_engine_handles_single_day_window_for_periodic_accumulation(self) -> None:
         service = RuleBacktestService(self.db)

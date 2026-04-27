@@ -42,8 +42,8 @@ StrategyTemplateCategoryId,
       en: 'Advanced / Extended Strategies',
     },
     description: {
-      zh: '扩展更多经典量价、波动率与区间模板，仅作专业模式参考目录。',
-      en: 'Expands the catalog with classic price, volume, and volatility setups as professional-mode references.',
+      zh: '扩展更多经典量价、波动率与区间模板；已支持的条目可直接执行，其余保留参考。',
+      en: 'Expands the catalog with classic price, volume, and volatility setups; executable templates launch directly while the rest remain as references.',
     },
   },
   professional: {
@@ -63,6 +63,18 @@ export const POINT_AND_SHOOT_TEMPLATE_IDS = [
   'moving_average_crossover',
   'rsi_threshold',
   'periodic_accumulation',
+  'bollinger_breakout',
+  'atr_breakout',
+  'obv_trend_confirmation',
+  'support_resistance_bounce',
+  'macd_rsi_combo',
+  'sma_bollinger_combo',
+  'trend_momentum_volume_mix',
+  'multi_indicator_trend_filter',
+  'bollinger_rsi_reversion_combo',
+  'triple_moving_average_trend_stack',
+  'support_resistance_macd_combo',
+  'vwap_volume_breakout_combo',
 ] as const;
 
 export type NormalStrategyTemplate = typeof POINT_AND_SHOOT_TEMPLATE_IDS[number];
@@ -132,7 +144,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'bollinger_breakout',
     strategyFamily: 'bollinger_breakout',
     category: 'advanced',
-    executable: false,
+    executable: true,
     name: { zh: '布林带突破', en: 'Bollinger Band breakout' },
     description: { zh: '价格上破上轨时追随突破，回落时退出。', en: 'Follows upside breakouts above the upper Bollinger Band and exits on weakness.' },
     logicSummary: { zh: '收盘价突破上轨买入，跌回中轨或下轨卖出。', en: 'Buy when price closes above the upper band and exit on a move back to the middle or lower band.' },
@@ -278,7 +290,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'support_resistance_bounce',
     strategyFamily: 'support_resistance_bounce',
     category: 'advanced',
-    executable: false,
+    executable: true,
     name: { zh: '支撑 / 阻力反弹', en: 'Support / resistance bounce' },
     description: { zh: '接近支撑位企稳时买入，接近阻力位减仓。', en: 'Looks for a bounce near support and trims near resistance.' },
     logicSummary: { zh: '回踩前低或平台支撑企稳买入，接近前高或阻力位卖出。', en: 'Buy after price stabilizes near support and exit as it approaches prior resistance.' },
@@ -306,7 +318,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'atr_breakout',
     strategyFamily: 'atr_breakout',
     category: 'advanced',
-    executable: false,
+    executable: true,
     name: { zh: 'ATR 波动突破', en: 'ATR volatility breakout' },
     description: { zh: '用 ATR 扩张确认波动放大，再跟随价格突破。', en: 'Uses ATR expansion to confirm rising volatility before following a price breakout.' },
     logicSummary: { zh: 'ATR14 扩张且价格突破前高时买入，跌回突破位下方卖出。', en: 'Buy when ATR14 expands and price breaks a prior high, then exit if price falls back below the breakout zone.' },
@@ -321,7 +333,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'obv_trend_confirmation',
     strategyFamily: 'obv_trend_confirmation',
     category: 'advanced',
-    executable: false,
+    executable: true,
     name: { zh: 'OBV 趋势确认', en: 'OBV trend confirmation' },
     description: { zh: '用能量潮指标确认量价同步上行，再顺势参与。', en: 'Uses On-Balance Volume to confirm price and volume rising together before entering.' },
     logicSummary: { zh: '价格站上均线且 OBV 同步创新高时买入，OBV 转弱时离场。', en: 'Buy when price holds above its moving average and OBV prints a new high, then exit when OBV weakens.' },
@@ -366,7 +378,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'macd_rsi_combo',
     strategyFamily: 'macd_rsi_combo',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: 'MACD + RSI 共振', en: 'MACD + RSI combo' },
     description: { zh: '用趋势和动量双确认减少单指标噪音。', en: 'Combines trend and momentum confirmation to reduce single-indicator noise.' },
     logicSummary: { zh: 'MACD 金叉且 RSI14 上穿 50 买入，任一信号走弱时卖出。', en: 'Buy when MACD turns bullish and RSI14 rises above 50, then exit when either signal weakens.' },
@@ -381,7 +393,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'sma_bollinger_combo',
     strategyFamily: 'sma_bollinger_combo',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: 'SMA + 布林带组合', en: 'SMA + Bollinger combo' },
     description: { zh: '先判断趋势方向，再用波动率带筛掉假突破。', en: 'Uses trend direction first and Bollinger structure second to filter weak breakouts.' },
     logicSummary: { zh: 'SMA20 在 SMA60 上方且价格重新站上布林带中轨时买入。', en: 'Buy when SMA20 stays above SMA60 and price reclaims the Bollinger middle band.' },
@@ -395,7 +407,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'trend_momentum_volume_mix',
     strategyFamily: 'trend_momentum_volume_mix',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: '趋势 + 动量 + 量能混合', en: 'Trend + momentum + volume mix' },
     description: { zh: '把趋势、动量、量能三类信号放在一套规则里联合确认。', en: 'Mixes trend, momentum, and volume into a single confirmation stack.' },
     logicSummary: { zh: '均线多头、RSI 强势且放量突破同时出现时买入。', en: 'Buy only when moving averages align, RSI stays strong, and a volume-confirmed breakout appears together.' },
@@ -410,7 +422,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'multi_indicator_trend_filter',
     strategyFamily: 'multi_indicator_trend_filter',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: '多指标趋势过滤', en: 'Multi-indicator trend filter' },
     description: { zh: '先用趋势过滤市场状态，再在强势区间内触发入场。', en: 'Filters for favorable regime first, then triggers entries only inside strong trend windows.' },
     logicSummary: { zh: '价格位于长期均线上方、MACD 为正且 ATR 扩张时才允许入场。', en: 'Allow entries only when price is above the long-term average, MACD stays positive, and ATR is expanding.' },
@@ -425,7 +437,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'bollinger_rsi_reversion_combo',
     strategyFamily: 'bollinger_rsi_reversion_combo',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: '布林带 + RSI 回归组合', en: 'Bollinger + RSI reversion combo' },
     description: { zh: '把波动率带与 RSI 超卖信号叠加，减少单一反转信号误判。', en: 'Stacks Bollinger structure with RSI oversold confirmation to reduce noisy reversal entries.' },
     logicSummary: { zh: '价格跌破下轨且 RSI2 低于 10 时买入，回到中轨或 RSI 回到 60 卖出。', en: 'Buy when price falls below the lower band and RSI2 drops under 10, then exit at the middle band or RSI 60.' },
@@ -440,7 +452,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'triple_moving_average_trend_stack',
     strategyFamily: 'triple_moving_average_trend_stack',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: '三重均线趋势栈', en: 'Triple moving-average trend stack' },
     description: { zh: '用短中长期均线排序确认趋势，只在多头排列内参与。', en: 'Uses short, medium, and long moving-average alignment to confirm a clean trend stack.' },
     logicSummary: { zh: 'SMA20 > SMA60 > SMA120 且价格回踩 SMA20 再转强时买入。', en: 'Buy when SMA20 stays above SMA60 above SMA120 and price rebounds after retesting SMA20.' },
@@ -455,7 +467,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'support_resistance_macd_combo',
     strategyFamily: 'support_resistance_macd_combo',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: '支撑阻力 + MACD 组合', en: 'Support / resistance + MACD combo' },
     description: { zh: '先看关键位，再用 MACD 确认反弹或突破是否有效。', en: 'Blends key support and resistance levels with MACD confirmation for cleaner entries.' },
     logicSummary: { zh: '价格在支撑位企稳且 MACD 金叉时买入，接近阻力位或 MACD 死叉时卖出。', en: 'Buy when price holds support and MACD turns bullish, then exit near resistance or on a bearish MACD crossover.' },
@@ -470,7 +482,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
     id: 'vwap_volume_breakout_combo',
     strategyFamily: 'vwap_volume_breakout_combo',
     category: 'professional',
-    executable: false,
+    executable: true,
     name: { zh: 'VWAP + 放量突破组合', en: 'VWAP + volume breakout combo' },
     description: { zh: '把 VWAP 站稳和放量突破叠加，适合做更严格的突破筛选。', en: 'Stacks VWAP reclaim with volume-confirmed breakouts for stricter breakout validation.' },
     logicSummary: { zh: '价格重回 VWAP 上方且突破平台高点并放量时买入，跌回 VWAP 下方卖出。', en: 'Buy when price reclaims VWAP, breaks range highs, and volume expands, then exit below VWAP.' },
@@ -522,23 +534,13 @@ export function buildPointAndShootStrategyText(
   const resolvedStart = payload.startDate || (language === 'en' ? 'the start date' : '开始日期');
   const resolvedEnd = payload.endDate || (language === 'en' ? 'the end date' : '结束日期');
   const resolvedCapital = payload.initialCapital || '100000';
+  const selectedTemplate = getStrategyCatalogEntry(template);
+  const editorText = selectedTemplate?.editorText[language]
+    || (language === 'en'
+      ? 'Buy when the 5-day moving average crosses above the 20-day average and sell on the reverse crossover'
+      : '5日均线上穿20日均线买入，下穿卖出');
 
-  if (template === 'macd_crossover') {
-    return language === 'en'
-      ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Buy on a MACD bullish crossover and sell on a bearish crossover.`
-      : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，MACD 金叉买入，死叉卖出。`;
-  }
-  if (template === 'rsi_threshold') {
-    return language === 'en'
-      ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Buy when RSI14 drops below 30 and sell when it rises above 70.`
-      : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，RSI14 低于 30 买入，高于 70 卖出。`;
-  }
-  if (template === 'periodic_accumulation') {
-    return language === 'en'
-      ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Invest a fixed amount every month until the test window ends or cash runs out.`
-      : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，每月按固定金额持续定投，直到区间结束或现金耗尽。`;
-  }
   return language === 'en'
-    ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Buy when the 5-day moving average crosses above the 20-day average, and sell on the reverse crossover.`
-    : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，5 日均线上穿 20 日均线买入，下穿卖出。`;
+    ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. ${editorText}.`
+    : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，${editorText}。`;
 }

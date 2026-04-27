@@ -922,7 +922,7 @@ describe('BacktestPage', () => {
     expect(screen.getByText('回测页面摘要')).toBeInTheDocument();
   });
 
-  it('limits point-and-shoot templates to the executable built-ins only', async () => {
+  it('includes every engine-supported classic strategy in point-and-shoot mode', async () => {
     renderBacktestRoutes();
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
@@ -935,6 +935,18 @@ describe('BacktestPage', () => {
       '均线交叉（SMA / EMA）',
       'RSI 超买 / 超卖',
       '定投策略',
+      '布林带突破',
+      '支撑 / 阻力反弹',
+      'ATR 波动突破',
+      'OBV 趋势确认',
+      'MACD + RSI 共振',
+      'SMA + 布林带组合',
+      '趋势 + 动量 + 量能混合',
+      '多指标趋势过滤',
+      '布林带 + RSI 回归组合',
+      '三重均线趋势栈',
+      '支撑阻力 + MACD 组合',
+      'VWAP + 放量突破组合',
     ]);
     expect(optionLabels).not.toContain('自定义代码');
   });
@@ -970,7 +982,7 @@ describe('BacktestPage', () => {
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
-  it('shows the full built-in strategy catalog in professional mode and marks unsupported templates', async () => {
+  it('shows the full built-in strategy catalog in professional mode and only marks still-unsupported templates', async () => {
     renderBacktestRoutes();
 
     await switchToProfessionalMode();
@@ -981,6 +993,7 @@ describe('BacktestPage', () => {
     expect(screen.getByText('专业 / 组合策略')).toBeInTheDocument();
     expect(screen.getByText('布林带突破')).toBeInTheDocument();
     expect(screen.getByText('MACD + RSI 共振')).toBeInTheDocument();
+    expect(screen.getAllByText('可执行').length).toBeGreaterThan(0);
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
   });
 

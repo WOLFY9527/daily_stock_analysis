@@ -7,23 +7,47 @@ import {
 } from '../strategyCatalog';
 
 describe('strategyCatalog', () => {
-  it('keeps point-and-shoot limited to the four deterministic-ready templates', () => {
+  it('includes every deterministic-ready classic strategy in point-and-shoot mode', () => {
     expect([...POINT_AND_SHOOT_TEMPLATE_IDS]).toEqual([
       'macd_crossover',
       'moving_average_crossover',
       'rsi_threshold',
       'periodic_accumulation',
+      'bollinger_breakout',
+      'atr_breakout',
+      'obv_trend_confirmation',
+      'support_resistance_bounce',
+      'macd_rsi_combo',
+      'sma_bollinger_combo',
+      'trend_momentum_volume_mix',
+      'multi_indicator_trend_filter',
+      'bollinger_rsi_reversion_combo',
+      'triple_moving_average_trend_stack',
+      'support_resistance_macd_combo',
+      'vwap_volume_breakout_combo',
     ]);
     expect(POINT_AND_SHOOT_TEMPLATES.map((template) => template.id)).toEqual([
       'macd_crossover',
       'moving_average_crossover',
       'rsi_threshold',
       'periodic_accumulation',
+      'bollinger_breakout',
+      'support_resistance_bounce',
+      'atr_breakout',
+      'obv_trend_confirmation',
+      'macd_rsi_combo',
+      'sma_bollinger_combo',
+      'trend_momentum_volume_mix',
+      'multi_indicator_trend_filter',
+      'bollinger_rsi_reversion_combo',
+      'triple_moving_average_trend_stack',
+      'support_resistance_macd_combo',
+      'vwap_volume_breakout_combo',
     ]);
-    expect(POINT_AND_SHOOT_TEMPLATES.every((template) => template.executable && template.category === 'basic')).toBe(true);
+    expect(POINT_AND_SHOOT_TEMPLATES.every((template) => template.executable)).toBe(true);
   });
 
-  it('keeps the basic catalog limited to executable templates and marks every other built-in as reference only', () => {
+  it('keeps all executable templates launchable for ordinary users and leaves unsupported templates as references', () => {
     const basicGroup = getStrategyCatalogGroups().find((group) => group.id === 'basic');
 
     expect(basicGroup?.templates.map((template) => template.id)).toEqual([
@@ -41,7 +65,7 @@ describe('strategyCatalog', () => {
     expect(referenceTemplates.every((template) => template.executable === false)).toBe(true);
   });
 
-  it('keeps classic reference templates available in advanced and professional catalogs', () => {
+  it('keeps both executable and unsupported classic templates visible inside the professional catalog', () => {
     const groups = getStrategyCatalogGroups();
     const advancedGroup = groups.find((group) => group.id === 'advanced');
     const professionalGroup = groups.find((group) => group.id === 'professional');
@@ -61,5 +85,8 @@ describe('strategyCatalog', () => {
       'triple_moving_average_trend_stack',
       'support_resistance_macd_combo',
     ]));
+    expect(advancedGroup?.templates.find((template) => template.id === 'bollinger_breakout')?.executable).toBe(true);
+    expect(advancedGroup?.templates.find((template) => template.id === 'volume_breakout')?.executable).toBe(false);
+    expect(professionalGroup?.templates.find((template) => template.id === 'macd_rsi_combo')?.executable).toBe(true);
   });
 });

@@ -1246,7 +1246,23 @@ class RuleBacktestEngine:
                 start_date=start_date,
                 end_date=end_date,
             )
-        if strategy_type in {"moving_average_crossover", "macd_crossover", "rsi_threshold"}:
+        if strategy_type in {
+            "moving_average_crossover",
+            "macd_crossover",
+            "rsi_threshold",
+            "bollinger_breakout",
+            "atr_breakout",
+            "obv_trend_confirmation",
+            "support_resistance_bounce",
+            "macd_rsi_combo",
+            "sma_bollinger_combo",
+            "trend_momentum_volume_mix",
+            "multi_indicator_trend_filter",
+            "bollinger_rsi_reversion_combo",
+            "triple_moving_average_trend_stack",
+            "support_resistance_macd_combo",
+            "vwap_volume_breakout_combo",
+        }:
             return self._run_indicator_family_strategy(
                 code=code,
                 parsed_strategy=parsed_strategy,
@@ -1660,7 +1676,7 @@ class RuleBacktestEngine:
         strategy_spec = parsed_strategy.strategy_spec or {}
         signal_spec = dict(strategy_spec.get("signal") or {})
         risk_controls = dict(strategy_spec.get("risk_controls") or {})
-        series_payload = self._build_strategy_signal_series(closes, strategy_spec)
+        series_payload = self._build_strategy_signal_series(ordered_bars, strategy_spec)
         fee_rate = max(0.0, float(execution_model.fee_bps_per_side)) / 10000.0
         slippage_rate = max(0.0, float(execution_model.slippage_bps_per_side)) / 10000.0
         trades: List[RuleBacktestTrade] = []
@@ -2311,17 +2327,25 @@ class RuleBacktestEngine:
 
     def _build_strategy_signal_series(
         self,
-        closes: Sequence[Optional[float]],
+        bars: Sequence[Any],
         strategy_spec: Dict[str, Any],
     ) -> Dict[str, List[Optional[float]]]:
         signal_spec = dict(strategy_spec.get("signal") or {})
         strategy_type = str(strategy_spec.get("strategy_type") or "")
+        closes = [self._safe_price(getattr(bar, "close", None)) for bar in bars]
+        highs = [self._safe_price(getattr(bar, "high", None)) for bar in bars]
+        lows = [self._safe_price(getattr(bar, "low", None)) for bar in bars]
+        volumes = [self._safe_volume(getattr(bar, "volume", None)) for bar in bars]
+        base_payload: Dict[str, List[Optional[float]]] = {
+            "close": list(closes),
+        }
         if strategy_type == "moving_average_crossover":
             fast_period = int(signal_spec.get("fast_period") or 5)
             slow_period = int(signal_spec.get("slow_period") or 20)
             fast_builder = self._build_ema if str(signal_spec.get("fast_type") or "simple") == "ema" else self._build_sma
             slow_builder = self._build_ema if str(signal_spec.get("slow_type") or "simple") == "ema" else self._build_sma
             return {
+                **base_payload,
                 "fast": fast_builder(closes, fast_period),
                 "slow": slow_builder(closes, slow_period),
             }
@@ -2341,6 +2365,7 @@ class RuleBacktestEngine:
                 for idx in range(len(closes))
             ]
             return {
+                **base_payload,
                 "macd": macd_line,
                 "signal": signal_line,
                 "histogram": histogram,
@@ -2348,7 +2373,187 @@ class RuleBacktestEngine:
         if strategy_type == "rsi_threshold":
             period = int(signal_spec.get("period") or 14)
             return {
+                **base_payload,
                 "rsi": self._build_rsi(closes, period),
+            }
+        if strategy_type == "bollinger_breakout":
+            period = int(signal_spec.get("period") or 20)
+            std_dev = float(signal_spec.get("std_dev") or 2.0)
+            middle, upper, lower = self._build_bollinger(closes, period, std_dev)
+            return {
+                **base_payload,
+                "middle": middle,
+                "upper": upper,
+                "lower": lower,
+            }
+        if strategy_type == "atr_breakout":
+            atr_period = int(signal_spec.get("atr_period") or 14)
+            breakout_lookback = int(signal_spec.get("breakout_lookback") or 20)
+            atr_expansion_lookback = int(signal_spec.get("atr_expansion_lookback") or breakout_lookback)
+            exit_lookback = int(signal_spec.get("exit_lookback") or max(5, breakout_lookback // 2))
+            atr = self._build_atr(highs, lows, closes, atr_period)
+            return {
+                **base_payload,
+                "atr": atr,
+                "atr_ceiling": self._build_rolling_max(atr, atr_expansion_lookback),
+                "breakout_high": self._build_rolling_high(highs, breakout_lookback),
+                "exit_low": self._build_rolling_low(lows, exit_lookback),
+            }
+        if strategy_type == "obv_trend_confirmation":
+            trend_average = int(signal_spec.get("trend_average") or 50)
+            obv_lookback = int(signal_spec.get("obv_lookback") or 20)
+            obv_signal_period = int(signal_spec.get("obv_signal_period") or 10)
+            obv = self._build_obv(closes, volumes)
+            return {
+                **base_payload,
+                "trend_ma": self._build_sma(closes, trend_average),
+                "obv": obv,
+                "obv_breakout": self._build_rolling_max(obv, obv_lookback),
+                "obv_signal": self._build_sma(obv, obv_signal_period),
+            }
+        if strategy_type == "support_resistance_bounce":
+            support_lookback = int(signal_spec.get("support_lookback") or 20)
+            resistance_lookback = int(signal_spec.get("resistance_lookback") or 20)
+            return {
+                **base_payload,
+                "support": self._build_rolling_low(lows, support_lookback),
+                "resistance": self._build_rolling_high(highs, resistance_lookback),
+            }
+        if strategy_type == "macd_rsi_combo":
+            fast_period = int(signal_spec.get("fast_period") or 12)
+            slow_period = int(signal_spec.get("slow_period") or 26)
+            signal_period = int(signal_spec.get("signal_period") or 9)
+            rsi_period = int(signal_spec.get("rsi_period") or 14)
+            fast_ema = self._build_ema(closes, fast_period)
+            slow_ema = self._build_ema(closes, slow_period)
+            macd_line = [
+                ((float(fast_ema[idx]) - float(slow_ema[idx])) if fast_ema[idx] is not None and slow_ema[idx] is not None else None)
+                for idx in range(len(closes))
+            ]
+            signal_line = self._build_ema(macd_line, signal_period)
+            return {
+                **base_payload,
+                "macd": macd_line,
+                "signal": signal_line,
+                "rsi": self._build_rsi(closes, rsi_period),
+            }
+        if strategy_type == "sma_bollinger_combo":
+            trend_fast_period = int(signal_spec.get("trend_fast_period") or 20)
+            trend_slow_period = int(signal_spec.get("trend_slow_period") or 60)
+            period = int(signal_spec.get("period") or 20)
+            std_dev = float(signal_spec.get("std_dev") or 2.0)
+            middle, upper, lower = self._build_bollinger(closes, period, std_dev)
+            return {
+                **base_payload,
+                "trend_fast": self._build_sma(closes, trend_fast_period),
+                "trend_slow": self._build_sma(closes, trend_slow_period),
+                "middle": middle,
+                "upper": upper,
+                "lower": lower,
+            }
+        if strategy_type == "trend_momentum_volume_mix":
+            fast_period = int(signal_spec.get("fast_period") or 20)
+            mid_period = int(signal_spec.get("mid_period") or 60)
+            slow_period = int(signal_spec.get("slow_period") or 120)
+            rsi_period = int(signal_spec.get("rsi_period") or 14)
+            price_lookback = int(signal_spec.get("price_lookback") or 20)
+            volume_period = int(signal_spec.get("volume_period") or 20)
+            return {
+                **base_payload,
+                "fast": self._build_sma(closes, fast_period),
+                "mid": self._build_sma(closes, mid_period),
+                "slow": self._build_sma(closes, slow_period),
+                "rsi": self._build_rsi(closes, rsi_period),
+                "breakout_high": self._build_rolling_high(highs, price_lookback),
+                "volume_sma": self._build_sma(volumes, volume_period),
+                "volume": volumes,
+            }
+        if strategy_type == "multi_indicator_trend_filter":
+            trend_average = int(signal_spec.get("trend_average") or 120)
+            fast_period = int(signal_spec.get("fast_period") or 12)
+            slow_period = int(signal_spec.get("slow_period") or 26)
+            signal_period = int(signal_spec.get("signal_period") or 9)
+            atr_period = int(signal_spec.get("atr_period") or 14)
+            atr_expansion_lookback = int(signal_spec.get("atr_expansion_lookback") or 20)
+            breakout_lookback = int(signal_spec.get("breakout_lookback") or 20)
+            fast_ema = self._build_ema(closes, fast_period)
+            slow_ema = self._build_ema(closes, slow_period)
+            macd_line = [
+                ((float(fast_ema[idx]) - float(slow_ema[idx])) if fast_ema[idx] is not None and slow_ema[idx] is not None else None)
+                for idx in range(len(closes))
+            ]
+            signal_line = self._build_ema(macd_line, signal_period)
+            histogram = [
+                ((float(macd_line[idx]) - float(signal_line[idx])) if macd_line[idx] is not None and signal_line[idx] is not None else None)
+                for idx in range(len(closes))
+            ]
+            atr = self._build_atr(highs, lows, closes, atr_period)
+            return {
+                **base_payload,
+                "trend_ma": self._build_sma(closes, trend_average),
+                "macd": macd_line,
+                "signal": signal_line,
+                "histogram": histogram,
+                "atr": atr,
+                "atr_ceiling": self._build_rolling_max(atr, atr_expansion_lookback),
+                "breakout_high": self._build_rolling_high(highs, breakout_lookback),
+            }
+        if strategy_type == "bollinger_rsi_reversion_combo":
+            period = int(signal_spec.get("period") or 20)
+            std_dev = float(signal_spec.get("std_dev") or 2.0)
+            rsi_period = int(signal_spec.get("rsi_period") or 2)
+            middle, upper, lower = self._build_bollinger(closes, period, std_dev)
+            return {
+                **base_payload,
+                "middle": middle,
+                "upper": upper,
+                "lower": lower,
+                "rsi": self._build_rsi(closes, rsi_period),
+            }
+        if strategy_type == "triple_moving_average_trend_stack":
+            fast_period = int(signal_spec.get("fast_period") or 20)
+            mid_period = int(signal_spec.get("mid_period") or 60)
+            slow_period = int(signal_spec.get("slow_period") or 120)
+            return {
+                **base_payload,
+                "fast": self._build_sma(closes, fast_period),
+                "mid": self._build_sma(closes, mid_period),
+                "slow": self._build_sma(closes, slow_period),
+            }
+        if strategy_type == "support_resistance_macd_combo":
+            support_lookback = int(signal_spec.get("support_lookback") or 20)
+            resistance_lookback = int(signal_spec.get("resistance_lookback") or 20)
+            fast_period = int(signal_spec.get("fast_period") or 12)
+            slow_period = int(signal_spec.get("slow_period") or 26)
+            signal_period = int(signal_spec.get("signal_period") or 9)
+            fast_ema = self._build_ema(closes, fast_period)
+            slow_ema = self._build_ema(closes, slow_period)
+            macd_line = [
+                ((float(fast_ema[idx]) - float(slow_ema[idx])) if fast_ema[idx] is not None and slow_ema[idx] is not None else None)
+                for idx in range(len(closes))
+            ]
+            signal_line = self._build_ema(macd_line, signal_period)
+            histogram = [
+                ((float(macd_line[idx]) - float(signal_line[idx])) if macd_line[idx] is not None and signal_line[idx] is not None else None)
+                for idx in range(len(closes))
+            ]
+            return {
+                **base_payload,
+                "support": self._build_rolling_low(lows, support_lookback),
+                "resistance": self._build_rolling_high(highs, resistance_lookback),
+                "macd": macd_line,
+                "signal": signal_line,
+                "histogram": histogram,
+            }
+        if strategy_type == "vwap_volume_breakout_combo":
+            price_lookback = int(signal_spec.get("price_lookback") or 20)
+            volume_period = int(signal_spec.get("volume_period") or 20)
+            return {
+                **base_payload,
+                "vwap": self._build_vwap(highs, lows, closes, volumes),
+                "breakout_high": self._build_rolling_high(highs, price_lookback),
+                "volume_sma": self._build_sma(volumes, volume_period),
+                "volume": volumes,
             }
         return {}
 
@@ -2381,6 +2586,272 @@ class RuleBacktestEngine:
             if side == "entry":
                 return float(previous) >= threshold and float(current) < threshold
             return float(previous) <= threshold and float(current) > threshold
+        close_series = series_payload.get("close") or []
+        if indicator_family == "bollinger_breakout":
+            entry_band = series_payload.get("upper") or []
+            exit_line = str(signal_spec.get("exit_line") or "middle_band")
+            exit_band = series_payload.get("middle") if exit_line == "middle_band" else series_payload.get("lower")
+            if side == "entry":
+                return self._price_cross_signal(close_series=close_series, reference_series=entry_band, index=index, direction="above")
+            return self._price_cross_signal(close_series=close_series, reference_series=exit_band or [], index=index, direction="below")
+        if indicator_family == "atr_breakout":
+            atr_series = series_payload.get("atr") or []
+            atr_ceiling = series_payload.get("atr_ceiling") or []
+            breakout_high = series_payload.get("breakout_high") or []
+            exit_low = series_payload.get("exit_low") or []
+            current_close = close_series[index] if index < len(close_series) else None
+            current_atr = atr_series[index] if index < len(atr_series) else None
+            prior_ceiling = atr_ceiling[index - 1] if index - 1 < len(atr_ceiling) else None
+            prior_breakout = breakout_high[index - 1] if index - 1 < len(breakout_high) else None
+            prior_exit_low = exit_low[index - 1] if index - 1 < len(exit_low) else None
+            if current_close is None:
+                return False
+            if side == "entry":
+                return (
+                    current_atr is not None
+                    and prior_ceiling is not None
+                    and prior_breakout is not None
+                    and float(current_atr) >= float(prior_ceiling)
+                    and float(current_close) > float(prior_breakout)
+                )
+            return prior_exit_low is not None and float(current_close) < float(prior_exit_low)
+        if indicator_family == "obv_trend_confirmation":
+            trend_ma = series_payload.get("trend_ma") or []
+            obv = series_payload.get("obv") or []
+            obv_breakout = series_payload.get("obv_breakout") or []
+            obv_signal = series_payload.get("obv_signal") or []
+            current_close = close_series[index] if index < len(close_series) else None
+            current_trend = trend_ma[index] if index < len(trend_ma) else None
+            current_obv = obv[index] if index < len(obv) else None
+            prior_obv_breakout = obv_breakout[index - 1] if index - 1 < len(obv_breakout) else None
+            current_obv_signal = obv_signal[index] if index < len(obv_signal) else None
+            if current_close is None:
+                return False
+            if side == "entry":
+                return (
+                    current_trend is not None
+                    and current_obv is not None
+                    and prior_obv_breakout is not None
+                    and float(current_close) > float(current_trend)
+                    and float(current_obv) > float(prior_obv_breakout)
+                )
+            return (
+                (current_trend is not None and float(current_close) < float(current_trend))
+                or (current_obv is not None and current_obv_signal is not None and float(current_obv) < float(current_obv_signal))
+            )
+        if indicator_family == "support_resistance_bounce":
+            support = series_payload.get("support") or []
+            resistance = series_payload.get("resistance") or []
+            proximity_pct = float(signal_spec.get("proximity_pct") or 2.0) / 100.0
+            current_close = close_series[index] if index < len(close_series) else None
+            previous_close = close_series[index - 1] if index - 1 < len(close_series) else None
+            current_support = support[index] if index < len(support) else None
+            current_resistance = resistance[index] if index < len(resistance) else None
+            if current_close is None:
+                return False
+            if side == "entry":
+                return (
+                    previous_close is not None
+                    and current_support is not None
+                    and float(previous_close) <= float(current_support) * (1.0 + proximity_pct)
+                    and float(current_close) > float(previous_close)
+                    and float(current_close) > float(current_support)
+                )
+            return (
+                (current_resistance is not None and float(current_close) >= float(current_resistance) * (1.0 - proximity_pct))
+                or (current_support is not None and float(current_close) < float(current_support))
+            )
+        if indicator_family == "macd_rsi_combo":
+            rsi_series = series_payload.get("rsi") or []
+            threshold = float(signal_spec.get("rsi_threshold") or 50.0)
+            current_rsi = rsi_series[index] if index < len(rsi_series) else None
+            macd_cross = self._cross_signal(series_payload.get("macd") or [], series_payload.get("signal") or [], index, direction=("above" if side == "entry" else "below"))
+            if side == "entry":
+                return macd_cross and current_rsi is not None and float(current_rsi) > threshold
+            return macd_cross or (current_rsi is not None and float(current_rsi) < threshold)
+        if indicator_family == "sma_bollinger_combo":
+            trend_fast = series_payload.get("trend_fast") or []
+            trend_slow = series_payload.get("trend_slow") or []
+            middle = series_payload.get("middle") or []
+            current_close = close_series[index] if index < len(close_series) else None
+            previous_close = close_series[index - 1] if index - 1 < len(close_series) else None
+            current_middle = middle[index] if index < len(middle) else None
+            previous_middle = middle[index - 1] if index - 1 < len(middle) else None
+            fast_value = trend_fast[index] if index < len(trend_fast) else None
+            slow_value = trend_slow[index] if index < len(trend_slow) else None
+            if side == "entry":
+                return (
+                    fast_value is not None
+                    and slow_value is not None
+                    and current_middle is not None
+                    and previous_middle is not None
+                    and current_close is not None
+                    and previous_close is not None
+                    and float(fast_value) > float(slow_value)
+                    and float(previous_close) <= float(previous_middle)
+                    and float(current_close) > float(current_middle)
+                )
+            return (
+                (fast_value is not None and slow_value is not None and float(fast_value) < float(slow_value))
+                or self._price_cross_signal(close_series=close_series, reference_series=middle, index=index, direction="below")
+            )
+        if indicator_family == "trend_momentum_volume_mix":
+            fast = series_payload.get("fast") or []
+            mid = series_payload.get("mid") or []
+            slow = series_payload.get("slow") or []
+            rsi_series = series_payload.get("rsi") or []
+            breakout_high = series_payload.get("breakout_high") or []
+            volume_sma = series_payload.get("volume_sma") or []
+            volumes = series_payload.get("volume") or []
+            rsi_threshold = float(signal_spec.get("rsi_threshold") or 55.0)
+            volume_multiplier = float(signal_spec.get("volume_multiplier") or 1.5)
+            current_close = close_series[index] if index < len(close_series) else None
+            current_fast = fast[index] if index < len(fast) else None
+            current_mid = mid[index] if index < len(mid) else None
+            current_slow = slow[index] if index < len(slow) else None
+            current_rsi = rsi_series[index] if index < len(rsi_series) else None
+            prior_breakout = breakout_high[index - 1] if index - 1 < len(breakout_high) else None
+            current_volume = volumes[index] if index < len(volumes) else None
+            current_volume_sma = volume_sma[index] if index < len(volume_sma) else None
+            if side == "entry":
+                return (
+                    current_close is not None
+                    and current_fast is not None
+                    and current_mid is not None
+                    and current_slow is not None
+                    and current_rsi is not None
+                    and prior_breakout is not None
+                    and current_volume is not None
+                    and current_volume_sma is not None
+                    and float(current_fast) > float(current_mid) > float(current_slow)
+                    and float(current_rsi) > rsi_threshold
+                    and float(current_close) > float(prior_breakout)
+                    and float(current_volume) > float(current_volume_sma) * volume_multiplier
+                )
+            return (
+                (current_close is not None and current_mid is not None and float(current_close) < float(current_mid))
+                or (current_rsi is not None and float(current_rsi) < rsi_threshold)
+            )
+        if indicator_family == "multi_indicator_trend_filter":
+            trend_ma = series_payload.get("trend_ma") or []
+            histogram = series_payload.get("histogram") or []
+            atr = series_payload.get("atr") or []
+            atr_ceiling = series_payload.get("atr_ceiling") or []
+            breakout_high = series_payload.get("breakout_high") or []
+            current_close = close_series[index] if index < len(close_series) else None
+            current_trend = trend_ma[index] if index < len(trend_ma) else None
+            current_hist = histogram[index] if index < len(histogram) else None
+            current_atr = atr[index] if index < len(atr) else None
+            prior_atr_ceiling = atr_ceiling[index - 1] if index - 1 < len(atr_ceiling) else None
+            prior_breakout = breakout_high[index - 1] if index - 1 < len(breakout_high) else None
+            if side == "entry":
+                return (
+                    current_close is not None
+                    and current_trend is not None
+                    and current_hist is not None
+                    and current_atr is not None
+                    and prior_atr_ceiling is not None
+                    and prior_breakout is not None
+                    and float(current_close) > float(current_trend)
+                    and float(current_hist) > 0.0
+                    and float(current_atr) >= float(prior_atr_ceiling)
+                    and float(current_close) > float(prior_breakout)
+                )
+            return (
+                (current_close is not None and current_trend is not None and float(current_close) < float(current_trend))
+                or (current_hist is not None and float(current_hist) <= 0.0)
+            )
+        if indicator_family == "bollinger_rsi_reversion_combo":
+            lower = series_payload.get("lower") or []
+            middle = series_payload.get("middle") or []
+            rsi_series = series_payload.get("rsi") or []
+            rsi_entry_threshold = float(signal_spec.get("rsi_entry_threshold") or 10.0)
+            rsi_exit_threshold = float(signal_spec.get("rsi_exit_threshold") or 60.0)
+            current_close = close_series[index] if index < len(close_series) else None
+            current_lower = lower[index] if index < len(lower) else None
+            current_rsi = rsi_series[index] if index < len(rsi_series) else None
+            if side == "entry":
+                return (
+                    current_close is not None
+                    and current_lower is not None
+                    and current_rsi is not None
+                    and float(current_close) < float(current_lower)
+                    and float(current_rsi) < rsi_entry_threshold
+                )
+            return self._price_cross_signal(close_series=close_series, reference_series=middle, index=index, direction="above") or (current_rsi is not None and float(current_rsi) > rsi_exit_threshold)
+        if indicator_family == "triple_moving_average_trend_stack":
+            fast = series_payload.get("fast") or []
+            mid = series_payload.get("mid") or []
+            slow = series_payload.get("slow") or []
+            current_close = close_series[index] if index < len(close_series) else None
+            previous_close = close_series[index - 1] if index - 1 < len(close_series) else None
+            current_fast = fast[index] if index < len(fast) else None
+            current_mid = mid[index] if index < len(mid) else None
+            current_slow = slow[index] if index < len(slow) else None
+            previous_fast = fast[index - 1] if index - 1 < len(fast) else None
+            if side == "entry":
+                return (
+                    current_close is not None
+                    and previous_close is not None
+                    and current_fast is not None
+                    and current_mid is not None
+                    and current_slow is not None
+                    and previous_fast is not None
+                    and float(current_fast) > float(current_mid) > float(current_slow)
+                    and float(previous_close) <= float(previous_fast)
+                    and float(current_close) > float(current_fast)
+                )
+            return (
+                (current_close is not None and current_mid is not None and float(current_close) < float(current_mid))
+                or (current_fast is not None and current_mid is not None and float(current_fast) < float(current_mid))
+            )
+        if indicator_family == "support_resistance_macd_combo":
+            support = series_payload.get("support") or []
+            resistance = series_payload.get("resistance") or []
+            proximity_pct = float(signal_spec.get("proximity_pct") or 2.0) / 100.0
+            current_close = close_series[index] if index < len(close_series) else None
+            previous_close = close_series[index - 1] if index - 1 < len(close_series) else None
+            current_support = support[index] if index < len(support) else None
+            current_resistance = resistance[index] if index < len(resistance) else None
+            macd_cross = self._cross_signal(series_payload.get("macd") or [], series_payload.get("signal") or [], index, direction=("above" if side == "entry" else "below"))
+            if side == "entry":
+                return (
+                    previous_close is not None
+                    and current_close is not None
+                    and current_support is not None
+                    and float(previous_close) <= float(current_support) * (1.0 + proximity_pct)
+                    and float(current_close) > float(previous_close)
+                    and macd_cross
+                )
+            return macd_cross or (current_resistance is not None and current_close is not None and float(current_close) >= float(current_resistance) * (1.0 - proximity_pct))
+        if indicator_family == "vwap_volume_breakout_combo":
+            vwap = series_payload.get("vwap") or []
+            breakout_high = series_payload.get("breakout_high") or []
+            volume_sma = series_payload.get("volume_sma") or []
+            volumes = series_payload.get("volume") or []
+            volume_multiplier = float(signal_spec.get("volume_multiplier") or 1.8)
+            current_close = close_series[index] if index < len(close_series) else None
+            previous_close = close_series[index - 1] if index - 1 < len(close_series) else None
+            current_vwap = vwap[index] if index < len(vwap) else None
+            previous_vwap = vwap[index - 1] if index - 1 < len(vwap) else None
+            prior_breakout = breakout_high[index - 1] if index - 1 < len(breakout_high) else None
+            current_volume = volumes[index] if index < len(volumes) else None
+            current_volume_sma = volume_sma[index] if index < len(volume_sma) else None
+            if side == "entry":
+                return (
+                    current_close is not None
+                    and previous_close is not None
+                    and current_vwap is not None
+                    and previous_vwap is not None
+                    and prior_breakout is not None
+                    and current_volume is not None
+                    and current_volume_sma is not None
+                    and float(previous_close) <= float(previous_vwap)
+                    and float(current_close) > float(current_vwap)
+                    and float(current_close) > float(prior_breakout)
+                    and float(current_volume) > float(current_volume_sma) * volume_multiplier
+                )
+            return current_close is not None and current_vwap is not None and float(current_close) < float(current_vwap)
         return False
 
     @staticmethod
@@ -2402,6 +2873,26 @@ class RuleBacktestEngine:
         if direction == "above":
             return float(prev_left) <= float(prev_right) and float(current_left) > float(current_right)
         return float(prev_left) >= float(prev_right) and float(current_left) < float(current_right)
+
+    @staticmethod
+    def _price_cross_signal(
+        *,
+        close_series: Sequence[Optional[float]],
+        reference_series: Sequence[Optional[float]],
+        index: int,
+        direction: str,
+    ) -> bool:
+        if index <= 0 or index >= len(close_series) or index >= len(reference_series):
+            return False
+        previous_close = close_series[index - 1]
+        current_close = close_series[index]
+        previous_reference = reference_series[index - 1]
+        current_reference = reference_series[index]
+        if previous_close is None or current_close is None or previous_reference is None or current_reference is None:
+            return False
+        if direction == "above":
+            return float(previous_close) <= float(previous_reference) and float(current_close) > float(current_reference)
+        return float(previous_close) >= float(previous_reference) and float(current_close) < float(current_reference)
 
     def _collect_signal_strategy_snapshot(
         self,
@@ -2433,11 +2924,75 @@ class RuleBacktestEngine:
             period = int(signal_spec.get("period") or 14)
             snapshot[f"RSI{period}"] = self._series_value(series_payload.get("rsi"), index)
             return snapshot
+        if indicator_family == "bollinger_breakout":
+            snapshot["MiddleBand"] = self._series_value(series_payload.get("middle"), index)
+            snapshot["UpperBand"] = self._series_value(series_payload.get("upper"), index)
+            snapshot["LowerBand"] = self._series_value(series_payload.get("lower"), index)
+            return snapshot
+        if indicator_family == "atr_breakout":
+            snapshot["ATR"] = self._series_value(series_payload.get("atr"), index)
+            snapshot["RangeHigh"] = self._series_value(series_payload.get("breakout_high"), index - 1)
+            snapshot["ExitLow"] = self._series_value(series_payload.get("exit_low"), index - 1)
+            return snapshot
+        if indicator_family == "obv_trend_confirmation":
+            snapshot["TrendMA"] = self._series_value(series_payload.get("trend_ma"), index)
+            snapshot["OBV"] = self._series_value(series_payload.get("obv"), index)
+            snapshot["OBVSignal"] = self._series_value(series_payload.get("obv_signal"), index)
+            return snapshot
+        if indicator_family == "support_resistance_bounce":
+            snapshot["Support"] = self._series_value(series_payload.get("support"), index)
+            snapshot["Resistance"] = self._series_value(series_payload.get("resistance"), index)
+            return snapshot
+        if indicator_family == "macd_rsi_combo":
+            snapshot["MACD"] = self._series_value(series_payload.get("macd"), index)
+            snapshot["Signal"] = self._series_value(series_payload.get("signal"), index)
+            snapshot[f"RSI{int(signal_spec.get('rsi_period') or 14)}"] = self._series_value(series_payload.get("rsi"), index)
+            return snapshot
+        if indicator_family == "sma_bollinger_combo":
+            snapshot["TrendFast"] = self._series_value(series_payload.get("trend_fast"), index)
+            snapshot["TrendSlow"] = self._series_value(series_payload.get("trend_slow"), index)
+            snapshot["MiddleBand"] = self._series_value(series_payload.get("middle"), index)
+            return snapshot
+        if indicator_family == "trend_momentum_volume_mix":
+            snapshot["FastMA"] = self._series_value(series_payload.get("fast"), index)
+            snapshot["MidMA"] = self._series_value(series_payload.get("mid"), index)
+            snapshot["SlowMA"] = self._series_value(series_payload.get("slow"), index)
+            snapshot[f"RSI{int(signal_spec.get('rsi_period') or 14)}"] = self._series_value(series_payload.get("rsi"), index)
+            snapshot["VolumeSMA"] = self._series_value(series_payload.get("volume_sma"), index)
+            snapshot["Volume"] = self._series_value(series_payload.get("volume"), index)
+            return snapshot
+        if indicator_family == "multi_indicator_trend_filter":
+            snapshot["TrendMA"] = self._series_value(series_payload.get("trend_ma"), index)
+            snapshot["MACD"] = self._series_value(series_payload.get("macd"), index)
+            snapshot["Histogram"] = self._series_value(series_payload.get("histogram"), index)
+            snapshot["ATR"] = self._series_value(series_payload.get("atr"), index)
+            return snapshot
+        if indicator_family == "bollinger_rsi_reversion_combo":
+            snapshot["MiddleBand"] = self._series_value(series_payload.get("middle"), index)
+            snapshot["LowerBand"] = self._series_value(series_payload.get("lower"), index)
+            snapshot[f"RSI{int(signal_spec.get('rsi_period') or 2)}"] = self._series_value(series_payload.get("rsi"), index)
+            return snapshot
+        if indicator_family == "triple_moving_average_trend_stack":
+            snapshot["FastMA"] = self._series_value(series_payload.get("fast"), index)
+            snapshot["MidMA"] = self._series_value(series_payload.get("mid"), index)
+            snapshot["SlowMA"] = self._series_value(series_payload.get("slow"), index)
+            return snapshot
+        if indicator_family == "support_resistance_macd_combo":
+            snapshot["Support"] = self._series_value(series_payload.get("support"), index)
+            snapshot["Resistance"] = self._series_value(series_payload.get("resistance"), index)
+            snapshot["MACD"] = self._series_value(series_payload.get("macd"), index)
+            snapshot["Signal"] = self._series_value(series_payload.get("signal"), index)
+            return snapshot
+        if indicator_family == "vwap_volume_breakout_combo":
+            snapshot["VWAP"] = self._series_value(series_payload.get("vwap"), index)
+            snapshot["VolumeSMA"] = self._series_value(series_payload.get("volume_sma"), index)
+            snapshot["Volume"] = self._series_value(series_payload.get("volume"), index)
+            return snapshot
         return snapshot
 
     @staticmethod
     def _series_value(series: Optional[Sequence[Optional[float]]], index: int) -> Optional[float]:
-        if not series or index >= len(series):
+        if not series or index < 0 or index >= len(series):
             return None
         value = series[index]
         return round(float(value), 6) if value is not None else None
@@ -2961,11 +3516,182 @@ class RuleBacktestEngine:
         return series
 
     @staticmethod
+    def _build_bollinger(
+        closes: Sequence[Optional[float]],
+        period: int,
+        std_dev: float,
+    ) -> Tuple[List[Optional[float]], List[Optional[float]], List[Optional[float]]]:
+        middle: List[Optional[float]] = []
+        upper: List[Optional[float]] = []
+        lower: List[Optional[float]] = []
+        window: List[float] = []
+        for price in closes:
+            if price is None:
+                middle.append(None)
+                upper.append(None)
+                lower.append(None)
+                continue
+            window.append(float(price))
+            if len(window) > period:
+                window.pop(0)
+            if len(window) < period:
+                middle.append(None)
+                upper.append(None)
+                lower.append(None)
+                continue
+            avg = sum(window) / len(window)
+            deviation = pstdev(window) if len(window) > 1 else 0.0
+            middle.append(avg)
+            upper.append(avg + deviation * std_dev)
+            lower.append(avg - deviation * std_dev)
+        return middle, upper, lower
+
+    @staticmethod
+    def _build_true_range(
+        highs: Sequence[Optional[float]],
+        lows: Sequence[Optional[float]],
+        closes: Sequence[Optional[float]],
+    ) -> List[Optional[float]]:
+        series: List[Optional[float]] = []
+        previous_close: Optional[float] = None
+        for idx in range(len(closes)):
+            high = highs[idx] if idx < len(highs) else None
+            low = lows[idx] if idx < len(lows) else None
+            close = closes[idx]
+            if high is None or low is None or close is None:
+                series.append(None)
+                previous_close = close if close is not None else previous_close
+                continue
+            if previous_close is None:
+                series.append(float(high) - float(low))
+            else:
+                series.append(
+                    max(
+                        float(high) - float(low),
+                        abs(float(high) - float(previous_close)),
+                        abs(float(low) - float(previous_close)),
+                    )
+                )
+            previous_close = float(close)
+        return series
+
+    def _build_atr(
+        self,
+        highs: Sequence[Optional[float]],
+        lows: Sequence[Optional[float]],
+        closes: Sequence[Optional[float]],
+        period: int,
+    ) -> List[Optional[float]]:
+        return self._build_sma(self._build_true_range(highs, lows, closes), period)
+
+    @staticmethod
+    def _build_rolling_high(values: Sequence[Optional[float]], period: int) -> List[Optional[float]]:
+        series: List[Optional[float]] = []
+        window: List[float] = []
+        for value in values:
+            if value is None:
+                series.append(None)
+                continue
+            window.append(float(value))
+            if len(window) > period:
+                window.pop(0)
+            if len(window) < period:
+                series.append(None)
+                continue
+            series.append(max(window))
+        return series
+
+    @staticmethod
+    def _build_rolling_low(values: Sequence[Optional[float]], period: int) -> List[Optional[float]]:
+        series: List[Optional[float]] = []
+        window: List[float] = []
+        for value in values:
+            if value is None:
+                series.append(None)
+                continue
+            window.append(float(value))
+            if len(window) > period:
+                window.pop(0)
+            if len(window) < period:
+                series.append(None)
+                continue
+            series.append(min(window))
+        return series
+
+    @staticmethod
+    def _build_rolling_max(values: Sequence[Optional[float]], period: int) -> List[Optional[float]]:
+        series: List[Optional[float]] = []
+        window: List[float] = []
+        for value in values:
+            if value is None:
+                series.append(None)
+                continue
+            window.append(float(value))
+            if len(window) > period:
+                window.pop(0)
+            if len(window) < period:
+                series.append(None)
+                continue
+            series.append(max(window))
+        return series
+
+    @staticmethod
+    def _build_obv(closes: Sequence[Optional[float]], volumes: Sequence[Optional[float]]) -> List[Optional[float]]:
+        series: List[Optional[float]] = []
+        obv = 0.0
+        previous_close: Optional[float] = None
+        for idx, close in enumerate(closes):
+            volume = volumes[idx] if idx < len(volumes) else None
+            if close is None or volume is None:
+                series.append(None)
+                previous_close = close if close is not None else previous_close
+                continue
+            if previous_close is None:
+                obv = 0.0
+            elif float(close) > float(previous_close):
+                obv += float(volume)
+            elif float(close) < float(previous_close):
+                obv -= float(volume)
+            series.append(obv)
+            previous_close = float(close)
+        return series
+
+    @staticmethod
+    def _build_vwap(
+        highs: Sequence[Optional[float]],
+        lows: Sequence[Optional[float]],
+        closes: Sequence[Optional[float]],
+        volumes: Sequence[Optional[float]],
+    ) -> List[Optional[float]]:
+        series: List[Optional[float]] = []
+        cumulative_volume = 0.0
+        cumulative_notional = 0.0
+        for idx, close in enumerate(closes):
+            high = highs[idx] if idx < len(highs) else None
+            low = lows[idx] if idx < len(lows) else None
+            volume = volumes[idx] if idx < len(volumes) else None
+            if close is None or high is None or low is None or volume is None or volume <= 0:
+                series.append(None)
+                continue
+            typical_price = (float(high) + float(low) + float(close)) / 3.0
+            cumulative_notional += typical_price * float(volume)
+            cumulative_volume += float(volume)
+            series.append(cumulative_notional / cumulative_volume if cumulative_volume > 0 else None)
+        return series
+
+    @staticmethod
     def _safe_price(value: Any) -> Optional[float]:
         price = _safe_float(value)
         if price is None or price <= 0:
             return None
         return price
+
+    @staticmethod
+    def _safe_volume(value: Any) -> Optional[float]:
+        volume = _safe_float(value)
+        if volume is None or volume < 0:
+            return None
+        return volume
 
     @staticmethod
     def _format_node(node: Dict[str, Any]) -> str:
