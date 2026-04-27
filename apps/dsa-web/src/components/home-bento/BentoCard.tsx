@@ -49,8 +49,8 @@ export const BentoCard: React.FC<BentoCardProps> = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className={CARD_KICKER_CLASS}>{eyebrow}</p>
-          {title ? <h2 className="mt-2.5 text-lg font-semibold text-white">{title}</h2> : null}
-          {subtitle ? <p className="mt-3 text-sm leading-relaxed text-white/58">{subtitle}</p> : null}
+          {title ? <h2 className="mt-2.5 min-w-0 break-words whitespace-normal text-lg font-semibold text-white">{title}</h2> : null}
+          {subtitle ? <p className="mt-3 min-w-0 break-words whitespace-normal text-sm leading-relaxed text-white/58">{subtitle}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>

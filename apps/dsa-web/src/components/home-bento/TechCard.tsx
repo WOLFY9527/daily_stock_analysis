@@ -43,11 +43,11 @@ export const TechCard: React.FC<TechCardProps> = ({
         <div
           key={signal.label}
           data-testid={`home-bento-tech-signal-${signal.label}`}
-          className="grid gap-2.5 border-b border-white/[0.07] pb-5 last:border-b-0 last:pb-0"
+          className="grid min-w-0 gap-2.5 border-b border-white/[0.07] pb-5 last:border-b-0 last:pb-0"
         >
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{signal.label}</span>
+          <span className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{signal.label}</span>
           <span
-            className={`text-base font-bold leading-tight ${getToneTextClass(signal.tone)}`}
+            className={`block break-words whitespace-normal text-base font-bold leading-tight ${getToneTextClass(signal.tone)}`}
             style={getToneTextStyle(signal.tone, index === 0)}
           >
             {signal.value}

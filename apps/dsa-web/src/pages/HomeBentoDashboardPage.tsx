@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import {
   BENTO_SURFACE_ROOT_CLASS,
-  BentoGrid,
   DecisionCard,
   DeepReportDrawer,
   FundamentalsCard,
@@ -11,6 +10,7 @@ import {
   TechCard,
   type SignalTone,
 } from '../components/home-bento';
+import { Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { AnalysisReport, StandardReportField } from '../types/analysis';
 import { useStockPoolStore } from '../stores';
@@ -754,8 +754,8 @@ const TICKER_ALIASES: Record<string, string> = {
   '特斯拉': 'TSLA',
 };
 
-function normalizeTickerQuery(rawValue: string): string {
-  const trimmed = rawValue.trim();
+function normalizeTickerQuery(rawValue?: string): string {
+  const trimmed = String(rawValue || '').trim();
   if (!trimmed) {
     return '';
   }
@@ -915,11 +915,13 @@ const HomeBentoDashboardPage: React.FC = () => {
   const { language } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
-  const [activeTicker, setActiveTicker] = useState('NVDA');
+  const [manualTicker, setManualTicker] = useState('');
+  const [isQueryDirty, setIsQueryDirty] = useState(false);
   const query = useStockPoolStore((state) => state.query);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
+  const [isHistoryDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const setQuery = useStockPoolStore((state) => state.setQuery);
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
@@ -928,6 +930,8 @@ const HomeBentoDashboardPage: React.FC = () => {
     () => Array.from(new Set(historyItems.map((item) => normalizeTickerQuery(item.stockCode)).filter(Boolean))).slice(0, 8),
     [historyItems],
   );
+  const activeTicker = manualTicker || recentHistory[0] || normalizeTickerQuery(selectedReport?.meta.stockCode) || 'NVDA';
+  const displayedQuery = isQueryDirty ? query : (query || activeTicker);
   const dashboardData = useMemo<DashboardPayload>(() => {
     if (selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker) {
       return buildDashboardFromReport(locale, selectedReport);
@@ -951,7 +955,8 @@ const HomeBentoDashboardPage: React.FC = () => {
       return '';
     }
 
-    setActiveTicker(normalizedTicker);
+    setManualTicker(normalizedTicker);
+    setIsQueryDirty(false);
     setQuery(normalizedTicker);
     return normalizedTicker;
   };
@@ -990,10 +995,14 @@ const HomeBentoDashboardPage: React.FC = () => {
       data-bento-surface="true"
       className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col overflow-x-hidden bg-transparent`}
     >
-      <main className="w-full flex-1 min-w-0 flex flex-col py-6 px-6 md:px-8 xl:px-12" data-testid="home-bento-main">
-        <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3 xl:grid-cols-5">
+      <main className="w-full flex-1 flex flex-col py-6 px-6 md:px-8 xl:px-12 min-w-0" data-testid="home-bento-main">
+        <div
+          data-testid="home-bento-grid"
+          data-bento-grid="true"
+          className="w-full grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-5 gap-6 items-stretch"
+        >
           <form
-            className="lg:col-span-3 xl:col-span-2 flex h-11 gap-3"
+            className="lg:col-span-3 xl:col-span-2 flex gap-3 h-12"
             data-testid="home-bento-omnibar"
             onSubmit={(event) => {
               event.preventDefault();
@@ -1007,8 +1016,11 @@ const HomeBentoDashboardPage: React.FC = () => {
               <input
                 data-testid="home-bento-omnibar-input"
                 type="text"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                value={displayedQuery}
+                onChange={(event) => {
+                  setIsQueryDirty(true);
+                  setQuery(event.target.value);
+                }}
                 autoComplete="off"
                 disabled={isAnalyzing}
                 className="w-full h-full bg-white/[0.03] border border-white/10 focus:border-indigo-500/50 focus:bg-white/[0.05] text-white text-sm rounded-xl pl-10 pr-4 outline-none transition-all placeholder:text-white/30"
@@ -1025,30 +1037,20 @@ const HomeBentoDashboardPage: React.FC = () => {
             </button>
           </form>
           <div
-            className="hidden xl:flex xl:col-span-3 items-center gap-3 overflow-x-auto no-scrollbar pl-2"
+            className="hidden xl:flex xl:col-span-3 items-center justify-end pl-2"
             data-testid="home-bento-recent-history"
           >
-            <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest shrink-0">
-              {locale === 'en' ? 'Recent analysis:' : '最近分析:'}
-            </span>
-            {recentHistory.length > 0 ? recentHistory.map((ticker) => (
-              <button
-                key={ticker}
-                type="button"
-                onClick={() => {
-                  void loadStockData(ticker);
-                }}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors shrink-0 ${
-                  activeTicker === ticker
-                    ? 'bg-white/[0.08] border-white/15 text-white'
-                    : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] text-white/70'
-                }`}
-              >
-                {ticker}
-              </button>
-            )) : (
-              <span className="text-xs text-white/35">{locale === 'en' ? 'No history synced yet.' : '历史分析尚未同步。'}</span>
-            )}
+            <button
+              type="button"
+              onClick={() => setHistoryDrawerOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] text-xs font-medium text-white/70 transition-colors"
+              data-testid="home-bento-history-drawer-trigger"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+              </svg>
+              <span>{locale === 'en' ? 'History' : '历史记录'}</span>
+            </button>
           </div>
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
@@ -1091,7 +1093,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             detailLabel={copy.fundamentals.detailLabel}
             onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
           />
-        </BentoGrid>
+        </div>
       </main>
 
       <DeepReportDrawer
@@ -1101,6 +1103,46 @@ const HomeBentoDashboardPage: React.FC = () => {
         modules={activeDrawer?.modules || []}
         testId="home-bento-drawer"
       />
+
+      <Drawer
+        isOpen={isHistoryDrawerOpen}
+        onClose={() => setHistoryDrawerOpen(false)}
+        title={locale === 'en' ? 'Analysis History' : '历史记录'}
+        width="max-w-lg"
+      >
+        <div className="flex flex-col gap-3" data-testid="home-bento-history-drawer">
+          {recentHistory.length > 0 ? recentHistory.map((ticker) => (
+            <button
+              key={ticker}
+              type="button"
+              onClick={() => {
+                setHistoryDrawerOpen(false);
+                void loadStockData(ticker);
+              }}
+              className={`flex min-w-0 items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors ${
+                activeTicker === ticker
+                  ? 'border-white/15 bg-white/[0.08] text-white'
+                  : 'border-white/5 bg-white/[0.02] text-white/72 hover:bg-white/[0.05]'
+              }`}
+              data-testid={`home-bento-history-item-${ticker}`}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{ticker}</p>
+                <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  {locale === 'en' ? 'Recent analysis' : '最近分析'}
+                </p>
+              </div>
+              <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/35">
+                {activeTicker === ticker ? (locale === 'en' ? 'Loaded' : '当前') : (locale === 'en' ? 'Open' : '打开')}
+              </span>
+            </button>
+          )) : (
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-white/48">
+              {locale === 'en' ? 'No synced analysis history yet.' : '历史分析尚未同步。'}
+            </div>
+          )}
+        </div>
+      </Drawer>
     </div>
   );
 };
