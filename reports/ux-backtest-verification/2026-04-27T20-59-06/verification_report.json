@@ -1,0 +1,264 @@
+{
+  "generated_at": "2026-04-27T21:50:37.143769",
+  "overall_status": "failed",
+  "verdict": "Critical API preflight/auth failures block all signed-in write actions from the preview origin.",
+  "environment": {
+    "frontend_preview": "http://127.0.0.1:4173",
+    "backend": "http://127.0.0.1:8000",
+    "admin_login": {
+      "username": "admin (empty username on UI resolves to admin)",
+      "password_used": "852258"
+    },
+    "database_path": "/Users/yehengli/daily_stock_analysis/data/stock_analysis.db",
+    "note": "Backend had to be restarted with CORS_ORIGINS=http://127.0.0.1:4173 so the preview origin could reach auth/status; business logic was not modified."
+  },
+  "steps": [
+    {
+      "id": "auth-flow",
+      "status": "passed",
+      "summary": "Guest home, login page, create-account page, logout, and admin login were all reachable from the preview origin.",
+      "evidence": [
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-guest-home.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-login-page.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-create-account-mode.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-home-after-login.png"
+      ]
+    },
+    {
+      "id": "home-layout",
+      "status": "partial",
+      "summary": "Home Bento surface renders correctly and exact viewport screenshots were captured; ORCL input updates the visible decision card, but no fresh analysis write was proven.",
+      "details": {
+        "ui_pass": true,
+        "fresh_db_write_proven": false,
+        "observed_card_symbol_after_input": "ORCL",
+        "db_delta_analysis_history": 0
+      },
+      "evidence": [
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-home-after-analysis.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-home.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-home.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-home-strategy-open.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-home-strategy-open.png"
+      ]
+    },
+    {
+      "id": "scanner-run",
+      "status": "failed",
+      "summary": "Scanner page loads existing history/results, but fresh run creation is blocked before POST execution.",
+      "error": "OPTIONS /api/v1/scanner/run -> 401 unauthorized from preview origin",
+      "db_delta": {
+        "market_scanner_runs": 0,
+        "market_scanner_candidates": 0
+      },
+      "evidence": [
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-scanner-initial.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-scanner-us-after-run.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-scanner.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-scanner.png"
+      ]
+    },
+    {
+      "id": "chat-send",
+      "status": "failed",
+      "summary": "Chat page and history render, but sending a new question triggers a local-service error instead of a streamed answer.",
+      "error": "OPTIONS /api/v1/agent/chat/stream -> 401 unauthorized from preview origin",
+      "db_delta": {
+        "conversation_sessions": 0,
+        "conversation_messages": 0
+      },
+      "evidence": [
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-chat-initial.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-chat-after-send.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-chat.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-chat.png"
+      ]
+    },
+    {
+      "id": "portfolio-workflow",
+      "status": "failed",
+      "summary": "Portfolio dashboard, holdings, and history drawer render, but account/trade/cash/corporate-action writes are blocked at preflight.",
+      "error": "OPTIONS /api/v1/portfolio/accounts|trades|cash-ledger|corporate-actions -> 401 unauthorized from preview origin",
+      "db_delta": {
+        "portfolio_accounts": 0,
+        "portfolio_trades": 0,
+        "portfolio_cash_ledger": 0,
+        "portfolio_corporate_actions": 0
+      },
+      "evidence": [
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-portfolio-initial.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-portfolio-new-account-modal.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-portfolio-after-account-create-attempt.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-portfolio.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-portfolio-history-open.png"
+      ]
+    },
+    {
+      "id": "backtest-workflow",
+      "status": "failed",
+      "summary": "Ordinary mode exposes the expanded classic template list; professional mode exposes executable/reference catalog labeling; execution is blocked before rule parsing.",
+      "error": "OPTIONS /api/v1/backtest/rule/parse -> 401 unauthorized from preview origin; GET /api/v1/backtest/performance returns 404 during page bootstrap",
+      "db_delta": {
+        "backtest_runs": 0,
+        "rule_backtest_runs": 0,
+        "rule_backtest_trades": 0
+      },
+      "evidence": [
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-backtest-initial.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-backtest-professional.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-backtest-ordinary-after-run-attempt.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-backtest.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-backtest.png"
+      ]
+    },
+    {
+      "id": "preview-routes",
+      "status": "passed",
+      "summary": "Both preview routes are reachable on desktop and mobile.",
+      "evidence": [
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-preview-report.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-preview-full-report.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-preview-report.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-preview-full-report.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-preview-report.png",
+        "reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-preview-full-report.png"
+      ]
+    }
+  ],
+  "db_delta": {
+    "analysis_history": 0,
+    "conversation_sessions": 0,
+    "conversation_messages": 0,
+    "market_scanner_runs": 0,
+    "market_scanner_candidates": 0,
+    "portfolio_accounts": 0,
+    "portfolio_trades": 0,
+    "portfolio_corporate_actions": 0,
+    "portfolio_cash_ledger": 0,
+    "backtest_runs": 0,
+    "rule_backtest_runs": 0,
+    "rule_backtest_trades": 0
+  },
+  "preflight_failures": [
+    {
+      "name": "analysis_analyze",
+      "path": "/api/v1/analysis/analyze",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "scanner_run",
+      "path": "/api/v1/scanner/run",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "chat_stream",
+      "path": "/api/v1/agent/chat/stream",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_accounts",
+      "path": "/api/v1/portfolio/accounts",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_trades",
+      "path": "/api/v1/portfolio/trades",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_cash_ledger",
+      "path": "/api/v1/portfolio/cash-ledger",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_corporate_actions",
+      "path": "/api/v1/portfolio/corporate-actions",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "backtest_rule_parse",
+      "path": "/api/v1/backtest/rule/parse",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "backtest_rule_run",
+      "path": "/api/v1/backtest/rule/run",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    }
+  ],
+  "viewport_report": {
+    "desktop-1440x900": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screenshots": [
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-home.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-scanner.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-chat.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-portfolio.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-backtest.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-preview-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-preview-full-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-home-strategy-open.png"
+      ],
+      "failedRequests": [
+        {
+          "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+          "status": 404,
+          "method": "GET"
+        },
+        {
+          "type": "console",
+          "message": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ]
+    },
+    "mobile-390x844": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screenshots": [
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-home.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-scanner.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-chat.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-portfolio.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-backtest.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-preview-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-preview-full-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-portfolio-history-open.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-home-strategy-open.png"
+      ],
+      "failedRequests": [
+        {
+          "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+          "status": 404,
+          "method": "GET"
+        },
+        {
+          "type": "console",
+          "message": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ]
+    }
+  }
+}

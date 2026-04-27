@@ -1,0 +1,68 @@
+{
+  "origin": "http://127.0.0.1:4173",
+  "checks": [
+    {
+      "name": "analysis_analyze",
+      "path": "/api/v1/analysis/analyze",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "scanner_run",
+      "path": "/api/v1/scanner/run",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "chat_stream",
+      "path": "/api/v1/agent/chat/stream",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_accounts",
+      "path": "/api/v1/portfolio/accounts",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_trades",
+      "path": "/api/v1/portfolio/trades",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_cash_ledger",
+      "path": "/api/v1/portfolio/cash-ledger",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "portfolio_corporate_actions",
+      "path": "/api/v1/portfolio/corporate-actions",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "backtest_rule_parse",
+      "path": "/api/v1/backtest/rule/parse",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    },
+    {
+      "name": "backtest_rule_run",
+      "path": "/api/v1/backtest/rule/run",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"message\":\"Login required\"}",
+      "headers": {}
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "authEnabled": true,
+  "loggedIn": false,
+  "passwordSet": true,
+  "passwordChangeable": true,
+  "setupState": "enabled",
+  "currentUser": null
+}

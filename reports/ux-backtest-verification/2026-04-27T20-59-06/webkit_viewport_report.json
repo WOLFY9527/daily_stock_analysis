@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-04-27T13:33:37.592Z",
+  "browser": "webkit",
+  "viewports": {
+    "desktop-1440x900": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screenshots": [
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-home.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-scanner.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-chat.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-portfolio.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-backtest.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-preview-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-preview-full-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/desktop-1440x900-home-strategy-open.png"
+      ],
+      "failedRequests": [
+        {
+          "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+          "status": 404,
+          "method": "GET"
+        },
+        {
+          "type": "console",
+          "message": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ]
+    },
+    "mobile-390x844": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screenshots": [
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-home.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-scanner.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-chat.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-portfolio.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-backtest.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-preview-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-preview-full-report.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-portfolio-history-open.png",
+        "/Users/yehengli/daily_stock_analysis/reports/ux-backtest-verification/2026-04-27T20-59-06/screenshots/mobile-390x844-home-strategy-open.png"
+      ],
+      "failedRequests": [
+        {
+          "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+          "status": 404,
+          "method": "GET"
+        },
+        {
+          "type": "console",
+          "message": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        }
+      ]
+    }
+  }
+}

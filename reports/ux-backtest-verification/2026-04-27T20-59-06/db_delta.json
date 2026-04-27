@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-04-27T21:46:06.530943",
+  "before": {
+    "analysis_history": 137,
+    "conversation_sessions": 12,
+    "conversation_messages": 23,
+    "market_scanner_runs": 19,
+    "market_scanner_candidates": 38,
+    "portfolio_accounts": 8,
+    "portfolio_trades": 7,
+    "portfolio_corporate_actions": 4,
+    "portfolio_cash_ledger": 4,
+    "backtest_runs": 3,
+    "rule_backtest_runs": 5,
+    "rule_backtest_trades": 68
+  },
+  "after": {
+    "analysis_history": 137,
+    "conversation_sessions": 12,
+    "conversation_messages": 23,
+    "market_scanner_runs": 19,
+    "market_scanner_candidates": 38,
+    "portfolio_accounts": 8,
+    "portfolio_trades": 7,
+    "portfolio_corporate_actions": 4,
+    "portfolio_cash_ledger": 4,
+    "backtest_runs": 3,
+    "rule_backtest_runs": 5,
+    "rule_backtest_trades": 68
+  },
+  "delta": {
+    "analysis_history": 0,
+    "conversation_sessions": 0,
+    "conversation_messages": 0,
+    "market_scanner_runs": 0,
+    "market_scanner_candidates": 0,
+    "portfolio_accounts": 0,
+    "portfolio_trades": 0,
+    "portfolio_corporate_actions": 0,
+    "portfolio_cash_ledger": 0,
+    "backtest_runs": 0,
+    "rule_backtest_runs": 0,
+    "rule_backtest_trades": 0
+  }
+}
