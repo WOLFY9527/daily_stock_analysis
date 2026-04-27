@@ -100,23 +100,23 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
     >
       <div className="flex h-full flex-col gap-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-white/78">
-              <span className="font-medium text-white">{company}</span>
-              <span className="font-mono text-white/40">{ticker}</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-end gap-2">
+              <span className="text-lg font-semibold leading-tight text-white">{company}</span>
+              <span className="text-xs font-mono uppercase tracking-[0.22em] text-white/40">{ticker}</span>
             </div>
             <div className="mt-4 flex flex-wrap items-end gap-4">
               <div>
                 <p className={CARD_KICKER_CLASS}>{heroLabel}</p>
                 <div className="mt-2 flex items-end gap-2">
-                  <span className="text-[56px] font-semibold leading-none text-white md:text-[72px]">{heroValue}</span>
-                  <span className="pb-2 text-base text-white/42">{heroUnit}</span>
+                  <span className="text-[40px] font-semibold leading-none text-white md:text-[48px]">{heroValue}</span>
+                  <span className="pb-1.5 text-sm text-white/42">{heroUnit}</span>
                 </div>
               </div>
               <div className="pb-2">
                 <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
                 <p
-                  className={`mt-2 text-[28px] font-semibold leading-none md:text-[32px] ${getToneTextClass(signalTone)}`}
+                  className={`mt-2 text-lg font-bold leading-tight ${getToneTextClass(signalTone)}`}
                   style={getToneTextStyle(signalTone, true)}
                 >
                   {signalLabel}
@@ -131,8 +131,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
 
           <div className={`${PANEL_METRIC_CLASS} min-w-[12rem] xl:max-w-[18rem]`}>
             <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
-            <p className="mt-3 text-2xl font-medium text-white md:text-3xl">{scoreValue}</p>
-            <p className="mt-4 text-sm leading-relaxed text-white/55">{summary}</p>
+            <p className="mt-3 text-lg font-bold leading-tight text-white">{scoreValue}</p>
+            <p className="mt-4 text-[13px] leading-relaxed text-white/70">{summary}</p>
           </div>
         </div>
 
@@ -185,7 +185,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
 
         <div className="rounded-xl border border-white/5 bg-white/[0.03] p-3 flex flex-col gap-1.5" data-testid="home-bento-breakout-reason">
           <div className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{reason.title}</div>
-          <p className="text-xs text-white/80 leading-relaxed">{reason.body}</p>
+          <p className="text-[13px] leading-relaxed text-white/70">{reason.body}</p>
         </div>
       </div>
     </BentoCard>

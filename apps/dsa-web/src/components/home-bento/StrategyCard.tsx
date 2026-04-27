@@ -50,25 +50,25 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   >
     <div className="flex h-full flex-col gap-5">
       <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3.5">
-      {metrics.map((metric) => (
-        <div
-          key={metric.label}
-          className={`${isEntryMetric(metric.label) ? 'col-span-2 flex flex-col gap-1' : 'flex flex-col gap-1'} min-w-0`}
-          data-testid={`home-bento-strategy-metric-${metric.label}`}
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
-          <p
-            className={`font-medium leading-tight text-xl sm:text-2xl ${getToneTextClass(metric.tone || 'neutral')}`}
-            style={getToneTextStyle(metric.tone || 'neutral', false)}
+        {metrics.map((metric) => (
+          <div
+            key={metric.label}
+            className={`${isEntryMetric(metric.label) ? 'col-span-2 flex flex-col gap-1' : 'flex flex-col gap-1'} min-w-0`}
+            data-testid={`home-bento-strategy-metric-${metric.label}`}
           >
-            {metric.value}
-          </p>
-        </div>
-      ))}
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
+            <p
+              className={`text-lg font-bold leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
+              style={getToneTextStyle(metric.tone || 'neutral', false)}
+            >
+              {metric.value}
+            </p>
+          </div>
+        ))}
       </div>
       <div className="h-fit border-t border-white/[0.08] pt-5">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{positionLabel}</p>
-        <p className="mt-3 text-sm leading-relaxed text-white/68">{positionBody}</p>
+        <p className="mt-3 text-[13px] leading-relaxed text-white/70">{positionBody}</p>
       </div>
     </div>
   </BentoCard>

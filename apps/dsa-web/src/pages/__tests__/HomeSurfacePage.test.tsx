@@ -131,6 +131,10 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     const root = screen.getByTestId('home-bento-dashboard');
+    const grid = screen.getByTestId('home-bento-grid');
+    const main = screen.getByTestId('home-bento-main');
+    const omnibar = screen.getByTestId('home-bento-omnibar');
+    const recentHistory = await screen.findByTestId('home-bento-recent-history');
     const strategyCard = screen.getByTestId('home-bento-card-strategy');
     const techCard = screen.getByTestId('home-bento-card-tech');
     const fundamentalsCard = screen.getByTestId('home-bento-card-fundamentals');
@@ -148,15 +152,20 @@ describe('HomeSurfacePage', () => {
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
-    expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
-    expect(screen.getByTestId('home-bento-grid')).toHaveClass('bento-grid-root');
-    const main = screen.getByTestId('home-bento-main');
+    expect(grid).toHaveAttribute('data-bento-grid', 'true');
+    expect(grid).toHaveClass('bento-grid-root');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'py-6', 'px-6', 'md:px-8', 'xl:px-12');
     expect(main.className).not.toContain('overflow-hidden');
-    expect(screen.getByTestId('home-bento-omnibar')).toHaveClass('lg:col-span-3', 'xl:col-span-2', 'flex', 'h-[48px]', 'gap-3');
-    expect(homeSearch).toHaveAttribute('placeholder', '输入股票代码或公司名称，唤醒 AI 深度分析...');
-    expect(homeSearch).toHaveClass('bg-white/[0.03]', 'border', 'border-white/10', 'text-sm', 'rounded-[16px]', 'pl-12');
+    expect(grid).toHaveClass('w-full', 'flex-1', 'min-h-0', 'grid-cols-1', 'items-stretch', 'gap-6', 'lg:grid-cols-3', 'xl:grid-cols-5');
+    expect(grid.className).not.toContain('mt-8');
+    expect(omnibar).toHaveClass('lg:col-span-3', 'xl:col-span-2', 'flex', 'h-11', 'gap-3');
+    expect(grid.firstElementChild).toBe(omnibar);
+    expect(grid.children[1]).toBe(recentHistory);
+    expect(recentHistory).toHaveClass('hidden', 'xl:flex', 'xl:col-span-3', 'items-center', 'gap-3', 'pl-2');
+    expect(homeSearch).toHaveAttribute('placeholder', '输入代码或公司名 (如 ORCL)...');
+    expect(homeSearch).toHaveClass('bg-white/[0.03]', 'border', 'border-white/10', 'text-sm', 'rounded-xl', 'pl-10');
     expect(screen.getByTestId('home-bento-analyze-button')).toHaveTextContent('分析');
+    expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-xl');
     expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
@@ -170,8 +179,6 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-breakout-reason')).toBeInTheDocument();
     expect(screen.getByText('AI 突破归因')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'flex-1', 'min-h-0', 'grid-cols-1', 'items-stretch', 'gap-6', 'lg:grid-cols-3', 'xl:grid-cols-5');
-    expect(screen.getByTestId('home-bento-grid').className).not.toContain('mt-8');
     expect(strategyCard).toHaveClass('w-full', 'self-start', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(techCard).toHaveClass('w-full', 'self-start', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(fundamentalsCard).toHaveClass('w-full', 'self-start', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
@@ -184,11 +191,14 @@ describe('HomeSurfacePage', () => {
     expect(targetMetric).not.toHaveClass('col-span-2');
     expect(stopLossMetric).not.toHaveClass('col-span-2');
     expect(screen.getByText('建仓区间')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40');
-    expect(screen.getByText('118.40 - 121.00')).toHaveClass('text-xl', 'sm:text-2xl');
-    expect(screen.getByText('136.00')).toHaveClass('text-xl', 'sm:text-2xl', 'font-medium');
-    expect(screen.getByText('111.80')).toHaveClass('text-xl', 'sm:text-2xl', 'font-medium');
-    expect(screen.getByText('零轴上方金叉')).toHaveClass('text-xl', 'font-medium');
-    expect(screen.getByText('+18.2%')).toHaveClass('text-2xl', 'font-medium');
+    expect(screen.getByText('118.40 - 121.00')).toHaveClass('text-lg', 'font-bold');
+    expect(screen.getByText('136.00')).toHaveClass('text-lg', 'font-bold');
+    expect(screen.getByText('111.80')).toHaveClass('text-lg', 'font-bold');
+    expect(screen.getByText('零轴上方金叉')).toHaveClass('text-base', 'font-bold');
+    expect(screen.getByText('+18.2%')).toHaveClass('text-lg', 'font-bold');
+    expect(screen.getByText('118.40 - 121.00').className).not.toContain('text-2xl');
+    expect(screen.getByText('+18.2%').className).not.toContain('text-2xl');
+    expect(screen.getByText('+18.2%').className).not.toContain('text-3xl');
     expect(screen.getByText('65.4')).toBeInTheDocument();
     expect(screen.getByText('2.4%')).toBeInTheDocument();
     expect(screen.getByText('市盈率 (PE)')).toBeInTheDocument();
@@ -203,7 +213,7 @@ describe('HomeSurfacePage', () => {
     expect(techCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
     expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
-    expect(await screen.findByTestId('home-bento-recent-history')).toBeInTheDocument();
+    expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
   });
 
   it('renders localized English copy for the signed-in dashboard', () => {
@@ -211,7 +221,7 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     expect(screen.queryByText('WolfyStock Command Center')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a stock code or company name to trigger AI deep analysis...');
+    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker or company name (for example ORCL)...');
     expect(screen.getByText('Execution Strategy')).toBeInTheDocument();
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
     expect(screen.getByText('Fundamental Profile')).toBeInTheDocument();
@@ -240,8 +250,11 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     fireEvent.click(await screen.findByRole('button', { name: 'ORCL' }));
-    expect(await screen.findByText('Oracle')).toBeInTheDocument();
-    expect(await screen.findByText('121.80 - 124.60')).toBeInTheDocument();
+    const company = await screen.findByText('Oracle');
+    const entryRange = await screen.findByText('121.80 - 124.60');
+    expect(company).toHaveClass('text-lg');
+    expect(entryRange).toHaveClass('text-lg', 'font-bold');
+    expect(entryRange.className).not.toContain('text-2xl');
   });
 
   it('updates the dashboard immediately when the analyze button is pressed', async () => {

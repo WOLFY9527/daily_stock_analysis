@@ -116,7 +116,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock 决策面板',
     description: '',
-    omnibarPlaceholder: '输入股票代码或公司名称，唤醒 AI 深度分析...',
+    omnibarPlaceholder: '输入代码或公司名 (如 ORCL)...',
     analyzeButton: '分析',
     instrument: '英伟达',
     ticker: 'NVDA',
@@ -293,7 +293,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock Command Center',
     description: '',
-    omnibarPlaceholder: 'Enter a stock code or company name to trigger AI deep analysis...',
+    omnibarPlaceholder: 'Enter a ticker or company name (for example ORCL)...',
     analyzeButton: 'Analyze',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
@@ -916,7 +916,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
   const [activeTicker, setActiveTicker] = useState('NVDA');
-  const [dashboardData, setDashboardData] = useState<DashboardPayload>(() => resolveDashboardPayload('zh', 'NVDA'));
   const query = useStockPoolStore((state) => state.query);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
@@ -925,11 +924,18 @@ const HomeBentoDashboardPage: React.FC = () => {
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
-  const copy = dashboardData;
   const recentHistory = useMemo(
     () => Array.from(new Set(historyItems.map((item) => normalizeTickerQuery(item.stockCode)).filter(Boolean))).slice(0, 8),
     [historyItems],
   );
+  const dashboardData = useMemo<DashboardPayload>(() => {
+    if (selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker) {
+      return buildDashboardFromReport(locale, selectedReport);
+    }
+
+    return resolveDashboardPayload(locale, activeTicker);
+  }, [activeTicker, locale, selectedReport]);
+  const copy = dashboardData;
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -939,15 +945,6 @@ const HomeBentoDashboardPage: React.FC = () => {
     void refreshHistory(true);
   }, [refreshHistory]);
 
-  useEffect(() => {
-    if (selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker) {
-      setDashboardData(buildDashboardFromReport(locale, selectedReport));
-      return;
-    }
-
-    setDashboardData(resolveDashboardPayload(locale, activeTicker));
-  }, [activeTicker, locale, selectedReport]);
-
   const syncDashboardTicker = (tickerValue: string) => {
     const normalizedTicker = normalizeTickerQuery(tickerValue);
     if (!normalizedTicker) {
@@ -955,7 +952,6 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     setActiveTicker(normalizedTicker);
-    setDashboardData(resolveDashboardPayload(locale, normalizedTicker));
     setQuery(normalizedTicker);
     return normalizedTicker;
   };
@@ -997,7 +993,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       <main className="w-full flex-1 min-w-0 flex flex-col py-6 px-6 md:px-8 xl:px-12" data-testid="home-bento-main">
         <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3 xl:grid-cols-5">
           <form
-            className="lg:col-span-3 xl:col-span-2 flex h-[48px] gap-3"
+            className="lg:col-span-3 xl:col-span-2 flex h-11 gap-3"
             data-testid="home-bento-omnibar"
             onSubmit={(event) => {
               event.preventDefault();
@@ -1015,14 +1011,14 @@ const HomeBentoDashboardPage: React.FC = () => {
                 onChange={(event) => setQuery(event.target.value)}
                 autoComplete="off"
                 disabled={isAnalyzing}
-                className="w-full h-full bg-white/[0.03] border border-white/10 focus:border-indigo-500/40 focus:bg-white/[0.05] text-white text-sm rounded-[16px] pl-12 pr-4 outline-none transition-all placeholder:text-white/30"
+                className="w-full h-full bg-white/[0.03] border border-white/10 focus:border-indigo-500/50 focus:bg-white/[0.05] text-white text-sm rounded-xl pl-10 pr-4 outline-none transition-all placeholder:text-white/30"
                 placeholder={copy.omnibarPlaceholder}
               />
             </div>
             <button
               type="submit"
               disabled={isAnalyzing}
-              className="h-full px-6 bg-white text-black font-bold text-sm rounded-[16px] hover:bg-white/90 active:scale-95 transition-all shrink-0 disabled:cursor-wait disabled:bg-white/70"
+              className="h-full px-6 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all shrink-0 disabled:cursor-wait disabled:bg-white/70"
               data-testid="home-bento-analyze-button"
             >
               {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : copy.analyzeButton}

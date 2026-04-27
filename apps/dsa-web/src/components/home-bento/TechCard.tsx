@@ -47,7 +47,7 @@ export const TechCard: React.FC<TechCardProps> = ({
         >
           <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{signal.label}</span>
           <span
-            className={`text-xl font-medium leading-tight ${getToneTextClass(signal.tone)}`}
+            className={`text-base font-bold leading-tight ${getToneTextClass(signal.tone)}`}
             style={getToneTextStyle(signal.tone, index === 0)}
           >
             {signal.value}

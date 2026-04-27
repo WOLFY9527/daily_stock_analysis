@@ -43,7 +43,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
         <div key={metric.label} className="min-w-0" data-testid={`home-bento-fundamental-metric-${metric.label}`}>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
           <p
-            className={`mt-2.5 text-2xl font-medium leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
+            className={`mt-2.5 text-lg font-bold leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
             style={getToneTextStyle(metric.tone || 'neutral', index === 0)}
           >
             {metric.value}
