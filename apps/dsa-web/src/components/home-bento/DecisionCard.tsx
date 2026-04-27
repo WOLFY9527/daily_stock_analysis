@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import {
@@ -67,7 +68,11 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   summary,
   ticker,
 }) => {
-  const openDetailsButton = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
+  const {
+    ref: openDetailsButtonRef,
+    onClick: handleOpenDetailsClick,
+    onPointerUp: handleOpenDetailsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const [activeTimeframeId, setActiveTimeframeId] = useState<DecisionChartTimeframeId>(defaultTimeframeId);
   const summaryParagraphs = summary
     .split(/\n+/)
@@ -96,12 +101,12 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       testId="home-bento-card-decision"
       action={(
         <button
-          ref={openDetailsButton.ref}
+          ref={openDetailsButtonRef}
           type="button"
           className={CARD_BUTTON_CLASS}
           data-testid="home-bento-drawer-trigger-decision"
-          onClick={openDetailsButton.onClick}
-          onPointerUp={openDetailsButton.onPointerUp}
+          onClick={handleOpenDetailsClick}
+          onPointerUp={handleOpenDetailsPointerUp}
         >
           <PanelRightOpen className="h-4 w-4" />
           <span>{detailLabel}</span>
@@ -186,7 +191,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </div>
 
         <div className="mt-1 shrink-0 border-t border-white/5 pt-4" data-testid="home-bento-breakout-reason">
-          <h4 className="mb-1 text-[10px] uppercase tracking-widest text-white/30">{reason.title}</h4>
+          <Label micro as="h4" className="mb-1 text-white/30">{reason.title}</Label>
           <p className="truncate text-xs leading-relaxed text-white/60" title={reason.body}>
             {(reasonParagraphs[0] || reason.body).trim()}
           </p>

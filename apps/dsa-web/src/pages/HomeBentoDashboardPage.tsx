@@ -15,6 +15,8 @@ import type {
   DecisionChartTimeframe,
   DecisionChartTimeframeId,
 } from '../components/home-bento/HomeSignalCandlestickChart';
+import { createApiError } from '../api/error';
+import { withFallback } from '../api/withFallback';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
@@ -50,6 +52,10 @@ type DrawerPayload = {
 
 type DashboardLocale = 'zh' | 'en';
 type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
+type AnalyzeFlowResult =
+  | { mode: 'submitted'; stockCode: string }
+  | { mode: 'noop' }
+  | { mode: 'fallback'; stockCode: string };
 type PendingHistoryDelete =
   | { mode: 'single'; recordIds: number[] }
   | { mode: 'visible'; recordIds: number[] };
@@ -1743,19 +1749,44 @@ const HomeBentoDashboardPage: React.FC = () => {
     setActiveTicker(normalizedTicker || rawQuery);
     setSearchQuery('');
 
-    const result = await submitAnalysis({
-      stockCode: normalizedTicker || rawQuery,
-      originalQuery: rawQuery,
-      selectionSource: 'manual',
-    });
+    let result;
+    try {
+      result = await withFallback<AnalyzeFlowResult>(
+        async (): Promise<AnalyzeFlowResult> => {
+          const nextResult = await submitAnalysis({
+            stockCode: normalizedTicker || rawQuery,
+            originalQuery: rawQuery,
+            selectionSource: 'manual',
+          });
 
-    if (result.ok) {
+          if (nextResult.ok) {
+            return { mode: 'submitted' as const, stockCode: nextResult.stockCode };
+          }
+
+          if (nextResult.duplicate || !nextResult.error) {
+            return { mode: 'noop' as const };
+          }
+
+          throw createApiError(nextResult.error);
+        },
+        {
+          fallback: (): AnalyzeFlowResult => ({
+            mode: 'fallback' as const,
+            stockCode: resolveDemoFallbackTicker(normalizedTicker || rawQuery),
+          }),
+        },
+      );
+    } catch {
+      setDashboardLoading(false);
+      return;
+    }
+
+    if (result.data.mode === 'submitted') {
       await refreshHistory(true);
-      await focusLatestHistoryForStock(result.stockCode);
-      setActiveTicker(result.stockCode);
-    } else if (!result.duplicate) {
-      const fallbackTicker = resolveDemoFallbackTicker(normalizedTicker || rawQuery);
-      setActiveTicker(fallbackTicker);
+      await focusLatestHistoryForStock(result.data.stockCode);
+      setActiveTicker(result.data.stockCode);
+    } else if (result.data.mode === 'fallback') {
+      setActiveTicker(result.data.stockCode);
       setAnalysisFallbackMode(true);
       clearError();
       setFallbackToast(locale === 'en'

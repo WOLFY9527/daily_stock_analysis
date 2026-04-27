@@ -341,7 +341,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
         },
       ],
     };
-  }, [densityConfig.mode, language, normalized, rows]);
+  }, [densityConfig.mode, language, rows]);
 
   useEffect(() => {
     const host = containerRef.current;

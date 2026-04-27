@@ -2,7 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { adminLogsApi, type ExecutionLogSessionDetail, type ExecutionLogSessionSummary } from '../api/adminLogs';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert, GlassCard } from '../components/common';
 import type { ParsedApiError } from '../api/error';
 
 const STATUS_CLASS: Record<string, string> = {
@@ -243,7 +243,7 @@ const AdminLogsPage: React.FC = () => {
       data-testid="admin-logs-workspace"
       className="flex h-full min-h-0 w-full flex-1 min-w-0 flex-col gap-6 overflow-y-auto px-6 py-8 md:px-8 xl:px-12"
     >
-      <section className="rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm">
+      <GlassCard as="section" className="p-6">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,64rem)] xl:items-end">
           <div>
             <h1 className="text-[1.65rem] font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
@@ -324,11 +324,11 @@ const AdminLogsPage: React.FC = () => {
             </button>
           </div>
         </div>
-      </section>
+      </GlassCard>
 
       {error ? <ApiErrorAlert error={error} /> : null}
 
-      <section className="rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm">
+      <GlassCard as="section" className="p-6">
         <div className="mb-4">
           <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
           <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionListHint')}</p>
@@ -412,9 +412,9 @@ const AdminLogsPage: React.FC = () => {
             </div>
           </div>
         )}
-      </section>
+      </GlassCard>
 
-      <section className="rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm">
+      <GlassCard as="section" className="p-6">
         <div className="mb-4 border-b border-white/5 pb-4">
           <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionDetailTitle')}</h2>
           <p className="mt-1 text-xs text-muted-text">{t('adminLogs.sessionDetailHint')}</p>
@@ -550,7 +550,7 @@ const AdminLogsPage: React.FC = () => {
               <p className="mt-1 text-sm text-muted-text">{t('adminLogs.selectSessionBody')}</p>
             </div>
           )}
-      </section>
+      </GlassCard>
     </section>
   );
 };

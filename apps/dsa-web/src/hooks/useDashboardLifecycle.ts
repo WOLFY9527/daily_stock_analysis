@@ -93,9 +93,7 @@ export function useDashboardLifecycle({
       syncTaskFailed(task);
       void hydrateRecentTasks();
     },
-    onError: () => {
-      console.warn('SSE connection disconnected, reconnecting...');
-    },
+    onError: () => undefined,
     enabled,
   });
 }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
-import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, Input, Select } from '../components/common';
+import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, Input, Select } from '../components/common';
 import {
   CARD_BUTTON_CLASS,
   PageBriefDrawer,
@@ -102,7 +102,6 @@ type CustomDataSourceRecord = {
   validation?: CustomDataSourceValidation;
 };
 
-const GLASS_SUBCARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm';
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
 const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-xl px-3 py-2 text-left text-sm transition-colors';
@@ -1592,15 +1591,6 @@ const SettingsPage: React.FC = () => {
     const readinessHasConfiguredProvider = aiGatewayReadiness.some((provider) => provider.credentialReady);
     return readinessHasConfiguredProvider && aiGatewaySelectorOptions.length === 0;
   }, [aiGatewayReadiness, aiGatewaySelectorOptions.length]);
-
-  useEffect(() => {
-    if (!aiSelectorReadinessMismatch) return;
-    console.warn('[Settings][AI Routing] readiness reports configured providers but selector options are empty', {
-      readinessProviders: aiGatewayReadiness.filter((provider) => provider.credentialReady).map((provider) => provider.gateway),
-      configuredChannels: aiCredentialReadyGateways,
-      llmChannels: splitCsv(allItemMap.get('LLM_CHANNELS')),
-    });
-  }, [aiCredentialReadyGateways, aiGatewayReadiness, aiSelectorReadinessMismatch, allItemMap]);
 
   const primaryGatewayDisabledReason = useMemo(() => {
     if (adminLocked) return t('settings.adminSaveLocked');
@@ -3193,7 +3183,7 @@ const SettingsPage: React.FC = () => {
               title={rawFieldsSectionTitle}
               description={rawFieldsSectionDescription}
             >
-              <div className={GLASS_SUBCARD_CLASS}>
+              <GlassCard className="px-4 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-foreground">{activeCategoryLabel}</p>
@@ -3214,7 +3204,7 @@ const SettingsPage: React.FC = () => {
                     {shouldCollapseRawFields ? rawFieldsToggleLabel : t('settings.dataSourceManageAction')}
                   </Button>
                 </div>
-              </div>
+              </GlassCard>
             </SettingsSectionCard>
           ) : (
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
@@ -3241,14 +3231,14 @@ const SettingsPage: React.FC = () => {
       >
         {activeDataRoutingGroup ? (
           <div className="space-y-4">
-            <div className={GLASS_SUBCARD_CLASS}>
+            <GlassCard className="px-4 py-4">
               <p className="text-sm font-semibold text-foreground">{activeDataRoutingGroup.role}</p>
               <p className="mt-1 text-xs text-secondary-text">
                 {activeDataRoutingGroup.values.length
                   ? activeDataRoutingGroup.values.map((source) => prettySourceLabel(source)).join(' -> ')
                   : t('settings.notConfigured')}
               </p>
-            </div>
+            </GlassCard>
 
             <div className="grid gap-3">
               <Select
@@ -3306,9 +3296,9 @@ const SettingsPage: React.FC = () => {
         zIndex={77}
       >
         <div className="space-y-4">
-          <div className={GLASS_SUBCARD_CLASS}>
+          <GlassCard className="px-4 py-4">
             <p className="text-sm font-semibold text-foreground">{t('settings.runtimeSummaryVisibilityDesc')}</p>
-          </div>
+          </GlassCard>
           <div className={SEGMENT_WRAPPER_CLASS}>
             <button
               type="button"

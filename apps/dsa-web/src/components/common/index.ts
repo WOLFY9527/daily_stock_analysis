@@ -11,6 +11,8 @@ export * from './ScoreGauge';
 export * from './Select';
 export * from './BrandedLoadingScreen';
 export * from './Badge';
+export * from './GlassCard';
+export * from './Label';
 export * from './Pagination';
 export * from './ConfirmDialog';
 export * from './WorkspacePageHeader';

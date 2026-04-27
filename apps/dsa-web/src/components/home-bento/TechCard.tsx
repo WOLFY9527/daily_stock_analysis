@@ -1,5 +1,6 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import { CARD_BUTTON_CLASS, getToneTextClass, getToneTextStyle, type SignalTone } from './theme';
@@ -23,7 +24,11 @@ export const TechCard: React.FC<TechCardProps> = ({
   detailLabel,
   onOpenDetails,
 }) => {
-  const openDetailsButton = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
+  const {
+    ref: openDetailsButtonRef,
+    onClick: handleOpenDetailsClick,
+    onPointerUp: handleOpenDetailsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
 
   return (
     <BentoCard
@@ -32,12 +37,12 @@ export const TechCard: React.FC<TechCardProps> = ({
       testId="home-bento-card-tech"
       action={(
         <button
-          ref={openDetailsButton.ref}
+          ref={openDetailsButtonRef}
           type="button"
           className={CARD_BUTTON_CLASS}
           data-testid="home-bento-drawer-trigger-tech"
-          onClick={openDetailsButton.onClick}
-          onPointerUp={openDetailsButton.onPointerUp}
+          onClick={handleOpenDetailsClick}
+          onPointerUp={handleOpenDetailsPointerUp}
         >
           <PanelRightOpen className="h-4 w-4" />
           <span>{detailLabel}</span>
@@ -51,7 +56,7 @@ export const TechCard: React.FC<TechCardProps> = ({
             data-testid={`home-bento-tech-signal-${signal.label}`}
             className="grid min-w-0 gap-2.5 border-b border-white/[0.07] pb-5 last:border-b-0 last:pb-0"
           >
-            <span className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{signal.label}</span>
+            <Label micro className="block truncate">{signal.label}</Label>
             <span
               className={`block break-words whitespace-normal text-base font-bold leading-tight ${getToneTextClass(signal.tone)}`}
               style={getToneTextStyle(signal.tone, index === 0)}

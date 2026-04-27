@@ -1,5 +1,6 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import { CARD_BUTTON_CLASS, getToneTextClass, getToneTextStyle, type SignalTone } from './theme';
@@ -23,7 +24,11 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
   detailLabel,
   onOpenDetails,
 }) => {
-  const openDetailsButton = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
+  const {
+    ref: openDetailsButtonRef,
+    onClick: handleOpenDetailsClick,
+    onPointerUp: handleOpenDetailsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
 
   return (
     <BentoCard
@@ -32,12 +37,12 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
       testId="home-bento-card-fundamentals"
       action={(
         <button
-          ref={openDetailsButton.ref}
+          ref={openDetailsButtonRef}
           type="button"
           className={CARD_BUTTON_CLASS}
           data-testid="home-bento-drawer-trigger-fundamentals"
-          onClick={openDetailsButton.onClick}
-          onPointerUp={openDetailsButton.onPointerUp}
+          onClick={handleOpenDetailsClick}
+          onPointerUp={handleOpenDetailsPointerUp}
         >
           <PanelRightOpen className="h-4 w-4" />
           <span>{detailLabel}</span>
@@ -47,7 +52,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
       <div className="grid grid-cols-2 gap-x-6 gap-y-5">
         {metrics.map((metric, index) => (
           <div key={metric.label} className="min-w-0" data-testid={`home-bento-fundamental-metric-${metric.label}`}>
-            <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
+            <Label micro as="p" className="block truncate">{metric.label}</Label>
             <p
               className={`mt-2.5 break-words whitespace-normal text-lg font-bold leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
               style={getToneTextStyle(metric.tone || 'neutral', index === 0)}

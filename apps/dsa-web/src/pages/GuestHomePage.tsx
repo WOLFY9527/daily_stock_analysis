@@ -4,12 +4,14 @@ import { TrendingUp } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
-import { ApiErrorAlert } from '../components/common';
+import { withFallback } from '../api/withFallback';
+import { ApiErrorAlert, GlassCard, Label } from '../components/common';
 import { StockAutocomplete } from '../components/StockAutocomplete';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLoginPath, buildRegistrationPath } from '../hooks/useProductSurface';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
+import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
 type GuestHomeCopy = {
@@ -105,6 +107,7 @@ const GuestHomePage: React.FC = () => {
   const [preview, setPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const loginPath = useMemo(() => buildLoginPath('/'), []);
@@ -128,13 +131,24 @@ const GuestHomePage: React.FC = () => {
 
     setIsLoading(true);
     setError(null);
+    setFallbackNotice(null);
     try {
-      const response = await publicAnalysisApi.preview({
-        stockCode: nextCode,
-        stockName,
-        reportType: 'brief',
-      });
-      setPreview(response);
+      const response = await withFallback(
+        () => publicAnalysisApi.preview({
+          stockCode: nextCode,
+          stockName,
+          reportType: 'brief',
+        }),
+        {
+          fallback: () => createPublicAnalysisFallbackPreview(nextCode, language),
+        },
+      );
+      setPreview(response.data);
+      if (response.fallback) {
+        setFallbackNotice(language === 'en'
+          ? 'Live preview is temporarily unavailable. Loaded a local snapshot instead.'
+          : '实时预览暂时不可用，已切换到本地快照。');
+      }
       setQuery(stockName || nextCode);
     } catch (err) {
       setError(getParsedApiError(err));
@@ -161,39 +175,37 @@ const GuestHomePage: React.FC = () => {
           <p className="text-sm text-white/40">{copy.subtitle}</p>
         </div>
 
-        <section
-          className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] p-6 shadow-2xl backdrop-blur-3xl"
-          data-testid="guest-home-search-card"
-        >
-          <div className="flex max-w-3xl flex-col gap-3 md:flex-row">
-            <div className="min-w-0 flex-1">
-              <StockAutocomplete
-                value={query}
-                onChange={setQuery}
-                onSubmit={(stockCode, stockName) => {
-                  void handlePreview(stockCode, stockName);
-                }}
-                placeholder={copy.inputPlaceholder}
+        <section className="w-full">
+          <GlassCard className="w-full p-6 shadow-2xl backdrop-blur-3xl" data-testid="guest-home-search-card">
+            <div className="flex max-w-3xl flex-col gap-3 md:flex-row">
+              <div className="min-w-0 flex-1">
+                <StockAutocomplete
+                  value={query}
+                  onChange={setQuery}
+                  onSubmit={(stockCode, stockName) => {
+                    void handlePreview(stockCode, stockName);
+                  }}
+                  placeholder={copy.inputPlaceholder}
+                  disabled={isLoading}
+                  className="border border-white/10 bg-white/[0.04] text-white placeholder:text-white/30"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handlePreview()}
+                className="shrink-0 rounded-xl border border-white/10 bg-white/[0.05] px-6 py-3.5 text-white font-medium transition-colors hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isLoading}
-                className="border border-white/10 bg-white/[0.04] text-white placeholder:text-white/30"
-              />
+              >
+                {isLoading ? copy.submittingLabel : copy.submitLabel}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void handlePreview()}
-              className="shrink-0 rounded-xl border border-white/10 bg-white/[0.05] px-6 py-3.5 text-white font-medium transition-colors hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isLoading}
-            >
-              {isLoading ? copy.submittingLabel : copy.submitLabel}
-            </button>
-          </div>
-          {error ? <div className="mt-4"><ApiErrorAlert error={error} /></div> : null}
+            {fallbackNotice ? <p className="mt-4 text-xs text-white/50">{fallbackNotice}</p> : null}
+            {error ? <div className="mt-4"><ApiErrorAlert error={error} /></div> : null}
+          </GlassCard>
         </section>
 
-        <section
-          className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] p-6 shadow-2xl backdrop-blur-3xl"
-          data-testid="guest-home-preview-card"
-        >
+        <section className="w-full">
+          <GlassCard className="w-full p-6 shadow-2xl backdrop-blur-3xl" data-testid="guest-home-preview-card">
           <div className="flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)] xl:items-stretch">
             <div className="flex min-w-0 flex-1 flex-col justify-between">
               <div>
@@ -207,7 +219,7 @@ const GuestHomePage: React.FC = () => {
                 </div>
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-white/36">{copy.actionLabel}</p>
+                    <Label as="p" size="dense" tone="muted">{copy.actionLabel}</Label>
                     <p
                       className={`mt-2 text-base font-medium ${summary?.operationAdvice ? 'text-white' : waitingToneClass}`}
                       data-testid="guest-home-waiting-action"
@@ -216,7 +228,7 @@ const GuestHomePage: React.FC = () => {
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-white/36">{copy.trendLabel}</p>
+                    <Label as="p" size="dense" tone="muted">{copy.trendLabel}</Label>
                     <p
                       className={`mt-2 text-base font-medium ${summary?.trendPrediction ? 'text-white' : waitingToneClass}`}
                       data-testid="guest-home-waiting-trend"
@@ -228,7 +240,7 @@ const GuestHomePage: React.FC = () => {
               </div>
 
               <div className="mt-5 rounded-2xl border border-white/6 bg-white/[0.025] px-4 py-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/36">{copy.summaryLabel}</p>
+                <Label as="p" size="dense" tone="muted">{copy.summaryLabel}</Label>
                 <p className="mt-2 text-sm leading-6 text-white/62">
                   {summary?.analysisSummary || copy.subtitle}
                 </p>
@@ -245,9 +257,9 @@ const GuestHomePage: React.FC = () => {
 
             <div className="min-w-0">
               <div className="h-full rounded-[26px] border border-white/6 bg-white/[0.03] p-4">
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.22em] text-white/34">
-                  <span>{copy.chartLabel}</span>
-                  <span>{preview?.report.meta.stockCode || '--'}</span>
+                <div className="flex items-center justify-between">
+                  <Label size="dense" tone="muted">{copy.chartLabel}</Label>
+                  <Label size="dense" tone="muted">{preview?.report.meta.stockCode || '--'}</Label>
                 </div>
                 <div className="relative mt-5 rounded-[22px] border border-white/6 bg-black/20 px-4 py-4">
                   <svg viewBox="0 0 320 136" className="h-44 w-full">
@@ -270,8 +282,8 @@ const GuestHomePage: React.FC = () => {
                   />
                   <circle cx="296" cy={chartLastY} r="5" fill="rgba(255,255,255,0.72)" />
                   </svg>
-                  <div className="absolute right-4 top-4 px-3 py-1 bg-emerald-500 text-black text-[10px] font-bold rounded-full shadow-[0_0_15px_rgba(16,185,129,0.5)] flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+                  <div className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full border border-indigo-400/25 bg-indigo-400/12 px-3 py-1 text-[10px] font-bold text-white shadow-[0_0_15px_rgba(99,102,241,0.22)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white/85 animate-pulse" />
                     {copy.chartLabel}
                   </div>
                 </div>
@@ -287,12 +299,13 @@ const GuestHomePage: React.FC = () => {
                   </span>
                 </div>
                 <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.03] p-3 flex flex-col gap-1.5">
-                  <div className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{copy.chartReasonTitle}</div>
+                  <Label micro as="div">{copy.chartReasonTitle}</Label>
                   <p className="text-xs text-white/80 leading-relaxed">{copy.chartReasonBody}</p>
                 </div>
               </div>
             </div>
           </div>
+          </GlassCard>
         </section>
       </div>
     </main>

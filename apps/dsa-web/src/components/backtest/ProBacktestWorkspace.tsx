@@ -359,9 +359,9 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                               <h5 className="text-base font-semibold text-white">{template.name[language]}</h5>
                               <p className="mt-1 text-sm leading-6 text-white/60">{template.description[language]}</p>
                             </div>
-                            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                              template.executable
-                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                              <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                                template.executable
+                                ? 'border-indigo-400/30 bg-indigo-400/10 text-indigo-200'
                                 : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
                             }`}
                             >

@@ -1,9 +1,7 @@
 import type React from 'react';
-import { Button } from '../common';
+import { Button, GlassCard } from '../common';
 import { ApiSourceCard } from './ApiSourceCard';
 import { SettingsSectionCard } from './SettingsSectionCard';
-
-const GLASS_SUBCARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
@@ -63,7 +61,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
     description={t('settings.dataEffectiveDesc')}
   >
     <div className="space-y-3">
-      <div className={GLASS_SUBCARD_CLASS}>
+      <GlassCard className="px-4 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -127,9 +125,9 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
             </div>
           ))}
         </div>
-      </div>
+      </GlassCard>
 
-      <div className={GLASS_SUBCARD_CLASS}>
+      <GlassCard className="px-4 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -188,7 +186,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
             />
           ))}
         </div>
-      </div>
+      </GlassCard>
     </div>
   </SettingsSectionCard>
 );

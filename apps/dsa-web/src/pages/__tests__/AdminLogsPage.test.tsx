@@ -24,9 +24,13 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
   }),
 }));
 
-vi.mock('../../components/common', () => ({
-  ApiErrorAlert: () => <div>api-error</div>,
-}));
+vi.mock('../../components/common', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../components/common')>();
+  return {
+    ...actual,
+    ApiErrorAlert: () => <div>api-error</div>,
+  };
+});
 
 describe('AdminLogsPage', () => {
   beforeEach(() => {

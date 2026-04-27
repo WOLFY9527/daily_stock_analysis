@@ -10,6 +10,8 @@ const DEFAULT_SIZE: ElementSize = { width: 0, height: 0 };
 export const useElementSize = <T extends HTMLElement>() => {
   const ref = useRef<T | null>(null);
   const [size, setSize] = useState<ElementSize>(DEFAULT_SIZE);
+  const frameRef = useRef<number | null>(null);
+  const nextSizeRef = useRef<ElementSize>(DEFAULT_SIZE);
 
   useEffect(() => {
     const node = ref.current;
@@ -19,7 +21,19 @@ export const useElementSize = <T extends HTMLElement>() => {
 
     const update = (width: number, height: number) => {
       if (width > 0 && height >= 0) {
-        setSize({ width, height });
+        if (nextSizeRef.current.width === width && nextSizeRef.current.height === height) {
+          return;
+        }
+
+        nextSizeRef.current = { width, height };
+        if (frameRef.current !== null) {
+          window.cancelAnimationFrame(frameRef.current);
+        }
+
+        frameRef.current = window.requestAnimationFrame(() => {
+          frameRef.current = null;
+          setSize(nextSizeRef.current);
+        });
       }
     };
 
@@ -36,6 +50,9 @@ export const useElementSize = <T extends HTMLElement>() => {
     observer.observe(node);
 
     return () => {
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+      }
       observer.disconnect();
     };
   }, []);

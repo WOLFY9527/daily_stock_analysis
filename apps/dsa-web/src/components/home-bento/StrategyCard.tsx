@@ -1,5 +1,6 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import { CARD_BUTTON_CLASS, getToneTextClass, getToneTextStyle } from './theme';
@@ -29,7 +30,11 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   detailLabel,
   onOpenDetails,
 }) => {
-  const openDetailsButton = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
+  const {
+    ref: openDetailsButtonRef,
+    onClick: handleOpenDetailsClick,
+    onPointerUp: handleOpenDetailsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const isEntryMetric = (label: string) => label === '建仓区间' || label === 'Entry Zone';
   const positionParagraphs = positionBody
     .split(/\n+/)
@@ -44,12 +49,12 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
       testId="home-bento-card-strategy"
       action={(
         <button
-          ref={openDetailsButton.ref}
+          ref={openDetailsButtonRef}
           type="button"
           className={CARD_BUTTON_CLASS}
           data-testid="home-bento-drawer-trigger-strategy"
-          onClick={openDetailsButton.onClick}
-          onPointerUp={openDetailsButton.onPointerUp}
+          onClick={handleOpenDetailsClick}
+          onPointerUp={handleOpenDetailsPointerUp}
         >
           <PanelRightOpen className="h-4 w-4" />
           <span>{detailLabel}</span>
@@ -64,7 +69,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
               className={`${isEntryMetric(metric.label) ? 'col-span-2 flex flex-col gap-1' : 'flex flex-col gap-1'} min-w-0`}
               data-testid={`home-bento-strategy-metric-${metric.label}`}
             >
-              <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
+              <Label micro as="p" className="block truncate">{metric.label}</Label>
               <p
                 className={`break-words whitespace-normal text-lg font-bold leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
                 style={getToneTextStyle(metric.tone || 'neutral', false)}
@@ -75,7 +80,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
           ))}
         </div>
         <div className="border-t border-white/[0.08] pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
-          <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{positionLabel}</p>
+          <Label micro as="p" className="block truncate">{positionLabel}</Label>
           <div className="mt-3 space-y-2 break-words text-[13px] leading-[1.7] text-white/70 whitespace-normal">
             {(positionParagraphs.length ? positionParagraphs : [positionBody]).map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>

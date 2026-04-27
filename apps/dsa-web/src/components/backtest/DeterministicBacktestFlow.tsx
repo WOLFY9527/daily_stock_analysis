@@ -774,7 +774,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     >
       <div className={denseCardClass}>
         <div className="flex items-start gap-3">
-          <span className="mt-1 h-3 w-1 rounded-full bg-emerald-500" />
+          <span className="mt-1 h-3 w-1 rounded-full bg-indigo-400" />
           <div>
             <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Instrument and date window' : '基础标的与区间'}</h3>
             <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'Keep the symbol and date window visible at a glance.' : '标的与时间窗口保持常驻可见，不再折叠切换。'}</p>
@@ -1308,7 +1308,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       ) : (
         <div className="flex flex-col gap-3">
           {visibleHistoryItems.map((item) => (
-            <div key={item.id} className={`rounded-2xl border bg-white/[0.02] p-4 ${selectedRunId === item.id ? 'border-emerald-500/40' : 'border-white/8'}`}>
+            <div key={item.id} className={`rounded-2xl border bg-white/[0.02] p-4 ${selectedRunId === item.id ? 'border-indigo-400/40' : 'border-white/8'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-white">{item.code || '--'} / {language === 'en' ? 'Rule backtest' : '规则回测'}</div>

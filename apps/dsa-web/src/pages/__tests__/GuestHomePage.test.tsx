@@ -153,6 +153,27 @@ describe('GuestHomePage', () => {
     expect(screen.queryByTestId('guest-home-grid')).not.toBeInTheDocument();
   });
 
+  it('falls back to a local snapshot when the live preview API rate-limits', async () => {
+    languageState.value = 'en';
+    window.history.replaceState(window.history.state, '', '/en');
+    previewMock.mockRejectedValueOnce(new Error('429 RateLimitError: upstream overloaded'));
+
+    render(
+      <MemoryRouter>
+        <GuestHomePage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('guest-stock-input'), { target: { value: 'NVDA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate snapshot' }));
+
+    expect(await screen.findByText('Live preview is temporarily unavailable. Loaded a local snapshot instead.')).toBeInTheDocument();
+    expect(await screen.findByText('NVIDIA')).toBeInTheDocument();
+    expect(screen.getByText('Keep holding')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-waiting-trend')).toHaveTextContent('Trend up');
+    expect(screen.getByText('84')).toBeInTheDocument();
+  });
+
   it('redirects signed-in users away from /guest and back to home', async () => {
     useAuthMock.mockReturnValue({
       loggedIn: true,

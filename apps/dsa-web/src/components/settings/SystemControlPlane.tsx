@@ -1,9 +1,7 @@
 import type React from 'react';
-import { Button, Disclosure } from '../common';
+import { Button, Disclosure, GlassCard } from '../common';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
-
-const GLASS_SUBCARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm';
 
 type AdminStat = {
   key: string;
@@ -42,7 +40,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
     description={t('settings.controlPlaneDesc')}
   >
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
-      <div className={GLASS_SUBCARD_CLASS}>
+      <GlassCard className="px-4 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-positive-hsl))]">
@@ -65,7 +63,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
             </div>
           ))}
         </div>
-      </div>
+      </GlassCard>
 
       <Disclosure
         summary={(
@@ -86,7 +84,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
         summaryClassName="px-4 py-4"
         bodyClassName="space-y-4 px-4 pb-4"
       >
-        <div className={GLASS_SUBCARD_CLASS}>
+        <GlassCard className="px-4 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.controlPlaneLogsTitle')}</p>
           <p className="mt-2 text-sm leading-6 text-secondary-text">{t('settings.controlPlaneLogsDesc')}</p>
           <div className="mt-4 flex justify-end">
@@ -99,7 +97,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
               {t('settings.viewAdminLogs')}
             </Button>
           </div>
-        </div>
+        </GlassCard>
 
         <div className="rounded-2xl bg-[hsl(var(--accent-warning-hsl)/0.08)] px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">

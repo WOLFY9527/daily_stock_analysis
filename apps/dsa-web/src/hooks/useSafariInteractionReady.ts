@@ -21,7 +21,6 @@ export function useSafariRenderReady<T extends HTMLElement = HTMLDivElement>(del
     let frameA = 0;
     let frameB = 0;
 
-    setIsReady(false);
     frameA = window.requestAnimationFrame(() => {
       repaintElement(surfaceRef.current);
       frameB = window.requestAnimationFrame(() => {

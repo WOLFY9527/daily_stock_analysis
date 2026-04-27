@@ -1,8 +1,6 @@
 import type React from 'react';
-import { Button } from '../common';
+import { Button, GlassCard } from '../common';
 import { SettingsSectionCard } from './SettingsSectionCard';
-
-const GLASS_SUBCARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
@@ -25,7 +23,7 @@ const SystemLogsConfig: React.FC<SystemLogsConfigProps> = ({
     title={t('settings.runtimeSummaryVisibilityTitle')}
     description={t('settings.runtimeSummaryVisibilityDesc')}
   >
-    <div className={GLASS_SUBCARD_CLASS}>
+    <GlassCard className="px-4 py-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-foreground">
@@ -43,7 +41,7 @@ const SystemLogsConfig: React.FC<SystemLogsConfigProps> = ({
           {t('settings.dataSourceManageAction')}
         </Button>
       </div>
-    </div>
+    </GlassCard>
   </SettingsSectionCard>
 );
 

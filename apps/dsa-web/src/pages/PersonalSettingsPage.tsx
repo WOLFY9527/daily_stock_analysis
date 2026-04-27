@@ -2,7 +2,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellRing, LockKeyhole, ShieldCheck, SlidersHorizontal } from 'lucide-react';
-import { ApiErrorAlert, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, GlassCard, WorkspacePageHeader } from '../components/common';
 import { authApi, type UserNotificationPreferences } from '../api/auth';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
@@ -14,7 +14,6 @@ import { buildLoginPath, buildRegistrationPath, useProductSurface } from '../hoo
 import type { MarketColorConvention } from '../utils/marketColors';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
-const GLASS_CARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-sm md:p-7';
 const GLASS_INPUT_CLASS = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white outline-none transition-[border-color,box-shadow] focus:border-white/24 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]';
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'min-w-[4.5rem] rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
@@ -148,7 +147,7 @@ const PersonalSettingsPage: React.FC = () => {
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
-        <section className={GLASS_CARD_CLASS}>
+        <GlassCard as="section" className="p-6 md:p-7">
           <div className="mb-5 space-y-1">
             <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalInterfaceTitle')}</h2>
             <p className="text-sm leading-6 text-muted-text">{t('settings.personalInterfaceSubtitle')}</p>
@@ -211,9 +210,9 @@ const PersonalSettingsPage: React.FC = () => {
           <div className="mt-4">
             <FontSizeSettingsCard />
           </div>
-        </section>
+        </GlassCard>
 
-        <section className={GLASS_CARD_CLASS}>
+        <GlassCard as="section" className="p-6 md:p-7">
           <div className="mb-5 space-y-1">
             <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalAccountAccessTitle')}</h2>
             <p className="text-sm leading-6 text-muted-text">{t('settings.personalAccountAccessSubtitle')}</p>
@@ -402,7 +401,7 @@ const PersonalSettingsPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </section>
+        </GlassCard>
       </div>
 
       {loggedIn && passwordChangeable ? <ChangePasswordCard /> : null}

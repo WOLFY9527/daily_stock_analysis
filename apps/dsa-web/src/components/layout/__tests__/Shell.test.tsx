@@ -1,11 +1,12 @@
+import { useContext, useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../../i18n/core';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Shell } from '../Shell';
+import { ShellRailContext } from '../ShellRailContext';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
-import { useShellRailSlot } from '../useShellRailSlot';
 import { useStockPoolStore } from '../../../stores';
 
 const { mockLogout, mockGetAgentStatus, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
@@ -64,7 +65,15 @@ afterEach(() => {
 });
 
 const ShellRailFixture = () => {
-  useShellRailSlot(<div>archive content</div>);
+  const { setRailContent } = useContext(ShellRailContext);
+
+  useEffect(() => {
+    setRailContent(<div>archive content</div>);
+    return () => {
+      setRailContent(null);
+    };
+  }, [setRailContent]);
+
   return <div>page content</div>;
 };
 
