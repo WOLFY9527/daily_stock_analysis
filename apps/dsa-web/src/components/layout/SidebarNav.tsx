@@ -69,7 +69,8 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
 ];
 
-const HEADER_UTILITY_TEXT_CLASS = 'text-sm font-medium text-white/50 hover:text-white transition-colors';
+const HEADER_UTILITY_TEXT_CLASS = 'px-3 py-1 text-xs font-medium text-white/50 transition-colors hover:text-white';
+const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-3 py-1 text-xs font-medium text-white/50 transition-colors hover:text-red-400';
 
 function NavLabel({
   label,
@@ -319,7 +320,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     <button
       type="button"
       onClick={() => setShowLogoutConfirm(true)}
-      className={isDrawer ? 'shell-nav-item shell-nav-item--utility shell-nav-item--danger' : HEADER_UTILITY_TEXT_CLASS}
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility shell-nav-item--danger' : HEADER_UTILITY_DANGER_TEXT_CLASS}
       aria-label={t('nav.logout')}
     >
       {isDrawer ? (
@@ -365,11 +366,22 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           </nav>
           <div className="shell-header-utilities">
             {archiveAction}
-            {languageAction}
-            {settingsAction}
-            {systemAction}
-            {signInAction}
-            {logoutAction}
+            <div
+              data-testid="shell-header-utility-island"
+              className="flex items-center gap-1 rounded-full border border-white/5 bg-white/[0.02] px-2 py-1.5 backdrop-blur-md"
+            >
+              {languageAction}
+              {(settingsAction || systemAction || signInAction || logoutAction) ? (
+                <div className="h-3 w-px bg-white/10" data-testid="shell-header-utility-divider" />
+              ) : null}
+              {settingsAction}
+              {systemAction}
+              {signInAction}
+              {logoutAction && (settingsAction || systemAction || signInAction) ? (
+                <div className="h-3 w-px bg-white/10" data-testid="shell-header-utility-divider" />
+              ) : null}
+              {logoutAction}
+            </div>
           </div>
         </div>
       )}

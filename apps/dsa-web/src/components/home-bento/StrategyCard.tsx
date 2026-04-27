@@ -38,7 +38,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     <BentoCard
       eyebrow={title}
       subtitle={subtitle}
-      className="w-full self-start rounded-[24px] lg:col-span-1 xl:col-span-1"
+      className="w-full rounded-[24px]"
       testId="home-bento-card-strategy"
       action={(
         <button
@@ -52,8 +52,8 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
         </button>
       )}
     >
-      <div className="flex h-full flex-col gap-5">
-        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3.5">
+      <div className="grid h-full gap-6 md:grid-cols-2">
+        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3.5 self-start">
           {metrics.map((metric) => (
             <div
               key={metric.label}
@@ -70,9 +70,9 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
             </div>
           ))}
         </div>
-        <div className="h-fit border-t border-white/[0.08] pt-5">
+        <div className="border-t border-white/[0.08] pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
           <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{positionLabel}</p>
-          <div className="mt-3 break-words text-[13px] leading-[1.7] text-white/70 space-y-2 whitespace-normal">
+          <div className="mt-3 space-y-2 break-words text-[13px] leading-[1.7] text-white/70 whitespace-normal">
             {(positionParagraphs.length ? positionParagraphs : [positionBody]).map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
             ))}

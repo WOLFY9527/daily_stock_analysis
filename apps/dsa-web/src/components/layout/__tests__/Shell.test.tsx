@@ -343,6 +343,44 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
   });
 
+  it('groups header utilities inside a shared glass action island', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: { isAdmin: true },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(actionIsland).toHaveClass(
+      'flex',
+      'items-center',
+      'gap-1',
+      'rounded-full',
+      'bg-white/[0.02]',
+      'border',
+      'border-white/5',
+      'px-2',
+      'py-1.5',
+      'backdrop-blur-md',
+    );
+    expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
+    expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
+  });
+
   it('resets mobile drawer and archive rail state when crossing back to desktop', async () => {
     window.innerWidth = 390;
 

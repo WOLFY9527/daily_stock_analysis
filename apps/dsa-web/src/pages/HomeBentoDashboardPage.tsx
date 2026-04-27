@@ -1011,7 +1011,7 @@ const HomeBentoDashboardPage: React.FC = () => {
           >
             <div className="relative flex-1 group">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                <Search className="h-5 w-5 text-white/40" />
+                <Search className="h-4 w-4 text-white/40" />
               </div>
               <input
                 data-testid="home-bento-omnibar-input"
@@ -1023,14 +1023,14 @@ const HomeBentoDashboardPage: React.FC = () => {
                 }}
                 autoComplete="off"
                 disabled={isAnalyzing}
-                className="w-full h-full bg-white/[0.03] border border-white/10 focus:border-indigo-500/50 focus:bg-white/[0.05] text-white text-sm rounded-xl pl-10 pr-4 outline-none transition-all placeholder:text-white/30"
+                className="w-full h-full rounded-2xl border border-white/5 bg-white/[0.02] pl-11 pr-4 text-sm text-white outline-none transition-all shadow-lg placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.04]"
                 placeholder={copy.omnibarPlaceholder}
               />
             </div>
             <button
               type="submit"
               disabled={isAnalyzing}
-              className="h-full px-6 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all shrink-0 disabled:cursor-wait disabled:bg-white/70"
+              className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-8 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
               data-testid="home-bento-analyze-button"
             >
               {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : copy.analyzeButton}
@@ -1043,7 +1043,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setHistoryDrawerOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] text-xs font-medium text-white/70 transition-colors"
+              className="flex items-center gap-2 rounded-2xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.05]"
               data-testid="home-bento-history-drawer-trigger"
             >
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -1052,6 +1052,11 @@ const HomeBentoDashboardPage: React.FC = () => {
               <span>{locale === 'en' ? 'History' : '历史记录'}</span>
             </button>
           </div>
+        </div>
+        <div
+          className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 xl:grid-cols-5"
+          data-testid="home-bento-dashboard-layout"
+        >
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}
@@ -1072,27 +1077,37 @@ const HomeBentoDashboardPage: React.FC = () => {
             detailLabel={copy.decision.detailLabel}
             onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
           />
-          <StrategyCard
-            title={copy.strategy.title}
-            subtitle={copy.strategy.subtitle}
-            metrics={copy.strategy.metrics}
-            positionLabel={copy.strategy.positionLabel}
-            positionBody={copy.strategy.positionBody}
-            detailLabel={copy.strategy.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
-          />
-          <TechCard
-            title={copy.tech.title}
-            signals={copy.tech.signals}
-            detailLabel={copy.tech.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
-          />
-          <FundamentalsCard
-            title={copy.fundamentals.title}
-            metrics={copy.fundamentals.metrics}
-            detailLabel={copy.fundamentals.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
-          />
+          <div
+            className="min-w-0 xl:col-span-3 flex flex-col gap-6"
+            data-testid="home-bento-secondary-stack"
+          >
+            <StrategyCard
+              title={copy.strategy.title}
+              subtitle={copy.strategy.subtitle}
+              metrics={copy.strategy.metrics}
+              positionLabel={copy.strategy.positionLabel}
+              positionBody={copy.strategy.positionBody}
+              detailLabel={copy.strategy.detailLabel}
+              onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
+            />
+            <div
+              className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+              data-testid="home-bento-secondary-grid"
+            >
+              <TechCard
+                title={copy.tech.title}
+                signals={copy.tech.signals}
+                detailLabel={copy.tech.detailLabel}
+                onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+              />
+              <FundamentalsCard
+                title={copy.fundamentals.title}
+                metrics={copy.fundamentals.metrics}
+                detailLabel={copy.fundamentals.detailLabel}
+                onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
+              />
+            </div>
+          </div>
         </div>
       </main>
 
