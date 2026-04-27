@@ -59,11 +59,11 @@ const DECISION_CHART_POINTS: DecisionChartPoint[] = [
 ];
 
 const CONTENT: Record<DashboardLocale, {
-  documentTitle: string;
+    documentTitle: string;
   eyebrow: string;
   heading: string;
   description: string;
-  omnibarPlaceholder: string;
+    omnibarPlaceholder: string;
   analyzeButton: string;
   instrument: string;
   ticker: string;
@@ -116,7 +116,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock 决策面板',
     description: '',
-    omnibarPlaceholder: '输入代码或公司名 (如 ORCL)...',
+    omnibarPlaceholder: '输入代码唤醒 AI (如 ORCL)...',
     analyzeButton: '分析',
     instrument: '英伟达',
     ticker: 'NVDA',
@@ -293,7 +293,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock Command Center',
     description: '',
-    omnibarPlaceholder: 'Enter a ticker or company name (for example ORCL)...',
+    omnibarPlaceholder: 'Enter a ticker to wake the AI (for example ORCL)...',
     analyzeButton: 'Analyze',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
@@ -789,6 +789,44 @@ function resolveDashboardPayload(locale: DashboardLocale, ticker: string): Dashb
   };
 }
 
+function resolveDemoFallbackTicker(ticker: string): string {
+  const normalizedTicker = normalizeTickerQuery(ticker);
+  if (normalizedTicker && DASHBOARD_VARIANTS.zh[normalizedTicker]) {
+    return normalizedTicker;
+  }
+  return 'ORCL';
+}
+
+function DashboardSkeletonCard({
+  testId,
+  className,
+  rows = 4,
+}: {
+  testId: string;
+  className?: string;
+  rows?: number;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className={`h-full w-full rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl ${className || ''}`}
+    >
+      <div className="flex h-full animate-pulse flex-col gap-4">
+        <div className="h-3 w-24 rounded-full bg-white/8" />
+        <div className="h-10 w-32 rounded-2xl bg-white/10" />
+        <div className="grid flex-1 gap-3">
+          {Array.from({ length: rows }).map((_, index) => (
+            <div
+              key={`${testId}-${index + 1}`}
+              className={`rounded-2xl ${index % 2 === 0 ? 'bg-white/[0.06]' : 'bg-white/[0.04]'} ${index === 0 ? 'h-16' : 'h-12'}`}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function toneFromScore(score?: number): SignalTone {
   if (typeof score !== 'number') {
     return 'neutral';
@@ -915,14 +953,15 @@ const HomeBentoDashboardPage: React.FC = () => {
   const { language } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
-  const [manualTicker, setManualTicker] = useState('');
-  const [isQueryDirty, setIsQueryDirty] = useState(false);
-  const query = useStockPoolStore((state) => state.query);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTicker, setActiveTicker] = useState('NVDA');
+  const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
+  const [isDashboardLoading, setDashboardLoading] = useState(false);
+  const [fallbackToast, setFallbackToast] = useState<string | null>(null);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
   const [isHistoryDrawerOpen, setHistoryDrawerOpen] = useState(false);
-  const setQuery = useStockPoolStore((state) => state.setQuery);
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
@@ -930,8 +969,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     () => Array.from(new Set(historyItems.map((item) => normalizeTickerQuery(item.stockCode)).filter(Boolean))).slice(0, 8),
     [historyItems],
   );
-  const activeTicker = manualTicker || recentHistory[0] || normalizeTickerQuery(selectedReport?.meta.stockCode) || 'NVDA';
-  const displayedQuery = isQueryDirty ? query : (query || activeTicker);
+  const isBusy = isAnalyzing || isDashboardLoading;
   const dashboardData = useMemo<DashboardPayload>(() => {
     if (selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker) {
       return buildDashboardFromReport(locale, selectedReport);
@@ -949,44 +987,80 @@ const HomeBentoDashboardPage: React.FC = () => {
     void refreshHistory(true);
   }, [refreshHistory]);
 
-  const syncDashboardTicker = (tickerValue: string) => {
-    const normalizedTicker = normalizeTickerQuery(tickerValue);
-    if (!normalizedTicker) {
-      return '';
+  useEffect(() => {
+    if (hasHydratedInitialTicker) {
+      return;
     }
 
-    setManualTicker(normalizedTicker);
-    setIsQueryDirty(false);
-    setQuery(normalizedTicker);
-    return normalizedTicker;
-  };
+    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || recentHistory[0];
+    if (!nextTicker) {
+      return;
+    }
+
+    setActiveTicker(nextTicker);
+    setHasHydratedInitialTicker(true);
+  }, [hasHydratedInitialTicker, recentHistory, selectedReport?.meta.stockCode]);
+
+  useEffect(() => {
+    if (!fallbackToast) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setFallbackToast(null);
+    }, 3200);
+
+    return () => window.clearTimeout(timer);
+  }, [fallbackToast]);
 
   const loadStockData = async (tickerValue: string) => {
-    const normalizedTicker = syncDashboardTicker(tickerValue);
+    const normalizedTicker = normalizeTickerQuery(tickerValue);
     if (!normalizedTicker) {
       return;
     }
 
-    await focusLatestHistoryForStock(normalizedTicker);
+    setFallbackToast(null);
+    setDashboardLoading(true);
+    try {
+      await focusLatestHistoryForStock(normalizedTicker);
+      setActiveTicker(normalizedTicker);
+    } finally {
+      setDashboardLoading(false);
+    }
   };
 
   const handleAnalyze = async () => {
-    const normalizedTicker = normalizeTickerQuery(query);
-    if (normalizedTicker) {
-      syncDashboardTicker(normalizedTicker);
+    const rawQuery = searchQuery.trim();
+    const normalizedTicker = normalizeTickerQuery(rawQuery);
+    if (!rawQuery) {
+      await submitAnalysis({
+        stockCode: '',
+        originalQuery: '',
+        selectionSource: 'manual',
+      });
+      return;
     }
 
-    await submitAnalysis({
-      stockCode: normalizedTicker || query,
-      originalQuery: query,
+    setFallbackToast(null);
+    setDashboardLoading(true);
+    setSearchQuery('');
+
+    const result = await submitAnalysis({
+      stockCode: normalizedTicker || rawQuery,
+      originalQuery: rawQuery,
       selectionSource: 'manual',
     });
 
-    if (normalizedTicker) {
-      setQuery(normalizedTicker);
+    if (result.ok) {
       await refreshHistory(true);
-      await focusLatestHistoryForStock(normalizedTicker);
+      await focusLatestHistoryForStock(result.stockCode);
+      setActiveTicker(result.stockCode);
+    } else if (!result.duplicate) {
+      setActiveTicker(resolveDemoFallbackTicker(normalizedTicker || rawQuery));
+      setFallbackToast(locale === 'en' ? 'API request failed. Switched to demo data.' : 'API调用失败，已切换为演示数据');
     }
+
+    setDashboardLoading(false);
   };
 
   return (
@@ -995,118 +1069,145 @@ const HomeBentoDashboardPage: React.FC = () => {
       data-bento-surface="true"
       className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col overflow-x-hidden bg-transparent`}
     >
+      {fallbackToast ? (
+        <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
+          <div className="rounded-2xl border border-white/10 bg-black/75 px-4 py-3 text-sm font-medium text-white shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+            {fallbackToast}
+          </div>
+        </div>
+      ) : null}
       <main className="w-full flex-1 flex flex-col py-6 px-6 md:px-8 xl:px-12 min-w-0" data-testid="home-bento-main">
         <div
           data-testid="home-bento-grid"
           data-bento-grid="true"
-          className="w-full grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-5 gap-6 items-stretch"
+          className="mt-6 w-full grid grid-cols-1 gap-6 items-stretch xl:grid-cols-5"
         >
-          <form
-            className="lg:col-span-3 xl:col-span-2 flex gap-3 h-12"
-            data-testid="home-bento-omnibar"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleAnalyze();
-            }}
-          >
-            <div className="relative flex-1 group">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                <Search className="h-4 w-4 text-white/40" />
-              </div>
-              <input
-                data-testid="home-bento-omnibar-input"
-                type="text"
-                value={displayedQuery}
-                onChange={(event) => {
-                  setIsQueryDirty(true);
-                  setQuery(event.target.value);
-                }}
-                autoComplete="off"
-                disabled={isAnalyzing}
-                className="w-full h-full rounded-2xl border border-white/5 bg-white/[0.02] pl-11 pr-4 text-sm text-white outline-none transition-all shadow-lg placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.04]"
-                placeholder={copy.omnibarPlaceholder}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={isAnalyzing}
-              className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-8 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
-              data-testid="home-bento-analyze-button"
-            >
-              {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : copy.analyzeButton}
-            </button>
-          </form>
           <div
-            className="hidden xl:flex xl:col-span-3 items-center justify-end pl-2"
-            data-testid="home-bento-recent-history"
+            className="xl:col-span-2 flex h-full min-h-0 flex-col gap-6"
+            data-testid="home-bento-primary-stack"
           >
-            <button
-              type="button"
-              onClick={() => setHistoryDrawerOpen(true)}
-              className="flex items-center gap-2 rounded-2xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.05]"
-              data-testid="home-bento-history-drawer-trigger"
+            <form
+              className="flex h-12 gap-3"
+              data-testid="home-bento-omnibar"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleAnalyze();
+              }}
             >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-              </svg>
-              <span>{locale === 'en' ? 'History' : '历史记录'}</span>
-            </button>
+              <div className="relative flex-1 group">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                  <Search className="h-4 w-4 text-white/40" />
+                </div>
+                <input
+                  data-testid="home-bento-omnibar-input"
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                  }}
+                  autoComplete="off"
+                  disabled={isBusy}
+                  className="w-full h-full rounded-2xl border border-white/5 bg-white/[0.02] pl-11 pr-4 text-sm text-white outline-none transition-all shadow-lg placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.04]"
+                  placeholder={copy.omnibarPlaceholder}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
+                data-testid="home-bento-analyze-button"
+              >
+                {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : copy.analyzeButton}
+              </button>
+              <button
+                type="button"
+                aria-label={locale === 'en' ? 'History' : '历史记录'}
+                onClick={() => setHistoryDrawerOpen(true)}
+                disabled={isBusy}
+                className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
+                data-testid="home-bento-history-drawer-trigger"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+                </svg>
+              </button>
+            </form>
+            <div className="min-h-0 flex-1">
+              {isDashboardLoading ? (
+                <DashboardSkeletonCard
+                  testId="home-bento-loading-decision-card"
+                  className="min-h-[32rem]"
+                  rows={5}
+                />
+              ) : (
+                <DecisionCard
+                  eyebrow={copy.decision.eyebrow}
+                  company={copy.decision.company}
+                  ticker={copy.ticker}
+                  heroValue={copy.decision.heroValue}
+                  heroUnit={copy.decision.heroUnit}
+                  heroLabel={copy.decision.heroLabel}
+                  signalLabel={copy.decision.signalLabel}
+                  signalTone={copy.decision.signalTone}
+                  scoreLabel={copy.decision.scoreLabel}
+                  scoreValue={copy.decision.scoreValue}
+                  badge={copy.decision.badge}
+                  chartLabel={copy.decision.chartLabel}
+                  summary={copy.decision.summary}
+                  chartPoints={copy.chartPoints}
+                  breakoutPointIndex={copy.breakoutPointIndex}
+                  reason={{ title: copy.decision.reasonTitle, body: copy.decision.reasonBody }}
+                  detailLabel={copy.decision.detailLabel}
+                  onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
+                />
+              )}
+            </div>
           </div>
-        </div>
-        <div
-          className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 xl:grid-cols-5"
-          data-testid="home-bento-dashboard-layout"
-        >
-          <DecisionCard
-            eyebrow={copy.decision.eyebrow}
-            company={copy.decision.company}
-            ticker={copy.ticker}
-            heroValue={copy.decision.heroValue}
-            heroUnit={copy.decision.heroUnit}
-            heroLabel={copy.decision.heroLabel}
-            signalLabel={copy.decision.signalLabel}
-            signalTone={copy.decision.signalTone}
-            scoreLabel={copy.decision.scoreLabel}
-            scoreValue={copy.decision.scoreValue}
-            badge={copy.decision.badge}
-            chartLabel={copy.decision.chartLabel}
-            summary={copy.decision.summary}
-            chartPoints={copy.chartPoints}
-            breakoutPointIndex={copy.breakoutPointIndex}
-            reason={{ title: copy.decision.reasonTitle, body: copy.decision.reasonBody }}
-            detailLabel={copy.decision.detailLabel}
-            onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
-          />
           <div
             className="min-w-0 xl:col-span-3 flex flex-col gap-6"
             data-testid="home-bento-secondary-stack"
           >
-            <StrategyCard
-              title={copy.strategy.title}
-              subtitle={copy.strategy.subtitle}
-              metrics={copy.strategy.metrics}
-              positionLabel={copy.strategy.positionLabel}
-              positionBody={copy.strategy.positionBody}
-              detailLabel={copy.strategy.detailLabel}
-              onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
-            />
-            <div
-              className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
-              data-testid="home-bento-secondary-grid"
-            >
-              <TechCard
-                title={copy.tech.title}
-                signals={copy.tech.signals}
-                detailLabel={copy.tech.detailLabel}
-                onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
-              />
-              <FundamentalsCard
-                title={copy.fundamentals.title}
-                metrics={copy.fundamentals.metrics}
-                detailLabel={copy.fundamentals.detailLabel}
-                onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
-              />
-            </div>
+            {isDashboardLoading ? (
+              <>
+                <DashboardSkeletonCard testId="home-bento-loading-strategy-card" rows={3} />
+                <div
+                  className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                  data-testid="home-bento-secondary-grid"
+                >
+                  <DashboardSkeletonCard testId="home-bento-loading-tech-card" rows={4} />
+                  <DashboardSkeletonCard testId="home-bento-loading-fundamentals-card" rows={4} />
+                </div>
+              </>
+            ) : (
+              <>
+                <StrategyCard
+                  title={copy.strategy.title}
+                  subtitle={copy.strategy.subtitle}
+                  metrics={copy.strategy.metrics}
+                  positionLabel={copy.strategy.positionLabel}
+                  positionBody={copy.strategy.positionBody}
+                  detailLabel={copy.strategy.detailLabel}
+                  onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
+                />
+                <div
+                  className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                  data-testid="home-bento-secondary-grid"
+                >
+                  <TechCard
+                    title={copy.tech.title}
+                    signals={copy.tech.signals}
+                    detailLabel={copy.tech.detailLabel}
+                    onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+                  />
+                  <FundamentalsCard
+                    title={copy.fundamentals.title}
+                    metrics={copy.fundamentals.metrics}
+                    detailLabel={copy.fundamentals.detailLabel}
+                    onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </main>

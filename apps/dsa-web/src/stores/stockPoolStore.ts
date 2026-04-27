@@ -26,6 +26,10 @@ type SubmitAnalysisOptions = {
   selectionSource?: SelectionSource;
 };
 
+type SubmitAnalysisResult =
+  | { ok: true; stockCode: string }
+  | { ok: false; duplicate?: boolean; error?: ParsedApiError };
+
 let reportRequestSeq = 0;
 let analyzeRequestSeq = 0;
 let historyRequestSeq = 0;
@@ -147,7 +151,7 @@ export interface StockPoolState {
   toggleHistorySelection: (recordId: number) => void;
   toggleSelectAllVisible: () => void;
   deleteSelectedHistory: () => Promise<void>;
-  submitAnalysis: (options?: SubmitAnalysisOptions) => Promise<void>;
+  submitAnalysis: (options?: SubmitAnalysisOptions) => Promise<SubmitAnalysisResult>;
   focusLatestHistoryForStock: (stockCode: string) => Promise<number | null>;
   clearHighlightedHistory: () => void;
   syncTaskCreated: (task: TaskInfo) => void;
@@ -422,12 +426,12 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
     if (!stockCodeInput) {
       set({ inputError: translateForCurrentLanguage('home.inputRequired'), duplicateError: null });
-      return;
+      return { ok: false };
     }
 
     if (selectionSource !== 'autocomplete' && isObviouslyInvalidStockQuery(stockCodeInput)) {
       set({ inputError: translateForCurrentLanguage('home.invalidInput'), duplicateError: null });
-      return;
+      return { ok: false };
     }
 
     let normalizedStockCode = stockCodeInput;
@@ -435,7 +439,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       const { valid, message, normalized } = validateStockCode(stockCodeInput);
       if (!valid) {
         set({ inputError: message, duplicateError: null });
-        return;
+        return { ok: false };
       }
       normalizedStockCode = normalized;
     }
@@ -458,7 +462,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       });
 
       if (requestId !== analyzeRequestSeq) {
-        return;
+        return { ok: false };
       }
 
       if ('taskId' in response) {
@@ -481,19 +485,22 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
         query: '',
         selectionSource: 'manual',
       });
+      return { ok: true, stockCode: normalizedStockCode };
     } catch (error) {
       if (requestId !== analyzeRequestSeq) {
-        return;
+        return { ok: false };
       }
 
       if (error instanceof DuplicateTaskError) {
         set({
           duplicateError: translateForCurrentLanguage('home.duplicateTask', { stockCode: error.stockCode }),
         });
-        return;
+        return { ok: false, duplicate: true };
       }
 
-      set({ error: getParsedApiError(error) });
+      const parsedError = getParsedApiError(error);
+      set({ error: parsedError });
+      return { ok: false, error: parsedError };
     } finally {
       if (requestId === analyzeRequestSeq) {
         set({ isAnalyzing: false });

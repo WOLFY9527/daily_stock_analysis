@@ -92,7 +92,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       tone={signalTone}
       accentGlow
       accentGlowClassName={SYSTEM_ACCENT_GLOW_CLASS}
-      className="w-full h-full rounded-[24px] xl:col-span-2"
+      className="w-full h-full rounded-[24px]"
       testId="home-bento-card-decision"
       action={(
         <button
