@@ -375,16 +375,19 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('user-scanner-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
     expect(screen.getByTestId('user-scanner-bento-page').className).not.toContain('overflow-hidden');
-    expect(screen.getByTestId('user-scanner-workspace')).toHaveClass('min-h-[calc(100vh-80px)]');
-    expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('h-[calc(100vh-80px)]');
+    expect(screen.getByTestId('user-scanner-bento-page')).toHaveClass('w-full', 'flex-1', 'min-h-0', 'min-w-0');
+    expect(screen.getByTestId('user-scanner-workspace')).toHaveClass('min-h-0');
+    expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('h-[calc(100vh-80px)]', 'min-h-[calc(100vh-80px)]');
     expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4');
     expect(screen.getByTestId('user-scanner-bento-drawer-trigger')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-results-pane')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'pb-24');
     const sidebar = screen.getByTestId('scanner-sidebar');
     const marketToggle = screen.getByTestId('scanner-market-toggle');
     const cnMarketButton = screen.getByRole('button', { name: 'A股' });
     const usMarketButton = screen.getByRole('button', { name: '美股' });
     const runButton = screen.getByTestId('scanner-run-button');
     expect(sidebar).toHaveClass('w-full', 'xl:w-[320px]', '2xl:w-[360px]', 'shrink-0', 'sticky', 'top-6', 'h-fit');
+    expect(screen.getByTestId('user-scanner-bento-hero').parentElement).toBe(screen.getByTestId('scanner-results-pane'));
     expect(marketToggle).toHaveClass('flex', 'w-fit', 'rounded-xl', 'border', 'border-white/5', 'bg-black/40', 'p-1');
     expect(cnMarketButton).toHaveClass('rounded-lg', 'bg-white/10', 'text-white', 'shadow-[0_2px_10px_rgba(0,0,0,0.5)]');
     expect(usMarketButton).toHaveClass('rounded-lg', 'bg-transparent', 'text-white/40');

@@ -16194,15 +16194,6 @@ html[data-theme='spacex'] .shell-header-links {
   grid-column: 2;
 }
 
-html[data-theme='spacex'] .shell-header-center {
-  grid-column: 2;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(0.9rem, 1.35vw, 1.2rem);
-}
-
 html[data-theme='spacex'] .shell-header-utilities,
 html[data-theme='spacex'] .shell-nav-actions {
   grid-column: 3;
@@ -16216,7 +16207,6 @@ html[data-theme='spacex'] .shell-header-links {
   justify-content: center;
   gap: clamp(0.75rem, 1.2vw, 1.15rem);
   flex-wrap: nowrap;
-  flex: 0 1 auto;
 }
 
 html[data-theme='spacex'] .shell-header-utilities,
@@ -16224,26 +16214,6 @@ html[data-theme='spacex'] .shell-nav-actions {
   justify-content: flex-end;
   gap: 0.75rem;
   flex-wrap: nowrap;
-}
-
-html[data-theme='spacex'] .shell-header-omnibar {
-  position: relative;
-  display: none;
-  flex: 1 1 14rem;
-  min-width: 0;
-  max-width: 20rem;
-}
-
-@media (min-width: 768px) {
-  html[data-theme='spacex'] .shell-header-omnibar {
-    display: flex;
-  }
-}
-
-@media (min-width: 1440px) {
-  html[data-theme='spacex'] .shell-header-omnibar {
-    max-width: 22rem;
-  }
 }
 
 html[data-theme='spacex'] .shell-brand-link,
@@ -16308,6 +16278,25 @@ html[data-theme='spacex'] .shell-mobile-button {
     transform var(--motion-duration-fast) ease;
 }
 
+html[data-theme='spacex'] .shell-header-link {
+  min-height: auto;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  backdrop-filter: none;
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  transition:
+    color var(--motion-duration-fast) ease,
+    opacity var(--motion-duration-fast) ease;
+}
+
 html[data-theme='spacex'] .shell-header-link::after,
 html[data-theme='spacex'] .shell-header-action::after {
   display: none;
@@ -16328,6 +16317,21 @@ html[data-theme='spacex'] .shell-mobile-button:hover {
 html[data-theme='spacex'] .shell-header-link.is-active,
 html[data-theme='spacex'] .shell-header-action.is-active {
   border-color: var(--wolfy-shell-panel-border-active) !important;
+}
+
+html[data-theme='spacex'] .shell-header-link:hover {
+  color: rgba(255, 255, 255, 1);
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+html[data-theme='spacex'] .shell-header-link.is-active {
+  color: rgba(255, 255, 255, 1);
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none;
+  font-weight: 700;
 }
 
 html[data-theme='spacex'] .shell-header-link__label {

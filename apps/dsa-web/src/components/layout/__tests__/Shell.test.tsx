@@ -8,11 +8,10 @@ import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useShellRailSlot } from '../useShellRailSlot';
 import { useStockPoolStore } from '../../../stores';
 
-const { mockLogout, mockGetAgentStatus, mockHardRedirect, mockAnalyzeAsync, useAuthMock } = vi.hoisted(() => ({
+const { mockLogout, mockGetAgentStatus, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
   mockLogout: vi.fn().mockResolvedValue(undefined),
   mockGetAgentStatus: vi.fn().mockResolvedValue({ enabled: true }),
   mockHardRedirect: vi.fn(),
-  mockAnalyzeAsync: vi.fn().mockResolvedValue({ taskId: 'task-shell', status: 'pending', message: 'submitted' }),
   useAuthMock: vi.fn(),
 }));
 
@@ -37,15 +36,6 @@ vi.mock('../../../api/agent', () => ({
   agentApi: {
     getStatus: (...args: unknown[]) => mockGetAgentStatus(...args),
   },
-}));
-
-vi.mock('../../../api/analysis', () => ({
-  analysisApi: {
-    analyzeAsync: (...args: unknown[]) => mockAnalyzeAsync(...args),
-    getTasks: vi.fn(),
-    getTaskStreamUrl: vi.fn(),
-  },
-  DuplicateTaskError: class DuplicateTaskError extends Error {},
 }));
 
 vi.mock('../../../utils/browserRedirect', () => ({
@@ -114,37 +104,11 @@ describe('Shell', () => {
     expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.png');
     expect(logo).not.toHaveClass('invert');
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
-    expect(screen.getByTestId('shell-global-omnibar')).toBeInTheDocument();
-    expect(screen.getByTestId('shell-global-omnibar-input')).toHaveAttribute('placeholder', '输入代码或公司名发起分析（如 NVDA）...');
+    const scannerLink = screen.getByRole('link', { name: '扫描器' });
+    expect(scannerLink).toHaveClass('text-sm', 'font-medium', 'text-white/50');
+    expect(screen.getByRole('link', { name: '问股' })).toHaveClass('text-sm', 'font-bold', 'text-white');
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
-  });
-
-  it('submits the global omnibar through the shared analysis store', async () => {
-    render(
-      <MemoryRouter initialEntries={['/scanner']}>
-        <ThemeProvider>
-          <Shell>
-            <div>page content</div>
-          </Shell>
-        </ThemeProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.change(screen.getByTestId('shell-global-omnibar-input'), {
-      target: { value: 'NVDA' },
-    });
-    fireEvent.submit(screen.getByTestId('shell-global-omnibar'));
-
-    await waitFor(() => {
-      expect(mockAnalyzeAsync).toHaveBeenCalledWith({
-        stockCode: 'NVDA',
-        reportType: 'detailed',
-        stockName: undefined,
-        originalQuery: 'NVDA',
-        selectionSource: 'manual',
-      });
-    });
   });
 
   it('shows the guest navigation routes without member-only account controls', () => {
@@ -171,7 +135,6 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
-    expect(screen.queryByTestId('shell-global-omnibar')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.settings') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
   });

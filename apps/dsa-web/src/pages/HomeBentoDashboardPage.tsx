@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
 import {
   BENTO_SURFACE_ROOT_CLASS,
   BentoGrid,
@@ -11,6 +12,7 @@ import {
   type SignalTone,
 } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
   label: string;
@@ -290,7 +292,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock Command Center',
     description: '',
-    omnibarPlaceholder: 'Enter a ticker or company name to wake AI deep analysis...',
+    omnibarPlaceholder: 'Enter a stock code or company name to trigger AI deep analysis...',
     analyzeButton: 'Analyze',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
@@ -469,6 +471,10 @@ const HomeBentoDashboardPage: React.FC = () => {
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const copy = CONTENT[locale];
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
+  const query = useStockPoolStore((state) => state.query);
+  const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
+  const setQuery = useStockPoolStore((state) => state.setQuery);
+  const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -478,10 +484,40 @@ const HomeBentoDashboardPage: React.FC = () => {
     <div
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col pt-4 pb-2 px-6 md:px-8 xl:px-12 overflow-x-hidden bg-transparent`}
+      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col overflow-x-hidden bg-transparent`}
     >
-      <main className="w-full flex-1 min-h-0 flex flex-col" data-testid="home-bento-main">
-        <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 items-start gap-4 lg:grid-cols-3 xl:grid-cols-5">
+      <main className="w-full flex-1 min-w-0 flex flex-col py-6 px-6 md:px-8 xl:px-12" data-testid="home-bento-main">
+        <form
+          className="group relative mb-6 w-full max-w-3xl"
+          data-testid="home-bento-omnibar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitAnalysis({
+              stockCode: query,
+              originalQuery: query,
+              selectionSource: 'manual',
+            });
+          }}
+        >
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+            <Search className="h-5 w-5 text-white/40" />
+          </div>
+          <input
+            data-testid="home-bento-omnibar-input"
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            autoComplete="off"
+            disabled={isAnalyzing}
+            className="w-full rounded-2xl border border-white/10 bg-white/[0.03] py-3 pl-12 pr-4 text-base text-white outline-none transition-all placeholder:text-white/30 focus:border-indigo-500/40 focus:bg-white/[0.05] shadow-lg"
+            placeholder={copy.omnibarPlaceholder}
+          />
+          <button type="submit" className="sr-only" disabled={isAnalyzing}>
+            {copy.analyzeButton}
+          </button>
+        </form>
+
+        <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3 xl:grid-cols-5">
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}

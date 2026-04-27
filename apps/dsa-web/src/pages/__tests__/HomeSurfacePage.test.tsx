@@ -45,6 +45,7 @@ describe('HomeSurfacePage', () => {
     const strategyCard = screen.getByTestId('home-bento-card-strategy');
     const techCard = screen.getByTestId('home-bento-card-tech');
     const fundamentalsCard = screen.getByTestId('home-bento-card-fundamentals');
+    const homeSearch = screen.getByTestId('home-bento-omnibar-input');
     const entryMetric = screen.getByTestId('home-bento-strategy-metric-建仓区间');
     const targetMetric = screen.getByTestId('home-bento-strategy-metric-目标位');
     const stopLossMetric = screen.getByTestId('home-bento-strategy-metric-止损位');
@@ -54,15 +55,18 @@ describe('HomeSurfacePage', () => {
     expect(root).toHaveAttribute('data-bento-surface', 'true');
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
-    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'flex', 'flex-1', 'min-h-[calc(100vh-80px)]', 'flex-col', 'overflow-x-hidden', 'px-6', 'pt-4', 'pb-2');
+    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'flex', 'flex-1', 'min-h-[calc(100vh-80px)]', 'flex-col', 'overflow-x-hidden');
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
     expect(screen.getByTestId('home-bento-grid')).toHaveClass('bento-grid-root');
     const main = screen.getByTestId('home-bento-main');
-    expect(main).toHaveClass('w-full', 'flex-1', 'min-h-0', 'flex', 'flex-col');
+    expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'py-6', 'px-6', 'md:px-8', 'xl:px-12');
     expect(main.className).not.toContain('overflow-hidden');
+    expect(screen.getByTestId('home-bento-omnibar')).toHaveClass('group', 'relative', 'mb-6', 'w-full', 'max-w-3xl');
+    expect(homeSearch).toHaveAttribute('placeholder', '输入股票代码或公司名称，唤醒 AI 深度分析...');
+    expect(homeSearch).toHaveClass('bg-white/[0.03]', 'border', 'border-white/10', 'text-base', 'rounded-2xl', 'py-3', 'pl-12');
     expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
@@ -76,7 +80,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-breakout-reason')).toBeInTheDocument();
     expect(screen.getByText('AI 突破归因')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'flex-1', 'min-h-0', 'grid-cols-1', 'items-start', 'gap-4', 'lg:grid-cols-3', 'xl:grid-cols-5');
+    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'flex-1', 'min-h-0', 'grid-cols-1', 'items-stretch', 'gap-6', 'lg:grid-cols-3', 'xl:grid-cols-5');
     expect(screen.getByTestId('home-bento-grid').className).not.toContain('mt-8');
     expect(strategyCard).toHaveClass('w-full', 'self-start', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(techCard).toHaveClass('w-full', 'self-start', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
@@ -116,7 +120,7 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     expect(screen.queryByText('WolfyStock Command Center')).not.toBeInTheDocument();
-    expect(screen.queryByText('Analyze')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a stock code or company name to trigger AI deep analysis...');
     expect(screen.getByText('Execution Strategy')).toBeInTheDocument();
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
     expect(screen.getByText('Fundamental Profile')).toBeInTheDocument();
