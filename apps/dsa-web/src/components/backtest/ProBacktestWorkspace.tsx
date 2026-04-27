@@ -4,6 +4,7 @@ import DeterministicBacktestFlow, {
   type FlowProps,
   type RuleWizardStep,
 } from './DeterministicBacktestFlow';
+import { getStrategyCatalogGroups } from './strategyCatalog';
 
 type BacktestLanguage = 'zh' | 'en';
 
@@ -22,6 +23,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   language,
   onParse,
   onRun,
+  onStrategyTextChange,
   currentStep,
   onStepChange,
   parsedStrategy,
@@ -99,6 +101,12 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const compactSelectClass = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
   const compactCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
   const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
+  const strategyCatalogGroups = getStrategyCatalogGroups();
+
+  const applyCatalogTemplate = (strategyText: string) => {
+    onStrategyTextChange(strategyText);
+    onStepChange('strategy');
+  };
 
   return (
     <section
@@ -282,11 +290,100 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               </div>
             </section>
 
+            <section
+              id="pro-section-strategy-catalog"
+              data-testid="pro-strategy-catalog"
+              className={`${compactCardClass} mt-6`}
+            >
+              <div className="flex flex-col gap-2">
+                <p className={compactFieldLabelClass}>
+                  {language === 'en' ? 'Built-in strategy catalog' : '内置策略目录'}
+                </p>
+                <h3 className="text-2xl font-semibold text-white">
+                  {language === 'en' ? 'Full template catalog' : '完整模板目录'}
+                </h3>
+                <p className="text-sm leading-6 text-white/60">
+                  {language === 'en'
+                    ? 'Point-and-shoot keeps only the deterministic-ready presets. This catalog keeps every built-in basic, advanced, and professional template available as runtime-loaded references.'
+                    : '普通模式只保留 deterministic 可执行模板。这里保留全部基础、进阶、专业内置模板，作为运行时可加载目录与专业模式参考面板。'}
+                </p>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-6">
+                {strategyCatalogGroups.map((group) => (
+                  <div key={group.id} className="flex flex-col gap-4">
+                    <div>
+                      <h4 className="text-lg font-semibold text-white">{group.title[language]}</h4>
+                      <p className="mt-1 text-sm text-white/52">{group.description[language]}</p>
+                    </div>
+                    <div className="grid gap-4 xl:grid-cols-2">
+                      {group.templates.map((template) => (
+                        <article
+                          key={template.id}
+                          className="rounded-[22px] border border-white/6 bg-black/20 p-5"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h5 className="text-base font-semibold text-white">{template.name[language]}</h5>
+                              <p className="mt-1 text-sm leading-6 text-white/60">{template.description[language]}</p>
+                            </div>
+                            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                              template.executable
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                            }`}
+                            >
+                              {template.executable
+                                ? (language === 'en' ? 'Executable' : '可执行')
+                                : (language === 'en' ? 'Not supported yet' : '当前不支持')}
+                            </span>
+                          </div>
+
+                          <p className="mt-3 text-sm leading-6 text-white/70">{template.logicSummary[language]}</p>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {template.defaultParameters.map((parameter) => (
+                              <span
+                                key={`${template.id}-${parameter.key}`}
+                                className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-white/58"
+                              >
+                                {parameter.label[language]}: {parameter.value}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-4">
+                            <p className="text-xs leading-5 text-white/45">
+                              {template.executable
+                                ? (language === 'en'
+                                  ? 'This template maps cleanly to the current deterministic engine.'
+                                  : '该模板可直接映射到当前 deterministic 引擎。')
+                                : (language === 'en'
+                                  ? 'Reference template only. Filling it into the editor may still parse as unsupported.'
+                                  : '仅作参考模板。填入编辑器后，当前仍可能被解析为不支持。')}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => applyCatalogTemplate(template.editorText[language])}
+                              className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-medium text-white/86 transition hover:border-white/20 hover:bg-white/[0.08]"
+                            >
+                              {language === 'en' ? 'Load into editor' : '填入编辑器'}
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <div className="mt-6">
               <DeterministicBacktestFlow
                 {...flowProps}
                 onParse={onParse}
                 onRun={onRun}
+                onStrategyTextChange={onStrategyTextChange}
                 currentStep={currentStep}
                 onStepChange={onStepChange}
                 parsedStrategy={parsedStrategy}

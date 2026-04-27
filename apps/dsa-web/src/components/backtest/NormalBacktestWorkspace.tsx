@@ -7,10 +7,12 @@ import {
   getBenchmarkModeLabel,
   type RuleBenchmarkMode,
 } from './shared';
-
-export type NormalStrategyTemplate = 'macd_crossover' | 'moving_average_trend' | 'periodic_accumulation' | 'custom_code';
-
-type BacktestLanguage = 'zh' | 'en';
+import {
+  POINT_AND_SHOOT_TEMPLATES,
+  getStrategyCatalogEntry,
+  type BacktestLanguage,
+  type NormalStrategyTemplate,
+} from './strategyCatalog';
 
 type NormalBacktestWorkspaceProps = {
   language: BacktestLanguage;
@@ -30,52 +32,11 @@ type NormalBacktestWorkspaceProps = {
   onBenchmarkCodeChange: (value: string) => void;
   strategyTemplate: NormalStrategyTemplate;
   onStrategyTemplateChange: (value: NormalStrategyTemplate) => void;
-  customStrategyText: string;
-  onCustomStrategyTextChange: (value: string) => void;
   templatePreview: string;
   onLaunch: () => Promise<void>;
   isLaunching: boolean;
   parseError: ParsedApiError | null;
   runError: ParsedApiError | null;
-};
-
-const TEMPLATE_COPY: Record<BacktestLanguage, Record<NormalStrategyTemplate, { label: string; description: string }>> = {
-  zh: {
-    macd_crossover: {
-      label: 'MACD 金叉',
-      description: '经典趋势跟随模板，适合快速验证单标的信号方向。',
-    },
-    moving_average_trend: {
-      label: '均线多头',
-      description: '使用短中期均线趋势关系做一键回测，适合普通用户直接上手。',
-    },
-    periodic_accumulation: {
-      label: '定投策略',
-      description: '按固定节奏持续买入，适合验证区间累计收益与基准差异。',
-    },
-    custom_code: {
-      label: '自定义代码',
-      description: '需要额外表达策略时，可在这里补充自然语言规则。',
-    },
-  },
-  en: {
-    macd_crossover: {
-      label: 'MACD crossover',
-      description: 'A classic trend-following preset for fast single-asset validation.',
-    },
-    moving_average_trend: {
-      label: 'Moving average trend',
-      description: 'A simple momentum preset for point-and-shoot users.',
-    },
-    periodic_accumulation: {
-      label: 'Periodic accumulation',
-      description: 'A scheduled accumulation template for capital deployment checks.',
-    },
-    custom_code: {
-      label: 'Custom code',
-      description: 'Drop in your own natural-language rule when presets are not enough.',
-    },
-  },
 };
 
 const GLASS_CARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
@@ -101,16 +62,16 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   onBenchmarkCodeChange,
   strategyTemplate,
   onStrategyTemplateChange,
-  customStrategyText,
-  onCustomStrategyTextChange,
   templatePreview,
   onLaunch,
   isLaunching,
   parseError,
   runError,
 }) => {
-  const copy = TEMPLATE_COPY[language];
-  const currentTemplate = copy[strategyTemplate];
+  const currentTemplate = getStrategyCatalogEntry(strategyTemplate);
+  const templateName = currentTemplate?.name[language] || '';
+  const templateDescription = currentTemplate?.description[language] || '';
+  const templateLogicSummary = currentTemplate?.logicSummary[language] || '';
 
   return (
     <section
@@ -158,9 +119,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 className={FIELD_CLASS}
                 aria-label={language === 'en' ? 'Strategy template' : '策略模板'}
               >
-                {Object.entries(copy).map(([value, item]) => (
-                  <option key={value} value={value}>
-                    {item.label}
+                {POINT_AND_SHOOT_TEMPLATES.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name[language]}
                   </option>
                 ))}
               </select>
@@ -245,8 +206,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             <p className={LABEL_CLASS}>
               {language === 'en' ? 'Selected template' : '当前模板'}
             </p>
-            <h3 className="mt-2 text-xl font-semibold text-white">{currentTemplate.label}</h3>
-            <p className="mt-2 text-sm leading-6 text-white/60">{currentTemplate.description}</p>
+            <h3 className="mt-2 text-xl font-semibold text-white">{templateName}</h3>
+            <p className="mt-2 text-sm leading-6 text-white/60">{templateDescription}</p>
+            <p className="mt-3 text-xs leading-6 text-white/46">{templateLogicSummary}</p>
           </div>
 
           <div className={GLASS_CARD_CLASS}>
@@ -257,18 +219,6 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               {templatePreview}
             </p>
           </div>
-
-          {strategyTemplate === 'custom_code' ? (
-            <label className="product-field gap-1.5">
-              <span className={LABEL_CLASS}>{language === 'en' ? 'Custom strategy text' : '自定义策略文本'}</span>
-              <textarea
-                value={customStrategyText}
-                onChange={(event) => onCustomStrategyTextChange(event.target.value)}
-                className={`${FIELD_CLASS} min-h-[120px] resize-none py-3`}
-                aria-label={language === 'en' ? 'Custom strategy text' : '自定义策略文本'}
-              />
-            </label>
-          ) : null}
 
           <button
             type="button"

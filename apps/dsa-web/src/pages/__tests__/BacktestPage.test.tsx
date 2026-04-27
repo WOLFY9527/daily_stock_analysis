@@ -922,6 +922,23 @@ describe('BacktestPage', () => {
     expect(screen.getByText('回测页面摘要')).toBeInTheDocument();
   });
 
+  it('limits point-and-shoot templates to the executable built-ins only', async () => {
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+    const templateSelect = screen.getByLabelText('策略模板');
+    const optionLabels = within(templateSelect).getAllByRole('option').map((option) => option.textContent?.trim());
+
+    expect(optionLabels).toEqual([
+      'MACD 金叉 / 死叉',
+      '均线交叉（SMA / EMA）',
+      'RSI 超买 / 超卖',
+      '定投策略',
+    ]);
+    expect(optionLabels).not.toContain('自定义代码');
+  });
+
   it('prefills the symbol when navigated from scanner context', async () => {
     renderBacktestRoutes([{ pathname: '/backtest', state: { prefillCode: '600001', prefillName: '算力龙头' } }]);
 
@@ -951,6 +968,20 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('overflow-hidden');
     expect(screen.getByTestId('backtest-setup-dashboard')).not.toHaveClass('overflow-y-auto', 'no-scrollbar');
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
+  });
+
+  it('shows the full built-in strategy catalog in professional mode and marks unsupported templates', async () => {
+    renderBacktestRoutes();
+
+    await switchToProfessionalMode();
+
+    expect(screen.getByTestId('pro-strategy-catalog')).toBeInTheDocument();
+    expect(screen.getByText('基础 / 默认策略')).toBeInTheDocument();
+    expect(screen.getByText('进阶 / 扩展策略')).toBeInTheDocument();
+    expect(screen.getByText('专业 / 组合策略')).toBeInTheDocument();
+    expect(screen.getByText('布林带突破')).toBeInTheDocument();
+    expect(screen.getByText('MACD + RSI 共振')).toBeInTheDocument();
+    expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
   });
 
   it('marks parsed strategy stale after setup changes', async () => {

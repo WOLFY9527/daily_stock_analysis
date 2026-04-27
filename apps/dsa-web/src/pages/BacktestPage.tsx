@@ -14,9 +14,7 @@ import {
 } from '../components/home-bento';
 import type { RuleWizardStep } from '../components/backtest/DeterministicBacktestFlow';
 import HistoricalEvaluationPanel from '../components/backtest/HistoricalEvaluationPanel';
-import NormalBacktestWorkspace, {
-  type NormalStrategyTemplate,
-} from '../components/backtest/NormalBacktestWorkspace';
+import NormalBacktestWorkspace from '../components/backtest/NormalBacktestWorkspace';
 import ProBacktestWorkspace from '../components/backtest/ProBacktestWorkspace';
 import {
   getDefaultRuleDateRange,
@@ -27,6 +25,10 @@ import {
   getStrategyPreviewSpec,
   parsePositiveInt,
 } from '../components/backtest/shared';
+import {
+  buildPointAndShootStrategyText,
+  type NormalStrategyTemplate,
+} from '../components/backtest/strategyCatalog';
 import type {
   AssumptionMap,
   BacktestResultItem,
@@ -89,38 +91,6 @@ const WORKBENCH_PANEL_TRANSITION = {
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
-function buildNormalStrategyText(
-  language: BacktestLanguage,
-  template: NormalStrategyTemplate,
-  payload: {
-    code: string;
-    startDate: string;
-    endDate: string;
-    initialCapital: string;
-    customStrategyText: string;
-  },
-): string {
-  const resolvedCode = payload.code || (language === 'en' ? 'the selected ticker' : '当前标的');
-  const resolvedStart = payload.startDate || (language === 'en' ? 'the start date' : '开始日期');
-  const resolvedEnd = payload.endDate || (language === 'en' ? 'the end date' : '结束日期');
-  const resolvedCapital = payload.initialCapital || '100000';
-
-  if (template === 'custom_code') return payload.customStrategyText.trim();
-  if (template === 'macd_crossover') {
-    return language === 'en'
-      ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Buy on a MACD bullish crossover and sell on a bearish crossover.`
-      : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，MACD 金叉买入，死叉卖出。`;
-  }
-  if (template === 'periodic_accumulation') {
-    return language === 'en'
-      ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Invest a fixed amount on every trading week and stop when cash runs out.`
-      : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，每周定投固定金额，直到现金耗尽。`;
-  }
-  return language === 'en'
-    ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Buy when the 5-day moving average crosses above the 20-day average, and sell on the reverse crossover.`
-    : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，5 日均线上穿 20 日均线买入，下穿卖出。`;
-}
-
 const BacktestPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -133,7 +103,7 @@ const BacktestPage: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ActiveModule>('rule');
   const [controlPanelMode, setControlPanelMode] = useState<ControlPanelMode>('normal');
   const [codeFilter, setCodeFilter] = useState('');
-  const [normalStrategyTemplate, setNormalStrategyTemplate] = useState<NormalStrategyTemplate>('moving_average_trend');
+  const [normalStrategyTemplate, setNormalStrategyTemplate] = useState<NormalStrategyTemplate>('moving_average_crossover');
   const [evaluationBars, setEvaluationBars] = useState('10');
   const [maturityDays, setMaturityDays] = useState('14');
   const [samplePreset, setSamplePreset] = useState('60');
@@ -215,13 +185,12 @@ const BacktestPage: React.FC = () => {
   }), [normalizedCode, ruleEndDate, ruleFeeBps, ruleInitialCapital, ruleSlippageBps, ruleStartDate, ruleStrategyText]);
 
   const isRuleParseStale = Boolean(ruleParsedStrategy && ruleParseSignature && ruleParseSignature !== currentRuleParseSignature);
-  const normalStrategyPreview = useMemo(() => buildNormalStrategyText(language, normalStrategyTemplate, {
+  const normalStrategyPreview = useMemo(() => buildPointAndShootStrategyText(language, normalStrategyTemplate, {
     code: normalizedCode,
     startDate: ruleStartDate,
     endDate: ruleEndDate,
     initialCapital: ruleInitialCapital,
-    customStrategyText: ruleStrategyText,
-  }), [language, normalStrategyTemplate, normalizedCode, ruleEndDate, ruleInitialCapital, ruleStartDate, ruleStrategyText]);
+  }), [language, normalStrategyTemplate, normalizedCode, ruleEndDate, ruleInitialCapital, ruleStartDate]);
 
   const historicalAssumptions = runResult?.executionAssumptions
     || overallPerf?.executionAssumptions
@@ -1003,12 +972,11 @@ const BacktestPage: React.FC = () => {
       return;
     }
 
-    const strategyText = buildNormalStrategyText(language, normalStrategyTemplate, {
+    const strategyText = buildPointAndShootStrategyText(language, normalStrategyTemplate, {
       code: normalizedCode,
       startDate: ruleStartDate,
       endDate: ruleEndDate,
       initialCapital: ruleInitialCapital,
-      customStrategyText: ruleStrategyText,
     });
 
     if (!strategyText.trim()) {
@@ -1368,8 +1336,6 @@ const BacktestPage: React.FC = () => {
                   onBenchmarkCodeChange={setRuleBenchmarkCode}
                   strategyTemplate={normalStrategyTemplate}
                   onStrategyTemplateChange={setNormalStrategyTemplate}
-                  customStrategyText={ruleStrategyText}
-                  onCustomStrategyTextChange={handleRuleStrategyTextChange}
                   templatePreview={normalStrategyPreview}
                   onLaunch={handleLaunchNormalRuleBacktest}
                   isLaunching={isLaunchingNormalRuleBacktest || isSubmittingRuleBacktest || isParsingRuleStrategy}
