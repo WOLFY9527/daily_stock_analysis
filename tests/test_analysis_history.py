@@ -274,6 +274,77 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             "持久化标准报告应被原样返回",
         )
 
+    def test_attach_persisted_report_enriches_canonical_payload_and_exposes_generated_at(self) -> None:
+        result = self._build_result()
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_canonical_report_001",
+            report_type="detailed",
+            news_content="新闻摘要",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+
+        generated_at = "2026-04-28T09:30:00+00:00"
+        attached = self.db.attach_analysis_report_payload(
+            query_id="query_canonical_report_001",
+            report_payload={
+                "meta": {
+                    "query_id": "query_canonical_report_001",
+                    "stock_code": "600519",
+                    "stock_name": "贵州茅台",
+                    "report_type": "detailed",
+                    "report_language": "zh",
+                    "created_at": "2026-04-28T09:29:00+00:00",
+                    "report_generated_at": generated_at,
+                    "generated_at": generated_at,
+                    "strategy_type": "hold",
+                },
+                "summary": {
+                    "analysis_summary": "数据库中的 canonical report 应成为唯一真源",
+                    "operation_advice": "持有",
+                    "trend_prediction": "震荡偏强",
+                    "sentiment_score": 78,
+                    "sentiment_label": "乐观",
+                    "strategy_summary": "等待确认后按节奏执行",
+                },
+                "strategy": {
+                    "ideal_buy": "1680 - 1705",
+                    "stop_loss": "1628",
+                    "take_profit": "1788",
+                },
+                "details": {
+                    "news_summary": "持久化新闻摘要",
+                },
+            },
+        )
+        self.assertEqual(attached, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_canonical_report_001"
+            ).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            raw_result = json.loads(row.raw_result or "{}")
+            persisted_report = raw_result.get("persisted_report") or {}
+
+        self.assertEqual(persisted_report.get("meta", {}).get("id"), row.id)
+        self.assertEqual(persisted_report.get("meta", {}).get("generated_at"), generated_at)
+        self.assertEqual(persisted_report.get("meta", {}).get("report_generated_at"), generated_at)
+        self.assertEqual(persisted_report.get("meta", {}).get("strategy_type"), "hold")
+        self.assertEqual(persisted_report.get("summary", {}).get("strategy_summary"), "等待确认后按节奏执行")
+
+        service = HistoryService(self.db)
+        history_list = service.get_history_list(page=1, limit=10)
+        self.assertEqual(history_list["items"][0]["generated_at"], generated_at)
+
+        detail = service.get_history_detail_by_id(row.id)
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.get("id"), row.id)
+        self.assertEqual(detail.get("report_generated_at"), generated_at)
+
     def test_history_detail_accepts_dict_raw_result(self) -> None:
         """_record_to_detail_dict should handle dict raw_result without json.loads errors."""
         result = self._build_result()

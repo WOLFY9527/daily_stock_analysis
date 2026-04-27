@@ -1,3 +1,7 @@
+## 2026-04-28
+
+- 🧾 **Home 历史抽屉改为 DB canonical report 真源，并补齐持久化 `generated_at` 契约** — 后端 `analysis/history` 链路现在会在分析成功后把 canonical report 完整写回 `analysis_history.raw_result.persisted_report`，并补齐 `meta.id`、`meta.generated_at`、`meta.report_generated_at`、`meta.strategy_type` 与 `summary.strategy_summary`；`HistoryService` 的历史列表同时开始返回每条记录的 `generated_at`，前端 `HomeBentoDashboardPage.tsx` 的历史抽屉会直接展示该时间戳，并在点击历史项时始终重新调用 `GET /api/v1/history/:id` 取数据库中的 canonical report，仅把本地 snapshot 当作过渡态，不再允许它覆盖数据库真值。配套回归已补到 `tests/test_analysis_api_contract.py`、`tests/test_analysis_history.py` 与 `apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx`，并通过独立 `127.0.0.1:8001 + 127.0.0.1:5174` 浏览器验证环境确认 `record_id=153` 的 `generated_at` 与 canonical 文案能在 history drawer 与首页主面板中正确写透和回放。
+
 ## 2026-04-27
 
 - 🧠 **Home 首页改为快照驱动的历史回看，并重写 AI 失败兜底语义** — `apps/dsa-web` 的首页历史抽屉不再依赖点击时重新取远端详情来驱动主面板，而是在 `stockPoolStore` 中把已加载/任务回传的完整 `AnalysisReport` 作为快照按股票代码持久化到本地状态与 `localStorage`，随后优先通过快照直接切换首页视图，避免“查看历史”与“触发分析”混在一起。与此同时，`HomeBentoDashboardPage.tsx` 重写了技术/基本面 fallback headline 的专业金融术语映射，特别是 `MA5 / MA10 / MA20 / MA60` 不再复用同一句占位文案，而是分别输出短线动能、十日趋势支撑、中期多头排列、长线牛熊分界等不同语义；当用户主动点击“分析”而 AI 引擎不可用时，页面右上角会显式弹出红色 toast“AI 引擎服务暂不可用，已为您加载本地回溯数据”，同时决断卡片切换为友好的本地回溯提示，不再暴露底层错误代码。配套回归覆盖已补到 `HomeSurfacePage.test.tsx` 与 `stockPoolStore.test.ts`。

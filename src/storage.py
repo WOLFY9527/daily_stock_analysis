@@ -5200,10 +5200,29 @@ class DatabaseManager:
                 if not isinstance(raw_result, dict):
                     raw_result = {}
 
-                raw_result["persisted_report"] = report_payload
+                payload = dict(report_payload)
+                meta = dict(payload.get("meta") or {})
+                summary = dict(payload.get("summary") or {})
+                details = dict(payload.get("details") or {})
+                generated_at = (
+                    meta.get("generated_at")
+                    or meta.get("report_generated_at")
+                    or (record.created_at.isoformat() if record.created_at else None)
+                )
+                meta["id"] = int(record.id)
+                if generated_at:
+                    meta["generated_at"] = generated_at
+                    meta.setdefault("report_generated_at", generated_at)
+                if summary.get("analysis_summary") and not summary.get("strategy_summary"):
+                    summary["strategy_summary"] = summary.get("analysis_summary")
+                if meta.get("strategy_type") is None:
+                    meta["strategy_type"] = meta.get("report_type") or record.report_type
+                payload["meta"] = meta
+                payload["summary"] = summary
+                payload["details"] = details
 
-                meta = report_payload.get("meta") if isinstance(report_payload.get("meta"), dict) else {}
-                details = report_payload.get("details") if isinstance(report_payload.get("details"), dict) else {}
+                raw_result["persisted_report"] = payload
+
                 standard_report = details.get("standard_report")
                 if isinstance(standard_report, dict):
                     raw_result["standard_report"] = standard_report

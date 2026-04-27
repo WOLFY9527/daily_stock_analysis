@@ -28,6 +28,7 @@ class HistoryItem(BaseModel):
                 "sentiment_score": 75,
                 "operation_advice": "持有",
                 "created_at": "2024-01-01T12:00:00",
+                "generated_at": "2024-01-01T12:01:05Z",
             }
         }
     )
@@ -45,6 +46,7 @@ class HistoryItem(BaseModel):
     )
     operation_advice: Optional[str] = Field(None, description="操作建议")
     created_at: Optional[str] = Field(None, description="创建时间")
+    generated_at: Optional[str] = Field(None, description="持久化报告生成时间")
 
 
 class HistoryListResponse(BaseModel):

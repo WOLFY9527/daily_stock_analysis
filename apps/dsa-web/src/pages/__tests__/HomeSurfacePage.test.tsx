@@ -59,6 +59,7 @@ const defaultHistoryReport = {
     stockName: 'Oracle',
     reportType: 'detailed' as const,
     createdAt: '2026-04-27T08:00:00Z',
+    reportGeneratedAt: '2026-04-27T08:03:00Z',
   },
   summary: {
     analysisSummary: 'Oracle is holding its post-earnings platform.',
@@ -113,9 +114,9 @@ describe('HomeSurfacePage', () => {
       page: 1,
       limit: 20,
       items: [
-        { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', createdAt: '2026-04-27T08:00:00Z' },
-        { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', createdAt: '2026-04-27T07:00:00Z' },
-        { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z' },
+        { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z' },
+        { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', createdAt: '2026-04-27T07:00:00Z', generatedAt: '2026-04-27T07:05:00Z' },
+        { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z' },
       ],
     });
     vi.mocked(historyApi.getDetail).mockResolvedValue(defaultHistoryReport);
@@ -396,6 +397,16 @@ describe('HomeSurfacePage', () => {
         stockName: 'Tesla',
       },
     });
+  });
+
+  it('shows canonical generated timestamps in the history drawer', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+
+    expect(await screen.findByText('2026-04-27T08:03:00Z')).toBeInTheDocument();
+    expect(screen.getByText('2026-04-27T07:05:00Z')).toBeInTheDocument();
   });
 
   it('renders a cached history snapshot immediately and then replaces it with database detail', async () => {

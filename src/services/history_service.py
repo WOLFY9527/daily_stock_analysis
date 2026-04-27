@@ -130,6 +130,13 @@ class HistoryService:
             # Convert to response format
             items = []
             for record in records:
+                raw_result = parse_json_field(record.raw_result)
+                persisted_report = raw_result.get("persisted_report") if isinstance(raw_result, dict) else None
+                persisted_meta = (
+                    persisted_report.get("meta")
+                    if isinstance(persisted_report, dict) and isinstance(persisted_report.get("meta"), dict)
+                    else {}
+                )
                 items.append({
                     "id": record.id,
                     "query_id": record.query_id,
@@ -139,6 +146,11 @@ class HistoryService:
                     "sentiment_score": record.sentiment_score,
                     "operation_advice": record.operation_advice,
                     "created_at": record.created_at.isoformat() if record.created_at else None,
+                    "generated_at": (
+                        persisted_meta.get("generated_at")
+                        or persisted_meta.get("report_generated_at")
+                        or (record.created_at.isoformat() if record.created_at else None)
+                    ),
                 })
             
             return {
@@ -797,7 +809,11 @@ class HistoryService:
             "market_timestamp": persisted_meta.get("market_timestamp") or time_contract.get("market_timestamp"),
             "market_session_date": persisted_meta.get("market_session_date") or time_contract.get("market_session_date"),
             "news_published_at": persisted_meta.get("news_published_at") or time_contract.get("news_published_at"),
-            "report_generated_at": persisted_meta.get("report_generated_at") or time_contract.get("report_generated_at"),
+            "report_generated_at": (
+                persisted_meta.get("generated_at")
+                or persisted_meta.get("report_generated_at")
+                or time_contract.get("report_generated_at")
+            ),
             "session_type": time_contract.get("session_type"),
             "persisted_report": persisted_report,
         }

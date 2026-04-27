@@ -127,6 +127,7 @@ class AnalysisService:
         report_type: str,
     ) -> Dict[str, Any]:
         """Build the canonical report payload from an AnalysisResult."""
+        generated_at = datetime.now(timezone.utc).isoformat()
         sniper_points = {}
         if hasattr(result, "get_sniper_points"):
             sniper_points = result.get_sniper_points() or {}
@@ -149,13 +150,16 @@ class AnalysisService:
                 "stock_name": stock_name,
                 "report_type": report_type,
                 "report_language": report_language,
-                "report_generated_at": datetime.now(timezone.utc).isoformat(),
+                "report_generated_at": generated_at,
+                "generated_at": generated_at,
                 "current_price": result.current_price,
                 "change_pct": result.change_pct,
                 "model_used": getattr(result, "model_used", None),
+                "strategy_type": getattr(result, "decision_type", None) or report_type,
             },
             "summary": {
                 "analysis_summary": result.analysis_summary,
+                "strategy_summary": result.analysis_summary,
                 "operation_advice": localize_operation_advice(result.operation_advice, report_language),
                 "trend_prediction": localize_trend_prediction(result.trend_prediction, report_language),
                 "sentiment_score": result.sentiment_score,

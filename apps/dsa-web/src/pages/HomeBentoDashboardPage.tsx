@@ -710,6 +710,10 @@ function normalizeTickerQuery(rawValue?: string): string {
   return TICKER_ALIASES[trimmed.toUpperCase()] || TICKER_ALIASES[trimmed] || trimmed.toUpperCase();
 }
 
+function resolveHistoryGeneratedAt(historyItem: HistoryItem): string {
+  return String(historyItem.generatedAt || historyItem.createdAt || '').trim();
+}
+
 function resolveDashboardPayload(locale: DashboardLocale, ticker: string): DashboardPayload {
   const normalizedTicker = normalizeTickerQuery(ticker) || 'NVDA';
   const variant = DASHBOARD_VARIANTS[locale][normalizedTicker];
@@ -1716,6 +1720,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     clearError();
     setActiveTicker(normalizedTicker);
 
+    // Local snapshots are only a visual bridge; the persisted history detail remains the source of truth.
     const hasCachedSnapshot = selectCachedHistoryForStock(normalizedTicker);
     if (!hasCachedSnapshot) {
       setDashboardLoading(true);
@@ -1896,6 +1901,7 @@ const HomeBentoDashboardPage: React.FC = () => {
           {recentHistoryItems.length > 0 ? recentHistoryItems.map((item) => {
             const ticker = normalizeTickerQuery(item.stockCode);
             const isSelected = selectedReport?.meta.id === item.id;
+            const generatedAt = resolveHistoryGeneratedAt(item);
             return (
             <button
               key={item.id}
@@ -1913,6 +1919,11 @@ const HomeBentoDashboardPage: React.FC = () => {
                 <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-white/40">
                   {ticker} · {locale === 'en' ? 'Recent analysis' : '最近分析'}
                 </p>
+                {generatedAt ? (
+                  <p className="mt-1 truncate text-[11px] text-white/45">
+                    {generatedAt}
+                  </p>
+                ) : null}
               </div>
               <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/35">
                 {isSelected ? (locale === 'en' ? 'Loaded' : '当前') : (locale === 'en' ? 'Open' : '打开')}

@@ -487,6 +487,7 @@ export interface HistoryItem {
   sentimentScore?: number;
   operationAdvice?: string;
   createdAt: string;
+  generatedAt?: string;
 }
 
 /** History list response */

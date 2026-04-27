@@ -241,6 +241,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             fundamental_analysis="fundamental",
             risk_warning="risk",
             report_language="zh",
+            decision_type="buy",
             runtime_execution={"steps": []},
             notification_result={"status": "ok"},
             get_sniper_points=lambda: {},
@@ -263,6 +264,9 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             "q-persisted-report",
             response["report"],
         )
+        self.assertEqual(response["report"]["meta"]["generated_at"], response["report"]["meta"]["report_generated_at"])
+        self.assertEqual(response["report"]["meta"]["strategy_type"], "buy")
+        self.assertEqual(response["report"]["summary"]["strategy_summary"], "等待确认")
 
     def test_build_analysis_report_extracts_fundamental_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:

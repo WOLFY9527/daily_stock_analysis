@@ -191,7 +191,7 @@ class AnalysisRepository:
         query_id: str,
         report_payload: Dict[str, Any],
     ) -> int:
-        """Attach the canonical persisted report payload to the latest matching history record."""
+        """Attach and canonicalize the persisted report payload on the latest matching history record."""
         try:
             return self.db.attach_analysis_report_payload(
                 query_id=query_id,
