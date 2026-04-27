@@ -69,6 +69,8 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
 ];
 
+const HEADER_UTILITY_TEXT_CLASS = 'text-sm font-medium text-white/50 hover:text-white transition-colors';
+
 function NavLabel({
   label,
   showBadge,
@@ -199,7 +201,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         onOpenArchive?.();
         onNavigate?.();
       }}
-      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : 'shell-header-action'}
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : HEADER_UTILITY_TEXT_CLASS}
       aria-label={t('shell.archiveTitle')}
     >
       {isDrawer ? (
@@ -222,7 +224,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         toggleLanguage();
         onNavigate?.();
       }}
-      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : 'shell-header-action'}
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : HEADER_UTILITY_TEXT_CLASS}
       aria-label={t('language.toggle')}
     >
       {isDrawer ? (
@@ -246,8 +248,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       to="/settings"
       onClick={onNavigate}
       className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : 'shell-header-action',
-        isActive ? 'is-active' : ''
+        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
       )}
       aria-label={t('nav.settings')}
     >
@@ -269,8 +272,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       to={consolePath}
       onClick={onNavigate}
       className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action' : 'shell-header-action',
-        isActive ? 'is-active' : '',
+        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
       )}
       aria-label={consoleLabel}
     >
@@ -292,8 +296,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       to={signInPath}
       onClick={onNavigate}
       className={({ isActive }) => cn(
-        isDrawer ? 'shell-drawer-action shell-drawer-action--primary' : 'shell-header-action shell-header-action--primary',
-        isActive ? 'is-active' : '',
+        isDrawer ? 'shell-drawer-action shell-drawer-action--primary' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
       )}
       aria-label={signInLabel}
     >
@@ -314,7 +319,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     <button
       type="button"
       onClick={() => setShowLogoutConfirm(true)}
-      className={isDrawer ? 'shell-nav-item shell-nav-item--utility shell-nav-item--danger' : 'shell-header-action shell-header-action--danger'}
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility shell-nav-item--danger' : HEADER_UTILITY_TEXT_CLASS}
       aria-label={t('nav.logout')}
     >
       {isDrawer ? (

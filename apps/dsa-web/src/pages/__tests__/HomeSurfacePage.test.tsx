@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { analysisApi } from '../../api/analysis';
+import { historyApi } from '../../api/history';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
 import HomeSurfacePage from '../HomeSurfacePage';
@@ -17,11 +19,98 @@ vi.mock('../GuestHomePage', () => ({
   default: () => <div>guest home page</div>,
 }));
 
+vi.mock('../../api/history', () => ({
+  historyApi: {
+    getList: vi.fn(),
+    getDetail: vi.fn(),
+    getNews: vi.fn(),
+    getMarkdown: vi.fn(),
+    deleteRecords: vi.fn(),
+  },
+}));
+
+vi.mock('../../api/analysis', async () => {
+  const actual = await vi.importActual<typeof import('../../api/analysis')>('../../api/analysis');
+  return {
+    ...actual,
+    analysisApi: {
+      ...actual.analysisApi,
+      analyzeAsync: vi.fn(),
+      getTasks: vi.fn(),
+    },
+  };
+});
+
 describe('HomeSurfacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
     useStockPoolStore.getState().resetDashboardState();
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 3,
+      page: 1,
+      limit: 20,
+      items: [
+        { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', createdAt: '2026-04-27T08:00:00Z' },
+        { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', createdAt: '2026-04-27T07:00:00Z' },
+        { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z' },
+      ],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue({
+      meta: {
+        queryId: 'q3',
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        reportType: 'detailed',
+        createdAt: '2026-04-27T08:00:00Z',
+      },
+      summary: {
+        analysisSummary: 'Oracle is holding its post-earnings platform.',
+        operationAdvice: 'Wait for a controlled pullback before adding.',
+        trendPrediction: 'Constructive for the next 72 hours.',
+        sentimentScore: 78,
+        sentimentLabel: 'Bullish',
+      },
+      strategy: {
+        idealBuy: '121.80 - 124.60',
+        stopLoss: '117.40',
+        takeProfit: '133.50',
+      },
+      details: {
+        standardReport: {
+          summaryPanel: {
+            stock: 'Oracle',
+            ticker: 'ORCL',
+            oneSentence: 'Cloud backlog keeps the medium-term floor intact.',
+          },
+          decisionContext: {
+            shortTermView: 'Post-earnings strength still holds the upper rail',
+          },
+          decisionPanel: {
+            idealEntry: '121.80 - 124.60',
+            target: '133.50',
+            stopLoss: '117.40',
+            buildStrategy: 'Start light, then add only after the pullback stays orderly.',
+          },
+          reasonLayer: {
+            coreReasons: ['Institutional sponsorship remains intact after earnings.'],
+          },
+          technicalFields: [
+            { label: 'MACD', value: 'Second expansion above zero' },
+            { label: 'Moving Averages', value: 'MA20 lifting MA60' },
+          ],
+          fundamentalFields: [
+            { label: 'Revenue Growth', value: '+9.4%' },
+            { label: 'Free Cash Flow', value: '$12.1B' },
+          ],
+        },
+      },
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
+      taskId: 'task-1',
+      status: 'pending',
+      message: 'submitted',
+    });
   });
 
   const renderSurface = () => render(
@@ -38,7 +127,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('guest home page')).toBeInTheDocument();
   });
 
-  it('renders the signed-in bento dashboard for authenticated users', () => {
+  it('renders the signed-in bento dashboard for authenticated users', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     const root = screen.getByTestId('home-bento-dashboard');
@@ -64,9 +153,10 @@ describe('HomeSurfacePage', () => {
     const main = screen.getByTestId('home-bento-main');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'py-6', 'px-6', 'md:px-8', 'xl:px-12');
     expect(main.className).not.toContain('overflow-hidden');
-    expect(screen.getByTestId('home-bento-omnibar')).toHaveClass('group', 'relative', 'mb-6', 'w-full', 'max-w-3xl');
+    expect(screen.getByTestId('home-bento-omnibar')).toHaveClass('lg:col-span-3', 'xl:col-span-2', 'flex', 'h-[48px]', 'gap-3');
     expect(homeSearch).toHaveAttribute('placeholder', '输入股票代码或公司名称，唤醒 AI 深度分析...');
-    expect(homeSearch).toHaveClass('bg-white/[0.03]', 'border', 'border-white/10', 'text-base', 'rounded-2xl', 'py-3', 'pl-12');
+    expect(homeSearch).toHaveClass('bg-white/[0.03]', 'border', 'border-white/10', 'text-sm', 'rounded-[16px]', 'pl-12');
+    expect(screen.getByTestId('home-bento-analyze-button')).toHaveTextContent('分析');
     expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
@@ -113,6 +203,7 @@ describe('HomeSurfacePage', () => {
     expect(techCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
     expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('home-bento-recent-history')).toBeInTheDocument();
   });
 
   it('renders localized English copy for the signed-in dashboard', () => {
@@ -143,5 +234,22 @@ describe('HomeSurfacePage', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     await new Promise((resolve) => window.setTimeout(resolve, 220));
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
+  });
+
+  it('updates the dashboard when a recent-history ticker is selected', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+    fireEvent.click(await screen.findByRole('button', { name: 'ORCL' }));
+    expect(await screen.findByText('Oracle')).toBeInTheDocument();
+    expect(await screen.findByText('121.80 - 124.60')).toBeInTheDocument();
+  });
+
+  it('updates the dashboard immediately when the analyze button is pressed', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+    expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    expect(analysisApi.analyzeAsync).toHaveBeenCalled();
   });
 });

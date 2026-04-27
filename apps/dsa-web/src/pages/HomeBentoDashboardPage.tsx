@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import {
   BENTO_SURFACE_ROOT_CLASS,
@@ -12,6 +12,7 @@ import {
   type SignalTone,
 } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
+import type { AnalysisReport, StandardReportField } from '../types/analysis';
 import { useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
@@ -466,19 +467,526 @@ const CONTENT: Record<DashboardLocale, {
   },
 };
 
+type DashboardPayload = (typeof CONTENT)['zh'] & {
+  chartPoints: DecisionChartPoint[];
+  breakoutPointIndex: number;
+};
+
+const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardPayload>> = {
+  zh: {
+    NVDA: {
+      ...CONTENT.zh,
+      chartPoints: DECISION_CHART_POINTS,
+      breakoutPointIndex: 9,
+    },
+    ORCL: {
+      ...CONTENT.zh,
+      instrument: '甲骨文',
+      ticker: 'ORCL',
+      sessionBadge: '企业软件云',
+      regimeBadge: '平台上修',
+      decision: {
+        ...CONTENT.zh.decision,
+        company: '甲骨文',
+        heroValue: '7.8',
+        signalLabel: '偏多',
+        signalTone: 'bullish',
+        scoreValue: '财报驱动后维持上沿强势',
+        badge: '云订单抬升 · 企业 IT 预算回流',
+        chartLabel: '平台上破',
+        summary: '云业务订单与数据库续费提供中线托底，回踩不破时更适合顺势跟进。',
+        reasonBody: '财报后资金没有快速撤离，价格保持在前高之上，企业软件主线继续提供趋势支撑。',
+      },
+      strategy: {
+        ...CONTENT.zh.strategy,
+        metrics: [
+          { label: '建仓区间', value: '121.80 - 124.60', tone: 'neutral' },
+          { label: '目标位', value: '133.50', tone: 'bullish' },
+          { label: '止损位', value: '117.40', tone: 'bearish' },
+        ],
+        positionBody: '先用轻仓跟随财报后的强势平台，确认回踩缩量后再补到计划仓位。',
+      },
+      tech: {
+        ...CONTENT.zh.tech,
+        signals: [
+          { label: 'MACD', value: '零轴上方二次扩张', tone: 'bullish' },
+          { label: '均线结构', value: 'MA20 托举 MA60', tone: 'bullish' },
+          { label: '量价配合', value: '突破后量能维持', tone: 'bullish' },
+          { label: 'RSI', value: '61.2', tone: 'neutral' },
+          { label: '波动率', value: '1.8%', tone: 'neutral' },
+        ],
+      },
+      fundamentals: {
+        ...CONTENT.zh.fundamentals,
+        metrics: [
+          { label: '收入增速', value: '+9.4%', tone: 'bullish' },
+          { label: '自由现金流', value: '$12.1B', tone: 'bullish' },
+          { label: '毛利率', value: '71.6%', tone: 'neutral' },
+          { label: 'ROE', value: '109.3%', tone: 'bullish' },
+          { label: '市盈率 (PE)', value: '31.2', tone: 'neutral' },
+          { label: '机构持仓', value: '44.8%', tone: 'neutral' },
+        ],
+      },
+      chartPoints: [
+        { label: '09:30', value: 121.2 },
+        { label: '10:00', value: 121.8 },
+        { label: '10:30', value: 122.0 },
+        { label: '11:00', value: 122.6 },
+        { label: '11:30', value: 122.1 },
+        { label: '12:00', value: 122.8 },
+        { label: '12:30', value: 123.0 },
+        { label: '13:00', value: 123.4 },
+        { label: '13:30', value: 123.8 },
+        { label: '14:00', value: 124.3 },
+        { label: '14:30', value: 124.8 },
+        { label: '15:00', value: 125.2 },
+      ],
+      breakoutPointIndex: 9,
+    },
+    TSLA: {
+      ...CONTENT.zh,
+      instrument: '特斯拉',
+      ticker: 'TSLA',
+      sessionBadge: '高波动成长',
+      regimeBadge: '反弹验证',
+      decision: {
+        ...CONTENT.zh.decision,
+        company: '特斯拉',
+        heroValue: '6.9',
+        signalLabel: '中性偏多',
+        signalTone: 'neutral',
+        scoreValue: '事件驱动后仍需量能确认',
+        badge: '波动放大 · 需要二次确认',
+        chartLabel: '反弹测试',
+        summary: '价格快速反抽后进入验证区，若量能跟不上，更适合等待第二次确认而不是追价。',
+        reasonBody: '高波动资产的反弹更多依赖事件催化，当前结构尚未给出完全顺滑的趋势延续信号。',
+      },
+      strategy: {
+        ...CONTENT.zh.strategy,
+        metrics: [
+          { label: '建仓区间', value: '166.00 - 171.50', tone: 'neutral' },
+          { label: '目标位', value: '183.00', tone: 'bullish' },
+          { label: '止损位', value: '159.20', tone: 'bearish' },
+        ],
+        positionBody: '只在确认量能延续时加仓，否则保留试错仓，避免在事件回落中被动扩大风险。',
+      },
+      tech: {
+        ...CONTENT.zh.tech,
+        signals: [
+          { label: 'MACD', value: '零轴下方收敛', tone: 'neutral' },
+          { label: '均线结构', value: 'MA20 仍在下压', tone: 'bearish' },
+          { label: '量价配合', value: '反弹放量，续航待定', tone: 'neutral' },
+          { label: 'RSI', value: '54.8', tone: 'neutral' },
+          { label: '波动率', value: '4.9%', tone: 'bearish' },
+        ],
+      },
+      fundamentals: {
+        ...CONTENT.zh.fundamentals,
+        metrics: [
+          { label: '收入增速', value: '+2.7%', tone: 'neutral' },
+          { label: '自由现金流', value: '$4.0B', tone: 'neutral' },
+          { label: '毛利率', value: '17.4%', tone: 'bearish' },
+          { label: 'ROE', value: '18.9%', tone: 'neutral' },
+          { label: '市盈率 (PE)', value: '55.8', tone: 'neutral' },
+          { label: '机构持仓', value: '47.6%', tone: 'neutral' },
+        ],
+      },
+      chartPoints: [
+        { label: '09:30', value: 165.4 },
+        { label: '10:00', value: 166.8 },
+        { label: '10:30', value: 168.1 },
+        { label: '11:00', value: 169.6 },
+        { label: '11:30', value: 168.7 },
+        { label: '12:00', value: 170.2 },
+        { label: '12:30', value: 169.1 },
+        { label: '13:00', value: 170.8 },
+        { label: '13:30', value: 171.2 },
+        { label: '14:00', value: 170.4 },
+        { label: '14:30', value: 171.0 },
+        { label: '15:00', value: 170.5 },
+      ],
+      breakoutPointIndex: 7,
+    },
+  },
+  en: {
+    NVDA: {
+      ...CONTENT.en,
+      chartPoints: DECISION_CHART_POINTS,
+      breakoutPointIndex: 9,
+    },
+    ORCL: {
+      ...CONTENT.en,
+      instrument: 'Oracle',
+      ticker: 'ORCL',
+      sessionBadge: 'Enterprise cloud software',
+      regimeBadge: 'Platform bid',
+      decision: {
+        ...CONTENT.en.decision,
+        company: 'Oracle',
+        heroValue: '7.8',
+        signalLabel: 'Constructive',
+        signalTone: 'bullish',
+        scoreValue: 'Post-earnings strength still holds the upper rail',
+        badge: 'Cloud demand lift · enterprise budgets returning',
+        chartLabel: 'Platform Break',
+        summary: 'Cloud backlog and database renewals keep the medium-term floor intact, so pullbacks remain the cleaner way to participate.',
+        reasonBody: 'Post-earnings sponsorship has not faded quickly, price is holding above the prior ceiling, and enterprise software remains a clean trend anchor.',
+      },
+      strategy: {
+        ...CONTENT.en.strategy,
+        metrics: [
+          { label: 'Entry Zone', value: '121.80 - 124.60', tone: 'neutral' },
+          { label: 'Target', value: '133.50', tone: 'bullish' },
+          { label: 'Stop', value: '117.40', tone: 'bearish' },
+        ],
+        positionBody: 'Start light into the earnings-led base, then add only if the pullback stays orderly on lighter volume.',
+      },
+      tech: {
+        ...CONTENT.en.tech,
+        signals: [
+          { label: 'MACD', value: 'Second expansion above zero', tone: 'bullish' },
+          { label: 'Moving Averages', value: 'MA20 lifting MA60', tone: 'bullish' },
+          { label: 'Volume Profile', value: 'Breakout volume still intact', tone: 'bullish' },
+          { label: 'RSI', value: '61.2', tone: 'neutral' },
+          { label: 'Volatility', value: '1.8%', tone: 'neutral' },
+        ],
+      },
+      fundamentals: {
+        ...CONTENT.en.fundamentals,
+        metrics: [
+          { label: 'Revenue Growth', value: '+9.4%', tone: 'bullish' },
+          { label: 'Free Cash Flow', value: '$12.1B', tone: 'bullish' },
+          { label: 'Gross Margin', value: '71.6%', tone: 'neutral' },
+          { label: 'ROE', value: '109.3%', tone: 'bullish' },
+          { label: 'PE', value: '31.2', tone: 'neutral' },
+          { label: 'Institutional Ownership', value: '44.8%', tone: 'neutral' },
+        ],
+      },
+      chartPoints: [
+        { label: '09:30', value: 121.2 },
+        { label: '10:00', value: 121.8 },
+        { label: '10:30', value: 122.0 },
+        { label: '11:00', value: 122.6 },
+        { label: '11:30', value: 122.1 },
+        { label: '12:00', value: 122.8 },
+        { label: '12:30', value: 123.0 },
+        { label: '13:00', value: 123.4 },
+        { label: '13:30', value: 123.8 },
+        { label: '14:00', value: 124.3 },
+        { label: '14:30', value: 124.8 },
+        { label: '15:00', value: 125.2 },
+      ],
+      breakoutPointIndex: 9,
+    },
+    TSLA: {
+      ...CONTENT.en,
+      instrument: 'Tesla',
+      ticker: 'TSLA',
+      sessionBadge: 'High-beta growth',
+      regimeBadge: 'Bounce validation',
+      decision: {
+        ...CONTENT.en.decision,
+        company: 'Tesla',
+        heroValue: '6.9',
+        signalLabel: 'Neutral to bullish',
+        signalTone: 'neutral',
+        scoreValue: 'Catalyst bounce still needs volume confirmation',
+        badge: 'Volatility expansion · second confirmation needed',
+        chartLabel: 'Bounce Test',
+        summary: 'Price snapped back fast but is still in a proof zone, so the cleaner move is to wait for a second confirmation instead of chasing the first spike.',
+        reasonBody: 'This rebound is still highly event-driven, and the structure has not yet converted into a smooth trend continuation setup.',
+      },
+      strategy: {
+        ...CONTENT.en.strategy,
+        metrics: [
+          { label: 'Entry Zone', value: '166.00 - 171.50', tone: 'neutral' },
+          { label: 'Target', value: '183.00', tone: 'bullish' },
+          { label: 'Stop', value: '159.20', tone: 'bearish' },
+        ],
+        positionBody: 'Add only when follow-through volume confirms. Otherwise keep risk in probe size and avoid forcing size into a news-driven retrace.',
+      },
+      tech: {
+        ...CONTENT.en.tech,
+        signals: [
+          { label: 'MACD', value: 'Compression below zero', tone: 'neutral' },
+          { label: 'Moving Averages', value: 'MA20 still pressing lower', tone: 'bearish' },
+          { label: 'Volume Profile', value: 'Bounce expanded, follow-through pending', tone: 'neutral' },
+          { label: 'RSI', value: '54.8', tone: 'neutral' },
+          { label: 'Volatility', value: '4.9%', tone: 'bearish' },
+        ],
+      },
+      fundamentals: {
+        ...CONTENT.en.fundamentals,
+        metrics: [
+          { label: 'Revenue Growth', value: '+2.7%', tone: 'neutral' },
+          { label: 'Free Cash Flow', value: '$4.0B', tone: 'neutral' },
+          { label: 'Gross Margin', value: '17.4%', tone: 'bearish' },
+          { label: 'ROE', value: '18.9%', tone: 'neutral' },
+          { label: 'PE', value: '55.8', tone: 'neutral' },
+          { label: 'Institutional Ownership', value: '47.6%', tone: 'neutral' },
+        ],
+      },
+      chartPoints: [
+        { label: '09:30', value: 165.4 },
+        { label: '10:00', value: 166.8 },
+        { label: '10:30', value: 168.1 },
+        { label: '11:00', value: 169.6 },
+        { label: '11:30', value: 168.7 },
+        { label: '12:00', value: 170.2 },
+        { label: '12:30', value: 169.1 },
+        { label: '13:00', value: 170.8 },
+        { label: '13:30', value: 171.2 },
+        { label: '14:00', value: 170.4 },
+        { label: '14:30', value: 171.0 },
+        { label: '15:00', value: 170.5 },
+      ],
+      breakoutPointIndex: 7,
+    },
+  },
+};
+
+const TICKER_ALIASES: Record<string, string> = {
+  NVIDIA: 'NVDA',
+  '英伟达': 'NVDA',
+  ORACLE: 'ORCL',
+  '甲骨文': 'ORCL',
+  TESLA: 'TSLA',
+  '特斯拉': 'TSLA',
+};
+
+function normalizeTickerQuery(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  return TICKER_ALIASES[trimmed.toUpperCase()] || TICKER_ALIASES[trimmed] || trimmed.toUpperCase();
+}
+
+function resolveDashboardPayload(locale: DashboardLocale, ticker: string): DashboardPayload {
+  const normalizedTicker = normalizeTickerQuery(ticker) || 'NVDA';
+  const variant = DASHBOARD_VARIANTS[locale][normalizedTicker];
+  if (variant) {
+    return variant;
+  }
+
+  const base = DASHBOARD_VARIANTS[locale].NVDA;
+  return {
+    ...base,
+    instrument: normalizedTicker,
+    ticker: normalizedTicker,
+    decision: {
+      ...base.decision,
+      company: normalizedTicker,
+      badge: locale === 'en' ? 'Awaiting refreshed analysis' : '等待最新分析刷新',
+      summary: locale === 'en'
+        ? 'This ticker does not have a dedicated local preset yet, so the dashboard is using a generic live shell while analysis refreshes.'
+        : '当前股票尚未配置专属本地预设，仪表盘先以通用动态骨架承接，等待分析结果回填。',
+      reasonBody: locale === 'en'
+        ? 'Search submission updated the dashboard state immediately. Historical analysis, if available, will overwrite these placeholders next.'
+        : '搜索提交已立即刷新首页状态，若历史分析存在，将优先用历史结果回填当前占位数据。',
+    },
+  };
+}
+
+function toneFromScore(score?: number): SignalTone {
+  if (typeof score !== 'number') {
+    return 'neutral';
+  }
+
+  if (score >= 70) {
+    return 'bullish';
+  }
+
+  if (score <= 40) {
+    return 'bearish';
+  }
+
+  return 'neutral';
+}
+
+function toneFromFieldValue(value?: string): SignalTone {
+  const normalized = String(value || '').toLowerCase();
+  if (/(bull|up|break|expand|strong|乐观|偏多|看多|金叉|上行|突破)/.test(normalized)) {
+    return 'bullish';
+  }
+  if (/(bear|down|weak|risk|fall|悲观|看空|下压|回落|破位)/.test(normalized)) {
+    return 'bearish';
+  }
+  return 'neutral';
+}
+
+function mapStandardFields(
+  fields: StandardReportField[] | undefined,
+  fallback: Array<{ label: string; value: string; tone?: SignalTone }>,
+  count: number,
+): Array<{ label: string; value: string; tone?: SignalTone }> {
+  if (!fields || fields.length === 0) {
+    return fallback;
+  }
+
+  return fields
+    .filter((field) => field.label && field.value)
+    .slice(0, count)
+    .map((field) => ({
+      label: field.label,
+      value: field.value,
+      tone: toneFromFieldValue(field.value),
+    }));
+}
+
+function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisReport): DashboardPayload {
+  const stockCode = normalizeTickerQuery(report.meta.stockCode || 'NVDA');
+  const seed = resolveDashboardPayload(locale, stockCode);
+  const standardReport = report.details?.standardReport;
+  const summaryPanel = standardReport?.summaryPanel;
+  const decisionPanel = standardReport?.decisionPanel;
+  const decisionContext = standardReport?.decisionContext;
+  const reasonLayer = standardReport?.reasonLayer;
+  const technicalFields = standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields;
+  const fundamentalFields = standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields;
+  const sentimentTone = toneFromScore(report.summary.sentimentScore);
+  const scoreText = typeof report.summary.sentimentScore === 'number'
+    ? (report.summary.sentimentScore / 10).toFixed(1)
+    : seed.decision.heroValue;
+  const reasonBody = reasonLayer?.coreReasons?.[0]
+    || reasonLayer?.topCatalyst
+    || reasonLayer?.latestKeyUpdate
+    || report.summary.analysisSummary
+    || seed.decision.reasonBody;
+  const badge = [
+    summaryPanel?.operationAdvice,
+    reasonLayer?.topCatalyst,
+    reasonLayer?.newsValueTier,
+  ].filter(Boolean).slice(0, 2).join(' · ') || seed.decision.badge;
+
+  return {
+    ...seed,
+    ticker: stockCode,
+    decision: {
+      ...seed.decision,
+      company: report.meta.stockName || summaryPanel?.stock || stockCode,
+      heroValue: scoreText,
+      signalLabel: report.summary.sentimentLabel || seed.decision.signalLabel,
+      signalTone: sentimentTone,
+      scoreValue: decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || seed.decision.scoreValue,
+      badge,
+      summary: summaryPanel?.oneSentence || report.summary.analysisSummary || seed.decision.summary,
+      reasonTitle: locale === 'en' ? 'Latest Report Context' : '最近报告归因',
+      reasonBody,
+    },
+    strategy: {
+      ...seed.strategy,
+      metrics: [
+        {
+          label: locale === 'en' ? 'Entry Zone' : '建仓区间',
+          value: decisionPanel?.idealEntry || decisionPanel?.support || report.strategy?.idealBuy || seed.strategy.metrics[0]?.value || '--',
+          tone: 'neutral',
+        },
+        {
+          label: locale === 'en' ? 'Target' : '目标位',
+          value: decisionPanel?.target || decisionPanel?.targetZone || report.strategy?.takeProfit || seed.strategy.metrics[1]?.value || '--',
+          tone: 'bullish',
+        },
+        {
+          label: locale === 'en' ? 'Stop' : '止损位',
+          value: decisionPanel?.stopLoss || report.strategy?.stopLoss || seed.strategy.metrics[2]?.value || '--',
+          tone: 'bearish',
+        },
+      ],
+      positionBody: decisionPanel?.buildStrategy
+        || decisionPanel?.holderAdvice
+        || decisionPanel?.noPositionAdvice
+        || report.summary.operationAdvice
+        || seed.strategy.positionBody,
+    },
+    tech: {
+      ...seed.tech,
+      signals: mapStandardFields(technicalFields, seed.tech.signals, 5).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
+    },
+    fundamentals: {
+      ...seed.fundamentals,
+      metrics: mapStandardFields(fundamentalFields, seed.fundamentals.metrics, 6),
+    },
+  };
+}
+
 const HomeBentoDashboardPage: React.FC = () => {
   const { language } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
-  const copy = CONTENT[locale];
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
+  const [activeTicker, setActiveTicker] = useState('NVDA');
+  const [dashboardData, setDashboardData] = useState<DashboardPayload>(() => resolveDashboardPayload('zh', 'NVDA'));
   const query = useStockPoolStore((state) => state.query);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
+  const historyItems = useStockPoolStore((state) => state.historyItems);
+  const selectedReport = useStockPoolStore((state) => state.selectedReport);
   const setQuery = useStockPoolStore((state) => state.setQuery);
+  const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
+  const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
+  const copy = dashboardData;
+  const recentHistory = useMemo(
+    () => Array.from(new Set(historyItems.map((item) => normalizeTickerQuery(item.stockCode)).filter(Boolean))).slice(0, 8),
+    [historyItems],
+  );
 
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
+
+  useEffect(() => {
+    void refreshHistory(true);
+  }, [refreshHistory]);
+
+  useEffect(() => {
+    if (selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker) {
+      setDashboardData(buildDashboardFromReport(locale, selectedReport));
+      return;
+    }
+
+    setDashboardData(resolveDashboardPayload(locale, activeTicker));
+  }, [activeTicker, locale, selectedReport]);
+
+  const syncDashboardTicker = (tickerValue: string) => {
+    const normalizedTicker = normalizeTickerQuery(tickerValue);
+    if (!normalizedTicker) {
+      return '';
+    }
+
+    setActiveTicker(normalizedTicker);
+    setDashboardData(resolveDashboardPayload(locale, normalizedTicker));
+    setQuery(normalizedTicker);
+    return normalizedTicker;
+  };
+
+  const loadStockData = async (tickerValue: string) => {
+    const normalizedTicker = syncDashboardTicker(tickerValue);
+    if (!normalizedTicker) {
+      return;
+    }
+
+    await focusLatestHistoryForStock(normalizedTicker);
+  };
+
+  const handleAnalyze = async () => {
+    const normalizedTicker = normalizeTickerQuery(query);
+    if (normalizedTicker) {
+      syncDashboardTicker(normalizedTicker);
+    }
+
+    await submitAnalysis({
+      stockCode: normalizedTicker || query,
+      originalQuery: query,
+      selectionSource: 'manual',
+    });
+
+    if (normalizedTicker) {
+      setQuery(normalizedTicker);
+      await refreshHistory(true);
+      await focusLatestHistoryForStock(normalizedTicker);
+    }
+  };
 
   return (
     <div
@@ -487,37 +995,65 @@ const HomeBentoDashboardPage: React.FC = () => {
       className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col overflow-x-hidden bg-transparent`}
     >
       <main className="w-full flex-1 min-w-0 flex flex-col py-6 px-6 md:px-8 xl:px-12" data-testid="home-bento-main">
-        <form
-          className="group relative mb-6 w-full max-w-3xl"
-          data-testid="home-bento-omnibar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitAnalysis({
-              stockCode: query,
-              originalQuery: query,
-              selectionSource: 'manual',
-            });
-          }}
-        >
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-            <Search className="h-5 w-5 text-white/40" />
-          </div>
-          <input
-            data-testid="home-bento-omnibar-input"
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            autoComplete="off"
-            disabled={isAnalyzing}
-            className="w-full rounded-2xl border border-white/10 bg-white/[0.03] py-3 pl-12 pr-4 text-base text-white outline-none transition-all placeholder:text-white/30 focus:border-indigo-500/40 focus:bg-white/[0.05] shadow-lg"
-            placeholder={copy.omnibarPlaceholder}
-          />
-          <button type="submit" className="sr-only" disabled={isAnalyzing}>
-            {copy.analyzeButton}
-          </button>
-        </form>
-
         <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3 xl:grid-cols-5">
+          <form
+            className="lg:col-span-3 xl:col-span-2 flex h-[48px] gap-3"
+            data-testid="home-bento-omnibar"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleAnalyze();
+            }}
+          >
+            <div className="relative flex-1 group">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                <Search className="h-5 w-5 text-white/40" />
+              </div>
+              <input
+                data-testid="home-bento-omnibar-input"
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                autoComplete="off"
+                disabled={isAnalyzing}
+                className="w-full h-full bg-white/[0.03] border border-white/10 focus:border-indigo-500/40 focus:bg-white/[0.05] text-white text-sm rounded-[16px] pl-12 pr-4 outline-none transition-all placeholder:text-white/30"
+                placeholder={copy.omnibarPlaceholder}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isAnalyzing}
+              className="h-full px-6 bg-white text-black font-bold text-sm rounded-[16px] hover:bg-white/90 active:scale-95 transition-all shrink-0 disabled:cursor-wait disabled:bg-white/70"
+              data-testid="home-bento-analyze-button"
+            >
+              {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : copy.analyzeButton}
+            </button>
+          </form>
+          <div
+            className="hidden xl:flex xl:col-span-3 items-center gap-3 overflow-x-auto no-scrollbar pl-2"
+            data-testid="home-bento-recent-history"
+          >
+            <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest shrink-0">
+              {locale === 'en' ? 'Recent analysis:' : '最近分析:'}
+            </span>
+            {recentHistory.length > 0 ? recentHistory.map((ticker) => (
+              <button
+                key={ticker}
+                type="button"
+                onClick={() => {
+                  void loadStockData(ticker);
+                }}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors shrink-0 ${
+                  activeTicker === ticker
+                    ? 'bg-white/[0.08] border-white/15 text-white'
+                    : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] text-white/70'
+                }`}
+              >
+                {ticker}
+              </button>
+            )) : (
+              <span className="text-xs text-white/35">{locale === 'en' ? 'No history synced yet.' : '历史分析尚未同步。'}</span>
+            )}
+          </div>
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}
@@ -532,8 +1068,8 @@ const HomeBentoDashboardPage: React.FC = () => {
             badge={copy.decision.badge}
             chartLabel={copy.decision.chartLabel}
             summary={copy.decision.summary}
-            chartPoints={DECISION_CHART_POINTS}
-            breakoutPointIndex={9}
+            chartPoints={copy.chartPoints}
+            breakoutPointIndex={copy.breakoutPointIndex}
             reason={{ title: copy.decision.reasonTitle, body: copy.decision.reasonBody }}
             detailLabel={copy.decision.detailLabel}
             onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
