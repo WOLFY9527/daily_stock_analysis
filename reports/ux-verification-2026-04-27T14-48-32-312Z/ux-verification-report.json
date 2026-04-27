@@ -1,0 +1,1459 @@
+{
+  "generatedAt": "2026-04-27T14:48:32.312Z",
+  "baseUrl": "http://127.0.0.1:8000",
+  "previewUrl": "http://127.0.0.1:4174",
+  "dbPath": "data/stock_analysis.db",
+  "actionTimeoutMs": 10000,
+  "user": {
+    "username": "ux_mohbb9dk",
+    "displayName": "UX Verify"
+  },
+  "runtime": {
+    "previewReachable": true,
+    "backendStatus": {
+      "authEnabled": true,
+      "loggedIn": false,
+      "passwordSet": true,
+      "passwordChangeable": true,
+      "setupState": "enabled",
+      "currentUser": null
+    }
+  },
+  "flows": [
+    {
+      "name": "visitor-home",
+      "startedAt": "2026-04-27T14:48:33.209Z",
+      "status": "pass",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "guest home visible",
+          "status": "pass"
+        }
+      ],
+      "database": null,
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-guest-home.png"
+      ],
+      "warnings": [],
+      "error": null,
+      "finishedAt": "2026-04-27T14:48:33.442Z"
+    },
+    {
+      "name": "create-account",
+      "startedAt": "2026-04-27T14:48:33.442Z",
+      "status": "pass",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "home after create visible",
+          "status": "pass"
+        }
+      ],
+      "database": {
+        "before": {
+          "tables": {
+            "app_users": {
+              "count": 16,
+              "lastRows": [
+                {
+                  "id": "user-24d5555be68fa990",
+                  "username": "ux_mohb6ww6",
+                  "display_name": "UX Verify",
+                  "password_hash": "onDhOL1QgHs71GxUKPoqP65cWntDKGwgarnO8wsqVFk=:HSvibTvCwncB/SJYUQNyDcRNDovxJDcPbAvVwbYNVwE=",
+                  "role": "user",
+                  "is_active": 1,
+                  "created_at": "2026-04-27 22:45:12.371654",
+                  "updated_at": "2026-04-27 22:45:12.371660"
+                }
+              ],
+              "error": null
+            },
+            "app_user_sessions": {
+              "count": 92,
+              "lastRows": [
+                {
+                  "session_id": "8a08f478e277510954f47b32dc8e1eaf",
+                  "user_id": "user-24d5555be68fa990",
+                  "created_at": "2026-04-27 22:46:45.029893",
+                  "last_seen_at": "2026-04-27 22:46:45.029893",
+                  "expires_at": "2026-04-28 14:46:45.029187",
+                  "revoked_at": null
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "after": {
+          "tables": {
+            "app_users": {
+              "count": 17,
+              "lastRows": [
+                {
+                  "id": "user-ba0253d156887042",
+                  "username": "ux_mohbb9dk",
+                  "display_name": "UX Verify",
+                  "password_hash": "hAgKaBW9t5upMi/H+CDbMdlBjja17jgbaUZDbHupVuw=:j6HPAhsLUhmZXt/Ix5rX1kFhXHrCEEGTo4DHVlMpKiE=",
+                  "role": "user",
+                  "is_active": 1,
+                  "created_at": "2026-04-27 22:48:35.249287",
+                  "updated_at": "2026-04-27 22:48:35.249292"
+                }
+              ],
+              "error": null
+            },
+            "app_user_sessions": {
+              "count": 93,
+              "lastRows": [
+                {
+                  "session_id": "3c8cd9ce9a89fa52578b270bc83bacf0",
+                  "user_id": "user-ba0253d156887042",
+                  "created_at": "2026-04-27 22:48:35.250756",
+                  "last_seen_at": "2026-04-27 22:48:35.250756",
+                  "expires_at": "2026-04-28 14:48:35.250361",
+                  "revoked_at": null
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "diff": {
+          "app_users": {
+            "before": 16,
+            "after": 17,
+            "delta": 1,
+            "direction": "up"
+          },
+          "app_user_sessions": {
+            "before": 92,
+            "after": 93,
+            "delta": 1,
+            "direction": "up"
+          }
+        }
+      },
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-create-account-home.png"
+      ],
+      "warnings": [],
+      "error": null,
+      "finishedAt": "2026-04-27T14:48:35.728Z"
+    },
+    {
+      "name": "logout-login",
+      "startedAt": "2026-04-27T14:48:35.728Z",
+      "status": "pass",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "login redirected home",
+          "status": "pass"
+        }
+      ],
+      "database": null,
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-login-screen.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-post-login-home.png"
+      ],
+      "warnings": [],
+      "error": null,
+      "finishedAt": "2026-04-27T14:48:38.446Z"
+    },
+    {
+      "name": "home-analysis",
+      "startedAt": "2026-04-27T14:48:38.446Z",
+      "status": "pass",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "home decision card visible",
+          "status": "pass"
+        },
+        {
+          "name": "home strategy drawer trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home history trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home hero glow text",
+          "status": "pass",
+          "textShadow": "rgba(52, 211, 153, 0.4) 0px 0px 30px"
+        },
+        {
+          "name": "home drawer opens",
+          "status": "pass"
+        }
+      ],
+      "database": {
+        "before": {
+          "tables": {
+            "analysis_history": {
+              "count": 142,
+              "lastRows": [
+                {
+                  "id": 143,
+                  "owner_id": "user-24d5555be68fa990",
+                  "query_id": "565c6b21a8794a409ebd20657f17eb27",
+                  "code": "TSLA",
+                  "name": "TSLA",
+                  "report_type": "full",
+                  "sentiment_score": 59,
+                  "operation_advice": "观望",
+                  "trend_prediction": "看空",
+                  "analysis_summary": "分析过程出错: All LLM models failed (tried 2 model(s)). Last error: litellm.ServiceUnavailableError: GeminiExcepti",
+                  "raw_result": "{\"code\": \"TSLA\", \"name\": \"TSLA\", \"sentiment_score\": 59, \"trend_prediction\": \"看空\", \"operation_advice\": \"观望\", \"decision_type\": \"hold\", \"confidence_level\": \"低\", \"report_language\": ...",
+                  "news_content": "【TSLA 情报搜索结果】\n\n📰 最新消息 (来源: Finnhub):\n  1. Elon Musk Registers 304 Million Tesla Shares. Stock Sinks. [2026-04-27]\n     Tesla CEO Elon Musk registered over 300 million shares of ...",
+                  "context_snapshot": "{\"enhanced_context\": {\"code\": \"TSLA\", \"date\": \"2026-04-27\", \"today\": {\"close\": 368.46, \"open\": 371.94, \"high\": 372.115, \"low\": 364.86, \"data_source\": \"alpaca\", \"ma5\": 378.379, \"...",
+                  "ideal_buy": null,
+                  "secondary_buy": null,
+                  "stop_loss": null,
+                  "take_profit": null,
+                  "created_at": "2026-04-27 22:45:34.232060"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "after": {
+          "tables": {
+            "analysis_history": {
+              "count": 142,
+              "lastRows": [
+                {
+                  "id": 143,
+                  "owner_id": "user-24d5555be68fa990",
+                  "query_id": "565c6b21a8794a409ebd20657f17eb27",
+                  "code": "TSLA",
+                  "name": "TSLA",
+                  "report_type": "full",
+                  "sentiment_score": 59,
+                  "operation_advice": "观望",
+                  "trend_prediction": "看空",
+                  "analysis_summary": "分析过程出错: All LLM models failed (tried 2 model(s)). Last error: litellm.ServiceUnavailableError: GeminiExcepti",
+                  "raw_result": "{\"code\": \"TSLA\", \"name\": \"TSLA\", \"sentiment_score\": 59, \"trend_prediction\": \"看空\", \"operation_advice\": \"观望\", \"decision_type\": \"hold\", \"confidence_level\": \"低\", \"report_language\": ...",
+                  "news_content": "【TSLA 情报搜索结果】\n\n📰 最新消息 (来源: Finnhub):\n  1. Elon Musk Registers 304 Million Tesla Shares. Stock Sinks. [2026-04-27]\n     Tesla CEO Elon Musk registered over 300 million shares of ...",
+                  "context_snapshot": "{\"enhanced_context\": {\"code\": \"TSLA\", \"date\": \"2026-04-27\", \"today\": {\"close\": 368.46, \"open\": 371.94, \"high\": 372.115, \"low\": 364.86, \"data_source\": \"alpaca\", \"ma5\": 378.379, \"...",
+                  "ideal_buy": null,
+                  "secondary_buy": null,
+                  "stop_loss": null,
+                  "take_profit": null,
+                  "created_at": "2026-04-27 22:45:34.232060"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "diff": {}
+      },
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-home-analysis.png"
+      ],
+      "warnings": [],
+      "error": null,
+      "finishedAt": "2026-04-27T14:48:42.640Z"
+    },
+    {
+      "name": "scanner-run",
+      "startedAt": "2026-04-27T14:48:42.640Z",
+      "status": "partial",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "scanner hero visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner run button visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner drawer trigger visible",
+          "status": "pass"
+        }
+      ],
+      "database": {
+        "before": {
+          "tables": {
+            "market_scanner_runs": {
+              "count": 23,
+              "lastRows": [
+                {
+                  "id": 23,
+                  "owner_id": "user-24d5555be68fa990",
+                  "scope": "user",
+                  "market": "cn",
+                  "profile": "cn_preopen_v1",
+                  "universe_name": "cn_a_liquid_watchlist_v1",
+                  "status": "failed",
+                  "shortlist_size": 0,
+                  "universe_size": 0,
+                  "preselected_size": 0,
+                  "evaluated_size": 0,
+                  "run_at": "2026-04-27 22:45:21.067597",
+                  "completed_at": "2026-04-27 22:45:21.067597",
+                  "source_summary": "universe=local_universe_cache; snapshot=unknown; history=local_first; degraded=no; universe_attempts=local_universe_cache:success; snapshot_attempts=AkshareFetcher:failed(akshar...",
+                  "summary_json": "{\"headline\": \"A股盘前扫描 v1 执行失败\", \"profile_label\": \"A股盘前扫描 v1\", \"shortlisted_codes\": [], \"watchlist_date\": \"2026-04-27\", \"trigger_mode\": \"manual\", \"request_source\": \"api\"}",
+                  "diagnostics_json": "{\"reason_code\": \"no_realtime_snapshot_available\", \"universe_resolution\": {\"success\": true, \"source\": \"local_universe_cache\", \"attempts\": [{\"fetcher\": \"local_universe_cache\", \"st...",
+                  "universe_notes_json": "[]",
+                  "scoring_notes_json": "[]"
+                }
+              ],
+              "error": null
+            },
+            "market_scanner_candidates": {
+              "count": 38,
+              "lastRows": [
+                {
+                  "id": 38,
+                  "run_id": 19,
+                  "symbol": "INTC",
+                  "name": "INTC",
+                  "rank": 8,
+                  "score": 81.5,
+                  "quality_hint": "高优先级",
+                  "reason_summary": "价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。；20 日与 60 日动量都保持正向，更像可跟踪的趋势延续候选。",
+                  "reasons_json": "[\"价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。\", \"20 日与 60 日动量都保持正向，更像可跟踪的趋势延续候选。\", \"相对基准近 20 日超额约 45.8%，强于大盘。\", \"距离近 20 日高点仅 4.0%，适合观察 breakout follow-through。\"]",
+                  "key_metrics_json": "[{\"label\": \"Price\", \"value\": \"82.53\"}, {\"label\": \"Day change\", \"value\": \"23.6%\"}, {\"label\": \"20D return\", \"value\": \"52.1%\"}, {\"label\": \"20D avg $vol\", \"value\": \"$5.68B\"}, {\"labe...",
+                  "feature_signals_json": "[{\"label\": \"Trend\", \"value\": \"20.0 / 20\"}, {\"label\": \"Momentum\", \"value\": \"16.0 / 16\"}, {\"label\": \"Liquidity\", \"value\": \"16.0 / 16\"}, {\"label\": \"Tradability\", \"value\": \"7.3 / 12...",
+                  "risk_notes_json": "[\"Gap risk 偏高，若开盘后不能延续，容易出现快速回吐。\"]",
+                  "watch_context_json": "[{\"label\": \"Pre-open\", \"value\": \"先看是否仍靠近/站上近 20 日高点 65.84，避免强 gap 后立即走弱。\"}, {\"label\": \"Open check\", \"value\": \"开盘后优先看成交是否延续到日内前 15 分钟，而不是只看第一笔价格跳动。\"}, {\"label\": \"Risk off\", \"valu...",
+                  "boards_json": "[]",
+                  "diagnostics_json": "{\"history\": {\"source\": \"local_db\", \"rows\": 180, \"latest_trade_date\": \"2026-04-16\", \"network_used\": false, \"network_failed\": false, \"partial_local_fallback\": false}, \"history_sou...",
+                  "created_at": "2026-04-27 01:30:09.833296"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "after": {
+          "tables": {
+            "market_scanner_runs": {
+              "count": 24,
+              "lastRows": [
+                {
+                  "id": 24,
+                  "owner_id": "user-ba0253d156887042",
+                  "scope": "user",
+                  "market": "cn",
+                  "profile": "cn_preopen_v1",
+                  "universe_name": "cn_a_liquid_watchlist_v1",
+                  "status": "failed",
+                  "shortlist_size": 0,
+                  "universe_size": 0,
+                  "preselected_size": 0,
+                  "evaluated_size": 0,
+                  "run_at": "2026-04-27 22:48:44.348407",
+                  "completed_at": "2026-04-27 22:48:44.348408",
+                  "source_summary": "universe=local_universe_cache; snapshot=unknown; history=local_first; degraded=no; universe_attempts=local_universe_cache:success; snapshot_attempts=AkshareFetcher:failed(akshar...",
+                  "summary_json": "{\"headline\": \"A股盘前扫描 v1 执行失败\", \"profile_label\": \"A股盘前扫描 v1\", \"shortlisted_codes\": [], \"watchlist_date\": \"2026-04-27\", \"trigger_mode\": \"manual\", \"request_source\": \"api\"}",
+                  "diagnostics_json": "{\"reason_code\": \"no_realtime_snapshot_available\", \"universe_resolution\": {\"success\": true, \"source\": \"local_universe_cache\", \"attempts\": [{\"fetcher\": \"local_universe_cache\", \"st...",
+                  "universe_notes_json": "[]",
+                  "scoring_notes_json": "[]"
+                }
+              ],
+              "error": null
+            },
+            "market_scanner_candidates": {
+              "count": 38,
+              "lastRows": [
+                {
+                  "id": 38,
+                  "run_id": 19,
+                  "symbol": "INTC",
+                  "name": "INTC",
+                  "rank": 8,
+                  "score": 81.5,
+                  "quality_hint": "高优先级",
+                  "reason_summary": "价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。；20 日与 60 日动量都保持正向，更像可跟踪的趋势延续候选。",
+                  "reasons_json": "[\"价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。\", \"20 日与 60 日动量都保持正向，更像可跟踪的趋势延续候选。\", \"相对基准近 20 日超额约 45.8%，强于大盘。\", \"距离近 20 日高点仅 4.0%，适合观察 breakout follow-through。\"]",
+                  "key_metrics_json": "[{\"label\": \"Price\", \"value\": \"82.53\"}, {\"label\": \"Day change\", \"value\": \"23.6%\"}, {\"label\": \"20D return\", \"value\": \"52.1%\"}, {\"label\": \"20D avg $vol\", \"value\": \"$5.68B\"}, {\"labe...",
+                  "feature_signals_json": "[{\"label\": \"Trend\", \"value\": \"20.0 / 20\"}, {\"label\": \"Momentum\", \"value\": \"16.0 / 16\"}, {\"label\": \"Liquidity\", \"value\": \"16.0 / 16\"}, {\"label\": \"Tradability\", \"value\": \"7.3 / 12...",
+                  "risk_notes_json": "[\"Gap risk 偏高，若开盘后不能延续，容易出现快速回吐。\"]",
+                  "watch_context_json": "[{\"label\": \"Pre-open\", \"value\": \"先看是否仍靠近/站上近 20 日高点 65.84，避免强 gap 后立即走弱。\"}, {\"label\": \"Open check\", \"value\": \"开盘后优先看成交是否延续到日内前 15 分钟，而不是只看第一笔价格跳动。\"}, {\"label\": \"Risk off\", \"valu...",
+                  "boards_json": "[]",
+                  "diagnostics_json": "{\"history\": {\"source\": \"local_db\", \"rows\": 180, \"latest_trade_date\": \"2026-04-16\", \"network_used\": false, \"network_failed\": false, \"partial_local_fallback\": false}, \"history_sou...",
+                  "created_at": "2026-04-27 01:30:09.833296"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "diff": {
+          "market_scanner_runs": {
+            "before": 23,
+            "after": 24,
+            "delta": 1,
+            "direction": "up"
+          }
+        }
+      },
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-scanner-run.png"
+      ],
+      "warnings": [
+        "1 non-2xx request(s) captured during flow"
+      ],
+      "error": null,
+      "finishedAt": "2026-04-27T14:48:45.293Z"
+    },
+    {
+      "name": "chat-query",
+      "startedAt": "2026-04-27T14:48:45.293Z",
+      "status": "partial",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "chat reply or progress visible",
+          "status": "pass"
+        }
+      ],
+      "database": {
+        "before": {
+          "tables": {
+            "conversation_sessions": {
+              "count": 16,
+              "lastRows": [
+                {
+                  "id": 25,
+                  "session_id": "7efe62a3-6af2-451d-ab83-a3805a4b8027",
+                  "owner_id": "user-24d5555be68fa990",
+                  "title": "TSLA today trend? give a short trading view.",
+                  "created_at": "2026-04-27 22:45:23.744678",
+                  "updated_at": "2026-04-27 22:45:25.771092"
+                }
+              ],
+              "error": null
+            },
+            "conversation_messages": {
+              "count": 31,
+              "lastRows": [
+                {
+                  "id": 57,
+                  "session_id": "7efe62a3-6af2-451d-ab83-a3805a4b8027",
+                  "role": "assistant",
+                  "content": "[分析失败] All LLM models failed. Last error: litellm.ServiceUnavailableError: GeminiException - {\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing...",
+                  "created_at": "2026-04-27 22:45:25.771179"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "after": {
+          "tables": {
+            "conversation_sessions": {
+              "count": 17,
+              "lastRows": [
+                {
+                  "id": 26,
+                  "session_id": "43f7c43f-b9ed-4991-9895-caf0dd7cf51e",
+                  "owner_id": "user-ba0253d156887042",
+                  "title": "TSLA today trend? give a short trading view.",
+                  "created_at": "2026-04-27 22:48:47.118954",
+                  "updated_at": "2026-04-27 22:48:48.966920"
+                }
+              ],
+              "error": null
+            },
+            "conversation_messages": {
+              "count": 33,
+              "lastRows": [
+                {
+                  "id": 59,
+                  "session_id": "43f7c43f-b9ed-4991-9895-caf0dd7cf51e",
+                  "role": "assistant",
+                  "content": "[分析失败] All LLM models failed. Last error: litellm.ServiceUnavailableError: GeminiException - {\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing...",
+                  "created_at": "2026-04-27 22:48:48.967048"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "diff": {
+          "conversation_sessions": {
+            "before": 16,
+            "after": 17,
+            "delta": 1,
+            "direction": "up"
+          },
+          "conversation_messages": {
+            "before": 31,
+            "after": 33,
+            "delta": 2,
+            "direction": "up"
+          }
+        }
+      },
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-chat-query.png"
+      ],
+      "warnings": [
+        "Error: chat assistant reply timed out after 10000ms"
+      ],
+      "error": null,
+      "finishedAt": "2026-04-27T14:48:57.250Z"
+    },
+    {
+      "name": "portfolio-actions",
+      "startedAt": "2026-04-27T14:48:57.250Z",
+      "status": "partial",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "portfolio total assets card visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio holdings panel visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio history trigger visible",
+          "status": "fail"
+        }
+      ],
+      "database": {
+        "before": {
+          "tables": {
+            "portfolio_accounts": {
+              "count": 11,
+              "lastRows": [
+                {
+                  "id": 11,
+                  "owner_id": "user-24d5555be68fa990",
+                  "name": "UX Main",
+                  "broker": "manual",
+                  "market": "cn",
+                  "base_currency": "CNY",
+                  "is_active": 1,
+                  "created_at": "2026-04-27 22:45:35.643636",
+                  "updated_at": "2026-04-27 22:45:35.643642"
+                }
+              ],
+              "error": null
+            },
+            "portfolio_trades": {
+              "count": 7,
+              "lastRows": [
+                {
+                  "id": 7,
+                  "account_id": 8,
+                  "trade_uid": "trade-1777210746877",
+                  "symbol": "AAPL",
+                  "market": "cn",
+                  "currency": "CNY",
+                  "trade_date": "2026-04-26",
+                  "side": "buy",
+                  "quantity": 10,
+                  "price": 185.5,
+                  "fee": 1,
+                  "tax": 0,
+                  "note": "UX verification trade",
+                  "dedup_hash": null,
+                  "created_at": "2026-04-26 21:39:06.927985"
+                }
+              ],
+              "error": null
+            },
+            "portfolio_cash_ledger": {
+              "count": 5,
+              "lastRows": [
+                {
+                  "id": 5,
+                  "account_id": 10,
+                  "event_date": "2026-04-27",
+                  "direction": "in",
+                  "amount": 20000,
+                  "currency": "CNY",
+                  "note": "ux cash",
+                  "created_at": "2026-04-27 22:42:33.555550"
+                }
+              ],
+              "error": null
+            },
+            "portfolio_corporate_actions": {
+              "count": 5,
+              "lastRows": [
+                {
+                  "id": 5,
+                  "account_id": 10,
+                  "symbol": "600519",
+                  "market": "cn",
+                  "currency": "CNY",
+                  "effective_date": "2026-04-27",
+                  "action_type": "cash_dividend",
+                  "cash_dividend_per_share": 2.5,
+                  "split_ratio": null,
+                  "note": "ux corporate",
+                  "created_at": "2026-04-27 22:42:33.608381"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "after": {
+          "tables": {
+            "portfolio_accounts": {
+              "count": 12,
+              "lastRows": [
+                {
+                  "id": 12,
+                  "owner_id": "user-ba0253d156887042",
+                  "name": "UX Main",
+                  "broker": "manual",
+                  "market": "cn",
+                  "base_currency": "CNY",
+                  "is_active": 1,
+                  "created_at": "2026-04-27 22:48:59.136106",
+                  "updated_at": "2026-04-27 22:48:59.136111"
+                }
+              ],
+              "error": null
+            },
+            "portfolio_trades": {
+              "count": 7,
+              "lastRows": [
+                {
+                  "id": 7,
+                  "account_id": 8,
+                  "trade_uid": "trade-1777210746877",
+                  "symbol": "AAPL",
+                  "market": "cn",
+                  "currency": "CNY",
+                  "trade_date": "2026-04-26",
+                  "side": "buy",
+                  "quantity": 10,
+                  "price": 185.5,
+                  "fee": 1,
+                  "tax": 0,
+                  "note": "UX verification trade",
+                  "dedup_hash": null,
+                  "created_at": "2026-04-26 21:39:06.927985"
+                }
+              ],
+              "error": null
+            },
+            "portfolio_cash_ledger": {
+              "count": 6,
+              "lastRows": [
+                {
+                  "id": 6,
+                  "account_id": 12,
+                  "event_date": "2026-04-27",
+                  "direction": "in",
+                  "amount": 20000,
+                  "currency": "CNY",
+                  "note": "ux cash",
+                  "created_at": "2026-04-27 22:48:59.265599"
+                }
+              ],
+              "error": null
+            },
+            "portfolio_corporate_actions": {
+              "count": 6,
+              "lastRows": [
+                {
+                  "id": 6,
+                  "account_id": 12,
+                  "symbol": "600519",
+                  "market": "cn",
+                  "currency": "CNY",
+                  "effective_date": "2026-04-27",
+                  "action_type": "cash_dividend",
+                  "cash_dividend_per_share": 2.5,
+                  "split_ratio": null,
+                  "note": "ux corporate",
+                  "created_at": "2026-04-27 22:48:59.331269"
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "diff": {
+          "portfolio_accounts": {
+            "before": 11,
+            "after": 12,
+            "delta": 1,
+            "direction": "up"
+          },
+          "portfolio_cash_ledger": {
+            "before": 5,
+            "after": 6,
+            "delta": 1,
+            "direction": "up"
+          },
+          "portfolio_corporate_actions": {
+            "before": 5,
+            "after": 6,
+            "delta": 1,
+            "direction": "up"
+          }
+        }
+      },
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-portfolio-actions.png"
+      ],
+      "warnings": [],
+      "error": null,
+      "finishedAt": "2026-04-27T14:49:00.248Z"
+    },
+    {
+      "name": "backtest-runs",
+      "startedAt": "2026-04-27T14:49:00.248Z",
+      "status": "partial",
+      "steps": [
+        {
+          "template": "moving_average_crossover",
+          "mode": "normal",
+          "outcome": "stayed_on_launch_page"
+        },
+        {
+          "template": "macd_crossover",
+          "mode": "normal",
+          "outcome": "stayed_on_launch_page"
+        },
+        {
+          "template": "rsi_threshold",
+          "mode": "normal",
+          "outcome": "stayed_on_launch_page"
+        },
+        {
+          "template": "periodic_accumulation",
+          "mode": "normal",
+          "outcome": "stayed_on_launch_page"
+        }
+      ],
+      "uiChecks": [
+        {
+          "name": "professional workspace visible",
+          "status": "fail"
+        }
+      ],
+      "database": {
+        "before": {
+          "tables": {
+            "backtest_runs": {
+              "count": 3,
+              "lastRows": [
+                {
+                  "id": 3,
+                  "owner_id": "user-13469083882bf57d",
+                  "code": "AAPL",
+                  "eval_window_days": 10,
+                  "min_age_days": 14,
+                  "force": 0,
+                  "run_at": "2026-04-26 21:39:49.423347",
+                  "completed_at": "2026-04-26 21:39:49.423347",
+                  "processed": 60,
+                  "saved": 60,
+                  "completed": 60,
+                  "insufficient": 0,
+                  "errors": 0,
+                  "candidate_count": 60,
+                  "result_count": 60,
+                  "no_result_reason": null,
+                  "no_result_message": null,
+                  "status": "completed",
+                  "total_evaluations": 60,
+                  "completed_count": 60,
+                  "insufficient_count": 0,
+                  "long_count": 41,
+                  "cash_count": 19,
+                  "win_count": 25,
+                  "loss_count": 23,
+                  "neutral_count": 12,
+                  "win_rate_pct": 52.08,
+                  "avg_stock_return_pct": 1.0183,
+                  "avg_simulated_return_pct": 0.0072,
+                  "direction_accuracy_pct": 52.08,
+                  "summary_json": "{\"scope\": \"stock\", \"code\": \"AAPL\", \"eval_window_days\": 10, \"engine_version\": \"v1\", \"total_evaluations\": 60, \"completed_count\": 60, \"insufficient_count\": 0, \"long_count\": 41, \"ca..."
+                }
+              ],
+              "error": null
+            },
+            "backtest_results": {
+              "count": 120,
+              "lastRows": [
+                {
+                  "id": 120,
+                  "owner_id": "user-13469083882bf57d",
+                  "analysis_history_id": 133,
+                  "code": "AAPL",
+                  "analysis_date": "2026-04-10",
+                  "eval_window_days": 10,
+                  "engine_version": "v1",
+                  "eval_status": "completed",
+                  "evaluated_at": "2026-04-26 21:39:49.423347",
+                  "operation_advice": "买入",
+                  "position_recommendation": "long",
+                  "start_price": 260.43,
+                  "end_close": 271.04,
+                  "max_high": 275.71,
+                  "min_low": 256.7,
+                  "stock_return_pct": 4.074031409591834,
+                  "direction_expected": "up",
+                  "direction_correct": 1,
+                  "outcome": "win",
+                  "stop_loss": 252.62,
+                  "take_profit": 273.45,
+                  "hit_stop_loss": 0,
+                  "hit_take_profit": 1,
+                  "first_hit": "take_profit",
+                  "first_hit_date": "2026-04-20",
+                  "first_hit_trading_days": 6,
+                  "simulated_entry_price": 260.43,
+                  "simulated_exit_price": 273.45,
+                  "simulated_exit_reason": "take_profit",
+                  "simulated_return_pct": 4.999424029489683
+                }
+              ],
+              "error": null
+            },
+            "rule_backtest_runs": {
+              "count": 6,
+              "lastRows": [
+                {
+                  "id": 6,
+                  "owner_id": "user-40c833b4cf9df454",
+                  "code": "600519",
+                  "strategy_text": "初始资金 100000，回测 600519 在 2025-04-27 到 2026-04-27 的表现，5日均线上穿20日均线买入，下穿卖出。",
+                  "parsed_strategy_json": "{\"version\": \"v1\", \"timeframe\": \"daily\", \"source_text\": \"初始资金 100000，回测 600519 在 2025-04-27 到 2026-04-27 的表现，5日均线上穿20日均线买入，下穿卖出。\", \"normalized_text\": \"MA5 上穿 MA20 买入，MA5 下穿 MA20 ...",
+                  "strategy_hash": "22e00cc7d33c909a78595d81589ecf872b46c57373dd5c6706478a294f5d90cd",
+                  "timeframe": "daily",
+                  "lookback_bars": 252,
+                  "initial_capital": 100000,
+                  "fee_bps": 0,
+                  "parsed_confidence": 0.95,
+                  "needs_confirmation": 1,
+                  "warnings_json": "[{\"code\": \"default_fast_ma_type\", \"message\": \"未显式写出快线类型，当前默认使用 SMA。\", \"suggestion\": \"如需指数均线，可写成 EMA5。\"}, {\"code\": \"default_slow_ma_type\", \"message\": \"未显式写出慢线类型，当前默认使用 SMA。\", \"su...",
+                  "run_at": "2026-04-27 22:39:22.471499",
+                  "completed_at": "2026-04-27 22:39:30.614167",
+                  "status": "completed",
+                  "no_result_reason": null,
+                  "no_result_message": null,
+                  "trade_count": 9,
+                  "win_count": 2,
+                  "loss_count": 7,
+                  "total_return_pct": -16.7528,
+                  "win_rate_pct": 22.2222,
+                  "avg_trade_return_pct": -2.0019,
+                  "max_drawdown_pct": 20.2807,
+                  "avg_holding_days": 13.2222,
+                  "final_equity": 83247.221469,
+                  "summary_json": "{\"request\": {\"start_date\": \"2025-04-27\", \"end_date\": \"2026-04-27\", \"lookback_bars\": 252, \"initial_capital\": 100000.0, \"fee_bps\": 0.0, \"slippage_bps\": 0.0, \"benchmark_mode\": \"aut...",
+                  "ai_summary": "All LLM models failed. Last error: litellm.ServiceUnavailableError: GeminiException - {\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing high d...",
+                  "equity_curve_json": "[{\"date\": \"2025-04-28\", \"equity\": 100000.0, \"cumulative_return_pct\": 0.0, \"drawdown_pct\": 0.0, \"close\": 1494.678101, \"signal_summary\": null, \"target_position\": 0.0, \"executed_ac..."
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "after": {
+          "tables": {
+            "backtest_runs": {
+              "count": 3,
+              "lastRows": [
+                {
+                  "id": 3,
+                  "owner_id": "user-13469083882bf57d",
+                  "code": "AAPL",
+                  "eval_window_days": 10,
+                  "min_age_days": 14,
+                  "force": 0,
+                  "run_at": "2026-04-26 21:39:49.423347",
+                  "completed_at": "2026-04-26 21:39:49.423347",
+                  "processed": 60,
+                  "saved": 60,
+                  "completed": 60,
+                  "insufficient": 0,
+                  "errors": 0,
+                  "candidate_count": 60,
+                  "result_count": 60,
+                  "no_result_reason": null,
+                  "no_result_message": null,
+                  "status": "completed",
+                  "total_evaluations": 60,
+                  "completed_count": 60,
+                  "insufficient_count": 0,
+                  "long_count": 41,
+                  "cash_count": 19,
+                  "win_count": 25,
+                  "loss_count": 23,
+                  "neutral_count": 12,
+                  "win_rate_pct": 52.08,
+                  "avg_stock_return_pct": 1.0183,
+                  "avg_simulated_return_pct": 0.0072,
+                  "direction_accuracy_pct": 52.08,
+                  "summary_json": "{\"scope\": \"stock\", \"code\": \"AAPL\", \"eval_window_days\": 10, \"engine_version\": \"v1\", \"total_evaluations\": 60, \"completed_count\": 60, \"insufficient_count\": 0, \"long_count\": 41, \"ca..."
+                }
+              ],
+              "error": null
+            },
+            "backtest_results": {
+              "count": 120,
+              "lastRows": [
+                {
+                  "id": 120,
+                  "owner_id": "user-13469083882bf57d",
+                  "analysis_history_id": 133,
+                  "code": "AAPL",
+                  "analysis_date": "2026-04-10",
+                  "eval_window_days": 10,
+                  "engine_version": "v1",
+                  "eval_status": "completed",
+                  "evaluated_at": "2026-04-26 21:39:49.423347",
+                  "operation_advice": "买入",
+                  "position_recommendation": "long",
+                  "start_price": 260.43,
+                  "end_close": 271.04,
+                  "max_high": 275.71,
+                  "min_low": 256.7,
+                  "stock_return_pct": 4.074031409591834,
+                  "direction_expected": "up",
+                  "direction_correct": 1,
+                  "outcome": "win",
+                  "stop_loss": 252.62,
+                  "take_profit": 273.45,
+                  "hit_stop_loss": 0,
+                  "hit_take_profit": 1,
+                  "first_hit": "take_profit",
+                  "first_hit_date": "2026-04-20",
+                  "first_hit_trading_days": 6,
+                  "simulated_entry_price": 260.43,
+                  "simulated_exit_price": 273.45,
+                  "simulated_exit_reason": "take_profit",
+                  "simulated_return_pct": 4.999424029489683
+                }
+              ],
+              "error": null
+            },
+            "rule_backtest_runs": {
+              "count": 6,
+              "lastRows": [
+                {
+                  "id": 6,
+                  "owner_id": "user-40c833b4cf9df454",
+                  "code": "600519",
+                  "strategy_text": "初始资金 100000，回测 600519 在 2025-04-27 到 2026-04-27 的表现，5日均线上穿20日均线买入，下穿卖出。",
+                  "parsed_strategy_json": "{\"version\": \"v1\", \"timeframe\": \"daily\", \"source_text\": \"初始资金 100000，回测 600519 在 2025-04-27 到 2026-04-27 的表现，5日均线上穿20日均线买入，下穿卖出。\", \"normalized_text\": \"MA5 上穿 MA20 买入，MA5 下穿 MA20 ...",
+                  "strategy_hash": "22e00cc7d33c909a78595d81589ecf872b46c57373dd5c6706478a294f5d90cd",
+                  "timeframe": "daily",
+                  "lookback_bars": 252,
+                  "initial_capital": 100000,
+                  "fee_bps": 0,
+                  "parsed_confidence": 0.95,
+                  "needs_confirmation": 1,
+                  "warnings_json": "[{\"code\": \"default_fast_ma_type\", \"message\": \"未显式写出快线类型，当前默认使用 SMA。\", \"suggestion\": \"如需指数均线，可写成 EMA5。\"}, {\"code\": \"default_slow_ma_type\", \"message\": \"未显式写出慢线类型，当前默认使用 SMA。\", \"su...",
+                  "run_at": "2026-04-27 22:39:22.471499",
+                  "completed_at": "2026-04-27 22:39:30.614167",
+                  "status": "completed",
+                  "no_result_reason": null,
+                  "no_result_message": null,
+                  "trade_count": 9,
+                  "win_count": 2,
+                  "loss_count": 7,
+                  "total_return_pct": -16.7528,
+                  "win_rate_pct": 22.2222,
+                  "avg_trade_return_pct": -2.0019,
+                  "max_drawdown_pct": 20.2807,
+                  "avg_holding_days": 13.2222,
+                  "final_equity": 83247.221469,
+                  "summary_json": "{\"request\": {\"start_date\": \"2025-04-27\", \"end_date\": \"2026-04-27\", \"lookback_bars\": 252, \"initial_capital\": 100000.0, \"fee_bps\": 0.0, \"slippage_bps\": 0.0, \"benchmark_mode\": \"aut...",
+                  "ai_summary": "All LLM models failed. Last error: litellm.ServiceUnavailableError: GeminiException - {\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing high d...",
+                  "equity_curve_json": "[{\"date\": \"2025-04-28\", \"equity\": 100000.0, \"cumulative_return_pct\": 0.0, \"drawdown_pct\": 0.0, \"close\": 1494.678101, \"signal_summary\": null, \"target_position\": 0.0, \"executed_ac..."
+                }
+              ],
+              "error": null
+            }
+          }
+        },
+        "diff": {}
+      },
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-backtest-professional.png"
+      ],
+      "warnings": [
+        "1 non-2xx request(s) captured during flow"
+      ],
+      "error": null,
+      "finishedAt": "2026-04-27T14:49:11.240Z"
+    },
+    {
+      "name": "report-previews",
+      "startedAt": "2026-04-27T14:49:11.240Z",
+      "status": "pass",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "preview report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report drawer opens",
+          "status": "pass"
+        }
+      ],
+      "database": null,
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-preview-report.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-preview-full-report.png"
+      ],
+      "warnings": [],
+      "error": null,
+      "finishedAt": "2026-04-27T14:49:13.070Z"
+    },
+    {
+      "name": "settings-locale",
+      "startedAt": "2026-04-27T14:49:13.070Z",
+      "status": "pass",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "settings page visible",
+          "status": "pass"
+        },
+        {
+          "name": "settings locale switched to english",
+          "status": "pass"
+        }
+      ],
+      "database": null,
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-settings-locale.png"
+      ],
+      "warnings": [],
+      "error": null,
+      "finishedAt": "2026-04-27T14:49:14.926Z"
+    },
+    {
+      "name": "surface-check-chromium-mobile",
+      "startedAt": "2026-04-27T14:49:17.756Z",
+      "status": "partial",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "home decision card visible",
+          "status": "pass"
+        },
+        {
+          "name": "home strategy drawer trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home history trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home hero glow text",
+          "status": "pass",
+          "textShadow": "unavailable"
+        },
+        {
+          "name": "home drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "scanner hero visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner run button visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner drawer trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "chat composer visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio total assets card visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio holdings panel visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio history trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio history drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "backtest hero strip visible",
+          "status": "pass"
+        },
+        {
+          "name": "backtest brief trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "settings page visible",
+          "status": "pass"
+        },
+        {
+          "name": "settings locale switched to english",
+          "status": "pass"
+        }
+      ],
+      "database": null,
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-home.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-scanner.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-chat.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-portfolio.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-backtest.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-preview-report.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-preview-full-report.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-settings.png"
+      ],
+      "warnings": [
+        "1 non-2xx request(s) captured during flow"
+      ],
+      "error": null,
+      "finishedAt": "2026-04-27T14:49:36.390Z"
+    },
+    {
+      "name": "surface-check-webkit-desktop",
+      "startedAt": "2026-04-27T14:49:39.732Z",
+      "status": "partial",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "home decision card visible",
+          "status": "pass"
+        },
+        {
+          "name": "home strategy drawer trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home history trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home hero glow text",
+          "status": "pass",
+          "textShadow": "unavailable"
+        },
+        {
+          "name": "home drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "scanner hero visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner run button visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner drawer trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "chat composer visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio total assets card visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio holdings panel visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio history trigger visible",
+          "status": "fail"
+        },
+        {
+          "name": "backtest hero strip visible",
+          "status": "pass"
+        },
+        {
+          "name": "backtest brief trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "settings page visible",
+          "status": "pass"
+        },
+        {
+          "name": "settings locale switched to english",
+          "status": "pass"
+        }
+      ],
+      "database": null,
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-home.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-scanner.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-chat.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-portfolio.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-backtest.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-preview-report.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-preview-full-report.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-settings.png"
+      ],
+      "warnings": [
+        "1 non-2xx request(s) captured during flow"
+      ],
+      "error": null,
+      "finishedAt": "2026-04-27T14:49:57.591Z"
+    },
+    {
+      "name": "surface-check-webkit-mobile",
+      "startedAt": "2026-04-27T14:50:00.625Z",
+      "status": "partial",
+      "steps": [],
+      "uiChecks": [
+        {
+          "name": "home decision card visible",
+          "status": "pass"
+        },
+        {
+          "name": "home strategy drawer trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home history trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "home hero glow text",
+          "status": "pass",
+          "textShadow": "unavailable"
+        },
+        {
+          "name": "home drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "scanner hero visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner run button visible",
+          "status": "pass"
+        },
+        {
+          "name": "scanner drawer trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "chat composer visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio total assets card visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio holdings panel visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio history trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "portfolio history drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "backtest hero strip visible",
+          "status": "pass"
+        },
+        {
+          "name": "backtest brief trigger visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report page visible",
+          "status": "pass"
+        },
+        {
+          "name": "preview full report drawer opens",
+          "status": "pass"
+        },
+        {
+          "name": "settings page visible",
+          "status": "pass"
+        },
+        {
+          "name": "settings locale switched to english",
+          "status": "pass"
+        }
+      ],
+      "database": null,
+      "screenshots": [
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-home.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-scanner.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-chat.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-portfolio.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-backtest.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-preview-report.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-preview-full-report.png",
+        "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-settings.png"
+      ],
+      "warnings": [
+        "1 non-2xx request(s) captured during flow"
+      ],
+      "error": null,
+      "finishedAt": "2026-04-27T14:50:19.023Z"
+    }
+  ],
+  "failedRequests": [
+    {
+      "at": "2026-04-27T14:48:44.373Z",
+      "url": "http://127.0.0.1:8000/api/v1/scanner/run",
+      "method": "POST",
+      "status": 400,
+      "requestPayload": "{\"market\":\"cn\",\"profile\":\"cn_preopen_v1\",\"shortlist_size\":5,\"universe_limit\":300,\"detail_limit\":60}",
+      "responseBody": ""
+    },
+    {
+      "at": "2026-04-27T14:49:00.608Z",
+      "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+      "method": "GET",
+      "status": 404,
+      "requestPayload": null,
+      "responseBody": "{\"error\":\"not_found\",\"message\":\"未找到整体回测汇总\"}"
+    },
+    {
+      "at": "2026-04-27T14:49:32.470Z",
+      "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+      "method": "GET",
+      "status": 404,
+      "requestPayload": null,
+      "responseBody": "{\"error\":\"not_found\",\"message\":\"未找到整体回测汇总\"}"
+    },
+    {
+      "at": "2026-04-27T14:49:53.822Z",
+      "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+      "method": "GET",
+      "status": 404,
+      "requestPayload": null,
+      "responseBody": "{\"error\":\"not_found\",\"message\":\"未找到整体回测汇总\"}"
+    },
+    {
+      "at": "2026-04-27T14:50:15.454Z",
+      "url": "http://127.0.0.1:8000/api/v1/backtest/performance",
+      "method": "GET",
+      "status": 404,
+      "requestPayload": null,
+      "responseBody": "{\"error\":\"not_found\",\"message\":\"未找到整体回测汇总\"}"
+    }
+  ],
+  "warnings": [],
+  "screenshots": {
+    "desktop": [
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-guest-home.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-create-account-home.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-login-screen.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-post-login-home.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-home-analysis.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-scanner-run.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-chat-query.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-portfolio-actions.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-backtest-professional.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-preview-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-preview-full-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/chromium-desktop-settings-locale.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-home.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-scanner.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-chat.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-portfolio.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-backtest.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-preview-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-preview-full-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/desktop/webkit-desktop-settings.png"
+    ],
+    "mobile": [
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-home.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-scanner.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-chat.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-portfolio.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-backtest.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-preview-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-preview-full-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/chromium-mobile-settings.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-home.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-scanner.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-chat.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-portfolio.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-backtest.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-preview-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-preview-full-report.png",
+      "reports/ux-verification-2026-04-27T14-48-32-312Z/screenshots/mobile/webkit-mobile-settings.png"
+    ]
+  },
+  "surfaceChecks": [
+    {
+      "browser": "chromium",
+      "viewport": "mobile",
+      "status": "partial"
+    },
+    {
+      "browser": "webkit",
+      "viewport": "desktop",
+      "status": "partial"
+    },
+    {
+      "browser": "webkit",
+      "viewport": "mobile",
+      "status": "partial"
+    }
+  ]
+}
