@@ -109,8 +109,8 @@ vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
 
-vi.mock('../components/access/PremiumPaywall', () => ({
-  PremiumPaywall: ({ moduleName }: { moduleName: string }) => <div>{`premium-paywall:${moduleName}`}</div>,
+vi.mock('../components/access/AuthGuardPlaceholder', () => ({
+  AuthGuardPlaceholder: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
 }));
 
 vi.mock('../pages/NotFoundPage', () => ({
@@ -220,9 +220,9 @@ describe('AppContent route flows', () => {
   );
 
   it.each([
-    ['/chat', 'premium-paywall:Ask Stock'],
-    ['/portfolio', 'premium-paywall:Portfolio'],
-    ['/backtest', 'premium-paywall:Backtest'],
+    ['/chat', 'auth-guard:Ask Stock'],
+    ['/portfolio', 'auth-guard:Portfolio'],
+    ['/backtest', 'auth-guard:Backtest'],
   ])(
     'keeps guest access on %s and renders the route-level paywall',
     async (path, expectedPaywallText) => {
@@ -246,11 +246,11 @@ describe('AppContent route flows', () => {
     languageState.value = 'en';
     renderAtWithLocationProbe('/en/portfolio');
 
-    expect(await screen.findByText('premium-paywall:Portfolio')).toBeInTheDocument();
+    expect(await screen.findByText('auth-guard:Portfolio')).toBeInTheDocument();
     expect(screen.getByTestId('location-path')).toHaveTextContent('/en/portfolio');
   });
 
-  it('redirects away from login to the requested route after authentication succeeds', async () => {
+  it('redirects away from login to the home workspace after authentication succeeds', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -266,7 +266,7 @@ describe('AppContent route flows', () => {
 
     renderAt('/login?redirect=%2Fportfolio');
 
-    expect(await screen.findByText('portfolio-page')).toBeInTheDocument();
+    expect(await screen.findByText('Home Workspace')).toBeInTheDocument();
     expect(screen.queryByText('login-page')).not.toBeInTheDocument();
   });
 

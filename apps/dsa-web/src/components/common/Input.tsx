@@ -115,7 +115,7 @@ export const Input = ({
             'input-surface input-focus-glow h-10 w-full rounded-xl border px-4 text-sm text-foreground transition-all placeholder:text-muted-text',
             'focus:outline-none',
             error ? 'border-danger/30' : '',
-            leadingIcon ? 'pl-9' : '',
+            leadingIcon ? 'pl-10' : '',
             finalTrailingAction ? 'pr-11' : '',
             'disabled:cursor-not-allowed disabled:opacity-60',
             className,

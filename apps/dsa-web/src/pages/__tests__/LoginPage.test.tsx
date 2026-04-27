@@ -67,10 +67,10 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') }));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings', { replace: true }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
   });
 
-  it('enters create-account mode directly when requested by the route and shows destination context', () => {
+  it('enters create-account mode directly when requested by the route', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('mode=create&redirect=%2Fscanner')]);
     useAuthMock.mockReturnValue({
       authEnabled: true,
@@ -81,13 +81,12 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.panelTitleCreate') })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleCreate') })).toBeInTheDocument();
     expect(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'))).toBeInTheDocument();
     expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'auth.login.continuePrefix', { label: translate('zh', 'auth.login.redirectTarget.scanner') }))).toBeInTheDocument();
   });
 
-  it('offers a safe exit back to home for direct login entry', () => {
+  it('offers a single guest-mode exit path for direct login entry', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('')]);
     useAuthMock.mockReturnValue({
       authEnabled: true,
@@ -98,12 +97,12 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.exitTarget.homeLabel') }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.returnToGuest') }));
 
-    expect(navigate).toHaveBeenCalledWith('/', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/guest', { replace: true });
   });
 
-  it('offers a safe exit back to the public scanner surface when redirected from scanner', () => {
+  it('still sends redirected login entries back to guest mode instead of the source route', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
     useAuthMock.mockReturnValue({
       authEnabled: true,
@@ -114,12 +113,12 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.exitTarget.scannerLabel') }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.returnToGuest') }));
 
-    expect(navigate).toHaveBeenCalledWith('/scanner', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/guest', { replace: true });
   });
 
-  it('keeps locale-prefixed exit targets when redirected from a localized route', () => {
+  it('keeps locale-prefixed guest exits when opened from a localized route', () => {
     window.history.replaceState(window.history.state, '', '/en/login?redirect=%2Fen%2Fscanner');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fen%2Fscanner')]);
     useAuthMock.mockReturnValue({
@@ -131,9 +130,9 @@ describe('LoginPage', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('en', 'auth.login.exitTarget.scannerLabel') }));
+    fireEvent.click(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') }));
 
-    expect(navigate).toHaveBeenCalledWith('/en/scanner', { replace: true });
+    expect(navigate).toHaveBeenCalledWith('/en/guest', { replace: true });
   });
 
   it('renders visible login copy in English for /en/login', () => {
@@ -149,10 +148,10 @@ describe('LoginPage', () => {
     renderPage();
 
     expect(screen.getByRole('heading', { name: translate('en', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'auth.login.continueAfterLogin'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'auth.login.continuePrefix', { label: translate('en', 'auth.login.redirectTarget.chat') }))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('en', 'auth.login.exitTarget.homeLabel') })).toBeInTheDocument();
+    expect(screen.queryByText(translate('en', 'auth.login.continueAfterLogin'))).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') })).toBeInTheDocument();
     expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(translate('en', 'auth.login.usernamePlaceholderLogin'))).toHaveAttribute('placeholder', 'Enter email or username');
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toBeInTheDocument();
   });
 
@@ -170,7 +169,7 @@ describe('LoginPage', () => {
 
     expect(screen.getByRole('link', { name: translate('zh', 'auth.login.forgotPassword') })).toHaveAttribute(
       'href',
-      '/reset-password?redirect=%2Fsettings',
+      '/reset-password',
     );
   });
 });

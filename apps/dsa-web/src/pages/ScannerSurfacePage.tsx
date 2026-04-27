@@ -1,5 +1,5 @@
 import type React from 'react';
-import { PremiumPaywall } from '../components/access/PremiumPaywall';
+import { AuthGuardPlaceholder } from '../components/access/AuthGuardPlaceholder';
 import UserScannerPage from './UserScannerPage';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
@@ -9,7 +9,7 @@ const ScannerSurfacePage: React.FC = () => {
   const { language } = useI18n();
 
   if (isGuest) {
-    return <PremiumPaywall moduleName={language === 'en' ? 'Market Scanner' : '全市场扫描仪'} />;
+    return <AuthGuardPlaceholder moduleName={language === 'en' ? 'Market Scanner' : '全市场扫描仪'} />;
   }
 
   return <UserScannerPage />;

@@ -7,8 +7,7 @@ import { isParsedApiError } from '../api/error';
 import { SettingsAlert } from '../components/settings';
 import { useAuth } from '../hooks';
 import { translate, type UiLanguage } from '../i18n/core';
-import { normalizeRedirectPath } from '../hooks/useProductSurface';
-import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../utils/localeRouting';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
 type LoginLanguage = UiLanguage;
 
@@ -60,19 +59,10 @@ type LoginCopy = {
   submitSetup: string;
   submitCreate: string;
   submitLogin: string;
+  returnToGuest: string;
   toggleToLogin: string;
   toggleToCreate: string;
   forgotPassword: string;
-  footSession: string;
-  footWorkspace: string;
-  footStable: string;
-  redirectTargets: Record<'systemSettings' | 'adminLogs' | 'chat' | 'portfolio' | 'backtestResult' | 'backtest' | 'scanner' | 'settings' | 'home', string>;
-  exitTargets: {
-    scannerLabel: string;
-    scannerDescription: string;
-    homeLabel: string;
-    homeDescription: string;
-  };
 };
 
 function auth(language: LoginLanguage, key: string, vars?: Record<string, string | number | undefined>): string {
@@ -132,84 +122,10 @@ function buildLoginCopy(language: LoginLanguage): LoginCopy {
     submitSetup: auth(language, 'submitSetup'),
     submitCreate: auth(language, 'submitCreate'),
     submitLogin: auth(language, 'submitLogin'),
+    returnToGuest: auth(language, 'returnToGuest'),
     toggleToLogin: auth(language, 'toggleToLogin'),
     toggleToCreate: auth(language, 'toggleToCreate'),
     forgotPassword: auth(language, 'forgotPassword'),
-    footSession: auth(language, 'footSession'),
-    footWorkspace: auth(language, 'footWorkspace'),
-    footStable: auth(language, 'footStable'),
-    redirectTargets: {
-      systemSettings: auth(language, 'redirectTarget.systemSettings'),
-      adminLogs: auth(language, 'redirectTarget.adminLogs'),
-      chat: auth(language, 'redirectTarget.chat'),
-      portfolio: auth(language, 'redirectTarget.portfolio'),
-      backtestResult: auth(language, 'redirectTarget.backtestResult'),
-      backtest: auth(language, 'redirectTarget.backtest'),
-      scanner: auth(language, 'redirectTarget.scanner'),
-      settings: auth(language, 'redirectTarget.settings'),
-      home: auth(language, 'redirectTarget.home'),
-    },
-    exitTargets: {
-      scannerLabel: auth(language, 'exitTarget.scannerLabel'),
-      scannerDescription: auth(language, 'exitTarget.scannerDescription'),
-      homeLabel: auth(language, 'exitTarget.homeLabel'),
-      homeDescription: auth(language, 'exitTarget.homeDescription'),
-    },
-  };
-}
-
-function describeRedirectTarget(pathname: string, copy: LoginCopy): {
-  label: string;
-  requiresAdmin: boolean;
-} {
-  if (pathname.startsWith('/settings/system')) {
-    return { label: copy.redirectTargets.systemSettings, requiresAdmin: true };
-  }
-  if (pathname.startsWith('/admin/logs')) {
-    return { label: copy.redirectTargets.adminLogs, requiresAdmin: true };
-  }
-  if (pathname.startsWith('/chat')) {
-    return { label: copy.redirectTargets.chat, requiresAdmin: false };
-  }
-  if (pathname.startsWith('/portfolio')) {
-    return { label: copy.redirectTargets.portfolio, requiresAdmin: false };
-  }
-  if (pathname.startsWith('/backtest/results/')) {
-    return { label: copy.redirectTargets.backtestResult, requiresAdmin: false };
-  }
-  if (pathname.startsWith('/backtest')) {
-    return { label: copy.redirectTargets.backtest, requiresAdmin: false };
-  }
-  if (pathname.startsWith('/scanner')) {
-    return { label: copy.redirectTargets.scanner, requiresAdmin: false };
-  }
-  if (pathname.startsWith('/settings')) {
-    return { label: copy.redirectTargets.settings, requiresAdmin: false };
-  }
-  return { label: copy.redirectTargets.home, requiresAdmin: false };
-}
-
-function describeExitTarget(
-  pathname: string,
-  routeLanguage: ReturnType<typeof parseLocaleFromPathname>,
-  copy: LoginCopy,
-): {
-  label: string;
-  destination: string;
-  description: string;
-} {
-  const localize = (path: string) => (routeLanguage ? buildLocalizedPath(path, routeLanguage) : path);
-  if (pathname.startsWith('/scanner')) {
-    return {
-      label: copy.exitTargets.scannerLabel,
-      destination: localize('/scanner'),
-      description: copy.exitTargets.scannerDescription,
-    };
-  }
-  return {
-    label: copy.exitTargets.homeLabel,
-    destination: localize('/'),
-    description: copy.exitTargets.homeDescription,
   };
 }
 
@@ -218,17 +134,13 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const redirect = normalizeRedirectPath(searchParams.get('redirect'), '/');
   const createModeRequested = searchParams.get('mode') === 'create';
-  const routeLanguage = parseLocaleFromPathname(redirect) || parseLocaleFromPathname(window.location.pathname);
+  const routeLanguage = parseLocaleFromPathname(window.location.pathname);
   const language: LoginLanguage = routeLanguage === 'en' ? 'en' : 'zh';
   const copy = useMemo(() => buildLoginCopy(language), [language]);
-  const normalizedRedirect = stripLocalePrefix(redirect);
-  const redirectTarget = describeRedirectTarget(normalizedRedirect, copy);
-  const exitTarget = describeExitTarget(normalizedRedirect, routeLanguage, copy);
-  const resetPasswordPath = routeLanguage
-    ? buildLocalizedPath(`/reset-password?redirect=${encodeURIComponent(redirect)}`, routeLanguage)
-    : `/reset-password?redirect=${encodeURIComponent(redirect)}`;
+  const homePath = routeLanguage ? buildLocalizedPath('/', routeLanguage) : '/';
+  const guestPath = routeLanguage ? buildLocalizedPath('/guest', routeLanguage) : '/guest';
+  const resetPasswordPath = routeLanguage ? buildLocalizedPath('/reset-password', routeLanguage) : '/reset-password';
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -276,7 +188,7 @@ const LoginPage: React.FC = () => {
         createUser: isCreateUserMode,
       });
       if (result.success) {
-        navigate(redirect, { replace: true });
+        navigate(homePath, { replace: true });
       } else {
         setError(result.error ?? copy.errorLoginFailed);
       }
@@ -290,68 +202,22 @@ const LoginPage: React.FC = () => {
       <div className="auth-screen__backdrop" aria-hidden="true" />
       <div className="auth-screen__grid" aria-hidden="true" />
 
-      <div className="auth-shell">
-        <section className="auth-hero">
-          <p className="auth-hero__eyebrow">{copy.heroEyebrow}</p>
-          <h1 className="auth-hero__title">
-            {isAdminBootstrap ? copy.heroTitleSetup : isCreateUserMode ? copy.heroTitleCreate : copy.heroTitleLogin}
-          </h1>
-          <p className="auth-hero__body">
-            {isAdminBootstrap ? copy.heroBodySetup : isCreateUserMode ? copy.heroBodyCreate : copy.heroBodyLogin}
-          </p>
-
-          <div className="auth-hero__facts" role="list" aria-label={copy.authFactsLabel}>
-            {copy.authFacts.map((item) => (
-              <div key={item} className="auth-fact" role="listitem">
-                <span className="auth-fact__line" aria-hidden="true" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
+      <div className="auth-shell auth-shell--panel-only">
         <section className="auth-panel theme-panel-glass">
           <div className="auth-panel__header">
-            <p className="label-uppercase text-secondary-text">
-              {isAdminBootstrap ? copy.panelEyebrowSetup : isCreateUserMode ? copy.panelEyebrowCreate : copy.panelEyebrowLogin}
-            </p>
-            <h2 className="auth-panel__title">
-              <span>{isAdminBootstrap ? copy.panelTitleSetup : isCreateUserMode ? copy.panelTitleCreate : copy.panelTitleLogin}</span>
-            </h2>
-            <p className="auth-panel__body">
-              {isAdminBootstrap ? copy.panelBodySetup : isCreateUserMode ? copy.panelBodyCreate : copy.panelBodyLogin}
-            </p>
+            <p className="label-uppercase text-secondary-text">{copy.heroEyebrow}</p>
+            <h1 className="auth-panel__title">
+              <span>{isAdminBootstrap ? copy.heroTitleSetup : isCreateUserMode ? copy.heroTitleCreate : copy.heroTitleLogin}</span>
+            </h1>
+            <p className="auth-panel__body">{isAdminBootstrap ? copy.heroBodySetup : isCreateUserMode ? copy.heroBodyCreate : copy.heroBodyLogin}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="auth-form">
-            {redirect !== '/' ? (
-              <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.continueAfterLogin}</p>
-                <p className="mt-2 text-sm font-semibold text-foreground">{copy.continuePrefix(redirectTarget.label)}</p>
-                <p className="mt-1 text-xs leading-5 text-secondary-text">
-                  {redirectTarget.requiresAdmin ? copy.continueRequiresAdmin : copy.continueStandard}
-                </p>
-              </div>
-            ) : null}
-
-            <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/35 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{copy.leaveAuthPage}</p>
-              <p className="mt-2 text-sm font-semibold text-foreground">{exitTarget.label}</p>
-              <p className="mt-1 text-xs leading-5 text-secondary-text">{exitTarget.description}</p>
-              <button
-                type="button"
-                className="btn-ghost mt-3 w-full justify-center"
-                onClick={() => navigate(exitTarget.destination, { replace: true })}
-                disabled={isSubmitting}
-              >
-                {exitTarget.label}
-              </button>
-            </div>
-
             {!isAdminBootstrap && !isAuthReenable ? (
               <Input
                 id="username"
                 type="text"
+                iconType="key"
                 label={copy.usernameLabel}
                 placeholder={isCreateUserMode ? copy.usernamePlaceholderCreate : copy.usernamePlaceholderLogin}
                 value={username}
@@ -445,13 +311,16 @@ const LoginPage: React.FC = () => {
                 {isCreateUserMode ? copy.toggleToLogin : copy.toggleToCreate}
               </button>
             ) : null}
-          </form>
 
-          <div className="auth-panel__foot">
-            <span>{copy.footSession}</span>
-            <span>{copy.footWorkspace}</span>
-            <span>{copy.footStable}</span>
-          </div>
+            <button
+              type="button"
+              className="btn-ghost w-full justify-center"
+              onClick={() => navigate(guestPath, { replace: true })}
+              disabled={isSubmitting}
+            >
+              {copy.returnToGuest}
+            </button>
+          </form>
         </section>
       </div>
     </main>

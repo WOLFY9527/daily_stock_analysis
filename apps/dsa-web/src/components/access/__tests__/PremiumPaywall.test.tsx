@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PremiumPaywall } from '../PremiumPaywall';
+import { AuthGuardPlaceholder } from '../AuthGuardPlaceholder';
 
 const { languageState } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
@@ -13,45 +13,53 @@ vi.mock('../../../contexts/UiLanguageContext', () => ({
   }),
 }));
 
-vi.mock('../../../hooks/useProductSurface', () => ({
-  buildLoginPath: (path: string) => `/${languageState.value}/login?redirect=${encodeURIComponent(path)}`,
-}));
+const navigate = vi.fn();
 
-describe('PremiumPaywall', () => {
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigate,
+  };
+});
+
+describe('AuthGuardPlaceholder', () => {
   beforeEach(() => {
     languageState.value = 'zh';
+    navigate.mockReset();
   });
 
-  it('renders the frosted glass guest paywall shell in Chinese', () => {
+  it('renders the centered auth guard shell in Chinese', () => {
     render(
       <MemoryRouter initialEntries={['/zh/chat']}>
-        <PremiumPaywall moduleName="问股" />
+        <AuthGuardPlaceholder moduleName="问股" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('premium-paywall-shell')).toHaveClass('w-full', 'h-[calc(100vh-80px)]', 'flex', 'items-center', 'justify-center', 'p-4');
-    expect(screen.getByTestId('premium-paywall-card')).toHaveClass(
+    expect(screen.getByTestId('auth-guard-shell')).toHaveClass('flex-1', 'w-full', 'flex', 'items-center', 'justify-center', 'min-h-[500px]');
+    expect(screen.getByTestId('auth-guard-card')).toHaveClass(
       'bg-white/[0.02]',
-      'backdrop-blur-3xl',
+      'backdrop-blur-md',
       'border',
       'border-white/5',
-      'rounded-[24px]',
-      'shadow-2xl',
+      'rounded-2xl',
     );
     expect(screen.getByRole('heading', { name: '登录解锁 问股 功能' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '登录 / 创建账户' })).toHaveAttribute('href', '/zh/login?redirect=%2Fzh%2Fchat');
+    fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
+    expect(navigate).toHaveBeenCalledWith('/zh/login');
   });
 
-  it('renders the English frosted CTA copy', () => {
+  it('renders the English CTA copy and opens the localized login route', () => {
     languageState.value = 'en';
 
     render(
       <MemoryRouter initialEntries={['/en/portfolio']}>
-        <PremiumPaywall moduleName="Portfolio" />
+        <AuthGuardPlaceholder moduleName="Portfolio" />
       </MemoryRouter>,
     );
 
     expect(screen.getByRole('heading', { name: 'Sign in to unlock Portfolio' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Sign in / Create account' })).toHaveAttribute('href', '/en/login?redirect=%2Fen%2Fportfolio');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in / Create account' }));
+    expect(navigate).toHaveBeenCalledWith('/en/login');
   });
 });

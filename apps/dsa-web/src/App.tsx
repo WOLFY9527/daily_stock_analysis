@@ -2,16 +2,14 @@ import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApiErrorAlert } from './components/common/ApiErrorAlert';
+import { AuthGuardPlaceholder } from './components/access/AuthGuardPlaceholder';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
-import { PremiumPaywall } from './components/access/PremiumPaywall';
 import { Shell } from './components/layout/Shell';
 import { PreviewShell } from './components/layout/PreviewShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useI18n } from './contexts/UiLanguageContext';
 import {
-  buildLoginPath,
   buildRegistrationPath,
-  resolveAuthRedirect,
   useProductSurface,
 } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
@@ -181,7 +179,7 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
     return <>{children}</>;
   }
 
-  return <PremiumPaywall moduleName={moduleName} />;
+  return <AuthGuardPlaceholder moduleName={moduleName} />;
 };
 
 export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -189,7 +187,6 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
   const { language } = useI18n();
   const { isAdmin, isGuest } = useProductSurface();
   const routePathname = stripLocalePrefix(location.pathname);
-  const routeTarget = `${routePathname}${location.search}`;
   const gateCopy = getAdminSurfaceCopy(routePathname, language, isGuest);
 
   if (isAdmin) {
@@ -206,7 +203,7 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
       note={gateCopy.note}
       primaryAction={{
         label: isGuest ? (language === 'en' ? 'Sign in' : '登录') : (language === 'en' ? 'Open personal settings' : '打开个人设置'),
-        to: isGuest ? buildLoginPath(routeTarget) : '/settings',
+        to: isGuest ? '/login' : '/settings',
       }}
       secondaryAction={gateCopy.secondaryAction}
     />
@@ -298,12 +295,11 @@ export const AppContent: React.FC = () => {
     );
   } else if (!isLoading) {
     if (routePathname === '/login') {
-      const redirectTarget = resolveAuthRedirect(location.search, localizedHomePath);
       const canRenderLogin = authEnabled || setupState === 'no_password' || setupState === 'password_retained';
       if (loggedIn) {
-        content = <Navigate to={redirectTarget} replace />;
+        content = <Navigate to={localizedHomePath} replace />;
       } else if (!canRenderLogin) {
-        content = <Navigate to={redirectTarget} replace />;
+        content = <Navigate to={localizedHomePath} replace />;
       } else {
         content = (
           <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
@@ -361,8 +357,8 @@ export const AppContent: React.FC = () => {
             </Route>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/:locale/login" element={<LoginPage />} />
-            <Route path="/register" element={<Navigate to={buildRegistrationPath(resolveAuthRedirect(location.search, localizedHomePath))} replace />} />
-            <Route path="/:locale/register" element={<Navigate to={buildRegistrationPath(resolveAuthRedirect(location.search, localizedHomePath))} replace />} />
+            <Route path="/register" element={<Navigate to={buildRegistrationPath(localizedHomePath)} replace />} />
+            <Route path="/:locale/register" element={<Navigate to={buildRegistrationPath(localizedHomePath)} replace />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
           </Routes>

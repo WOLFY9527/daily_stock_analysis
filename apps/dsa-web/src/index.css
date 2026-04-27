@@ -8881,6 +8881,13 @@ button[data-variant='danger-subtle']:hover {
   grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem);
 }
 
+.auth-shell--panel-only {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(32rem, calc(100vw - 2rem));
+}
+
 .auth-hero {
   max-width: 40rem;
 }
@@ -10713,6 +10720,11 @@ html[data-theme='spacex'] .auth-screen__grid {
 
 html[data-theme='spacex'] .auth-shell {
   width: min(100%, 1240px);
+  padding: 0 0 2.4rem;
+}
+
+html[data-theme='spacex'] .auth-shell--panel-only {
+  width: min(32rem, calc(100vw - 2rem));
   padding: 0 0 2.4rem;
 }
 
