@@ -12,10 +12,12 @@ import {
   PageBriefDrawer,
   type BentoHeroItem,
 } from '../components/home-bento';
-import DeterministicBacktestFlow, {
-  type RuleWizardStep,
-} from '../components/backtest/DeterministicBacktestFlow';
+import type { RuleWizardStep } from '../components/backtest/DeterministicBacktestFlow';
 import HistoricalEvaluationPanel from '../components/backtest/HistoricalEvaluationPanel';
+import NormalBacktestWorkspace, {
+  type NormalStrategyTemplate,
+} from '../components/backtest/NormalBacktestWorkspace';
+import ProBacktestWorkspace from '../components/backtest/ProBacktestWorkspace';
 import {
   getDefaultRuleDateRange,
   getBenchmarkModeLabel,
@@ -87,6 +89,38 @@ const WORKBENCH_PANEL_TRANSITION = {
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
+function buildNormalStrategyText(
+  language: BacktestLanguage,
+  template: NormalStrategyTemplate,
+  payload: {
+    code: string;
+    startDate: string;
+    endDate: string;
+    initialCapital: string;
+    customStrategyText: string;
+  },
+): string {
+  const resolvedCode = payload.code || (language === 'en' ? 'the selected ticker' : '当前标的');
+  const resolvedStart = payload.startDate || (language === 'en' ? 'the start date' : '开始日期');
+  const resolvedEnd = payload.endDate || (language === 'en' ? 'the end date' : '结束日期');
+  const resolvedCapital = payload.initialCapital || '100000';
+
+  if (template === 'custom_code') return payload.customStrategyText.trim();
+  if (template === 'macd_crossover') {
+    return language === 'en'
+      ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Buy on a MACD bullish crossover and sell on a bearish crossover.`
+      : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，MACD 金叉买入，死叉卖出。`;
+  }
+  if (template === 'periodic_accumulation') {
+    return language === 'en'
+      ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Invest a fixed amount on every trading week and stop when cash runs out.`
+      : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，每周定投固定金额，直到现金耗尽。`;
+  }
+  return language === 'en'
+    ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. Buy when the 5-day moving average crosses above the 20-day average, and sell on the reverse crossover.`
+    : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，5 日均线上穿 20 日均线买入，下穿卖出。`;
+}
+
 const BacktestPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,6 +133,7 @@ const BacktestPage: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ActiveModule>('rule');
   const [controlPanelMode, setControlPanelMode] = useState<ControlPanelMode>('normal');
   const [codeFilter, setCodeFilter] = useState('');
+  const [normalStrategyTemplate, setNormalStrategyTemplate] = useState<NormalStrategyTemplate>('moving_average_trend');
   const [evaluationBars, setEvaluationBars] = useState('10');
   const [maturityDays, setMaturityDays] = useState('14');
   const [samplePreset, setSamplePreset] = useState('60');
@@ -149,6 +184,7 @@ const BacktestPage: React.FC = () => {
   const [ruleParsedStrategy, setRuleParsedStrategy] = useState<RuleBacktestParseResponse | null>(null);
   const [ruleConfirmed, setRuleConfirmed] = useState(false);
   const [isParsingRuleStrategy, setIsParsingRuleStrategy] = useState(false);
+  const [isLaunchingNormalRuleBacktest, setIsLaunchingNormalRuleBacktest] = useState(false);
   const [ruleParseError, setRuleParseError] = useState<ParsedApiError | null>(null);
   const [isSubmittingRuleBacktest, setIsSubmittingRuleBacktest] = useState(false);
   const [ruleRunError, setRuleRunError] = useState<ParsedApiError | null>(null);
@@ -179,6 +215,13 @@ const BacktestPage: React.FC = () => {
   }), [normalizedCode, ruleEndDate, ruleFeeBps, ruleInitialCapital, ruleSlippageBps, ruleStartDate, ruleStrategyText]);
 
   const isRuleParseStale = Boolean(ruleParsedStrategy && ruleParseSignature && ruleParseSignature !== currentRuleParseSignature);
+  const normalStrategyPreview = useMemo(() => buildNormalStrategyText(language, normalStrategyTemplate, {
+    code: normalizedCode,
+    startDate: ruleStartDate,
+    endDate: ruleEndDate,
+    initialCapital: ruleInitialCapital,
+    customStrategyText: ruleStrategyText,
+  }), [language, normalStrategyTemplate, normalizedCode, ruleEndDate, ruleInitialCapital, ruleStartDate, ruleStrategyText]);
 
   const historicalAssumptions = runResult?.executionAssumptions
     || overallPerf?.executionAssumptions
@@ -922,6 +965,142 @@ const BacktestPage: React.FC = () => {
     }
   };
 
+  const handleLaunchNormalRuleBacktest = async () => {
+    if (!normalizedCode) {
+      setRuleRunError({
+        title: bt(language, 'page.errors.missingCodeTitle'),
+        message: bt(language, 'page.errors.missingRunCode'),
+        rawMessage: bt(language, 'page.errors.missingRunCode'),
+        category: 'missing_params',
+      });
+      return;
+    }
+    if (!ruleStartDate || !ruleEndDate) {
+      setRuleRunError({
+        title: bt(language, 'page.errors.missingRangeTitle'),
+        message: bt(language, 'page.errors.missingRange'),
+        rawMessage: bt(language, 'page.errors.missingRange'),
+        category: 'validation_error',
+      });
+      return;
+    }
+    if (ruleStartDate > ruleEndDate) {
+      setRuleRunError({
+        title: bt(language, 'page.errors.invalidRangeTitle'),
+        message: bt(language, 'page.errors.invalidRange'),
+        rawMessage: bt(language, 'page.errors.invalidRange'),
+        category: 'validation_error',
+      });
+      return;
+    }
+    if (ruleBenchmarkMode === 'custom_code' && !ruleBenchmarkCode.trim()) {
+      setRuleRunError({
+        title: bt(language, 'page.errors.missingBenchmarkTitle'),
+        message: bt(language, 'page.errors.missingBenchmark'),
+        rawMessage: bt(language, 'page.errors.missingBenchmark'),
+        category: 'validation_error',
+      });
+      return;
+    }
+
+    const strategyText = buildNormalStrategyText(language, normalStrategyTemplate, {
+      code: normalizedCode,
+      startDate: ruleStartDate,
+      endDate: ruleEndDate,
+      initialCapital: ruleInitialCapital,
+      customStrategyText: ruleStrategyText,
+    });
+
+    if (!strategyText.trim()) {
+      setRuleParseError({
+        title: bt(language, 'page.errors.missingStrategyTitle'),
+        message: bt(language, 'page.errors.missingStrategyText'),
+        rawMessage: bt(language, 'page.errors.missingStrategyText'),
+        category: 'missing_params',
+      });
+      return;
+    }
+
+    setIsLaunchingNormalRuleBacktest(true);
+    setRuleParseError(null);
+    setRuleRunError(null);
+    setAppliedRewriteText(null);
+    setRuleStrategyText(strategyText);
+
+    try {
+      const parsed = await backtestApi.parseRuleStrategy({
+        code: normalizedCode,
+        strategyText,
+        startDate: ruleStartDate || undefined,
+        endDate: ruleEndDate || undefined,
+        initialCapital: Number.parseFloat(ruleInitialCapital) || undefined,
+        feeBps: Number.parseFloat(ruleFeeBps) || 0,
+        slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
+      });
+
+      setRuleParsedStrategy(parsed);
+      setRuleParseSignature(buildRuleParseSignature({
+        code: normalizedCode,
+        strategyText,
+        startDate: ruleStartDate,
+        endDate: ruleEndDate,
+        initialCapital: ruleInitialCapital,
+        feeBps: ruleFeeBps,
+        slippageBps: ruleSlippageBps,
+      }));
+
+      if (!parsed.executable && !parsed.parsedStrategy.executable) {
+        setRuleConfirmed(false);
+        setControlPanelMode('professional');
+        setRuleParseError({
+          title: language === 'en' ? 'Template needs professional review' : '模板需要专业模式复查',
+          message: language === 'en'
+            ? 'The selected template did not compile into a runnable deterministic rule. The page has switched to Professional mode so you can inspect and revise it.'
+            : '当前模板没有成功编译成可执行的确定性规则，已自动切到专业模式以便继续检查和改写。',
+          rawMessage: language === 'en'
+            ? 'The selected template did not compile into a runnable deterministic rule.'
+            : '当前模板没有成功编译成可执行的确定性规则。',
+          category: 'validation_error',
+        });
+        return;
+      }
+
+      setRuleConfirmed(true);
+      setRuleCurrentStep('run');
+      setIsSubmittingRuleBacktest(true);
+      try {
+        const response = await backtestApi.runRuleBacktest({
+          code: normalizedCode,
+          strategyText,
+          parsedStrategy: parsed.parsedStrategy,
+          startDate: ruleStartDate,
+          endDate: ruleEndDate,
+          lookbackBars: parsePositiveInt(ruleLookbackBars, 252, 10),
+          initialCapital: Number.parseFloat(ruleInitialCapital) || 100000,
+          feeBps: Number.parseFloat(ruleFeeBps) || 0,
+          slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
+          benchmarkMode: ruleBenchmarkMode,
+          benchmarkCode: ruleBenchmarkMode === 'custom_code'
+            ? ruleBenchmarkCode.trim().toUpperCase()
+            : undefined,
+          confirmed: true,
+          waitForCompletion: false,
+        });
+        setSelectedRuleRunId(response.id);
+        void fetchRuleHistory(1, normalizedCode);
+        navigate(`/backtest/results/${response.id}`, { state: { initialRun: response } });
+      } catch (error) {
+        setRuleRunError(getParsedApiError(error));
+      } finally {
+        setIsSubmittingRuleBacktest(false);
+      }
+    } catch (error) {
+      setRuleParseError(getParsedApiError(error));
+    } finally {
+      setIsLaunchingNormalRuleBacktest(false);
+    }
+  };
+
   const handleOpenRuleRun = (run: RuleBacktestHistoryItem) => {
     setSelectedRuleRunId(run.id);
     setCodeFilter(run.code);
@@ -1102,7 +1281,7 @@ const BacktestPage: React.FC = () => {
         </section>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
-            key={activeModule}
+            key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
             className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full min-w-0`}
             data-testid="backtest-v1-stage"
             initial={{ opacity: 0, y: 18 }}
@@ -1170,54 +1349,83 @@ const BacktestPage: React.FC = () => {
               panelMode={controlPanelMode}
             />
             ) : (
-              <DeterministicBacktestFlow
-              code={normalizedCode}
-              onCodeChange={setCodeFilter}
-              onCodeEnter={handleRuleCodeKeyDown}
-              strategyText={ruleStrategyText}
-              onStrategyTextChange={handleRuleStrategyTextChange}
-              startDate={ruleStartDate}
-              onStartDateChange={setRuleStartDate}
-              endDate={ruleEndDate}
-              onEndDateChange={setRuleEndDate}
-              initialCapital={ruleInitialCapital}
-              onInitialCapitalChange={setRuleInitialCapital}
-              lookbackBars={ruleLookbackBars}
-              onLookbackBarsChange={setRuleLookbackBars}
-              feeBps={ruleFeeBps}
-              onFeeBpsChange={setRuleFeeBps}
-              slippageBps={ruleSlippageBps}
-              onSlippageBpsChange={setRuleSlippageBps}
-              benchmarkMode={ruleBenchmarkMode}
-              onBenchmarkModeChange={setRuleBenchmarkMode}
-              benchmarkCode={ruleBenchmarkCode}
-              onBenchmarkCodeChange={setRuleBenchmarkCode}
-              parsedStrategy={ruleParsedStrategy}
-              confirmed={ruleConfirmed}
-              onToggleConfirmed={setRuleConfirmed}
-              isParsing={isParsingRuleStrategy}
-              parseError={ruleParseError}
-              onParse={handleParseRuleStrategy}
-              isSubmitting={isSubmittingRuleBacktest}
-              runError={ruleRunError}
-              onRun={handleRunRuleBacktest}
-              onReset={resetRuleFlow}
-              historyItems={ruleHistoryItems}
-              historyTotal={ruleHistoryTotal}
-              historyPage={ruleHistoryPage}
-              selectedRunId={selectedRuleRunId}
-              isLoadingHistory={isLoadingRuleHistory}
-              historyError={ruleHistoryError}
-              onRefreshHistory={() => void fetchRuleHistory(1, normalizedCode || undefined)}
-              onOpenHistoryRun={handleOpenRuleRun}
-              previewAssumptions={previewRuleAssumptions}
-              currentStep={ruleCurrentStep}
-              onStepChange={setRuleCurrentStep}
-              parseStale={isRuleParseStale}
-              onApplyRewriteSuggestion={handleApplyRuleRewriteSuggestion}
-              appliedRewriteText={appliedRewriteText}
-              panelMode={controlPanelMode}
-            />
+              controlPanelMode === 'normal' ? (
+                <NormalBacktestWorkspace
+                  language={language}
+                  code={normalizedCode}
+                  onCodeChange={setCodeFilter}
+                  startDate={ruleStartDate}
+                  onStartDateChange={setRuleStartDate}
+                  endDate={ruleEndDate}
+                  onEndDateChange={setRuleEndDate}
+                  initialCapital={ruleInitialCapital}
+                  onInitialCapitalChange={setRuleInitialCapital}
+                  feeBps={ruleFeeBps}
+                  onFeeBpsChange={setRuleFeeBps}
+                  benchmarkMode={ruleBenchmarkMode}
+                  onBenchmarkModeChange={setRuleBenchmarkMode}
+                  benchmarkCode={ruleBenchmarkCode}
+                  onBenchmarkCodeChange={setRuleBenchmarkCode}
+                  strategyTemplate={normalStrategyTemplate}
+                  onStrategyTemplateChange={setNormalStrategyTemplate}
+                  customStrategyText={ruleStrategyText}
+                  onCustomStrategyTextChange={handleRuleStrategyTextChange}
+                  templatePreview={normalStrategyPreview}
+                  onLaunch={handleLaunchNormalRuleBacktest}
+                  isLaunching={isLaunchingNormalRuleBacktest || isSubmittingRuleBacktest || isParsingRuleStrategy}
+                  parseError={ruleParseError}
+                  runError={ruleRunError}
+                />
+              ) : (
+                <ProBacktestWorkspace
+                  language={language}
+                  code={normalizedCode}
+                  onCodeChange={setCodeFilter}
+                  onCodeEnter={handleRuleCodeKeyDown}
+                  strategyText={ruleStrategyText}
+                  onStrategyTextChange={handleRuleStrategyTextChange}
+                  startDate={ruleStartDate}
+                  onStartDateChange={setRuleStartDate}
+                  endDate={ruleEndDate}
+                  onEndDateChange={setRuleEndDate}
+                  initialCapital={ruleInitialCapital}
+                  onInitialCapitalChange={setRuleInitialCapital}
+                  lookbackBars={ruleLookbackBars}
+                  onLookbackBarsChange={setRuleLookbackBars}
+                  feeBps={ruleFeeBps}
+                  onFeeBpsChange={setRuleFeeBps}
+                  slippageBps={ruleSlippageBps}
+                  onSlippageBpsChange={setRuleSlippageBps}
+                  benchmarkMode={ruleBenchmarkMode}
+                  onBenchmarkModeChange={setRuleBenchmarkMode}
+                  benchmarkCode={ruleBenchmarkCode}
+                  onBenchmarkCodeChange={setRuleBenchmarkCode}
+                  parsedStrategy={ruleParsedStrategy}
+                  confirmed={ruleConfirmed}
+                  onToggleConfirmed={setRuleConfirmed}
+                  isParsing={isParsingRuleStrategy}
+                  parseError={ruleParseError}
+                  onParse={handleParseRuleStrategy}
+                  isSubmitting={isSubmittingRuleBacktest}
+                  runError={ruleRunError}
+                  onRun={handleRunRuleBacktest}
+                  onReset={resetRuleFlow}
+                  historyItems={ruleHistoryItems}
+                  historyTotal={ruleHistoryTotal}
+                  historyPage={ruleHistoryPage}
+                  selectedRunId={selectedRuleRunId}
+                  isLoadingHistory={isLoadingRuleHistory}
+                  historyError={ruleHistoryError}
+                  onRefreshHistory={() => void fetchRuleHistory(1, normalizedCode || undefined)}
+                  onOpenHistoryRun={handleOpenRuleRun}
+                  previewAssumptions={previewRuleAssumptions}
+                  currentStep={ruleCurrentStep}
+                  onStepChange={setRuleCurrentStep}
+                  parseStale={isRuleParseStale}
+                  onApplyRewriteSuggestion={handleApplyRuleRewriteSuggestion}
+                  appliedRewriteText={appliedRewriteText}
+                />
+              )
             )}
           </motion.div>
         </AnimatePresence>
@@ -1228,8 +1436,8 @@ const BacktestPage: React.FC = () => {
         title={language === 'en' ? 'Backtest surface brief' : '回测页面摘要'}
         testId="backtest-bento-drawer"
         summary={language === 'en'
-          ? 'The backtest shell now uses the shared Bento header while leaving deterministic workflows, parse logic, and result plumbing untouched.'
-          : '回测页现在套用共享 Bento 头部，但确定性流程、解析逻辑和结果链路都保持原样。'}
+          ? 'Backtest now splits into a one-screen point-and-shoot launcher and a separate quant workbench, while deterministic execution and result routing stay on the existing backend contracts.'
+          : '回测页现在拆成一屏式普通发射台和独立专业工作台，但确定性执行链路与结果路由仍保持现有后端契约。'}
         metrics={[
           {
             label: bt(language, 'page.moduleTabsLabel'),
@@ -1252,16 +1460,16 @@ const BacktestPage: React.FC = () => {
         ]}
         bullets={[
           language === 'en'
-            ? 'The hero strip anchors module, control mode, symbol, and benchmark so the page reads as a workbench instead of a form wall.'
-            : 'Hero strip 先锚定模块、控制模式、标的和基准，让页面更像工作台而不是表单墙。',
+            ? 'Normal mode compresses the launch surface to one screen, exposing only ticker, range, capital, benchmark, fees, and a strategy template selector.'
+            : '普通模式压缩成一屏发射台，只保留标的、区间、资金、基准、手续费和策略模板。',
           language === 'en'
-            ? 'Historical evaluation and rule backtest still render through the existing components, so backend contracts and result routes stay stable.'
-            : '历史评估和规则回测仍走原有组件，因此后端契约和结果路由继续保持稳定。',
+            ? 'Professional mode adds a docked capability tree plus compile zone, then reuses the existing deterministic flow and result route for the actual execution chain.'
+            : '专业模式补上能力树和编译坞，但真实执行链路仍复用原有确定性回测流程与结果页。',
           language === 'en'
-            ? 'This segment changes shell, test hooks, and disclosure affordances only.'
-            : '这一段只调整外壳、测试钩子和说明抽屉。',
+            ? 'Historical evaluation remains a separate module and keeps its current behavior.'
+            : '历史评估仍保持为独立模块，现有行为不变。',
         ]}
-        footnote={language === 'en' ? 'No strategy-engine or API changes in this pass.' : '本次不改策略引擎和 API。'}
+        footnote={language === 'en' ? 'No backend API schema changes in this pass.' : '本次不改后端 API Schema。'}
       />
     </div>
   );

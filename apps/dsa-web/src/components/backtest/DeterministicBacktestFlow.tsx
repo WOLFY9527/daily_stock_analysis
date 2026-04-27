@@ -501,7 +501,7 @@ function buildAssumptionCards(
   return cards.filter((card) => card.items.length > 0);
 }
 
-type FlowProps = {
+export type FlowProps = {
   code: string;
   onCodeChange: (value: string) => void;
   onCodeEnter: (event: React.KeyboardEvent<HTMLInputElement>) => void;
