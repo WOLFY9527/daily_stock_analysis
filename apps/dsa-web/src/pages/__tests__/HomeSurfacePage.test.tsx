@@ -433,6 +433,85 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('Oracle Browser Check (BCHK)')).not.toBeInTheDocument();
   });
 
+  it('deletes a single history row from the drawer after confirmation', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.deleteRecords).mockResolvedValueOnce({ deleted: 1 });
+    vi.mocked(historyApi.getList)
+      .mockResolvedValueOnce({
+        total: 3,
+        page: 1,
+        limit: 20,
+        items: [
+          { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', companyName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z', isTest: false },
+          { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', companyName: 'Tesla', createdAt: '2026-04-27T07:00:00Z', generatedAt: '2026-04-27T07:05:00Z', isTest: false },
+          { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', companyName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z', isTest: false },
+        ],
+      })
+      .mockResolvedValueOnce({
+        total: 2,
+        page: 1,
+        limit: 20,
+        items: [
+          { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', companyName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z', isTest: false },
+          { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', companyName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z', isTest: false },
+        ],
+      });
+    vi.mocked(historyApi.getDetail).mockResolvedValue({
+      ...defaultHistoryReport,
+      meta: {
+        ...defaultHistoryReport.meta,
+        id: 3,
+        queryId: 'q3',
+      },
+    });
+
+    renderSurface();
+
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-delete-2'));
+
+    expect(await screen.findByText('删除历史记录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+
+    await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([2]));
+    await waitFor(() => expect(screen.queryByTestId('home-bento-history-item-2')).not.toBeInTheDocument());
+    expect(screen.getByTestId('home-bento-history-item-3')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-history-item-1')).toBeInTheDocument();
+  });
+
+  it('deletes all visible drawer rows after confirmation', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.deleteRecords).mockResolvedValueOnce({ deleted: 3 });
+    vi.mocked(historyApi.getList)
+      .mockResolvedValueOnce({
+        total: 3,
+        page: 1,
+        limit: 20,
+        items: [
+          { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', companyName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z', isTest: false },
+          { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', companyName: 'Tesla', createdAt: '2026-04-27T07:00:00Z', generatedAt: '2026-04-27T07:05:00Z', isTest: false },
+          { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', companyName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z', isTest: false },
+        ],
+      })
+      .mockResolvedValueOnce({
+        total: 0,
+        page: 1,
+        limit: 20,
+        items: [],
+      });
+
+    renderSurface();
+
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-delete-all'));
+
+    expect(await screen.findByText('确认删除选中的 3 条历史记录吗？删除后将不可恢复。')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+
+    await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([3, 2, 1]));
+    await waitFor(() => expect(screen.getByText('历史分析尚未同步。')).toBeInTheDocument());
+  });
+
   it('renders a cached history snapshot immediately and then replaces it with database detail', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();

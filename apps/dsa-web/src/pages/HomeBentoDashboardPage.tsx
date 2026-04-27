@@ -15,7 +15,7 @@ import type {
   DecisionChartTimeframe,
   DecisionChartTimeframeId,
 } from '../components/home-bento/HomeSignalCandlestickChart';
-import { Drawer } from '../components/common';
+import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
 import { useStockPoolStore } from '../stores';
@@ -44,6 +44,9 @@ type DrawerPayload = {
 
 type DashboardLocale = 'zh' | 'en';
 type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
+type PendingHistoryDelete =
+  | { mode: 'single'; recordIds: number[] }
+  | { mode: 'visible'; recordIds: number[] };
 
 type DashboardField = {
   label: string;
@@ -1624,7 +1627,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
 }
 
 const HomeBentoDashboardPage: React.FC = () => {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1633,6 +1636,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [fallbackToast, setFallbackToast] = useState<string | null>(null);
   const [analysisFallbackMode, setAnalysisFallbackMode] = useState(false);
+  const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
@@ -1641,6 +1645,8 @@ const HomeBentoDashboardPage: React.FC = () => {
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
   const selectHistoryItem = useStockPoolStore((state) => state.selectHistoryItem);
   const selectCachedHistoryForStock = useStockPoolStore((state) => state.selectCachedHistoryForStock);
+  const deleteHistoryRecords = useStockPoolStore((state) => state.deleteHistoryRecords);
+  const isDeletingHistory = useStockPoolStore((state) => state.isDeletingHistory);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
   const clearError = useStockPoolStore((state) => state.clearError);
   const recentHistoryItems = useMemo(
@@ -1659,6 +1665,17 @@ const HomeBentoDashboardPage: React.FC = () => {
   }, [activeTicker, analysisFallbackMode, locale, selectedReport]);
   const copy = dashboardData;
   const activeDrawerPayload = activeDrawer ? buildDrawerPayload(locale, copy, activeDrawer) : null;
+  const deleteCopy = useMemo(() => ({
+    title: t('home.deleteTitle'),
+    single: t('home.deleteSingle'),
+    multiple: (count: number) => t('home.deleteMultiple', { count }),
+    confirm: t('home.deleteConfirm'),
+    deleting: t('home.deleting'),
+    cancel: t('home.cancel'),
+    clearVisible: t('home.deleteAll'),
+    deleteOne: t('home.deleteOne'),
+    visibleCount: t('home.visibleCount'),
+  }), [t]);
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -1762,6 +1779,18 @@ const HomeBentoDashboardPage: React.FC = () => {
       await selectHistoryItem(historyItem.id);
     } finally {
       setDashboardLoading(false);
+    }
+  };
+
+  const handleConfirmDeleteHistory = async () => {
+    if (!pendingHistoryDelete || isDeletingHistory) {
+      return;
+    }
+
+    try {
+      await deleteHistoryRecords(pendingHistoryDelete.recordIds);
+    } finally {
+      setPendingHistoryDelete(null);
     }
   };
 
@@ -1930,39 +1959,80 @@ const HomeBentoDashboardPage: React.FC = () => {
         width="max-w-lg"
       >
         <div className="flex flex-col gap-3" data-testid="home-bento-history-drawer">
+          {recentHistoryItems.length > 0 ? (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  {deleteCopy.visibleCount}
+                </p>
+                <p className="mt-1 text-sm text-white/72">
+                  {recentHistoryItems.length}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="danger-subtle"
+                size="sm"
+                disabled={isDeletingHistory}
+                className="shrink-0"
+                onClick={() => setPendingHistoryDelete({
+                  mode: 'visible',
+                  recordIds: recentHistoryItems.map((item) => item.id),
+                })}
+                data-testid="home-bento-history-delete-all"
+              >
+                {isDeletingHistory ? deleteCopy.deleting : deleteCopy.clearVisible}
+              </Button>
+            </div>
+          ) : null}
           {recentHistoryItems.length > 0 ? recentHistoryItems.map((item) => {
             const ticker = normalizeTickerQuery(item.stockCode);
             const isSelected = selectedReport?.meta.id === item.id;
             const generatedAt = resolveHistoryGeneratedAt(item, locale);
             const companyLabel = resolveHistoryCompanyLabel(item);
             return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => { void handleHistoryClick(item); }}
-              className={`flex min-w-0 items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors ${
-                isSelected
-                  ? 'border-white/15 bg-white/[0.08] text-white'
-                  : 'border-white/5 bg-white/[0.02] text-white/72 hover:bg-white/[0.05]'
-              }`}
-              data-testid={`home-bento-history-item-${item.id}`}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{companyLabel}</p>
-                <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  {ticker} · {locale === 'en' ? 'Recent analysis' : '最近分析'}
-                </p>
-                {generatedAt ? (
-                  <p className="mt-1 truncate text-[11px] text-white/45">
-                    {generatedAt}
-                  </p>
-                ) : null}
+              <div
+                key={item.id}
+                className={`flex min-w-0 items-center gap-3 rounded-2xl border px-3 py-3 transition-colors ${
+                  isSelected
+                    ? 'border-white/15 bg-white/[0.08] text-white'
+                    : 'border-white/5 bg-white/[0.02] text-white/72 hover:bg-white/[0.05]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => { void handleHistoryClick(item); }}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left"
+                  data-testid={`home-bento-history-item-${item.id}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{companyLabel}</p>
+                    <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      {ticker} · {locale === 'en' ? 'Recent analysis' : '最近分析'}
+                    </p>
+                    {generatedAt ? (
+                      <p className="mt-1 truncate text-[11px] text-white/45">
+                        {generatedAt}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/35">
+                    {isSelected ? (locale === 'en' ? 'Loaded' : '当前') : (locale === 'en' ? 'Open' : '打开')}
+                  </span>
+                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={isDeletingHistory}
+                  className="shrink-0 border border-white/8 bg-white/[0.03] px-3 text-white/62 hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-100"
+                  onClick={() => setPendingHistoryDelete({ mode: 'single', recordIds: [item.id] })}
+                  data-testid={`home-bento-history-delete-${item.id}`}
+                >
+                  {deleteCopy.deleteOne}
+                </Button>
               </div>
-              <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/35">
-                {isSelected ? (locale === 'en' ? 'Loaded' : '当前') : (locale === 'en' ? 'Open' : '打开')}
-              </span>
-            </button>
-          );
+            );
           }) : (
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-5 text-sm text-white/48">
               {locale === 'en' ? 'No synced analysis history yet.' : '历史分析尚未同步。'}
@@ -1970,6 +2040,27 @@ const HomeBentoDashboardPage: React.FC = () => {
           )}
         </div>
       </Drawer>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingHistoryDelete)}
+        title={deleteCopy.title}
+        message={
+          pendingHistoryDelete
+            ? pendingHistoryDelete.mode === 'single'
+              ? deleteCopy.single
+              : deleteCopy.multiple(pendingHistoryDelete.recordIds.length)
+            : deleteCopy.single
+        }
+        confirmText={isDeletingHistory ? deleteCopy.deleting : deleteCopy.confirm}
+        cancelText={deleteCopy.cancel}
+        isDanger
+        onConfirm={() => { void handleConfirmDeleteHistory(); }}
+        onCancel={() => {
+          if (!isDeletingHistory) {
+            setPendingHistoryDelete(null);
+          }
+        }}
+      />
     </div>
   );
 };

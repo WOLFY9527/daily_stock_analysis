@@ -183,6 +183,7 @@ export interface StockPoolState {
   selectCachedHistoryForStock: (stockCode: string) => boolean;
   toggleHistorySelection: (recordId: number) => void;
   toggleSelectAllVisible: () => void;
+  deleteHistoryRecords: (recordIds: number[]) => Promise<void>;
   deleteSelectedHistory: () => Promise<void>;
   submitAnalysis: (options?: SubmitAnalysisOptions) => Promise<SubmitAnalysisResult>;
   focusLatestHistoryForStock: (stockCode: string) => Promise<number | null>;
@@ -456,17 +457,21 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
   },
 
   deleteSelectedHistory: async () => {
+    await get().deleteHistoryRecords(get().selectedHistoryIds);
+  },
+
+  deleteHistoryRecords: async (recordIds) => {
     const state = get();
-    const recordIds = Array.from(new Set(state.selectedHistoryIds));
-    if (recordIds.length === 0 || state.isDeletingHistory) {
+    const normalizedRecordIds = Array.from(new Set(recordIds)).filter((recordId) => Number.isFinite(recordId));
+    if (normalizedRecordIds.length === 0 || state.isDeletingHistory) {
       return;
     }
 
     set({ isDeletingHistory: true });
     try {
-      await historyApi.deleteRecords(recordIds);
+      await historyApi.deleteRecords(normalizedRecordIds);
 
-      const deletedIds = new Set(recordIds);
+      const deletedIds = new Set(normalizedRecordIds);
       const selectedWasDeleted = state.selectedReport?.meta.id !== undefined
         && deletedIds.has(state.selectedReport.meta.id);
 
