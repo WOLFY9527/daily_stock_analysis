@@ -984,6 +984,19 @@ describe('BacktestPage', () => {
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
   });
 
+  it('loads reference templates from the professional catalog into the strategy editor', async () => {
+    renderBacktestRoutes();
+
+    await openDeterministicStrategyInput();
+
+    const referenceTemplateCard = screen.getByText('支撑 / 阻力反弹').closest('article');
+    expect(referenceTemplateCard).not.toBeNull();
+
+    fireEvent.click(within(referenceTemplateCard as HTMLElement).getByRole('button', { name: '填入编辑器' }));
+
+    expect(screen.getByDisplayValue('回踩支撑企稳买入，接近阻力位卖出')).toBeInTheDocument();
+  });
+
   it('marks parsed strategy stale after setup changes', async () => {
     renderBacktestRoutes();
 

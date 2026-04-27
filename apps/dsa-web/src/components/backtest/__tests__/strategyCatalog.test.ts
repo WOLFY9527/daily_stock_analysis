@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import {
+  BUILT_IN_STRATEGY_CATALOG,
+  POINT_AND_SHOOT_TEMPLATE_IDS,
+  POINT_AND_SHOOT_TEMPLATES,
+  getStrategyCatalogGroups,
+} from '../strategyCatalog';
+
+describe('strategyCatalog', () => {
+  it('keeps point-and-shoot limited to the four deterministic-ready templates', () => {
+    expect([...POINT_AND_SHOOT_TEMPLATE_IDS]).toEqual([
+      'macd_crossover',
+      'moving_average_crossover',
+      'rsi_threshold',
+      'periodic_accumulation',
+    ]);
+    expect(POINT_AND_SHOOT_TEMPLATES.map((template) => template.id)).toEqual([
+      'macd_crossover',
+      'moving_average_crossover',
+      'rsi_threshold',
+      'periodic_accumulation',
+    ]);
+    expect(POINT_AND_SHOOT_TEMPLATES.every((template) => template.executable && template.category === 'basic')).toBe(true);
+  });
+
+  it('keeps the basic catalog limited to executable templates and marks every other built-in as reference only', () => {
+    const basicGroup = getStrategyCatalogGroups().find((group) => group.id === 'basic');
+
+    expect(basicGroup?.templates.map((template) => template.id)).toEqual([
+      'macd_crossover',
+      'moving_average_crossover',
+      'rsi_threshold',
+      'periodic_accumulation',
+    ]);
+    expect(basicGroup?.templates.every((template) => template.executable)).toBe(true);
+
+    const pointAndShootIds = new Set(POINT_AND_SHOOT_TEMPLATE_IDS);
+    const referenceTemplates = BUILT_IN_STRATEGY_CATALOG.filter((template) => !pointAndShootIds.has(template.id as typeof POINT_AND_SHOOT_TEMPLATE_IDS[number]));
+
+    expect(referenceTemplates.length).toBeGreaterThan(0);
+    expect(referenceTemplates.every((template) => template.executable === false)).toBe(true);
+  });
+
+  it('keeps classic reference templates available in advanced and professional catalogs', () => {
+    const groups = getStrategyCatalogGroups();
+    const advancedGroup = groups.find((group) => group.id === 'advanced');
+    const professionalGroup = groups.find((group) => group.id === 'professional');
+
+    expect(advancedGroup?.templates.map((template) => template.id)).toEqual(expect.arrayContaining([
+      'bollinger_breakout',
+      'support_resistance_bounce',
+      'volume_breakout',
+      'atr_breakout',
+      'obv_trend_confirmation',
+      'stochastic_reversal',
+    ]));
+    expect(professionalGroup?.templates.map((template) => template.id)).toEqual(expect.arrayContaining([
+      'macd_rsi_combo',
+      'trend_momentum_volume_mix',
+      'bollinger_rsi_reversion_combo',
+      'triple_moving_average_trend_stack',
+      'support_resistance_macd_combo',
+    ]));
+  });
+});
