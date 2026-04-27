@@ -18,6 +18,7 @@ import { useStockPoolStore } from '../stores';
 type DrawerMetric = {
   label: string;
   value: string;
+  details?: string;
   tone?: SignalTone;
   glow?: boolean;
 };
@@ -42,6 +43,18 @@ type DecisionChartPoint = {
 };
 
 type DashboardLocale = 'zh' | 'en';
+type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
+
+type DashboardField = {
+  label: string;
+  value: string;
+  tone?: SignalTone;
+  details?: string;
+};
+
+type DashboardSignal = DashboardField & {
+  tone: SignalTone;
+};
 
 const DECISION_CHART_POINTS: DecisionChartPoint[] = [
   { label: '09:30', value: 116.2 },
@@ -89,19 +102,19 @@ const CONTENT: Record<DashboardLocale, {
   strategy: {
     title: string;
     subtitle?: string;
-    metrics: Array<{ label: string; value: string; tone?: SignalTone }>;
+    metrics: DashboardField[];
     positionLabel: string;
     positionBody: string;
     detailLabel: string;
   };
   tech: {
     title: string;
-    signals: Array<{ label: string; value: string; tone: SignalTone }>;
+    signals: DashboardSignal[];
     detailLabel: string;
   };
   fundamentals: {
     title: string;
-    metrics: Array<{ label: string; value: string; tone?: SignalTone }>;
+    metrics: DashboardField[];
     detailLabel: string;
   };
   drawers: {
@@ -174,118 +187,10 @@ const CONTENT: Record<DashboardLocale, {
       detailLabel: '查看基本面细节',
     },
     drawers: {
-      decision: {
-        title: '深度报告',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: '技术形态',
-            title: '技术形态深看',
-            summary: '只保留能解释当前偏向的核心信号，用更大的留白承接后续真实图表。',
-            metrics: [
-              { label: 'MACD', value: '零轴上方金叉延续', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: '双均线继续扩张上行', tone: 'bullish' },
-              { label: '主力资金', value: '近三日净流入持续放大', tone: 'bullish' },
-            ],
-            footnote: '技术模块当前仍是前端占位数据。',
-          },
-          {
-            id: 'fundamental',
-            eyebrow: '基本面画像',
-            title: '基本面画像深看',
-            summary: '这里先用描述卡占位，后续接入更深层的盈利质量、订单结构和资本效率。',
-            metrics: [
-              { label: '业务描述', value: 'AI 基础设施主线仍是最强盈利锚点。', tone: 'neutral' },
-              { label: '现金流画像', value: '自由现金流充足，允许估值波动期保持耐心。', tone: 'neutral' },
-              { label: '质量占位', value: '后续补充订单、毛利率与资本效率深层信号。', tone: 'neutral' },
-            ],
-            footnote: '基本面深层字段将在后续数据接入阶段替换。',
-          },
-        ],
-      },
-      strategy: {
-        title: '执行策略细节',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: '技术形态',
-            title: '执行前结构确认',
-            summary: '策略仍然依赖技术确认来控制节奏。',
-            metrics: [
-              { label: 'MACD', value: '零轴上方金叉延续', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: '趋势未破坏前继续顺势', tone: 'bullish' },
-              { label: '主力资金', value: '资金没有出现明显背离', tone: 'bullish' },
-            ],
-          },
-          {
-            id: 'fundamental',
-            eyebrow: '基本面画像',
-            title: '执行耐心的基本面锚',
-            summary: '基本面模块只用来解释为何值得等待更好的入场质量。',
-            metrics: [
-              { label: '盈利质量', value: '增长质量仍支持中期偏强预期', tone: 'neutral' },
-              { label: '现金流', value: '现金流强度为回撤期提供安全垫', tone: 'neutral' },
-              { label: '后续占位', value: '未来在这里挂载更深层财务描述卡', tone: 'neutral' },
-            ],
-          },
-        ],
-      },
-      tech: {
-        title: '技术结构细节',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: '技术形态',
-            title: '技术形态深看',
-            summary: '聚焦 MACD、均线和主力资金，避免非核心信号占用注意力。',
-            metrics: [
-              { label: 'MACD', value: '金叉延续，快慢线继续抬升', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: '均线发散健康，趋势仍完整', tone: 'bullish' },
-              { label: '主力资金', value: '净流入延续，回踩承接仍在', tone: 'bullish' },
-            ],
-            footnote: '仅核心信号保留辉光。',
-          },
-          {
-            id: 'fundamental',
-            eyebrow: '基本面画像',
-            title: '基本面占位卡',
-            summary: '为后续深层信息预留固定容器，而不是让技术抽屉单线扩张。',
-            metrics: [
-              { label: '行业叙事', value: 'AI 基础设施需求仍提供中期支撑。', tone: 'neutral' },
-              { label: '盈利韧性', value: '高利润率框架仍然成立。', tone: 'neutral' },
-              { label: '未来字段', value: '将接入盈利质量与估值弹性描述卡。', tone: 'neutral' },
-            ],
-          },
-        ],
-      },
-      fundamentals: {
-        title: '基本面细节',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: '技术形态',
-            title: '技术确认辅助',
-            summary: '即使打开基本面抽屉，也保留技术确认模块保持双核结构一致。',
-            metrics: [
-              { label: 'MACD', value: '趋势与基本面叙事同向', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: '均线支撑尚未失真', tone: 'bullish' },
-              { label: '主力资金', value: '核心资金没有明显撤退', tone: 'bullish' },
-            ],
-          },
-          {
-            id: 'fundamental',
-            eyebrow: '基本面画像',
-            title: '基本面画像深看',
-            summary: '把收入、现金流与质量描述收束到一组更沉静的说明卡中。',
-            metrics: [
-              { label: '收入增速', value: '+18.2%', tone: 'bullish' },
-              { label: '自由现金流', value: '$16.4B', tone: 'bullish' },
-              { label: '质量描述', value: '毛利率与资本效率仍是后续深度卡的核心锚点。', tone: 'neutral' },
-            ],
-            footnote: '当前为基本面占位卡结构。',
-          },
-        ],
-      },
+      decision: { title: '', modules: [] },
+      strategy: { title: '', modules: [] },
+      tech: { title: '', modules: [] },
+      fundamentals: { title: '', modules: [] },
     },
   },
   en: {
@@ -351,118 +256,10 @@ const CONTENT: Record<DashboardLocale, {
       detailLabel: 'Open Fundamental Brief',
     },
     drawers: {
-      decision: {
-        title: 'Deep report',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: 'Technical Analysis',
-            title: 'Technical analysis deep read',
-            summary: 'Keep only the core signals that explain the current bias, with more negative space for future live charts.',
-            metrics: [
-              { label: 'MACD', value: 'Bullish crossover continues above zero', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: 'Both moving averages keep expanding higher', tone: 'bullish' },
-              { label: 'Main Fund Inflows', value: 'Three-session inflow trend remains intact', tone: 'bullish' },
-            ],
-            footnote: 'Technical data remains placeholder-only in this pass.',
-          },
-          {
-            id: 'fundamental',
-            eyebrow: 'Fundamental Profile',
-            title: 'Fundamental profile deep read',
-            summary: 'Use description cards as placeholders until deeper profitability and capital-efficiency data arrive.',
-            metrics: [
-              { label: 'Business Thread', value: 'AI infrastructure remains the clearest earnings anchor.', tone: 'neutral' },
-              { label: 'Cash Flow Profile', value: 'Free cash flow strength supports patience through pullbacks.', tone: 'neutral' },
-              { label: 'Future Slot', value: 'Deeper quality and efficiency signals land here later.', tone: 'neutral' },
-            ],
-            footnote: 'The fundamental module is intentionally placeholder-driven for now.',
-          },
-        ],
-      },
-      strategy: {
-        title: 'Execution strategy brief',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: 'Technical Analysis',
-            title: 'Pre-entry structure confirmation',
-            summary: 'Execution still depends on technical confirmation before sizing up.',
-            metrics: [
-              { label: 'MACD', value: 'Crossover remains constructive above zero', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: 'Trend stays intact while averages expand', tone: 'bullish' },
-              { label: 'Main Fund Inflows', value: 'No meaningful sponsorship fade yet', tone: 'bullish' },
-            ],
-          },
-          {
-            id: 'fundamental',
-            eyebrow: 'Fundamental Profile',
-            title: 'Patience anchor',
-            summary: 'The fundamental module explains why a cleaner entry is still worth waiting for.',
-            metrics: [
-              { label: 'Earnings Quality', value: 'Growth quality still supports a constructive medium-term bias.', tone: 'neutral' },
-              { label: 'Cash Flow', value: 'Cash generation adds a cushion during pullbacks.', tone: 'neutral' },
-              { label: 'Future Slot', value: 'Deeper financial description cards land here later.', tone: 'neutral' },
-            ],
-          },
-        ],
-      },
-      tech: {
-        title: 'Technical structure brief',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: 'Technical Analysis',
-            title: 'Technical analysis deep read',
-            summary: 'Focus on MACD, moving averages, and main fund inflows only.',
-            metrics: [
-              { label: 'MACD', value: 'Bullish crossover continues with rising slope', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: 'Average expansion stays healthy and trend intact', tone: 'bullish' },
-              { label: 'Main Fund Inflows', value: 'Net inflows remain supportive through pullbacks', tone: 'bullish' },
-            ],
-            footnote: 'Glow remains reserved for the core signal only.',
-          },
-          {
-            id: 'fundamental',
-            eyebrow: 'Fundamental Profile',
-            title: 'Fundamental placeholder cards',
-            summary: 'Reserve a stable second module so the drawer keeps a balanced two-core structure.',
-            metrics: [
-              { label: 'Industry Thread', value: 'AI infrastructure demand still supports the broader story.', tone: 'neutral' },
-              { label: 'Profitability', value: 'High-margin structure remains intact.', tone: 'neutral' },
-              { label: 'Future Slot', value: 'Quality and valuation elasticity cards arrive later.', tone: 'neutral' },
-            ],
-          },
-        ],
-      },
-      fundamentals: {
-        title: 'Fundamental brief',
-        modules: [
-          {
-            id: 'technical',
-            eyebrow: 'Technical Analysis',
-            title: 'Technical confirmation layer',
-            summary: 'Even on the fundamental view, the technical module remains visible to preserve the dual-core rhythm.',
-            metrics: [
-              { label: 'MACD', value: 'Trend confirmation still aligns with the story', tone: 'bullish', glow: true },
-              { label: 'MA20 / MA60', value: 'Average support has not broken down', tone: 'bullish' },
-              { label: 'Main Fund Inflows', value: 'Core sponsorship remains constructive', tone: 'bullish' },
-            ],
-          },
-          {
-            id: 'fundamental',
-            eyebrow: 'Fundamental Profile',
-            title: 'Fundamental profile deep read',
-            summary: 'Pull revenue, cash flow, and quality description into quieter high-context cards.',
-            metrics: [
-              { label: 'Revenue Growth', value: '+18.2%', tone: 'bullish' },
-              { label: 'Free Cash Flow', value: '$16.4B', tone: 'bullish' },
-              { label: 'Quality Note', value: 'Margin and capital-efficiency remain the next deep-data anchors.', tone: 'neutral' },
-            ],
-            footnote: 'The module keeps placeholder content intentionally for now.',
-          },
-        ],
-      },
+      decision: { title: '', modules: [] },
+      strategy: { title: '', modules: [] },
+      tech: { title: '', modules: [] },
+      fundamentals: { title: '', modules: [] },
     },
   },
 };
@@ -767,11 +564,11 @@ function resolveDashboardPayload(locale: DashboardLocale, ticker: string): Dashb
   const normalizedTicker = normalizeTickerQuery(ticker) || 'NVDA';
   const variant = DASHBOARD_VARIANTS[locale][normalizedTicker];
   if (variant) {
-    return variant;
+    return enrichDashboardPayload(locale, variant);
   }
 
   const base = DASHBOARD_VARIANTS[locale].NVDA;
-  return {
+  return enrichDashboardPayload(locale, {
     ...base,
     instrument: normalizedTicker,
     ticker: normalizedTicker,
@@ -786,7 +583,7 @@ function resolveDashboardPayload(locale: DashboardLocale, ticker: string): Dashb
         ? 'Search submission updated the dashboard state immediately. Historical analysis, if available, will overwrite these placeholders next.'
         : '搜索提交已立即刷新首页状态，若历史分析存在，将优先用历史结果回填当前占位数据。',
     },
-  };
+  });
 }
 
 function resolveDemoFallbackTicker(ticker: string): string {
@@ -854,23 +651,303 @@ function toneFromFieldValue(value?: string): SignalTone {
   return 'neutral';
 }
 
+function normalizeDetailKey(value?: string): string {
+  return String(value || '').toLowerCase().replace(/[\s/()%+.\-_:]+/g, '');
+}
+
 function mapStandardFields(
   fields: StandardReportField[] | undefined,
-  fallback: Array<{ label: string; value: string; tone?: SignalTone }>,
+  fallback: DashboardField[],
   count: number,
-): Array<{ label: string; value: string; tone?: SignalTone }> {
+) : DashboardField[] {
   if (!fields || fields.length === 0) {
-    return fallback;
+    return fallback.slice(0, count);
   }
 
   return fields
     .filter((field) => field.label && field.value)
     .slice(0, count)
-    .map((field) => ({
-      label: field.label,
-      value: field.value,
-      tone: toneFromFieldValue(field.value),
-    }));
+    .map((field, index) => {
+      const fallbackField = fallback.find((item) => normalizeDetailKey(item.label) === normalizeDetailKey(field.label)) || fallback[index];
+      return {
+        label: field.label,
+        value: field.value,
+        tone: toneFromFieldValue(field.value),
+        details: fallbackField?.details,
+      };
+    });
+}
+
+function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
+  const key = normalizeDetailKey(label);
+  const isEnglish = locale === 'en';
+
+  if (key === 'macd') {
+    if (ticker === 'TSLA') {
+      return isEnglish
+        ? 'Fast and slow lines are still below zero, the downside histogram is shrinking, and the next confirmation is whether a bullish cross can convert the rebound into a tradable trend leg.'
+        : '快慢线仍在零轴下方运行，绿柱缩短，说明空头动能在衰减；下一步要看能否形成金叉，把反弹转成可交易的趋势段。';
+    }
+    if (ticker === 'ORCL') {
+      return isEnglish
+        ? 'The indicator is already above zero and re-accelerating, which usually means the post-earnings trend is being confirmed by a second impulse rather than a one-day squeeze.'
+        : '指标已经站上零轴并再次扩张，通常意味着财报后的趋势不是单日脉冲，而是在走二次确认。';
+    }
+    return isEnglish
+      ? 'The crossover is still above zero, so momentum and trend direction remain aligned. The key watchpoint is whether the slope can stay positive during the next pullback.'
+      : '金叉保持在零轴上方，动能和趋势方向仍同向；关键观察点是下次回踩时快线斜率能否继续维持正向。';
+  }
+
+  if (key === '均线结构' || key === 'movingaverages' || key === 'ma20ma60') {
+    if (ticker === 'TSLA') {
+      return isEnglish
+        ? 'MA20 is still acting as a downward lid, so this move is still a counter-trend bounce until price can reclaim and stabilize above the short-term average.'
+        : 'MA20 仍在压制价格，这一波更像逆势反抽；只有重新站稳短期均线，结构才会从修复转成趋势延续。';
+    }
+    return isEnglish
+      ? 'The short-term average is leading the medium-term line higher, which keeps the trend stack constructive as long as pullbacks continue to hold the moving-average band.'
+      : '短期均线继续牵引中期均线上行，只要回踩仍能守住均线带，趋势结构就没有被破坏。';
+  }
+
+  if (key === '量价配合' || key === 'volumeprofile') {
+    if (ticker === 'TSLA') {
+      return isEnglish
+        ? 'The first rebound printed volume, but follow-through is not clean yet. Without a second expansion on lower volatility, the move still carries headline-driven whipsaw risk.'
+        : '首轮反弹已经放量，但续航并不干净；如果没有第二次低波动放量确认，这个结构仍有事件驱动的来回扫损风险。';
+    }
+    return isEnglish
+      ? 'Volume stayed orderly during the pullback and expanded into the breakout, which is the healthier sequence for trend continuation instead of distribution.'
+      : '回踩阶段量能收敛、突破阶段量能放大，这是更健康的趋势延续序列，而不是高位派发。';
+  }
+
+  if (key === 'rsi') {
+    return isEnglish
+      ? `RSI is at ${value}, which is firm but not yet an exhaustion print. It supports continuation as long as price does not diverge against new highs.`
+      : `RSI 处在 ${value}，强势但还没到典型透支区；只要价格创新高时不出现背离，趋势延续概率仍占优。`;
+  }
+
+  if (key === '波动率' || key === 'volatility') {
+    return isEnglish
+      ? `Realized volatility is ${value}; position sizing should stay tied to wider risk bands instead of headline-driven chasing.`
+      : `实现波动率约为 ${value}，仓位和止损都要按更宽的风险带来做，不能用追涨方式处理。`;
+  }
+
+  return isEnglish
+    ? `${label} is currently reading ${value}, and the drill-down should stay anchored to that live signal instead of a separate narrative block.`
+    : `${label} 当前读数为 ${value}，下钻说明应继续围绕这个实时信号展开，而不是脱离主卡片另写一套叙事。`;
+}
+
+function buildFundamentalMetricDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
+  const key = normalizeDetailKey(label);
+  const isEnglish = locale === 'en';
+
+  if (key === '收入增速' || key === 'revenuegrowth') {
+    if (ticker === 'TSLA') {
+      return isEnglish
+        ? 'Auto delivery growth is slowing and that is capping the top-line pace, while the higher-margin energy storage line is carrying a larger share of the earnings support.'
+        : '汽车交付量放缓拖累整体营收增速，但储能业务的高毛利贡献正在抬升，对冲了汽车主业的增速压力。';
+    }
+    return isEnglish
+      ? `Revenue growth is running at ${value}, which still supports the current thesis as long as demand conversion remains ahead of cost pressure.`
+      : `收入增速为 ${value}，只要需求兑现继续快于成本压力，这个读数就仍然支撑当前主线判断。`;
+  }
+
+  if (key === '自由现金流' || key === 'freecashflow') {
+    return isEnglish
+      ? `Free cash flow at ${value} keeps financing pressure contained and gives the company room to absorb volatility without breaking the medium-term thesis.`
+      : `自由现金流达到 ${value}，说明公司仍有能力承受阶段波动，不至于因为融资压力打断中期逻辑。`;
+  }
+
+  if (key === '毛利率' || key === 'grossmargin') {
+    return isEnglish
+      ? `Gross margin at ${value} is the cleanest read on pricing power versus cost pressure, so this line is critical for validating whether the earnings base is expanding or compressing.`
+      : `毛利率为 ${value}，这是检验定价权和成本压力最直接的指标，决定利润底盘是在扩张还是收缩。`;
+  }
+
+  if (key === 'roe') {
+    return isEnglish
+      ? `ROE at ${value} measures how efficiently equity is being converted into earnings, which matters for judging whether the current valuation premium has operating support.`
+      : `ROE 为 ${value}，反映股东权益转化为利润的效率，用来判断当前估值溢价是否有经营效率支撑。`;
+  }
+
+  if (key === '市盈率pe' || key === 'pe') {
+    return isEnglish
+      ? `A PE of ${value} means the market is still paying for forward growth; unless growth durability improves, the rerating room stays bounded.`
+      : `市盈率约为 ${value}，说明市场仍在为未来成长付费；如果增长持续性没有继续抬升，估值扩张空间会受到约束。`;
+  }
+
+  if (key === '机构持仓' || key === 'institutionalownership') {
+    return isEnglish
+      ? `Institutional ownership at ${value} helps gauge sponsorship stability; higher stickiness usually lowers the probability of purely retail-driven air pockets.`
+      : `机构持仓约为 ${value}，用来判断筹码稳定性；机构黏性越高，纯情绪性踩踏的概率通常越低。`;
+  }
+
+  return isEnglish
+    ? `${label} is currently ${value}, and the supporting note should remain attached to that same fundamental observation.`
+    : `${label} 当前为 ${value}，支撑说明需要继续绑定在这条基本面观测本身。`;
+}
+
+function buildStrategyMetricDetails(locale: DashboardLocale, label: string, value: string): string {
+  const key = normalizeDetailKey(label);
+  const isEnglish = locale === 'en';
+
+  if (key === '建仓区间' || key === 'entryzone') {
+    return isEnglish
+      ? `Use ${value} as the preferred accumulation band. Only step in when intraday structure remains orderly instead of expanding on disorderly volume.`
+      : `以 ${value} 作为优先吸纳带，只有当日内结构维持有序、没有失控放量时，才考虑执行首笔仓位。`;
+  }
+
+  if (key === '目标位' || key === 'target') {
+    return isEnglish
+      ? `The ${value} objective maps to the next supply zone or rerating band, so profit-taking efficiency should be reassessed as price approaches that area.`
+      : `${value} 对应下一层压力带或估值修复上沿，价格接近该区间时要重新评估兑现效率。`;
+  }
+
+  if (key === '止损位' || key === 'stop') {
+    return isEnglish
+      ? `The ${value} stop is the structure invalidation line. A decisive break there means the thesis should be re-underwritten rather than averaged down.`
+      : `${value} 是结构失效位；一旦有效跌破，应该重做交易假设，而不是机械摊低成本。`;
+  }
+
+  return isEnglish
+    ? `${label} is currently set to ${value}, and execution should continue to respect that same operating constraint.`
+    : `${label} 当前设定为 ${value}，执行层必须继续遵守这一条约束。`;
+}
+
+function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardPayload): DashboardPayload {
+  return {
+    ...payload,
+    strategy: {
+      ...payload.strategy,
+      metrics: payload.strategy.metrics.map((metric) => ({
+        ...metric,
+        details: metric.details || buildStrategyMetricDetails(locale, metric.label, metric.value),
+      })),
+    },
+    tech: {
+      ...payload.tech,
+      signals: payload.tech.signals.map((signal) => ({
+        ...signal,
+        details: signal.details || buildTechSignalDetails(locale, payload.ticker, signal.label, signal.value),
+      })),
+    },
+    fundamentals: {
+      ...payload.fundamentals,
+      metrics: payload.fundamentals.metrics.map((metric) => ({
+        ...metric,
+        details: metric.details || buildFundamentalMetricDetails(locale, payload.ticker, metric.label, metric.value),
+      })),
+    },
+  };
+}
+
+function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload, drawerKey: DetailDrawerKey): DrawerPayload {
+  const isEnglish = locale === 'en';
+  const titleMap: Record<DetailDrawerKey, string> = {
+    decision: isEnglish ? `${dashboard.ticker} Decision Drill-down` : `${dashboard.ticker} 决策下钻`,
+    strategy: isEnglish ? `${dashboard.ticker} Execution Drill-down` : `${dashboard.ticker} 执行下钻`,
+    tech: isEnglish ? `${dashboard.ticker} Technical Drill-down` : `${dashboard.ticker} 技术下钻`,
+    fundamentals: isEnglish ? `${dashboard.ticker} Fundamental Drill-down` : `${dashboard.ticker} 基本面下钻`,
+  };
+
+  if (drawerKey === 'decision') {
+    return {
+      title: titleMap.decision,
+      modules: [
+        {
+          id: 'decision',
+          eyebrow: dashboard.decision.eyebrow,
+          title: isEnglish ? 'Supporting Evidence' : '支撑证据',
+          metrics: [
+            {
+              label: isEnglish ? 'Signal Bias' : '信号方向',
+              value: dashboard.decision.signalLabel,
+              details: dashboard.decision.scoreValue,
+              tone: dashboard.decision.signalTone,
+              glow: true,
+            },
+            {
+              label: isEnglish ? 'Trade Thesis' : '交易主线',
+              value: dashboard.decision.summary,
+              details: dashboard.decision.reasonBody,
+              tone: 'neutral',
+            },
+            {
+              label: isEnglish ? 'Catalyst Tag' : '催化标签',
+              value: dashboard.decision.badge,
+              details: dashboard.decision.chartLabel,
+              tone: dashboard.decision.signalTone,
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  if (drawerKey === 'strategy') {
+    return {
+      title: titleMap.strategy,
+      modules: [
+        {
+          id: 'strategy',
+          eyebrow: dashboard.strategy.title,
+          title: isEnglish ? 'Execution Constraints' : '执行约束',
+          metrics: [
+            ...dashboard.strategy.metrics.map((metric) => ({
+              label: metric.label,
+              value: metric.value,
+              details: metric.details,
+              tone: metric.tone || 'neutral',
+            })),
+            {
+              label: dashboard.strategy.positionLabel,
+              value: isEnglish ? 'Staggered Sizing' : '分批仓位',
+              details: dashboard.strategy.positionBody,
+              tone: 'neutral',
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  if (drawerKey === 'tech') {
+    return {
+      title: titleMap.tech,
+      modules: [
+        {
+          id: 'tech',
+          eyebrow: dashboard.tech.title,
+          title: isEnglish ? 'Signal Stack' : '信号栈',
+          metrics: dashboard.tech.signals.map((signal, index) => ({
+            label: signal.label,
+            value: signal.value,
+            details: signal.details,
+            tone: signal.tone,
+            glow: index === 0,
+          })),
+        },
+      ],
+    };
+  }
+
+  return {
+    title: titleMap.fundamentals,
+    modules: [
+      {
+        id: 'fundamentals',
+        eyebrow: dashboard.fundamentals.title,
+        title: isEnglish ? 'Fundamental Support' : '基本面支撑',
+        metrics: dashboard.fundamentals.metrics.map((metric, index) => ({
+          label: metric.label,
+          value: metric.value,
+          details: metric.details,
+          tone: metric.tone || 'neutral',
+          glow: index === 0 && metric.tone === 'bullish',
+        })),
+      },
+    ],
+  };
 }
 
 function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisReport): DashboardPayload {
@@ -898,7 +975,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     reasonLayer?.newsValueTier,
   ].filter(Boolean).slice(0, 2).join(' · ') || seed.decision.badge;
 
-  return {
+  return enrichDashboardPayload(locale, {
     ...seed,
     ticker: stockCode,
     decision: {
@@ -946,13 +1023,13 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
       ...seed.fundamentals,
       metrics: mapStandardFields(fundamentalFields, seed.fundamentals.metrics, 6),
     },
-  };
+  });
 }
 
 const HomeBentoDashboardPage: React.FC = () => {
   const { language } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
-  const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
+  const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState('NVDA');
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
@@ -978,6 +1055,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     return resolveDashboardPayload(locale, activeTicker);
   }, [activeTicker, locale, selectedReport]);
   const copy = dashboardData;
+  const activeDrawerPayload = activeDrawer ? buildDrawerPayload(locale, copy, activeDrawer) : null;
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -1158,7 +1236,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                   breakoutPointIndex={copy.breakoutPointIndex}
                   reason={{ title: copy.decision.reasonTitle, body: copy.decision.reasonBody }}
                   detailLabel={copy.decision.detailLabel}
-                  onOpenDetails={() => setActiveDrawer(copy.drawers.decision)}
+                  onOpenDetails={() => setActiveDrawer('decision')}
                 />
               )}
             </div>
@@ -1187,7 +1265,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                   positionLabel={copy.strategy.positionLabel}
                   positionBody={copy.strategy.positionBody}
                   detailLabel={copy.strategy.detailLabel}
-                  onOpenDetails={() => setActiveDrawer(copy.drawers.strategy)}
+                  onOpenDetails={() => setActiveDrawer('strategy')}
                 />
                 <div
                   className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
@@ -1197,13 +1275,13 @@ const HomeBentoDashboardPage: React.FC = () => {
                     title={copy.tech.title}
                     signals={copy.tech.signals}
                     detailLabel={copy.tech.detailLabel}
-                    onOpenDetails={() => setActiveDrawer(copy.drawers.tech)}
+                    onOpenDetails={() => setActiveDrawer('tech')}
                   />
                   <FundamentalsCard
                     title={copy.fundamentals.title}
                     metrics={copy.fundamentals.metrics}
                     detailLabel={copy.fundamentals.detailLabel}
-                    onOpenDetails={() => setActiveDrawer(copy.drawers.fundamentals)}
+                    onOpenDetails={() => setActiveDrawer('fundamentals')}
                   />
                 </div>
               </>
@@ -1213,10 +1291,10 @@ const HomeBentoDashboardPage: React.FC = () => {
       </main>
 
       <DeepReportDrawer
-        isOpen={Boolean(activeDrawer)}
+        isOpen={Boolean(activeDrawerPayload)}
         onClose={() => setActiveDrawer(null)}
-        title={activeDrawer?.title || ''}
-        modules={activeDrawer?.modules || []}
+        title={activeDrawerPayload?.title || ''}
+        modules={activeDrawerPayload?.modules || []}
         testId="home-bento-drawer"
       />
 

@@ -269,9 +269,9 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-strategy'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer')).toBeInTheDocument();
-    expect(screen.getAllByText('技术形态').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('基本面画像').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/MACD/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('执行约束')).toBeInTheDocument();
+    expect(screen.getAllByText('建仓区间').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('仓位节奏').length).toBeGreaterThan(0);
     fireEvent.keyDown(document, { key: 'Escape' });
     await new Promise((resolve) => window.setTimeout(resolve, 220));
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
@@ -279,12 +279,12 @@ describe('HomeSurfacePage', () => {
 
   it('updates the dashboard when a recent-history ticker is selected', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
-    const deferred = createDeferred<typeof historyReport>();
+    const deferred = createDeferred<typeof defaultHistoryReport>();
     vi.mocked(historyApi.getDetail).mockImplementation((recordId) => {
       if (recordId === 2) {
         return deferred.promise;
       }
-      return Promise.resolve(historyReport);
+      return Promise.resolve(defaultHistoryReport);
     });
     renderSurface();
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
@@ -324,6 +324,16 @@ describe('HomeSurfacePage', () => {
             target: '183.00',
             stopLoss: '159.20',
           },
+          technicalFields: [
+            { label: 'MACD', value: '零轴下方收敛' },
+            { label: '均线结构', value: 'MA20 仍在下压' },
+            { label: '量价配合', value: '反弹放量，续航待定' },
+          ],
+          fundamentalFields: [
+            { label: '收入增速', value: '+2.7%' },
+            { label: '自由现金流', value: '$4.0B' },
+            { label: '毛利率', value: '17.4%' },
+          ],
         },
       },
     });
@@ -333,6 +343,93 @@ describe('HomeSurfacePage', () => {
     expect(company).toHaveClass('text-lg');
     expect(entryRange).toHaveClass('text-lg', 'font-bold');
     expect(entryRange.className).not.toContain('text-2xl');
+  });
+
+  it('keeps TSLA drill-down content synchronized with the active dashboard payload', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockImplementation((recordId) => {
+      if (recordId === 2) {
+        return Promise.resolve({
+          ...defaultHistoryReport,
+          meta: {
+            ...defaultHistoryReport.meta,
+            id: 2,
+            queryId: 'q2',
+            stockCode: 'TSLA',
+            stockName: 'Tesla',
+          },
+          summary: {
+            ...defaultHistoryReport.summary,
+            analysisSummary: 'Tesla remains in a bounce validation zone.',
+            operationAdvice: 'Add only after a second confirmation.',
+            trendPrediction: 'High-beta rebound still needs follow-through volume.',
+            sentimentScore: 56,
+            sentimentLabel: 'Neutral',
+          },
+          strategy: {
+            idealBuy: '166.00 - 171.50',
+            stopLoss: '159.20',
+            takeProfit: '183.00',
+          },
+          details: {
+            standardReport: {
+              ...defaultHistoryReport.details.standardReport,
+              summaryPanel: {
+                ...defaultHistoryReport.details.standardReport.summaryPanel,
+                stock: 'Tesla',
+                ticker: 'TSLA',
+                oneSentence: 'Tesla is still inside a bounce validation zone after the initial squeeze.',
+              },
+              decisionContext: {
+                shortTermView: 'High-beta rebound still needs follow-through volume.',
+              },
+              decisionPanel: {
+                ...defaultHistoryReport.details.standardReport.decisionPanel,
+                idealEntry: '166.00 - 171.50',
+                target: '183.00',
+                stopLoss: '159.20',
+                buildStrategy: 'Add only after the second confirmation stays orderly.',
+              },
+              reasonLayer: {
+                coreReasons: ['The bounce is still event-driven and has not converted into a clean trend continuation yet.'],
+              },
+              technicalFields: [
+                { label: 'MACD', value: '零轴下方收敛' },
+                { label: '均线结构', value: 'MA20 仍在下压' },
+                { label: '量价配合', value: '反弹放量，续航待定' },
+              ],
+              fundamentalFields: [
+                { label: '收入增速', value: '+2.7%' },
+                { label: '自由现金流', value: '$4.0B' },
+                { label: '毛利率', value: '17.4%' },
+              ],
+            },
+          },
+        });
+      }
+      return Promise.resolve(defaultHistoryReport);
+    });
+
+    renderSurface();
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-TSLA'));
+
+    expect(await screen.findByText('Tesla')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方收敛');
+
+    fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
+    expect(await screen.findByText('TSLA 技术下钻')).toBeInTheDocument();
+    expect(screen.getAllByText('零轴下方收敛').length).toBeGreaterThan(1);
+    expect(screen.getByText('快慢线仍在零轴下方运行，绿柱缩短，说明空头动能在衰减；下一步要看能否形成金叉，把反弹转成可交易的趋势段。')).toBeInTheDocument();
+    expect(screen.queryByText(/聚焦 MACD/)).not.toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await new Promise((resolve) => window.setTimeout(resolve, 220));
+
+    fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-fundamentals'));
+    expect(await screen.findByText('TSLA 基本面下钻')).toBeInTheDocument();
+    expect(screen.getAllByText('+2.7%').length).toBeGreaterThan(1);
+    expect(screen.getByText('汽车交付量放缓拖累整体营收增速，但储能业务的高毛利贡献正在抬升，对冲了汽车主业的增速压力。')).toBeInTheDocument();
+    expect(screen.queryByText(/将接入盈利质量与估值弹性描述卡/)).not.toBeInTheDocument();
   });
 
   it('updates the dashboard immediately when the analyze button is pressed and clears the local search query', async () => {

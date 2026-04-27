@@ -6,6 +6,7 @@ import { getToneTextClass, getToneTextStyle, type SignalTone } from './theme';
 export type DeepReportMetric = {
   label: string;
   value: React.ReactNode;
+  details?: React.ReactNode;
   tone?: SignalTone;
   glow?: boolean;
 };
@@ -44,7 +45,7 @@ export const DeepReportDrawer: React.FC<DeepReportDrawerProps> = ({
       data-testid={testId}
       className="space-y-6 rounded-l-[40px] rounded-r-[24px] border border-white/[0.08] bg-white/[0.02] p-6 text-white backdrop-blur-3xl sm:p-8"
     >
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4">
         {modules.map((module) => (
           <section
             key={module.id}
@@ -72,6 +73,11 @@ export const DeepReportDrawer: React.FC<DeepReportDrawerProps> = ({
                     >
                       {metric.value}
                     </p>
+                    {metric.details ? (
+                      <p className="mt-2 text-sm leading-6 text-white/62">
+                        {metric.details}
+                      </p>
+                    ) : null}
                   </div>
                 );
               })}
