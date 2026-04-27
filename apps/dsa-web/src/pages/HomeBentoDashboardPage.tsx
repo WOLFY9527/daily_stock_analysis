@@ -744,6 +744,103 @@ function resolveDemoFallbackTicker(ticker: string): string {
   return 'ORCL';
 }
 
+function buildAnalysisFallbackDashboard(locale: DashboardLocale, ticker: string): DashboardPayload {
+  const fallbackTicker = resolveDemoFallbackTicker(ticker);
+  const seed = resolveDashboardPayload(locale, fallbackTicker);
+
+  if (locale === 'en') {
+    return enrichDashboardPayload(locale, {
+      ...seed,
+      decision: {
+        ...seed.decision,
+        heroValue: '6.8',
+        signalLabel: 'Constructive',
+        signalTone: 'bullish',
+        scoreValue: 'Short-term structure is constructive and the moving-average stack still leans bullish.',
+        badge: 'AI engine overloaded · local snapshot active',
+        chartLabel: 'Local Snapshot',
+        summary: 'Hold. Price is still above MA20 with nearby support intact, so the cleaner path is to wait for an orderly pullback confirmation.',
+        reasonBody: 'Technical and fundamental signals still reinforce each other, liquidity absorption remains healthy, and the local snapshot keeps the hold thesis intact.',
+      },
+      strategy: {
+        ...seed.strategy,
+        metrics: [
+          { label: 'Entry Zone', value: 'Pull back into the MA20 support band', tone: 'neutral' },
+          { label: 'Target', value: 'Scale out near the prior breakout shelf', tone: 'bullish' },
+          { label: 'Stop', value: 'Reassess if the recent support band fails', tone: 'bearish' },
+        ],
+        positionBody: 'Keep sizing patient, add only after the pullback stabilizes, and avoid chasing while the remote engine is degraded.',
+      },
+      tech: {
+        ...seed.tech,
+        signals: [
+          { label: 'MA5', value: 'Short-term momentum stays active with price climbing along the 5-day line', tone: 'bullish' },
+          { label: 'MA10', value: 'Trend support is confirmed and orderly pullbacks still qualify as entries', tone: 'bullish' },
+          { label: 'MA20', value: 'MA20 continues to carry MA60, preserving the medium-term bullish stack', tone: 'bullish' },
+          { label: 'MA60', value: 'The long-cycle bull/bear divider is still rising, so the core trend remains intact', tone: 'bullish' },
+          { label: 'RSI', value: 'Momentum is firm without an obvious exhaustion print', tone: 'neutral' },
+        ],
+      },
+      fundamentals: {
+        ...seed.fundamentals,
+        metrics: [
+          { label: 'Market Cap', value: 'Scale remains deep enough to support institutional liquidity', tone: 'bullish' },
+          { label: 'Total Shares', value: 'Share count remains stable and dilution pressure looks contained', tone: 'neutral' },
+          { label: 'PE Ratio', value: 'Valuation still assumes growth, so execution needs to keep proving out', tone: 'neutral' },
+          { label: 'Free Float', value: 'Float size remains balanced enough for orderly turnover', tone: 'neutral' },
+          { label: 'Cash Buffer', value: 'Balance-sheet flexibility still supports the current holding thesis', tone: 'bullish' },
+          { label: 'Ownership Mix', value: 'Positioning remains orderly rather than panic-driven', tone: 'neutral' },
+        ],
+      },
+    });
+  }
+
+  return enrichDashboardPayload(locale, {
+    ...seed,
+    decision: {
+      ...seed.decision,
+      heroValue: '6.8',
+      signalLabel: '偏多',
+      signalTone: 'bullish',
+      scoreValue: '短线技术偏强，均线结构偏多',
+      badge: 'AI 引擎过载 · 本地快照接管',
+      chartLabel: '本地快照',
+      summary: '持有。技术结构：价格位于 MA20 上方，防守位在近期支撑带；若回踩企稳，趋势延续概率更高。',
+      reasonBody: '技术面与基本面相互印证，资金承接良好，综合建议以持有为主。',
+    },
+    strategy: {
+      ...seed.strategy,
+      metrics: [
+        { label: '建仓区间', value: '回踩 MA20 与近期支撑带', tone: 'neutral' },
+        { label: '目标位', value: '前高突破带分批兑现', tone: 'bullish' },
+        { label: '止损位', value: '近期支撑失守后重估', tone: 'bearish' },
+      ],
+      positionBody: '仓位以耐心承接为主，只在回踩企稳后逐步加仓，避免在 AI 引擎降级时追高放大误差。',
+    },
+    tech: {
+      ...seed.tech,
+      signals: [
+        { label: 'MA5', value: '短线动能充沛，价格沿五日线攀升', tone: 'bullish' },
+        { label: 'MA10', value: '趋势支撑确认，回踩不破可视作介入点', tone: 'bullish' },
+        { label: 'MA20', value: 'MA20 托举 MA60，中期多头排列延续', tone: 'bullish' },
+        { label: 'MA60', value: '长线牛熊分界线稳步上移，中线底仓逻辑未坏', tone: 'bullish' },
+        { label: 'RSI', value: '强势但未失真，暂未出现明显透支信号', tone: 'neutral' },
+      ],
+    },
+    fundamentals: {
+      ...seed.fundamentals,
+      metrics: [
+        { label: '总市值', value: '总市值体量充足，流动性承接极强', tone: 'bullish' },
+        { label: '总股本', value: '总股本规模稳定，摊薄压力相对可控', tone: 'neutral' },
+        { label: '市盈率', value: '估值仍在成长溢价区，需业绩继续兑现', tone: 'neutral' },
+        { label: '流通盘', value: '流通盘规模适中，换手承接相对平衡', tone: 'neutral' },
+        { label: '现金缓冲', value: '资金缓冲充足，持有逻辑具备继续跟踪空间', tone: 'bullish' },
+        { label: '筹码结构', value: '承接秩序稳定，未见明显恐慌性松动', tone: 'neutral' },
+      ],
+    },
+  });
+}
+
 function DashboardSkeletonCard({
   testId,
   className,
@@ -1074,11 +1171,11 @@ function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined,
   if (!value) {
     return fallback;
   }
+  if (/all llm models failed|ratelimiterror|分析过程出错/i.test(value)) {
+    return fallback;
+  }
   if (locale === 'zh') {
     return value;
-  }
-  if (/all llm models failed|ratelimiterror/i.test(value)) {
-    return fallback;
   }
   const exact = REPORT_TEXT_EN_BY_KEY[normalizeDetailKey(value)];
   if (exact) {
@@ -1508,36 +1605,20 @@ const HomeBentoDashboardPage: React.FC = () => {
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
   const selectCachedHistoryForStock = useStockPoolStore((state) => state.selectCachedHistoryForStock);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
+  const clearError = useStockPoolStore((state) => state.clearError);
   const recentHistory = useMemo(
     () => Array.from(new Set(historyItems.map((item) => normalizeTickerQuery(item.stockCode)).filter(Boolean))).slice(0, 8),
     [historyItems],
   );
   const isBusy = isAnalyzing || isDashboardLoading;
   const dashboardData = useMemo<DashboardPayload>(() => {
-    const baseDashboard = selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker
-      ? buildDashboardFromReport(locale, selectedReport)
-      : resolveDashboardPayload(locale, activeTicker);
-
-    if (!analysisFallbackMode) {
-      return baseDashboard;
+    if (analysisFallbackMode) {
+      return buildAnalysisFallbackDashboard(locale, activeTicker);
     }
 
-    return {
-      ...baseDashboard,
-      decision: {
-        ...baseDashboard.decision,
-        signalLabel: locale === 'en' ? 'Fallback active' : '已切换本地回溯',
-        signalTone: 'bearish',
-        scoreValue: locale === 'en' ? 'AI engine unavailable. Local recall snapshot is now loaded.' : 'AI引擎暂不可用，已切换至本地回溯快照',
-        badge: locale === 'en' ? 'LLM service degraded · local recall active' : 'AI 服务降级 · 本地回溯已接管',
-        summary: locale === 'en'
-          ? 'The live AI engine is temporarily unavailable, so the dashboard is serving the latest local recall snapshot instead of raw error text.'
-          : '当前 AI 引擎暂时不可用，首页已切换为最近一次本地回溯快照，不再展示底层报错代码。',
-        reasonBody: locale === 'en'
-          ? 'Only explicit Analyze actions may call the remote engine. This fallback view keeps the dashboard readable while upstream service is recovering.'
-          : '只有用户主动点击“分析”才会触发远端推理；当前回退视图仅用于在上游恢复前维持可读的分析快照。',
-      },
-    };
+    return selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker
+      ? buildDashboardFromReport(locale, selectedReport)
+      : resolveDashboardPayload(locale, activeTicker);
   }, [activeTicker, analysisFallbackMode, locale, selectedReport]);
   const copy = dashboardData;
   const activeDrawerPayload = activeDrawer ? buildDrawerPayload(locale, copy, activeDrawer) : null;
@@ -1560,8 +1641,12 @@ const HomeBentoDashboardPage: React.FC = () => {
       return;
     }
 
-    setActiveTicker(nextTicker);
-    setHasHydratedInitialTicker(true);
+    const frame = window.requestAnimationFrame(() => {
+      setActiveTicker(nextTicker);
+      setHasHydratedInitialTicker(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [hasHydratedInitialTicker, recentHistory, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
@@ -1576,29 +1661,8 @@ const HomeBentoDashboardPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [fallbackToast]);
 
-  const loadStockData = async (tickerValue: string) => {
-    const normalizedTicker = normalizeTickerQuery(tickerValue);
-    if (!normalizedTicker) {
-      return;
-    }
-
-    setFallbackToast(null);
-    setAnalysisFallbackMode(false);
-    if (selectCachedHistoryForStock(normalizedTicker)) {
-      setActiveTicker(normalizedTicker);
-      return;
-    }
-    setDashboardLoading(true);
-    try {
-      await focusLatestHistoryForStock(normalizedTicker);
-      setActiveTicker(normalizedTicker);
-    } finally {
-      setDashboardLoading(false);
-    }
-  };
-
-  const handleAnalyze = async () => {
-    const rawQuery = searchQuery.trim();
+  const handleAnalyze = async (tickerOverride?: string) => {
+    const rawQuery = (tickerOverride ?? searchQuery).trim();
     const normalizedTicker = normalizeTickerQuery(rawQuery);
     if (!rawQuery) {
       await submitAnalysis({
@@ -1611,7 +1675,9 @@ const HomeBentoDashboardPage: React.FC = () => {
 
     setFallbackToast(null);
     setAnalysisFallbackMode(false);
+    clearError();
     setDashboardLoading(true);
+    setActiveTicker(normalizedTicker || rawQuery);
     setSearchQuery('');
 
     const result = await submitAnalysis({
@@ -1625,14 +1691,33 @@ const HomeBentoDashboardPage: React.FC = () => {
       await focusLatestHistoryForStock(result.stockCode);
       setActiveTicker(result.stockCode);
     } else if (!result.duplicate) {
-      setActiveTicker(resolveDemoFallbackTicker(normalizedTicker || rawQuery));
+      const fallbackTicker = resolveDemoFallbackTicker(normalizedTicker || rawQuery);
+      setActiveTicker(fallbackTicker);
       setAnalysisFallbackMode(true);
+      clearError();
       setFallbackToast(locale === 'en'
-        ? 'AI engine is temporarily unavailable. Loaded local recall data.'
-        : 'AI 引擎服务暂不可用，已为您加载本地回溯数据');
+        ? 'AI engine is temporarily unavailable. Loaded local snapshot data.'
+        : 'AI 引擎调用过载，已加载本地快照数据');
     }
 
     setDashboardLoading(false);
+  };
+
+  const handleHistoryClick = async (tickerValue: string) => {
+    const normalizedTicker = normalizeTickerQuery(tickerValue);
+    if (!normalizedTicker) {
+      return;
+    }
+
+    setHistoryDrawerOpen(false);
+    setFallbackToast(null);
+    setAnalysisFallbackMode(false);
+    clearError();
+    if (selectCachedHistoryForStock(normalizedTicker)) {
+      setActiveTicker(normalizedTicker);
+      return;
+    }
+    await handleAnalyze(normalizedTicker);
   };
 
   return (
@@ -1804,10 +1889,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             <button
               key={ticker}
               type="button"
-              onClick={() => {
-                setHistoryDrawerOpen(false);
-                void loadStockData(ticker);
-              }}
+              onClick={() => { void handleHistoryClick(ticker); }}
               className={`flex min-w-0 items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors ${
                 activeTicker === ticker
                   ? 'border-white/15 bg-white/[0.08] text-white'

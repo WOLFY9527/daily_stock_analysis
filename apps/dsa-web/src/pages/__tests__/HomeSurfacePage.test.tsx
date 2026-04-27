@@ -373,72 +373,28 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 
-  it('updates the dashboard when a recent-history ticker is selected', async () => {
+  it('re-analyzes from the history drawer when a local snapshot is missing instead of fetching history detail', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
-    const deferred = createDeferred<typeof defaultHistoryReport>();
-    vi.mocked(historyApi.getDetail).mockImplementation((recordId) => {
-      if (recordId === 2) {
-        return deferred.promise;
-      }
-      return Promise.resolve(defaultHistoryReport);
-    });
+    const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
+    vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
     renderSurface();
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     expect(await screen.findByTestId('home-bento-history-drawer')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('home-bento-history-item-TSLA'));
+
     expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
-    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(analysisApi.analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
+      stockCode: 'TSLA',
+      originalQuery: 'TSLA',
+      selectionSource: 'manual',
+    }));
+    expect(historyApi.getDetail).not.toHaveBeenCalled();
+
     deferred.resolve({
-      ...defaultHistoryReport,
-      meta: {
-        ...defaultHistoryReport.meta,
-        id: 2,
-        queryId: 'q2',
-        stockCode: 'TSLA',
-        stockName: 'Tesla',
-      },
-      summary: {
-        ...defaultHistoryReport.summary,
-        analysisSummary: 'Tesla remains in a bounce validation zone.',
-      },
-      strategy: {
-        idealBuy: '166.00 - 171.50',
-        stopLoss: '159.20',
-        takeProfit: '183.00',
-      },
-      details: {
-        standardReport: {
-          ...defaultHistoryReport.details.standardReport,
-          summaryPanel: {
-            ...defaultHistoryReport.details.standardReport.summaryPanel,
-            stock: 'Tesla',
-            ticker: 'TSLA',
-          },
-          decisionPanel: {
-            ...defaultHistoryReport.details.standardReport.decisionPanel,
-            idealEntry: '166.00 - 171.50',
-            target: '183.00',
-            stopLoss: '159.20',
-          },
-          technicalFields: [
-            { label: 'MACD', value: '零轴下方收敛' },
-            { label: '均线结构', value: 'MA20 仍在下压' },
-            { label: '量价配合', value: '反弹放量，续航待定' },
-          ],
-          fundamentalFields: [
-            { label: '收入增速', value: '+2.7%' },
-            { label: '自由现金流', value: '$4.0B' },
-            { label: '毛利率', value: '17.4%' },
-          ],
-        },
-      },
+      taskId: 'task-tsla-history',
+      status: 'pending',
+      message: 'submitted',
     });
-    const company = await screen.findByText('Tesla');
-    const entryRange = await screen.findByText('166.00 - 171.50');
-    await waitFor(() => expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument());
-    expect(company).toHaveClass('text-lg');
-    expect(entryRange).toHaveClass('text-lg', 'font-bold');
-    expect(entryRange.className).not.toContain('text-2xl');
   });
 
   it('renders a cached history snapshot immediately without triggering a new analyze request', async () => {
@@ -601,12 +557,12 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText(/将接入盈利质量与估值弹性描述卡/)).not.toBeInTheDocument();
   });
 
-  it('updates the dashboard immediately when the analyze button is pressed and clears the local search query', async () => {
+  it('enters loading state immediately when the analyze button is pressed and clears the local search query', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
-    expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
     expect(analysisApi.analyzeAsync).toHaveBeenCalled();
   });
@@ -627,10 +583,18 @@ describe('HomeSurfacePage', () => {
         category: 'upstream_unavailable',
       })));
 
-    expect(await screen.findByText('AI 引擎服务暂不可用，已为您加载本地回溯数据')).toBeInTheDocument();
+    expect(await screen.findByText('AI 引擎调用过载，已加载本地快照数据')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
     expect(screen.getByText('甲骨文')).toBeInTheDocument();
     expect(screen.queryByText('待确认股票')).not.toBeInTheDocument();
-    expect(screen.getByText('AI引擎暂不可用，已切换至本地回溯快照')).toBeInTheDocument();
+    expect(screen.getByText('偏多')).toBeInTheDocument();
+    expect(screen.getByText('短线技术偏强，均线结构偏多')).toBeInTheDocument();
+    expect(screen.getByText('持有。技术结构：价格位于 MA20 上方，防守位在近期支撑带；若回踩企稳，趋势延续概率更高。')).toBeInTheDocument();
+    expect(screen.getByText('技术面与基本面相互印证，资金承接良好，综合建议以持有为主。')).toBeInTheDocument();
+    expect(screen.getByText('短线动能充沛，价格沿五日线攀升')).toBeInTheDocument();
+    expect(screen.getByText('趋势支撑确认，回踩不破可视作介入点')).toBeInTheDocument();
+    expect(screen.getByText('总市值体量充足，流动性承接极强')).toBeInTheDocument();
+    expect(screen.getByText('估值仍在成长溢价区，需业绩继续兑现')).toBeInTheDocument();
+    expect(screen.queryByText(/RateLimitError/i)).not.toBeInTheDocument();
   });
 });
