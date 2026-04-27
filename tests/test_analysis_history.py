@@ -37,6 +37,7 @@ from src.config import Config
 from src.storage import DatabaseManager, AnalysisHistory, BacktestResult, StockDaily
 from src.analyzer import AnalysisResult
 from src.services.history_service import HistoryService
+from scripts.clean_test_history import clean_test_history_records
 import src.auth as auth
 
 class AnalysisHistoryTestCase(unittest.TestCase):
@@ -286,7 +287,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         )
         self.assertEqual(saved, 1)
 
-        generated_at = "2026-04-28T09:30:00+00:00"
+        generated_at = "2026-04-28T17:30:00+08:00"
         attached = self.db.attach_analysis_report_payload(
             query_id="query_canonical_report_001",
             report_payload={
@@ -294,11 +295,13 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                     "query_id": "query_canonical_report_001",
                     "stock_code": "600519",
                     "stock_name": "贵州茅台",
+                    "company_name": "贵州茅台",
                     "report_type": "detailed",
                     "report_language": "zh",
-                    "created_at": "2026-04-28T09:29:00+00:00",
+                    "created_at": "2026-04-28T17:29:00+08:00",
                     "report_generated_at": generated_at,
                     "generated_at": generated_at,
+                    "is_test": True,
                     "strategy_type": "hold",
                 },
                 "summary": {
@@ -333,17 +336,22 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertEqual(persisted_report.get("meta", {}).get("id"), row.id)
         self.assertEqual(persisted_report.get("meta", {}).get("generated_at"), generated_at)
         self.assertEqual(persisted_report.get("meta", {}).get("report_generated_at"), generated_at)
+        self.assertEqual(persisted_report.get("meta", {}).get("company_name"), "贵州茅台")
+        self.assertTrue(persisted_report.get("meta", {}).get("is_test"))
         self.assertEqual(persisted_report.get("meta", {}).get("strategy_type"), "hold")
         self.assertEqual(persisted_report.get("summary", {}).get("strategy_summary"), "等待确认后按节奏执行")
 
         service = HistoryService(self.db)
         history_list = service.get_history_list(page=1, limit=10)
         self.assertEqual(history_list["items"][0]["generated_at"], generated_at)
+        self.assertTrue(history_list["items"][0]["is_test"])
 
         detail = service.get_history_detail_by_id(row.id)
         self.assertIsNotNone(detail)
         self.assertEqual(detail.get("id"), row.id)
         self.assertEqual(detail.get("report_generated_at"), generated_at)
+        self.assertEqual(detail.get("company_name"), "贵州茅台")
+        self.assertTrue(detail.get("is_test"))
 
     def test_history_detail_accepts_dict_raw_result(self) -> None:
         """_record_to_detail_dict should handle dict raw_result without json.loads errors."""
@@ -842,6 +850,88 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertEqual(report.meta.market_session_date, "2026-03-27")
         self.assertEqual(report.meta.news_published_at, "2026-03-27T09:00:00-04:00")
         self.assertEqual(report.meta.report_generated_at, "2026-03-27T21:35:00+08:00")
+
+    def test_history_detail_endpoint_exposes_company_name_and_is_test(self) -> None:
+        if get_history_detail is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        query_id = "query_history_company_name_001"
+        saved = self.db.save_analysis_history(
+            result=self._build_result(),
+            query_id=query_id,
+            report_type="detailed",
+            news_content="news",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+
+        attached = self.db.attach_analysis_report_payload(
+            query_id=query_id,
+            report_payload={
+                "meta": {
+                    "query_id": query_id,
+                    "stock_code": "600519",
+                    "stock_name": "贵州茅台",
+                    "company_name": "贵州茅台",
+                    "report_type": "detailed",
+                    "report_language": "zh",
+                    "generated_at": "2026-04-28T17:35:00+08:00",
+                    "report_generated_at": "2026-04-28T17:35:00+08:00",
+                    "is_test": True,
+                },
+                "summary": {
+                    "analysis_summary": "测试公司名返回",
+                },
+                "details": {},
+            },
+        )
+        self.assertEqual(attached, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.query_id == query_id).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            record_id = row.id
+
+        report = get_history_detail(str(record_id), db_manager=self.db)
+        self.assertEqual(report.meta.stock_name, "贵州茅台")
+        self.assertEqual(report.meta.company_name, "贵州茅台")
+        self.assertTrue(report.meta.is_test)
+
+    def test_clean_test_history_script_deletes_only_flagged_rows(self) -> None:
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=self._build_result(),
+                query_id="query_clean_test_001",
+                report_type="simple",
+                news_content="新闻摘要",
+                context_snapshot=None,
+                save_snapshot=False,
+                is_test=True,
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=self._build_result(),
+                query_id="query_clean_test_002",
+                report_type="simple",
+                news_content="新闻摘要",
+                context_snapshot=None,
+                save_snapshot=False,
+                is_test=False,
+            ),
+            1,
+        )
+
+        self.assertEqual(clean_test_history_records(dry_run=True), 1)
+        self.assertEqual(clean_test_history_records(), 1)
+
+        with self.db.get_session() as session:
+            remaining = session.query(AnalysisHistory).order_by(AnalysisHistory.query_id.asc()).all()
+
+        self.assertEqual([row.query_id for row in remaining], ["query_clean_test_002"])
 
     def test_history_markdown_localizes_english_report_and_placeholder_name(self) -> None:
         """History markdown should preserve report_language for English reports."""

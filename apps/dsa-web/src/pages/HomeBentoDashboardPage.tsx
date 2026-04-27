@@ -710,8 +710,40 @@ function normalizeTickerQuery(rawValue?: string): string {
   return TICKER_ALIASES[trimmed.toUpperCase()] || TICKER_ALIASES[trimmed] || trimmed.toUpperCase();
 }
 
-function resolveHistoryGeneratedAt(historyItem: HistoryItem): string {
-  return String(historyItem.generatedAt || historyItem.createdAt || '').trim();
+function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'): string {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '';
+  }
+
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return text;
+  }
+
+  const parts = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('month')}/${get('day')} ${get('hour')}:${get('minute')}`;
+}
+
+function resolveHistoryGeneratedAt(historyItem: HistoryItem, locale: DashboardLocale): string {
+  return formatHistoryTimestamp(historyItem.generatedAt || historyItem.createdAt, locale);
+}
+
+function resolveHistoryCompanyLabel(historyItem: HistoryItem): string {
+  const ticker = normalizeTickerQuery(historyItem.stockCode);
+  const companyName = String(historyItem.companyName || historyItem.stockName || '').trim();
+  if (!companyName || companyName.toUpperCase() === ticker) {
+    return ticker;
+  }
+  return `${companyName} (${ticker})`;
 }
 
 function resolveDashboardPayload(locale: DashboardLocale, ticker: string): DashboardPayload {
@@ -1612,7 +1644,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
   const clearError = useStockPoolStore((state) => state.clearError);
   const recentHistoryItems = useMemo(
-    () => historyItems.slice(0, 8),
+    () => historyItems.filter((item) => !item.isTest).slice(0, 8),
     [historyItems],
   );
   const isBusy = isAnalyzing || isDashboardLoading;
@@ -1901,7 +1933,8 @@ const HomeBentoDashboardPage: React.FC = () => {
           {recentHistoryItems.length > 0 ? recentHistoryItems.map((item) => {
             const ticker = normalizeTickerQuery(item.stockCode);
             const isSelected = selectedReport?.meta.id === item.id;
-            const generatedAt = resolveHistoryGeneratedAt(item);
+            const generatedAt = resolveHistoryGeneratedAt(item, locale);
+            const companyLabel = resolveHistoryCompanyLabel(item);
             return (
             <button
               key={item.id}
@@ -1915,7 +1948,7 @@ const HomeBentoDashboardPage: React.FC = () => {
               data-testid={`home-bento-history-item-${item.id}`}
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{item.stockName || ticker}</p>
+                <p className="truncate text-sm font-semibold">{companyLabel}</p>
                 <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-white/40">
                   {ticker} · {locale === 'en' ? 'Recent analysis' : '最近分析'}
                 </p>

@@ -12,7 +12,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, Any, Callable
 
 from src.report_language import (
@@ -22,6 +22,7 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from src.utils.time_utils import to_beijing_iso8601
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,7 @@ class AnalysisService:
         report_type: str,
     ) -> Dict[str, Any]:
         """Build the canonical report payload from an AnalysisResult."""
-        generated_at = datetime.now(timezone.utc).isoformat()
+        generated_at = to_beijing_iso8601(datetime.utcnow())
         sniper_points = {}
         if hasattr(result, "get_sniper_points"):
             sniper_points = result.get_sniper_points() or {}
@@ -148,10 +149,12 @@ class AnalysisService:
                 "query_id": query_id,
                 "stock_code": result.code,
                 "stock_name": stock_name,
+                "company_name": stock_name,
                 "report_type": report_type,
                 "report_language": report_language,
                 "report_generated_at": generated_at,
                 "generated_at": generated_at,
+                "is_test": False,
                 "current_price": result.current_price,
                 "change_pct": result.change_pct,
                 "model_used": getattr(result, "model_used", None),

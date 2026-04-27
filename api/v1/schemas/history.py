@@ -24,11 +24,13 @@ class HistoryItem(BaseModel):
                 "query_id": "abc123",
                 "stock_code": "600519",
                 "stock_name": "贵州茅台",
+                "company_name": "贵州茅台",
                 "report_type": "detailed",
                 "sentiment_score": 75,
                 "operation_advice": "持有",
                 "created_at": "2024-01-01T12:00:00",
                 "generated_at": "2024-01-01T12:01:05Z",
+                "is_test": False,
             }
         }
     )
@@ -37,6 +39,7 @@ class HistoryItem(BaseModel):
     query_id: str = Field(..., description="分析记录关联 query_id（批量分析时重复）")
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
+    company_name: Optional[str] = Field(None, description="公司名称")
     report_type: Optional[str] = Field(None, description="报告类型")
     sentiment_score: Optional[int] = Field(
         None, 
@@ -47,6 +50,7 @@ class HistoryItem(BaseModel):
     operation_advice: Optional[str] = Field(None, description="操作建议")
     created_at: Optional[str] = Field(None, description="创建时间")
     generated_at: Optional[str] = Field(None, description="持久化报告生成时间")
+    is_test: bool = Field(False, description="是否为测试/临时历史记录")
 
 
 class HistoryListResponse(BaseModel):
@@ -124,6 +128,7 @@ class ReportMeta(BaseModel):
     query_id: str = Field(..., description="分析记录关联 query_id（批量分析时重复）")
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
+    company_name: Optional[str] = Field(None, description="公司名称")
     report_type: Optional[str] = Field(None, description="报告类型")
     report_language: Optional[str] = Field(None, description="报告输出语言（zh/en）")
     created_at: Optional[str] = Field(None, description="创建时间")
@@ -131,6 +136,7 @@ class ReportMeta(BaseModel):
     market_session_date: Optional[str] = Field(None, description="市场会话日期（YYYY-MM-DD）")
     news_published_at: Optional[str] = Field(None, description="新闻发布时间（ISO 8601, aware）")
     report_generated_at: Optional[str] = Field(None, description="报告生成时间（ISO 8601, aware）")
+    is_test: bool = Field(False, description="是否为测试/临时历史记录")
     current_price: Optional[float] = Field(None, description="分析时股价")
     change_pct: Optional[float] = Field(None, description="分析时涨跌幅(%)")
     model_used: Optional[str] = Field(None, description="分析使用的 LLM 模型")

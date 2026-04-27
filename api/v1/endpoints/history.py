@@ -135,11 +135,13 @@ def get_history_list(
                 query_id=item.get("query_id", ""),
                 stock_code=item.get("stock_code", ""),
                 stock_name=item.get("stock_name"),
+                company_name=item.get("company_name"),
                 report_type=item.get("report_type"),
                 sentiment_score=item.get("sentiment_score"),
                 operation_advice=item.get("operation_advice"),
                 created_at=item.get("created_at"),
                 generated_at=item.get("generated_at"),
+                is_test=bool(item.get("is_test")),
             )
             for item in result.get("items", [])
         ]
@@ -322,6 +324,7 @@ def get_history_detail(
             query_id=result.get("query_id", ""),
             stock_code=result.get("stock_code", ""),
             stock_name=stock_name,
+            company_name=result.get("company_name") or stock_name,
             report_type=result.get("report_type"),
             report_language=report_language,
             created_at=result.get("created_at"),
@@ -329,6 +332,7 @@ def get_history_detail(
             market_session_date=result.get("market_session_date"),
             news_published_at=result.get("news_published_at"),
             report_generated_at=result.get("report_generated_at"),
+            is_test=bool(result.get("is_test")),
             current_price=current_price,
             change_pct=change_pct,
             model_used=normalize_model_used(result.get("model_used"))

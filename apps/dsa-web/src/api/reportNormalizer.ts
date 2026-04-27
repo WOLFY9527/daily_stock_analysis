@@ -12,6 +12,7 @@ interface ReportMetaFallback extends Partial<ReportMeta> {
   queryId?: string;
   stockCode?: string;
   stockName?: string;
+  companyName?: string;
   createdAt?: string;
 }
 
@@ -98,6 +99,7 @@ export const normalizeAnalysisReport = (
       queryId: meta.queryId || fallbackMeta.queryId || '',
       stockCode: meta.stockCode || fallbackMeta.stockCode || '',
       stockName: meta.stockName || fallbackMeta.stockName || meta.stockCode || fallbackMeta.stockCode || '',
+      companyName: meta.companyName || meta.stockName || fallbackMeta.companyName || fallbackMeta.stockName || meta.stockCode || fallbackMeta.stockCode || '',
       reportType: meta.reportType || 'detailed',
       createdAt: meta.createdAt || fallbackMeta.createdAt || '',
     },

@@ -32,6 +32,7 @@ from src.report_language import (
 from data_provider.us_index_mapping import is_us_stock_code
 from src.storage import DatabaseManager
 from src.utils.data_processing import normalize_model_used, parse_json_field
+from src.utils.time_utils import to_beijing_iso8601
 
 if TYPE_CHECKING:
     from src.analyzer import AnalysisResult
@@ -141,15 +142,26 @@ class HistoryService:
                     "id": record.id,
                     "query_id": record.query_id,
                     "stock_code": record.code,
-                    "stock_name": record.name,
+                    "stock_name": persisted_meta.get("stock_name") or record.name,
+                    "company_name": (
+                        persisted_meta.get("company_name")
+                        or persisted_meta.get("stock_name")
+                        or record.name
+                        or record.code
+                    ),
                     "report_type": record.report_type,
                     "sentiment_score": record.sentiment_score,
                     "operation_advice": record.operation_advice,
                     "created_at": record.created_at.isoformat() if record.created_at else None,
-                    "generated_at": (
+                    "generated_at": to_beijing_iso8601(
                         persisted_meta.get("generated_at")
                         or persisted_meta.get("report_generated_at")
-                        or (record.created_at.isoformat() if record.created_at else None)
+                        or record.created_at
+                    ),
+                    "is_test": bool(
+                        persisted_meta.get("is_test")
+                        if persisted_meta.get("is_test") is not None
+                        else record.is_test
                     ),
                 })
             
@@ -786,9 +798,20 @@ class HistoryService:
             "query_id": record.query_id,
             "stock_code": persisted_meta.get("stock_code") or record.code,
             "stock_name": persisted_meta.get("stock_name") or record.name,
+            "company_name": (
+                persisted_meta.get("company_name")
+                or persisted_meta.get("stock_name")
+                or record.name
+                or record.code
+            ),
             "report_type": persisted_meta.get("report_type") or record.report_type,
             "created_at": persisted_meta.get("created_at") or (record.created_at.isoformat() if record.created_at else None),
             "report_language": persisted_meta.get("report_language"),
+            "is_test": bool(
+                persisted_meta.get("is_test")
+                if persisted_meta.get("is_test") is not None
+                else record.is_test
+            ),
             "model_used": model_used,
             "analysis_summary": persisted_summary.get("analysis_summary") or record.analysis_summary,
             "operation_advice": persisted_summary.get("operation_advice") or record.operation_advice,
@@ -809,7 +832,7 @@ class HistoryService:
             "market_timestamp": persisted_meta.get("market_timestamp") or time_contract.get("market_timestamp"),
             "market_session_date": persisted_meta.get("market_session_date") or time_contract.get("market_session_date"),
             "news_published_at": persisted_meta.get("news_published_at") or time_contract.get("news_published_at"),
-            "report_generated_at": (
+            "report_generated_at": to_beijing_iso8601(
                 persisted_meta.get("generated_at")
                 or persisted_meta.get("report_generated_at")
                 or time_contract.get("report_generated_at")

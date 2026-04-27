@@ -76,6 +76,7 @@ from src.postgres_control_plane_store import PostgresPhaseGStore
 import src.storage_phase_g_observability as storage_phase_g_observability
 import src.storage_postgres_bridge as storage_postgres_bridge
 import src.storage_topology_report as storage_topology_report
+from src.utils.time_utils import to_beijing_iso8601
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +327,7 @@ class AnalysisHistory(Base):
     secondary_buy = Column(Float)
     stop_loss = Column(Float)
     take_profit = Column(Float)
+    is_test = Column(Boolean, nullable=False, default=False, index=True)
 
     created_at = Column(DateTime, default=datetime.now, index=True)
 
@@ -355,6 +357,7 @@ class AnalysisHistory(Base):
             'secondary_buy': self.secondary_buy,
             'stop_loss': self.stop_loss,
             'take_profit': self.take_profit,
+            'is_test': bool(self.is_test),
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -1314,6 +1317,7 @@ class DatabaseManager:
             self._ensure_bootstrap_admin_user_row(conn)
 
             self._add_column_if_missing(conn, "analysis_history", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "analysis_history", "is_test", "BOOLEAN NOT NULL DEFAULT 0")
             self._add_column_if_missing(conn, "backtest_results", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "backtest_runs", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "rule_backtest_runs", "owner_id", "VARCHAR(64)")
@@ -1336,6 +1340,12 @@ class DatabaseManager:
                 "ix_analysis_owner_query",
                 "analysis_history",
                 "owner_id, query_id",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_analysis_history_is_test_created",
+                "analysis_history",
+                "is_test, created_at",
             )
             self._create_index_if_missing(
                 conn,
@@ -5105,6 +5115,7 @@ class DatabaseManager:
         context_snapshot: Optional[Dict[str, Any]] = None,
         save_snapshot: bool = True,
         owner_id: Optional[str] = None,
+        is_test: bool = False,
     ) -> int:
         """
         保存分析结果历史记录
@@ -5136,6 +5147,7 @@ class DatabaseManager:
             secondary_buy=sniper_points.get("secondary_buy"),
             stop_loss=sniper_points.get("stop_loss"),
             take_profit=sniper_points.get("take_profit"),
+            is_test=bool(is_test),
             created_at=datetime.now(),
         )
 
@@ -5204,15 +5216,25 @@ class DatabaseManager:
                 meta = dict(payload.get("meta") or {})
                 summary = dict(payload.get("summary") or {})
                 details = dict(payload.get("details") or {})
-                generated_at = (
+                generated_at = to_beijing_iso8601(
                     meta.get("generated_at")
                     or meta.get("report_generated_at")
-                    or (record.created_at.isoformat() if record.created_at else None)
+                    or record.created_at
                 )
                 meta["id"] = int(record.id)
                 if generated_at:
                     meta["generated_at"] = generated_at
                     meta.setdefault("report_generated_at", generated_at)
+                company_name = str(
+                    meta.get("company_name")
+                    or meta.get("stock_name")
+                    or record.name
+                    or record.code
+                ).strip()
+                meta["company_name"] = company_name
+                meta.setdefault("stock_name", company_name)
+                resolved_is_test = bool(meta.get("is_test") or record.is_test)
+                meta["is_test"] = resolved_is_test
                 if summary.get("analysis_summary") and not summary.get("strategy_summary"):
                     summary["strategy_summary"] = summary.get("analysis_summary")
                 if meta.get("strategy_type") is None:
@@ -5236,6 +5258,7 @@ class DatabaseManager:
                     raw_result["model_used"] = model_used
 
                 record.raw_result = self._safe_json_dumps(raw_result)
+                record.is_test = resolved_is_test
                 session.commit()
                 return 1
             except Exception as e:

@@ -265,6 +265,9 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             response["report"],
         )
         self.assertEqual(response["report"]["meta"]["generated_at"], response["report"]["meta"]["report_generated_at"])
+        self.assertTrue(str(response["report"]["meta"]["generated_at"]).endswith("+08:00"))
+        self.assertEqual(response["report"]["meta"]["company_name"], "NVIDIA")
+        self.assertFalse(response["report"]["meta"]["is_test"])
         self.assertEqual(response["report"]["meta"]["strategy_type"], "buy")
         self.assertEqual(response["report"]["summary"]["strategy_summary"], "等待确认")
 

@@ -114,9 +114,9 @@ describe('HomeSurfacePage', () => {
       page: 1,
       limit: 20,
       items: [
-        { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z' },
-        { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', createdAt: '2026-04-27T07:00:00Z', generatedAt: '2026-04-27T07:05:00Z' },
-        { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z' },
+        { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', companyName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z', isTest: false },
+        { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', companyName: 'Tesla', createdAt: '2026-04-27T07:00:00Z', generatedAt: '2026-04-27T07:05:00Z', isTest: false },
+        { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', companyName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z', isTest: false },
       ],
     });
     vi.mocked(historyApi.getDetail).mockResolvedValue(defaultHistoryReport);
@@ -405,8 +405,32 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
 
-    expect(await screen.findByText('2026-04-27T08:03:00Z')).toBeInTheDocument();
-    expect(screen.getByText('2026-04-27T07:05:00Z')).toBeInTheDocument();
+    expect(await screen.findByText('Oracle (ORCL)')).toBeInTheDocument();
+    expect(screen.getByText('Tesla (TSLA)')).toBeInTheDocument();
+    expect(screen.getByText('NVIDIA (NVDA)')).toBeInTheDocument();
+    expect(screen.getByText('04/27 16:03')).toBeInTheDocument();
+    expect(screen.getByText('04/27 15:05')).toBeInTheDocument();
+  });
+
+  it('hides test history rows and falls back to ticker when company name is missing', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 3,
+      page: 1,
+      limit: 20,
+      items: [
+        { id: 31, queryId: 'q31', stockCode: 'ORCL', stockName: 'Oracle', companyName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z', isTest: false },
+        { id: 32, queryId: 'q32', stockCode: 'BCHK', stockName: 'Oracle Browser Check', companyName: 'Oracle Browser Check', createdAt: '2026-04-27T07:00:00Z', generatedAt: '2026-04-27T07:05:00Z', isTest: true },
+        { id: 33, queryId: 'q33', stockCode: 'NVDA', stockName: '', companyName: '', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z', isTest: false },
+      ],
+    });
+    renderSurface();
+
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+
+    expect(await screen.findByText('Oracle (ORCL)')).toBeInTheDocument();
+    expect(screen.getByText('NVDA')).toBeInTheDocument();
+    expect(screen.queryByText('Oracle Browser Check (BCHK)')).not.toBeInTheDocument();
   });
 
   it('renders a cached history snapshot immediately and then replaces it with database detail', async () => {

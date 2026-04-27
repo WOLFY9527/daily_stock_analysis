@@ -26,6 +26,7 @@ export interface ReportMeta {
   queryId: string;
   stockCode: string;
   stockName: string;
+  companyName?: string;
   reportType: 'simple' | 'detailed' | 'full' | 'brief';
   reportLanguage?: ReportLanguage;
   createdAt: string;
@@ -33,6 +34,7 @@ export interface ReportMeta {
   marketSessionDate?: string;
   newsPublishedAt?: string;
   reportGeneratedAt?: string;
+  isTest?: boolean;
   currentPrice?: number;
   changePct?: number;
   modelUsed?: string;  // LLM model used for analysis
@@ -483,11 +485,13 @@ export interface HistoryItem {
   queryId: string;  // Linked analysis query ID
   stockCode: string;
   stockName?: string;
+  companyName?: string;
   reportType?: string;
   sentimentScore?: number;
   operationAdvice?: string;
   createdAt: string;
   generatedAt?: string;
+  isTest?: boolean;
 }
 
 /** History list response */

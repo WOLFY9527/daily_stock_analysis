@@ -158,7 +158,8 @@ class AnalysisRepository:
         query_id: str,
         report_type: str,
         news_content: Optional[str] = None,
-        context_snapshot: Optional[Dict[str, Any]] = None
+        context_snapshot: Optional[Dict[str, Any]] = None,
+        is_test: bool = False,
     ) -> int:
         """
         保存分析结果
@@ -181,6 +182,7 @@ class AnalysisRepository:
                 news_content=news_content,
                 context_snapshot=context_snapshot,
                 owner_id=self.owner_id,
+                is_test=is_test,
             )
         except Exception as e:
             logger.error(f"保存分析结果失败: {e}")

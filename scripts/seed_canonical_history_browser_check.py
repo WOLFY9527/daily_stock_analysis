@@ -16,6 +16,7 @@ if ROOT_DIR not in sys.path:
 from src.analyzer import AnalysisResult
 from src.repositories.analysis_repo import AnalysisRepository
 from src.storage import AnalysisHistory, DatabaseManager
+from src.utils.time_utils import to_beijing_iso8601
 
 
 OWNER_ID = "bootstrap-admin"
@@ -25,7 +26,7 @@ def main() -> None:
     db = DatabaseManager.get_instance()
     repo = AnalysisRepository(db, owner_id=OWNER_ID)
     query_id = f"browser-check-{uuid.uuid4().hex[:12]}"
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at = to_beijing_iso8601(datetime.now(timezone.utc))
 
     result = AnalysisResult(
         code="ORCL",
@@ -48,6 +49,7 @@ def main() -> None:
         report_type="detailed",
         news_content=result.news_summary,
         context_snapshot=None,
+        is_test=True,
     )
     if saved != 1:
         raise SystemExit("failed to save verification history row")
@@ -57,6 +59,7 @@ def main() -> None:
             "query_id": query_id,
             "stock_code": "ORCL",
             "stock_name": "Oracle Browser Check",
+            "company_name": "Oracle Browser Check",
             "report_type": "detailed",
             "report_language": "en",
             "created_at": generated_at,
@@ -64,6 +67,7 @@ def main() -> None:
             "report_generated_at": generated_at,
             "model_used": "browser-check-seed",
             "strategy_type": "hold",
+            "is_test": True,
         },
         "summary": {
             "analysis_summary": "Browser verification canonical report: database payload should replace any local snapshot.",
