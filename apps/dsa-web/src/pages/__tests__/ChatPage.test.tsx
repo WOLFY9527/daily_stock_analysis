@@ -171,6 +171,27 @@ beforeEach(() => {
 });
 
 describe('ChatPage', () => {
+  it('replaces persisted Gemini 429 failure notes with the timeout fallback copy', async () => {
+    mockStoreState.messages = [
+      {
+        id: 'assistant-timeout',
+        role: 'assistant',
+        content: '[分析失败] Gemini 429: rate limit exceeded',
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('当前响应超时，请稍后刷新')).toBeInTheDocument();
+    expect(screen.queryByText(/429|rate limit exceeded/i)).not.toBeInTheDocument();
+  });
+
   it('renders a three-column workspace with a dedicated right-side strategy console and docked composer', async () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/chat']}>

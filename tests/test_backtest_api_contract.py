@@ -16,6 +16,8 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
     cancel_rule_backtest_run,
     compare_rule_backtest_runs,
+    get_backtest_performance,
+    get_backtest_stock_performance,
     get_rule_backtest_execution_trace_csv,
     get_rule_backtest_execution_trace_json,
     get_rule_backtest_support_bundle_reproducibility_manifest,
@@ -83,6 +85,41 @@ EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
 
 
 class BacktestApiContractTestCase(unittest.TestCase):
+    @staticmethod
+    def _performance_payload(*, scope: str = "overall", code: str | None = None) -> dict:
+        return {
+            "scope": scope,
+            "code": code,
+            "eval_window_days": 10,
+            "evaluation_window_trading_bars": 10,
+            "engine_version": "v1",
+            "computed_at": "2026-04-27T09:00:00Z",
+            "total_evaluations": 12,
+            "completed_count": 10,
+            "insufficient_count": 2,
+            "long_count": 7,
+            "cash_count": 3,
+            "win_count": 6,
+            "loss_count": 2,
+            "neutral_count": 2,
+            "direction_accuracy_pct": 70.0,
+            "win_rate_pct": 75.0,
+            "neutral_rate_pct": 20.0,
+            "avg_stock_return_pct": 4.5,
+            "avg_simulated_return_pct": 5.1,
+            "stop_loss_trigger_rate": 10.0,
+            "take_profit_trigger_rate": 30.0,
+            "ambiguous_rate": 5.0,
+            "avg_days_to_first_hit": 4.0,
+            "advice_breakdown": {"buy": 8, "hold": 2},
+            "diagnostics": {"source": "summary_table"},
+            "evaluation_mode": "standard",
+            "requested_mode": "local_first" if code else "auto",
+            "resolved_source": "LocalParquet" if code else "DatabaseCache",
+            "fallback_used": False,
+            "execution_assumptions": {"entry_timing": "next_bar_open"},
+        }
+
     @staticmethod
     def _rule_run_payload(*, run_id: int = 123, status: str = "queued") -> dict:
         artifact_availability = {
@@ -689,6 +726,95 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(service.run_backtest.call_args.kwargs["parsed_strategy"]["setup"]["indicator_family"], "macd")
         self.assertEqual(service.run_backtest.call_args.kwargs["parsed_strategy"]["strategy_spec"], {})
+
+    def test_get_backtest_performance_returns_global_summary_contract(self) -> None:
+        service = MagicMock()
+        service.get_global_summary.return_value = self._performance_payload(scope="overall")
+
+        with patch("api.v1.endpoints.backtest.BacktestService", return_value=service):
+            response = get_backtest_performance(eval_window_days=10, db_manager=MagicMock())
+
+        self.assertEqual(response.scope, "overall")
+        self.assertIsNone(response.code)
+        self.assertEqual(response.requested_mode, "auto")
+        self.assertEqual(response.resolved_source, "DatabaseCache")
+        service.get_global_summary.assert_called_once_with(eval_window_days=10)
+
+    def test_get_backtest_stock_performance_returns_stock_summary_contract(self) -> None:
+        service = MagicMock()
+        service.get_stock_summary.return_value = self._performance_payload(scope="stock", code="AAPL")
+
+        with patch("api.v1.endpoints.backtest.BacktestService", return_value=service):
+            response = get_backtest_stock_performance(code="AAPL", eval_window_days=5, db_manager=MagicMock())
+
+        self.assertEqual(response.scope, "stock")
+        self.assertEqual(response.code, "AAPL")
+        self.assertEqual(response.requested_mode, "local_first")
+        self.assertEqual(response.resolved_source, "LocalParquet")
+        service.get_stock_summary.assert_called_once_with("AAPL", eval_window_days=5)
+
+    def test_get_backtest_performance_falls_back_to_rule_run_aggregate_when_standard_summary_missing(self) -> None:
+        service = MagicMock()
+        service.get_global_summary.return_value = None
+        rule_service = MagicMock()
+        rule_service.list_runs.return_value = {
+            "total": 2,
+            "page": 1,
+            "limit": 100,
+            "items": [
+                {
+                    "id": 201,
+                    "code": "AAPL",
+                    "status": "completed",
+                    "total_return_pct": 12.5,
+                    "final_equity": 112500.0,
+                    "run_at": "2026-04-27T09:00:00Z",
+                    "completed_at": "2026-04-27T09:01:00Z",
+                },
+                {
+                    "id": 202,
+                    "code": "MSFT",
+                    "status": "completed",
+                    "total_return_pct": -3.5,
+                    "final_equity": 96500.0,
+                    "run_at": "2026-04-27T10:00:00Z",
+                    "completed_at": "2026-04-27T10:01:00Z",
+                },
+            ],
+        }
+
+        with patch("api.v1.endpoints.backtest.BacktestService", return_value=service), \
+             patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=rule_service):
+            response = get_backtest_performance(eval_window_days=10, db_manager=MagicMock())
+
+        self.assertEqual(response.scope, "overall")
+        self.assertEqual(response.total_evaluations, 2)
+        self.assertEqual(response.completed_count, 2)
+        self.assertEqual(response.win_rate_pct, 50.0)
+        self.assertEqual(response.avg_simulated_return_pct, 4.5)
+        self.assertEqual(response.resolved_source, "stored_rule_backtest_runs")
+        self.assertEqual(response.evaluation_mode, "rule_deterministic_fallback")
+
+    def test_get_backtest_performance_returns_zero_state_payload_when_no_summary_exists(self) -> None:
+        service = MagicMock()
+        service.get_global_summary.return_value = None
+        rule_service = MagicMock()
+        rule_service.list_runs.return_value = {
+            "total": 0,
+            "page": 1,
+            "limit": 100,
+            "items": [],
+        }
+
+        with patch("api.v1.endpoints.backtest.BacktestService", return_value=service), \
+             patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=rule_service):
+            response = get_backtest_performance(eval_window_days=10, db_manager=MagicMock())
+
+        self.assertEqual(response.scope, "overall")
+        self.assertEqual(response.total_evaluations, 0)
+        self.assertEqual(response.completed_count, 0)
+        self.assertEqual(response.resolved_source, "no_backtest_data")
+        self.assertEqual(response.evaluation_mode, "empty_state")
 
     def test_get_rule_backtest_run_serializes_canonical_audit_rows_field(self) -> None:
         service = MagicMock()

@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildPreferredScannerConfigs,
   diffTableCounts,
+  isRetryableScannerValidationError,
   summarizeFlowOutcomes,
 } from './ux-verification-helpers.mjs';
 
@@ -42,4 +44,29 @@ test('summarizeFlowOutcomes classifies pass partial fail counts', () => {
     failed: 1,
     overallStatus: 'partial',
   });
+});
+
+test('buildPreferredScannerConfigs prioritizes US before fallback markets', () => {
+  assert.deepEqual(buildPreferredScannerConfigs(), [
+    { market: 'us', profile: 'us_preopen_v1' },
+    { market: 'hk', profile: 'hk_preopen_v1' },
+    { market: 'cn', profile: 'cn_preopen_v1' },
+  ]);
+});
+
+test('isRetryableScannerValidationError detects scanner validation payloads', () => {
+  assert.equal(
+    isRetryableScannerValidationError({
+      status: 400,
+      responseBody: '{"detail":{"error":"validation_error","message":"A 股全市场快照不可用。"}}',
+    }),
+    true,
+  );
+  assert.equal(
+    isRetryableScannerValidationError({
+      status: 500,
+      responseBody: '{"detail":{"error":"internal_error"}}',
+    }),
+    false,
+  );
 });

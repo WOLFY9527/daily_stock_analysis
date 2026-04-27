@@ -19,6 +19,7 @@ import {
 import { downloadSession, formatSessionAsMarkdown } from '../utils/chatExport';
 import type { ChatFollowUpContext } from '../utils/chatFollowUp';
 import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFollowUp';
+import { normalizeAssistantMessageContent } from '../utils/chatTimeoutFallback';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
 
@@ -784,6 +785,9 @@ const ChatPage: React.FC = () => {
                 ) : (
                   <div className="flex w-full flex-col gap-6">
                     {messages.map((msg, index) => {
+                      const displayContent = msg.role === 'assistant'
+                        ? normalizeAssistantMessageContent(msg.content)
+                        : msg.content;
                       const isLast = index === messages.length - 1;
                       const shouldStream = isGenerating
                         && msg.role === 'assistant'
@@ -798,7 +802,7 @@ const ChatPage: React.FC = () => {
                           className="mb-6 flex w-full justify-end"
                         >
                           <div className="max-w-[80%] rounded-2xl rounded-tr-[4px] border border-white/10 bg-white/[0.05] px-5 py-3.5 text-[15px] leading-relaxed text-white/90 shadow-lg backdrop-blur-md break-words">
-                            {msg.content.split('\n').map((line, i) => (
+                            {displayContent.split('\n').map((line, i) => (
                               <p key={i} className="mb-1 leading-relaxed last:mb-0">
                                 {line || '\u00A0'}
                               </p>
@@ -842,7 +846,7 @@ const ChatPage: React.FC = () => {
                                 as="div"
                                 className={STREAMING_ASSISTANT_MESSAGE_SURFACE_CLASS}
                                 testId={`chat-typewriter-${msg.id}`}
-                                text={msg.content}
+                                text={displayContent}
                                 autoScrollRef={isAutoScroll}
                                 onComplete={() => {
                                   setAnimatedAssistantMessageId((currentId) => (currentId === msg.id ? null : currentId));
@@ -851,7 +855,7 @@ const ChatPage: React.FC = () => {
                             ) : (
                               <div className={ASSISTANT_MESSAGE_SURFACE_CLASS}>
                                 <Markdown components={assistantMarkdownComponents} remarkPlugins={[remarkGfm]}>
-                                  {msg.content}
+                                  {displayContent}
                                 </Markdown>
                               </div>
                             )}

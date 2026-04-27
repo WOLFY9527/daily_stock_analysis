@@ -8,6 +8,11 @@ import {
   isParsedApiError,
   type ParsedApiError,
 } from '../api/error';
+import {
+  CHAT_TIMEOUT_FALLBACK_TEXT,
+  normalizeAssistantMessageContent,
+  shouldUseChatTimeoutFallback,
+} from '../utils/chatTimeoutFallback';
 import { generateUUID } from '../utils/uuid';
 
 const STORAGE_KEY_SESSION = 'dsa_chat_session_id';
@@ -147,7 +152,9 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
               messages: msgs.map((m) => ({
                 id: m.id,
                 role: m.role,
-                content: m.content,
+                content: m.role === 'assistant'
+                  ? normalizeAssistantMessageContent(m.content)
+                  : m.content,
               })),
             });
           }
@@ -185,7 +192,9 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
         messages: msgs.map((m) => ({
           id: m.id,
           role: m.role,
-          content: m.content,
+          content: m.role === 'assistant'
+            ? normalizeAssistantMessageContent(m.content)
+            : m.content,
         })),
       });
     } catch (error: unknown) {
@@ -271,13 +280,14 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
       if (currentSessionId !== streamSessionId || ac.signal.aborted) {
         return;
       }
+      const normalizedContent = normalizeAssistantMessageContent(content.trim() ? content : '（无内容）');
       set((s) => ({
         messages: [
           ...s.messages,
           {
             id: (Date.now() + 1).toString(),
             role: 'assistant',
-            content: content.trim() ? content : '（无内容）',
+            content: normalizedContent,
             skill: payload.skills?.[0],
             skillName,
             thinkingSteps: [...thinkingSteps],
@@ -307,13 +317,14 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
       syncCompletionBadge();
     };
 
+    const currentProgressSteps: ProgressStep[] = [];
+
     try {
       const response = await agentApi.chatStream(payload, { signal: ac.signal });
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buf = '';
       let finalContent: string | null = null;
-      const currentProgressSteps: ProgressStep[] = [];
       const processLine = (line: string) => {
         if (!line.startsWith('data: ')) return;
 
@@ -385,19 +396,29 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
       if (error instanceof Error && error.name === 'AbortError') {
         // User-initiated abort: silent, no badge
       } else {
-        if (shouldFallbackToStandardChat(error)) {
-          try {
-            await runNonStreamFallback();
-          } catch (fallbackError: unknown) {
-            set({ chatError: getParsedApiError(fallbackError) });
+          if (shouldFallbackToStandardChat(error)) {
+            try {
+              await runNonStreamFallback();
+            } catch (fallbackError: unknown) {
+              const parsedFallbackError = getParsedApiError(fallbackError);
+              if (shouldUseChatTimeoutFallback(parsedFallbackError)) {
+                appendAssistantMessage(CHAT_TIMEOUT_FALLBACK_TEXT, currentProgressSteps);
+              } else {
+                set({ chatError: parsedFallbackError });
+              }
+              syncCompletionBadge();
+            }
+          } else {
+            const parsedError = getParsedApiError(error);
+            if (shouldUseChatTimeoutFallback(parsedError)) {
+              appendAssistantMessage(CHAT_TIMEOUT_FALLBACK_TEXT, currentProgressSteps);
+            } else {
+              set({ chatError: parsedError });
+            }
             syncCompletionBadge();
           }
-        } else {
-          set({ chatError: getParsedApiError(error) });
-          syncCompletionBadge();
         }
-      }
-    } finally {
+      } finally {
       const { abortController: currentAc } = get();
       if (currentAc === ac) {
         set({

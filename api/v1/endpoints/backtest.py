@@ -109,6 +109,139 @@ def _run_endpoint(
         raise _internal_error(action_label, exc) from exc
 
 
+def _requested_mode_for_code(code: Optional[str]) -> str:
+    normalized_code = str(code or "").strip().upper()
+    if normalized_code and normalized_code.isascii() and normalized_code.isalpha():
+        return "local_first"
+    return "auto"
+
+
+def _build_rule_run_performance_fallback(
+    *,
+    rule_service: RuleBacktestService,
+    scope: str,
+    code: Optional[str],
+    eval_window_days: Optional[int],
+) -> dict | None:
+    payload = rule_service.list_runs(code=code, page=1, limit=100)
+    items = payload.get("items", []) if isinstance(payload, dict) else []
+    completed_runs = [
+        item for item in items
+        if isinstance(item, dict) and str(item.get("status") or "").strip().lower() == "completed"
+    ]
+    if not completed_runs:
+        return None
+
+    total_returns = [
+        float(item["total_return_pct"])
+        for item in completed_runs
+        if item.get("total_return_pct") is not None
+    ]
+    win_count = sum(1 for value in total_returns if value > 0)
+    loss_count = sum(1 for value in total_returns if value < 0)
+    neutral_count = sum(1 for value in total_returns if value == 0)
+    completed_count = len(completed_runs)
+    win_rate_pct = round((win_count / completed_count) * 100.0, 4) if completed_count else None
+    avg_return_pct = round(sum(total_returns) / len(total_returns), 4) if total_returns else None
+    computed_at = max(
+        (
+            str(item.get("completed_at") or item.get("run_at"))
+            for item in completed_runs
+            if item.get("completed_at") or item.get("run_at")
+        ),
+        default=None,
+    )
+
+    return {
+        "scope": scope,
+        "code": code,
+        "eval_window_days": int(eval_window_days or 10),
+        "evaluation_window_trading_bars": int(eval_window_days or 10),
+        "engine_version": "rule_deterministic_v1",
+        "computed_at": computed_at,
+        "total_evaluations": completed_count,
+        "completed_count": completed_count,
+        "insufficient_count": 0,
+        "long_count": completed_count,
+        "cash_count": 0,
+        "win_count": win_count,
+        "loss_count": loss_count,
+        "neutral_count": neutral_count,
+        "direction_accuracy_pct": win_rate_pct,
+        "win_rate_pct": win_rate_pct,
+        "neutral_rate_pct": round((neutral_count / completed_count) * 100.0, 4) if completed_count else None,
+        "avg_stock_return_pct": avg_return_pct,
+        "avg_simulated_return_pct": avg_return_pct,
+        "stop_loss_trigger_rate": None,
+        "take_profit_trigger_rate": None,
+        "ambiguous_rate": None,
+        "avg_days_to_first_hit": None,
+        "advice_breakdown": {
+            "rule_runs_completed": completed_count,
+            "rule_runs_positive": win_count,
+            "rule_runs_negative": loss_count,
+            "rule_runs_neutral": neutral_count,
+        },
+        "diagnostics": {
+            "source": "rule_backtest_runs_fallback",
+            "fallback_reason": "standard_backtest_summary_missing",
+            "sample_run_ids": [item.get("id") for item in completed_runs[:10]],
+        },
+        "evaluation_mode": "rule_deterministic_fallback",
+        "requested_mode": _requested_mode_for_code(code),
+        "resolved_source": "stored_rule_backtest_runs",
+        "fallback_used": False,
+        "execution_assumptions": {
+            "source": "rule_backtest_runs",
+            "mode": "stored_result_aggregate",
+        },
+    }
+
+
+def _build_empty_performance_payload(
+    *,
+    scope: str,
+    code: Optional[str],
+    eval_window_days: Optional[int],
+) -> dict:
+    resolved_window = int(eval_window_days or 10)
+    return {
+        "scope": scope,
+        "code": code,
+        "eval_window_days": resolved_window,
+        "evaluation_window_trading_bars": resolved_window,
+        "engine_version": "v1",
+        "computed_at": None,
+        "total_evaluations": 0,
+        "completed_count": 0,
+        "insufficient_count": 0,
+        "long_count": 0,
+        "cash_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "neutral_count": 0,
+        "direction_accuracy_pct": None,
+        "win_rate_pct": None,
+        "neutral_rate_pct": None,
+        "avg_stock_return_pct": None,
+        "avg_simulated_return_pct": None,
+        "stop_loss_trigger_rate": None,
+        "take_profit_trigger_rate": None,
+        "ambiguous_rate": None,
+        "avg_days_to_first_hit": None,
+        "advice_breakdown": {},
+        "diagnostics": {
+            "source": "empty_state",
+            "reason": "no_backtest_data_for_current_user",
+        },
+        "evaluation_mode": "empty_state",
+        "requested_mode": _requested_mode_for_code(code),
+        "resolved_source": "no_backtest_data",
+        "fallback_used": False,
+        "execution_assumptions": {},
+    }
+
+
 # ------------------ 普通回测接口，使用 BacktestService ------------------
 
 @router.post(
@@ -243,6 +376,79 @@ def get_backtest_results(
         items = [BacktestResultItem(**item) for item in data.get("items", [])]
         return BacktestResultsResponse(total=int(data.get("total", 0)), page=page, limit=limit, items=items)
     return _run_endpoint("查询回测结果失败", _operation)
+
+
+@router.get(
+    "/performance",
+    response_model=PerformanceMetrics,
+    responses={
+        200: {"description": "总体表现指标"},
+        404: {"description": "暂无可用统计", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取历史分析评估总体表现",
+)
+def get_backtest_performance(
+    eval_window_days: Optional[int] = Query(None, ge=1, le=120, description="评估窗口过滤"),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PerformanceMetrics:
+    def _operation() -> PerformanceMetrics:
+        service = _build_backtest_service(db_manager, current_user)
+        data = service.get_global_summary(eval_window_days=eval_window_days)
+        if data is None:
+            rule_service = _build_rule_backtest_service(db_manager, current_user)
+            data = _build_rule_run_performance_fallback(
+                rule_service=rule_service,
+                scope="overall",
+                code=None,
+                eval_window_days=eval_window_days,
+            )
+        if data is None:
+            data = _build_empty_performance_payload(
+                scope="overall",
+                code=None,
+                eval_window_days=eval_window_days,
+            )
+        return PerformanceMetrics(**data)
+    return _run_endpoint("查询总体回测表现失败", _operation)
+
+
+@router.get(
+    "/performance/{code}",
+    response_model=PerformanceMetrics,
+    responses={
+        200: {"description": "个股表现指标"},
+        404: {"description": "暂无可用统计", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取单只股票的历史分析评估表现",
+)
+def get_backtest_stock_performance(
+    code: str,
+    eval_window_days: Optional[int] = Query(None, ge=1, le=120, description="评估窗口过滤"),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PerformanceMetrics:
+    def _operation() -> PerformanceMetrics:
+        service = _build_backtest_service(db_manager, current_user)
+        data = service.get_stock_summary(code, eval_window_days=eval_window_days)
+        if data is None:
+            rule_service = _build_rule_backtest_service(db_manager, current_user)
+            data = _build_rule_run_performance_fallback(
+                rule_service=rule_service,
+                scope="stock",
+                code=code,
+                eval_window_days=eval_window_days,
+            )
+        if data is None:
+            data = _build_empty_performance_payload(
+                scope="stock",
+                code=code,
+                eval_window_days=eval_window_days,
+            )
+        return PerformanceMetrics(**data)
+    return _run_endpoint("查询个股回测表现失败", _operation)
 
 
 @router.post(

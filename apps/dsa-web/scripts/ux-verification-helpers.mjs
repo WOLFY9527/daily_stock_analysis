@@ -41,3 +41,20 @@ export function summarizeFlowOutcomes(flows = []) {
     overallStatus,
   };
 }
+
+export function buildPreferredScannerConfigs() {
+  return [
+    { market: 'us', profile: 'us_preopen_v1' },
+    { market: 'hk', profile: 'hk_preopen_v1' },
+    { market: 'cn', profile: 'cn_preopen_v1' },
+  ];
+}
+
+export function isRetryableScannerValidationError(result = {}) {
+  if (Number(result.status || 0) !== 400) {
+    return false;
+  }
+
+  const responseBody = String(result.responseBody || '').toLowerCase();
+  return responseBody.includes('validation_error');
+}

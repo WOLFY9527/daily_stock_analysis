@@ -78,6 +78,27 @@ describe('agentChatStore.startStream', () => {
     expect(state.progressSteps).toEqual([]);
   });
 
+  it('converts Gemini 429 failures into a persisted-looking timeout fallback bubble', async () => {
+    vi.mocked(agentApi.chatStream).mockResolvedValue(
+      createStreamResponse([
+        'data: {"type":"done","success":false,"error":"Gemini 429: rate limit exceeded"}',
+      ]),
+    );
+
+    await useAgentChatStore
+      .getState()
+      .startStream({ message: '分析 TSLA', session_id: 'session-test' }, { skillName: '趋势技能' });
+
+    const state = useAgentChatStore.getState();
+    expect(state.loading).toBe(false);
+    expect(state.chatError).toBeNull();
+    expect(state.messages).toHaveLength(2);
+    expect(state.messages[1]).toMatchObject({
+      role: 'assistant',
+      content: '当前响应超时，请稍后刷新',
+    });
+  });
+
   it('resets chat session state and clears the persisted chat session on logout', () => {
     const abort = vi.fn();
     localStorage.setItem('dsa_chat_session_id', 'session-old');
