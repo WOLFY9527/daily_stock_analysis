@@ -241,16 +241,27 @@ function PillTagGroup({
   value,
   options,
   onChange,
+  variant = 'default',
+  testId,
 }: {
   label: string;
   value: string;
   options: PillOption[];
   onChange: (next: string) => void;
+  variant?: 'default' | 'market';
+  testId?: string;
 }) {
+  const isMarketGroup = variant === 'market';
+
   return (
     <div className="flex flex-col gap-2">
       <span className="text-xs uppercase tracking-widest text-white/40">{label}</span>
-      <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+      <div
+        className={isMarketGroup ? 'flex w-fit rounded-xl border border-white/5 bg-black/40 p-1' : 'flex flex-wrap gap-2'}
+        role="group"
+        aria-label={label}
+        data-testid={testId}
+      >
         {options.map((option) => {
           const isActive = option.value === value;
           return (
@@ -260,8 +271,12 @@ function PillTagGroup({
               aria-pressed={isActive}
               onClick={() => onChange(option.value)}
               className={isActive
-                ? 'rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors'
-                : 'rounded-full border border-white/5 bg-transparent px-4 py-1.5 text-sm text-white/50 transition-colors hover:bg-white/[0.05]'}
+                ? isMarketGroup
+                  ? 'rounded-lg bg-white/10 px-5 py-1.5 text-sm font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
+                  : 'rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors'
+                : isMarketGroup
+                  ? 'rounded-lg bg-transparent px-5 py-1.5 text-sm font-medium text-white/40 transition-all hover:text-white/70'
+                  : 'rounded-full border border-white/5 bg-transparent px-4 py-1.5 text-sm text-white/50 transition-colors hover:bg-white/[0.05]'}
             >
               {option.label}
             </button>
@@ -564,10 +579,13 @@ const UserScannerPage: React.FC = () => {
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
           <main className="w-full flex-1 flex flex-col lg:flex-row gap-6 min-h-0 min-w-0 mt-6">
-            <section className="w-full lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 sticky top-8 h-fit max-h-[calc(100vh-100px)] overflow-y-auto no-scrollbar">
+            <section
+              data-testid="scanner-sidebar"
+              className="w-full xl:w-[320px] 2xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 h-fit sticky top-6"
+            >
               <SectionShell className="rounded-[24px] p-0 bg-transparent shadow-none">
                 <div className="flex flex-col gap-6">
-                  <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} />
+                  <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                   <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
                   <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
@@ -578,9 +596,10 @@ const UserScannerPage: React.FC = () => {
                       onClick={() => void handleRun()}
                       disabled={isRunning}
                       aria-busy={isRunning}
-                      className="mt-6 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-white/12 bg-white px-8 py-3.5 text-sm font-bold text-black transition-all hover:border-white/35 hover:bg-white/92 hover:shadow-[0_0_20px_rgba(255,255,255,0.12)] active:scale-95 disabled:pointer-events-none disabled:opacity-60 disabled:transform-none"
+                      data-testid="scanner-run-button"
+                      className="group mt-8 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-8 py-4 text-sm font-bold text-indigo-400 transition-all hover:border-indigo-500/50 hover:bg-indigo-500/20 hover:shadow-[0_0_25px_rgba(99,102,241,0.2)] active:scale-95 disabled:pointer-events-none disabled:opacity-60 disabled:shadow-none disabled:transform-none"
                     >
-                      <Play className="h-4 w-4" />
+                      <Play className="h-4 w-4 group-hover:animate-pulse" />
                       <span>{isRunning ? t('scanner.running') : t('scanner.run')}</span>
                     </button>
                   </div>

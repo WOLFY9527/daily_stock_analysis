@@ -1,19 +1,16 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
 import {
   BENTO_SURFACE_ROOT_CLASS,
   BentoGrid,
   DecisionCard,
   DeepReportDrawer,
   FundamentalsCard,
-  SYSTEM_ACCENT_BORDER_CLASS,
   StrategyCard,
   TechCard,
   type SignalTone,
 } from '../components/home-bento';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
   label: string;
@@ -472,28 +469,10 @@ const HomeBentoDashboardPage: React.FC = () => {
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const copy = CONTENT[locale];
   const [activeDrawer, setActiveDrawer] = useState<DrawerPayload | null>(null);
-  const query = useStockPoolStore((state) => state.query);
-  const setQuery = useStockPoolStore((state) => state.setQuery);
-  const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
-  const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
 
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const nextQuery = query.trim();
-    if (!nextQuery) {
-      return;
-    }
-
-    void submitAnalysis({
-      stockCode: nextQuery,
-      originalQuery: nextQuery,
-      selectionSource: 'manual',
-    });
-  };
 
   return (
     <div
@@ -501,61 +480,8 @@ const HomeBentoDashboardPage: React.FC = () => {
       data-bento-surface="true"
       className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col pt-4 pb-2 px-6 md:px-8 xl:px-12 overflow-x-hidden bg-transparent`}
     >
-      <header className="flex w-full shrink-0 flex-col gap-4" data-testid="home-bento-header">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
-            {copy.heading}
-          </h1>
-        </div>
-
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="w-full max-w-3xl">
-            <form
-              onSubmit={handleSubmit}
-              className="flex w-full items-center gap-2.5 rounded-full border border-white/5 bg-white/[0.01] px-4 py-2.5 text-white backdrop-blur-md transition-colors duration-150 focus-within:border-white/15 focus-within:bg-white/[0.02] focus-within:ring-1 focus-within:ring-white/10"
-              data-testid="home-bento-omnibar"
-            >
-              <Search className="h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
-              <span className="sr-only">{copy.omnibarPlaceholder}</span>
-              <input
-                type="search"
-                className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/20 focus:outline-none"
-                placeholder={copy.omnibarPlaceholder}
-                aria-label={copy.omnibarPlaceholder}
-                autoComplete="off"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                disabled={isAnalyzing}
-              />
-              <button
-                type="submit"
-                className="relative z-10 shrink-0 rounded-md border border-white/8 bg-white/5 px-2 py-0.5 font-mono text-[10px] text-white/55 transition-colors duration-150 hover:bg-white/10 cursor-pointer"
-                data-testid="home-bento-omnibar-submit"
-                aria-label={copy.analyzeButton}
-                disabled={!query.trim() || isAnalyzing}
-              >
-                {copy.analyzeButton}
-              </button>
-            </form>
-          </div>
-
-          <div className="flex flex-wrap gap-2 shrink-0">
-            <div className="rounded-full border border-white/5 bg-white/[0.01] px-3 py-1.5 text-xs text-white/86 backdrop-blur-xl">
-              <span className="font-medium text-white">{copy.instrument}</span>
-              <span className="ml-2 font-mono text-white/40">{copy.ticker}</span>
-            </div>
-            <div className={`rounded-full border px-3 py-1.5 text-xs ${SYSTEM_ACCENT_BORDER_CLASS}`}>
-              {copy.sessionBadge}
-            </div>
-            <div className="rounded-full border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs text-white/78">
-              {copy.regimeBadge}
-            </div>
-          </div>
-        </div>
-      </header>
-
       <main className="w-full flex-1 min-h-0 flex flex-col" data-testid="home-bento-main">
-        <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-5 gap-5 mt-5 auto-rows-[minmax(0,1fr)]">
+        <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-5 gap-5 auto-rows-[minmax(0,1fr)]">
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}

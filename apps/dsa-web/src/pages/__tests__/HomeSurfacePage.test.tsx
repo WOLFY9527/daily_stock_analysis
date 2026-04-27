@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { analysisApi } from '../../api/analysis';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
 import HomeSurfacePage from '../HomeSurfacePage';
@@ -18,25 +17,11 @@ vi.mock('../GuestHomePage', () => ({
   default: () => <div>guest home page</div>,
 }));
 
-vi.mock('../../api/analysis', () => ({
-  analysisApi: {
-    analyzeAsync: vi.fn(),
-    getTasks: vi.fn(),
-    getTaskStreamUrl: vi.fn(),
-  },
-  DuplicateTaskError: class DuplicateTaskError extends Error {},
-}));
-
 describe('HomeSurfacePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
     useStockPoolStore.getState().resetDashboardState();
-    vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
-      taskId: 'task-home-bento',
-      status: 'pending',
-      message: 'submitted',
-    });
   });
 
   const renderSurface = () => render(
@@ -69,50 +54,19 @@ describe('HomeSurfacePage', () => {
     expect(root).toHaveAttribute('data-bento-surface', 'true');
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
-    expect(root).toHaveClass(
-      'workspace-width-wide',
-      'w-full',
-      'flex',
-      'min-h-[calc(100vh-80px)]',
-      'flex-1',
-      'flex-col',
-      'overflow-x-hidden',
-      'px-6',
-      'pt-4',
-      'pb-2',
-    );
+    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'flex', 'flex-1', 'min-h-[calc(100vh-80px)]', 'flex-col', 'overflow-x-hidden', 'px-6', 'pt-4', 'pb-2');
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
     expect(screen.getByTestId('home-bento-grid')).toHaveAttribute('data-bento-grid', 'true');
     expect(screen.getByTestId('home-bento-grid')).toHaveClass('bento-grid-root');
-    expect(screen.getByText('WolfyStock 决策面板')).toBeInTheDocument();
-    const header = screen.getByTestId('home-bento-header');
     const main = screen.getByTestId('home-bento-main');
-    const omnibar = screen.getByTestId('home-bento-omnibar');
-    const omnibarInput = screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...');
-    const omnibarSubmit = screen.getByTestId('home-bento-omnibar-submit');
-    expect(header).toHaveClass('shrink-0', 'flex', 'w-full', 'flex-col', 'gap-4');
-    expect(main).toHaveClass('w-full', 'flex-1', 'min-h-0');
+    expect(screen.queryByText('WolfyStock 决策面板')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-header')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-omnibar')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...')).not.toBeInTheDocument();
+    expect(main).toHaveClass('w-full', 'flex-1', 'min-h-0', 'flex', 'flex-col');
     expect(main.className).not.toContain('overflow-hidden');
-    expect(omnibar).toHaveClass(
-      'flex',
-      'w-full',
-      'items-center',
-      'gap-2.5',
-      'rounded-full',
-      'border-white/5',
-      'bg-white/[0.01]',
-      'backdrop-blur-md',
-      'focus-within:border-white/15',
-      'focus-within:bg-white/[0.02]',
-      'focus-within:ring-1',
-      'focus-within:ring-white/10',
-    );
-    expect(omnibarInput).toHaveAttribute('type', 'search');
-    expect(omnibarSubmit).toHaveAttribute('type', 'submit');
-    expect(omnibarSubmit).toHaveClass('relative', 'z-10', 'hover:bg-white/10', 'cursor-pointer');
-    expect(screen.getByText('分析')).toHaveClass('text-[10px]', 'bg-white/5');
     expect(screen.queryByText('SYSTEM VIEW')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
@@ -126,19 +80,16 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-breakout-reason')).toBeInTheDocument();
     expect(screen.getByText('AI 突破归因')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'grid-cols-1', 'lg:grid-cols-3', 'xl:grid-cols-5', 'gap-5', 'mt-5');
+    expect(screen.getByTestId('home-bento-grid')).toHaveClass('w-full', 'flex-1', 'min-h-0', 'grid-cols-1', 'lg:grid-cols-3', 'xl:grid-cols-5', 'gap-5', 'auto-rows-[minmax(0,1fr)]');
+    expect(screen.getByTestId('home-bento-grid').className).not.toContain('mt-8');
     expect(strategyCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(techCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(fundamentalsCard).toHaveClass('w-full', 'h-full', 'lg:col-span-1', 'xl:col-span-1', 'rounded-[24px]');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('w-full', 'h-full', 'lg:col-span-3', 'xl:col-span-2', 'rounded-[24px]');
-    expect(strategyCard).toHaveClass('p-5');
-    expect(techCard).toHaveClass('p-5');
-    expect(fundamentalsCard).toHaveClass('p-5');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('p-5');
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
-    expect(strategyMetricsGrid).toHaveClass('grid', 'grid-cols-2', 'gap-y-3', 'gap-x-4', 'w-full');
+    expect(strategyMetricsGrid).toHaveClass('grid', 'grid-cols-2', 'gap-y-4', 'gap-x-4', 'w-full');
     expect(entryMetric).toHaveClass('col-span-2', 'flex', 'flex-col', 'gap-1');
     expect(targetMetric).not.toHaveClass('col-span-2');
     expect(stopLossMetric).not.toHaveClass('col-span-2');
@@ -146,9 +97,6 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('118.40 - 121.00')).toHaveClass('text-xl', 'sm:text-2xl');
     expect(screen.getByText('136.00')).toHaveClass('text-xl', 'sm:text-2xl', 'font-medium');
     expect(screen.getByText('111.80')).toHaveClass('text-xl', 'sm:text-2xl', 'font-medium');
-    expect(screen.getByTestId('home-bento-strategy-position-body')).toHaveClass('text-[11px]', 'leading-tight', 'mt-1', 'text-white/60');
-    expect(screen.getByTestId('home-bento-decision-chart-shell')).toHaveClass('relative', 'mt-4', 'flex-1', 'min-h-0');
-    expect(screen.getByTestId('home-bento-decision-chart-frame')).toHaveClass('absolute', 'inset-0', 'h-full', 'w-full');
     expect(screen.getByText('零轴上方金叉')).toHaveClass('text-xl', 'font-medium');
     expect(screen.getByText('+18.2%')).toHaveClass('text-2xl', 'font-medium');
     expect(screen.getByText('65.4')).toBeInTheDocument();
@@ -171,8 +119,8 @@ describe('HomeSurfacePage', () => {
     window.localStorage.setItem('dsa-ui-language', 'en');
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
-    expect(screen.getByText('WolfyStock Command Center')).toBeInTheDocument();
-    expect(screen.getByText('Analyze')).toBeInTheDocument();
+    expect(screen.queryByText('WolfyStock Command Center')).not.toBeInTheDocument();
+    expect(screen.queryByText('Analyze')).not.toBeInTheDocument();
     expect(screen.getByText('Execution Strategy')).toBeInTheDocument();
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
     expect(screen.getByText('Fundamental Profile')).toBeInTheDocument();
@@ -195,22 +143,5 @@ describe('HomeSurfacePage', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     await new Promise((resolve) => window.setTimeout(resolve, 220));
     expect(await screen.findByTestId('home-bento-dashboard')).toBeInTheDocument();
-  });
-
-  it('submits the home omnibar into analysis instead of navigating to chat', async () => {
-    useProductSurfaceMock.mockReturnValue({ isGuest: false });
-    renderSurface();
-    fireEvent.change(screen.getByPlaceholderText('输入股票代码或公司名称，唤醒 AI 深度分析...'), {
-      target: { value: 'NVDA' },
-    });
-    fireEvent.click(screen.getByTestId('home-bento-omnibar-submit'));
-    expect(analysisApi.analyzeAsync).toHaveBeenCalledWith({
-      stockCode: 'NVDA',
-      reportType: 'detailed',
-      stockName: undefined,
-      originalQuery: 'NVDA',
-      selectionSource: 'manual',
-    });
-    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
   });
 });
