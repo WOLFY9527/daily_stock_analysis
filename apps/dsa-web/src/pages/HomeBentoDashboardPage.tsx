@@ -10,6 +10,11 @@ import {
   TechCard,
   type SignalTone,
 } from '../components/home-bento';
+import type {
+  DecisionCandle,
+  DecisionChartTimeframe,
+  DecisionChartTimeframeId,
+} from '../components/home-bento/HomeSignalCandlestickChart';
 import { Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import type { AnalysisReport, StandardReportField } from '../types/analysis';
@@ -37,11 +42,6 @@ type DrawerPayload = {
   modules: DrawerModule[];
 };
 
-type DecisionChartPoint = {
-  label: string;
-  value: number;
-};
-
 type DashboardLocale = 'zh' | 'en';
 type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
 
@@ -56,20 +56,153 @@ type DashboardSignal = DashboardField & {
   tone: SignalTone;
 };
 
-const DECISION_CHART_POINTS: DecisionChartPoint[] = [
-  { label: '09:30', value: 116.2 },
-  { label: '10:00', value: 117.4 },
-  { label: '10:30', value: 116.8 },
-  { label: '11:00', value: 117.9 },
-  { label: '11:30', value: 116.5 },
-  { label: '12:00', value: 117.2 },
-  { label: '12:30', value: 116.1 },
-  { label: '13:00', value: 117.6 },
-  { label: '13:30', value: 118.1 },
-  { label: '14:00', value: 120.4 },
-  { label: '14:30', value: 123.1 },
-  { label: '15:00', value: 125.0 },
-];
+type DecisionChartSeriesPreset = {
+  breakoutIndex: number;
+  candles: DecisionCandle[];
+};
+
+const DEFAULT_DECISION_TIMEFRAME_ID: DecisionChartTimeframeId = 'swing';
+const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
+
+function normalizeDetailKey(value?: string): string {
+  return String(value || '').toLowerCase().replace(/[\s/()%+.\-_:]+/g, '');
+}
+
+function containsCjk(value?: string): boolean {
+  return CJK_TEXT_RE.test(String(value || ''));
+}
+
+function buildCandles(
+  labels: string[],
+  closes: number[],
+  volumes: number[],
+  scale = 0.0065,
+): DecisionCandle[] {
+  return labels.map((label, index) => {
+    const close = closes[index] ?? closes[closes.length - 1] ?? 0;
+    const previousClose = closes[Math.max(index - 1, 0)] ?? close;
+    const swing = Math.max(close * scale, 0.42);
+    const open = index === 0
+      ? Number((close - swing * 0.72).toFixed(2))
+      : Number((previousClose + (index % 2 === 0 ? -swing * 0.24 : swing * 0.18)).toFixed(2));
+    const high = Number((Math.max(open, close) + swing * (index % 3 === 0 ? 1.06 : 0.82)).toFixed(2));
+    const low = Number((Math.min(open, close) - swing * (index % 3 === 1 ? 0.98 : 0.74)).toFixed(2));
+    return {
+      close: Number(close.toFixed(2)),
+      high,
+      label,
+      low,
+      open,
+      volume: volumes[index] ?? volumes[volumes.length - 1] ?? 0,
+    };
+  });
+}
+
+const CHART_PRESETS: Record<string, Record<DecisionChartTimeframeId, DecisionChartSeriesPreset>> = {
+  NVDA: {
+    intraday: {
+      breakoutIndex: 9,
+      candles: buildCandles(
+        ['09:35', '10:00', '10:30', '11:00', '11:30', '12:30', '13:00', '13:30', '14:00', '14:20', '14:40', '15:00'],
+        [116.2, 116.9, 116.4, 117.5, 117.1, 117.9, 117.4, 118.2, 119.1, 121.3, 123.0, 124.8],
+        [2100000, 2480000, 2260000, 2740000, 2380000, 2960000, 2440000, 3180000, 3660000, 5980000, 6720000, 5410000],
+      ),
+    },
+    swing: {
+      breakoutIndex: 7,
+      candles: buildCandles(
+        ['04-14', '04-15', '04-16', '04-17', '04-18', '04-21', '04-22', '04-23', '04-24', '04-25'],
+        [112.4, 113.6, 114.1, 114.8, 115.2, 116.7, 117.1, 121.4, 123.6, 125.0],
+        [18200000, 19400000, 17600000, 18800000, 20500000, 21400000, 22100000, 39200000, 33400000, 28700000],
+      ),
+    },
+    position: {
+      breakoutIndex: 5,
+      candles: buildCandles(
+        ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'],
+        [103.2, 106.4, 107.8, 110.1, 113.7, 118.4, 122.3, 125.0],
+        [55200000, 58800000, 60400000, 62200000, 65100000, 88400000, 81200000, 74400000],
+      ),
+    },
+  },
+  ORCL: {
+    intraday: {
+      breakoutIndex: 8,
+      candles: buildCandles(
+        ['09:35', '10:00', '10:30', '11:00', '11:30', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00'],
+        [121.2, 121.6, 121.4, 122.1, 121.9, 122.7, 123.0, 123.6, 124.5, 124.9, 125.2],
+        [1180000, 1320000, 1270000, 1490000, 1410000, 1620000, 1740000, 2080000, 3360000, 3010000, 2660000],
+      ),
+    },
+    swing: {
+      breakoutIndex: 6,
+      candles: buildCandles(
+        ['04-14', '04-15', '04-16', '04-17', '04-18', '04-21', '04-22', '04-23', '04-24', '04-25'],
+        [118.6, 119.4, 119.8, 120.5, 121.0, 121.7, 123.1, 124.0, 124.8, 125.2],
+        [10100000, 9620000, 9840000, 10800000, 11200000, 11700000, 18800000, 17400000, 15800000, 14600000],
+      ),
+    },
+    position: {
+      breakoutIndex: 5,
+      candles: buildCandles(
+        ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'],
+        [109.1, 110.4, 112.0, 113.2, 116.3, 120.1, 123.6, 125.2],
+        [30400000, 29800000, 31500000, 32200000, 36600000, 51200000, 46800000, 43100000],
+      ),
+    },
+  },
+  TSLA: {
+    intraday: {
+      breakoutIndex: 6,
+      candles: buildCandles(
+        ['09:35', '10:00', '10:30', '11:00', '11:30', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00'],
+        [165.4, 166.7, 167.9, 169.2, 168.6, 169.7, 171.0, 170.6, 170.3, 170.9, 170.5],
+        [2280000, 2460000, 2720000, 3180000, 2860000, 3010000, 4620000, 4080000, 3520000, 3310000, 2990000],
+      ),
+    },
+    swing: {
+      breakoutIndex: 4,
+      candles: buildCandles(
+        ['04-14', '04-15', '04-16', '04-17', '04-18', '04-21', '04-22', '04-23', '04-24', '04-25'],
+        [158.8, 160.2, 161.4, 163.6, 168.8, 170.3, 169.5, 170.7, 171.2, 170.5],
+        [26400000, 28200000, 29500000, 31800000, 50200000, 44800000, 42200000, 39800000, 37200000, 34100000],
+        0.0078,
+      ),
+    },
+    position: {
+      breakoutIndex: 3,
+      candles: buildCandles(
+        ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'],
+        [148.2, 151.4, 155.8, 163.1, 168.0, 170.2, 171.4, 170.5],
+        [68400000, 70200000, 75600000, 98200000, 91400000, 86100000, 83600000, 80800000],
+        0.0084,
+      ),
+    },
+  },
+};
+
+function resolveDecisionChartTimeframes(locale: DashboardLocale, ticker: string, breakoutLabel: string): DecisionChartTimeframe[] {
+  const preset = CHART_PRESETS[ticker] || CHART_PRESETS.NVDA;
+  const labelMap: Record<DashboardLocale, Record<DecisionChartTimeframeId, string>> = {
+    zh: {
+      intraday: '分时',
+      swing: '日K',
+      position: '周K',
+    },
+    en: {
+      intraday: '1D',
+      swing: '5D',
+      position: '1M',
+    },
+  };
+
+  return (['swing', 'intraday', 'position'] as DecisionChartTimeframeId[]).map((id) => ({
+    ...preset[id],
+    id,
+    label: labelMap[locale][id],
+    breakoutLabel,
+  }));
+}
 
 const CONTENT: Record<DashboardLocale, {
     documentTitle: string;
@@ -148,7 +281,7 @@ const CONTENT: Record<DashboardLocale, {
       badge: '动能回升 · 机构跟进',
       chartLabel: '突破完成',
       summary: '订单动能回升，价格重新贴近强趋势区间，适合用回踩确认来组织仓位。',
-      reasonTitle: 'AI 突破归因',
+      reasonTitle: '最近报告归因',
       reasonBody: '盘中监测到大级别资金吸筹，价格成功站稳 MA60 关键支撑位，并伴随 MACD 零轴上方金叉，确认箱体突破有效。',
       detailLabel: '查看完整判断',
     },
@@ -217,7 +350,7 @@ const CONTENT: Record<DashboardLocale, {
       badge: 'Momentum rebuild · institutional follow-through',
       chartLabel: 'Breakout Confirmed',
       summary: 'Order momentum is improving and price is moving back into a strong-trend zone, so the cleaner plan is still a pullback confirmation entry.',
-      reasonTitle: 'AI Breakout Why',
+      reasonTitle: 'Latest Report Context',
       reasonBody: 'Intraday flow points to institutional accumulation, price reclaimed MA60 support, and the MACD bullish cross stayed above zero to validate the range escape.',
       detailLabel: 'Open Decision Brief',
     },
@@ -265,16 +398,16 @@ const CONTENT: Record<DashboardLocale, {
 };
 
 type DashboardPayload = (typeof CONTENT)['zh'] & {
-  chartPoints: DecisionChartPoint[];
-  breakoutPointIndex: number;
+  chartTimeframes: DecisionChartTimeframe[];
+  defaultTimeframeId: DecisionChartTimeframeId;
 };
 
-const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardPayload>> = {
+type DashboardVariant = Omit<DashboardPayload, 'chartTimeframes' | 'defaultTimeframeId'>;
+
+const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVariant>> = {
   zh: {
     NVDA: {
       ...CONTENT.zh,
-      chartPoints: DECISION_CHART_POINTS,
-      breakoutPointIndex: 9,
     },
     ORCL: {
       ...CONTENT.zh,
@@ -324,21 +457,6 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardPayloa
           { label: '机构持仓', value: '44.8%', tone: 'neutral' },
         ],
       },
-      chartPoints: [
-        { label: '09:30', value: 121.2 },
-        { label: '10:00', value: 121.8 },
-        { label: '10:30', value: 122.0 },
-        { label: '11:00', value: 122.6 },
-        { label: '11:30', value: 122.1 },
-        { label: '12:00', value: 122.8 },
-        { label: '12:30', value: 123.0 },
-        { label: '13:00', value: 123.4 },
-        { label: '13:30', value: 123.8 },
-        { label: '14:00', value: 124.3 },
-        { label: '14:30', value: 124.8 },
-        { label: '15:00', value: 125.2 },
-      ],
-      breakoutPointIndex: 9,
     },
     TSLA: {
       ...CONTENT.zh,
@@ -388,28 +506,11 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardPayloa
           { label: '机构持仓', value: '47.6%', tone: 'neutral' },
         ],
       },
-      chartPoints: [
-        { label: '09:30', value: 165.4 },
-        { label: '10:00', value: 166.8 },
-        { label: '10:30', value: 168.1 },
-        { label: '11:00', value: 169.6 },
-        { label: '11:30', value: 168.7 },
-        { label: '12:00', value: 170.2 },
-        { label: '12:30', value: 169.1 },
-        { label: '13:00', value: 170.8 },
-        { label: '13:30', value: 171.2 },
-        { label: '14:00', value: 170.4 },
-        { label: '14:30', value: 171.0 },
-        { label: '15:00', value: 170.5 },
-      ],
-      breakoutPointIndex: 7,
     },
   },
   en: {
     NVDA: {
       ...CONTENT.en,
-      chartPoints: DECISION_CHART_POINTS,
-      breakoutPointIndex: 9,
     },
     ORCL: {
       ...CONTENT.en,
@@ -459,21 +560,6 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardPayloa
           { label: 'Institutional Ownership', value: '44.8%', tone: 'neutral' },
         ],
       },
-      chartPoints: [
-        { label: '09:30', value: 121.2 },
-        { label: '10:00', value: 121.8 },
-        { label: '10:30', value: 122.0 },
-        { label: '11:00', value: 122.6 },
-        { label: '11:30', value: 122.1 },
-        { label: '12:00', value: 122.8 },
-        { label: '12:30', value: 123.0 },
-        { label: '13:00', value: 123.4 },
-        { label: '13:30', value: 123.8 },
-        { label: '14:00', value: 124.3 },
-        { label: '14:30', value: 124.8 },
-        { label: '15:00', value: 125.2 },
-      ],
-      breakoutPointIndex: 9,
     },
     TSLA: {
       ...CONTENT.en,
@@ -523,21 +609,6 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardPayloa
           { label: 'Institutional Ownership', value: '47.6%', tone: 'neutral' },
         ],
       },
-      chartPoints: [
-        { label: '09:30', value: 165.4 },
-        { label: '10:00', value: 166.8 },
-        { label: '10:30', value: 168.1 },
-        { label: '11:00', value: 169.6 },
-        { label: '11:30', value: 168.7 },
-        { label: '12:00', value: 170.2 },
-        { label: '12:30', value: 169.1 },
-        { label: '13:00', value: 170.8 },
-        { label: '13:30', value: 171.2 },
-        { label: '14:00', value: 170.4 },
-        { label: '14:30', value: 171.0 },
-        { label: '15:00', value: 170.5 },
-      ],
-      breakoutPointIndex: 7,
     },
   },
 };
@@ -651,11 +722,157 @@ function toneFromFieldValue(value?: string): SignalTone {
   return 'neutral';
 }
 
-function normalizeDetailKey(value?: string): string {
-  return String(value || '').toLowerCase().replace(/[\s/()%+.\-_:]+/g, '');
+const REPORT_LABEL_EN_BY_KEY: Record<string, string> = {
+  entryzone: 'Entry Zone',
+  forwardpe一致预期: 'Forward PE (Consensus)',
+  freecashflow: 'Free Cash Flow',
+  grossmargin: 'Gross Margin',
+  institutionalownership: 'Institutional Ownership',
+  ma10: 'MA10',
+  ma20: 'MA20',
+  ma5: 'MA5',
+  ma60: 'MA60',
+  macd: 'MACD',
+  movingaverages: 'Moving Averages',
+  pe: 'PE',
+  pe一致预期: 'Forward PE (Consensus)',
+  pettm: 'PE (TTM)',
+  positionrhythm: 'Position Rhythm',
+  revenuegrowth: 'Revenue Growth',
+  roe: 'ROE',
+  rsi14: 'RSI14',
+  stop: 'Stop',
+  target: 'Target',
+  volumeprofile: 'Volume Profile',
+  均线结构: 'Moving Averages',
+  回踩支撑确认: 'Pullback support confirmed',
+  建仓区间: 'Entry Zone',
+  总股本最新值: 'Shares Outstanding (Latest)',
+  总市值最新值: 'Market Cap (Latest)',
+  技术失效位: 'Technical invalidation',
+  收入增速: 'Revenue Growth',
+  机构持仓: 'Institutional Ownership',
+  止损位: 'Stop',
+  毛利率: 'Gross Margin',
+  流通市值最新值: 'Free-Float Cap (Latest)',
+  流通股最新值: 'Free-Float Shares (Latest)',
+  波动率: 'Volatility',
+  目标位: 'Target',
+  目标区间: 'Target zone',
+  量价配合: 'Volume Profile',
+  预期市盈率一致预期: 'Forward PE (Consensus)',
+  市盈率ttm: 'PE (TTM)',
+  自由现金流: 'Free Cash Flow',
+  财报驱动后维持上沿强势: 'Post-earnings strength still holds the upper rail',
+};
+
+const REPORT_TEXT_EN_BY_KEY: Record<string, string> = {
+  中性偏多: 'Neutral to bullish',
+  乐观: 'Bullish',
+  偏多: 'Constructive',
+  回踩支撑确认: 'Pullback support confirmed',
+  字段待接入: 'field pending',
+  技术失效位: 'Technical invalidation',
+  持有: 'Hold',
+  技术面与基本面相互印证综合建议以持有为主: 'Technical and fundamental signals align, so the composite stance remains Hold.',
+  持有技术结构价格仍位于ma20上方防守位在17548近期支撑ma簇一带若回踩企稳趋势延续概率更高方向偏多置信度中: 'Hold · Structure still sits above MA20, with defense near 175.48 (recent support / MA cluster). Trend continuation improves if the pullback stabilizes, and the directional bias remains constructive with medium conviction.',
+  理想做法是回踩支撑簇小仓试错若站回ma5ma10再做第二笔: 'Start with probe size on a pullback into the support cluster, then add only if price reclaims MA5 and MA10.',
+  短线技术偏强均线结构偏强价格位于ma20上方价格位于ma60上方: 'Short-term technical posture remains constructive, with price holding above both MA20 and MA60.',
+  目标区间: 'Target zone',
+  近期支撑ma簇: 'recent support / MA cluster',
+};
+
+function convertChineseUnits(value: string): string {
+  return value
+    .replace(/(\d+(?:\.\d+)?)亿/g, (_, amount: string) => `${(Number(amount) / 10).toFixed(Number(amount) >= 100 ? 2 : 1).replace(/\.0$/, '')}B`)
+    .replace(/(\d+(?:\.\d+)?)万/g, (_, amount: string) => `${(Number(amount) / 100).toFixed(Number(amount) >= 1000 ? 1 : 2).replace(/\.0$/, '')}M`);
+}
+
+function replaceEnglishFragments(raw: string): string {
+  return raw
+    .replace(/分析过程出错[:：]\s*/g, 'Analysis process hit an error: ')
+    .replace(/NA[（(]字段待接入[）)]/g, 'N/A (field pending)')
+    .replace(/[（(]回踩支撑确认[）)]/g, ' (Pullback support confirmed)')
+    .replace(/[（(]目标区间[）)]/g, ' (Target zone)')
+    .replace(/[（(]技术失效位[）)]/g, ' (Technical invalidation)');
+}
+
+function localizeCompanyName(locale: DashboardLocale, raw: string | undefined, fallback: string, ticker: string): string {
+  const value = String(raw || '').trim();
+  if (!value) {
+    return fallback || ticker;
+  }
+  if (locale === 'en' && (value === '待确认股票' || containsCjk(value))) {
+    return fallback || ticker;
+  }
+  return value;
+}
+
+function localizeSentimentLabel(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
+  const value = String(raw || '').trim();
+  if (!value) {
+    return fallback;
+  }
+  if (locale === 'zh') {
+    return value;
+  }
+  return REPORT_TEXT_EN_BY_KEY[normalizeDetailKey(value)] || (containsCjk(value) ? fallback : value);
+}
+
+function localizeFieldLabel(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
+  const value = String(raw || '').trim();
+  if (!value) {
+    return fallback;
+  }
+  if (locale === 'zh') {
+    return value;
+  }
+  return REPORT_LABEL_EN_BY_KEY[normalizeDetailKey(value)] || (containsCjk(value) ? fallback : value);
+}
+
+function localizeMetricValue(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
+  const value = String(raw || '').trim();
+  if (!value) {
+    return fallback;
+  }
+  if (locale === 'zh') {
+    return value;
+  }
+  const exact = REPORT_TEXT_EN_BY_KEY[normalizeDetailKey(value)];
+  if (exact) {
+    return exact;
+  }
+  const localized = convertChineseUnits(replaceEnglishFragments(value)).replace(/\s+/g, ' ').trim();
+  if (!containsCjk(localized)) {
+    return localized;
+  }
+  return fallback;
+}
+
+function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
+  const value = String(raw || '').trim();
+  if (!value) {
+    return fallback;
+  }
+  if (locale === 'zh') {
+    return value;
+  }
+  if (/all llm models failed|ratelimiterror/i.test(value)) {
+    return fallback;
+  }
+  const exact = REPORT_TEXT_EN_BY_KEY[normalizeDetailKey(value)];
+  if (exact) {
+    return exact;
+  }
+  const localized = convertChineseUnits(replaceEnglishFragments(value)).replace(/\s+/g, ' ').trim();
+  if (!containsCjk(localized)) {
+    return localized;
+  }
+  return fallback;
 }
 
 function mapStandardFields(
+  locale: DashboardLocale,
   fields: StandardReportField[] | undefined,
   fallback: DashboardField[],
   count: number,
@@ -669,10 +886,11 @@ function mapStandardFields(
     .slice(0, count)
     .map((field, index) => {
       const fallbackField = fallback.find((item) => normalizeDetailKey(item.label) === normalizeDetailKey(field.label)) || fallback[index];
+      const localizedValue = localizeMetricValue(locale, field.value, fallbackField?.value || field.value);
       return {
-        label: field.label,
-        value: field.value,
-        tone: toneFromFieldValue(field.value),
+        label: localizeFieldLabel(locale, field.label, fallbackField?.label || field.label),
+        value: localizedValue,
+        tone: toneFromFieldValue(field.value || localizedValue),
         details: fallbackField?.details,
       };
     });
@@ -814,9 +1032,12 @@ function buildStrategyMetricDetails(locale: DashboardLocale, label: string, valu
     : `${label} 当前设定为 ${value}，执行层必须继续遵守这一条约束。`;
 }
 
-function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardPayload): DashboardPayload {
+function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardVariant | DashboardPayload): DashboardPayload {
+  const chartTicker = normalizeTickerQuery(payload.ticker) || 'NVDA';
   return {
     ...payload,
+    chartTimeframes: resolveDecisionChartTimeframes(locale, chartTicker, payload.decision.chartLabel),
+    defaultTimeframeId: DEFAULT_DECISION_TIMEFRAME_ID,
     strategy: {
       ...payload.strategy,
       metrics: payload.strategy.metrics.map((metric) => ({
@@ -974,54 +1195,62 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     reasonLayer?.topCatalyst,
     reasonLayer?.newsValueTier,
   ].filter(Boolean).slice(0, 2).join(' · ') || seed.decision.badge;
+  const rawCompany = report.meta.stockName || summaryPanel?.stock || stockCode;
+  const rawSignalLabel = report.summary.sentimentLabel || seed.decision.signalLabel;
+  const rawScoreValue = decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || seed.decision.scoreValue;
+  const rawSummary = summaryPanel?.oneSentence || report.summary.analysisSummary || seed.decision.summary;
+  const entryValue = decisionPanel?.idealEntry || decisionPanel?.support || report.strategy?.idealBuy || seed.strategy.metrics[0]?.value || '--';
+  const targetValue = decisionPanel?.target || decisionPanel?.targetZone || report.strategy?.takeProfit || seed.strategy.metrics[1]?.value || '--';
+  const stopValue = decisionPanel?.stopLoss || report.strategy?.stopLoss || seed.strategy.metrics[2]?.value || '--';
+  const positionBody = decisionPanel?.buildStrategy
+    || decisionPanel?.holderAdvice
+    || decisionPanel?.noPositionAdvice
+    || report.summary.operationAdvice
+    || seed.strategy.positionBody;
 
   return enrichDashboardPayload(locale, {
     ...seed,
     ticker: stockCode,
     decision: {
       ...seed.decision,
-      company: report.meta.stockName || summaryPanel?.stock || stockCode,
+      company: localizeCompanyName(locale, rawCompany, seed.decision.company, stockCode),
       heroValue: scoreText,
-      signalLabel: report.summary.sentimentLabel || seed.decision.signalLabel,
+      signalLabel: localizeSentimentLabel(locale, rawSignalLabel, seed.decision.signalLabel),
       signalTone: sentimentTone,
-      scoreValue: decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || seed.decision.scoreValue,
-      badge,
-      summary: summaryPanel?.oneSentence || report.summary.analysisSummary || seed.decision.summary,
+      scoreValue: localizeNarrativeText(locale, rawScoreValue, seed.decision.scoreValue),
+      badge: localizeNarrativeText(locale, badge, seed.decision.badge),
+      summary: localizeNarrativeText(locale, rawSummary, seed.decision.summary),
       reasonTitle: locale === 'en' ? 'Latest Report Context' : '最近报告归因',
-      reasonBody,
+      reasonBody: localizeNarrativeText(locale, reasonBody, seed.decision.reasonBody),
     },
     strategy: {
       ...seed.strategy,
       metrics: [
         {
           label: locale === 'en' ? 'Entry Zone' : '建仓区间',
-          value: decisionPanel?.idealEntry || decisionPanel?.support || report.strategy?.idealBuy || seed.strategy.metrics[0]?.value || '--',
+          value: localizeMetricValue(locale, entryValue, seed.strategy.metrics[0]?.value || '--'),
           tone: 'neutral',
         },
         {
           label: locale === 'en' ? 'Target' : '目标位',
-          value: decisionPanel?.target || decisionPanel?.targetZone || report.strategy?.takeProfit || seed.strategy.metrics[1]?.value || '--',
+          value: localizeMetricValue(locale, targetValue, seed.strategy.metrics[1]?.value || '--'),
           tone: 'bullish',
         },
         {
           label: locale === 'en' ? 'Stop' : '止损位',
-          value: decisionPanel?.stopLoss || report.strategy?.stopLoss || seed.strategy.metrics[2]?.value || '--',
+          value: localizeMetricValue(locale, stopValue, seed.strategy.metrics[2]?.value || '--'),
           tone: 'bearish',
         },
       ],
-      positionBody: decisionPanel?.buildStrategy
-        || decisionPanel?.holderAdvice
-        || decisionPanel?.noPositionAdvice
-        || report.summary.operationAdvice
-        || seed.strategy.positionBody,
+      positionBody: localizeNarrativeText(locale, positionBody, seed.strategy.positionBody),
     },
     tech: {
       ...seed.tech,
-      signals: mapStandardFields(technicalFields, seed.tech.signals, 5).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
+      signals: mapStandardFields(locale, technicalFields, seed.tech.signals, 5).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
     },
     fundamentals: {
       ...seed.fundamentals,
-      metrics: mapStandardFields(fundamentalFields, seed.fundamentals.metrics, 6),
+      metrics: mapStandardFields(locale, fundamentalFields, seed.fundamentals.metrics, 6),
     },
   });
 }
@@ -1232,8 +1461,9 @@ const HomeBentoDashboardPage: React.FC = () => {
                   badge={copy.decision.badge}
                   chartLabel={copy.decision.chartLabel}
                   summary={copy.decision.summary}
-                  chartPoints={copy.chartPoints}
-                  breakoutPointIndex={copy.breakoutPointIndex}
+                  chartTimeframes={copy.chartTimeframes}
+                  defaultTimeframeId={copy.defaultTimeframeId}
+                  locale={locale}
                   reason={{ title: copy.decision.reasonTitle, body: copy.decision.reasonBody }}
                   detailLabel={copy.decision.detailLabel}
                   onOpenDetails={() => setActiveDrawer('decision')}

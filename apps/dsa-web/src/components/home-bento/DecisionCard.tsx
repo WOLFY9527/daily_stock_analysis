@@ -1,6 +1,12 @@
 import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { BentoCard } from './BentoCard';
+import {
+  HomeSignalCandlestickChart,
+  type DecisionChartTimeframe,
+  type DecisionChartTimeframeId,
+} from './HomeSignalCandlestickChart';
 import {
   CARD_BUTTON_CLASS,
   CARD_KICKER_CLASS,
@@ -12,71 +18,55 @@ import {
   getToneTextStyle,
 } from './theme';
 
-type ChartPoint = {
-  label: string;
-  value: number;
-};
-
 type DecisionReason = {
-  title: string;
   body: string;
+  title: string;
 };
 
 type DecisionCardProps = {
-  eyebrow: string;
-  company: string;
-  ticker: string;
-  heroValue: string;
-  heroUnit: string;
-  heroLabel: string;
-  signalLabel: string;
-  signalTone: SignalTone;
-  scoreLabel: string;
-  scoreValue: string;
   badge: string;
   chartLabel: string;
-  summary: string;
-  chartPoints: ChartPoint[];
-  breakoutPointIndex: number;
-  reason: DecisionReason;
+  chartTimeframes: DecisionChartTimeframe[];
+  company: string;
+  defaultTimeframeId: DecisionChartTimeframeId;
   detailLabel: string;
+  eyebrow: string;
+  heroLabel: string;
+  heroUnit: string;
+  heroValue: string;
+  locale: 'zh' | 'en';
   onOpenDetails: () => void;
+  reason: DecisionReason;
+  scoreLabel: string;
+  scoreValue: string;
+  signalLabel: string;
+  signalTone: SignalTone;
+  summary: string;
+  ticker: string;
 };
 
 export const DecisionCard: React.FC<DecisionCardProps> = ({
-  eyebrow,
-  company,
-  ticker,
-  heroValue,
-  heroUnit,
-  heroLabel,
-  signalLabel,
-  signalTone,
-  scoreLabel,
-  scoreValue,
   badge,
   chartLabel,
-  summary,
-  chartPoints,
-  breakoutPointIndex,
-  reason,
+  chartTimeframes,
+  company,
+  defaultTimeframeId,
   detailLabel,
+  eyebrow,
+  heroLabel,
+  heroUnit,
+  heroValue,
+  locale,
   onOpenDetails,
+  reason,
+  scoreLabel,
+  scoreValue,
+  signalLabel,
+  signalTone,
+  summary,
+  ticker,
 }) => {
-  const high = Math.max(...chartPoints.map((point) => point.value));
-  const low = Math.min(...chartPoints.map((point) => point.value));
-  const paddedHigh = high + 1.2;
-  const paddedLow = low - 1.2;
-  const range = paddedHigh - paddedLow || 1;
-  const labels = [paddedHigh, paddedLow + range / 2, paddedLow].map((value) => value.toFixed(2));
-  const linePoints = chartPoints.map((point, index) => {
-    const x = chartPoints.length === 1 ? 0 : (index / (chartPoints.length - 1)) * 100;
-    const y = 48 - ((point.value - paddedLow) / range) * 38;
-    return `${x},${y}`;
-  }).join(' ');
-  const breakoutPoint = chartPoints[breakoutPointIndex] || chartPoints[chartPoints.length - 1];
-  const breakoutX = chartPoints.length === 1 ? 0 : (breakoutPointIndex / (chartPoints.length - 1)) * 100;
-  const breakoutY = 48 - ((breakoutPoint.value - paddedLow) / range) * 38;
+  const [activeTimeframeId, setActiveTimeframeId] = useState<DecisionChartTimeframeId>(defaultTimeframeId);
   const summaryParagraphs = summary
     .split(/\n+/)
     .map((paragraph) => paragraph.trim())
@@ -85,6 +75,14 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
     .split(/\n+/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
+  const activeTimeframe = useMemo(
+    () => chartTimeframes.find((timeframe) => timeframe.id === activeTimeframeId) || chartTimeframes[0],
+    [activeTimeframeId, chartTimeframes],
+  );
+
+  useEffect(() => {
+    setActiveTimeframeId(defaultTimeframeId);
+  }, [defaultTimeframeId]);
 
   return (
     <BentoCard
@@ -92,7 +90,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       tone={signalTone}
       accentGlow
       accentGlowClassName={SYSTEM_ACCENT_GLOW_CLASS}
-      className="w-full h-full rounded-[24px]"
+      className="h-full w-full rounded-[24px]"
       testId="home-bento-card-decision"
       action={(
         <button
@@ -106,7 +104,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </button>
       )}
     >
-      <div className="flex h-full flex-col gap-5">
+      <div className="flex h-full flex-col gap-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-end gap-2">
@@ -140,7 +138,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
           <div className={`${PANEL_METRIC_CLASS} min-w-0 xl:min-w-[12rem] xl:max-w-[18rem]`}>
             <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
             <p className="mt-3 break-words whitespace-normal text-lg font-bold leading-tight text-white">{scoreValue}</p>
-            <div className="mt-4 break-words text-[13px] leading-[1.7] text-white/70 space-y-2 whitespace-normal">
+            <div className="mt-4 break-words whitespace-normal space-y-2 text-[13px] leading-[1.7] text-white/70">
               {(summaryParagraphs.length ? summaryParagraphs : [summary]).map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
@@ -148,71 +146,46 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
           </div>
         </div>
 
-        <div className="mt-4 flex-1 min-h-[200px] relative">
-          <div className="absolute inset-0 rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-4 backdrop-blur-xl md:p-5">
-            <div
-              className="grid h-full min-h-0 grid-cols-[2.75rem_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_1.75rem] gap-x-3 gap-y-3"
-              data-testid="home-bento-decision-chart-frame"
-            >
-              <div className="pointer-events-none flex min-w-0 flex-col justify-between text-[10px] leading-4 text-white/28">
-                {labels.map((label) => <span key={label} className="truncate">{label}</span>)}
-              </div>
-              <div className="relative min-h-0 min-w-0" data-testid="home-bento-decision-chart-plot">
-                <svg className="absolute inset-0 h-full w-full text-[#34D399]" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="home-bento-decision-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
-                      <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <line x1="0" y1="10" x2="100" y2="10" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="0.4" />
-                  <line x1="0" y1="28" x2="100" y2="28" stroke="rgba(148, 163, 184, 0.36)" strokeWidth="0.6" strokeDasharray="2.4 2.2" />
-                  <line x1="0" y1="46" x2="100" y2="46" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="0.4" />
-                  <polygon points={`0,56 ${linePoints} 100,56`} fill="url(#home-bento-decision-fill)" />
-                  <polyline
-                    points={linePoints}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.25"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ filter: 'drop-shadow(0 4px 8px rgba(52, 211, 153, 0.4))' }}
-                  />
-                  <circle cx={breakoutX} cy={breakoutY} r="2.1" fill="#34D399" />
-                  <circle cx={breakoutX} cy={breakoutY} r="5.4" fill="rgba(52, 211, 153, 0.16)" />
-                </svg>
-                <div
-                  className="absolute flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-bold text-black shadow-[0_0_15px_rgba(16,185,129,0.5)]"
-                  style={{
-                    left: `clamp(4rem, calc(${breakoutX}% - 2rem), calc(100% - 11rem))`,
-                    top: `clamp(0.75rem, calc(${(breakoutY / 56) * 100}% - 2.25rem), calc(100% - 2.5rem))`,
-                  }}
-                  data-testid="home-bento-breakout-pill"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-black animate-pulse" />
-                  {chartLabel}
-                </div>
-              </div>
-              <div />
-              <div
-                className="pointer-events-none flex min-w-0 items-start gap-3 text-[10px] leading-4 text-white/28"
-                data-testid="home-bento-decision-chart-x-axis"
-              >
-                <span className="min-w-0 flex-1 truncate text-left">{chartPoints[0]?.label}</span>
-                <span className="min-w-0 flex-1 truncate text-center">{chartPoints[Math.floor(chartPoints.length / 2)]?.label}</span>
-                <span className="min-w-0 flex-1 truncate text-right">{chartPoints[chartPoints.length - 1]?.label}</span>
-              </div>
+        <div className="mt-2 flex min-h-[220px] flex-1 flex-col">
+          <div className="relative flex min-h-[220px] flex-1 rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-4 backdrop-blur-xl md:p-5">
+            <div className="pointer-events-none absolute left-6 top-5 rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/52">
+              {chartLabel}
+            </div>
+            <div className="absolute right-4 top-4 z-10 flex items-center gap-1 rounded-xl bg-black/40 p-0.5 shadow-[0_12px_24px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+              {chartTimeframes.map((timeframe) => {
+                const isActive = timeframe.id === activeTimeframe?.id;
+                return (
+                  <button
+                    key={timeframe.id}
+                    type="button"
+                    className={`rounded-lg px-2 py-0.5 text-[10px] transition-colors ${
+                      isActive ? 'bg-white/10 font-bold text-white' : 'text-white/40 hover:text-white'
+                    }`}
+                    data-testid={`home-bento-decision-timeframe-${timeframe.id}`}
+                    onClick={() => setActiveTimeframeId(timeframe.id)}
+                  >
+                    {timeframe.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex min-h-0 flex-1 items-stretch pt-6">
+              {activeTimeframe ? (
+                <HomeSignalCandlestickChart
+                  locale={locale}
+                  signalTone={signalTone}
+                  timeframe={activeTimeframe}
+                />
+              ) : null}
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-3 flex min-w-0 flex-col gap-2" data-testid="home-bento-breakout-reason">
-          <div className="block truncate text-[10px] text-white/40 uppercase tracking-widest font-bold">{reason.title}</div>
-          <div className="break-words text-[13px] leading-[1.7] text-white/70 space-y-2 whitespace-normal">
-            {(reasonParagraphs.length ? reasonParagraphs : [reason.body]).map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </div>
+        <div className="mt-1 shrink-0 border-t border-white/5 pt-4" data-testid="home-bento-breakout-reason">
+          <h4 className="mb-1 text-[10px] uppercase tracking-widest text-white/30">{reason.title}</h4>
+          <p className="truncate text-xs leading-relaxed text-white/60" title={reason.body}>
+            {(reasonParagraphs[0] || reason.body).trim()}
+          </p>
         </div>
       </div>
     </BentoCard>

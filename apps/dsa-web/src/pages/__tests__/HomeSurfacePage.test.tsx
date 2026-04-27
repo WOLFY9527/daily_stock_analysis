@@ -196,9 +196,12 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-breakout-pill')).toHaveClass('bg-emerald-500', 'text-black', 'rounded-full');
+    expect(screen.getByTestId('home-bento-decision-chart-workspace')).toHaveAttribute('data-chart-engine', 'echarts');
+    expect(screen.getByTestId('home-bento-decision-timeframe-swing')).toHaveTextContent('日K');
+    expect(screen.getByTestId('home-bento-decision-timeframe-intraday')).toHaveTextContent('分时');
+    expect(screen.getByTestId('home-bento-decision-timeframe-position')).toHaveTextContent('周K');
     expect(screen.getByTestId('home-bento-breakout-reason')).toBeInTheDocument();
-    expect(screen.getByText('AI 突破归因')).toBeInTheDocument();
+    expect(screen.getByText('最近报告归因')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
     expect(strategyCard).toHaveClass('w-full', 'rounded-[24px]');
     expect(strategyCard.className).not.toContain('xl:col-span-1');
@@ -232,9 +235,6 @@ describe('HomeSurfacePage', () => {
     expect(macdSignalValue).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByText('+9.4%')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(screen.getByText('$12.1B')).toHaveStyle({ textShadow: 'none' });
-    expect(screen.getByTestId('home-bento-decision-chart-frame')).toHaveClass('grid');
-    expect(screen.getByTestId('home-bento-decision-chart-plot')).toHaveClass('relative', 'min-h-0', 'min-w-0');
-    expect(screen.getByTestId('home-bento-decision-chart-x-axis')).toHaveClass('min-w-0');
     expect(primaryStack.compareDocumentPosition(secondaryStack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(omnibar.compareDocumentPosition(screen.getByTestId('home-bento-card-decision')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(strategyCard.compareDocumentPosition(secondaryGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -260,6 +260,98 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByRole('link', { name: /portfolio/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /backtest/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Lock the range first, then decide the pace.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-timeframe-swing')).toHaveTextContent('5D');
+    expect(screen.getByTestId('home-bento-decision-timeframe-intraday')).toHaveTextContent('1D');
+    expect(screen.getByTestId('home-bento-decision-timeframe-position')).toHaveTextContent('1M');
+    expect(screen.getByText('Latest Report Context')).toBeInTheDocument();
+  });
+
+  it('sanitizes Chinese report fields when the dashboard is viewed in English', async () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockImplementation((recordId) => {
+      if (recordId !== 3) {
+        return Promise.resolve(defaultHistoryReport);
+      }
+
+      return Promise.resolve({
+        ...defaultHistoryReport,
+        meta: {
+          ...defaultHistoryReport.meta,
+          id: 3,
+          queryId: 'q3',
+          stockCode: 'ORCL',
+          stockName: '待确认股票',
+        },
+        summary: {
+          ...defaultHistoryReport.summary,
+          analysisSummary: '分析过程出错: All LLM models failed (tried 2 model(s)). Last error: litellm.RateLimitError: litellm.RateLimitError',
+          operationAdvice: '理想做法是回踩支撑簇小仓试错，若站回 MA5/MA10 再做第二笔。',
+          trendPrediction: '短线技术偏强，均线结构偏强、价格位于 MA20 上方、价格位于 MA60 上方。',
+          sentimentLabel: '乐观',
+          sentimentScore: 60,
+        },
+        strategy: {
+          idealBuy: '172.92-178.04（回踩支撑确认）',
+          stopLoss: '164.39（技术失效位）',
+          takeProfit: '180.45-189.17（目标区间）',
+        },
+        details: {
+          standardReport: {
+            ...defaultHistoryReport.details.standardReport,
+            summaryPanel: {
+              ...defaultHistoryReport.details.standardReport.summaryPanel,
+              stock: '待确认股票',
+            },
+            decisionContext: {
+              shortTermView: '短线技术偏强，均线结构偏强、价格位于 MA20 上方、价格位于 MA60 上方。',
+            },
+            reasonLayer: {
+              coreReasons: ['技术面与基本面相互印证，综合建议以持有为主。'],
+            },
+            decisionPanel: {
+              ...defaultHistoryReport.details.standardReport.decisionPanel,
+              idealEntry: '172.92-178.04（回踩支撑确认）',
+              target: '180.45-189.17（目标区间）',
+              stopLoss: '164.39（技术失效位）',
+              buildStrategy: '理想做法是回踩支撑簇小仓试错，若站回 MA5/MA10 再做第二笔。',
+            },
+            technicalFields: [
+              { label: 'MA5', value: '178.19' },
+              { label: 'MA10', value: '175.48' },
+              { label: 'MA20', value: '159.63' },
+              { label: 'MA60', value: '154.05' },
+              { label: 'RSI14', value: '67.97' },
+            ],
+            fundamentalFields: [
+              { label: '总市值(最新值)', value: '4983.61亿' },
+              { label: '流通市值(最新值)', value: 'NA（字段待接入）' },
+              { label: '总股本(最新值)', value: '28.76亿' },
+              { label: '流通股(最新值)', value: '17.09亿' },
+              { label: '市盈率(TTM)', value: '31.17' },
+              { label: '预期市盈率(一致预期)', value: '21.58' },
+            ],
+          },
+        },
+      });
+    });
+
+    renderSurface();
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-ORCL'));
+
+    await waitFor(() => expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument());
+    expect(await screen.findByText('Oracle')).toBeInTheDocument();
+    expect(screen.getByText('Bullish')).toBeInTheDocument();
+    expect(screen.getByText('172.92-178.04 (Pullback support confirmed)')).toBeInTheDocument();
+    expect(screen.getByText('180.45-189.17 (Target zone)')).toBeInTheDocument();
+    expect(screen.getByText('164.39 (Technical invalidation)')).toBeInTheDocument();
+    expect(screen.getByText('Market Cap (Latest)')).toBeInTheDocument();
+    expect(screen.getByText('498.36B')).toBeInTheDocument();
+    expect(screen.getByText('N/A (field pending)')).toBeInTheDocument();
+    expect(screen.queryByText('回踩支撑确认')).not.toBeInTheDocument();
+    expect(screen.queryByText('总市值(最新值)')).not.toBeInTheDocument();
+    expect(screen.queryByText('待确认股票')).not.toBeInTheDocument();
   });
 
   it('opens and closes the progressive-disclosure drawer from the strategy card', async () => {
