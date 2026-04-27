@@ -666,8 +666,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     setPresets(deleteRuleBacktestPreset(presetId));
   }, []);
 
-  const compactInputClass = 'input-surface input-focus-glow product-command-input !px-3 !py-2.5 !text-sm';
+  const compactInputClass = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
+  const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
   const denseCardClass = 'bg-white/[0.02] border border-white/5 rounded-[24px] p-6 flex flex-col gap-5';
+  const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
   const stickyStatusTitle = language === 'en'
     ? `Ready: ${code || 'Pending symbol'} ${parsedStrategy ? `· ${getLocalizedStrategyTypeLabel(parsedStrategy, language)}` : ''}`
     : `就绪: ${code || '--'} ${parsedStrategy ? getLocalizedStrategyTypeLabel(parsedStrategy, language) : '待解析策略'}`;
@@ -680,7 +682,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   const executionSettingsFields = (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <label className="product-field gap-1.5">
-        <span className="theme-field-label">{language === 'en' ? 'Initial capital' : '初始资金'}</span>
+        <span className={compactFieldLabelClass}>{language === 'en' ? 'Initial capital' : '初始资金'}</span>
         <input
           type="number"
           min={1}
@@ -692,7 +694,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         />
       </label>
       <label className="product-field gap-1.5">
-        <span className="theme-field-label">{language === 'en' ? 'Lookback window' : '回看范围'}</span>
+        <span className={compactFieldLabelClass}>{language === 'en' ? 'Lookback window' : '回看范围'}</span>
         <input
           type="number"
           min={10}
@@ -705,7 +707,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         />
       </label>
       <label className="product-field gap-1.5 md:col-span-2">
-        <span className="theme-field-label">{language === 'en' ? 'Benchmark' : '对比基准'}</span>
+        <span className={compactFieldLabelClass}>{language === 'en' ? 'Benchmark' : '对比基准'}</span>
         <select
           value={benchmarkMode}
           onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
@@ -722,7 +724,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       </label>
       {benchmarkMode === 'custom_code' ? (
         <label className="product-field gap-1.5 md:col-span-2">
-          <span className="theme-field-label">{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
+          <span className={compactFieldLabelClass}>{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
           <input
             type="text"
             value={benchmarkCode}
@@ -735,7 +737,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         </label>
       ) : null}
       <label className="product-field gap-1.5">
-        <span className="theme-field-label">{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
+        <span className={compactFieldLabelClass}>{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
         <input
           type="number"
           min={0}
@@ -748,7 +750,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         />
       </label>
       <label className="product-field gap-1.5">
-        <span className="theme-field-label">{language === 'en' ? 'Slippage (bp)' : '滑点 (bp)'}</span>
+        <span className={compactFieldLabelClass}>{language === 'en' ? 'Slippage (bp)' : '滑点 (bp)'}</span>
         <input
           type="number"
           min={0}
@@ -780,7 +782,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         </div>
         <div className="backtest-base-params-layout grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="backtest-base-params-layout">
           <label className="product-field product-field--full gap-1.5 md:col-span-2">
-            <span className="theme-field-label">{language === 'en' ? 'Ticker' : '标的代码'}</span>
+            <span className={compactFieldLabelClass}>{language === 'en' ? 'Ticker' : '标的代码'}</span>
             <input
               type="text"
               value={code}
@@ -794,7 +796,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           </label>
           <div className="backtest-date-range-grid grid grid-cols-1 gap-4 md:grid-cols-2 md:col-span-2" data-testid="backtest-base-date-range">
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Start date' : '开始日期'}</span>
+              <span className={compactFieldLabelClass}>{language === 'en' ? 'Start date' : '开始日期'}</span>
               <input
                 type="date"
                 value={startDate}
@@ -805,7 +807,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
               />
             </label>
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'End date' : '结束日期'}</span>
+              <span className={compactFieldLabelClass}>{language === 'en' ? 'End date' : '结束日期'}</span>
               <input
                 type="date"
                 value={endDate}
@@ -852,7 +854,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           </Button>
         </div>
         <label className="product-field product-field--full gap-1.5">
-          <span className="theme-field-label">{language === 'en' ? 'Natural-language strategy' : '自然语言策略'}</span>
+          <span className={compactFieldLabelClass}>{language === 'en' ? 'Natural-language strategy' : '自然语言策略'}</span>
           <AnimatePresence initial={false}>
             {appliedRewriteText ? (
               <motion.div
@@ -878,7 +880,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             onFocus={() => onStepChange('setup')}
             rows={8}
             autoFocus={Boolean(appliedRewriteText)}
-            className={`${compactInputClass} min-h-[220px] !py-3 product-command-input--textarea`}
+            className={`${compactInputClass} min-h-[220px] py-3 product-command-input--textarea`}
             placeholder={language === 'en' ? 'For example: Start with 100000, buy 100 shares of ORCL every trading day from 2025-01-01 to 2025-12-31, and stop when cash runs out' : '例如：资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止'}
           />
         </label>
@@ -918,8 +920,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           </div>
         </div>
         {executionSettingsFields}
-        <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Execution defaults' : '执行默认值'}</p>
+        <div className={subCardClass}>
+          <p className={compactFieldLabelClass}>{language === 'en' ? 'Execution defaults' : '执行默认值'}</p>
           <div className="mt-3">
             <AssumptionList assumptions={previewAssumptions} emptyText={language === 'en' ? 'No execution defaults are available yet.' : '暂无执行默认值。'} />
           </div>
@@ -1253,7 +1255,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/45">{presets.length}</span>
       </div>
       {visiblePresets.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm text-white/45">
+        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/45">
           {language === 'en' ? 'No saved presets yet. Recent drafts will appear here after your first run.' : '当前还没有保存的预设。完成一次回测后，最近草稿会显示在这里。'}
         </div>
       ) : (
@@ -1268,7 +1270,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                   <div className="mt-2 text-sm font-medium text-white">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</div>
                   <div className="mt-1 text-xs text-white/35">{preset.startDate || '--'} {'->'} {preset.endDate || '--'}</div>
                 </div>
-                <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/55">{preset.code}</span>
+                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">{preset.code}</span>
               </div>
               <div className="product-action-row mt-4">
                 <Button size="sm" variant="secondary" onClick={() => handleApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
@@ -1298,7 +1300,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       </div>
       {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
       {visibleHistoryItems.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm text-white/45">
+        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/45">
           {isEmptyHistory
             ? (language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here.' : '当前还没有已保存的规则回测记录。完成第一次回测后，最近历史会显示在这里。')
             : (language === 'en' ? 'History is loading or temporarily unavailable.' : '历史记录正在加载，或暂时不可用。')}
@@ -1313,7 +1315,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                   <div className="mt-1 text-xs text-white/35">{item.runAt?.slice(0, 10) || '--'} {'->'} {item.completedAt?.slice(0, 10) || item.runAt?.slice(0, 10) || '--'}</div>
                   <div className="mt-2 text-xs text-white/45">{language === 'en' ? 'Status' : '状态'}: {item.status || '--'}</div>
                 </div>
-                <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/55">#{item.id}</span>
+                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">#{item.id}</span>
               </div>
               <div className="product-action-row mt-4">
                 <Button size="sm" variant="secondary" onClick={() => onOpenHistoryRun(item)}>
@@ -1341,16 +1343,16 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             : '配置页现在更像回测启动面板：先在这里选择标的、区间、资金和策略，提交后将进入独立结果页查看 KPI、图表、审计与交易。'}
         </p>
         <div className="mt-6 grid gap-3">
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Flow' : '流程'}</p>
+          <div className={subCardClass}>
+            <p className={compactFieldLabelClass}>{language === 'en' ? 'Flow' : '流程'}</p>
             <p className="mt-2 text-sm text-white">{language === 'en' ? 'Setup -> Parse -> Launch' : '配置 -> 解析 -> 发射'}</p>
           </div>
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Current symbol' : '当前标的'}</p>
+          <div className={subCardClass}>
+            <p className={compactFieldLabelClass}>{language === 'en' ? 'Current symbol' : '当前标的'}</p>
             <p className="mt-2 text-sm text-white">{code || '--'}</p>
           </div>
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">{language === 'en' ? 'Window' : '区间'}</p>
+          <div className={subCardClass}>
+            <p className={compactFieldLabelClass}>{language === 'en' ? 'Window' : '区间'}</p>
             <p className="mt-2 text-sm text-white">{startDate || '--'} {'->'} {endDate || '--'}</p>
           </div>
         </div>
@@ -1363,9 +1365,9 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   return (
     <div className="w-full min-w-0 flex flex-col gap-10 xl:flex-row" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
       {renderSetupSidebar()}
-      <main className="flex-1 min-w-0 bg-[#030303] border border-white/5 rounded-[32px] shadow-2xl relative overflow-hidden backtest-setup-main" data-testid="backtest-cockpit-monitor">
+      <main className="relative flex-1 min-w-0 rounded-[32px] border border-white/5 bg-white/[0.02] shadow-2xl backtest-setup-main" data-testid="backtest-cockpit-monitor">
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-        <div className="flex-1 overflow-y-auto no-scrollbar p-6 md:p-8 xl:p-10 pb-36" data-testid="backtest-setup-dashboard">
+        <div className="p-6 pb-36 md:p-8 md:pb-36 xl:p-10 xl:pb-36" data-testid="backtest-setup-dashboard">
           <div className="flex flex-col gap-8 backtest-setup-form-stack">
             <div className="flex flex-col gap-3">
               <SectionEyebrow>{panelMode === 'professional' ? (language === 'en' ? 'Professional mode' : '专业模式') : (language === 'en' ? 'Launch workflow' : '发射流程')}</SectionEyebrow>

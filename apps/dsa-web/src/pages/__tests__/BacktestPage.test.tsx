@@ -915,7 +915,7 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
     expect(screen.getByLabelText('策略模板')).toBeInTheDocument();
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '🚀 一键开始回测' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '一键开始回测' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
 
     fireEvent.click(screen.getByTestId('backtest-bento-drawer-trigger'));
     expect(await screen.findByTestId('backtest-bento-drawer')).toBeInTheDocument();
@@ -939,15 +939,17 @@ describe('BacktestPage', () => {
     await switchToProfessionalMode();
 
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('pro-backtest-sidebar')).toHaveClass('w-64', 'border-r', 'border-white/5');
+    expect(screen.getByTestId('pro-backtest-workspace')).not.toHaveClass('overflow-hidden');
+    expect(screen.getByTestId('pro-backtest-sidebar')).toHaveClass('w-64', 'shrink-0', 'flex', 'flex-col', 'gap-2', 'sticky', 'top-6', 'h-fit');
     expect(screen.getByTestId('pro-backtest-nav-assets')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-orders')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-execution')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-analytics')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-backtest-compile-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-backtest-compile-bar')).toHaveClass('rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
     expect(screen.getByRole('button', { name: '编译并运行' })).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('overflow-hidden');
+    expect(screen.getByTestId('backtest-setup-dashboard')).not.toHaveClass('overflow-y-auto', 'no-scrollbar');
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1096,7 +1098,7 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('pro-backtest-workspace')).toHaveAttribute('data-module', 'rule');
     expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
     expect(screen.getByText('量化工作台')).toBeInTheDocument();
-    expect(screen.getByText('将策略编译、执行模型、风控与高级分析收拢到统一参数面板内。')).toBeInTheDocument();
+    expect(screen.getByText('让左侧能力树始终可见，右侧参数工作区随页面自然展开。')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-symbol')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-strategy')).toBeInTheDocument();
@@ -1271,6 +1273,6 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tablist', { name: bt('en', 'page.controlModeLabel') })).toBeInTheDocument();
     expect(screen.getByText('Point & shoot mode')).toBeInTheDocument();
     expect(screen.getByLabelText('Strategy template')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '🚀 Launch backtest' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Launch backtest' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
   });
 });

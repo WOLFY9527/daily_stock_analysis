@@ -96,60 +96,63 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     await onRun();
   };
 
-  const compactSelectClass = 'input-surface input-focus-glow product-command-input !px-3 !py-2.5 !text-sm';
-  const compactCardClass = 'rounded-[24px] border border-white/8 bg-white/[0.03] p-4';
+  const compactSelectClass = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
+  const compactCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
+  const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
 
   return (
     <section
       data-testid="pro-backtest-workspace"
       data-module="rule"
-      className="overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(7,9,18,0.98),rgba(4,5,12,0.94))] shadow-[0_32px_80px_rgba(0,0,0,0.42)]"
+      className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(7,9,18,0.98),rgba(4,5,12,0.94))] p-6 shadow-[0_32px_80px_rgba(0,0,0,0.42)]"
     >
-      <div className="flex min-h-[900px] min-w-0">
+      <div className="flex min-w-0 flex-col gap-6 xl:flex-row xl:items-start">
         <aside
           data-testid="pro-backtest-sidebar"
-          className="w-64 border-r border-white/5 bg-white/[0.02] px-4 py-5"
+          className="w-64 shrink-0 flex flex-col gap-2 sticky top-6 h-fit"
         >
           <div className="flex flex-col gap-2">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-100/55">
-              {language === 'en' ? 'Quant IDE' : 'Quant IDE'}
-            </p>
-            <h2 className="text-2xl font-semibold text-white">
-              {language === 'en' ? 'Quant workbench' : '量化工作台'}
-            </h2>
-            <p className="text-sm leading-6 text-white/56">
-              {language === 'en'
-                ? 'Release the full engine surface: orchestration, execution, and analysis live in one docked console.'
-                : '将策略编译、执行模型、风控与高级分析收拢到统一参数面板内。'}
-            </p>
-          </div>
+            <div className="rounded-[24px] border border-white/5 bg-white/[0.02] p-5">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-white/44">
+                {language === 'en' ? 'Quant IDE' : 'Quant IDE'}
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold text-white">
+                {language === 'en' ? 'Quant workbench' : '量化工作台'}
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-white/56">
+                {language === 'en'
+                  ? 'Keep the left capability tree visible while the right workspace expands naturally with the page.'
+                  : '让左侧能力树始终可见，右侧参数工作区随页面自然展开。'}
+              </p>
+            </div>
 
-          <div className="mt-6 flex flex-col gap-2">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                data-testid={item.testId}
-                onClick={() => jumpToSection(item)}
-                className={`rounded-2xl border px-4 py-3 text-left transition ${
-                  currentStep === item.step
-                    ? 'border-cyan-300/30 bg-cyan-400/10 text-white'
-                    : 'border-white/8 bg-white/[0.02] text-white/72 hover:border-white/14 hover:bg-white/[0.05]'
-                }`}
-              >
-                <span className="block text-sm font-medium">{item.label}</span>
-              </button>
-            ))}
+            <div className="flex flex-col gap-2 rounded-[24px] border border-white/5 bg-white/[0.02] p-3">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-testid={item.testId}
+                  onClick={() => jumpToSection(item)}
+                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                    currentStep === item.step
+                      ? 'border-white/12 bg-white/[0.08] text-white'
+                      : 'border-white/5 bg-white/[0.02] text-white/72 hover:border-white/12 hover:bg-white/[0.05]'
+                  }`}
+                >
+                  <span className="block text-sm font-medium">{item.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1">
+        <div className="flex flex-1 min-w-0 flex-col gap-6 pb-24">
           <div
             data-testid="pro-backtest-compile-bar"
-            className="sticky top-0 z-10 flex flex-col gap-4 border-b border-white/5 bg-[rgba(4,7,18,0.94)] px-6 py-5 backdrop-blur-xl xl:flex-row xl:items-center xl:justify-between"
+            className="flex flex-col gap-4 rounded-[24px] border border-white/5 bg-white/[0.02] px-6 py-5 backdrop-blur-xl xl:flex-row xl:items-center xl:justify-between"
           >
             <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-100/50">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-white/44">
                 {language === 'en' ? 'Compile zone' : 'Compile Zone'}
               </p>
               <p className="mt-1 text-sm text-white/60">
@@ -162,7 +165,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               <button
                 type="button"
                 onClick={() => void onParse()}
-                className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-medium text-white/86 transition hover:border-white/20 hover:bg-white/[0.08]"
+                className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-medium text-white/86 transition hover:border-white/20 hover:bg-white/[0.08]"
               >
                 {language === 'en' ? 'Compile strategy' : '编译策略'}
               </button>
@@ -170,22 +173,22 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 type="button"
                 onClick={() => void handleCompileAndRun()}
                 disabled={isSubmitting}
-                className="rounded-full border border-cyan-300/30 bg-cyan-400/14 px-5 py-2 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(34,211,238,0.18)] transition hover:-translate-y-0.5 hover:border-cyan-200/40 hover:bg-cyan-300/18 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded-2xl bg-white px-5 py-2 text-sm font-semibold text-black transition-transform hover:bg-white/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {language === 'en' ? 'Compile & Run' : '编译并运行'}
               </button>
             </div>
           </div>
 
-          <div className="max-h-[calc(100vh-14rem)] overflow-y-auto px-6 py-6">
+          <div className="flex flex-col gap-6">
             <div className="grid gap-6 xl:grid-cols-2">
               <section id="pro-section-assets" className={compactCardClass}>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/42">
+                <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Assets & portfolio' : '标的与组合'}
                 </p>
                 <div className="mt-4 grid gap-4">
                   <label className="product-field gap-1.5">
-                    <span className="theme-field-label">{language === 'en' ? 'Scope mode' : '资产范围'}</span>
+                    <span className={compactFieldLabelClass}>{language === 'en' ? 'Scope mode' : '资产范围'}</span>
                     <select
                       value={portfolioMode}
                       onChange={(event) => setPortfolioMode(event.target.value as 'single' | 'multi')}
@@ -196,7 +199,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                     </select>
                   </label>
                   <label className="product-field gap-1.5">
-                    <span className="theme-field-label">{language === 'en' ? 'Rebalancing cadence' : '再平衡频率'}</span>
+                    <span className={compactFieldLabelClass}>{language === 'en' ? 'Rebalancing cadence' : '再平衡频率'}</span>
                     <select
                       value={rebalancingCadence}
                       onChange={(event) => setRebalancingCadence(event.target.value)}
@@ -211,7 +214,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               </section>
 
               <section id="pro-section-strategy" className={compactCardClass}>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/42">
+                <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Strategy engine' : '策略与引擎'}
                 </p>
                 <div className="mt-4 flex flex-col gap-3 text-sm text-white/72">
@@ -224,7 +227,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               </section>
 
               <section id="pro-section-orders" className={compactCardClass}>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/42">
+                <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Orders & risk' : '订单与风控'}
                 </p>
                 <div className="mt-4 grid gap-3 text-sm text-white/72">
@@ -244,7 +247,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               </section>
 
               <section id="pro-section-execution" className={compactCardClass}>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/42">
+                <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Execution model' : '成本与滑点'}
                 </p>
                 <p className="mt-4 text-sm leading-6 text-white/68">
@@ -256,7 +259,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             </div>
 
             <section id="pro-section-analytics" className={`${compactCardClass} mt-6`}>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-white/42">
+              <p className={compactFieldLabelClass}>
                 {language === 'en' ? 'Advanced analytics' : '高级分析'}
               </p>
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm text-white/72">

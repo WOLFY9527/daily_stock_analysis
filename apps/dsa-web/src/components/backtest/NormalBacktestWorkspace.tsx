@@ -1,4 +1,5 @@
 import type React from 'react';
+import { Play } from 'lucide-react';
 import { ApiErrorAlert } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
 import {
@@ -77,7 +78,10 @@ const TEMPLATE_COPY: Record<BacktestLanguage, Record<NormalStrategyTemplate, { l
   },
 };
 
-const FIELD_CLASS = 'input-surface input-focus-glow product-command-input !px-3 !py-2.5 !text-sm';
+const GLASS_CARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
+const FIELD_CLASS = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
+const LABEL_CLASS = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
+const PRIMARY_CTA_CLASS = 'flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-base font-bold text-black transition-transform hover:bg-white/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70';
 
 const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   language,
@@ -111,12 +115,12 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   return (
     <section
       data-testid="normal-backtest-workspace"
-      className="relative overflow-hidden rounded-[32px] border border-indigo-400/20 bg-[radial-gradient(circle_at_top_left,rgba(129,140,248,0.24),transparent_32%),linear-gradient(180deg,rgba(8,12,24,0.96),rgba(6,8,18,0.92))] shadow-[0_30px_80px_rgba(49,46,129,0.35)]"
+      className="relative overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(8,12,24,0.96),rgba(6,8,18,0.92))] shadow-[0_30px_80px_rgba(0,0,0,0.35)]"
     >
       <div className="grid gap-6 p-6 xl:grid-cols-[1.12fr_0.88fr] xl:items-stretch xl:p-8">
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-indigo-300/20 bg-indigo-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-indigo-100/80">
+            <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/72">
               {language === 'en' ? 'Point & shoot mode' : 'Point & Shoot 模式'}
             </span>
             <span className="text-xs text-white/50">
@@ -136,7 +140,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Ticker' : '标的代码'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Ticker' : '标的代码'}</span>
               <input
                 type="text"
                 value={code}
@@ -147,7 +151,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               />
             </label>
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Strategy template' : '策略模板'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Strategy template' : '策略模板'}</span>
               <select
                 value={strategyTemplate}
                 onChange={(event) => onStrategyTemplateChange(event.target.value as NormalStrategyTemplate)}
@@ -162,7 +166,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               </select>
             </label>
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Range start' : '回测区间开始'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Range start' : '回测区间开始'}</span>
               <input
                 type="date"
                 value={startDate}
@@ -172,7 +176,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               />
             </label>
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Range end' : '回测区间结束'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Range end' : '回测区间结束'}</span>
               <input
                 type="date"
                 value={endDate}
@@ -182,7 +186,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               />
             </label>
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Capital' : '初始资金'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Capital' : '初始资金'}</span>
               <input
                 type="number"
                 min={1}
@@ -193,7 +197,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               />
             </label>
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
               <input
                 type="number"
                 min={0}
@@ -207,9 +211,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-4 rounded-[28px] border border-white/10 bg-black/20 p-5 backdrop-blur-xl">
+        <div className="flex flex-col gap-4 rounded-[28px] border border-white/8 bg-white/[0.02] p-5 backdrop-blur-xl">
           <label className="product-field gap-1.5">
-            <span className="theme-field-label">{language === 'en' ? 'Benchmark' : '对比基准'}</span>
+            <span className={LABEL_CLASS}>{language === 'en' ? 'Benchmark' : '对比基准'}</span>
             <select
               value={benchmarkMode}
               onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
@@ -226,7 +230,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
 
           {benchmarkMode === 'custom_code' ? (
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
               <input
                 type="text"
                 value={benchmarkCode}
@@ -237,16 +241,16 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             </label>
           ) : null}
 
-          <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-white/40">
+          <div className={GLASS_CARD_CLASS}>
+            <p className={LABEL_CLASS}>
               {language === 'en' ? 'Selected template' : '当前模板'}
             </p>
             <h3 className="mt-2 text-xl font-semibold text-white">{currentTemplate.label}</h3>
             <p className="mt-2 text-sm leading-6 text-white/60">{currentTemplate.description}</p>
           </div>
 
-          <div className="rounded-[24px] border border-indigo-300/10 bg-indigo-400/8 p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-indigo-100/60">
+          <div className={GLASS_CARD_CLASS}>
+            <p className={LABEL_CLASS}>
               {language === 'en' ? 'Launch preview' : '发射预览'}
             </p>
             <p className="mt-3 text-sm leading-7 text-white/74">
@@ -256,11 +260,11 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
 
           {strategyTemplate === 'custom_code' ? (
             <label className="product-field gap-1.5">
-              <span className="theme-field-label">{language === 'en' ? 'Custom strategy text' : '自定义策略文本'}</span>
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Custom strategy text' : '自定义策略文本'}</span>
               <textarea
                 value={customStrategyText}
                 onChange={(event) => onCustomStrategyTextChange(event.target.value)}
-                className="input-surface input-focus-glow product-command-input min-h-[120px] resize-none !px-3 !py-3 !text-sm"
+                className={`${FIELD_CLASS} min-h-[120px] resize-none py-3`}
                 aria-label={language === 'en' ? 'Custom strategy text' : '自定义策略文本'}
               />
             </label>
@@ -270,13 +274,13 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             type="button"
             onClick={() => void onLaunch()}
             disabled={isLaunching}
-            className="group relative mt-auto inline-flex min-h-[82px] w-full items-center justify-center overflow-hidden rounded-[26px] border border-indigo-200/30 bg-[linear-gradient(135deg,rgba(129,140,248,0.88),rgba(79,70,229,0.86))] px-6 py-5 text-lg font-semibold tracking-[0.08em] text-white shadow-[0_28px_80px_rgba(99,102,241,0.45)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_34px_90px_rgba(99,102,241,0.52)] disabled:cursor-not-allowed disabled:opacity-70"
+            className={PRIMARY_CTA_CLASS}
           >
-            <span className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.3),transparent_42%)] opacity-80" />
-            <span className="relative">
+            <Play className="h-4 w-4" />
+            <span>
               {isLaunching
                 ? (language === 'en' ? 'Launching...' : '正在启动...')
-                : (language === 'en' ? '🚀 Launch backtest' : '🚀 一键开始回测')}
+                : (language === 'en' ? 'Launch backtest' : '一键开始回测')}
             </span>
           </button>
 
