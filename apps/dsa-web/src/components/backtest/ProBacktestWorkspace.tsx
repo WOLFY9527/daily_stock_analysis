@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DeterministicBacktestFlow, {
   type FlowProps,
   type RuleWizardStep,
@@ -42,6 +42,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const [enableBayesianSearch, setEnableBayesianSearch] = useState(false);
   const [enableWalkForward, setEnableWalkForward] = useState(true);
   const [enableMonteCarlo, setEnableMonteCarlo] = useState(false);
+  const [catalogToast, setCatalogToast] = useState<string | null>(null);
 
   const navItems: NavItem[] = [
     {
@@ -103,9 +104,30 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
   const strategyCatalogGroups = getStrategyCatalogGroups();
 
+  useEffect(() => {
+    if (!catalogToast) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setCatalogToast(null);
+    }, 3200);
+    return () => window.clearTimeout(timer);
+  }, [catalogToast]);
+
   const applyCatalogTemplate = (strategyText: string) => {
     onStrategyTextChange(strategyText);
     onStepChange('strategy');
+  };
+
+  const handleCatalogTemplateAction = (strategyText: string, executable: boolean) => {
+    applyCatalogTemplate(strategyText);
+    if (!executable) {
+      setCatalogToast(
+        language === 'en'
+          ? 'This template is not directly runnable yet. Modify it in the editor before execution.'
+          : '当前模板暂不支持直接运行，请在编辑器中修改后再执行',
+      );
+    }
   };
 
   return (
@@ -307,6 +329,16 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                     ? 'Point-and-shoot keeps only the deterministic-ready presets. This catalog keeps every built-in basic, advanced, and professional template available as runtime-loaded references.'
                     : '普通模式只保留 deterministic 可执行模板。这里保留全部基础、进阶、专业内置模板，作为运行时可加载目录与专业模式参考面板。'}
                 </p>
+                {catalogToast ? (
+                  <p
+                    data-testid="pro-strategy-catalog-toast"
+                    role="status"
+                    aria-live="polite"
+                    className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-100"
+                  >
+                    {catalogToast}
+                  </p>
+                ) : null}
               </div>
 
               <div className="mt-6 flex flex-col gap-6">
@@ -364,10 +396,19 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                             </p>
                             <button
                               type="button"
-                              onClick={() => applyCatalogTemplate(template.editorText[language])}
-                              className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-medium text-white/86 transition hover:border-white/20 hover:bg-white/[0.08]"
+                              onClick={() => handleCatalogTemplateAction(template.editorText[language], template.executable)}
+                              title={template.executable
+                                ? (language === 'en' ? 'Load this template into the editor' : '将该模板填入编辑器')
+                                : (language === 'en' ? 'Reference only. Edit before running.' : '仅供参考，执行前请先在编辑器中修改')}
+                              className={`rounded-2xl border px-4 py-2 text-sm font-medium transition ${
+                                template.executable
+                                  ? 'border-white/10 bg-white/[0.05] text-white/86 hover:border-white/20 hover:bg-white/[0.08]'
+                                  : 'border-amber-500/25 bg-amber-500/10 text-amber-100 hover:border-amber-400/35 hover:bg-amber-500/14'
+                              }`}
                             >
-                              {language === 'en' ? 'Load into editor' : '填入编辑器'}
+                              {template.executable
+                                ? (language === 'en' ? 'Load into editor' : '填入编辑器')
+                                : (language === 'en' ? 'Load as reference' : '载入参考模板')}
                             </button>
                           </div>
                         </article>

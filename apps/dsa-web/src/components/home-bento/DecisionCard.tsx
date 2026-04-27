@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import {
   HomeSignalCandlestickChart,
@@ -66,6 +67,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   summary,
   ticker,
 }) => {
+  const openDetailsButton = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const [activeTimeframeId, setActiveTimeframeId] = useState<DecisionChartTimeframeId>(defaultTimeframeId);
   const summaryParagraphs = summary
     .split(/\n+/)
@@ -94,10 +96,12 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       testId="home-bento-card-decision"
       action={(
         <button
+          ref={openDetailsButton.ref}
           type="button"
           className={CARD_BUTTON_CLASS}
           data-testid="home-bento-drawer-trigger-decision"
-          onClick={onOpenDetails}
+          onClick={openDetailsButton.onClick}
+          onPointerUp={openDetailsButton.onPointerUp}
         >
           <PanelRightOpen className="h-4 w-4" />
           <span>{detailLabel}</span>

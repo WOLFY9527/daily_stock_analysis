@@ -997,17 +997,32 @@ describe('BacktestPage', () => {
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
   });
 
-  it('loads reference templates from the professional catalog into the strategy editor', async () => {
+  it('loads unsupported reference templates into the editor and shows the direct-run warning', async () => {
     renderBacktestRoutes();
 
     await openDeterministicStrategyInput();
 
-    const referenceTemplateCard = screen.getByText('支撑 / 阻力反弹').closest('article');
+    const referenceTemplateCard = screen.getByText('简单动量').closest('article');
     expect(referenceTemplateCard).not.toBeNull();
 
-    fireEvent.click(within(referenceTemplateCard as HTMLElement).getByRole('button', { name: '填入编辑器' }));
+    fireEvent.click(within(referenceTemplateCard as HTMLElement).getByRole('button', { name: '载入参考模板' }));
 
-    expect(screen.getByDisplayValue('回踩支撑企稳买入，接近阻力位卖出')).toBeInTheDocument();
+    expect(await screen.findByTestId('pro-strategy-catalog-toast')).toHaveTextContent('当前模板暂不支持直接运行，请在编辑器中修改后再执行');
+    expect(screen.getByDisplayValue('近20日涨幅转正并创新高买入，跌破10日低点卖出')).toBeInTheDocument();
+  });
+
+  it('loads executable catalog templates without showing the unsupported warning', async () => {
+    renderBacktestRoutes();
+
+    await openDeterministicStrategyInput();
+
+    const executableTemplateCard = screen.getByText('MACD 金叉 / 死叉').closest('article');
+    expect(executableTemplateCard).not.toBeNull();
+
+    fireEvent.click(within(executableTemplateCard as HTMLElement).getByRole('button', { name: '填入编辑器' }));
+
+    expect(screen.queryByTestId('pro-strategy-catalog-toast')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('MACD 金叉买入，死叉卖出')).toBeInTheDocument();
   });
 
   it('marks parsed strategy stale after setup changes', async () => {

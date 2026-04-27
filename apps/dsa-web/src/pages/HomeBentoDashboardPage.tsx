@@ -17,6 +17,12 @@ import type {
 } from '../components/home-bento/HomeSignalCandlestickChart';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
+import {
+  getSafariReadySurfaceClassName,
+  shouldApplySafariA11yGuard,
+  useSafariRenderReady,
+  useSafariWarmActivation,
+} from '../hooks/useSafariInteractionReady';
 import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
 import { useStockPoolStore } from '../stores';
 
@@ -1627,6 +1633,8 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
 }
 
 const HomeBentoDashboardPage: React.FC = () => {
+  const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
+  const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
@@ -1649,6 +1657,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const isDeletingHistory = useStockPoolStore((state) => state.isDeletingHistory);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
   const clearError = useStockPoolStore((state) => state.clearError);
+  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
   const recentHistoryItems = useMemo(
     () => historyItems.filter((item) => !item.isTest).slice(0, 8),
     [historyItems],
@@ -1796,9 +1805,15 @@ const HomeBentoDashboardPage: React.FC = () => {
 
   return (
     <div
+      ref={surfaceRef}
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col overflow-x-hidden bg-transparent`}
+      aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
+      aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
+      className={getSafariReadySurfaceClassName(
+        isSafariReady,
+        `${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col overflow-x-hidden bg-transparent`,
+      )}
     >
       {fallbackToast ? (
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
@@ -1851,9 +1866,11 @@ const HomeBentoDashboardPage: React.FC = () => {
                 {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : copy.analyzeButton}
               </button>
               <button
+                ref={openHistoryDrawerButton.ref}
                 type="button"
                 aria-label={locale === 'en' ? 'History' : '历史记录'}
-                onClick={() => setHistoryDrawerOpen(true)}
+                onClick={openHistoryDrawerButton.onClick}
+                onPointerUp={openHistoryDrawerButton.onPointerUp}
                 disabled={isBusy}
                 className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
                 data-testid="home-bento-history-drawer-trigger"

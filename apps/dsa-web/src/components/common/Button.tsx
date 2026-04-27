@@ -36,7 +36,7 @@ const BUTTON_VARIANT_STYLES = {
   'home-action-report': '',
 } as const;
 
-export const Button: React.FC<ButtonProps> = ({
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   children,
   variant = 'primary',
   size = 'md',
@@ -47,19 +47,20 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   type = 'button',
   ...props
-}) => {
+}, ref) => {
   const { t } = useI18n();
   const glowStyles = glow ? 'theme-accent-glow settings-glow-accent-hover' : '';
   const resolvedLoadingText = loadingText || (isLoading ? t('common.processing') : '');
 
   return (
     <button
+      ref={ref}
       type={type}
       aria-busy={isLoading || undefined}
       data-variant={variant}
       data-size={size}
       className={cn(
-        'inline-flex w-auto max-w-full cursor-pointer items-center justify-center gap-2 rounded-[var(--theme-button-radius)] border border-transparent bg-transparent font-normal whitespace-nowrap transition-[color,background-color,border-color,opacity,transform] duration-200',
+        'pointer-events-auto inline-flex w-auto max-w-full cursor-pointer items-center justify-center gap-2 rounded-[var(--theme-button-radius)] border border-transparent bg-transparent font-normal whitespace-nowrap transition-[color,background-color,border-color,opacity,transform] duration-200 [backface-visibility:hidden] [transform:translateZ(0)]',
         'theme-focus-ring focus-visible:ring-offset-0 focus-visible:outline-none',
         'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none',
         BUTTON_SIZE_STYLES[size],
@@ -105,4 +106,6 @@ export const Button: React.FC<ButtonProps> = ({
       )}
     </button>
   );
-};
+});
+
+Button.displayName = 'Button';

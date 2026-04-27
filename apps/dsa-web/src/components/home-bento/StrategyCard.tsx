@@ -1,5 +1,6 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import { CARD_BUTTON_CLASS, getToneTextClass, getToneTextStyle } from './theme';
 
@@ -28,6 +29,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   detailLabel,
   onOpenDetails,
 }) => {
+  const openDetailsButton = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const isEntryMetric = (label: string) => label === '建仓区间' || label === 'Entry Zone';
   const positionParagraphs = positionBody
     .split(/\n+/)
@@ -42,10 +44,12 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
       testId="home-bento-card-strategy"
       action={(
         <button
+          ref={openDetailsButton.ref}
           type="button"
           className={CARD_BUTTON_CLASS}
           data-testid="home-bento-drawer-trigger-strategy"
-          onClick={onOpenDetails}
+          onClick={openDetailsButton.onClick}
+          onPointerUp={openDetailsButton.onPointerUp}
         >
           <PanelRightOpen className="h-4 w-4" />
           <span>{detailLabel}</span>

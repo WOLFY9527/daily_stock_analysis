@@ -13,7 +13,11 @@ import {
 const repoRoot = path.resolve(new URL('../../..', import.meta.url).pathname);
 const generatedAt = new Date().toISOString();
 const stamp = generatedAt.replace(/[:.]/g, '-');
-const reportDir = path.join(repoRoot, 'reports', `ux-verification-${stamp}`);
+const reportBaseDir = process.env.DSA_UX_VERIFY_REPORT_BASE
+  ? path.resolve(repoRoot, process.env.DSA_UX_VERIFY_REPORT_BASE)
+  : path.join(repoRoot, 'reports');
+const reportName = process.env.DSA_UX_VERIFY_REPORT_NAME || `ux-verification-${stamp}`;
+const reportDir = path.join(reportBaseDir, reportName);
 const screenshotRoot = path.join(reportDir, 'screenshots');
 const desktopShotDir = path.join(screenshotRoot, 'desktop');
 const mobileShotDir = path.join(screenshotRoot, 'mobile');
@@ -21,6 +25,7 @@ const reportJsonPath = path.join(reportDir, 'ux-verification-report.json');
 const reportMdPath = path.join(reportDir, 'ux-verification-report.md');
 const baseUrl = process.env.DSA_UX_VERIFY_BASE_URL || 'http://127.0.0.1:8000';
 const previewUrl = process.env.DSA_UX_VERIFY_PREVIEW_URL || 'http://127.0.0.1:4174';
+const backendStatusUrl = process.env.DSA_UX_VERIFY_STATUS_URL || `${baseUrl}/api/v1/auth/status`;
 const dbPath = path.join(repoRoot, 'data', 'stock_analysis.db');
 const actionTimeoutMs = 10_000;
 
@@ -156,6 +161,33 @@ print(json.dumps(result, ensure_ascii=False))
     maxBuffer: 10 * 1024 * 1024,
   });
   return JSON.parse(output);
+}
+
+function readBackendStatus() {
+  try {
+    const payload = execFileSync('curl', ['-sS', backendStatusUrl], {
+      encoding: 'utf-8',
+      maxBuffer: 1024 * 1024,
+    }).trim();
+    if (!payload) {
+      return {
+        ok: false,
+        statusUrl: backendStatusUrl,
+        error: 'empty_response',
+      };
+    }
+    return {
+      ok: true,
+      statusUrl: backendStatusUrl,
+      payload: JSON.parse(payload),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      statusUrl: backendStatusUrl,
+      error: String(error),
+    };
+  }
 }
 
 async function takeScreenshot(page, browserName, viewportName, slug) {
@@ -425,6 +457,12 @@ async function verifyHome(page, browserName, viewportName, flow, slugPrefix = 'h
     pushUiCheck(flow, 'home drawer opens', drawerVisible);
     await page.keyboard.press('Escape').catch(() => undefined);
   }
+  if (await historyTrigger.isVisible().catch(() => false)) {
+    await historyTrigger.click();
+    await page.locator('[data-testid="home-bento-history-drawer"]').waitFor({ state: 'visible', timeout: actionTimeoutMs }).catch(() => undefined);
+    pushUiCheck(flow, 'home history drawer opens', await page.locator('[data-testid="home-bento-history-drawer"]').isVisible().catch(() => false));
+    await page.keyboard.press('Escape').catch(() => undefined);
+  }
   flow.screenshots.push(await takeScreenshot(page, browserName, viewportName, slugPrefix));
 }
 
@@ -434,6 +472,12 @@ async function verifyScanner(page, browserName, viewportName, flow, slugPrefix =
   pushUiCheck(flow, 'scanner hero visible', await page.locator('[data-testid="user-scanner-bento-hero"]').isVisible().catch(() => false));
   pushUiCheck(flow, 'scanner run button visible', await page.locator('[data-testid="scanner-run-button"]').isVisible().catch(() => false));
   pushUiCheck(flow, 'scanner drawer trigger visible', await page.locator('[data-testid="user-scanner-bento-drawer-trigger"]').isVisible().catch(() => false));
+  if (await page.locator('[data-testid="user-scanner-bento-drawer-trigger"]').isVisible().catch(() => false)) {
+    await page.locator('[data-testid="user-scanner-bento-drawer-trigger"]').click();
+    await page.getByRole('dialog').waitFor({ state: 'visible', timeout: actionTimeoutMs }).catch(() => undefined);
+    pushUiCheck(flow, 'scanner history drawer opens', await page.getByRole('dialog').isVisible().catch(() => false));
+    await page.keyboard.press('Escape').catch(() => undefined);
+  }
   flow.screenshots.push(await takeScreenshot(page, browserName, viewportName, slugPrefix));
 }
 
@@ -441,6 +485,14 @@ async function verifyChat(page, browserName, viewportName, flow, slugPrefix = 'c
   await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="chat-bento-page"]').waitFor({ state: 'visible', timeout: actionTimeoutMs });
   pushUiCheck(flow, 'chat composer visible', await page.locator('[data-testid="chat-composer-omnibar"]').isVisible().catch(() => false));
+  const briefTrigger = page.locator('[data-testid="chat-bento-brief-trigger"]');
+  pushUiCheck(flow, 'chat brief trigger visible', await briefTrigger.isVisible().catch(() => false));
+  if (await briefTrigger.isVisible().catch(() => false)) {
+    await briefTrigger.click();
+    await page.getByRole('dialog').waitFor({ state: 'visible', timeout: actionTimeoutMs }).catch(() => undefined);
+    pushUiCheck(flow, 'chat brief drawer opens', await page.getByRole('dialog').isVisible().catch(() => false));
+    await page.keyboard.press('Escape').catch(() => undefined);
+  }
   flow.screenshots.push(await takeScreenshot(page, browserName, viewportName, slugPrefix));
 }
 
@@ -471,6 +523,29 @@ async function verifyBacktest(page, browserName, viewportName, flow, slugPrefix 
   await page.locator('[data-testid="backtest-bento-page"]').waitFor({ state: 'visible', timeout: actionTimeoutMs });
   pushUiCheck(flow, 'backtest hero strip visible', await page.locator('[data-testid="backtest-bento-hero"]').isVisible().catch(() => false));
   pushUiCheck(flow, 'backtest brief trigger visible', await page.locator('[data-testid="backtest-bento-drawer-trigger"]').isVisible().catch(() => false));
+  const briefTrigger = page.locator('[data-testid="backtest-bento-drawer-trigger"]');
+  if (await briefTrigger.isVisible().catch(() => false)) {
+    await briefTrigger.click();
+    await page.getByRole('dialog').waitFor({ state: 'visible', timeout: actionTimeoutMs }).catch(() => undefined);
+    pushUiCheck(flow, 'backtest brief drawer opens', await page.getByRole('dialog').isVisible().catch(() => false));
+    await page.keyboard.press('Escape').catch(() => undefined);
+  }
+  const professionalTab = page.getByRole('tab', { name: locatorRegex('专业', 'Professional') }).first();
+  if (await professionalTab.isVisible().catch(() => false)) {
+    await professionalTab.click();
+    await page.locator('[data-testid="pro-backtest-workspace"]').waitFor({ state: 'visible', timeout: actionTimeoutMs }).catch(() => undefined);
+    pushUiCheck(flow, 'backtest professional workspace visible', await page.locator('[data-testid="pro-backtest-workspace"]').isVisible().catch(() => false));
+    const unsupportedCard = page.locator('article').filter({ hasText: locatorRegex('简单动量', 'Simple momentum') }).first();
+    if (await unsupportedCard.isVisible().catch(() => false)) {
+      await unsupportedCard.getByRole('button', { name: locatorRegex('载入参考模板', 'Load as reference') }).click();
+      await page.locator('[data-testid="pro-strategy-catalog-toast"]').waitFor({ state: 'visible', timeout: actionTimeoutMs }).catch(() => undefined);
+      pushUiCheck(
+        flow,
+        'backtest unsupported template warning visible',
+        await page.locator('[data-testid="pro-strategy-catalog-toast"]').isVisible().catch(() => false),
+      );
+    }
+  }
   flow.screenshots.push(await takeScreenshot(page, browserName, viewportName, slugPrefix));
 }
 
@@ -810,7 +885,7 @@ function buildMarkdown() {
 async function main() {
   await ensureDirs();
   report.runtime.previewReachable = true;
-  report.runtime.backendStatus = JSON.parse(execFileSync('curl', ['-sS', `${baseUrl}/api/v1/auth/status`], { encoding: 'utf-8' }));
+  report.runtime.backendStatus = readBackendStatus();
 
   const primaryBrowser = await chromium.launch({ headless: true });
   const primaryContext = await primaryBrowser.newContext({

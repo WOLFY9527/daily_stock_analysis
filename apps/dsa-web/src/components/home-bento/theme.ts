@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 export type SignalTone = 'bullish' | 'bearish' | 'neutral';
 
 export const CARD_KICKER_CLASS = 'block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40';
-export const CARD_BUTTON_CLASS = 'inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.01] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/72 backdrop-blur-xl transition-colors duration-150 hover:border-white/[0.08] hover:bg-white/[0.02] hover:text-white';
+export const CARD_BUTTON_CLASS = 'pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.01] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/72 backdrop-blur-xl transition-colors duration-150 [backface-visibility:hidden] [transform:translateZ(0)] hover:border-white/[0.08] hover:bg-white/[0.02] hover:text-white';
 export const PANEL_METRIC_CLASS = 'rounded-[18px] border border-white/5 bg-white/[0.01] p-4 backdrop-blur-xl';
 export const BENTO_SURFACE_ROOT_CLASS = 'bento-surface-root';
 export const BENTO_GRID_ROOT_CLASS = 'bento-grid-root';

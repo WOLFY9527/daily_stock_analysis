@@ -5,6 +5,12 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
+import {
+  getSafariReadySurfaceClassName,
+  shouldApplySafariA11yGuard,
+  useSafariRenderReady,
+  useSafariWarmActivation,
+} from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
 import type {
@@ -389,6 +395,8 @@ function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: Port
 }
 
 const PortfolioPage: React.FC = () => {
+  const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
+  const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const copy = useMemo(() => getPortfolioCopy(t, language), [language, t]);
 
@@ -987,6 +995,7 @@ const PortfolioPage: React.FC = () => {
   const totalAssetsTitle = '总资产 Total Assets';
   const historyDrawerLabel = language === 'en' ? 'History ↗' : '历史记录 ↗';
   const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
+  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
 
   useEffect(() => {
     if (!isHistoryDrawerOpen) {
@@ -1136,9 +1145,15 @@ const PortfolioPage: React.FC = () => {
       ) : null}
 
       <div
+        ref={surfaceRef}
         data-testid="portfolio-bento-page"
         data-bento-surface="true"
-        className="flex h-full min-h-0 w-full flex-1 min-w-0 flex-col overflow-hidden bg-transparent px-6 py-8 text-white/72 md:px-8 xl:px-12"
+        aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
+        aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
+        className={getSafariReadySurfaceClassName(
+          isSafariReady,
+          'flex h-full min-h-0 w-full flex-1 min-w-0 flex-col overflow-hidden bg-transparent px-6 py-8 text-white/72 md:px-8 xl:px-12',
+        )}
       >
         <section className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-12 xl:grid-cols-10">
           <section className="theme-panel-glass lg:col-span-4 xl:col-span-2 h-full flex flex-col rounded-[18px] overflow-hidden">
@@ -1439,9 +1454,11 @@ const PortfolioPage: React.FC = () => {
                   Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
                 </h2>
                 <Button
+                  ref={openHistoryDrawerButton.ref}
                   type="button"
                   variant="ghost"
-                  onClick={() => setIsHistoryDrawerOpen(true)}
+                  onClick={openHistoryDrawerButton.onClick}
+                  onPointerUp={openHistoryDrawerButton.onPointerUp}
                   data-testid="portfolio-history-drawer-trigger"
                   className="shrink-0 rounded-full border border-[var(--theme-panel-subtle-border)] px-3 py-1.5 text-xs text-secondary-text hover:bg-[var(--overlay-hover)] hover:text-foreground xl:hidden"
                 >

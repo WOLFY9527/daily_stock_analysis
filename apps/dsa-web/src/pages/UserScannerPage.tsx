@@ -5,6 +5,12 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
 import { ApiErrorAlert, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
+import {
+  getSafariReadySurfaceClassName,
+  shouldApplySafariA11yGuard,
+  useSafariRenderReady,
+  useSafariWarmActivation,
+} from '../hooks/useSafariInteractionReady';
 import type { ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
 import {
   getScannerDetailOptions,
@@ -414,6 +420,8 @@ function formatHistoryHeadline(
 }
 
 const UserScannerPage: React.FC = () => {
+  const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
+  const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { t, language } = useI18n();
   const [market, setMarket] = useState<'cn' | 'us' | 'hk'>('cn');
   const [profile, setProfile] = useState('cn_preopen_v1');
@@ -526,6 +534,10 @@ const UserScannerPage: React.FC = () => {
     () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
     [historyTotal],
   );
+  const runScannerButton = useSafariWarmActivation<HTMLButtonElement>(() => {
+    void handleRun();
+  });
+  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsRationaleDrawerOpen(true));
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
   const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
   const elapsedTime = formatDuration(runDetail?.runAt, runDetail?.completedAt, language);
@@ -561,9 +573,15 @@ const UserScannerPage: React.FC = () => {
   return (
     <>
       <div
+        ref={surfaceRef}
         data-testid="user-scanner-bento-page"
         data-bento-surface="true"
-        className="bento-surface-root flex w-full flex-1 min-h-0 min-w-0 bg-transparent text-foreground"
+        aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
+        aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
+        className={getSafariReadySurfaceClassName(
+          isSafariReady,
+          'bento-surface-root flex w-full flex-1 min-h-0 min-w-0 bg-transparent text-foreground',
+        )}
       >
         <div
           data-testid="user-scanner-workspace"
@@ -592,8 +610,10 @@ const UserScannerPage: React.FC = () => {
                   <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                   <div className="flex flex-col gap-4">
                     <button
+                      ref={runScannerButton.ref}
                       type="button"
-                      onClick={() => void handleRun()}
+                      onClick={runScannerButton.onClick}
+                      onPointerUp={runScannerButton.onPointerUp}
                       disabled={isRunning}
                       aria-busy={isRunning}
                       data-testid="scanner-run-button"
@@ -634,9 +654,11 @@ const UserScannerPage: React.FC = () => {
                     {language === 'en' ? `${shortlistCount} symbols hit` : `命中 ${shortlistCount} 只标的`}
                   </span>
                   <button
+                    ref={openHistoryDrawerButton.ref}
                     type="button"
                     data-testid="user-scanner-bento-drawer-trigger"
-                    onClick={() => setIsRationaleDrawerOpen(true)}
+                    onClick={openHistoryDrawerButton.onClick}
+                    onPointerUp={openHistoryDrawerButton.onPointerUp}
                     className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/[0.1]"
                   >
                     <PanelRightOpen className="h-4 w-4" />

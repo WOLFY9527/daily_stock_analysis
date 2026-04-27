@@ -42,6 +42,12 @@ import type {
   RuleBacktestRunResponse,
 } from '../types/backtest';
 import { useI18n } from '../contexts/UiLanguageContext';
+import {
+  getSafariReadySurfaceClassName,
+  shouldApplySafariA11yGuard,
+  useSafariRenderReady,
+  useSafariWarmActivation,
+} from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
 
 const HISTORICAL_PAGE_SIZE = 20;
@@ -92,6 +98,8 @@ const WORKBENCH_PANEL_TRANSITION = {
 };
 
 const BacktestPage: React.FC = () => {
+  const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
+  const shouldGuardA11y = shouldApplySafariA11yGuard();
   const navigate = useNavigate();
   const location = useLocation();
   const { language } = useI18n();
@@ -168,6 +176,11 @@ const BacktestPage: React.FC = () => {
   const [ruleParseSignature, setRuleParseSignature] = useState<string | null>(null);
   const [appliedRewriteText, setAppliedRewriteText] = useState<string | null>(null);
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
+  const openBriefButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsBriefDrawerOpen(true));
+  const showRuleModuleButton = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('rule'));
+  const showHistoricalModuleButton = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('historical'));
+  const showNormalModeButton = useSafariWarmActivation<HTMLButtonElement>(() => setControlPanelMode('normal'));
+  const showProfessionalModeButton = useSafariWarmActivation<HTMLButtonElement>(() => setControlPanelMode('professional'));
 
   const normalizedCode = String(codeFilter || '').trim().toUpperCase();
   const resolvedSampleCount = samplePreset === 'custom'
@@ -1137,20 +1150,24 @@ const BacktestPage: React.FC = () => {
   const moduleTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
       <button
+        ref={showRuleModuleButton.ref}
         type="button"
         role="tab"
         aria-selected={activeModule === 'rule'}
         className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
-        onClick={() => setActiveModule('rule')}
+        onClick={showRuleModuleButton.onClick}
+        onPointerUp={showRuleModuleButton.onPointerUp}
       >
         {bt(language, 'page.ruleTab')}
       </button>
       <button
+        ref={showHistoricalModuleButton.ref}
         type="button"
         role="tab"
         aria-selected={activeModule === 'historical'}
         className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
-        onClick={() => setActiveModule('historical')}
+        onClick={showHistoricalModuleButton.onClick}
+        onPointerUp={showHistoricalModuleButton.onPointerUp}
       >
         {bt(language, 'page.historicalTab')}
       </button>
@@ -1160,20 +1177,24 @@ const BacktestPage: React.FC = () => {
   const controlModeTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.controlModeLabel')}>
       <button
+        ref={showNormalModeButton.ref}
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'normal'}
         className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
-        onClick={() => setControlPanelMode('normal')}
+        onClick={showNormalModeButton.onClick}
+        onPointerUp={showNormalModeButton.onPointerUp}
       >
         {bt(language, 'page.normalMode')}
       </button>
       <button
+        ref={showProfessionalModeButton.ref}
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'professional'}
         className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
-        onClick={() => setControlPanelMode('professional')}
+        onClick={showProfessionalModeButton.onClick}
+        onPointerUp={showProfessionalModeButton.onPointerUp}
       >
         {bt(language, 'page.professionalMode')}
       </button>
@@ -1182,8 +1203,11 @@ const BacktestPage: React.FC = () => {
 
   return (
     <div
+      ref={surfaceRef}
       data-testid="backtest-bento-page"
-      className="w-full min-h-screen flex flex-col bg-transparent"
+      aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
+      aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
+      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full min-h-screen flex flex-col bg-transparent')}
     >
       <header className="w-full px-6 pt-6 xl:px-10">
         <div className="relative overflow-hidden rounded-[32px] border border-white/8 bg-white/[0.02] px-6 py-6 backdrop-blur-2xl xl:px-8">
@@ -1203,10 +1227,12 @@ const BacktestPage: React.FC = () => {
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <button
+                ref={openBriefButton.ref}
                 type="button"
                 className={CARD_BUTTON_CLASS}
                 data-testid="backtest-bento-drawer-trigger"
-                onClick={() => setIsBriefDrawerOpen(true)}
+                onClick={openBriefButton.onClick}
+                onPointerUp={openBriefButton.onPointerUp}
               >
                 <PanelRightOpen className="h-4 w-4" />
                 <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>

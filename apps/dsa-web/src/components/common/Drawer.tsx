@@ -7,9 +7,13 @@ import type React from 'react';
 import { useEffect, useCallback, useId, useRef, useState } from 'react';
 import { cn } from '../../utils/cn';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import { shouldApplySafariA11yGuard } from '../../hooks/useSafariInteractionReady';
 
 let activeDrawerCount = 0;
 const BACKDROP_INTERACTION_GUARD_MS = 420;
+const DRAWER_READY_DELAY_MS = 80;
+const DRAWER_WARMUP_INTERVAL_MS = 100;
+const DRAWER_WARMUP_WINDOW_MS = 500;
 
 interface DrawerProps {
   isOpen: boolean;
@@ -36,8 +40,19 @@ export const Drawer: React.FC<DrawerProps> = ({
   const generatedId = useId();
   const [isMounted, setIsMounted] = useState(isOpen);
   const [uiState, setUiState] = useState<'open' | 'closed'>(isOpen ? 'open' : 'closed');
+  const [isInteractionReady, setIsInteractionReady] = useState(isOpen);
+  const shouldGuardA11y = shouldApplySafariA11yGuard();
   const backdropGuardRef = useRef(isOpen);
   const backdropGuardTimerRef = useRef<number | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const repaintTargets = useCallback(() => {
+    panelRef.current?.getBoundingClientRect();
+    void panelRef.current?.offsetHeight;
+    closeButtonRef.current?.getBoundingClientRect();
+    void closeButtonRef.current?.offsetHeight;
+  }, []);
 
   // Close the drawer when Escape is pressed.
   const handleKeyDown = useCallback(
@@ -52,6 +67,7 @@ export const Drawer: React.FC<DrawerProps> = ({
   useEffect(() => {
     if (isOpen) {
       backdropGuardRef.current = true;
+      setIsInteractionReady(false);
       if (backdropGuardTimerRef.current != null) {
         window.clearTimeout(backdropGuardTimerRef.current);
       }
@@ -61,12 +77,20 @@ export const Drawer: React.FC<DrawerProps> = ({
       }, BACKDROP_INTERACTION_GUARD_MS);
       window.requestAnimationFrame(() => {
         setIsMounted(true);
-        window.requestAnimationFrame(() => setUiState('open'));
+        window.requestAnimationFrame(() => {
+          repaintTargets();
+          setUiState('open');
+          window.setTimeout(() => {
+            repaintTargets();
+            setIsInteractionReady(true);
+          }, DRAWER_READY_DELAY_MS);
+        });
       });
       return;
     }
 
     backdropGuardRef.current = false;
+    setIsInteractionReady(false);
     if (backdropGuardTimerRef.current != null) {
       window.clearTimeout(backdropGuardTimerRef.current);
       backdropGuardTimerRef.current = null;
@@ -80,7 +104,7 @@ export const Drawer: React.FC<DrawerProps> = ({
       setIsMounted(false);
     }, 190);
     return () => window.clearTimeout(timer);
-  }, [isOpen, isMounted]);
+  }, [isOpen, isMounted, repaintTargets]);
 
   useEffect(() => () => {
     if (backdropGuardTimerRef.current != null) {
@@ -106,6 +130,39 @@ export const Drawer: React.FC<DrawerProps> = ({
       }
     };
   }, [isMounted, handleKeyDown]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    let elapsedMs = 0;
+    const warmTargets = () => {
+      const noop = () => undefined;
+      if (panelRef.current) {
+        panelRef.current.addEventListener('pointerdown', noop, { passive: true });
+        panelRef.current.removeEventListener('pointerdown', noop);
+      }
+      if (closeButtonRef.current) {
+        closeButtonRef.current.addEventListener('pointerdown', noop, { passive: true });
+        closeButtonRef.current.removeEventListener('pointerdown', noop);
+      }
+      repaintTargets();
+    };
+
+    warmTargets();
+    const intervalId = window.setInterval(() => {
+      warmTargets();
+      elapsedMs += DRAWER_WARMUP_INTERVAL_MS;
+      if (elapsedMs >= DRAWER_WARMUP_WINDOW_MS) {
+        window.clearInterval(intervalId);
+      }
+    }, DRAWER_WARMUP_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isOpen, repaintTargets]);
 
   const handleBackdropClick = useCallback(() => {
     if (!closeOnBackdropClick) {
@@ -137,20 +194,24 @@ export const Drawer: React.FC<DrawerProps> = ({
         data-state={uiState}
         className={cn(
           'absolute inset-0 bg-black/60 transition-opacity duration-200 ease-out',
-          uiState === 'open' ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+          uiState === 'open' && isInteractionReady ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={handleBackdropClick}
       />
 
       <div className={cn('drawer__frame absolute inset-y-0 flex w-full', sidePositionClass, width)}>
         <div
+          ref={panelRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          aria-hidden={shouldGuardA11y && !isInteractionReady ? true : undefined}
+          aria-live={shouldGuardA11y ? (isInteractionReady ? 'polite' : 'off') : undefined}
           className={cn(
             'drawer__panel relative flex h-full w-full flex-col bg-white/[0.02] backdrop-blur-sm transition-all duration-200 ease-out',
             borderClass,
             'border-white/5',
+            isInteractionReady ? 'pointer-events-auto' : 'pointer-events-none',
             panelStateClass,
           )}
           data-state={uiState}
@@ -162,6 +223,7 @@ export const Drawer: React.FC<DrawerProps> = ({
               </h2>
             ) : <div />}
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={onClose}
               className="drawer__close inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-secondary-text transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"

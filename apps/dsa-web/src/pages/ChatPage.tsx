@@ -21,6 +21,12 @@ import type { ChatFollowUpContext } from '../utils/chatFollowUp';
 import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFollowUp';
 import { normalizeAssistantMessageContent } from '../utils/chatTimeoutFallback';
 import { useI18n } from '../contexts/UiLanguageContext';
+import {
+  getSafariReadySurfaceClassName,
+  shouldApplySafariA11yGuard,
+  useSafariRenderReady,
+  useSafariWarmActivation,
+} from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
 
 const assistantMarkdownComponents = {
@@ -151,6 +157,8 @@ function getSessionBucketLabel(dateValue: string | null | undefined, language: '
 }
 
 const ChatPage: React.FC = () => {
+  const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
+  const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState('');
@@ -330,6 +338,13 @@ const ChatPage: React.FC = () => {
     stopStream();
   }, [stopStream]);
 
+  const startNewChatDesktopButton = useSafariWarmActivation<HTMLButtonElement>(handleStartNewChat);
+  const startNewChatMobileButton = useSafariWarmActivation<HTMLButtonElement>(handleStartNewChat);
+  const openBriefButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsBriefDrawerOpen(true));
+  const sendMessageButton = useSafariWarmActivation<HTMLButtonElement>(() => {
+    void handleSend();
+  });
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -480,9 +495,15 @@ const ChatPage: React.FC = () => {
 
   return (
     <div
+      ref={surfaceRef}
       data-testid="chat-bento-page"
       data-bento-surface="true"
-      className="gemini-bento-page bento-surface-root workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat flex w-full flex-1 min-w-0 flex-col bg-[#030303]"
+      aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
+      aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
+      className={getSafariReadySurfaceClassName(
+        isSafariReady,
+        'gemini-bento-page bento-surface-root workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat flex w-full flex-1 min-w-0 flex-col bg-[#030303]',
+      )}
     >
       <div
         data-testid="chat-workspace"
@@ -506,8 +527,10 @@ const ChatPage: React.FC = () => {
           <div className="p-4">
             <p className="mb-3 text-[10px] uppercase tracking-[0.28em] text-white/30">{chat('historyTitle')}</p>
             <button
+              ref={startNewChatDesktopButton.ref}
               type="button"
-              onClick={handleStartNewChat}
+              onClick={startNewChatDesktopButton.onClick}
+              onPointerUp={startNewChatDesktopButton.onPointerUp}
               aria-label={chat('newChatTitle')}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] py-2.5 text-sm font-medium text-white transition-all hover:bg-white/[0.1]"
             >
@@ -649,15 +672,19 @@ const ChatPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      ref={startNewChatMobileButton.ref}
                       type="button"
-                      onClick={handleStartNewChat}
+                      onClick={startNewChatMobileButton.onClick}
+                      onPointerUp={startNewChatMobileButton.onPointerUp}
                       className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white transition-colors hover:bg-white/[0.08] md:hidden"
                     >
                       + {language === 'en' ? 'New' : '新建'}
                     </button>
                     <button
+                      ref={openBriefButton.ref}
                       type="button"
-                      onClick={() => setIsBriefDrawerOpen(true)}
+                      onClick={openBriefButton.onClick}
+                      onPointerUp={openBriefButton.onPointerUp}
                       data-testid="chat-bento-brief-trigger"
                       className={CARD_BUTTON_CLASS}
                       title={language === 'en' ? 'Open brief' : '查看摘要'}
@@ -958,10 +985,10 @@ const ChatPage: React.FC = () => {
                         </button>
                       ) : (
                         <button
+                          ref={sendMessageButton.ref}
                           type="button"
-                          onClick={() => {
-                            void handleSend();
-                          }}
+                          onClick={sendMessageButton.onClick}
+                          onPointerUp={sendMessageButton.onPointerUp}
                           disabled={!input.trim() || loading}
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                           aria-label={chat('notifyAction')}
