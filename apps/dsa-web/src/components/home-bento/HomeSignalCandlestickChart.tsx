@@ -66,12 +66,10 @@ type EChartsOption = ComposeOption<
   | TooltipComponentOption
 >;
 
-const BULL_CANDLE = '#34D399';
-const BULL_BORDER = '#A7F3D0';
-const BEAR_CANDLE = '#FB7185';
-const BEAR_BORDER = '#FDA4AF';
-const VOLUME_BULL = 'rgba(52, 211, 153, 0.32)';
-const VOLUME_BEAR = 'rgba(251, 113, 133, 0.26)';
+const BULL_CANDLE = '#10b981';
+const BEAR_CANDLE = '#ef4444';
+const VOLUME_BULL = 'rgba(16, 185, 129, 0.34)';
+const VOLUME_BEAR = 'rgba(239, 68, 68, 0.3)';
 
 function formatCompactVolume(value: number, locale: HomeChartLocale): string {
   return new Intl.NumberFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
@@ -110,13 +108,13 @@ export const HomeSignalCandlestickChart: React.FC<{
           left: 42,
           right: 10,
           top: 12,
-          height: '60%',
+          height: '66%',
         },
         {
           left: 42,
           right: 10,
-          top: '76%',
-          height: '13%',
+          top: '81%',
+          height: '11%',
         },
       ],
       tooltip: {
@@ -219,12 +217,12 @@ export const HomeSignalCandlestickChart: React.FC<{
           yAxisIndex: 0,
           data: ohlc,
           itemStyle: {
-            borderColor: BULL_BORDER,
-            borderColor0: BEAR_BORDER,
+            borderColor: BULL_CANDLE,
+            borderColor0: BEAR_CANDLE,
             color: BULL_CANDLE,
             color0: BEAR_CANDLE,
           },
-          barMaxWidth: 14,
+          barMaxWidth: 12,
           markPoint: {
             animation: false,
             data: [
@@ -237,21 +235,16 @@ export const HomeSignalCandlestickChart: React.FC<{
             itemStyle: {
               color: signalTone === 'bearish' ? BEAR_CANDLE : BULL_CANDLE,
               shadowBlur: 20,
-              shadowColor: signalTone === 'bearish' ? 'rgba(251,113,133,0.38)' : 'rgba(52,211,153,0.38)',
+              shadowColor: signalTone === 'bearish' ? 'rgba(239,68,68,0.34)' : 'rgba(16,185,129,0.34)',
             },
             label: {
-              color: '#020617',
-              fontSize: 10,
-              fontWeight: 700,
-              formatter: () => timeframe.breakoutLabel,
-              padding: [2, 6],
-              position: 'top',
+              show: false,
             },
-            symbol: 'triangle',
+            symbol: 'pin',
             symbolKeepAspect: true,
-            symbolOffset: [0, -18],
+            symbolOffset: [0, -10],
             symbolRotate: 0,
-            symbolSize: 18,
+            symbolSize: 20,
           },
         },
         {
@@ -264,7 +257,9 @@ export const HomeSignalCandlestickChart: React.FC<{
               color: candle.close >= candle.open ? VOLUME_BULL : VOLUME_BEAR,
             },
           })),
-          barWidth: '48%',
+          barGap: '0%',
+          barCategoryGap: '18%',
+          barWidth: '58%',
           emphasis: {
             disabled: true,
           },

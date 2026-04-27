@@ -226,15 +226,19 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('117.40')).toHaveClass('text-lg', 'font-bold');
     expect(macdSignalValue).not.toBeUndefined();
     expect(macdSignalValue).toHaveClass('text-base', 'font-bold');
-    expect(screen.getByText('+9.4%')).toHaveClass('text-lg', 'font-bold');
+    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏')).toHaveClass('text-lg', 'font-bold');
     expect(screen.getByText('121.80 - 124.60').className).not.toContain('text-2xl');
-    expect(screen.getByText('+9.4%').className).not.toContain('text-2xl');
-    expect(screen.getByText('+9.4%').className).not.toContain('text-3xl');
+    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏').className).not.toContain('text-2xl');
+    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏').className).not.toContain('text-3xl');
     expect(techMetricTiles.length).toBe(0);
     expect(fundamentalsMetricTiles.length).toBe(0);
     expect(macdSignalValue).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByText('+9.4%')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByText('$12.1B')).toHaveStyle({ textShadow: 'none' });
+    expect(screen.getByText('零轴上方二次扩张，动能继续偏强')).toBeInTheDocument();
+    expect(screen.getByText('MA20 托举 MA60，多头排列延续')).toBeInTheDocument();
+    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(screen.getByText('自由现金流充裕，波动缓冲仍在')).toHaveStyle({ textShadow: 'none' });
+    expect(screen.queryByText('+9.4%')).not.toBeInTheDocument();
+    expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
     expect(primaryStack.compareDocumentPosition(secondaryStack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(omnibar.compareDocumentPosition(screen.getByTestId('home-bento-card-decision')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(strategyCard.compareDocumentPosition(secondaryGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -347,8 +351,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('180.45-189.17 (Target zone)')).toBeInTheDocument();
     expect(screen.getByText('164.39 (Technical invalidation)')).toBeInTheDocument();
     expect(screen.getByText('Market Cap (Latest)')).toBeInTheDocument();
-    expect(screen.getByText('498.36B')).toBeInTheDocument();
-    expect(screen.getByText('N/A (field pending)')).toBeInTheDocument();
+    expect(screen.getByText('-')).toBeInTheDocument();
+    expect(screen.queryByText('N/A (field pending)')).not.toBeInTheDocument();
     expect(screen.queryByText('回踩支撑确认')).not.toBeInTheDocument();
     expect(screen.queryByText('总市值(最新值)')).not.toBeInTheDocument();
     expect(screen.queryByText('待确认股票')).not.toBeInTheDocument();
@@ -507,11 +511,11 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-item-TSLA'));
 
     expect(await screen.findByText('Tesla')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方收敛');
+    expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方动能收敛，反弹仍待确认');
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
     expect(await screen.findByText('TSLA 技术下钻')).toBeInTheDocument();
-    expect(screen.getAllByText('零轴下方收敛').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('零轴下方动能收敛，反弹仍待确认').length).toBeGreaterThan(1);
     expect(screen.getByText('快慢线仍在零轴下方运行，绿柱缩短，说明空头动能在衰减；下一步要看能否形成金叉，把反弹转成可交易的趋势段。')).toBeInTheDocument();
     expect(screen.queryByText(/聚焦 MACD/)).not.toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -519,7 +523,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-fundamentals'));
     expect(await screen.findByText('TSLA 基本面下钻')).toBeInTheDocument();
-    expect(screen.getAllByText('+2.7%').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('营收增速放缓，期待新驱动接力').length).toBeGreaterThan(1);
     expect(screen.getByText('汽车交付量放缓拖累整体营收增速，但储能业务的高毛利贡献正在抬升，对冲了汽车主业的增速压力。')).toBeInTheDocument();
     expect(screen.queryByText(/将接入盈利质量与估值弹性描述卡/)).not.toBeInTheDocument();
   });

@@ -48,6 +48,7 @@ type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
 type DashboardField = {
   label: string;
   value: string;
+  rawValue?: string;
   tone?: SignalTone;
   details?: string;
 };
@@ -70,6 +71,19 @@ function normalizeDetailKey(value?: string): string {
 
 function containsCjk(value?: string): boolean {
   return CJK_TEXT_RE.test(String(value || ''));
+}
+
+function isPendingMetricValue(value?: string): boolean {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === ''
+    || normalized === '--'
+    || normalized === '-'
+    || /^(na|n\/a)[（(]?(字段待接入|field pending)?[）)]?$/i.test(normalized)
+    || /字段待接入|field pending/i.test(normalized);
+}
+
+function sanitizeMetricValue(value?: string): string {
+  return isPendingMetricValue(value) ? '-' : String(value || '').trim();
 }
 
 function buildCandles(
@@ -98,83 +112,148 @@ function buildCandles(
   });
 }
 
+function buildIntradayLabels(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => {
+    const totalMinutes = 9 * 60 + 35 + index * 13;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  });
+}
+
+function buildDateLabels(startMonth: number, startDay: number, count: number): string[] {
+  const start = new Date(Date.UTC(2026, startMonth - 1, startDay));
+  return Array.from({ length: count }, (_, index) => {
+    const next = new Date(start);
+    next.setUTCDate(start.getUTCDate() + index);
+    return `${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
+  });
+}
+
+function buildWeekLabels(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `W${String(index + 1).padStart(2, '0')}`);
+}
+
+function interpolateSeries(length: number, anchors: number[]): number[] {
+  if (anchors.length === 0) {
+    return [];
+  }
+  if (anchors.length === 1) {
+    return Array.from({ length }, () => Number(anchors[0].toFixed(2)));
+  }
+
+  const positions = anchors.map((_, index) => Math.round((index * (length - 1)) / (anchors.length - 1)));
+  return Array.from({ length }, (_, index) => {
+    const segment = positions.findIndex((position, segmentIndex) => segmentIndex < positions.length - 1 && index >= position && index <= positions[segmentIndex + 1]);
+    const leftIndex = segment === -1 ? positions.length - 2 : segment;
+    const startPosition = positions[leftIndex];
+    const endPosition = positions[leftIndex + 1];
+    const ratio = endPosition === startPosition ? 0 : (index - startPosition) / (endPosition - startPosition);
+    const base = anchors[leftIndex] + (anchors[leftIndex + 1] - anchors[leftIndex]) * ratio;
+    const wave = Math.sin((index + 1) * 0.82) * Math.max(Math.abs(anchors[leftIndex + 1] - anchors[leftIndex]) * 0.04, 0.18);
+    return Number((base + wave).toFixed(2));
+  });
+}
+
+function interpolateVolumes(length: number, anchors: number[]): number[] {
+  return interpolateSeries(length, anchors).map((value) => Math.max(Math.round(value), 0));
+}
+
+function buildDensePreset(
+  labels: string[],
+  closeAnchors: number[],
+  volumeAnchors: number[],
+  breakoutIndex: number,
+  scale = 0.0065,
+): DecisionChartSeriesPreset {
+  return {
+    breakoutIndex,
+    candles: buildCandles(
+      labels,
+      interpolateSeries(labels.length, closeAnchors),
+      interpolateVolumes(labels.length, volumeAnchors),
+      scale,
+    ),
+  };
+}
+
 const CHART_PRESETS: Record<string, Record<DecisionChartTimeframeId, DecisionChartSeriesPreset>> = {
   NVDA: {
     intraday: {
-      breakoutIndex: 9,
-      candles: buildCandles(
-        ['09:35', '10:00', '10:30', '11:00', '11:30', '12:30', '13:00', '13:30', '14:00', '14:20', '14:40', '15:00'],
+      ...buildDensePreset(
+        buildIntradayLabels(32),
         [116.2, 116.9, 116.4, 117.5, 117.1, 117.9, 117.4, 118.2, 119.1, 121.3, 123.0, 124.8],
         [2100000, 2480000, 2260000, 2740000, 2380000, 2960000, 2440000, 3180000, 3660000, 5980000, 6720000, 5410000],
+        25,
       ),
     },
     swing: {
-      breakoutIndex: 7,
-      candles: buildCandles(
-        ['04-14', '04-15', '04-16', '04-17', '04-18', '04-21', '04-22', '04-23', '04-24', '04-25'],
+      ...buildDensePreset(
+        buildDateLabels(3, 25, 34),
         [112.4, 113.6, 114.1, 114.8, 115.2, 116.7, 117.1, 121.4, 123.6, 125.0],
         [18200000, 19400000, 17600000, 18800000, 20500000, 21400000, 22100000, 39200000, 33400000, 28700000],
+        26,
       ),
     },
     position: {
-      breakoutIndex: 5,
-      candles: buildCandles(
-        ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'],
+      ...buildDensePreset(
+        buildWeekLabels(24),
         [103.2, 106.4, 107.8, 110.1, 113.7, 118.4, 122.3, 125.0],
         [55200000, 58800000, 60400000, 62200000, 65100000, 88400000, 81200000, 74400000],
+        17,
       ),
     },
   },
   ORCL: {
     intraday: {
-      breakoutIndex: 8,
-      candles: buildCandles(
-        ['09:35', '10:00', '10:30', '11:00', '11:30', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00'],
+      ...buildDensePreset(
+        buildIntradayLabels(31),
         [121.2, 121.6, 121.4, 122.1, 121.9, 122.7, 123.0, 123.6, 124.5, 124.9, 125.2],
         [1180000, 1320000, 1270000, 1490000, 1410000, 1620000, 1740000, 2080000, 3360000, 3010000, 2660000],
+        23,
       ),
     },
     swing: {
-      breakoutIndex: 6,
-      candles: buildCandles(
-        ['04-14', '04-15', '04-16', '04-17', '04-18', '04-21', '04-22', '04-23', '04-24', '04-25'],
+      ...buildDensePreset(
+        buildDateLabels(3, 25, 34),
         [118.6, 119.4, 119.8, 120.5, 121.0, 121.7, 123.1, 124.0, 124.8, 125.2],
         [10100000, 9620000, 9840000, 10800000, 11200000, 11700000, 18800000, 17400000, 15800000, 14600000],
+        24,
       ),
     },
     position: {
-      breakoutIndex: 5,
-      candles: buildCandles(
-        ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'],
+      ...buildDensePreset(
+        buildWeekLabels(24),
         [109.1, 110.4, 112.0, 113.2, 116.3, 120.1, 123.6, 125.2],
         [30400000, 29800000, 31500000, 32200000, 36600000, 51200000, 46800000, 43100000],
+        16,
       ),
     },
   },
   TSLA: {
     intraday: {
-      breakoutIndex: 6,
-      candles: buildCandles(
-        ['09:35', '10:00', '10:30', '11:00', '11:30', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00'],
+      ...buildDensePreset(
+        buildIntradayLabels(31),
         [165.4, 166.7, 167.9, 169.2, 168.6, 169.7, 171.0, 170.6, 170.3, 170.9, 170.5],
         [2280000, 2460000, 2720000, 3180000, 2860000, 3010000, 4620000, 4080000, 3520000, 3310000, 2990000],
+        20,
       ),
     },
     swing: {
-      breakoutIndex: 4,
-      candles: buildCandles(
-        ['04-14', '04-15', '04-16', '04-17', '04-18', '04-21', '04-22', '04-23', '04-24', '04-25'],
+      ...buildDensePreset(
+        buildDateLabels(3, 25, 34),
         [158.8, 160.2, 161.4, 163.6, 168.8, 170.3, 169.5, 170.7, 171.2, 170.5],
         [26400000, 28200000, 29500000, 31800000, 50200000, 44800000, 42200000, 39800000, 37200000, 34100000],
+        18,
         0.0078,
       ),
     },
     position: {
-      breakoutIndex: 3,
-      candles: buildCandles(
-        ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'],
+      ...buildDensePreset(
+        buildWeekLabels(24),
         [148.2, 151.4, 155.8, 163.1, 168.0, 170.2, 171.4, 170.5],
         [68400000, 70200000, 75600000, 98200000, 91400000, 86100000, 83600000, 80800000],
+        12,
         0.0084,
       ),
     },
@@ -831,9 +910,12 @@ function localizeFieldLabel(locale: DashboardLocale, raw: string | undefined, fa
 }
 
 function localizeMetricValue(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
-  const value = String(raw || '').trim();
+  const value = sanitizeMetricValue(raw);
   if (!value) {
     return fallback;
+  }
+  if (value === '-') {
+    return '-';
   }
   if (locale === 'zh') {
     return value;
@@ -847,6 +929,125 @@ function localizeMetricValue(locale: DashboardLocale, raw: string | undefined, f
     return localized;
   }
   return fallback;
+}
+
+function buildTechSignalHeadline(locale: DashboardLocale, ticker: string, label: string, value: string): string {
+  const key = normalizeDetailKey(label);
+  const raw = sanitizeMetricValue(value);
+  const isEnglish = locale === 'en';
+
+  if (key === 'macd') {
+    if (/below zero|零轴下方|收敛|compression/i.test(raw)) {
+      return isEnglish ? 'Momentum is compressing below zero, so the bounce still needs proof' : '零轴下方动能收敛，反弹仍待确认';
+    }
+    if (/second expansion|二次扩张/i.test(raw)) {
+      return isEnglish ? 'Momentum is expanding again above zero, keeping buyers in control' : '零轴上方二次扩张，动能继续偏强';
+    }
+    return isEnglish ? 'The bullish MACD posture still supports trend continuation' : 'MACD 仍偏多头结构，趋势延续占优';
+  }
+
+  if (key === '均线结构' || key === 'movingaverages' || key === 'ma20ma60' || key === 'ma5' || key === 'ma10' || key === 'ma20' || key === 'ma60') {
+    if (/pressing lower|下压|压制/i.test(raw) || (ticker === 'TSLA' && /ma20/i.test(raw))) {
+      return isEnglish ? 'MA20 is still capping price, so the repair phase is not finished' : 'MA20 仍在压制价格，趋势修复尚未完成';
+    }
+    return isEnglish ? 'MA20 keeps lifting MA60, so the trend stack stays constructive' : 'MA20 托举 MA60，多头排列延续';
+  }
+
+  if (key === '量价配合' || key === 'volumeprofile') {
+    if (/follow-through pending|续航待定/i.test(raw)) {
+      return isEnglish ? 'The first bounce had volume, but follow-through still needs confirmation' : '首波反弹已有量能，但续航还需二次确认';
+    }
+    return isEnglish ? 'Pullback volume stayed calm and the breakout re-expanded cleanly' : '回踩缩量、突破放量，趋势承接仍然健康';
+  }
+
+  if (key === 'rsi' || key === 'rsi14') {
+    const numeric = Number.parseFloat(raw);
+    if (Number.isFinite(numeric) && numeric >= 70) {
+      return isEnglish ? 'RSI is hot enough to watch for short-term exhaustion' : 'RSI 已接近过热区，短线需防透支';
+    }
+    if (Number.isFinite(numeric) && numeric >= 55) {
+      return isEnglish ? 'RSI is firm but not overbought, leaving room for continuation' : 'RSI 强势但未过热，趋势仍有延续空间';
+    }
+    return isEnglish ? 'RSI has only partially repaired, so conviction still needs confirmation' : 'RSI 修复有限，信号强度仍待确认';
+  }
+
+  if (key === '波动率' || key === 'volatility') {
+    const numeric = Number.parseFloat(raw.replace('%', ''));
+    if (Number.isFinite(numeric) && numeric >= 4) {
+      return isEnglish ? 'Volatility remains elevated, so sizing should stay conservative' : '波动率仍然偏高，仓位节奏需要收敛';
+    }
+    return isEnglish ? 'Volatility remains controlled enough for staggered execution' : '波动率可控，适合按节奏分批执行';
+  }
+
+  return raw;
+}
+
+function buildFundamentalMetricHeadline(locale: DashboardLocale, label: string, value: string): string {
+  const key = normalizeDetailKey(label);
+  const raw = sanitizeMetricValue(value);
+  const isEnglish = locale === 'en';
+
+  if (raw === '-') {
+    return '-';
+  }
+
+  if (key === '收入增速' || key === 'revenuegrowth') {
+    const numeric = Number.parseFloat(raw.replace('%', '').replace('+', ''));
+    if (Number.isFinite(numeric) && numeric >= 6) {
+      return isEnglish ? 'Revenue is still expanding, so the demand spine remains intact' : '营收仍在稳步扩张，需求主线未坏';
+    }
+    return isEnglish ? 'Growth has slowed, so the next leg needs a fresh catalyst' : '营收增速放缓，期待新驱动接力';
+  }
+
+  if (key === '自由现金流' || key === 'freecashflow') {
+    return isEnglish ? 'Free cash flow still cushions volatility and funding pressure' : '自由现金流充裕，波动缓冲仍在';
+  }
+
+  if (key === '毛利率' || key === 'grossmargin') {
+    const numeric = Number.parseFloat(raw.replace('%', ''));
+    if (Number.isFinite(numeric) && numeric >= 40) {
+      return isEnglish ? 'Margins are still rich enough to defend pricing power' : '毛利率保持高位，定价权仍然稳固';
+    }
+    return isEnglish ? 'Margins stay under pressure, so earnings quality still needs repair' : '毛利率承压，盈利质量仍待修复';
+  }
+
+  if (key === 'roe') {
+    const numeric = Number.parseFloat(raw.replace('%', ''));
+    if (Number.isFinite(numeric) && numeric >= 25) {
+      return isEnglish ? 'Capital returns remain strong, which supports operating quality' : '资本回报效率强，经营质量仍有支撑';
+    }
+    return isEnglish ? 'Returns remain healthy, but not yet at a standout level' : '资本回报仍属健康，但尚非极致强势';
+  }
+
+  if (key === '市盈率ttm' || key === '市盈率pe' || key === 'pe' || key === 'pettm') {
+    return isEnglish ? 'Valuation still sits in a growth-premium zone' : '估值仍在成长溢价区，需业绩继续兑现';
+  }
+
+  if (key === '预期市盈率一致预期' || key === 'pe一致预期' || key === 'forwardpe一致预期') {
+    return isEnglish ? 'Forward valuation is calmer than spot, but growth expectations stay high' : '远期估值较现值更温和，但成长预期仍高';
+  }
+
+  if (key === '机构持仓' || key === 'institutionalownership') {
+    return isEnglish ? 'Institutional sponsorship still looks sticky and orderly' : '机构筹码相对稳定，抛压风险可控';
+  }
+
+  if (key === '总市值最新值' || key === 'marketcaplatest') {
+    return isEnglish ? 'Market-cap liquidity still provides deep sponsorship' : '总市值体量充足，流动性承接仍强';
+  }
+
+  if (key === '流通市值最新值' || key === 'freefloatcaplatest') {
+    return isEnglish ? 'Free-float liquidity remains usable for institutional participation' : '流通市值承接尚可，交易流动性仍在线';
+  }
+
+  if (key === '总股本最新值' || key === 'sharesoutstandinglatest') {
+    return isEnglish ? 'Share count looks stable, so dilution pressure is contained' : '总股本规模稳定，摊薄压力相对可控';
+  }
+
+  if (key === '流通股最新值' || key === 'freefloatshareslatest') {
+    return isEnglish ? 'Float size remains adequate for orderly turnover' : '流通盘规模适中，换手承接相对平衡';
+  }
+
+  return raw;
 }
 
 function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
@@ -890,6 +1091,7 @@ function mapStandardFields(
       return {
         label: localizeFieldLabel(locale, field.label, fallbackField?.label || field.label),
         value: localizedValue,
+        rawValue: localizedValue,
         tone: toneFromFieldValue(field.value || localizedValue),
         details: fallbackField?.details,
       };
@@ -898,7 +1100,12 @@ function mapStandardFields(
 
 function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
   const key = normalizeDetailKey(label);
+  const rawValue = sanitizeMetricValue(value);
   const isEnglish = locale === 'en';
+
+  if (rawValue === '-') {
+    return '-';
+  }
 
   if (key === 'macd') {
     if (ticker === 'TSLA') {
@@ -940,24 +1147,29 @@ function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: 
 
   if (key === 'rsi') {
     return isEnglish
-      ? `RSI is at ${value}, which is firm but not yet an exhaustion print. It supports continuation as long as price does not diverge against new highs.`
-      : `RSI 处在 ${value}，强势但还没到典型透支区；只要价格创新高时不出现背离，趋势延续概率仍占优。`;
+      ? `RSI is at ${rawValue}, which is firm but not yet an exhaustion print. It supports continuation as long as price does not diverge against new highs.`
+      : `RSI 处在 ${rawValue}，强势但还没到典型透支区；只要价格创新高时不出现背离，趋势延续概率仍占优。`;
   }
 
   if (key === '波动率' || key === 'volatility') {
     return isEnglish
-      ? `Realized volatility is ${value}; position sizing should stay tied to wider risk bands instead of headline-driven chasing.`
-      : `实现波动率约为 ${value}，仓位和止损都要按更宽的风险带来做，不能用追涨方式处理。`;
+      ? `Realized volatility is ${rawValue}; position sizing should stay tied to wider risk bands instead of headline-driven chasing.`
+      : `实现波动率约为 ${rawValue}，仓位和止损都要按更宽的风险带来做，不能用追涨方式处理。`;
   }
 
   return isEnglish
-    ? `${label} is currently reading ${value}, and the drill-down should stay anchored to that live signal instead of a separate narrative block.`
-    : `${label} 当前读数为 ${value}，下钻说明应继续围绕这个实时信号展开，而不是脱离主卡片另写一套叙事。`;
+    ? `${label} is currently reading ${rawValue}, and the drill-down should stay anchored to that live signal instead of a separate narrative block.`
+    : `${label} 当前读数为 ${rawValue}，下钻说明应继续围绕这个实时信号展开，而不是脱离主卡片另写一套叙事。`;
 }
 
 function buildFundamentalMetricDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
   const key = normalizeDetailKey(label);
+  const rawValue = sanitizeMetricValue(value);
   const isEnglish = locale === 'en';
+
+  if (rawValue === '-') {
+    return '-';
+  }
 
   if (key === '收入增速' || key === 'revenuegrowth') {
     if (ticker === 'TSLA') {
@@ -966,43 +1178,43 @@ function buildFundamentalMetricDetails(locale: DashboardLocale, ticker: string, 
         : '汽车交付量放缓拖累整体营收增速，但储能业务的高毛利贡献正在抬升，对冲了汽车主业的增速压力。';
     }
     return isEnglish
-      ? `Revenue growth is running at ${value}, which still supports the current thesis as long as demand conversion remains ahead of cost pressure.`
-      : `收入增速为 ${value}，只要需求兑现继续快于成本压力，这个读数就仍然支撑当前主线判断。`;
+      ? `Revenue growth is running at ${rawValue}, which still supports the current thesis as long as demand conversion remains ahead of cost pressure.`
+      : `收入增速为 ${rawValue}，只要需求兑现继续快于成本压力，这个读数就仍然支撑当前主线判断。`;
   }
 
   if (key === '自由现金流' || key === 'freecashflow') {
     return isEnglish
-      ? `Free cash flow at ${value} keeps financing pressure contained and gives the company room to absorb volatility without breaking the medium-term thesis.`
-      : `自由现金流达到 ${value}，说明公司仍有能力承受阶段波动，不至于因为融资压力打断中期逻辑。`;
+      ? `Free cash flow at ${rawValue} keeps financing pressure contained and gives the company room to absorb volatility without breaking the medium-term thesis.`
+      : `自由现金流达到 ${rawValue}，说明公司仍有能力承受阶段波动，不至于因为融资压力打断中期逻辑。`;
   }
 
   if (key === '毛利率' || key === 'grossmargin') {
     return isEnglish
-      ? `Gross margin at ${value} is the cleanest read on pricing power versus cost pressure, so this line is critical for validating whether the earnings base is expanding or compressing.`
-      : `毛利率为 ${value}，这是检验定价权和成本压力最直接的指标，决定利润底盘是在扩张还是收缩。`;
+      ? `Gross margin at ${rawValue} is the cleanest read on pricing power versus cost pressure, so this line is critical for validating whether the earnings base is expanding or compressing.`
+      : `毛利率为 ${rawValue}，这是检验定价权和成本压力最直接的指标，决定利润底盘是在扩张还是收缩。`;
   }
 
   if (key === 'roe') {
     return isEnglish
-      ? `ROE at ${value} measures how efficiently equity is being converted into earnings, which matters for judging whether the current valuation premium has operating support.`
-      : `ROE 为 ${value}，反映股东权益转化为利润的效率，用来判断当前估值溢价是否有经营效率支撑。`;
+      ? `ROE at ${rawValue} measures how efficiently equity is being converted into earnings, which matters for judging whether the current valuation premium has operating support.`
+      : `ROE 为 ${rawValue}，反映股东权益转化为利润的效率，用来判断当前估值溢价是否有经营效率支撑。`;
   }
 
   if (key === '市盈率pe' || key === 'pe') {
     return isEnglish
-      ? `A PE of ${value} means the market is still paying for forward growth; unless growth durability improves, the rerating room stays bounded.`
-      : `市盈率约为 ${value}，说明市场仍在为未来成长付费；如果增长持续性没有继续抬升，估值扩张空间会受到约束。`;
+      ? `A PE of ${rawValue} means the market is still paying for forward growth; unless growth durability improves, the rerating room stays bounded.`
+      : `市盈率约为 ${rawValue}，说明市场仍在为未来成长付费；如果增长持续性没有继续抬升，估值扩张空间会受到约束。`;
   }
 
   if (key === '机构持仓' || key === 'institutionalownership') {
     return isEnglish
-      ? `Institutional ownership at ${value} helps gauge sponsorship stability; higher stickiness usually lowers the probability of purely retail-driven air pockets.`
-      : `机构持仓约为 ${value}，用来判断筹码稳定性；机构黏性越高，纯情绪性踩踏的概率通常越低。`;
+      ? `Institutional ownership at ${rawValue} helps gauge sponsorship stability; higher stickiness usually lowers the probability of purely retail-driven air pockets.`
+      : `机构持仓约为 ${rawValue}，用来判断筹码稳定性；机构黏性越高，纯情绪性踩踏的概率通常越低。`;
   }
 
   return isEnglish
-    ? `${label} is currently ${value}, and the supporting note should remain attached to that same fundamental observation.`
-    : `${label} 当前为 ${value}，支撑说明需要继续绑定在这条基本面观测本身。`;
+    ? `${label} is currently ${rawValue}, and the supporting note should remain attached to that same fundamental observation.`
+    : `${label} 当前为 ${rawValue}，支撑说明需要继续绑定在这条基本面观测本身。`;
 }
 
 function buildStrategyMetricDetails(locale: DashboardLocale, label: string, value: string): string {
@@ -1049,14 +1261,18 @@ function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardVaria
       ...payload.tech,
       signals: payload.tech.signals.map((signal) => ({
         ...signal,
-        details: signal.details || buildTechSignalDetails(locale, payload.ticker, signal.label, signal.value),
+        rawValue: signal.rawValue || signal.value,
+        value: buildTechSignalHeadline(locale, payload.ticker, signal.label, signal.rawValue || signal.value),
+        details: signal.details || buildTechSignalDetails(locale, payload.ticker, signal.label, signal.rawValue || signal.value),
       })),
     },
     fundamentals: {
       ...payload.fundamentals,
       metrics: payload.fundamentals.metrics.map((metric) => ({
         ...metric,
-        details: metric.details || buildFundamentalMetricDetails(locale, payload.ticker, metric.label, metric.value),
+        rawValue: metric.rawValue || metric.value,
+        value: buildFundamentalMetricHeadline(locale, metric.label, metric.rawValue || metric.value),
+        details: metric.details || buildFundamentalMetricDetails(locale, payload.ticker, metric.label, metric.rawValue || metric.value),
       })),
     },
   };
