@@ -563,11 +563,11 @@ const UserScannerPage: React.FC = () => {
       <div
         data-testid="user-scanner-bento-page"
         data-bento-surface="true"
-        className="bento-surface-root flex min-h-[calc(100vh-80px)] w-full flex-1 min-w-0 overflow-hidden bg-transparent text-foreground"
+        className="bento-surface-root flex min-h-[calc(100vh-80px)] w-full flex-1 min-w-0 bg-transparent text-foreground"
       >
         <div
           data-testid="user-scanner-workspace"
-          className="flex h-[calc(100vh-80px)] w-full flex-1 min-w-0 flex-col overflow-hidden bg-transparent px-6 py-8 md:px-8 xl:px-12"
+          className="flex min-h-[calc(100vh-80px)] w-full flex-1 min-w-0 flex-col bg-transparent px-6 py-8 md:px-8 xl:px-12"
         >
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
@@ -578,7 +578,7 @@ const UserScannerPage: React.FC = () => {
 
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
-          <main className="w-full flex-1 flex flex-col lg:flex-row gap-6 min-h-0 min-w-0 mt-6">
+          <main className="mt-6 flex w-full flex-1 min-h-0 min-w-0 flex-col gap-5 lg:flex-row">
             <section
               data-testid="scanner-sidebar"
               className="w-full xl:w-[320px] 2xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 h-fit sticky top-6"
@@ -607,8 +607,8 @@ const UserScannerPage: React.FC = () => {
               </SectionShell>
             </section>
 
-            <section className="flex-1 min-w-0 flex flex-col min-h-0 gap-4 overflow-hidden">
-              <div data-testid="user-scanner-bento-hero" className="flex justify-between items-end gap-3 border-b border-white/5 pb-4 mb-6 shrink-0">
+            <section className="flex-1 min-w-0 flex flex-col min-h-0 gap-4">
+              <div data-testid="user-scanner-bento-hero" className="mb-5 flex shrink-0 items-end justify-between gap-3 border-b border-white/5 pb-4">
                 <div className="min-w-0">
                   <h2 className="text-xl font-bold text-white mb-1">{language === 'en' ? 'Scanner results and tactical plan' : '扫描结果与战术计划'}</h2>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-white/40">

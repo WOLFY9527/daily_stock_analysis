@@ -13599,6 +13599,10 @@ html[data-theme='spacex'] .theme-shell--scanner {
   overflow-y: clip;
 }
 
+html[data-theme='spacex'] .theme-shell--scanner.theme-shell--page-scroll {
+  overflow-y: visible;
+}
+
 html[data-theme='spacex'] .shell-content-frame--scanner {
   min-height: 100vh;
   padding-bottom: 0;
@@ -13607,6 +13611,11 @@ html[data-theme='spacex'] .shell-content-frame--scanner {
 html[data-theme='spacex'] .shell-main-column--scanner {
   min-height: calc(100vh - var(--shell-masthead-height) - 1.15rem);
   overflow: hidden;
+}
+
+html[data-theme='spacex'] .shell-main-column--scanner.shell-main-column--page-scroll {
+  min-height: auto;
+  overflow: visible;
 }
 
 html[data-theme='spacex'] .shell-main-column {
@@ -15792,6 +15801,25 @@ html[data-theme='spacex'] .theme-shell {
   overflow: hidden;
 }
 
+html[data-theme='spacex'] #root[data-page-scroll-shell='true'],
+html[data-theme='spacex'] .theme-shell--page-scroll {
+  height: auto;
+  min-height: 100vh;
+}
+
+html[data-theme='spacex'][data-page-scroll-shell='true'],
+html[data-theme='spacex'] body[data-page-scroll-shell='true'],
+html[data-theme='spacex'] #root[data-page-scroll-shell='true'] {
+  height: auto;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+html[data-theme='spacex'] .theme-shell--page-scroll {
+  overflow: visible;
+}
+
 html[data-theme='spacex'] .shell-masthead {
   flex: 0 0 auto;
   padding-top: max(0.32rem, env(safe-area-inset-top));
@@ -15815,12 +15843,24 @@ html[data-theme='spacex'] .shell-content-frame {
   padding-bottom: 0.82rem;
 }
 
+html[data-theme='spacex'] .shell-content-frame--page-scroll {
+  min-height: auto;
+  overflow: visible;
+  padding-bottom: 1.25rem;
+}
+
 html[data-theme='spacex'] .theme-main-lane,
 html[data-theme='spacex'] .shell-main-column {
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+html[data-theme='spacex'] .shell-main-column--page-scroll,
+html[data-theme='spacex'] .shell-main-column--page-scroll.theme-main-lane {
+  min-height: auto;
+  overflow: visible;
 }
 
 html[data-theme='spacex'] .theme-page-transition {
@@ -15833,6 +15873,14 @@ html[data-theme='spacex'] .theme-page-transition {
   scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border-muted-hsl) / 0.5) transparent;
+}
+
+html[data-theme='spacex'] .theme-page-transition--page-scroll {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+  padding-right: 0;
+  scrollbar-gutter: auto;
 }
 
 html[data-theme='spacex'] .theme-page-transition::-webkit-scrollbar {
@@ -16105,6 +16153,10 @@ html[data-theme='spacex'] .shell-content-frame {
   padding-top: calc(var(--shell-masthead-height) + 1rem);
 }
 
+html[data-theme='spacex'] .theme-shell--page-scroll .shell-content-frame--page-scroll {
+  padding-top: 0.28rem;
+}
+
 html[data-theme='spacex'] .shell-main-column {
   min-width: 0;
   width: 100%;
@@ -16142,6 +16194,15 @@ html[data-theme='spacex'] .shell-header-links {
   grid-column: 2;
 }
 
+html[data-theme='spacex'] .shell-header-center {
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.9rem, 1.35vw, 1.2rem);
+}
+
 html[data-theme='spacex'] .shell-header-utilities,
 html[data-theme='spacex'] .shell-nav-actions {
   grid-column: 3;
@@ -16154,14 +16215,35 @@ html[data-theme='spacex'] .shell-header-links {
   align-items: center;
   justify-content: center;
   gap: clamp(0.75rem, 1.2vw, 1.15rem);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex: 0 1 auto;
 }
 
 html[data-theme='spacex'] .shell-header-utilities,
 html[data-theme='spacex'] .shell-nav-actions {
   justify-content: flex-end;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+html[data-theme='spacex'] .shell-header-omnibar {
+  position: relative;
+  display: none;
+  flex: 1 1 14rem;
+  min-width: 0;
+  max-width: 20rem;
+}
+
+@media (min-width: 768px) {
+  html[data-theme='spacex'] .shell-header-omnibar {
+    display: flex;
+  }
+}
+
+@media (min-width: 1440px) {
+  html[data-theme='spacex'] .shell-header-omnibar {
+    max-width: 22rem;
+  }
 }
 
 html[data-theme='spacex'] .shell-brand-link,

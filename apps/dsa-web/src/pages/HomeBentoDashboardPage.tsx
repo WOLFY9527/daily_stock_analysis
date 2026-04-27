@@ -481,7 +481,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       className={`${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col pt-4 pb-2 px-6 md:px-8 xl:px-12 overflow-x-hidden bg-transparent`}
     >
       <main className="w-full flex-1 min-h-0 flex flex-col" data-testid="home-bento-main">
-        <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-5 gap-5 auto-rows-[minmax(0,1fr)]">
+        <BentoGrid testId="home-bento-grid" className="w-full flex-1 min-h-0 grid grid-cols-1 items-start gap-4 lg:grid-cols-3 xl:grid-cols-5">
           <DecisionCard
             eyebrow={copy.decision.eyebrow}
             company={copy.decision.company}

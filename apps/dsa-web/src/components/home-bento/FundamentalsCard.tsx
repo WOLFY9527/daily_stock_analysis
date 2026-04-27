@@ -24,7 +24,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
 }) => (
   <BentoCard
     eyebrow={title}
-    className="w-full h-full rounded-[24px] lg:col-span-1 xl:col-span-1"
+    className="w-full self-start rounded-[24px] lg:col-span-1 xl:col-span-1"
     testId="home-bento-card-fundamentals"
     action={(
       <button
@@ -38,12 +38,12 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
       </button>
     )}
   >
-    <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+    <div className="grid grid-cols-2 gap-x-6 gap-y-5">
       {metrics.map((metric, index) => (
         <div key={metric.label} className="min-w-0" data-testid={`home-bento-fundamental-metric-${metric.label}`}>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
           <p
-            className={`mt-2 text-2xl font-medium leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
+            className={`mt-2.5 text-2xl font-medium leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
             style={getToneTextStyle(metric.tone || 'neutral', index === 0)}
           >
             {metric.value}

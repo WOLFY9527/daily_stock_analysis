@@ -3,7 +3,7 @@
  * toggling, completion badge, and logout confirmation while aligning nav
  * controls to the shared glass tokens.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   BriefcaseBusiness,
@@ -13,6 +13,7 @@ import {
   LogOut,
   MessageSquareText,
   Radar,
+  Search,
   Settings2,
   ShieldCheck,
   TestTubeDiagonal,
@@ -22,6 +23,7 @@ import { agentApi } from '../../api/agent';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
+import { useStockPoolStore } from '../../stores';
 import { useAgentChatStore } from '../../stores/agentChatStore';
 import { cn } from '../../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
@@ -118,12 +120,20 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [agentRuntimeEnabled, setAgentRuntimeEnabled] = useState<boolean>(location.pathname.startsWith('/chat'));
+  const omnibarInputRef = useRef<HTMLInputElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const isDrawer = layout === 'drawer';
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
+  const omnibarPlaceholder = language === 'en'
+    ? 'Enter a ticker or company for analysis (for example NVDA)...'
+    : '输入代码或公司名发起分析（如 NVDA）...';
+  const omnibarQuery = useStockPoolStore((state) => state.query);
+  const omnibarBusy = useStockPoolStore((state) => state.isAnalyzing);
+  const setOmnibarQuery = useStockPoolStore((state) => state.setQuery);
+  const submitOmnibarAnalysis = useStockPoolStore((state) => state.submitAnalysis);
 
   useEffect(() => {
     if (isGuest) {
@@ -148,6 +158,23 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       cancelled = true;
     };
   }, [isGuest, location.pathname]);
+
+  useEffect(() => {
+    if (isDrawer || isGuest) {
+      return;
+    }
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        omnibarInputRef.current?.focus();
+        omnibarInputRef.current?.select();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [isDrawer, isGuest]);
 
   const agentEnabled = !isGuest && agentRuntimeEnabled;
 
@@ -325,6 +352,49 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </button>
   ) : null;
 
+  const omnibar = !isDrawer && !isGuest ? (
+    <form
+      className="shell-header-omnibar group"
+      data-testid="shell-global-omnibar"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submitOmnibarAnalysis({
+          stockCode: omnibarQuery,
+          originalQuery: omnibarQuery,
+          selectionSource: 'manual',
+        });
+      }}
+    >
+      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+        <Search className="h-4 w-4 text-white/40 transition-colors group-focus-within:text-indigo-400" />
+      </div>
+      <input
+        ref={omnibarInputRef}
+        data-testid="shell-global-omnibar-input"
+        type="text"
+        value={omnibarQuery}
+        onChange={(event) => setOmnibarQuery(event.target.value)}
+        placeholder={omnibarPlaceholder}
+        autoComplete="off"
+        disabled={omnibarBusy}
+        className="h-10 w-full rounded-full border border-white/10 bg-white/[0.05] py-1.5 pl-9 pr-14 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-indigo-500/50 focus:bg-white/[0.08]"
+      />
+      <div className="pointer-events-none absolute inset-y-0 right-1 hidden items-center pr-1 lg:flex">
+        <kbd className="inline-flex items-center justify-center rounded border border-white/10 bg-white/[0.02] px-2 py-0.5 text-[10px] text-white/40">
+          ⌘ K
+        </kbd>
+      </div>
+      <button
+        type="submit"
+        className="sr-only"
+        aria-label={language === 'en' ? 'Run analysis' : '发起分析'}
+        disabled={omnibarBusy}
+      >
+        {language === 'en' ? 'Run analysis' : '发起分析'}
+      </button>
+    </form>
+  ) : null;
+
   return (
     <>
       {isDrawer ? (
@@ -350,9 +420,12 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           <div className="shell-header-brand">
             <BrandWordmark />
           </div>
-          <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
-            {navLinks}
-          </nav>
+          <div className="shell-header-center">
+            <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
+              {navLinks}
+            </nav>
+            {omnibar}
+          </div>
           <div className="shell-header-utilities">
             {archiveAction}
             {languageAction}

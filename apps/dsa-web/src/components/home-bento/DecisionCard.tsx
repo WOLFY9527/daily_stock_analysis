@@ -98,25 +98,25 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </button>
       )}
     >
-      <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex h-full flex-col gap-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-white/78">
               <span className="font-medium text-white">{company}</span>
               <span className="font-mono text-white/40">{ticker}</span>
             </div>
-            <div className="mt-4 flex flex-wrap items-end gap-3">
+            <div className="mt-4 flex flex-wrap items-end gap-4">
               <div>
                 <p className={CARD_KICKER_CLASS}>{heroLabel}</p>
                 <div className="mt-2 flex items-end gap-2">
-                  <span className="text-[48px] font-semibold leading-none text-white md:text-[60px]">{heroValue}</span>
-                  <span className="pb-1.5 text-sm text-white/42">{heroUnit}</span>
+                  <span className="text-[56px] font-semibold leading-none text-white md:text-[72px]">{heroValue}</span>
+                  <span className="pb-2 text-base text-white/42">{heroUnit}</span>
                 </div>
               </div>
-              <div className="pb-1.5">
+              <div className="pb-2">
                 <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
                 <p
-                  className={`mt-2 text-[24px] font-semibold leading-none md:text-[28px] ${getToneTextClass(signalTone)}`}
+                  className={`mt-2 text-[28px] font-semibold leading-none md:text-[32px] ${getToneTextClass(signalTone)}`}
                   style={getToneTextStyle(signalTone, true)}
                 >
                   {signalLabel}
@@ -131,64 +131,61 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
 
           <div className={`${PANEL_METRIC_CLASS} min-w-[12rem] xl:max-w-[18rem]`}>
             <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
-            <p className="mt-2 text-xl font-medium text-white md:text-2xl">{scoreValue}</p>
-            <p className="mt-3 text-[11px] leading-tight text-white/60">{summary}</p>
+            <p className="mt-3 text-2xl font-medium text-white md:text-3xl">{scoreValue}</p>
+            <p className="mt-4 text-sm leading-relaxed text-white/55">{summary}</p>
           </div>
         </div>
 
-        <div
-          className="relative mt-4 flex-1 min-h-0 rounded-[32px] border border-white/[0.08] bg-white/[0.02] p-4 backdrop-blur-xl"
-          data-testid="home-bento-decision-chart-shell"
-        >
-          <div className="absolute inset-0 h-full w-full" data-testid="home-bento-decision-chart-frame">
-            <svg className="h-full w-full text-[#34D399]" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
-              <defs>
-                <linearGradient id="home-bento-decision-fill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
-                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <line x1="0" y1="10" x2="100" y2="10" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="0.4" />
-              <line x1="0" y1="28" x2="100" y2="28" stroke="rgba(148, 163, 184, 0.36)" strokeWidth="0.6" strokeDasharray="2.4 2.2" />
-              <line x1="0" y1="46" x2="100" y2="46" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="0.4" />
-              <polygon points={`0,56 ${linePoints} 100,56`} fill="url(#home-bento-decision-fill)" />
-              <polyline
-                points={linePoints}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.25"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ filter: 'drop-shadow(0 4px 8px rgba(52, 211, 153, 0.4))' }}
-              />
-              <circle cx={breakoutX} cy={breakoutY} r="2.1" fill="#34D399" />
-              <circle cx={breakoutX} cy={breakoutY} r="5.4" fill="rgba(52, 211, 153, 0.16)" />
+        <div className="mt-4 flex-1 min-h-[200px] relative">
+          <div className="absolute inset-0 rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-4 backdrop-blur-xl md:p-5">
+            <svg className="absolute inset-4 h-[calc(100%-2rem)] w-[calc(100%-2rem)] text-[#34D399] md:inset-5 md:h-[calc(100%-2.5rem)] md:w-[calc(100%-2.5rem)]" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="home-bento-decision-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="10" x2="100" y2="10" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="0.4" />
+            <line x1="0" y1="28" x2="100" y2="28" stroke="rgba(148, 163, 184, 0.36)" strokeWidth="0.6" strokeDasharray="2.4 2.2" />
+            <line x1="0" y1="46" x2="100" y2="46" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="0.4" />
+            <polygon points={`0,56 ${linePoints} 100,56`} fill="url(#home-bento-decision-fill)" />
+            <polyline
+              points={linePoints}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ filter: 'drop-shadow(0 4px 8px rgba(52, 211, 153, 0.4))' }}
+            />
+            <circle cx={breakoutX} cy={breakoutY} r="2.1" fill="#34D399" />
+            <circle cx={breakoutX} cy={breakoutY} r="5.4" fill="rgba(52, 211, 153, 0.16)" />
             </svg>
-          </div>
-          <div className="pointer-events-none absolute inset-y-4 left-4 flex flex-col justify-between text-[10px] text-white/28">
-            {labels.map((label) => <span key={label}>{label}</span>)}
-          </div>
-          <div className="pointer-events-none absolute inset-x-5 bottom-4 flex justify-between text-[10px] text-white/28">
-            <span>{chartPoints[0]?.label}</span>
-            <span>{chartPoints[Math.floor(chartPoints.length / 2)]?.label}</span>
-            <span>{chartPoints[chartPoints.length - 1]?.label}</span>
-          </div>
-          <div
-            className="absolute px-3 py-1 bg-emerald-500 text-black text-[10px] font-bold rounded-full shadow-[0_0_15px_rgba(16,185,129,0.5)] flex items-center gap-1.5"
-            style={{
-              left: `clamp(4rem, calc(${breakoutX}% - 2rem), calc(100% - 11rem))`,
-              top: `clamp(0.75rem, calc(${(breakoutY / 56) * 100}% - 2.25rem), calc(100% - 2.5rem))`,
-            }}
-            data-testid="home-bento-breakout-pill"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
-            {chartLabel}
+            <div className="pointer-events-none absolute inset-y-4 left-4 flex flex-col justify-between text-[10px] text-white/28 md:inset-y-5 md:left-5">
+              {labels.map((label) => <span key={label}>{label}</span>)}
+            </div>
+            <div className="pointer-events-none absolute inset-x-6 bottom-4 flex justify-between text-[10px] text-white/28 md:inset-x-7 md:bottom-5">
+              <span>{chartPoints[0]?.label}</span>
+              <span>{chartPoints[Math.floor(chartPoints.length / 2)]?.label}</span>
+              <span>{chartPoints[chartPoints.length - 1]?.label}</span>
+            </div>
+            <div
+              className="absolute flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1 text-[10px] font-bold text-black shadow-[0_0_15px_rgba(16,185,129,0.5)]"
+              style={{
+                left: `clamp(4rem, calc(${breakoutX}% - 2rem), calc(100% - 11rem))`,
+                top: `clamp(0.75rem, calc(${(breakoutY / 56) * 100}% - 2.25rem), calc(100% - 2.5rem))`,
+              }}
+              data-testid="home-bento-breakout-pill"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-black animate-pulse" />
+              {chartLabel}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-3 flex flex-col gap-1" data-testid="home-bento-breakout-reason">
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-3 flex flex-col gap-1.5" data-testid="home-bento-breakout-reason">
           <div className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{reason.title}</div>
-          <p className="mt-1 text-[11px] text-white/60 leading-tight">{reason.body}</p>
+          <p className="text-xs text-white/80 leading-relaxed">{reason.body}</p>
         </div>
       </div>
     </BentoCard>

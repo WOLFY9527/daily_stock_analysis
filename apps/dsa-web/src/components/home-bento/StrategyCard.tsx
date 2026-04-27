@@ -34,7 +34,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   <BentoCard
     eyebrow={title}
     subtitle={subtitle}
-    className="w-full h-full rounded-[24px] lg:col-span-1 xl:col-span-1"
+    className="w-full self-start rounded-[24px] lg:col-span-1 xl:col-span-1"
     testId="home-bento-card-strategy"
     action={(
       <button
@@ -48,8 +48,8 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
       </button>
     )}
   >
-    <div className="flex h-full flex-col">
-      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3">
+    <div className="flex h-full flex-col gap-5">
+      <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3.5">
       {metrics.map((metric) => (
         <div
           key={metric.label}
@@ -66,9 +66,9 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
         </div>
       ))}
       </div>
-      <div className="mt-6 flex-1 border-t border-white/[0.08] pt-4">
+      <div className="h-fit border-t border-white/[0.08] pt-5">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{positionLabel}</p>
-        <p className="mt-1 text-[11px] text-white/60 leading-tight" data-testid="home-bento-strategy-position-body">{positionBody}</p>
+        <p className="mt-3 text-sm leading-relaxed text-white/68">{positionBody}</p>
       </div>
     </div>
   </BentoCard>

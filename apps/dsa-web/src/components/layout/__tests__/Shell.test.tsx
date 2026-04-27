@@ -6,11 +6,13 @@ import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Shell } from '../Shell';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useShellRailSlot } from '../useShellRailSlot';
+import { useStockPoolStore } from '../../../stores';
 
-const { mockLogout, mockGetAgentStatus, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
+const { mockLogout, mockGetAgentStatus, mockHardRedirect, mockAnalyzeAsync, useAuthMock } = vi.hoisted(() => ({
   mockLogout: vi.fn().mockResolvedValue(undefined),
   mockGetAgentStatus: vi.fn().mockResolvedValue({ enabled: true }),
   mockHardRedirect: vi.fn(),
+  mockAnalyzeAsync: vi.fn().mockResolvedValue({ taskId: 'task-shell', status: 'pending', message: 'submitted' }),
   useAuthMock: vi.fn(),
 }));
 
@@ -35,6 +37,15 @@ vi.mock('../../../api/agent', () => ({
   agentApi: {
     getStatus: (...args: unknown[]) => mockGetAgentStatus(...args),
   },
+}));
+
+vi.mock('../../../api/analysis', () => ({
+  analysisApi: {
+    analyzeAsync: (...args: unknown[]) => mockAnalyzeAsync(...args),
+    getTasks: vi.fn(),
+    getTaskStreamUrl: vi.fn(),
+  },
+  DuplicateTaskError: class DuplicateTaskError extends Error {},
 }));
 
 vi.mock('../../../utils/browserRedirect', () => ({
@@ -75,6 +86,8 @@ describe('Shell', () => {
     vi.clearAllMocks();
     setAdminSurfaceMode('user');
     window.sessionStorage.clear();
+    window.localStorage.clear();
+    useStockPoolStore.getState().resetDashboardState();
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -101,8 +114,37 @@ describe('Shell', () => {
     expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.png');
     expect(logo).not.toHaveClass('invert');
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
+    expect(screen.getByTestId('shell-global-omnibar')).toBeInTheDocument();
+    expect(screen.getByTestId('shell-global-omnibar-input')).toHaveAttribute('placeholder', '输入代码或公司名发起分析（如 NVDA）...');
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+  });
+
+  it('submits the global omnibar through the shared analysis store', async () => {
+    render(
+      <MemoryRouter initialEntries={['/scanner']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByTestId('shell-global-omnibar-input'), {
+      target: { value: 'NVDA' },
+    });
+    fireEvent.submit(screen.getByTestId('shell-global-omnibar'));
+
+    await waitFor(() => {
+      expect(mockAnalyzeAsync).toHaveBeenCalledWith({
+        stockCode: 'NVDA',
+        reportType: 'detailed',
+        stockName: undefined,
+        originalQuery: 'NVDA',
+        selectionSource: 'manual',
+      });
+    });
   });
 
   it('shows the guest navigation routes without member-only account controls', () => {
@@ -129,6 +171,7 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
+    expect(screen.queryByTestId('shell-global-omnibar')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.settings') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
   });
@@ -254,13 +297,17 @@ describe('Shell', () => {
 
     expect(document.querySelector('.theme-shell--scanner')).not.toBeNull();
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--scanner')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
     expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'min-w-0');
     expect(document.documentElement.dataset.scannerShell).toBe('true');
     expect(document.body.dataset.scannerShell).toBe('true');
+    expect(document.documentElement.dataset.pageScrollShell).toBe('true');
   });
 
   it('adds wide-shell modifiers for the home route without enabling backtest mode', () => {
@@ -275,6 +322,7 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
   });

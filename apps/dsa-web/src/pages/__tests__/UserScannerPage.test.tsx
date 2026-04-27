@@ -374,6 +374,9 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     expect(await screen.findByTestId('user-scanner-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('user-scanner-bento-page').className).not.toContain('overflow-hidden');
+    expect(screen.getByTestId('user-scanner-workspace')).toHaveClass('min-h-[calc(100vh-80px)]');
+    expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('h-[calc(100vh-80px)]');
     expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4');
     expect(screen.getByTestId('user-scanner-bento-drawer-trigger')).toBeInTheDocument();
     const sidebar = screen.getByTestId('scanner-sidebar');
