@@ -141,6 +141,7 @@ export default {
         'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
         'spin-slow': 'spin 2s linear infinite',
         'float-in': 'floatIn 0.45s ease-out',
+        'ghost-scan': 'ghostScan 3s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -162,6 +163,12 @@ export default {
         pulseGlow: {
           '0%, 100%': { boxShadow: '0 0 20px rgba(0, 212, 255, 0.4)' },
           '50%': { boxShadow: '0 0 40px rgba(0, 212, 255, 0.6)' },
+        },
+        ghostScan: {
+          '0%': { transform: 'translateY(-110%)', opacity: '0' },
+          '20%': { opacity: '0.35' },
+          '50%': { transform: 'translateY(28%)', opacity: '0.16' },
+          '100%': { transform: 'translateY(135%)', opacity: '0' },
         },
       },
     },

@@ -1688,14 +1688,20 @@ const HomeBentoDashboardPage: React.FC = () => {
       ? {
         analyzeButton: 'Analyze',
         omnibarPlaceholder: 'Enter a ticker or company name...',
-        title: 'Standby',
-        body: 'Enter a ticker or company name above to wake the Wolfy AI quantitative analysis engine.',
+        title: 'Wolfy AI Engine Standing By',
+        body: 'Enter a ticker in the command deck above to wake the deep research network instantly.',
+        strategyLocked: 'Execution strategy module is locked',
+        techWaiting: 'Awaiting technical structure scan',
+        fundamentalsWaiting: 'Awaiting fundamental profile load',
       }
       : {
         analyzeButton: '分析',
         omnibarPlaceholder: '输入股票代码或公司名称...',
-        title: '系统待命',
-        body: '在上方输入股票代码或公司名称，唤醒 Wolfy AI 量化分析引擎。',
+        title: 'Wolfy AI 引擎待命中',
+        body: '在上方联合指挥台输入股票代码，立即唤醒深度研报网络。',
+        strategyLocked: '执行策略模块处于锁定状态',
+        techWaiting: '等待技术形态扫描',
+        fundamentalsWaiting: '等待基本面画像加载',
       }
   ), [locale]);
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
@@ -2016,17 +2022,74 @@ const HomeBentoDashboardPage: React.FC = () => {
         })() : (
           <div
             data-testid="home-bento-zero-state"
-            className="w-full flex-1 flex flex-col items-center justify-center rounded-[24px] border border-white/5 bg-white/[0.02] min-h-[500px] px-6 text-center"
+            data-bento-grid="ghost"
+            className="w-full grid grid-cols-1 gap-6 xl:grid-cols-5"
           >
-            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] shadow-[0_0_40px_rgba(255,255,255,0.02)]">
-              <svg className="h-8 w-8 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+            <div
+              className="group relative flex h-[500px] flex-col overflow-hidden rounded-[24px] border border-dashed border-white/10 bg-white/[0.01] p-6 xl:col-span-2"
+              data-testid="home-bento-zero-state-hero"
+            >
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent animate-ghost-scan" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_48%)] opacity-70" />
+              <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.02]">
+                  <Search className="h-6 w-6 text-white/30" aria-hidden="true" />
+                </div>
+                <h3 className="mb-2 text-center text-sm font-bold uppercase tracking-[0.28em] text-white/50">
+                  {standbyCopy.title}
+                </h3>
+                <p className="max-w-[220px] text-center text-xs leading-relaxed text-white/30">
+                  {standbyCopy.body}
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                  {['NVDA', 'TSLA', 'AAPL'].map((ticker) => (
+                    <button
+                      key={ticker}
+                      type="button"
+                      onClick={() => { void handleAnalyze(ticker); }}
+                      className="rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/50 transition-all hover:border-white/12 hover:bg-white/[0.08] hover:text-white"
+                      data-testid={`home-bento-zero-state-quick-${ticker}`}
+                    >
+                      {ticker}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <h2 className="mb-3 text-xl font-bold tracking-wide text-white">{standbyCopy.title}</h2>
-            <p className="max-w-md text-center text-sm leading-relaxed text-white/40">
-              {standbyCopy.body}
-            </p>
+            <div
+              className="flex min-w-0 flex-col gap-6 xl:col-span-3"
+              data-testid="home-bento-zero-state-secondary"
+            >
+              <div
+                className="flex h-32 items-center justify-center rounded-[24px] border border-dashed border-white/5 bg-white/[0.01] px-6 text-center"
+                data-testid="home-bento-zero-state-strategy"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/20">
+                  {standbyCopy.strategyLocked}
+                </span>
+              </div>
+              <div
+                className="grid flex-1 grid-cols-1 gap-6 md:grid-cols-2"
+                data-testid="home-bento-zero-state-secondary-grid"
+              >
+                <div
+                  className="flex min-h-[181px] items-center justify-center rounded-[24px] border border-dashed border-white/5 bg-white/[0.01] px-6 text-center"
+                  data-testid="home-bento-zero-state-tech"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/20">
+                    {standbyCopy.techWaiting}
+                  </span>
+                </div>
+                <div
+                  className="flex min-h-[181px] items-center justify-center rounded-[24px] border border-dashed border-white/5 bg-white/[0.01] px-6 text-center"
+                  data-testid="home-bento-zero-state-fundamentals"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/20">
+                    {standbyCopy.fundamentalsWaiting}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>

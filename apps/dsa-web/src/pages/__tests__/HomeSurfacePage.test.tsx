@@ -261,12 +261,25 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     const zeroState = await screen.findByTestId('home-bento-zero-state');
+    const heroCard = screen.getByTestId('home-bento-zero-state-hero');
+    const secondaryStack = screen.getByTestId('home-bento-zero-state-secondary');
+    const secondaryGrid = screen.getByTestId('home-bento-zero-state-secondary-grid');
     const omnibar = screen.getByTestId('home-bento-omnibar');
     expect(omnibar).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
-    expect(screen.getByText('系统待命')).toBeInTheDocument();
-    expect(screen.getByText('在上方输入股票代码或公司名称，唤醒 Wolfy AI 量化分析引擎。')).toBeInTheDocument();
-    expect(zeroState).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'items-center', 'justify-center', 'bg-white/[0.02]', 'border', 'border-white/5', 'rounded-[24px]', 'min-h-[500px]');
+    expect(zeroState).toHaveClass('w-full', 'grid', 'grid-cols-1', 'gap-6', 'xl:grid-cols-5');
+    expect(zeroState).toHaveAttribute('data-bento-grid', 'ghost');
+    expect(heroCard).toHaveClass('xl:col-span-2', 'flex', 'flex-col', 'h-[500px]', 'bg-white/[0.01]', 'border-dashed', 'border-white/10', 'rounded-[24px]', 'p-6', 'relative', 'overflow-hidden');
+    expect(secondaryStack).toHaveClass('xl:col-span-3', 'flex', 'flex-col', 'gap-6');
+    expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'flex-1');
+    expect(screen.getByText('Wolfy AI 引擎待命中')).toBeInTheDocument();
+    expect(screen.getByText('在上方联合指挥台输入股票代码，立即唤醒深度研报网络。')).toBeInTheDocument();
+    expect(screen.getByText('执行策略模块处于锁定状态')).toBeInTheDocument();
+    expect(screen.getByText('等待技术形态扫描')).toBeInTheDocument();
+    expect(screen.getByText('等待基本面画像加载')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-zero-state-quick-NVDA')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-zero-state-quick-TSLA')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-zero-state-quick-AAPL')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-card-decision')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
