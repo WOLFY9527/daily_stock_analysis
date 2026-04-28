@@ -1648,6 +1648,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
+  const [pendingTicker, setPendingTicker] = useState<string | null>(null);
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
@@ -1684,6 +1685,10 @@ const HomeBentoDashboardPage: React.FC = () => {
       ? buildDashboardFromReport(locale, selectedReport)
       : resolveDashboardPayload(locale, activeTicker);
   }, [activeTicker, analysisFallbackMode, locale, selectedReport]);
+  const shouldRenderDashboardShell = Boolean(
+    (activeTicker && (Boolean(dashboardData) || isDashboardLoading))
+    || (pendingTicker && isDashboardLoading),
+  );
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -1790,7 +1795,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     setAnalysisFallbackMode(false);
     clearError();
     setDashboardLoading(true);
-    setActiveTicker(normalizedTicker);
+    setPendingTicker(normalizedTicker);
     setSearchQuery('');
 
     try {
@@ -1802,6 +1807,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             : `未找到股票代码 ${normalizedTicker}，请检查是否退市或输入有误`,
           tone: 'error',
         });
+        setPendingTicker(null);
         setDashboardLoading(false);
         return;
       }
@@ -1812,6 +1818,7 @@ const HomeBentoDashboardPage: React.FC = () => {
           : '股票代码校验暂时不可用，请稍后重试',
         tone: 'error',
       });
+      setPendingTicker(null);
       setDashboardLoading(false);
       return;
     }
@@ -1849,10 +1856,12 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     if (result.data.mode === 'submitted') {
+      setPendingTicker(null);
       await refreshHistory(true);
-      await focusLatestHistoryForStock(result.data.stockCode);
-      setActiveTicker(result.data.stockCode);
+      const latestHistoryId = await focusLatestHistoryForStock(result.data.stockCode);
+      setActiveTicker(latestHistoryId ? result.data.stockCode : null);
     } else if (result.data.mode === 'fallback') {
+      setPendingTicker(null);
       setActiveTicker(result.data.stockCode);
       setAnalysisFallbackMode(true);
       clearError();
@@ -1978,7 +1987,7 @@ const HomeBentoDashboardPage: React.FC = () => {
             </svg>
           </button>
         </form>
-        {activeTicker && dashboardData ? (() => {
+        {shouldRenderDashboardShell ? (() => {
           const readyCopy = dashboardData;
           return (
             <div
@@ -1991,7 +2000,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                 data-testid="home-bento-primary-stack"
               >
                 <div className="min-h-0 flex-1">
-                  {isDashboardLoading ? (
+                  {isDashboardLoading || !readyCopy ? (
                     <DashboardSkeletonCard
                       testId="home-bento-loading-decision-card"
                       className="min-h-[32rem]"
@@ -2026,7 +2035,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                 className="min-w-0 xl:col-span-3 flex flex-col gap-6"
                 data-testid="home-bento-secondary-stack"
               >
-                {isDashboardLoading ? (
+                {isDashboardLoading || !readyCopy ? (
                   <>
                     <DashboardSkeletonCard testId="home-bento-loading-strategy-card" rows={3} />
                     <div

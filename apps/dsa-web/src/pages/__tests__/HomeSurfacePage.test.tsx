@@ -773,10 +773,17 @@ describe('HomeSurfacePage', () => {
 
   it('enters loading state immediately when the analyze button is pressed and clears the local search query', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
+    vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
     renderSurface();
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
     expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    deferred.resolve({
+      taskId: 'task-loading-state',
+      status: 'pending',
+      message: 'submitted',
+    });
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
     expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('TSLA');
     expect(analysisApi.analyzeAsync).toHaveBeenCalled();
@@ -840,5 +847,40 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('总市值体量充足，流动性承接极强')).toBeInTheDocument();
     expect(screen.getByText('估值仍在成长溢价区，需业绩继续兑现')).toBeInTheDocument();
     expect(screen.queryByText(/RateLimitError/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render preset ORCL dashboard immediately after manual submit without a persisted report', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: 'ORCL',
+      exists: true,
+      stockName: 'Oracle',
+    });
+    const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
+    vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
+
+    renderSurface();
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'ORCL' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
+
+    deferred.resolve({
+      taskId: 'task-orcl',
+      status: 'pending',
+      message: 'submitted',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('home-bento-zero-state')).toBeInTheDocument());
+    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
   });
 });
