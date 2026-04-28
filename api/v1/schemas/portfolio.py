@@ -265,6 +265,17 @@ class PortfolioMarketBreakdownItem(BaseModel):
     weight_pct: float
 
 
+class PortfolioFxRateItem(BaseModel):
+    from_currency: str
+    to_currency: str
+    rate: Optional[float] = None
+    rate_date: Optional[str] = None
+    source: str
+    is_stale: bool
+    updated_at: Optional[str] = None
+    source_direction: str
+
+
 class PortfolioSnapshotResponse(BaseModel):
     as_of: str
     cost_method: str
@@ -279,6 +290,7 @@ class PortfolioSnapshotResponse(BaseModel):
     tax_total: float
     fx_stale: bool
     market_breakdown: List[PortfolioMarketBreakdownItem] = Field(default_factory=list)
+    fx_rates: List[PortfolioFxRateItem] = Field(default_factory=list)
     portfolio_attribution: Dict[str, Any] = Field(default_factory=dict)
     accounts: List[PortfolioAccountSnapshot] = Field(default_factory=list)
 

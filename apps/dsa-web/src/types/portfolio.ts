@@ -115,6 +115,17 @@ export interface PortfolioAccountSnapshot {
   positions: PortfolioPositionItem[];
 }
 
+export interface PortfolioFxRateItem {
+  fromCurrency: string;
+  toCurrency: string;
+  rate?: number | null;
+  rateDate?: string | null;
+  source: string;
+  isStale: boolean;
+  updatedAt?: string | null;
+  sourceDirection: string;
+}
+
 export interface PortfolioSnapshotResponse {
   asOf: string;
   costMethod: PortfolioCostMethod;
@@ -128,6 +139,7 @@ export interface PortfolioSnapshotResponse {
   feeTotal: number;
   taxTotal: number;
   fxStale: boolean;
+  fxRates?: PortfolioFxRateItem[];
   portfolioAttribution?: Record<string, unknown>;
   accounts: PortfolioAccountSnapshot[];
 }

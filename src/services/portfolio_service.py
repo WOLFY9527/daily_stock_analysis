@@ -2443,6 +2443,11 @@ class PortfolioService:
                 market_breakdown=market_breakdown,
                 total_market_value=aggregate["total_market_value"],
             ),
+            "fx_rates": self._build_fx_rate_snapshot(
+                account_rows=account_rows,
+                aggregate_currency=aggregate_currency,
+                as_of_date=as_of_date,
+            ),
             "accounts": accounts_payload,
         }
         snapshot_payload["portfolio_attribution"] = self._build_portfolio_attribution(
@@ -2450,6 +2455,63 @@ class PortfolioService:
             as_of_date=as_of_date,
         )
         return snapshot_payload
+
+    def _build_fx_rate_snapshot(
+        self,
+        *,
+        account_rows: Iterable[Any],
+        aggregate_currency: str,
+        as_of_date: date,
+    ) -> List[Dict[str, Any]]:
+        pairs: Set[Tuple[str, str]] = set()
+        aggregate_norm = self._normalize_currency(aggregate_currency)
+
+        for account in account_rows:
+            base_currency = self._normalize_currency(account.base_currency)
+            if base_currency != aggregate_norm:
+                pairs.add((base_currency, aggregate_norm))
+            for currency in self._list_account_refresh_fx_currencies(
+                account=account,
+                as_of_date=as_of_date,
+                strict=False,
+            ):
+                currency_norm = self._normalize_currency(currency)
+                if currency_norm != base_currency:
+                    pairs.add((currency_norm, base_currency))
+
+        rows: List[Dict[str, Any]] = []
+        for from_currency, to_currency in sorted(pairs):
+            direct = self.repo.get_latest_fx_rate(
+                from_currency=from_currency,
+                to_currency=to_currency,
+                as_of=as_of_date,
+            )
+            source_direction = "direct"
+            row = direct
+            rate_value: Optional[float] = float(direct.rate) if direct is not None and direct.rate > 0 else None
+
+            if rate_value is None:
+                inverse = self.repo.get_latest_fx_rate(
+                    from_currency=to_currency,
+                    to_currency=from_currency,
+                    as_of=as_of_date,
+                )
+                if inverse is not None and inverse.rate > 0:
+                    row = inverse
+                    rate_value = 1.0 / float(inverse.rate)
+                    source_direction = "inverse"
+
+            rows.append({
+                "from_currency": from_currency,
+                "to_currency": to_currency,
+                "rate": round(rate_value, 8) if rate_value is not None else None,
+                "rate_date": row.rate_date.isoformat() if row is not None and row.rate_date else None,
+                "source": row.source if row is not None else "missing",
+                "is_stale": True if row is None else bool(row.is_stale),
+                "updated_at": row.updated_at.isoformat() if row is not None and row.updated_at else None,
+                "source_direction": source_direction if row is not None else "missing",
+            })
+        return rows
 
     def refresh_fx_rates(
         self,

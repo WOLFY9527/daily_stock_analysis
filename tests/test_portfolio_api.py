@@ -257,6 +257,12 @@ class PortfolioApiTestCase(unittest.TestCase):
                 },
             ],
         )
+        self.assertEqual(len(payload["fx_rates"]), 1)
+        self.assertEqual(payload["fx_rates"][0]["from_currency"], "USD")
+        self.assertEqual(payload["fx_rates"][0]["to_currency"], "CNY")
+        self.assertAlmostEqual(payload["fx_rates"][0]["rate"], 7.0, places=6)
+        self.assertEqual(payload["fx_rates"][0]["source"], "manual")
+        self.assertFalse(payload["fx_rates"][0]["is_stale"])
 
     def test_snapshot_invalid_cost_method_returns_400(self) -> None:
         resp = self.client.get("/api/v1/portfolio/snapshot", params={"cost_method": "bad"})

@@ -119,6 +119,28 @@ function makeSnapshot(options: { accountId?: number; fxStale?: boolean; accountC
     feeTotal: 0,
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
+    fxRates: [
+      {
+        fromCurrency: 'USD',
+        toCurrency: 'CNY',
+        rate: 7.245,
+        rateDate: '2026-03-19',
+        source: 'manual',
+        isStale: false,
+        updatedAt: '2026-03-19T10:00:00',
+        sourceDirection: 'direct',
+      },
+      {
+        fromCurrency: 'HKD',
+        toCurrency: 'CNY',
+        rate: 0.921,
+        rateDate: '2026-03-19',
+        source: 'manual',
+        isStale: false,
+        updatedAt: '2026-03-19T10:00:00',
+        sourceDirection: 'direct',
+      },
+    ],
     portfolioAttribution: {
       accountAttribution: {
         topAccounts: [
@@ -235,6 +257,11 @@ async function waitForInitialLoad() {
   await waitFor(() => expect(listTrades).toHaveBeenCalledTimes(1));
 }
 
+function openFxPanel(language: 'zh' | 'en' = 'zh') {
+  fireEvent.click(screen.getByRole('button', { name: language === 'en' ? 'FX' : '汇率' }));
+  return screen.getByRole('button', { name: translate(language, 'portfolio.refreshFx') });
+}
+
 describe('PortfolioPage FX refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -335,10 +362,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
-    const refreshFxButton = screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') });
-    expect(refreshFxButton).toBeInTheDocument();
-    expect(refreshFxButton).toHaveAttribute('data-variant', 'ghost');
-    expect(refreshFxButton.className).toContain('rounded-xl');
+    expect(screen.queryByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeInTheDocument();
     const submitTradeButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
     expect(submitTradeButton).toHaveAttribute('data-variant', 'primary');
     expect(submitTradeButton.className).toContain('bg-white');
@@ -348,11 +372,12 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '交易' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '账户' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '同步' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '汇率' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '历史记录 ↗' })).toBeInTheDocument();
   });
 
-  it('switches left tabs between trade, account, and sync surfaces', async () => {
+  it('switches left tabs between trade, account, sync, and fx surfaces', async () => {
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
@@ -368,6 +393,15 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
     expect(screen.getByText(translate('zh', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.currentImportAccount'))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '汇率' }));
+    expect(screen.getByTestId('portfolio-fx-panel')).toBeInTheDocument();
+    expect(screen.getByText('USD/CNY')).toBeInTheDocument();
+    expect(screen.getByText('HKD/CNY')).toBeInTheDocument();
+    expect(screen.getByText('7.2450')).toBeInTheDocument();
+    const refreshFxButton = openFxPanel();
+    expect(refreshFxButton).toHaveAttribute('data-variant', 'ghost');
+    expect(refreshFxButton.className).not.toContain('border-white/10');
   });
 
   it('shows IBKR as a broker import option and surfaces account-linked connection context', async () => {
@@ -629,7 +663,7 @@ describe('PortfolioPage FX refresh', () => {
     const riskCallsBeforeRefresh = getRisk.mock.calls.length;
     const tradeCallsBeforeRefresh = listTrades.mock.calls.length;
 
-    const refreshFxButton = screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') });
+    const refreshFxButton = openFxPanel();
     await waitFor(() => expect(refreshFxButton).not.toBeDisabled());
     fireEvent.click(refreshFxButton);
 
@@ -659,7 +693,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
 
     await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: undefined }));
     expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshNoPairs'))).toBeInTheDocument();
@@ -680,7 +714,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
 
     expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshDisabled'))).toBeInTheDocument();
   });
@@ -701,7 +735,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
 
     expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshDisabled'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshNoPairs'))).not.toBeInTheDocument();
@@ -721,7 +755,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
 
     expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshFallbackWarning', {
       updatedCount: 1,
@@ -748,7 +782,7 @@ describe('PortfolioPage FX refresh', () => {
     const riskCallsBeforeRefresh = getRisk.mock.calls.length;
     const tradeCallsBeforeRefresh = listTrades.mock.calls.length;
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
 
     expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshPartialFailure', {
       updatedCount: 0,
@@ -776,12 +810,12 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const refreshButton = screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') });
+    const refreshButton = openFxPanel();
     fireEvent.click(refreshButton);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('刷新失败');
     expect(screen.getByRole('alert')).toHaveTextContent('汇率服务暂时不可用');
-    await waitFor(() => expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeDisabled());
+    await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
   });
 
   it('does not keep success feedback when snapshot reload fails after FX refresh succeeds', async () => {
@@ -800,12 +834,12 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
 
     expect(await screen.findByRole('alert')).toHaveTextContent('快照刷新失败');
     expect(screen.getByRole('alert')).toHaveTextContent('无法加载最新持仓快照');
     await waitFor(() => expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeDisabled());
+    await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
   });
 
   it('drops late FX refresh results after switching to another account scope', async () => {
@@ -835,14 +869,14 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
     await waitFor(() => {
       expect(refreshFx).toHaveBeenCalledWith({ accountId: 1 });
     });
 
     fireEvent.change(accountSelect, { target: { value: '2' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 2, costMethod: 'fifo' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeDisabled());
+    await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
 
     const snapshotCallsAfterSwitch = getSnapshot.mock.calls.length;
     const riskCallsAfterSwitch = getRisk.mock.calls.length;
@@ -881,12 +915,12 @@ describe('PortfolioPage FX refresh', () => {
 
     const costMethodSelect = screen.getAllByRole('combobox')[1];
 
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel());
     expect(await screen.findByRole('button', { name: translate('zh', 'portfolio.refreshingFx') })).toBeDisabled();
 
     fireEvent.change(costMethodSelect, { target: { value: 'avg' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: undefined, costMethod: 'avg' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeDisabled());
+    await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
 
     const snapshotCallsAfterSwitch = getSnapshot.mock.calls.length;
     const riskCallsAfterSwitch = getRisk.mock.calls.length;
@@ -926,7 +960,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'History ↗' })).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'portfolio.noPositions'))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('en', 'portfolio.refreshFx') })).toBeInTheDocument();
+    expect(openFxPanel('en')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
     expect(screen.getByText(translate('en', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
@@ -943,7 +977,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.click(screen.getByRole('button', { name: translate('en', 'portfolio.refreshFx') }));
+    fireEvent.click(openFxPanel('en'));
 
     expect(await screen.findByText(translate('en', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
   });

@@ -22,6 +22,7 @@ import type {
   PortfolioCorporateActionListItem,
   PortfolioCorporateActionType,
   PortfolioCostMethod,
+  PortfolioFxRateItem,
   PortfolioFxRefreshResponse,
   PortfolioImportBrokerItem,
   PortfolioIbkrSyncResponse,
@@ -37,13 +38,14 @@ const PORTFOLIO_FIELD_LABEL_CLASS = 'text-[10px] text-white/40 uppercase trackin
 const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/20';
 const PORTFOLIO_SELECT_CLASS = 'w-full [&_select]:rounded-xl [&_select]:border-white/10 [&_select]:bg-white/[0.04] [&_select]:text-white';
 const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-12 w-full rounded-2xl !border-transparent !bg-white px-5 !font-bold !text-black shadow-[0_20px_60px_rgba(255,255,255,0.12)] hover:!bg-white hover:brightness-110 hover:scale-[1.01]';
-const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
-const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border border-white/10 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
+const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border-0 bg-white/[0.04] px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
+const PORTFOLIO_TEXT_BUTTON_CLASS = 'h-8 rounded-md border-0 bg-transparent px-2 text-xs text-white/40 hover:bg-transparent hover:text-white disabled:text-white/15';
+const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
 const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-lg border-0 bg-transparent p-0 text-white/30 hover:bg-red-500/10 hover:text-red-400';
-const PORTFOLIO_SEGMENT_LIST_CLASS = 'w-full rounded-2xl border border-white/5 bg-black/30 p-1';
-const PORTFOLIO_SEGMENT_BUTTON_CLASS = 'rounded-xl border-0 px-3 py-2 text-xs font-bold uppercase tracking-widest text-white/45';
-const PORTFOLIO_SEGMENT_ACTIVE_CLASS = 'bg-white/10 text-white shadow-none';
-const PORTFOLIO_SEGMENT_INACTIVE_CLASS = 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white/70';
+const PORTFOLIO_SEGMENT_LIST_CLASS = 'w-full rounded-lg border-0 bg-white/[0.03] p-1';
+const PORTFOLIO_SEGMENT_BUTTON_CLASS = 'rounded-md border-0 px-3 py-2 text-xs font-bold uppercase tracking-widest text-white/45';
+const PORTFOLIO_SEGMENT_ACTIVE_CLASS = 'bg-white/10 text-white shadow-sm';
+const PORTFOLIO_SEGMENT_INACTIVE_CLASS = 'bg-transparent text-white/40 hover:bg-transparent hover:text-white/70';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -291,6 +293,19 @@ function formatMoney(value: number | undefined | null, currency = 'CNY'): string
   })}`;
 }
 
+function formatFxRate(rate: number | undefined | null): string {
+  if (rate == null || Number.isNaN(rate)) return '--';
+  return Number(rate).toLocaleString(undefined, {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  });
+}
+
+function formatFxTimestamp(value: string | undefined | null): string {
+  if (!value) return '--';
+  return value.replace('T', ' ').replace(/\.\d+$/, '');
+}
+
 function formatSideLabel(value: PortfolioSide, language: PortfolioLanguage): string {
   return translate(language, `portfolio.side.${value}`);
 }
@@ -443,7 +458,7 @@ const PortfolioPage: React.FC = () => {
   const [ibkrSyncing, setIbkrSyncing] = useState(false);
   const [ibkrSyncResult, setIbkrSyncResult] = useState<PortfolioIbkrSyncResponse | null>(null);
 
-  const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync'>('trade');
+  const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync' | 'fx'>('trade');
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [isXlViewport, setIsXlViewport] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth >= 1280));
   const [eventType, setEventType] = useState<EventType>('trade');
@@ -995,6 +1010,15 @@ const PortfolioPage: React.FC = () => {
   };
 
   const snapshotCurrency = snapshot?.currency || 'CNY';
+  const fxRateRows = useMemo<PortfolioFxRateItem[]>(() => snapshot?.fxRates || [], [snapshot?.fxRates]);
+  const fxLastUpdated = useMemo(() => {
+    const timestamps = fxRateRows
+      .map((item) => item.updatedAt || item.rateDate)
+      .filter((value): value is string => Boolean(value));
+    if (timestamps.length === 0) return '--';
+    const sorted = timestamps.sort();
+    return formatFxTimestamp(sorted[sorted.length - 1]);
+  }, [fxRateRows]);
   const totalEquity = snapshot?.totalEquity ?? 0;
   const totalCash = snapshot?.totalCash ?? 0;
   const totalMarketValue = snapshot?.totalMarketValue ?? 0;
@@ -1058,7 +1082,7 @@ const PortfolioPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar pt-5">
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pt-5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <SegmentedControl
@@ -1075,9 +1099,9 @@ const PortfolioPage: React.FC = () => {
               inactiveButtonClassName={PORTFOLIO_SEGMENT_INACTIVE_CLASS}
             />
             <div className="flex items-center gap-2 text-xs text-secondary-text">
-              <Button type="button" variant="secondary" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</Button>
+              <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</Button>
               <span>{copy.pageLabel} {eventPage}</span>
-              <Button type="button" variant="secondary" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</Button>
+              <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</Button>
             </div>
           </div>
 
@@ -1171,7 +1195,7 @@ const PortfolioPage: React.FC = () => {
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
           isSafariReady,
-          'w-full h-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar min-w-0 bg-transparent text-white/72',
+          'w-full h-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] min-w-0 bg-transparent text-white/72',
         )}
       >
         <section className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-12">
@@ -1181,17 +1205,6 @@ const PortfolioPage: React.FC = () => {
                 <div>
                   <h2 className="text-sm text-muted-text uppercase tracking-widest">Trade Station</h2>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={PORTFOLIO_ICON_BUTTON_CLASS}
-                  onClick={() => void handleRefreshFx()}
-                  disabled={!hasAccounts || isLoading || fxRefreshing}
-                  aria-label={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
-                  title={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
-                >
-                  <RefreshCw className={`h-4 w-4 ${fxRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
-                </Button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2.5">
                 <Select
@@ -1222,27 +1235,17 @@ const PortfolioPage: React.FC = () => {
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="text-foreground">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
-              {fxRefreshFeedback ? (
-                <p className={`mt-2 text-xs ${
-                  fxRefreshFeedback.tone === 'success'
-                    ? 'text-emerald-300'
-                    : fxRefreshFeedback.tone === 'warning'
-                      ? 'text-amber-200'
-                      : 'text-secondary-text'
-                }`}>
-                  {fxRefreshFeedback.text}
-                </p>
-              ) : null}
             </div>
 
             <div className="shrink-0 border-b border-white/5 pt-4 pb-4">
               <SegmentedControl
                 value={leftTab}
-                onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync')}
+                onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync' | 'fx')}
                 options={[
                   { value: 'trade', label: language === 'en' ? 'Trade' : '交易' },
                   { value: 'account', label: language === 'en' ? 'Account' : '账户' },
                   { value: 'sync', label: language === 'en' ? 'Sync' : '同步' },
+                  { value: 'fx', label: language === 'en' ? 'FX' : '汇率' },
                 ]}
                 listClassName={PORTFOLIO_SEGMENT_LIST_CLASS}
                 buttonClassName={PORTFOLIO_SEGMENT_BUTTON_CLASS}
@@ -1253,7 +1256,7 @@ const PortfolioPage: React.FC = () => {
 
             <div
               data-testid="portfolio-trade-station-scroll"
-              className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar"
+              className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]"
             >
               {leftTab === 'trade' ? (
                 <div className="flex flex-col gap-2">
@@ -1446,6 +1449,70 @@ const PortfolioPage: React.FC = () => {
                   )}
                 </div>
               ) : null}
+
+              {leftTab === 'fx' ? (
+                <div data-testid="portfolio-fx-panel" className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">
+                        {language === 'en' ? 'Exchange Rates' : '汇率看板'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-white/35">
+                        {language === 'en' ? 'Last update' : '最后更新'} {fxLastUpdated}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={PORTFOLIO_ICON_BUTTON_CLASS}
+                      onClick={() => void handleRefreshFx()}
+                      disabled={!hasAccounts || isLoading || fxRefreshing}
+                      aria-label={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
+                      title={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
+                    >
+                      <RefreshCw className={`h-4 w-4 ${fxRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {fxRateRows.length === 0 ? (
+                      <div className="rounded-lg bg-white/[0.025] px-4 py-4 text-xs text-white/40">
+                        {language === 'en' ? 'No cached cross-currency rates for this scope.' : '当前范围暂无跨币种缓存汇率。'}
+                      </div>
+                    ) : (
+                      fxRateRows.map((item) => (
+                        <div
+                          key={`${item.fromCurrency}-${item.toCurrency}`}
+                          className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg bg-white/[0.025] px-4 py-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-white">
+                              {item.fromCurrency}/{item.toCurrency}
+                            </div>
+                            <div className="mt-1 text-[11px] text-white/35">
+                              {formatFxTimestamp(item.updatedAt || item.rateDate)}
+                              {item.isStale ? ` · ${copy.fxStale}` : ''}
+                            </div>
+                          </div>
+                          <div className="text-right text-sm tabular-nums text-white/80">
+                            {formatFxRate(item.rate)}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {fxRefreshFeedback ? (
+                    <p className={`text-xs ${
+                      fxRefreshFeedback.tone === 'success'
+                        ? 'text-emerald-300'
+                        : fxRefreshFeedback.tone === 'warning'
+                          ? 'text-amber-200'
+                          : 'text-secondary-text'
+                    }`}>
+                      {fxRefreshFeedback.text}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </section>
 
@@ -1489,13 +1556,13 @@ const PortfolioPage: React.FC = () => {
                   onClick={openHistoryDrawerButton.onClick}
                   onPointerUp={openHistoryDrawerButton.onPointerUp}
                   data-testid="portfolio-history-drawer-trigger"
-                  className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55 hover:bg-white/10 hover:text-white lg:hidden"
+                  className="shrink-0 rounded-xl border-0 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55 hover:bg-white/10 hover:text-white lg:hidden"
                 >
                   {historyDrawerLabel}
                 </Button>
               </div>
 
-              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar">
+              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
                 <div className="flex flex-col">
                   {positionRows.length === 0 ? (
                     <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-6 py-5 text-sm text-secondary-text">{copy.noPositions}</div>
