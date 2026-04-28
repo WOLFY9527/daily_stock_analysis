@@ -179,7 +179,11 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
     return <>{children}</>;
   }
 
-  return <AuthGuardOverlay moduleName={moduleName} />;
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center">
+      <AuthGuardOverlay moduleName={moduleName} />
+    </div>
+  );
 };
 
 export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {

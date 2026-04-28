@@ -9,7 +9,11 @@ const ScannerSurfacePage: React.FC = () => {
   const { language } = useI18n();
 
   if (isGuest) {
-    return <AuthGuardOverlay moduleName={language === 'en' ? 'Market Scanner' : '全市场扫描仪'} />;
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center">
+        <AuthGuardOverlay moduleName={language === 'en' ? 'Market Scanner' : '全市场扫描仪'} />
+      </div>
+    );
   }
 
   return <UserScannerPage />;

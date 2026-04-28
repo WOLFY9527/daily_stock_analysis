@@ -89,7 +89,7 @@ describe('GuestHomePage', () => {
     );
 
     expect(screen.getByTestId('guest-home-page')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-page')).toHaveClass('w-full', 'min-h-[calc(100vh-80px)]', 'overflow-x-hidden', 'px-6', 'py-8');
+    expect(screen.getByTestId('guest-home-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'overflow-y-auto', 'no-scrollbar', 'overflow-x-hidden');
     expect(screen.getByRole('heading', { name: 'WolfyStock 决策面板' })).toBeInTheDocument();
     expect(screen.getAllByText('输入股票代码，唤醒 AI 深度分析...').length).toBeGreaterThan(0);
     expect(screen.getByTestId('guest-home-search-card')).toHaveClass(

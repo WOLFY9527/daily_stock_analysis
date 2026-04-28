@@ -59,11 +59,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const surfacePathname = stripLocalePrefix(location.pathname);
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
-  const allowNaturalPageScroll = surfacePathname === '/' || isScannerRoute;
-  const shellViewportClass = allowNaturalPageScroll
-    ? 'min-h-screen'
-    : 'h-screen overflow-hidden';
-  const shellFrameOverflowClass = allowNaturalPageScroll ? '' : ' overflow-hidden';
+  const shellViewportClass = 'h-full min-h-0';
+  const shellFrameOverflowClass = '';
   const isWideRoute = surfacePathname === '/'
     || surfacePathname.startsWith('/scanner')
     || surfacePathname.startsWith('/chat')
@@ -144,26 +141,17 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       body.dataset.scannerShell = 'true';
       appRoot?.setAttribute('data-scanner-shell', 'true');
     }
-    if (allowNaturalPageScroll) {
-      root.dataset.pageScrollShell = 'true';
-      body.dataset.pageScrollShell = 'true';
-      appRoot?.setAttribute('data-page-scroll-shell', 'true');
-    }
-
     return () => {
       delete root.dataset.scannerShell;
       delete body.dataset.scannerShell;
-      delete root.dataset.pageScrollShell;
-      delete body.dataset.pageScrollShell;
       appRoot?.removeAttribute('data-scanner-shell');
-      appRoot?.removeAttribute('data-page-scroll-shell');
     };
-  }, [allowNaturalPageScroll, isScannerRoute]);
+  }, [isScannerRoute]);
 
   return (
     <ShellRailContext.Provider value={railContextValue}>
       <div
-        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}${allowNaturalPageScroll ? ' theme-shell--page-scroll' : ''}`}
+        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
         <header className="shell-masthead shrink-0 w-full">
@@ -199,10 +187,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${allowNaturalPageScroll ? ' shell-content-frame--page-scroll' : ''}`}
+          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column relative flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}${allowNaturalPageScroll ? ' shell-main-column--page-scroll' : ''}`}>
-            <div key={location.pathname} className={`theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col${allowNaturalPageScroll ? ' theme-page-transition--page-scroll' : ''}`}>
+          <main className={`theme-main-lane shell-main-column relative flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+            <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col">
               {children ?? <Outlet />}
             </div>
           </main>

@@ -16154,7 +16154,7 @@ html[data-theme='spacex'] .shell-content-frame {
 }
 
 html[data-theme='spacex'] .shell-masthead__inner {
-  padding-block: max(0.55rem, env(safe-area-inset-top)) 0.72rem;
+  padding-block: max(0.35rem, env(safe-area-inset-top)) 0.48rem;
 }
 
 html[data-theme='spacex'] .theme-shell--wide .shell-masthead__inner,
@@ -16163,7 +16163,7 @@ html[data-theme='spacex'] .shell-content-frame--wide {
 }
 
 html[data-theme='spacex'] .shell-content-frame {
-  padding-top: calc(var(--shell-masthead-height) + 1rem);
+  padding-top: 0.2rem;
 }
 
 html[data-theme='spacex'] .theme-shell--page-scroll .shell-content-frame--page-scroll {

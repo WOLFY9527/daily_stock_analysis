@@ -328,7 +328,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-card')).toBeInTheDocument();
@@ -1072,9 +1072,11 @@ describe('PortfolioPage FX refresh', () => {
     expect(pageShell.className).toContain('min-h-0');
     expect(pageShell.className).toContain('flex');
     expect(pageShell.className).toContain('flex-col');
-    expect(pageShell.className).toContain('overflow-hidden');
+    expect(pageShell.className).toContain('overflow-y-auto');
     expect(pageShell.className).toContain('bg-transparent');
-    expect(pageShell.className).toContain('py-8');
+    expect(pageShell.className).toContain('px-6');
+    expect(pageShell.className).toContain('pt-6');
+    expect(pageShell.className).toContain('pb-12');
 
     const scrollContainer = screen.getByTestId('portfolio-trade-station-scroll');
     expect(scrollContainer.className).toContain('min-h-0');

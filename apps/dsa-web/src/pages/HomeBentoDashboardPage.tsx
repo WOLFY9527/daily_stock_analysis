@@ -1868,7 +1868,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
       className={getSafariReadySurfaceClassName(
         isSafariReady,
-        `${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full min-h-[calc(100vh-80px)] flex-1 flex flex-col overflow-x-hidden bg-transparent`,
+        `${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full flex-1 min-h-0 flex flex-col overflow-x-hidden bg-transparent`,
       )}
     >
       {fallbackToast ? (
@@ -1878,7 +1878,7 @@ const HomeBentoDashboardPage: React.FC = () => {
           </div>
         </div>
       ) : null}
-      <main className="w-full flex-1 flex flex-col py-6 px-6 md:px-8 xl:px-12 min-w-0" data-testid="home-bento-main">
+      <main className="w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 min-w-0 overflow-y-auto no-scrollbar" data-testid="home-bento-main">
         <form
           className="w-full flex gap-3 h-12 mb-6 shrink-0"
           data-testid="home-bento-omnibar"

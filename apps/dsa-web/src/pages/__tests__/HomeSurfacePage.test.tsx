@@ -165,13 +165,13 @@ describe('HomeSurfacePage', () => {
     expect(root).toHaveAttribute('data-bento-surface', 'true');
     expect(root).toHaveClass('bento-surface-root');
     expect(screen.queryByTestId('home-bento-header-logo')).not.toBeInTheDocument();
-    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'flex', 'flex-1', 'min-h-[calc(100vh-80px)]', 'flex-col', 'overflow-x-hidden');
+    expect(root).toHaveClass('workspace-width-wide', 'w-full', 'flex', 'flex-1', 'min-h-0', 'flex-col', 'overflow-x-hidden');
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
     expect(omnibar).toHaveClass('w-full', 'flex', 'gap-3', 'h-12', 'mb-6', 'shrink-0');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
-    expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'py-6', 'px-6', 'md:px-8', 'xl:px-12');
+    expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(main.className).not.toContain('overflow-hidden');
     expect(main.firstElementChild).toBe(omnibar);
     expect(main.children[1]).toBe(grid);

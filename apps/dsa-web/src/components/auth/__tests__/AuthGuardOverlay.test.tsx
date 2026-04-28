@@ -37,10 +37,10 @@ describe('AuthGuardOverlay', () => {
     );
 
     expect(screen.getByTestId('auth-guard-shell')).toHaveClass(
-      'absolute',
-      'inset-0',
       'z-40',
       'flex',
+      'w-full',
+      'flex-1',
       'items-center',
       'justify-center',
       'bg-[#030303]/80',

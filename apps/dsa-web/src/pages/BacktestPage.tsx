@@ -1207,9 +1207,9 @@ const BacktestPage: React.FC = () => {
       data-testid="backtest-bento-page"
       aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full min-h-screen flex flex-col bg-transparent')}
+      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar bg-transparent')}
     >
-      <header className="w-full px-6 pt-6 xl:px-10">
+      <header className="w-full">
         <div className="relative overflow-hidden rounded-[32px] border border-white/8 bg-white/[0.02] px-6 py-6 backdrop-blur-2xl xl:px-8">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="min-w-0 max-w-4xl">
@@ -1244,7 +1244,7 @@ const BacktestPage: React.FC = () => {
 
       <div
         data-testid="backtest-subnav"
-        className="mt-6 w-full border-b border-white/5 bg-[#030303] px-6 xl:px-10"
+        className="w-full border-b border-white/5 bg-[#030303]"
       >
         <div className="flex flex-col gap-3 py-2 xl:flex-row xl:items-center xl:justify-between">
           <nav
@@ -1264,7 +1264,7 @@ const BacktestPage: React.FC = () => {
 
       <main
         data-testid="backtest-v1-page"
-        className="w-full flex-1 flex flex-col gap-10 bg-transparent px-6 py-8 xl:px-10"
+        className="w-full flex-1 flex flex-col gap-10 bg-transparent pt-6"
       >
         <section data-testid="backtest-summary-strip" className="w-full">
           <BentoHeroStrip

@@ -166,7 +166,7 @@ const GuestHomePage: React.FC = () => {
 
   return (
     <main
-      className="w-full min-h-[calc(100vh-80px)] flex flex-col py-8 px-6 md:px-8 xl:px-12 overflow-x-hidden"
+      className="w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar overflow-x-hidden"
       data-testid="guest-home-page"
     >
       <div className="flex w-full flex-col gap-8">

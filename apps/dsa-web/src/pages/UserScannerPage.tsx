@@ -583,9 +583,9 @@ const UserScannerPage: React.FC = () => {
           'bento-surface-root flex w-full flex-1 min-h-0 min-w-0 bg-transparent text-foreground',
         )}
       >
-        <div
+        <main
           data-testid="user-scanner-workspace"
-          className="flex w-full flex-1 min-h-0 min-w-0 flex-col bg-transparent px-6 py-8 md:px-8 xl:px-12"
+          className="w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar"
         >
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
@@ -596,7 +596,7 @@ const UserScannerPage: React.FC = () => {
 
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
 
-          <main className="mt-6 flex w-full flex-1 min-h-0 min-w-0 flex-col gap-6 xl:flex-row">
+          <div className="mt-6 flex w-full flex-1 min-h-0 min-w-0 flex-col gap-6 xl:flex-row">
             <section
               data-testid="scanner-sidebar"
               className="w-full xl:w-[320px] 2xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 h-fit sticky top-6"
@@ -743,8 +743,8 @@ const UserScannerPage: React.FC = () => {
                 />
               )}
             </section>
-          </main>
-        </div>
+          </div>
+        </main>
       </div>
 
       <Drawer

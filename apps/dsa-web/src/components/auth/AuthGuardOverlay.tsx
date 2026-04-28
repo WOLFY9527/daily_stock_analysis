@@ -21,7 +21,7 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName }
 
   return (
     <div
-      className="absolute inset-0 z-40 flex items-center justify-center bg-[#030303]/80 backdrop-blur-sm"
+      className="z-40 flex w-full flex-1 items-center justify-center bg-[#030303]/80 backdrop-blur-sm"
       data-testid="auth-guard-shell"
     >
       <div

@@ -203,11 +203,11 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('chat-bento-page')).toHaveClass('flex', 'flex-col', 'bg-[#030303]', 'workspace-page--chat');
+    expect(screen.getByTestId('chat-bento-page')).toHaveClass('flex', 'flex-col', 'bg-[#030303]', 'workspace-page--chat', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-full', 'overflow-hidden');
     expect(container.querySelectorAll('main')).toHaveLength(1);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'h-[calc(100vh-80px)]', 'flex', 'overflow-hidden', 'bg-transparent');
+    expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'overflow-hidden', 'bg-transparent');
     const historyPane = screen.getByTestId('chat-history-pane');
     expect(historyPane).toHaveClass('w-64', 'shrink-0', 'hidden', 'md:flex', 'flex-col', 'border-r', 'border-white/5', 'bg-white/[0.01]');
     expect(screen.getByTestId('chat-history-list')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'px-3', 'pb-4', 'flex', 'flex-col', 'gap-1');

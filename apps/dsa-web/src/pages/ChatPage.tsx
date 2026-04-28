@@ -502,12 +502,12 @@ const ChatPage: React.FC = () => {
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
       className={getSafariReadySurfaceClassName(
         isSafariReady,
-        'gemini-bento-page bento-surface-root workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat flex w-full flex-1 min-w-0 flex-col bg-[#030303]',
+        'gemini-bento-page bento-surface-root workspace-page workspace-page--chat workspace-width-wide gemini-bento-page--chat w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar min-w-0 bg-[#030303]',
       )}
     >
       <div
         data-testid="chat-workspace"
-        className="flex h-[calc(100vh-80px)] w-full min-w-0 overflow-hidden bg-transparent"
+        className="flex w-full min-h-0 flex-1 min-w-0 overflow-hidden bg-transparent"
       >
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
