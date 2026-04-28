@@ -276,7 +276,7 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
     expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
     expect(document.querySelector('.shell-main-column--page-scroll')).not.toBeNull();
-    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'min-w-0');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('relative', 'w-full', 'min-w-0');
     expect(document.documentElement.dataset.scannerShell).toBe('true');
     expect(document.body.dataset.scannerShell).toBe('true');
     expect(document.documentElement.dataset.pageScrollShell).toBe('true');

@@ -201,7 +201,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         <div
           className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${allowNaturalPageScroll ? ' shell-content-frame--page-scroll' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}${allowNaturalPageScroll ? ' shell-main-column--page-scroll' : ''}`}>
+          <main className={`theme-main-lane shell-main-column relative flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}${allowNaturalPageScroll ? ' shell-main-column--page-scroll' : ''}`}>
             <div key={location.pathname} className={`theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col${allowNaturalPageScroll ? ' theme-page-transition--page-scroll' : ''}`}>
               {children ?? <Outlet />}
             </div>

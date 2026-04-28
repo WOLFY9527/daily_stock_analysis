@@ -36,10 +36,19 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('auth-guard-shell')).toHaveClass('flex-1', 'w-full', 'flex', 'items-center', 'justify-center', 'min-h-[calc(100vh-100px)]');
-    expect(screen.getByTestId('auth-guard-card')).toHaveClass(
-      'bg-white/[0.02]',
+    expect(screen.getByTestId('auth-guard-shell')).toHaveClass(
+      'absolute',
+      'inset-0',
+      'z-40',
+      'flex',
+      'items-center',
+      'justify-center',
+      'bg-[#030303]/80',
       'backdrop-blur-sm',
+    );
+    expect(screen.getByTestId('auth-guard-card')).toHaveClass(
+      'w-[360px]',
+      'bg-white/[0.02]',
       'border',
       'border-white/5',
       'rounded-[24px]',
