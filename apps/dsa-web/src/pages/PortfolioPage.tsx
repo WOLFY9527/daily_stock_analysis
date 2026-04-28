@@ -4,7 +4,7 @@ import { RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
+import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Input, PillBadge, SectionShell, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,
@@ -42,11 +42,8 @@ const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border-0 bg-white/[0.04
 const PORTFOLIO_TEXT_BUTTON_CLASS = 'h-8 rounded-md border-0 bg-transparent px-2 text-xs text-white/40 hover:bg-transparent hover:text-white disabled:text-white/15';
 const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
 const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-lg border-0 bg-transparent p-0 text-white/30 hover:bg-red-500/10 hover:text-red-400';
-const PORTFOLIO_SEGMENT_LIST_CLASS = 'w-full rounded-lg border-0 bg-white/[0.03] p-1';
-const PORTFOLIO_SEGMENT_BUTTON_CLASS = 'rounded-md border-0 px-3 py-2 text-xs font-bold uppercase tracking-widest text-white/45';
-const PORTFOLIO_SEGMENT_ACTIVE_CLASS = 'bg-white/10 text-white shadow-sm';
-const PORTFOLIO_SEGMENT_INACTIVE_CLASS = 'bg-transparent text-white/40 hover:bg-transparent hover:text-white/70';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
+const FX_CURRENCY_OPTIONS = ['USD', 'CNY', 'HKD', 'EUR', 'JPY', 'GBP'] as const;
 
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
@@ -63,6 +60,17 @@ type TradeFormType = 'stock' | 'fund' | 'corporate';
 type FlatPosition = PortfolioPositionItem & {
   accountId: number;
   accountName: string;
+};
+
+type SeamlessSegmentOption = {
+  value: string;
+  label: React.ReactNode;
+};
+
+type DisplayFxRate = {
+  rate: number;
+  timestamp?: string;
+  isStale?: boolean;
 };
 
 type PendingDelete =
@@ -83,6 +91,41 @@ type FxRefreshContext = {
 type PortfolioLanguage = 'zh' | 'en';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
+
+function SeamlessSegmentedControl({
+  value,
+  options,
+  onChange,
+  className = '',
+  itemClassName = '',
+  dataTestId,
+}: {
+  value: string;
+  options: SeamlessSegmentOption[];
+  onChange: (value: string) => void;
+  className?: string;
+  itemClassName?: string;
+  dataTestId?: string;
+}) {
+  return (
+    <div data-testid={dataTestId} className={`flex p-1 bg-white/[0.05] rounded-xl w-full ${className}`}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+            className={`appearance-none border-0 flex-1 py-1.5 text-center text-sm font-medium transition-all duration-200 rounded-lg cursor-pointer ${active ? 'text-white bg-white/10 shadow-sm' : 'text-white/40 hover:text-white/70 bg-transparent'} ${itemClassName}`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function getPortfolioCopy(
   t: TranslateFn,
@@ -502,6 +545,8 @@ const PortfolioPage: React.FC = () => {
     note: '',
   });
   const [tradeType, setTradeType] = useState<TradeFormType>('stock');
+  const [fxBaseCurrency, setFxBaseCurrency] = useState('USD');
+  const [fxQuoteCurrency, setFxQuoteCurrency] = useState('CNY');
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
   const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
@@ -1019,6 +1064,31 @@ const PortfolioPage: React.FC = () => {
     const sorted = timestamps.sort();
     return formatFxTimestamp(sorted[sorted.length - 1]);
   }, [fxRateRows]);
+  const selectedFxRate = useMemo<DisplayFxRate | null>(() => {
+    if (fxBaseCurrency === fxQuoteCurrency) {
+      return { rate: 1, timestamp: fxLastUpdated === '--' ? undefined : fxLastUpdated, isStale: false };
+    }
+
+    const direct = fxRateRows.find((item) => item.fromCurrency === fxBaseCurrency && item.toCurrency === fxQuoteCurrency);
+    if (direct && typeof direct.rate === 'number') {
+      return {
+        rate: direct.rate,
+        timestamp: direct.updatedAt || direct.rateDate || undefined,
+        isStale: direct.isStale,
+      };
+    }
+
+    const reverse = fxRateRows.find((item) => item.fromCurrency === fxQuoteCurrency && item.toCurrency === fxBaseCurrency);
+    if (reverse && typeof reverse.rate === 'number' && reverse.rate !== 0) {
+      return {
+        rate: 1 / reverse.rate,
+        timestamp: reverse.updatedAt || reverse.rateDate || undefined,
+        isStale: reverse.isStale,
+      };
+    }
+
+    return null;
+  }, [fxBaseCurrency, fxQuoteCurrency, fxLastUpdated, fxRateRows]);
   const totalEquity = snapshot?.totalEquity ?? 0;
   const totalCash = snapshot?.totalCash ?? 0;
   const totalMarketValue = snapshot?.totalMarketValue ?? 0;
@@ -1085,7 +1155,7 @@ const PortfolioPage: React.FC = () => {
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pt-5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <SegmentedControl
+            <SeamlessSegmentedControl
               value={eventType}
               onChange={(next) => setEventType(next as EventType)}
               options={[
@@ -1093,10 +1163,8 @@ const PortfolioPage: React.FC = () => {
                 { value: 'cash', label: copy.cashLedger },
                 { value: 'corporate', label: copy.corporateLedger },
               ]}
-              listClassName={`${PORTFOLIO_SEGMENT_LIST_CLASS} w-auto`}
-              buttonClassName={`${PORTFOLIO_SEGMENT_BUTTON_CLASS} flex-none`}
-              activeButtonClassName={PORTFOLIO_SEGMENT_ACTIVE_CLASS}
-              inactiveButtonClassName={PORTFOLIO_SEGMENT_INACTIVE_CLASS}
+              className="sm:w-auto"
+              itemClassName="px-3 text-xs uppercase tracking-widest sm:flex-none"
             />
             <div className="flex items-center gap-2 text-xs text-secondary-text">
               <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</Button>
@@ -1238,7 +1306,7 @@ const PortfolioPage: React.FC = () => {
             </div>
 
             <div className="shrink-0 border-b border-white/5 pt-4 pb-4">
-              <SegmentedControl
+              <SeamlessSegmentedControl
                 value={leftTab}
                 onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync' | 'fx')}
                 options={[
@@ -1247,16 +1315,13 @@ const PortfolioPage: React.FC = () => {
                   { value: 'sync', label: language === 'en' ? 'Sync' : '同步' },
                   { value: 'fx', label: language === 'en' ? 'FX' : '汇率' },
                 ]}
-                listClassName={PORTFOLIO_SEGMENT_LIST_CLASS}
-                buttonClassName={PORTFOLIO_SEGMENT_BUTTON_CLASS}
-                activeButtonClassName={PORTFOLIO_SEGMENT_ACTIVE_CLASS}
-                inactiveButtonClassName={PORTFOLIO_SEGMENT_INACTIVE_CLASS}
+                dataTestId="portfolio-left-tab-switcher"
               />
             </div>
 
             <div
               data-testid="portfolio-trade-station-scroll"
-              className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]"
+              className="min-h-0 flex-1 overflow-y-auto no-scrollbar pt-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
             >
               {leftTab === 'trade' ? (
                 <div className="flex flex-col gap-2">
@@ -1264,7 +1329,7 @@ const PortfolioPage: React.FC = () => {
                     data-testid="portfolio-trade-type-switcher"
                     className="mb-3"
                   >
-                    <SegmentedControl
+                    <SeamlessSegmentedControl
                       value={tradeType}
                       onChange={(value) => setTradeType(value as TradeFormType)}
                       options={[
@@ -1272,10 +1337,7 @@ const PortfolioPage: React.FC = () => {
                         { value: 'fund', label: language === 'en' ? 'Cash Transfer' : '资金划转' },
                         { value: 'corporate', label: language === 'en' ? 'Corporate Action' : '公司行为' },
                       ]}
-                      listClassName={PORTFOLIO_SEGMENT_LIST_CLASS}
-                      buttonClassName={PORTFOLIO_SEGMENT_BUTTON_CLASS}
-                      activeButtonClassName={PORTFOLIO_SEGMENT_ACTIVE_CLASS}
-                      inactiveButtonClassName={PORTFOLIO_SEGMENT_INACTIVE_CLASS}
+                      itemClassName="text-xs"
                     />
                   </div>
                   {tradeType === 'stock' ? (
@@ -1452,54 +1514,57 @@ const PortfolioPage: React.FC = () => {
 
               {leftTab === 'fx' ? (
                 <div data-testid="portfolio-fx-panel" className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-text">
-                        {language === 'en' ? 'Exchange Rates' : '汇率看板'}
-                      </p>
-                      <p className="mt-1 text-[11px] text-white/35">
-                        {language === 'en' ? 'Last update' : '最后更新'} {fxLastUpdated}
-                      </p>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">LIVE EXCHANGE ENGINE</p>
+                    <p className="mt-1 text-[11px] text-white/35">
+                      {language === 'en' ? 'Last update' : '最后更新'} {selectedFxRate?.timestamp ? formatFxTimestamp(selectedFxRate.timestamp) : fxLastUpdated}
+                      {selectedFxRate?.isStale ? ` · ${copy.fxStale}` : ''}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
+                    <Select
+                      label="Base Currency"
+                      labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                      className={PORTFOLIO_SELECT_CLASS}
+                      value={fxBaseCurrency}
+                      onChange={setFxBaseCurrency}
+                      options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+                    />
+                    <span className="mb-2 flex h-10 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-white/45" aria-hidden="true">⇄</span>
+                    <Select
+                      label="Quote Currency"
+                      labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                      className={PORTFOLIO_SELECT_CLASS}
+                      value={fxQuoteCurrency}
+                      onChange={setFxQuoteCurrency}
+                      options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+                    />
+                  </div>
+                  <div className="rounded-2xl bg-white/[0.025] px-4 py-5">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">
+                      {fxBaseCurrency}/{fxQuoteCurrency}
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className={PORTFOLIO_ICON_BUTTON_CLASS}
-                      onClick={() => void handleRefreshFx()}
-                      disabled={!hasAccounts || isLoading || fxRefreshing}
-                      aria-label={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
-                      title={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
-                    >
-                      <RefreshCw className={`h-4 w-4 ${fxRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
-                    </Button>
+                    <div data-testid="portfolio-fx-rate-value" className="mt-2 flex items-baseline gap-1.5 whitespace-nowrap">
+                      <span className="text-sm text-white/60">1 {fxBaseCurrency} =</span>
+                      {' '}
+                      <span className="font-mono text-xl text-indigo-400">{selectedFxRate ? formatFxRate(selectedFxRate.rate) : '--'}</span>
+                      {' '}
+                      <span className="text-sm text-white/60">{fxQuoteCurrency}</span>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {fxRateRows.length === 0 ? (
-                      <div className="rounded-lg bg-white/[0.025] px-4 py-4 text-xs text-white/40">
-                        {language === 'en' ? 'No cached cross-currency rates for this scope.' : '当前范围暂无跨币种缓存汇率。'}
-                      </div>
-                    ) : (
-                      fxRateRows.map((item) => (
-                        <div
-                          key={`${item.fromCurrency}-${item.toCurrency}`}
-                          className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg bg-white/[0.025] px-4 py-3"
-                        >
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-white">
-                              {item.fromCurrency}/{item.toCurrency}
-                            </div>
-                            <div className="mt-1 text-[11px] text-white/35">
-                              {formatFxTimestamp(item.updatedAt || item.rateDate)}
-                              {item.isStale ? ` · ${copy.fxStale}` : ''}
-                            </div>
-                          </div>
-                          <div className="text-right text-sm tabular-nums text-white/80">
-                            {formatFxRate(item.rate)}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    className="h-12 w-full rounded-xl !border-transparent !bg-white px-4 !font-bold !text-black hover:!bg-white hover:brightness-105"
+                    onClick={() => void handleRefreshFx()}
+                    disabled={!hasAccounts || isLoading || fxRefreshing}
+                    aria-label={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
+                    title={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
+                    isLoading={fxRefreshing}
+                    loadingText={copy.refreshingFx}
+                  >
+                    获取实时汇率 <span className="text-black/60">(Fetch Live Rate)</span>
+                  </Button>
                   {fxRefreshFeedback ? (
                     <p className={`text-xs ${
                       fxRefreshFeedback.tone === 'success'

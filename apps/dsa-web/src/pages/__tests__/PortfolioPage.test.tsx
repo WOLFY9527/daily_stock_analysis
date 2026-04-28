@@ -373,6 +373,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '账户' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '同步' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '汇率' })).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-left-tab-switcher').className).toContain('bg-white/[0.05]');
+    expect(screen.getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
+    expect(screen.getByRole('button', { name: '账户' }).className).not.toContain('border-white');
     expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '历史记录 ↗' })).toBeInTheDocument();
   });
@@ -396,12 +399,16 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '汇率' }));
     expect(screen.getByTestId('portfolio-fx-panel')).toBeInTheDocument();
+    expect(screen.getByText('LIVE EXCHANGE ENGINE')).toBeInTheDocument();
+    expect(screen.getByLabelText('Base Currency')).toHaveValue('USD');
+    expect(screen.getByLabelText('Quote Currency')).toHaveValue('CNY');
     expect(screen.getByText('USD/CNY')).toBeInTheDocument();
-    expect(screen.getByText('HKD/CNY')).toBeInTheDocument();
-    expect(screen.getByText('7.2450')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-fx-rate-value')).toHaveTextContent('1 USD = 7.2450 CNY');
     const refreshFxButton = openFxPanel();
-    expect(refreshFxButton).toHaveAttribute('data-variant', 'ghost');
-    expect(refreshFxButton.className).not.toContain('border-white/10');
+    expect(refreshFxButton).toHaveAttribute('data-variant', 'primary');
+    expect(refreshFxButton.className).toContain('bg-white');
+    expect(refreshFxButton.className).toContain('text-black');
+    expect(refreshFxButton).toHaveTextContent('获取实时汇率');
   });
 
   it('shows IBKR as a broker import option and surfaces account-linked connection context', async () => {
@@ -1081,8 +1088,9 @@ describe('PortfolioPage FX refresh', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.syncIbkr') }));
 
+    await waitFor(() => expect(syncIbkrReadOnly).toHaveBeenCalled());
     expect(await screen.findByText(translate('zh', 'portfolio.readOnlyBadge'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.syncResult')).closest('div')).toHaveTextContent(`${translate('zh', 'portfolio.positionsCountLabel')} 1`);
     expect(screen.queryByText(translate('en', 'portfolio.readOnlyBadge'))).not.toBeInTheDocument();
   });
