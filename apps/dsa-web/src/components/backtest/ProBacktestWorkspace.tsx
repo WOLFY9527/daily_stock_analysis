@@ -134,61 +134,50 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     <section
       data-testid="pro-backtest-workspace"
       data-module="rule"
-      className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(7,9,18,0.98),rgba(4,5,12,0.94))] p-6 shadow-[0_32px_80px_rgba(0,0,0,0.42)]"
+      className="w-full min-w-0 rounded-[32px] border border-white/5 bg-white/[0.02] p-6 shadow-[0_32px_80px_rgba(0,0,0,0.32)] backdrop-blur-sm"
     >
-      <div className="flex min-w-0 flex-col gap-6 xl:flex-row xl:items-start">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-5 xl:items-start">
         <aside
           data-testid="pro-backtest-sidebar"
-          className="w-64 shrink-0 flex flex-col gap-2 sticky top-6 h-fit"
+          className="flex min-w-0 flex-col gap-4 xl:col-span-1 xl:sticky xl:top-6"
         >
-          <div className="flex flex-col gap-2">
-            <div className="rounded-[24px] border border-white/5 bg-white/[0.02] p-5">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-white/44">
-                {language === 'en' ? 'Quant IDE' : 'Quant IDE'}
-              </p>
-              <h2 className="mt-3 text-2xl font-semibold text-white">
-                {language === 'en' ? 'Quant workbench' : '量化工作台'}
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-white/56">
-                {language === 'en'
-                  ? 'Keep the left capability tree visible while the right workspace expands naturally with the page.'
-                  : '让左侧能力树始终可见，右侧参数工作区随页面自然展开。'}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2 rounded-[24px] border border-white/5 bg-white/[0.02] p-3">
+          <div className="rounded-[24px] border border-white/5 bg-white/[0.02] p-5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+              {language === 'en' ? 'Professional lane' : '专业模式'}
+            </p>
+            <div className="mt-4 flex flex-col gap-2 rounded-[20px] border border-white/5 bg-black/20 p-3">
               {navItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   data-testid={item.testId}
                   onClick={() => jumpToSection(item)}
-                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`min-w-0 rounded-2xl border px-4 py-3 text-left transition ${
                     currentStep === item.step
-                      ? 'border-white/12 bg-white/[0.08] text-white'
+                      ? 'border-indigo-400/40 bg-indigo-500/10 text-white'
                       : 'border-white/5 bg-white/[0.02] text-white/72 hover:border-white/12 hover:bg-white/[0.05]'
                   }`}
                 >
-                  <span className="block text-sm font-medium">{item.label}</span>
+                  <span className="block truncate text-sm font-medium">{item.label}</span>
                 </button>
               ))}
             </div>
           </div>
         </aside>
 
-        <div className="flex flex-1 min-w-0 flex-col gap-6 pb-24">
+        <div className="flex min-w-0 flex-col gap-6 xl:col-span-4">
           <div
             data-testid="pro-backtest-compile-bar"
-            className="flex flex-col gap-4 rounded-[24px] border border-white/5 bg-white/[0.02] px-6 py-5 backdrop-blur-xl xl:flex-row xl:items-center xl:justify-between"
+            className="flex min-w-0 flex-col gap-4 rounded-[24px] border border-white/5 bg-white/[0.02] px-6 py-5 backdrop-blur-sm xl:flex-row xl:items-center xl:justify-between"
           >
             <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-white/44">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
                 {language === 'en' ? 'Compile zone' : 'Compile Zone'}
               </p>
-              <p className="mt-1 text-sm text-white/60">
+              <p className="mt-2 text-sm text-white/60">
                 {language === 'en'
-                  ? 'Keep the left tree for capability routing, and use this dock to compile or launch without leaving the panel.'
-                  : '左侧能力树负责切换工作区，右侧操作坞负责编译与运行。'}
+                  ? 'Compile, inspect, and route the deterministic run from one board.'
+                  : '在同一块工作台里完成编译、检查和提交。'}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -205,14 +194,14 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 disabled={isSubmitting}
                 className="rounded-2xl bg-white px-5 py-2 text-sm font-semibold text-black transition-transform hover:bg-white/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {language === 'en' ? 'Compile & Run' : '编译并运行'}
+                {language === 'en' ? 'Execute backtest task' : '执行回测任务'}
               </button>
             </div>
           </div>
 
           <div className="flex flex-col gap-6">
-            <div className="grid gap-6 xl:grid-cols-2">
-              <section id="pro-section-assets" className={compactCardClass}>
+            <div className="grid gap-6 xl:grid-cols-5 xl:items-stretch">
+              <section id="pro-section-assets" className={`${compactCardClass} flex h-full min-w-0 flex-col`}>
                 <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Assets & portfolio' : '标的与组合'}
                 </p>
@@ -243,7 +232,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 </div>
               </section>
 
-              <section id="pro-section-strategy" className={compactCardClass}>
+              <section id="pro-section-strategy" className={`${compactCardClass} flex h-full min-w-0 flex-col`}>
                 <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Strategy engine' : '策略与引擎'}
                 </p>
@@ -256,7 +245,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 </div>
               </section>
 
-              <section id="pro-section-orders" className={compactCardClass}>
+              <section id="pro-section-orders" className={`${compactCardClass} flex h-full min-w-0 flex-col`}>
                 <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Orders & risk' : '订单与风控'}
                 </p>
@@ -276,7 +265,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 </div>
               </section>
 
-              <section id="pro-section-execution" className={compactCardClass}>
+              <section id="pro-section-execution" className={`${compactCardClass} flex h-full min-w-0 flex-col`}>
                 <p className={compactFieldLabelClass}>
                   {language === 'en' ? 'Execution model' : '成本与滑点'}
                 </p>
@@ -288,7 +277,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               </section>
             </div>
 
-            <section id="pro-section-analytics" className={`${compactCardClass} mt-6`}>
+            <section id="pro-section-analytics" className={`${compactCardClass} flex min-w-0 flex-col`}>
               <p className={compactFieldLabelClass}>
                 {language === 'en' ? 'Advanced analytics' : '高级分析'}
               </p>
@@ -419,7 +408,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               </div>
             </section>
 
-            <div className="mt-6">
+            <div className="min-w-0">
               <DeterministicBacktestFlow
                 {...flowProps}
                 onParse={onParse}

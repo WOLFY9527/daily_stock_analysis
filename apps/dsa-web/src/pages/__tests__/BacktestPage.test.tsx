@@ -890,14 +890,10 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'overflow-y-auto', 'no-scrollbar', 'bg-transparent');
+    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'min-w-0', 'min-h-0', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'bg-transparent');
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('container', 'mx-auto', 'max-w-[1600px]');
-    expect(screen.getByTestId('backtest-bento-hero')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-bento-hero-module-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'border-b', 'border-white/5', 'bg-[#030303]');
-    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'gap-10', 'pt-6', 'bg-transparent');
-    expect(screen.getByTestId('backtest-summary-strip')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: bt('zh', 'page.headerTitle') })).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
+    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'pt-6', 'bg-transparent');
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.normalMode') })).toHaveAttribute('aria-selected', 'true');
@@ -905,8 +901,7 @@ describe('BacktestPage', () => {
 
     expect(screen.getByTestId('normal-backtest-workspace')).toBeInTheDocument();
     expect(screen.queryByTestId('pro-backtest-workspace')).not.toBeInTheDocument();
-    expect(screen.getByText('极简回测发射台')).toBeInTheDocument();
-    expect(screen.getByText('先选模板，再在一屏内完成标的、区间、资金、基准与成本设置。提交后直接进入独立结果页。')).toBeInTheDocument();
+    expect(screen.getByTestId('normal-backtest-primary-grid')).toHaveClass('xl:grid-cols-4');
     expect(screen.getByLabelText('标的代码')).toBeInTheDocument();
     expect(screen.getByLabelText('回测区间开始')).toBeInTheDocument();
     expect(screen.getByLabelText('回测区间结束')).toBeInTheDocument();
@@ -915,11 +910,7 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
     expect(screen.getByLabelText('策略模板')).toBeInTheDocument();
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '一键开始回测' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
-
-    fireEvent.click(screen.getByTestId('backtest-bento-drawer-trigger'));
-    expect(await screen.findByTestId('backtest-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByText('回测页面摘要')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
   });
 
   it('includes every engine-supported classic strategy in point-and-shoot mode', async () => {
@@ -969,14 +960,14 @@ describe('BacktestPage', () => {
 
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('pro-backtest-workspace')).not.toHaveClass('overflow-hidden');
-    expect(screen.getByTestId('pro-backtest-sidebar')).toHaveClass('w-64', 'shrink-0', 'flex', 'flex-col', 'gap-2', 'sticky', 'top-6', 'h-fit');
+    expect(screen.getByTestId('pro-backtest-sidebar')).toHaveClass('flex', 'flex-col', 'gap-4', 'xl:col-span-1', 'xl:sticky', 'xl:top-6');
     expect(screen.getByTestId('pro-backtest-nav-assets')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-orders')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-execution')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-analytics')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-compile-bar')).toHaveClass('rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
-    expect(screen.getByRole('button', { name: '编译并运行' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('overflow-hidden');
     expect(screen.getByTestId('backtest-setup-dashboard')).not.toHaveClass('overflow-y-auto', 'no-scrollbar');
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
@@ -1169,8 +1160,6 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('pro-backtest-workspace')).toHaveAttribute('data-module', 'rule');
     expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
-    expect(screen.getByText('量化工作台')).toBeInTheDocument();
-    expect(screen.getByText('让左侧能力树始终可见，右侧参数工作区随页面自然展开。')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-symbol')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-control-section-strategy')).toBeInTheDocument();
@@ -1185,7 +1174,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
 
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('backtest-sticky-action-bar')).getByRole('button', { name: '开始执行回测' }));
+    fireEvent.click(within(screen.getByTestId('backtest-sticky-action-bar')).getByRole('button', { name: '执行回测任务' }));
 
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
     expect(runRuleBacktest).toHaveBeenCalledWith(
@@ -1338,13 +1327,11 @@ describe('BacktestPage', () => {
     window.history.replaceState(window.history.state, '', '/en/backtest');
     renderBacktestRoutes(['/en/backtest']);
 
-    expect(await screen.findByRole('heading', { name: bt('en', 'page.headerTitle') })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: bt('en', 'page.moduleTabsLabel') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'page.ruleTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'page.historicalTab') })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: bt('en', 'page.controlModeLabel') })).toBeInTheDocument();
-    expect(screen.getByText('Point & shoot mode')).toBeInTheDocument();
     expect(screen.getByLabelText('Strategy template')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Launch backtest' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
+    expect(screen.getByRole('button', { name: 'Execute backtest task' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
   });
 });

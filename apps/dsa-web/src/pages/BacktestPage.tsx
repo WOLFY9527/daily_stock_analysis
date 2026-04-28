@@ -1,24 +1,16 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PanelRightOpen } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import {
-  BentoHeroStrip,
-  CARD_BUTTON_CLASS,
-  PageBriefDrawer,
-  type BentoHeroItem,
-} from '../components/home-bento';
 import type { RuleWizardStep } from '../components/backtest/DeterministicBacktestFlow';
 import HistoricalEvaluationPanel from '../components/backtest/HistoricalEvaluationPanel';
 import NormalBacktestWorkspace from '../components/backtest/NormalBacktestWorkspace';
 import ProBacktestWorkspace from '../components/backtest/ProBacktestWorkspace';
 import {
   getDefaultRuleDateRange,
-  getBenchmarkModeLabel,
   getPeriodicNumber,
   getPeriodicString,
   type RuleBenchmarkMode,
@@ -175,8 +167,6 @@ const BacktestPage: React.FC = () => {
   const [ruleCurrentStep, setRuleCurrentStep] = useState<RuleWizardStep>('symbol');
   const [ruleParseSignature, setRuleParseSignature] = useState<string | null>(null);
   const [appliedRewriteText, setAppliedRewriteText] = useState<string | null>(null);
-  const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
-  const openBriefButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsBriefDrawerOpen(true));
   const showRuleModuleButton = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('rule'));
   const showHistoricalModuleButton = useSafariWarmActivation<HTMLButtonElement>(() => setActiveModule('historical'));
   const showNormalModeButton = useSafariWarmActivation<HTMLButtonElement>(() => setControlPanelMode('normal'));
@@ -1114,39 +1104,6 @@ const BacktestPage: React.FC = () => {
     setRuleBenchmarkMode('auto');
     setRuleBenchmarkCode('');
   }, []);
-  const heroItems: BentoHeroItem[] = [
-    {
-      label: bt(language, 'page.moduleTabsLabel'),
-      value: activeModule === 'rule' ? bt(language, 'page.ruleTab') : bt(language, 'page.historicalTab'),
-      detail: bt(language, 'page.controlModeLabel'),
-      tone: 'bullish',
-      testId: 'backtest-bento-hero-module',
-      valueTestId: 'backtest-bento-hero-module-value',
-    },
-    {
-      label: bt(language, 'page.controlModeLabel'),
-      value: controlPanelMode === 'professional' ? bt(language, 'page.professionalMode') : bt(language, 'page.normalMode'),
-      detail: bt(language, 'page.headerEyebrow'),
-      testId: 'backtest-bento-hero-mode',
-    },
-    {
-      label: bt(language, 'page.symbolSectionTitle'),
-      value: normalizedCode || '--',
-      detail: activeModule === 'rule' ? bt(language, 'page.ruleInputHint') : bt(language, 'page.historicalInputHint'),
-      tone: normalizedCode ? 'bullish' : 'neutral',
-      testId: 'backtest-bento-hero-symbol',
-      valueTestId: 'backtest-bento-hero-symbol-value',
-    },
-    {
-      label: bt(language, 'page.headerTitle'),
-      value: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
-      detail: bt(language, 'page.headerDescription', {
-        benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
-      }),
-      testId: 'backtest-bento-hero-benchmark',
-    },
-  ];
-
   const moduleTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
       <button
@@ -1207,54 +1164,21 @@ const BacktestPage: React.FC = () => {
       data-testid="backtest-bento-page"
       aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar bg-transparent')}
+      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 flex flex-col min-w-0 min-h-0 px-6 pt-6 pb-12 md:px-8 xl:px-12 bg-transparent')}
     >
-      <header className="w-full">
-        <div className="relative overflow-hidden rounded-[32px] border border-white/8 bg-white/[0.02] px-6 py-6 backdrop-blur-2xl xl:px-8">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="min-w-0 max-w-4xl">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-white/44">
-                {bt(language, 'page.headerEyebrow')}
-              </p>
-              <h1 className="mt-3 max-w-[14ch] text-[clamp(2.1rem,3.2vw,3.7rem)] font-bold uppercase tracking-[0.1em] text-white">
-                {bt(language, 'page.headerTitle')}
-              </h1>
-              <p className="mt-3 max-w-4xl text-sm leading-7 text-white/62">
-                {bt(language, 'page.headerDescription', {
-                  benchmark: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
-                })}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-3">
-              <button
-                ref={openBriefButton.ref}
-                type="button"
-                className={CARD_BUTTON_CLASS}
-                data-testid="backtest-bento-drawer-trigger"
-                onClick={openBriefButton.onClick}
-                onPointerUp={openBriefButton.onPointerUp}
-              >
-                <PanelRightOpen className="h-4 w-4" />
-                <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
       <div
         data-testid="backtest-subnav"
-        className="w-full border-b border-white/5 bg-[#030303]"
+        className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm"
       >
-        <div className="flex flex-col gap-3 py-2 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <nav
-            className="flex h-14 items-center gap-6 overflow-x-auto no-scrollbar"
+            className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar"
             aria-label={bt(language, 'page.moduleTabsLabel')}
           >
             {moduleTabs}
           </nav>
           <nav
-            className="flex h-14 items-center gap-6 overflow-x-auto no-scrollbar xl:justify-end"
+            className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar xl:justify-end"
             aria-label={bt(language, 'page.controlModeLabel')}
           >
             {controlModeTabs}
@@ -1264,15 +1188,8 @@ const BacktestPage: React.FC = () => {
 
       <main
         data-testid="backtest-v1-page"
-        className="w-full flex-1 flex flex-col gap-10 bg-transparent pt-6"
+        className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent pt-6"
       >
-        <section data-testid="backtest-summary-strip" className="w-full">
-          <BentoHeroStrip
-            items={heroItems}
-            testId="backtest-bento-hero"
-            className="w-full gap-6"
-          />
-        </section>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
@@ -1422,47 +1339,6 @@ const BacktestPage: React.FC = () => {
           </motion.div>
         </AnimatePresence>
       </main>
-      <PageBriefDrawer
-        isOpen={isBriefDrawerOpen}
-        onClose={() => setIsBriefDrawerOpen(false)}
-        title={language === 'en' ? 'Backtest surface brief' : '回测页面摘要'}
-        testId="backtest-bento-drawer"
-        summary={language === 'en'
-          ? 'Backtest now splits into a one-screen point-and-shoot launcher and a separate quant workbench, while deterministic execution and result routing stay on the existing backend contracts.'
-          : '回测页现在拆成一屏式普通发射台和独立专业工作台，但确定性执行链路与结果路由仍保持现有后端契约。'}
-        metrics={[
-          {
-            label: bt(language, 'page.moduleTabsLabel'),
-            value: activeModule === 'rule' ? bt(language, 'page.ruleTab') : bt(language, 'page.historicalTab'),
-            tone: 'bullish',
-          },
-          {
-            label: bt(language, 'page.controlModeLabel'),
-            value: controlPanelMode === 'professional' ? bt(language, 'page.professionalMode') : bt(language, 'page.normalMode'),
-          },
-          {
-            label: bt(language, 'page.symbolSectionTitle'),
-            value: normalizedCode || '--',
-            tone: normalizedCode ? 'bullish' : 'neutral',
-          },
-          {
-            label: bt(language, 'page.headerTitle'),
-            value: getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode, language),
-          },
-        ]}
-        bullets={[
-          language === 'en'
-            ? 'Normal mode compresses the launch surface to one screen, exposing only ticker, range, capital, benchmark, fees, and a strategy template selector.'
-            : '普通模式压缩成一屏发射台，只保留标的、区间、资金、基准、手续费和策略模板。',
-          language === 'en'
-            ? 'Professional mode adds a docked capability tree plus compile zone, then reuses the existing deterministic flow and result route for the actual execution chain.'
-            : '专业模式补上能力树和编译坞，但真实执行链路仍复用原有确定性回测流程与结果页。',
-          language === 'en'
-            ? 'Historical evaluation remains a separate module and keeps its current behavior.'
-            : '历史评估仍保持为独立模块，现有行为不变。',
-        ]}
-        footnote={language === 'en' ? 'No backend API schema changes in this pass.' : '本次不改后端 API Schema。'}
-      />
     </div>
   );
 };

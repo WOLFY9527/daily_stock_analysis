@@ -15729,9 +15729,9 @@ html[lang='en'][data-theme='spacex'] .report-price-chart[data-language='en'] .th
   padding-bottom: 0.95rem;
 }
 
-.backtest-setup-main :is(.product-command-input, .input-surface, select):focus {
-  border-color: rgba(16, 185, 129, 0.5);
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.22);
+.backtest-setup-main :is(.product-command-input, .input-surface, select, input, textarea):focus {
+  border-color: rgba(99, 102, 241, 0.55);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
 
 .backtest-setup-main :is(.product-command-input, .input-surface, select)::placeholder {
