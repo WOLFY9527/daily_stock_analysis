@@ -236,6 +236,13 @@ class AnalysisRepository:
             include_all_owners=self.include_all_owners,
         )
 
+    def delete_all_records(self) -> int:
+        """Delete all analysis history rows for the current owner scope."""
+        return self.db.delete_all_analysis_history_records(
+            owner_id=self.owner_id,
+            include_all_owners=self.include_all_owners,
+        )
+
     def get_news_intel_by_query_id(self, *, query_id: str, limit: int = 20) -> List[Any]:
         """Return news intel rows for a query."""
         try:

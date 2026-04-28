@@ -40,6 +40,44 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _is_placeholder_stock_label(name: Optional[str], stock_code: Optional[str]) -> bool:
+    text = str(name or "").strip()
+    normalized_code = str(stock_code or "").strip().upper()
+    if not text:
+        return True
+    if text.lower() in {"unknown", "unnamed stock"}:
+        return True
+    if text == "待确认股票":
+        return True
+    if normalized_code and text.upper() == normalized_code:
+        return True
+    if text.startswith("股票"):
+        return True
+    return False
+
+
+def _resolve_history_display_names(
+    persisted_meta: Dict[str, Any],
+    *,
+    stock_code: str,
+    record_name: Optional[str],
+) -> Tuple[str, str]:
+    normalized_code = str(stock_code or "").strip().upper()
+    fallback_name = str(record_name or "").strip()
+    persisted_stock_name = str(persisted_meta.get("stock_name") or "").strip()
+    persisted_company_name = str(persisted_meta.get("company_name") or "").strip()
+
+    stock_name = persisted_stock_name
+    if _is_placeholder_stock_label(stock_name, normalized_code):
+        stock_name = fallback_name if not _is_placeholder_stock_label(fallback_name, normalized_code) else normalized_code
+
+    company_name = persisted_company_name
+    if _is_placeholder_stock_label(company_name, normalized_code):
+        company_name = stock_name if not _is_placeholder_stock_label(stock_name, normalized_code) else normalized_code
+
+    return stock_name, company_name
+
+
 class MarkdownReportGenerationError(Exception):
     """Exception raised when Markdown report generation fails due to internal errors."""
 
@@ -138,17 +176,17 @@ class HistoryService:
                     if isinstance(persisted_report, dict) and isinstance(persisted_report.get("meta"), dict)
                     else {}
                 )
+                stock_name, company_name = _resolve_history_display_names(
+                    persisted_meta,
+                    stock_code=record.code,
+                    record_name=record.name,
+                )
                 items.append({
                     "id": record.id,
                     "query_id": record.query_id,
                     "stock_code": record.code,
-                    "stock_name": persisted_meta.get("stock_name") or record.name,
-                    "company_name": (
-                        persisted_meta.get("company_name")
-                        or persisted_meta.get("stock_name")
-                        or record.name
-                        or record.code
-                    ),
+                    "stock_name": stock_name,
+                    "company_name": company_name,
                     "report_type": record.report_type,
                     "sentiment_score": record.sentiment_score,
                     "operation_advice": record.operation_advice,
@@ -792,18 +830,18 @@ class HistoryService:
         model_used = normalize_model_used(model_used)
         sniper_points = self._get_display_sniper_points(record, raw_result)
         time_contract = self._extract_time_contract(context_snapshot)
+        stock_name, company_name = _resolve_history_display_names(
+            persisted_meta,
+            stock_code=record.code,
+            record_name=record.name,
+        )
 
         return {
             "id": record.id,
             "query_id": record.query_id,
             "stock_code": persisted_meta.get("stock_code") or record.code,
-            "stock_name": persisted_meta.get("stock_name") or record.name,
-            "company_name": (
-                persisted_meta.get("company_name")
-                or persisted_meta.get("stock_name")
-                or record.name
-                or record.code
-            ),
+            "stock_name": stock_name,
+            "company_name": company_name,
             "report_type": persisted_meta.get("report_type") or record.report_type,
             "created_at": persisted_meta.get("created_at") or (record.created_at.isoformat() if record.created_at else None),
             "report_language": persisted_meta.get("report_language"),
@@ -841,12 +879,13 @@ class HistoryService:
             "persisted_report": persisted_report,
         }
 
-    def delete_history_records(self, record_ids: List[int]) -> int:
+    def delete_history_records(self, record_ids: List[int], *, delete_all: bool = False) -> int:
         """
         Delete specified analysis history records.
 
         Args:
             record_ids: List of history record primary key IDs
+            delete_all: Whether to clear all history rows for the current owner
 
         Returns:
             Number of records actually deleted
@@ -855,6 +894,8 @@ class HistoryService:
             Exception: Re-raises any storage-layer exception so the API caller
                        receives a proper 500 error instead of a silent success.
         """
+        if delete_all:
+            return self.repo.delete_all_records()
         return self.repo.delete_records(record_ids)
 
     def get_news_intel(self, query_id: str, limit: int = 20) -> List[Dict[str, str]]:

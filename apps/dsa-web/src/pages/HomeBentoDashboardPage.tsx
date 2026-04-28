@@ -1747,6 +1747,19 @@ const HomeBentoDashboardPage: React.FC = () => {
   }, [hasHydratedInitialTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
+    const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
+    if (selectedTicker) {
+      setActiveTicker(selectedTicker);
+      return;
+    }
+
+    if (recentHistoryItems.length === 0) {
+      setActiveTicker(null);
+      setAnalysisFallbackMode(false);
+    }
+  }, [recentHistoryItems, selectedReport?.meta.stockCode]);
+
+  useEffect(() => {
     if (!statusToast) {
       return undefined;
     }
@@ -1885,7 +1898,11 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     try {
-      await deleteHistoryRecords(pendingHistoryDelete.recordIds);
+      await deleteHistoryRecords(
+        pendingHistoryDelete.recordIds,
+        pendingHistoryDelete.mode === 'visible' ? { deleteAll: true } : undefined,
+      );
+      setHistoryDrawerOpen(false);
     } finally {
       setPendingHistoryDelete(null);
     }
@@ -2075,19 +2092,6 @@ const HomeBentoDashboardPage: React.FC = () => {
                 <p className="max-w-[220px] text-center text-xs leading-relaxed text-white/30">
                   {standbyCopy.body}
                 </p>
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-                  {['NVDA', 'TSLA', 'AAPL'].map((ticker) => (
-                    <button
-                      key={ticker}
-                      type="button"
-                      onClick={() => { void handleAnalyze(ticker); }}
-                      className="rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/50 transition-all hover:border-white/12 hover:bg-white/[0.08] hover:text-white"
-                      data-testid={`home-bento-zero-state-quick-${ticker}`}
-                    >
-                      {ticker}
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
             <div

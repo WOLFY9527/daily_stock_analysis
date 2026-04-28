@@ -3,6 +3,7 @@ import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { historyApi } from '../api/history';
+import type { DeleteHistoryOptions } from '../api/history';
 import type { AnalysisReport, HistoryItem, HistoryListResponse, TaskInfo } from '../types/analysis';
 import { translateForCurrentLanguage } from '../i18n/core';
 import { MAX_RECENT_TASKS, sortTasksByPriority } from '../utils/taskQueue';
@@ -217,7 +218,7 @@ export interface StockPoolState {
   selectCachedHistoryForStock: (stockCode: string) => boolean;
   toggleHistorySelection: (recordId: number) => void;
   toggleSelectAllVisible: () => void;
-  deleteHistoryRecords: (recordIds: number[]) => Promise<void>;
+  deleteHistoryRecords: (recordIds: number[], options?: DeleteHistoryOptions) => Promise<void>;
   deleteSelectedHistory: () => Promise<void>;
   submitAnalysis: (options?: SubmitAnalysisOptions) => Promise<SubmitAnalysisResult>;
   focusLatestHistoryForStock: (stockCode: string) => Promise<number | null>;
@@ -493,7 +494,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     await get().deleteHistoryRecords(get().selectedHistoryIds);
   },
 
-  deleteHistoryRecords: async (recordIds) => {
+  deleteHistoryRecords: async (recordIds, options) => {
     const state = get();
     const normalizedRecordIds = Array.from(new Set(recordIds)).filter((recordId) => Number.isFinite(recordId));
     if (normalizedRecordIds.length === 0 || state.isDeletingHistory) {
@@ -502,7 +503,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
     set({ isDeletingHistory: true });
     try {
-      await historyApi.deleteRecords(normalizedRecordIds);
+      await historyApi.deleteRecords(normalizedRecordIds, options);
 
       const deletedIds = new Set(normalizedRecordIds);
       const selectedWasDeleted = state.selectedReport?.meta.id !== undefined
@@ -511,9 +512,29 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       set({ selectedHistoryIds: [] });
 
       const freshPage = await fetchHistory(get, set, { reset: true });
+      const nextItems = freshPage?.items ?? [];
+      const nextStockCodes = new Set(nextItems.map((item) => normalizeSnapshotKey(item.stockCode)).filter(Boolean));
+      const nextSnapshots = Object.fromEntries(
+        Object.entries(get().reportSnapshotsByStockCode).filter(([stockCode]) => nextStockCodes.has(stockCode)),
+      );
+
+      set({
+        highlightedHistoryId: null,
+        reportSnapshotsByStockCode: nextSnapshots,
+      });
+
+      if (nextItems.length === 0) {
+        set({
+          selectedReport: null,
+          highlightedHistoryId: null,
+          reportSnapshotsByStockCode: {},
+        });
+        persistSelectedHistoryId(null);
+        return;
+      }
 
       if (selectedWasDeleted) {
-        const nextItem = freshPage?.items?.[0];
+        const nextItem = nextItems[0];
         if (nextItem) {
           await get().selectHistoryItem(nextItem.id);
         } else {

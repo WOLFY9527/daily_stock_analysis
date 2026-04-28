@@ -184,7 +184,7 @@ def delete_history_records(
     按主键 ID 批量删除历史分析记录。
     """
     record_ids = sorted({record_id for record_id in request.record_ids if record_id is not None})
-    if not record_ids:
+    if not request.delete_all and not record_ids:
         raise HTTPException(
             status_code=400,
             detail={
@@ -195,7 +195,7 @@ def delete_history_records(
 
     try:
         service = _build_history_service(db_manager, current_user)
-        deleted = service.delete_history_records(record_ids)
+        deleted = service.delete_history_records(record_ids, delete_all=request.delete_all)
         return DeleteHistoryResponse(deleted=deleted)
     except HTTPException:
         raise

@@ -5452,6 +5452,38 @@ class DatabaseManager:
             )
             return result.rowcount or 0
 
+    def delete_all_analysis_history_records(
+        self,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
+        """
+        删除当前 owner 范围内的全部分析历史记录。
+
+        同时清理依赖这些历史记录的回测结果，避免残留孤儿数据。
+        """
+        with self.session_scope() as session:
+            owner_filter = []
+            if not include_all_owners:
+                owner_filter.append(AnalysisHistory.owner_id == self.require_user_id(owner_id))
+
+            matching_analysis_ids = session.execute(
+                select(AnalysisHistory.id).where(and_(*owner_filter)) if owner_filter else select(AnalysisHistory.id)
+            ).scalars().all()
+            if not matching_analysis_ids:
+                return 0
+
+            if self._phase_b_enabled and self._phase_b_store is not None:
+                self._phase_b_store.delete_analysis_history_shadow(matching_analysis_ids)
+
+            session.execute(
+                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(matching_analysis_ids))
+            )
+            result = session.execute(
+                delete(AnalysisHistory).where(AnalysisHistory.id.in_(matching_analysis_ids))
+            )
+            return result.rowcount or 0
+
     def get_latest_analysis_by_query_id(
         self,
         query_id: str,

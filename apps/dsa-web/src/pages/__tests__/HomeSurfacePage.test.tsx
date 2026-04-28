@@ -289,9 +289,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('执行策略模块处于锁定状态')).toBeInTheDocument();
     expect(screen.getByText('等待技术形态扫描')).toBeInTheDocument();
     expect(screen.getByText('等待基本面画像加载')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-zero-state-quick-NVDA')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-zero-state-quick-TSLA')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-zero-state-quick-AAPL')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-zero-state-quick-NVDA')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-zero-state-quick-TSLA')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-zero-state-quick-AAPL')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-card-decision')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
@@ -521,7 +521,7 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByText('删除历史记录')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
-    await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([2]));
+    await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([2], undefined));
     await waitFor(() => expect(screen.queryByTestId('home-bento-history-item-2')).not.toBeInTheDocument());
     expect(screen.getByTestId('home-bento-history-item-3')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-item-1')).toBeInTheDocument();
@@ -556,8 +556,11 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByText('确认删除选中的 3 条历史记录吗？删除后将不可恢复。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
-    await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([3, 2, 1]));
+    await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([3, 2, 1], { deleteAll: true }));
     await waitFor(() => expect(screen.getByText('历史分析尚未同步。')).toBeInTheDocument());
+    expect(screen.getByTestId('home-bento-zero-state')).toBeInTheDocument();
+    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-zero-state-quick-NVDA')).not.toBeInTheDocument();
   });
 
   it('renders a cached history snapshot immediately and then replaces it with database detail', async () => {

@@ -77,6 +77,7 @@ class DeleteHistoryRequest(BaseModel):
     """删除历史记录请求"""
 
     record_ids: List[int] = Field(default_factory=list, description="要删除的历史记录主键 ID 列表")
+    delete_all: bool = Field(False, description="是否删除当前用户的全部历史记录")
 
 
 class DeleteHistoryResponse(BaseModel):

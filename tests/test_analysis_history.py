@@ -1108,6 +1108,30 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                 0,
             )
 
+    def test_history_list_ignores_placeholder_stock_name_in_persisted_meta(self) -> None:
+        """历史列表应回退到真实股票名，避免展示待确认股票占位文案。"""
+        record_id = self._save_history("query_history_placeholder_name_001")
+
+        with self.db.session_scope() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id).first()
+            if row is None:
+                self.fail("未找到测试历史记录")
+            row.name = "Tesla"
+            row.raw_result = json.dumps({
+                "persisted_report": {
+                    "meta": {
+                        "stock_code": "TSLA",
+                        "stock_name": "待确认股票",
+                        "company_name": "待确认股票",
+                    }
+                }
+            }, ensure_ascii=False)
+
+        response = HistoryService(self.db).get_history_list(limit=20)
+        self.assertEqual(response["total"], 1)
+        self.assertEqual(response["items"][0]["stock_name"], "Tesla")
+        self.assertEqual(response["items"][0]["company_name"], "Tesla")
+
     @patch("src.auth.is_auth_enabled", return_value=False)
     def test_delete_history_api_deletes_selected_records(self, mock_auth) -> None:
         """DELETE /api/v1/history should remove only the requested records."""
@@ -1133,6 +1157,32 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         with self.db.get_session() as session:
             self.assertIsNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_1).first())
             self.assertIsNotNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_2).first())
+
+    @patch("src.auth.is_auth_enabled", return_value=False)
+    def test_delete_history_api_delete_all_clears_all_history(self, mock_auth) -> None:
+        """DELETE /api/v1/history with delete_all should clear the current user's history."""
+        if TestClient is None or create_app is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        record_id_1 = self._save_history("query_delete_all_api_001")
+        record_id_2 = self._save_history("query_delete_all_api_002")
+
+        static_dir = Path(self._temp_dir.name) / "empty-static"
+        static_dir.mkdir(exist_ok=True)
+        client = TestClient(create_app(static_dir=static_dir))
+
+        response = client.request(
+            "DELETE",
+            "/api/v1/history",
+            json={"record_ids": [record_id_1], "delete_all": True},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("deleted"), 2)
+
+        with self.db.get_session() as session:
+            self.assertIsNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_1).first())
+            self.assertIsNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_2).first())
 
 
 if __name__ == "__main__":

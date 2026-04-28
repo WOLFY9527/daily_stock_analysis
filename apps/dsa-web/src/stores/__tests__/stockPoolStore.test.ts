@@ -107,6 +107,33 @@ describe('stockPoolStore', () => {
     expect(historyApi.getList).toHaveBeenCalledTimes(1);
   });
 
+  it('clears report snapshots and selection after deleting all history records', async () => {
+    useStockPoolStore.setState({
+      historyItems: [historyItem],
+      selectedReport: historyReport,
+      reportSnapshotsByStockCode: {
+        '600519': historyReport,
+      },
+    });
+
+    vi.mocked(historyApi.deleteRecords).mockResolvedValue({ deleted: 1 });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+
+    await useStockPoolStore.getState().deleteHistoryRecords([1], { deleteAll: true });
+
+    const state = useStockPoolStore.getState();
+    expect(historyApi.deleteRecords).toHaveBeenCalledWith([1], { deleteAll: true });
+    expect(state.historyItems).toHaveLength(0);
+    expect(state.selectedReport).toBeNull();
+    expect(state.reportSnapshotsByStockCode).toEqual({});
+    expect(window.localStorage.getItem('dsa-selected-history-id')).toBeNull();
+  });
+
   it('deletes an explicit history record list and preserves other rows', async () => {
     const secondHistoryItem = {
       ...historyItem,
@@ -143,7 +170,7 @@ describe('stockPoolStore', () => {
     await useStockPoolStore.getState().deleteHistoryRecords([1]);
 
     const state = useStockPoolStore.getState();
-    expect(historyApi.deleteRecords).toHaveBeenCalledWith([1]);
+    expect(historyApi.deleteRecords).toHaveBeenCalledWith([1], undefined);
     expect(state.historyItems.map((item) => item.id)).toEqual([2]);
     expect(state.selectedReport?.meta.id).toBe(2);
   });

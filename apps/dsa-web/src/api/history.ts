@@ -17,6 +17,10 @@ export interface GetHistoryListParams extends HistoryFilters {
   limit?: number;
 }
 
+export interface DeleteHistoryOptions {
+  deleteAll?: boolean;
+}
+
 export const historyApi = {
   /**
    * 获取历史分析列表
@@ -83,9 +87,9 @@ export const historyApi = {
    * 批量删除历史记录
    * @param recordIds 分析历史记录主键 ID 列表
    */
-  deleteRecords: async (recordIds: number[]): Promise<{ deleted: number }> => {
+  deleteRecords: async (recordIds: number[], options?: DeleteHistoryOptions): Promise<{ deleted: number }> => {
     const response = await apiClient.delete<Record<string, unknown>>('/api/v1/history', {
-      data: { record_ids: recordIds },
+      data: { record_ids: recordIds, delete_all: options?.deleteAll === true },
     });
 
     return toCamelCase<{ deleted: number }>(response.data);
