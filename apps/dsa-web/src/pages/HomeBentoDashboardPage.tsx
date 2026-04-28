@@ -10,11 +10,6 @@ import {
   TechCard,
   type SignalTone,
 } from '../components/home-bento';
-import type {
-  DecisionCandle,
-  DecisionChartTimeframe,
-  DecisionChartTimeframeId,
-} from '../components/home-bento/HomeSignalCandlestickChart';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
@@ -66,13 +61,6 @@ type DashboardField = {
 type DashboardSignal = DashboardField & {
   tone: SignalTone;
 };
-
-type DecisionChartSeriesPreset = {
-  breakoutIndex: number;
-  candles: DecisionCandle[];
-};
-
-const DEFAULT_DECISION_TIMEFRAME_ID: DecisionChartTimeframeId = 'swing';
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
 const TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
 const EMPTY_FIELD_VALUE = '-';
@@ -161,203 +149,6 @@ function neutralizeDashboardSignals(signals: DashboardSignal[]): DashboardSignal
     rawValue: EMPTY_FIELD_VALUE,
     tone: 'neutral',
     details: EMPTY_FIELD_VALUE,
-  }));
-}
-
-function buildCandles(
-  labels: string[],
-  closes: number[],
-  volumes: number[],
-  scale = 0.0065,
-): DecisionCandle[] {
-  return labels.map((label, index) => {
-    const close = closes[index] ?? closes[closes.length - 1] ?? 0;
-    const previousClose = closes[Math.max(index - 1, 0)] ?? close;
-    const swing = Math.max(close * scale, 0.42);
-    const open = index === 0
-      ? Number((close - swing * 0.72).toFixed(2))
-      : Number((previousClose + (index % 2 === 0 ? -swing * 0.24 : swing * 0.18)).toFixed(2));
-    const high = Number((Math.max(open, close) + swing * (index % 3 === 0 ? 1.06 : 0.82)).toFixed(2));
-    const low = Number((Math.min(open, close) - swing * (index % 3 === 1 ? 0.98 : 0.74)).toFixed(2));
-    return {
-      close: Number(close.toFixed(2)),
-      high,
-      label,
-      low,
-      open,
-      volume: volumes[index] ?? volumes[volumes.length - 1] ?? 0,
-    };
-  });
-}
-
-function buildIntradayLabels(count: number): string[] {
-  return Array.from({ length: count }, (_, index) => {
-    const totalMinutes = 9 * 60 + 35 + index * 13;
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-  });
-}
-
-function buildDateLabels(startMonth: number, startDay: number, count: number): string[] {
-  const start = new Date(Date.UTC(2026, startMonth - 1, startDay));
-  return Array.from({ length: count }, (_, index) => {
-    const next = new Date(start);
-    next.setUTCDate(start.getUTCDate() + index);
-    return `${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
-  });
-}
-
-function buildWeekLabels(count: number): string[] {
-  return Array.from({ length: count }, (_, index) => `W${String(index + 1).padStart(2, '0')}`);
-}
-
-function interpolateSeries(length: number, anchors: number[]): number[] {
-  if (anchors.length === 0) {
-    return [];
-  }
-  if (anchors.length === 1) {
-    return Array.from({ length }, () => Number(anchors[0].toFixed(2)));
-  }
-
-  const positions = anchors.map((_, index) => Math.round((index * (length - 1)) / (anchors.length - 1)));
-  return Array.from({ length }, (_, index) => {
-    const segment = positions.findIndex((position, segmentIndex) => segmentIndex < positions.length - 1 && index >= position && index <= positions[segmentIndex + 1]);
-    const leftIndex = segment === -1 ? positions.length - 2 : segment;
-    const startPosition = positions[leftIndex];
-    const endPosition = positions[leftIndex + 1];
-    const ratio = endPosition === startPosition ? 0 : (index - startPosition) / (endPosition - startPosition);
-    const base = anchors[leftIndex] + (anchors[leftIndex + 1] - anchors[leftIndex]) * ratio;
-    const wave = Math.sin((index + 1) * 0.82) * Math.max(Math.abs(anchors[leftIndex + 1] - anchors[leftIndex]) * 0.04, 0.18);
-    return Number((base + wave).toFixed(2));
-  });
-}
-
-function interpolateVolumes(length: number, anchors: number[]): number[] {
-  return interpolateSeries(length, anchors).map((value) => Math.max(Math.round(value), 0));
-}
-
-function buildDensePreset(
-  labels: string[],
-  closeAnchors: number[],
-  volumeAnchors: number[],
-  breakoutIndex: number,
-  scale = 0.0065,
-): DecisionChartSeriesPreset {
-  return {
-    breakoutIndex,
-    candles: buildCandles(
-      labels,
-      interpolateSeries(labels.length, closeAnchors),
-      interpolateVolumes(labels.length, volumeAnchors),
-      scale,
-    ),
-  };
-}
-
-const CHART_PRESETS: Record<string, Record<DecisionChartTimeframeId, DecisionChartSeriesPreset>> = {
-  NVDA: {
-    intraday: {
-      ...buildDensePreset(
-        buildIntradayLabels(32),
-        [116.2, 116.9, 116.4, 117.5, 117.1, 117.9, 117.4, 118.2, 119.1, 121.3, 123.0, 124.8],
-        [2100000, 2480000, 2260000, 2740000, 2380000, 2960000, 2440000, 3180000, 3660000, 5980000, 6720000, 5410000],
-        25,
-      ),
-    },
-    swing: {
-      ...buildDensePreset(
-        buildDateLabels(3, 25, 34),
-        [112.4, 113.6, 114.1, 114.8, 115.2, 116.7, 117.1, 121.4, 123.6, 125.0],
-        [18200000, 19400000, 17600000, 18800000, 20500000, 21400000, 22100000, 39200000, 33400000, 28700000],
-        26,
-      ),
-    },
-    position: {
-      ...buildDensePreset(
-        buildWeekLabels(24),
-        [103.2, 106.4, 107.8, 110.1, 113.7, 118.4, 122.3, 125.0],
-        [55200000, 58800000, 60400000, 62200000, 65100000, 88400000, 81200000, 74400000],
-        17,
-      ),
-    },
-  },
-  ORCL: {
-    intraday: {
-      ...buildDensePreset(
-        buildIntradayLabels(31),
-        [121.2, 121.6, 121.4, 122.1, 121.9, 122.7, 123.0, 123.6, 124.5, 124.9, 125.2],
-        [1180000, 1320000, 1270000, 1490000, 1410000, 1620000, 1740000, 2080000, 3360000, 3010000, 2660000],
-        23,
-      ),
-    },
-    swing: {
-      ...buildDensePreset(
-        buildDateLabels(3, 25, 34),
-        [118.6, 119.4, 119.8, 120.5, 121.0, 121.7, 123.1, 124.0, 124.8, 125.2],
-        [10100000, 9620000, 9840000, 10800000, 11200000, 11700000, 18800000, 17400000, 15800000, 14600000],
-        24,
-      ),
-    },
-    position: {
-      ...buildDensePreset(
-        buildWeekLabels(24),
-        [109.1, 110.4, 112.0, 113.2, 116.3, 120.1, 123.6, 125.2],
-        [30400000, 29800000, 31500000, 32200000, 36600000, 51200000, 46800000, 43100000],
-        16,
-      ),
-    },
-  },
-  TSLA: {
-    intraday: {
-      ...buildDensePreset(
-        buildIntradayLabels(31),
-        [165.4, 166.7, 167.9, 169.2, 168.6, 169.7, 171.0, 170.6, 170.3, 170.9, 170.5],
-        [2280000, 2460000, 2720000, 3180000, 2860000, 3010000, 4620000, 4080000, 3520000, 3310000, 2990000],
-        20,
-      ),
-    },
-    swing: {
-      ...buildDensePreset(
-        buildDateLabels(3, 25, 34),
-        [158.8, 160.2, 161.4, 163.6, 168.8, 170.3, 169.5, 170.7, 171.2, 170.5],
-        [26400000, 28200000, 29500000, 31800000, 50200000, 44800000, 42200000, 39800000, 37200000, 34100000],
-        18,
-        0.0078,
-      ),
-    },
-    position: {
-      ...buildDensePreset(
-        buildWeekLabels(24),
-        [148.2, 151.4, 155.8, 163.1, 168.0, 170.2, 171.4, 170.5],
-        [68400000, 70200000, 75600000, 98200000, 91400000, 86100000, 83600000, 80800000],
-        12,
-        0.0084,
-      ),
-    },
-  },
-};
-
-function resolveDecisionChartTimeframes(locale: DashboardLocale, ticker: string, breakoutLabel: string): DecisionChartTimeframe[] {
-  const preset = CHART_PRESETS[ticker] || CHART_PRESETS.NVDA;
-  const labelMap: Record<DashboardLocale, Record<DecisionChartTimeframeId, string>> = {
-    zh: {
-      intraday: '分时',
-      swing: '日K',
-      position: '周K',
-    },
-    en: {
-      intraday: '1D',
-      swing: '5D',
-      position: '1M',
-    },
-  };
-
-  return (['swing', 'intraday', 'position'] as DecisionChartTimeframeId[]).map((id) => ({
-    ...preset[id],
-    id,
-    label: labelMap[locale][id],
-    breakoutLabel,
   }));
 }
 
@@ -554,12 +345,8 @@ const CONTENT: Record<DashboardLocale, {
   },
 };
 
-type DashboardPayload = (typeof CONTENT)['zh'] & {
-  chartTimeframes: DecisionChartTimeframe[];
-  defaultTimeframeId: DecisionChartTimeframeId;
-};
-
-type DashboardVariant = Omit<DashboardPayload, 'chartTimeframes' | 'defaultTimeframeId'>;
+type DashboardPayload = (typeof CONTENT)['zh'];
+type DashboardVariant = DashboardPayload;
 
 const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVariant>> = {
   zh: {
@@ -1393,11 +1180,8 @@ function buildStrategyMetricDetails(locale: DashboardLocale, label: string, valu
 }
 
 function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardVariant | DashboardPayload): DashboardPayload {
-  const chartTicker = normalizeTickerQuery(payload.ticker) || 'NVDA';
   return {
     ...payload,
-    chartTimeframes: resolveDecisionChartTimeframes(locale, chartTicker, payload.decision.chartLabel),
-    defaultTimeframeId: DEFAULT_DECISION_TIMEFRAME_ID,
     strategy: {
       ...payload.strategy,
       metrics: payload.strategy.metrics.map((metric) => ({
@@ -2005,10 +1789,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                     scoreLabel={readyCopy.decision.scoreLabel}
                     scoreValue={readyCopy.decision.scoreValue}
                     badge={readyCopy.decision.badge}
-                    chartLabel={readyCopy.decision.chartLabel}
                     summary={readyCopy.decision.summary}
-                    chartTimeframes={readyCopy.chartTimeframes}
-                    defaultTimeframeId={readyCopy.defaultTimeframeId}
                     locale={locale}
                     reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
                     detailLabel={readyCopy.decision.detailLabel}

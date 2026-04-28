@@ -1,14 +1,8 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
-import {
-  HomeSignalCandlestickChart,
-  type DecisionChartTimeframe,
-  type DecisionChartTimeframeId,
-} from './HomeSignalCandlestickChart';
 import {
   CARD_BUTTON_CLASS,
   CARD_KICKER_CLASS,
@@ -25,12 +19,15 @@ type DecisionReason = {
   title: string;
 };
 
+type SupportingIndicator = {
+  context: string;
+  label: string;
+  value: string;
+};
+
 type DecisionCardProps = {
   badge: string;
-  chartLabel: string;
-  chartTimeframes: DecisionChartTimeframe[];
   company: string;
-  defaultTimeframeId: DecisionChartTimeframeId;
   detailLabel: string;
   eyebrow: string;
   heroLabel: string;
@@ -47,12 +44,81 @@ type DecisionCardProps = {
   ticker: string;
 };
 
+function getSignalCommand(locale: 'zh' | 'en', tone: SignalTone): { bias: string; command: string } {
+  if (tone === 'bearish') {
+    return locale === 'en'
+      ? { command: 'SHORT', bias: 'BEARISH' }
+      : { command: 'SHORT', bias: '看空' };
+  }
+
+  if (tone === 'neutral') {
+    return locale === 'en'
+      ? { command: 'HOLD', bias: 'NEUTRAL' }
+      : { command: 'HOLD', bias: '中性' };
+  }
+
+  return locale === 'en'
+    ? { command: 'LONG', bias: 'BULLISH' }
+    : { command: 'LONG', bias: '看多' };
+}
+
+function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): SupportingIndicator[] {
+  if (tone === 'bearish') {
+    return locale === 'en'
+      ? [
+          { label: 'MA ALIGNMENT', value: 'BEARISH', context: 'MA20 < MA60' },
+          { label: 'LIQUIDITY AB.', value: 'THIN', context: 'Bid weakens' },
+          { label: 'RSI-14', value: '41', context: 'Weak zone' },
+          { label: 'MACD-12/26/9', value: 'BEAR CROSS', context: 'Below zero' },
+          { label: 'VOLUME CONF.', value: 'NO', context: 'Failed follow-through' },
+        ]
+      : [
+          { label: '均线排列', value: '空头', context: 'MA20 低于 MA60' },
+          { label: '资金承接', value: '偏弱', context: '买盘退潮' },
+          { label: 'RSI-14', value: '41', context: '弱势区' },
+          { label: 'MACD-12/26/9', value: '死叉', context: '零轴下方' },
+          { label: '量能确认', value: '否', context: '承接不足' },
+        ];
+  }
+
+  if (tone === 'neutral') {
+    return locale === 'en'
+      ? [
+          { label: 'MA ALIGNMENT', value: 'MIXED', context: 'Short-term repair' },
+          { label: 'LIQUIDITY AB.', value: 'BALANCED', context: 'Flow stabilizing' },
+          { label: 'RSI-14', value: '54', context: 'Repair zone' },
+          { label: 'MACD-12/26/9', value: 'EARLY TURN', context: 'Histogram improving' },
+          { label: 'VOLUME CONF.', value: 'PENDING', context: 'Needs a second push' },
+        ]
+      : [
+          { label: '均线排列', value: '混合', context: '短线修复中' },
+          { label: '资金承接', value: '均衡', context: '流向趋稳' },
+          { label: 'RSI-14', value: '54', context: '修复区' },
+          { label: 'MACD-12/26/9', value: '拐点初现', context: '柱体改善' },
+          { label: '量能确认', value: '待确认', context: '需要二次放量' },
+        ];
+  }
+
+  return locale === 'en'
+    ? [
+        { label: 'MA ALIGNMENT', value: 'BULLISH', context: 'Stacked higher' },
+        { label: 'LIQUIDITY AB.', value: 'STRONG', context: 'Institutional bid' },
+        { label: 'RSI-14', value: '68', context: 'Strong zone' },
+        { label: 'MACD-12/26/9', value: 'BULL CROSSOVER', context: 'Above zero' },
+        { label: 'VOLUME CONF.', value: 'YES', context: 'Quiet pullback / active breakout' },
+      ]
+    : [
+        { label: '均线排列', value: '多头', context: '均线多头排列' },
+        { label: '资金承接', value: '强力', context: '机构承接' },
+        { label: 'RSI-14', value: '68', context: '强势区' },
+        { label: 'MACD-12/26/9', value: '金叉', context: '零轴上方' },
+        { label: '量能确认', value: '是', context: '缩量回踩 / 放量突破' },
+      ];
+}
+
 export const DecisionCard: React.FC<DecisionCardProps> = ({
   badge,
-  chartLabel,
-  chartTimeframes,
   company,
-  defaultTimeframeId,
   detailLabel,
   eyebrow,
   heroLabel,
@@ -73,23 +139,9 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
     onClick: handleOpenDetailsClick,
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
-  const [activeTimeframeId, setActiveTimeframeId] = useState<DecisionChartTimeframeId>(defaultTimeframeId);
-  const summaryParagraphs = summary
-    .split(/\n+/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-  const reasonParagraphs = reason.body
-    .split(/\n+/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-  const activeTimeframe = useMemo(
-    () => chartTimeframes.find((timeframe) => timeframe.id === activeTimeframeId) || chartTimeframes[0],
-    [activeTimeframeId, chartTimeframes],
-  );
-
-  useEffect(() => {
-    setActiveTimeframeId(defaultTimeframeId);
-  }, [defaultTimeframeId]);
+  const signalCommand = getSignalCommand(locale, signalTone);
+  const supportingIndicators = getSupportingIndicators(locale, signalTone);
+  const isEnglish = locale === 'en';
 
   return (
     <BentoCard
@@ -114,87 +166,92 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       )}
     >
       <div className="flex h-full flex-col gap-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-end gap-2">
               <span className="min-w-0 truncate text-lg font-semibold leading-tight text-white">{company}</span>
               <span className="text-xs font-mono uppercase tracking-[0.22em] text-white/40">{ticker}</span>
             </div>
-            <div className="mt-4 flex flex-wrap items-end gap-4">
-              <div>
-                <p className={CARD_KICKER_CLASS}>{heroLabel}</p>
-                <div className="mt-2 flex items-end gap-2">
-                  <span className="text-[40px] font-semibold leading-none text-white md:text-[48px]">{heroValue}</span>
-                  <span className="pb-1.5 text-sm text-white/42">{heroUnit}</span>
-                </div>
-              </div>
-              <div className="pb-2">
-                <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
-                <p
-                  className={`mt-2 text-lg font-bold leading-tight ${getToneTextClass(signalTone)}`}
-                  style={getToneTextStyle(signalTone, true)}
-                >
-                  {signalLabel}
-                </p>
-              </div>
-            </div>
-            <div className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${getToneBorderClass(signalTone)}`}>
+            <div className={`mt-3 inline-flex min-h-8 items-center gap-2 rounded-full border px-3 py-1 text-sm ${getToneBorderClass(signalTone)}`}>
               <span className="h-2 w-2 rounded-full bg-current" />
               <span className="min-w-0 break-words whitespace-normal">{badge}</span>
             </div>
           </div>
-
-          <div className={`${PANEL_METRIC_CLASS} min-w-0 xl:min-w-[12rem] xl:max-w-[18rem]`}>
+          <div className={`${PANEL_METRIC_CLASS} min-w-[12rem] max-w-full px-4 py-3`}>
             <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
-            <p className="mt-3 break-words whitespace-normal text-lg font-bold leading-tight text-white">{scoreValue}</p>
-            <div className="mt-4 break-words whitespace-normal space-y-2 text-[13px] leading-[1.7] text-white/70">
-              {(summaryParagraphs.length ? summaryParagraphs : [summary]).map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-white/78">{scoreValue}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(16rem,0.95fr)]">
+          <div className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl md:px-6">
+            <Label micro className="text-white/32">{isEnglish ? 'AI SIGNAL DIRECTION' : 'AI 信号方向'}</Label>
+            <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
+              <span
+                className={`text-3xl font-semibold leading-none md:text-4xl ${getToneTextClass(signalTone)}`}
+                data-testid="home-bento-decision-signal-hero"
+                style={getToneTextStyle(signalTone, true)}
+              >
+                {signalCommand.command}
+              </span>
+              <span className={`pb-1 text-sm font-semibold uppercase tracking-[0.22em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
+                {signalLabel || signalCommand.bias}
+              </span>
+            </div>
+            <p className="mt-4 max-w-3xl text-sm leading-[1.7] text-white/72">{summary}</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1" data-testid="home-bento-decision-core-metrics">
+            <div className={`${PANEL_METRIC_CLASS} flex flex-col gap-1`}>
+              <Label micro>{heroLabel}</Label>
+              <p className="text-2xl font-semibold leading-none text-white">
+                {heroValue}
+                <span className="ml-1 text-sm font-medium text-white/42">{heroUnit}</span>
+              </p>
+            </div>
+            <div className={`${PANEL_METRIC_CLASS} flex flex-col gap-1`}>
+              <Label micro>{isEnglish ? 'BIAS' : '方向'}</Label>
+              <p className={`text-lg font-semibold leading-tight ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
+                {signalCommand.bias}
+              </p>
+            </div>
+            <div className={`${PANEL_METRIC_CLASS} flex flex-col gap-1 sm:col-span-2 xl:col-span-1`}>
+              <Label micro>{isEnglish ? 'OPERATING THESIS' : '执行主线'}</Label>
+              <p className="text-sm leading-[1.7] text-white/70">{scoreValue}</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-2 flex min-h-[220px] flex-1 flex-col">
-          <div className="relative flex min-h-[220px] flex-1 rounded-[28px] border border-white/[0.08] bg-white/[0.02] p-4 backdrop-blur-xl md:p-5">
-            <div className="pointer-events-none absolute left-6 top-5 rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/52">
-              {chartLabel}
-            </div>
-            <div className="absolute right-4 top-4 z-10 flex items-center gap-1 rounded-xl bg-black/40 p-0.5 shadow-[0_12px_24px_rgba(0,0,0,0.22)] backdrop-blur-xl">
-              {chartTimeframes.map((timeframe) => {
-                const isActive = timeframe.id === activeTimeframe?.id;
-                return (
-                  <button
-                    key={timeframe.id}
-                    type="button"
-                    className={`rounded-lg px-2 py-0.5 text-[10px] transition-colors ${
-                      isActive ? 'bg-white/10 font-bold text-white' : 'text-white/40 hover:text-white'
-                    }`}
-                    data-testid={`home-bento-decision-timeframe-${timeframe.id}`}
-                    onClick={() => setActiveTimeframeId(timeframe.id)}
-                  >
-                    {timeframe.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex min-h-0 flex-1 items-stretch pt-6">
-              {activeTimeframe ? (
-                <HomeSignalCandlestickChart
-                  locale={locale}
-                  signalTone={signalTone}
-                  timeframe={activeTimeframe}
-                />
-              ) : null}
-            </div>
+        <div className="flex flex-1 flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-4 py-4 backdrop-blur-xl md:px-5">
+          <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
+            <Label micro className="text-white/30">{isEnglish ? 'SUPPORTING INDICATORS' : '量化佐证指标'}</Label>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/28">
+              {isEnglish ? 'SIMULATED FEED' : '模拟信号流'}
+            </span>
+          </div>
+          <div className="flex-1 divide-y divide-white/6" data-testid="home-bento-decision-support-grid">
+            {supportingIndicators.map((indicator) => (
+              <div
+                key={indicator.label}
+                className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 py-3 text-xs md:text-[13px]"
+              >
+                <div className="min-w-0">
+                  <Label micro className="text-white/26">{indicator.label}</Label>
+                </div>
+                <div className={`min-w-0 font-semibold uppercase tracking-[0.14em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
+                  <span className="block truncate">{indicator.value}</span>
+                </div>
+                <div className="min-w-0 text-right text-white/56">
+                  <span className="block truncate">{indicator.context}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="mt-1 shrink-0 border-t border-white/5 pt-4" data-testid="home-bento-breakout-reason">
+        <div className="shrink-0 border-t border-white/5 pt-4" data-testid="home-bento-breakout-reason">
           <Label micro as="h4" className="mb-1 text-white/30">{reason.title}</Label>
-          <p className="truncate text-xs leading-relaxed text-white/60" title={reason.body}>
-            {(reasonParagraphs[0] || reason.body).trim()}
-          </p>
+          <p className="text-xs leading-[1.75] text-white/60">{reason.body}</p>
         </div>
       </div>
     </BentoCard>
