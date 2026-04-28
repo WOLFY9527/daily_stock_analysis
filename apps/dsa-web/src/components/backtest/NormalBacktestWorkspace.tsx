@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Play } from 'lucide-react';
-import { ApiErrorAlert } from '../../components/common';
+import { ApiErrorAlert, GlassCard } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
 import {
   RULE_BENCHMARK_OPTIONS,
@@ -26,6 +26,8 @@ type NormalBacktestWorkspaceProps = {
   onInitialCapitalChange: (value: string) => void;
   feeBps: string;
   onFeeBpsChange: (value: string) => void;
+  slippageBps: string;
+  onSlippageBpsChange: (value: string) => void;
   benchmarkMode: RuleBenchmarkMode;
   onBenchmarkModeChange: (value: RuleBenchmarkMode) => void;
   benchmarkCode: string;
@@ -39,10 +41,9 @@ type NormalBacktestWorkspaceProps = {
   runError: ParsedApiError | null;
 };
 
-const GLASS_CARD_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
-const FIELD_CLASS = 'w-full min-w-0 truncate rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 pr-10 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
+const FIELD_CLASS = 'w-full min-w-0 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
 const LABEL_CLASS = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
-const PRIMARY_CTA_CLASS = 'flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-base font-bold text-black transition-transform hover:bg-white/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70';
+const PRIMARY_CTA_CLASS = 'inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-sm font-bold text-black transition-transform hover:bg-white/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70';
 
 const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   language,
@@ -56,6 +57,8 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   onInitialCapitalChange,
   feeBps,
   onFeeBpsChange,
+  slippageBps,
+  onSlippageBpsChange,
   benchmarkMode,
   onBenchmarkModeChange,
   benchmarkCode,
@@ -76,12 +79,39 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   return (
     <section
       data-testid="normal-backtest-workspace"
-      className="w-full min-w-0 rounded-[32px] border border-white/5 bg-white/[0.02] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.28)] backdrop-blur-sm xl:p-8"
+      className="w-full min-w-0"
     >
-      <div className="flex min-w-0 flex-col gap-6">
-        <div className="grid min-w-0 gap-6 xl:grid-cols-4" data-testid="normal-backtest-primary-grid">
-          <div className={`${GLASS_CARD_CLASS} flex h-full min-w-0 flex-col`}>
-            <label className="product-field min-w-0 gap-1.5">
+      <GlassCard
+        data-testid="normal-backtest-consolidated-card"
+        className="w-full min-w-0 rounded-[32px] border border-white/5 bg-white/[0.02] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.28)] xl:p-8"
+      >
+        <div className="flex min-w-0 flex-col gap-6">
+          <div className="flex min-w-0 flex-col gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
+              {language === 'en' ? 'Point-and-shoot lane' : '普通模式'}
+            </p>
+            <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-2xl font-semibold text-white">
+                  {language === 'en' ? 'Single launch card' : '单卡片回测表单'}
+                </h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-white/58">
+                  {language === 'en'
+                    ? 'Keep symbol, benchmark, time range, capital, friction, and the selected template in one dense launch surface.'
+                    : '把标的、基准、区间、资金、摩擦成本与模板收束到同一块高密度发射面板里。'}
+                </p>
+              </div>
+              <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/50">
+                {templateName || '--'}
+              </div>
+            </div>
+          </div>
+
+          <div
+            data-testid="normal-backtest-form-grid"
+            className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-4"
+          >
+            <label className="product-field min-w-0 gap-1.5 md:col-span-1">
               <span className={LABEL_CLASS}>{language === 'en' ? 'Ticker' : '标的代码'}</span>
               <input
                 type="text"
@@ -92,66 +122,65 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 aria-label={language === 'en' ? 'Ticker' : '标的代码'}
               />
             </label>
-          </div>
 
-          <div className={`${GLASS_CARD_CLASS} flex h-full min-w-0 flex-col gap-4`}>
-            <label className="product-field min-w-0 gap-1.5">
-              <span className={LABEL_CLASS}>{language === 'en' ? 'Benchmark' : '对比基准'}</span>
-              <select
-                value={benchmarkMode}
-                onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
-                className={FIELD_CLASS}
-                aria-label={language === 'en' ? 'Benchmark' : '对比基准'}
-              >
-                {RULE_BENCHMARK_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {getBenchmarkModeLabel(option.value, code, benchmarkCode, language)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {benchmarkMode === 'custom_code' ? (
+            <div className="min-w-0 md:col-span-1">
               <label className="product-field min-w-0 gap-1.5">
-                <span className={LABEL_CLASS}>{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
-                <input
-                  type="text"
-                  value={benchmarkCode}
-                  onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())}
-                  placeholder={language === 'en' ? 'QQQ / SPY / ^NDX / 000300' : 'QQQ / SPY / ^NDX / 000300'}
+                <span className={LABEL_CLASS}>{language === 'en' ? 'Benchmark' : '对比基准'}</span>
+                <select
+                  value={benchmarkMode}
+                  onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
                   className={FIELD_CLASS}
-                />
+                  aria-label={language === 'en' ? 'Benchmark' : '对比基准'}
+                >
+                  {RULE_BENCHMARK_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {getBenchmarkModeLabel(option.value, code, benchmarkCode, language)}
+                    </option>
+                  ))}
+                </select>
               </label>
-            ) : null}
-          </div>
-
-          <div className={`${GLASS_CARD_CLASS} flex h-full min-w-0 flex-col`}>
-            <span className={LABEL_CLASS}>{language === 'en' ? 'Date range' : '回测区间'}</span>
-            <div className="grid min-w-0 gap-4">
-              <label className="product-field min-w-0 gap-1.5">
-                <span className="sr-only">{language === 'en' ? 'Range start' : '回测区间开始'}</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => onStartDateChange(event.target.value)}
-                  className={FIELD_CLASS}
-                  aria-label={language === 'en' ? 'Range start' : '回测区间开始'}
-                />
-              </label>
-              <label className="product-field min-w-0 gap-1.5">
-                <span className="sr-only">{language === 'en' ? 'Range end' : '回测区间结束'}</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => onEndDateChange(event.target.value)}
-                  className={FIELD_CLASS}
-                  aria-label={language === 'en' ? 'Range end' : '回测区间结束'}
-                />
-              </label>
+              {benchmarkMode === 'custom_code' ? (
+                <label className="product-field mt-3 min-w-0 gap-1.5">
+                  <span className="sr-only">{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
+                  <input
+                    type="text"
+                    value={benchmarkCode}
+                    onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())}
+                    placeholder={language === 'en' ? 'QQQ / SPY / ^NDX / 000300' : 'QQQ / SPY / ^NDX / 000300'}
+                    className={FIELD_CLASS}
+                    aria-label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}
+                  />
+                </label>
+              ) : null}
             </div>
-          </div>
 
-          <div className={`${GLASS_CARD_CLASS} flex h-full min-w-0 flex-col`}>
-            <label className="product-field min-w-0 gap-1.5">
+            <div className="min-w-0 md:col-span-2">
+              <span className={LABEL_CLASS}>{language === 'en' ? 'Date range' : '回测区间'}</span>
+              <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="product-field min-w-0 gap-1.5">
+                  <span className="sr-only">{language === 'en' ? 'Range start' : '回测区间开始'}</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => onStartDateChange(event.target.value)}
+                    className={FIELD_CLASS}
+                    aria-label={language === 'en' ? 'Range start' : '回测区间开始'}
+                  />
+                </label>
+                <label className="product-field min-w-0 gap-1.5">
+                  <span className="sr-only">{language === 'en' ? 'Range end' : '回测区间结束'}</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(event) => onEndDateChange(event.target.value)}
+                    className={FIELD_CLASS}
+                    aria-label={language === 'en' ? 'Range end' : '回测区间结束'}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <label className="product-field min-w-0 gap-1.5 md:col-span-1">
               <span className={LABEL_CLASS}>{language === 'en' ? 'Capital' : '初始资金'}</span>
               <input
                 type="number"
@@ -162,94 +191,94 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 aria-label={language === 'en' ? 'Capital' : '初始资金'}
               />
             </label>
-          </div>
-        </div>
 
-        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)] xl:items-stretch">
-          <div className={`${GLASS_CARD_CLASS} flex h-full min-w-0 flex-col gap-5`}>
-            <label className="product-field min-w-0 gap-1.5">
-              <span className={LABEL_CLASS}>{language === 'en' ? 'Strategy template' : '策略模板'}</span>
-              <select
-                value={strategyTemplate}
-                onChange={(event) => onStrategyTemplateChange(event.target.value as NormalStrategyTemplate)}
-                className={FIELD_CLASS}
-                aria-label={language === 'en' ? 'Strategy template' : '策略模板'}
-              >
-                {POINT_AND_SHOOT_TEMPLATES.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name[language]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid min-w-0 gap-6 md:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
-              <div className="min-w-0 rounded-[20px] border border-white/5 bg-white/[0.02] p-5">
-                <p className={LABEL_CLASS}>
-                  {language === 'en' ? 'Selected template' : '当前模板'}
-                </p>
-                <h3 className="mt-2 text-base font-semibold text-white">{templateName}</h3>
-                <p className="mt-2 text-sm leading-6 text-white/60">{templateDescription}</p>
-              </div>
-              <div className="min-w-0 rounded-[20px] border border-white/5 bg-white/[0.02] p-5">
-                <p className={LABEL_CLASS}>
-                  {language === 'en' ? 'Execution logic' : '执行逻辑'}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-white/68">{templateLogicSummary}</p>
-              </div>
+            <div className="min-w-0 md:col-span-1">
+              <label className="product-field min-w-0 gap-1.5">
+                <span className={LABEL_CLASS}>{language === 'en' ? 'Slippage' : '滑点'}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  value={slippageBps}
+                  onChange={(event) => onSlippageBpsChange(event.target.value)}
+                  className={FIELD_CLASS}
+                  aria-label={language === 'en' ? 'Slippage' : '滑点'}
+                />
+              </label>
+              <label className="product-field mt-3 min-w-0 gap-1.5">
+                <span className={LABEL_CLASS}>{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  value={feeBps}
+                  onChange={(event) => onFeeBpsChange(event.target.value)}
+                  className={FIELD_CLASS}
+                  aria-label={language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}
+                />
+              </label>
             </div>
-            <div className="min-w-0 rounded-[20px] border border-white/5 bg-white/[0.02] p-5">
-              <p className={LABEL_CLASS}>
-                {language === 'en' ? 'Compile preview' : '编译预览'}
-              </p>
-              <p className="mt-2 text-sm leading-7 text-white/74">
-                {templatePreview}
-              </p>
+
+            <div className="min-w-0 md:col-span-2">
+              <label className="product-field min-w-0 gap-1.5">
+                <span className={LABEL_CLASS}>{language === 'en' ? 'Strategy template' : '策略模板'}</span>
+                <select
+                  value={strategyTemplate}
+                  onChange={(event) => onStrategyTemplateChange(event.target.value as NormalStrategyTemplate)}
+                  className={FIELD_CLASS}
+                  aria-label={language === 'en' ? 'Strategy template' : '策略模板'}
+                >
+                  {POINT_AND_SHOOT_TEMPLATES.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name[language]}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
 
-          <div className={`${GLASS_CARD_CLASS} flex h-full min-w-0 flex-col gap-5`}>
-            <label className="product-field min-w-0 gap-1.5">
-              <span className={LABEL_CLASS}>{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
-              <input
-                type="number"
-                min={0}
-                max={500}
-                value={feeBps}
-                onChange={(event) => onFeeBpsChange(event.target.value)}
-                className={FIELD_CLASS}
-                aria-label={language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}
-              />
-            </label>
-            <div className="min-w-0 rounded-[20px] border border-white/5 bg-white/[0.02] p-5">
-              <p className={LABEL_CLASS}>
-                {language === 'en' ? 'Route' : '执行路径'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-white/68">
-                {language === 'en'
-                  ? 'Template compile -> deterministic submission -> dedicated result route'
-                  : '模板编译 -> 确定性提交 -> 独立结果页'}
-              </p>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
+              <p className={LABEL_CLASS}>{language === 'en' ? 'Selected template' : '模板摘要'}</p>
+              <h3 className="mt-2 text-base font-semibold text-white">{templateName}</h3>
+              <p className="mt-2 text-sm leading-6 text-white/60">{templateDescription}</p>
+              <p className="mt-3 text-sm leading-6 text-white/48">{templateLogicSummary}</p>
             </div>
-            <div className="flex min-w-0 flex-1 items-end">
-              <button
-                type="button"
-                onClick={() => void onLaunch()}
-                disabled={isLaunching}
-                className={PRIMARY_CTA_CLASS}
-              >
-                <Play className="h-4 w-4" />
-                <span>
-                  {isLaunching
-                    ? (language === 'en' ? 'Submitting...' : '提交中...')
-                    : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
-                </span>
-              </button>
+            <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
+              <p className={LABEL_CLASS}>{language === 'en' ? 'Compile preview' : '编译预览'}</p>
+              <p className="mt-2 text-sm leading-7 text-white/72">{templatePreview}</p>
             </div>
-            {parseError ? <ApiErrorAlert error={parseError} /> : null}
-            {runError ? <ApiErrorAlert error={runError} /> : null}
           </div>
+
+          <div
+            data-testid="normal-backtest-cta-row"
+            className="flex min-w-0 flex-col gap-4 border-t border-white/8 pt-5 xl:flex-row xl:items-center xl:justify-between"
+          >
+            <div className="min-w-0 text-sm text-white/46">
+              {language === 'en'
+                ? 'Point-and-shoot compiles the selected template into the deterministic rule lane, then opens the dedicated result route.'
+                : '普通模式会先把模板编译进确定性规则链路，再跳转到独立结果页。'}
+            </div>
+            <button
+              type="button"
+              onClick={() => void onLaunch()}
+              disabled={isLaunching}
+              className={PRIMARY_CTA_CLASS}
+            >
+              <Play className="h-4 w-4" />
+              <span>
+                {isLaunching
+                  ? (language === 'en' ? 'Submitting...' : '提交中...')
+                  : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
+              </span>
+            </button>
+          </div>
+
+          {parseError ? <ApiErrorAlert error={parseError} /> : null}
+          {runError ? <ApiErrorAlert error={runError} /> : null}
         </div>
-      </div>
+      </GlassCard>
     </section>
   );
 };

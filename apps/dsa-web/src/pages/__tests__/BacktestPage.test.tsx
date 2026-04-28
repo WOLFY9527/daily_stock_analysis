@@ -570,7 +570,7 @@ describe('BacktestPage', () => {
 
   async function parseDeterministicStrategy() {
     await openDeterministicStrategyInput();
-    fireEvent.click(screen.getByRole('button', { name: '解析策略' }));
+    fireEvent.click(within(screen.getByTestId('backtest-control-section-setup')).getByRole('button', { name: '解析策略' }));
     expect(await screen.findByTestId('confirm-status-section')).toBeInTheDocument();
   }
 
@@ -901,12 +901,14 @@ describe('BacktestPage', () => {
 
     expect(screen.getByTestId('normal-backtest-workspace')).toBeInTheDocument();
     expect(screen.queryByTestId('pro-backtest-workspace')).not.toBeInTheDocument();
-    expect(screen.getByTestId('normal-backtest-primary-grid')).toHaveClass('xl:grid-cols-4');
+    expect(screen.getByTestId('normal-backtest-consolidated-card')).toBeInTheDocument();
+    expect(screen.getByTestId('normal-backtest-form-grid')).toHaveClass('grid', 'md:grid-cols-4');
     expect(screen.getByLabelText('标的代码')).toBeInTheDocument();
     expect(screen.getByLabelText('回测区间开始')).toBeInTheDocument();
     expect(screen.getByLabelText('回测区间结束')).toBeInTheDocument();
     expect(screen.getByLabelText('初始资金')).toBeInTheDocument();
     expect(screen.getByLabelText('对比基准')).toBeInTheDocument();
+    expect(screen.getByLabelText('滑点')).toBeInTheDocument();
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
     expect(screen.getByLabelText('策略模板')).toBeInTheDocument();
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
@@ -954,6 +956,9 @@ describe('BacktestPage', () => {
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
     expect(screen.getByTestId('normal-backtest-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('normal-backtest-consolidated-card')).toBeInTheDocument();
+    expect(screen.getByTestId('normal-backtest-form-grid')).toHaveClass('grid', 'md:grid-cols-4');
+    expect(screen.getByTestId('normal-backtest-cta-row')).toBeInTheDocument();
     expect(screen.queryByTestId('pro-backtest-workspace')).not.toBeInTheDocument();
 
     await switchToProfessionalMode();
@@ -967,24 +972,27 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('pro-backtest-nav-execution')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-nav-analytics')).toBeInTheDocument();
     expect(screen.getByTestId('pro-backtest-compile-bar')).toHaveClass('rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
+    expect(screen.getByTestId('pro-panel-strategy')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
     expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('overflow-hidden');
     expect(screen.getByTestId('backtest-setup-dashboard')).not.toHaveClass('overflow-y-auto', 'no-scrollbar');
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
-  it('shows the full built-in strategy catalog in professional mode and only marks still-unsupported templates', async () => {
+  it('opens the strategy catalog drawer in professional mode and keeps unsupported templates marked inside it', async () => {
     renderBacktestRoutes();
 
     await switchToProfessionalMode();
 
+    expect(screen.queryByTestId('pro-strategy-catalog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-open-template-drawer'));
+    expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
     expect(screen.getByTestId('pro-strategy-catalog')).toBeInTheDocument();
-    expect(screen.getByText('基础 / 默认策略')).toBeInTheDocument();
-    expect(screen.getByText('进阶 / 扩展策略')).toBeInTheDocument();
-    expect(screen.getByText('专业 / 组合策略')).toBeInTheDocument();
-    expect(screen.getByText('布林带突破')).toBeInTheDocument();
-    expect(screen.getByText('MACD + RSI 共振')).toBeInTheDocument();
+    expect(screen.getAllByText('基础 / 默认策略').length).toBeGreaterThan(0);
+    expect(screen.getByText('均线交叉（SMA / EMA）')).toBeInTheDocument();
     expect(screen.getAllByText('可执行').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '进阶 / 扩展策略' }));
+    expect(screen.getByText('简单动量')).toBeInTheDocument();
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
   });
 
@@ -992,6 +1000,9 @@ describe('BacktestPage', () => {
     renderBacktestRoutes();
 
     await openDeterministicStrategyInput();
+    fireEvent.click(screen.getByTestId('pro-open-template-drawer'));
+    expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '进阶 / 扩展策略' }));
 
     const referenceTemplateCard = screen.getByText('简单动量').closest('article');
     expect(referenceTemplateCard).not.toBeNull();
@@ -1006,6 +1017,8 @@ describe('BacktestPage', () => {
     renderBacktestRoutes();
 
     await openDeterministicStrategyInput();
+    fireEvent.click(screen.getByTestId('pro-open-template-drawer'));
+    expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
 
     const executableTemplateCard = screen.getByText('MACD 金叉 / 死叉').closest('article');
     expect(executableTemplateCard).not.toBeNull();
@@ -1014,6 +1027,29 @@ describe('BacktestPage', () => {
 
     expect(screen.queryByTestId('pro-strategy-catalog-toast')).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('MACD 金叉买入，死叉卖出')).toBeInTheDocument();
+  });
+
+  it('switches the professional workspace through one right-side panel at a time', async () => {
+    renderBacktestRoutes();
+
+    await switchToProfessionalMode();
+
+    expect(screen.getByTestId('pro-panel-strategy')).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-panel-assets')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('pro-backtest-nav-assets'));
+    expect(await screen.findByTestId('pro-panel-assets')).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-panel-strategy')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('pro-backtest-nav-orders'));
+    expect(await screen.findByTestId('pro-panel-orders')).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-panel-assets')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('pro-backtest-nav-execution'));
+    expect(await screen.findByTestId('pro-panel-execution')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('pro-backtest-nav-analytics'));
+    expect(await screen.findByTestId('pro-panel-analytics')).toBeInTheDocument();
   });
 
   it('marks parsed strategy stale after setup changes', async () => {
@@ -1033,7 +1069,7 @@ describe('BacktestPage', () => {
 
     await openDeterministicStrategyInput();
     fireEvent.change(screen.getByLabelText('策略文本'), { target: { value: 'MACD金叉买入，止损5%，死叉卖出' } });
-    fireEvent.click(screen.getByRole('button', { name: '解析策略' }));
+    fireEvent.click(within(screen.getByTestId('backtest-control-section-setup')).getByRole('button', { name: '解析策略' }));
 
     const guidanceSection = await screen.findByTestId('confirm-guidance-section');
     const assumptionsSection = screen.getByTestId('confirm-assumptions-section');

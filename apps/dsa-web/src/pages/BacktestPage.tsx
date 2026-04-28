@@ -1273,6 +1273,8 @@ const BacktestPage: React.FC = () => {
                   onInitialCapitalChange={setRuleInitialCapital}
                   feeBps={ruleFeeBps}
                   onFeeBpsChange={setRuleFeeBps}
+                  slippageBps={ruleSlippageBps}
+                  onSlippageBpsChange={setRuleSlippageBps}
                   benchmarkMode={ruleBenchmarkMode}
                   onBenchmarkModeChange={setRuleBenchmarkMode}
                   benchmarkCode={ruleBenchmarkCode}
