@@ -1645,7 +1645,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTicker, setActiveTicker] = useState('NVDA');
+  const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [fallbackToast, setFallbackToast] = useState<string | null>(null);
@@ -1669,7 +1669,11 @@ const HomeBentoDashboardPage: React.FC = () => {
     [historyItems],
   );
   const isBusy = isAnalyzing || isDashboardLoading;
-  const dashboardData = useMemo<DashboardPayload>(() => {
+  const dashboardData = useMemo<DashboardPayload | null>(() => {
+    if (!activeTicker) {
+      return null;
+    }
+
     if (analysisFallbackMode) {
       return buildAnalysisFallbackDashboard(locale, activeTicker);
     }
@@ -1679,7 +1683,22 @@ const HomeBentoDashboardPage: React.FC = () => {
       : resolveDashboardPayload(locale, activeTicker);
   }, [activeTicker, analysisFallbackMode, locale, selectedReport]);
   const copy = dashboardData;
-  const activeDrawerPayload = activeDrawer ? buildDrawerPayload(locale, copy, activeDrawer) : null;
+  const standbyCopy = useMemo(() => (
+    locale === 'en'
+      ? {
+        analyzeButton: 'Analyze',
+        omnibarPlaceholder: 'Enter a ticker or company name...',
+        title: 'Standby',
+        body: 'Enter a ticker or company name above to wake the Wolfy AI quantitative analysis engine.',
+      }
+      : {
+        analyzeButton: '分析',
+        omnibarPlaceholder: '输入股票代码或公司名称...',
+        title: '系统待命',
+        body: '在上方输入股票代码或公司名称，唤醒 Wolfy AI 量化分析引擎。',
+      }
+  ), [locale]);
+  const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
   const deleteCopy = useMemo(() => ({
     title: t('home.deleteTitle'),
     single: t('home.deleteSingle'),
@@ -1693,8 +1712,8 @@ const HomeBentoDashboardPage: React.FC = () => {
   }), [t]);
 
   useEffect(() => {
-    document.title = copy.documentTitle;
-  }, [copy.documentTitle]);
+    document.title = copy?.documentTitle || `WolfyStock | ${standbyCopy.title}`;
+  }, [copy?.documentTitle, standbyCopy.title]);
 
   useEffect(() => {
     void refreshHistory(true);
@@ -1854,142 +1873,162 @@ const HomeBentoDashboardPage: React.FC = () => {
         </div>
       ) : null}
       <main className="w-full flex-1 flex flex-col py-6 px-6 md:px-8 xl:px-12 min-w-0" data-testid="home-bento-main">
-        <div
-          data-testid="home-bento-grid"
-          data-bento-grid="true"
-          className="mt-6 w-full grid grid-cols-1 gap-6 items-stretch xl:grid-cols-5"
+        <form
+          className="w-full flex gap-3 h-12 mb-6 shrink-0"
+          data-testid="home-bento-omnibar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleAnalyze();
+          }}
         >
-          <div
-            className="xl:col-span-2 flex h-full min-h-0 flex-col gap-6"
-            data-testid="home-bento-primary-stack"
-          >
-            <form
-              className="flex h-12 gap-3"
-              data-testid="home-bento-omnibar"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleAnalyze();
-              }}
-            >
-              <div className="relative flex-1 group">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                  <Search className="h-4 w-4 text-white/40" />
-                </div>
-                <input
-                  data-testid="home-bento-omnibar-input"
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                  }}
-                  autoComplete="off"
-                  disabled={isBusy}
-                  className="w-full h-full rounded-2xl border border-white/5 bg-white/[0.02] pl-11 pr-4 text-sm text-white outline-none transition-all shadow-lg placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.04]"
-                  placeholder={copy.omnibarPlaceholder}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isBusy}
-                className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
-                data-testid="home-bento-analyze-button"
-              >
-                {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : copy.analyzeButton}
-              </button>
-              <button
-                ref={openHistoryDrawerButton.ref}
-                type="button"
-                aria-label={locale === 'en' ? 'History' : '历史记录'}
-                onClick={openHistoryDrawerButton.onClick}
-                onPointerUp={openHistoryDrawerButton.onPointerUp}
-                disabled={isBusy}
-                className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
-                data-testid="home-bento-history-drawer-trigger"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-                </svg>
-              </button>
-            </form>
-            <div className="min-h-0 flex-1">
-              {isDashboardLoading ? (
-                <DashboardSkeletonCard
-                  testId="home-bento-loading-decision-card"
-                  className="min-h-[32rem]"
-                  rows={5}
-                />
-              ) : (
-                <DecisionCard
-                  eyebrow={copy.decision.eyebrow}
-                  company={copy.decision.company}
-                  ticker={copy.ticker}
-                  heroValue={copy.decision.heroValue}
-                  heroUnit={copy.decision.heroUnit}
-                  heroLabel={copy.decision.heroLabel}
-                  signalLabel={copy.decision.signalLabel}
-                  signalTone={copy.decision.signalTone}
-                  scoreLabel={copy.decision.scoreLabel}
-                  scoreValue={copy.decision.scoreValue}
-                  badge={copy.decision.badge}
-                  chartLabel={copy.decision.chartLabel}
-                  summary={copy.decision.summary}
-                  chartTimeframes={copy.chartTimeframes}
-                  defaultTimeframeId={copy.defaultTimeframeId}
-                  locale={locale}
-                  reason={{ title: copy.decision.reasonTitle, body: copy.decision.reasonBody }}
-                  detailLabel={copy.decision.detailLabel}
-                  onOpenDetails={() => setActiveDrawer('decision')}
-                />
-              )}
+          <div className="relative flex-1 group">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+              <Search className="h-4 w-4 text-white/40" />
             </div>
+            <input
+              data-testid="home-bento-omnibar-input"
+              type="text"
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+              }}
+              autoComplete="off"
+              disabled={isBusy}
+              className="w-full h-full rounded-2xl border border-white/5 bg-white/[0.02] pl-11 pr-4 text-sm text-white outline-none transition-all shadow-lg placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.04]"
+              placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
+            />
           </div>
-          <div
-            className="min-w-0 xl:col-span-3 flex flex-col gap-6"
-            data-testid="home-bento-secondary-stack"
+          <button
+            type="submit"
+            disabled={isBusy}
+            className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
+            data-testid="home-bento-analyze-button"
           >
-            {isDashboardLoading ? (
-              <>
-                <DashboardSkeletonCard testId="home-bento-loading-strategy-card" rows={3} />
-                <div
-                  className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
-                  data-testid="home-bento-secondary-grid"
-                >
-                  <DashboardSkeletonCard testId="home-bento-loading-tech-card" rows={4} />
-                  <DashboardSkeletonCard testId="home-bento-loading-fundamentals-card" rows={4} />
+            {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
+          </button>
+          <button
+            ref={openHistoryDrawerButton.ref}
+            type="button"
+            aria-label={locale === 'en' ? 'History' : '历史记录'}
+            onClick={openHistoryDrawerButton.onClick}
+            onPointerUp={openHistoryDrawerButton.onPointerUp}
+            disabled={isBusy}
+            className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
+            data-testid="home-bento-history-drawer-trigger"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+            </svg>
+          </button>
+        </form>
+        {activeTicker && dashboardData ? (() => {
+          const readyCopy = dashboardData;
+          return (
+            <div
+              data-testid="home-bento-grid"
+              data-bento-grid="true"
+              className="w-full grid grid-cols-1 gap-6 items-stretch xl:grid-cols-5"
+            >
+              <div
+                className="xl:col-span-2 flex h-full min-h-0 flex-col gap-6"
+                data-testid="home-bento-primary-stack"
+              >
+                <div className="min-h-0 flex-1">
+                  {isDashboardLoading ? (
+                    <DashboardSkeletonCard
+                      testId="home-bento-loading-decision-card"
+                      className="min-h-[32rem]"
+                      rows={5}
+                    />
+                  ) : (
+                    <DecisionCard
+                      eyebrow={readyCopy.decision.eyebrow}
+                      company={readyCopy.decision.company}
+                      ticker={readyCopy.ticker}
+                      heroValue={readyCopy.decision.heroValue}
+                      heroUnit={readyCopy.decision.heroUnit}
+                      heroLabel={readyCopy.decision.heroLabel}
+                      signalLabel={readyCopy.decision.signalLabel}
+                      signalTone={readyCopy.decision.signalTone}
+                      scoreLabel={readyCopy.decision.scoreLabel}
+                      scoreValue={readyCopy.decision.scoreValue}
+                      badge={readyCopy.decision.badge}
+                      chartLabel={readyCopy.decision.chartLabel}
+                      summary={readyCopy.decision.summary}
+                      chartTimeframes={readyCopy.chartTimeframes}
+                      defaultTimeframeId={readyCopy.defaultTimeframeId}
+                      locale={locale}
+                      reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
+                      detailLabel={readyCopy.decision.detailLabel}
+                      onOpenDetails={() => setActiveDrawer('decision')}
+                    />
+                  )}
                 </div>
-              </>
-            ) : (
-              <>
-                <StrategyCard
-                  title={copy.strategy.title}
-                  subtitle={copy.strategy.subtitle}
-                  metrics={copy.strategy.metrics}
-                  positionLabel={copy.strategy.positionLabel}
-                  positionBody={copy.strategy.positionBody}
-                  detailLabel={copy.strategy.detailLabel}
-                  onOpenDetails={() => setActiveDrawer('strategy')}
-                />
-                <div
-                  className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
-                  data-testid="home-bento-secondary-grid"
-                >
-                  <TechCard
-                    title={copy.tech.title}
-                    signals={copy.tech.signals}
-                    detailLabel={copy.tech.detailLabel}
-                    onOpenDetails={() => setActiveDrawer('tech')}
-                  />
-                  <FundamentalsCard
-                    title={copy.fundamentals.title}
-                    metrics={copy.fundamentals.metrics}
-                    detailLabel={copy.fundamentals.detailLabel}
-                    onOpenDetails={() => setActiveDrawer('fundamentals')}
-                  />
-                </div>
-              </>
-            )}
+              </div>
+              <div
+                className="min-w-0 xl:col-span-3 flex flex-col gap-6"
+                data-testid="home-bento-secondary-stack"
+              >
+                {isDashboardLoading ? (
+                  <>
+                    <DashboardSkeletonCard testId="home-bento-loading-strategy-card" rows={3} />
+                    <div
+                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                      data-testid="home-bento-secondary-grid"
+                    >
+                      <DashboardSkeletonCard testId="home-bento-loading-tech-card" rows={4} />
+                      <DashboardSkeletonCard testId="home-bento-loading-fundamentals-card" rows={4} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <StrategyCard
+                      title={readyCopy.strategy.title}
+                      subtitle={readyCopy.strategy.subtitle}
+                      metrics={readyCopy.strategy.metrics}
+                      positionLabel={readyCopy.strategy.positionLabel}
+                      positionBody={readyCopy.strategy.positionBody}
+                      detailLabel={readyCopy.strategy.detailLabel}
+                      onOpenDetails={() => setActiveDrawer('strategy')}
+                    />
+                    <div
+                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                      data-testid="home-bento-secondary-grid"
+                    >
+                      <TechCard
+                        title={readyCopy.tech.title}
+                        signals={readyCopy.tech.signals}
+                        detailLabel={readyCopy.tech.detailLabel}
+                        onOpenDetails={() => setActiveDrawer('tech')}
+                      />
+                      <FundamentalsCard
+                        title={readyCopy.fundamentals.title}
+                        metrics={readyCopy.fundamentals.metrics}
+                        detailLabel={readyCopy.fundamentals.detailLabel}
+                        onOpenDetails={() => setActiveDrawer('fundamentals')}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })() : (
+          <div
+            data-testid="home-bento-zero-state"
+            className="w-full flex-1 flex flex-col items-center justify-center rounded-[24px] border border-white/5 bg-white/[0.02] min-h-[500px] px-6 text-center"
+          >
+            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] shadow-[0_0_40px_rgba(255,255,255,0.02)]">
+              <svg className="h-8 w-8 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h2 className="mb-3 text-xl font-bold tracking-wide text-white">{standbyCopy.title}</h2>
+            <p className="max-w-md text-center text-sm leading-relaxed text-white/40">
+              {standbyCopy.body}
+            </p>
           </div>
-        </div>
+        )}
       </main>
 
       <DeepReportDrawer

@@ -169,16 +169,16 @@ describe('HomeSurfacePage', () => {
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
+    expect(omnibar).toHaveClass('w-full', 'flex', 'gap-3', 'h-12', 'mb-6', 'shrink-0');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'py-6', 'px-6', 'md:px-8', 'xl:px-12');
     expect(main.className).not.toContain('overflow-hidden');
-    expect(main.firstElementChild).toBe(grid);
-    expect(grid).toHaveClass('mt-6', 'w-full', 'grid', 'grid-cols-1', 'items-stretch', 'gap-6', 'xl:grid-cols-5');
+    expect(main.firstElementChild).toBe(omnibar);
+    expect(main.children[1]).toBe(grid);
+    expect(grid).toHaveClass('w-full', 'grid', 'grid-cols-1', 'items-stretch', 'gap-6', 'xl:grid-cols-5');
     expect(grid.className).not.toContain('flex-1');
     expect(primaryStack).toHaveClass('xl:col-span-2', 'flex', 'flex-col', 'gap-6', 'h-full', 'min-h-0');
-    expect(omnibar).toHaveClass('flex', 'h-12', 'gap-3');
     expect(grid.firstElementChild).toBe(primaryStack);
-    expect(primaryStack.firstElementChild).toBe(omnibar);
     expect(secondaryStack).toHaveClass('xl:col-span-3', 'flex', 'flex-col', 'gap-6', 'min-w-0');
     expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'flex-1', 'items-stretch');
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
@@ -249,14 +249,37 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
   });
 
+  it('renders the standby zero-state when there is no non-test history', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+
+    renderSurface();
+
+    const zeroState = await screen.findByTestId('home-bento-zero-state');
+    const omnibar = screen.getByTestId('home-bento-omnibar');
+    expect(omnibar).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
+    expect(screen.getByText('系统待命')).toBeInTheDocument();
+    expect(screen.getByText('在上方输入股票代码或公司名称，唤醒 Wolfy AI 量化分析引擎。')).toBeInTheDocument();
+    expect(zeroState).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'items-center', 'justify-center', 'bg-white/[0.02]', 'border', 'border-white/5', 'rounded-[24px]', 'min-h-[500px]');
+    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-card-decision')).not.toBeInTheDocument();
+    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+  });
+
   it('renders localized English copy for the signed-in dashboard', async () => {
     window.localStorage.setItem('dsa-ui-language', 'en');
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     expect(screen.queryByText('WolfyStock Command Center')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker to wake the AI (for example ORCL)...');
     expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument();
     expect(await screen.findByText('Execution Strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker to wake the AI (for example ORCL)...');
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
     expect(screen.getByText('Fundamental Profile')).toBeInTheDocument();
     expect(screen.getByText('Execution Strategy')).toHaveClass('truncate');
@@ -363,7 +386,7 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     expect(document.body.style.overflow).toBe('');
-    fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-strategy'));
+    fireEvent.click(await screen.findByTestId('home-bento-drawer-trigger-strategy'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer')).toBeInTheDocument();
     expect(screen.getByText('执行约束')).toBeInTheDocument();
