@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi, DuplicateTaskError } from '../../api/analysis';
 import { historyApi } from '../../api/history';
-import { useStockPoolStore } from '../stockPoolStore';
+import { purgeZombieDashboardStorage, useStockPoolStore } from '../stockPoolStore';
 
 vi.mock('../../api/history', () => ({
   historyApi: {
@@ -345,6 +345,28 @@ describe('stockPoolStore', () => {
     expect(selectedFromCache).toBe(true);
     expect(useStockPoolStore.getState().selectedReport?.meta.stockCode).toBe('ORCL');
     expect(historyApi.getDetail).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('dsa-history-report-snapshots-v1')).toBeNull();
+  });
+
+  it('purges deprecated zombie dashboard storage keys on mount cleanup', () => {
+    window.localStorage.setItem('dsa-history-report-snapshots-v1', JSON.stringify({
+      NVDA: {
+        meta: {
+          stockCode: 'NVDA',
+          stockName: '待确认股票',
+        },
+      },
+    }));
+    window.localStorage.setItem('recentHistory', JSON.stringify(['NVDA', 'TSLA']));
+    window.localStorage.setItem('cachedHistory', JSON.stringify({
+      stockName: '待确认股票',
+    }));
+
+    purgeZombieDashboardStorage();
+
+    expect(window.localStorage.getItem('dsa-history-report-snapshots-v1')).toBeNull();
+    expect(window.localStorage.getItem('recentHistory')).toBeNull();
+    expect(window.localStorage.getItem('cachedHistory')).toBeNull();
   });
 
   it('ignores late task updates after a task has been removed', () => {

@@ -16,6 +16,7 @@ import type {
   DecisionChartTimeframeId,
 } from '../components/home-bento/HomeSignalCandlestickChart';
 import { createApiError } from '../api/error';
+import { stocksApi } from '../api/stocks';
 import { withFallback } from '../api/withFallback';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -26,7 +27,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
-import { useStockPoolStore } from '../stores';
+import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
   label: string;
@@ -79,6 +80,7 @@ type DecisionChartSeriesPreset = {
 
 const DEFAULT_DECISION_TIMEFRAME_ID: DecisionChartTimeframeId = 'swing';
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
+const TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
 
 function normalizeDetailKey(value?: string): string {
   return String(value || '').toLowerCase().replace(/[\s/()%+.\-_:]+/g, '');
@@ -1648,7 +1650,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
-  const [fallbackToast, setFallbackToast] = useState<string | null>(null);
+  const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [analysisFallbackMode, setAnalysisFallbackMode] = useState(false);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
@@ -1687,7 +1689,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     locale === 'en'
       ? {
         analyzeButton: 'Analyze',
-        omnibarPlaceholder: 'Enter a ticker or company name...',
+        omnibarPlaceholder: 'Enter a valid ticker...',
         title: 'Wolfy AI Engine Standing By',
         body: 'Enter a ticker in the command deck above to wake the deep research network instantly.',
         strategyLocked: 'Execution strategy module is locked',
@@ -1696,7 +1698,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       }
       : {
         analyzeButton: '分析',
-        omnibarPlaceholder: '输入股票代码或公司名称...',
+        omnibarPlaceholder: '输入有效股票代码...',
         title: 'Wolfy AI 引擎待命中',
         body: '在上方联合指挥台输入股票代码，立即唤醒深度研报网络。',
         strategyLocked: '执行策略模块处于锁定状态',
@@ -1722,6 +1724,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   }, [copy?.documentTitle, standbyCopy.title]);
 
   useEffect(() => {
+    purgeZombieDashboardStorage();
     void refreshHistory(true);
   }, [refreshHistory]);
 
@@ -1744,43 +1747,69 @@ const HomeBentoDashboardPage: React.FC = () => {
   }, [hasHydratedInitialTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
-    if (!fallbackToast) {
+    if (!statusToast) {
       return undefined;
     }
 
     const timer = window.setTimeout(() => {
-      setFallbackToast(null);
+      setStatusToast(null);
     }, 3200);
 
     return () => window.clearTimeout(timer);
-  }, [fallbackToast]);
+  }, [statusToast]);
 
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
-    const normalizedTicker = normalizeTickerQuery(rawQuery);
     if (!rawQuery) {
-      await submitAnalysis({
-        stockCode: '',
-        originalQuery: '',
-        selectionSource: 'manual',
+      return;
+    }
+
+    const normalizedTicker = rawQuery.toUpperCase();
+    if (!TICKER_FORMAT_RE.test(normalizedTicker)) {
+      setStatusToast({
+        message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
+        tone: 'error',
       });
       return;
     }
 
-    setFallbackToast(null);
+    setStatusToast(null);
     setAnalysisFallbackMode(false);
     clearError();
     setDashboardLoading(true);
-    setActiveTicker(normalizedTicker || rawQuery);
+    setActiveTicker(normalizedTicker);
     setSearchQuery('');
+
+    try {
+      const validation = await stocksApi.verifyTickerExists(normalizedTicker);
+      if (!validation.exists) {
+        setStatusToast({
+          message: locale === 'en'
+            ? `Ticker ${normalizedTicker} was not found. Check for delisting or a typo.`
+            : `未找到股票代码 ${normalizedTicker}，请检查是否退市或输入有误`,
+          tone: 'error',
+        });
+        setDashboardLoading(false);
+        return;
+      }
+    } catch {
+      setStatusToast({
+        message: locale === 'en'
+          ? 'Ticker validation is temporarily unavailable. Please try again.'
+          : '股票代码校验暂时不可用，请稍后重试',
+        tone: 'error',
+      });
+      setDashboardLoading(false);
+      return;
+    }
 
     let result;
     try {
       result = await withFallback<AnalyzeFlowResult>(
         async (): Promise<AnalyzeFlowResult> => {
           const nextResult = await submitAnalysis({
-            stockCode: normalizedTicker || rawQuery,
-            originalQuery: rawQuery,
+            stockCode: normalizedTicker,
+            originalQuery: normalizedTicker,
             selectionSource: 'manual',
           });
 
@@ -1797,7 +1826,7 @@ const HomeBentoDashboardPage: React.FC = () => {
         {
           fallback: (): AnalyzeFlowResult => ({
             mode: 'fallback' as const,
-            stockCode: resolveDemoFallbackTicker(normalizedTicker || rawQuery),
+            stockCode: resolveDemoFallbackTicker(normalizedTicker),
           }),
         },
       );
@@ -1814,9 +1843,12 @@ const HomeBentoDashboardPage: React.FC = () => {
       setActiveTicker(result.data.stockCode);
       setAnalysisFallbackMode(true);
       clearError();
-      setFallbackToast(locale === 'en'
-        ? 'AI engine is temporarily unavailable. Loaded local snapshot data.'
-        : 'AI 引擎调用过载，已加载本地快照数据');
+      setStatusToast({
+        message: locale === 'en'
+          ? 'AI engine is temporarily unavailable. Loaded local snapshot data.'
+          : 'AI 引擎调用过载，已加载本地快照数据',
+        tone: 'warning',
+      });
     }
 
     setDashboardLoading(false);
@@ -1829,7 +1861,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     setHistoryDrawerOpen(false);
-    setFallbackToast(null);
+    setStatusToast(null);
     setAnalysisFallbackMode(false);
     clearError();
     setActiveTicker(normalizedTicker);
@@ -1871,10 +1903,12 @@ const HomeBentoDashboardPage: React.FC = () => {
         `${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full flex-1 min-h-0 flex flex-col overflow-x-hidden bg-transparent`,
       )}
     >
-      {fallbackToast ? (
+      {statusToast ? (
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
-          <div className="rounded-2xl border border-red-400/35 bg-red-950/82 px-4 py-3 text-sm font-semibold text-red-50 shadow-[0_18px_50px_rgba(127,29,29,0.35)] backdrop-blur-xl">
-            {fallbackToast}
+          <div className={statusToast.tone === 'warning'
+            ? 'rounded-2xl border border-red-400/35 bg-red-950/82 px-4 py-3 text-sm font-semibold text-red-50 shadow-[0_18px_50px_rgba(127,29,29,0.35)] backdrop-blur-xl'
+            : 'rounded-2xl border border-amber-300/35 bg-amber-950/82 px-4 py-3 text-sm font-semibold text-amber-50 shadow-[0_18px_50px_rgba(120,53,15,0.35)] backdrop-blur-xl'}>
+            {statusToast.message}
           </div>
         </div>
       ) : null}

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
+import { stocksApi } from '../../api/stocks';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
 import HomeSurfacePage from '../HomeSurfacePage';
@@ -27,6 +28,12 @@ vi.mock('../../api/history', () => ({
     getNews: vi.fn(),
     getMarkdown: vi.fn(),
     deleteRecords: vi.fn(),
+  },
+}));
+
+vi.mock('../../api/stocks', () => ({
+  stocksApi: {
+    verifyTickerExists: vi.fn(),
   },
 }));
 
@@ -120,6 +127,11 @@ describe('HomeSurfacePage', () => {
       ],
     });
     vi.mocked(historyApi.getDetail).mockResolvedValue(defaultHistoryReport);
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValue({
+      stockCode: 'TSLA',
+      exists: true,
+      stockName: 'Tesla',
+    });
     vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
       taskId: 'task-1',
       status: 'pending',
@@ -763,7 +775,37 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
     expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('TSLA');
     expect(analysisApi.analyzeAsync).toHaveBeenCalled();
+  });
+
+  it('rejects malformed ticker input before calling ticker validation or analysis', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla!!!' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    expect(await screen.findByText('请输入格式正确的股票代码')).toBeInTheDocument();
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
+  });
+
+  it('blocks analysis when the backend ticker validation reports that the symbol does not exist', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: 'ZZZZZ',
+      exists: false,
+      stockName: null,
+    });
+    renderSurface();
+
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'zzzzz' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    expect(await screen.findByText('未找到股票代码 ZZZZZ，请检查是否退市或输入有误')).toBeInTheDocument();
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('ZZZZZ');
+    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
   it('falls back to demo data with a toast when the analysis API fails', async () => {

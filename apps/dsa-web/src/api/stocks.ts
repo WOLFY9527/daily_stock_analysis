@@ -48,7 +48,18 @@ export type StockIntradayResponse = {
   data: StockIntradayPoint[];
 };
 
+export type StockValidationResponse = {
+  stockCode: string;
+  exists: boolean;
+  stockName?: string | null;
+};
+
 export const stocksApi = {
+  async verifyTickerExists(stockCode: string): Promise<StockValidationResponse> {
+    const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/validate`);
+    return response.data as StockValidationResponse;
+  },
+
   async getHistory(
     stockCode: string,
     params: {

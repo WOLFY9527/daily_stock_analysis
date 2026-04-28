@@ -21,6 +21,22 @@ from src.services.us_history_helper import fetch_daily_history_with_local_us_fal
 logger = logging.getLogger(__name__)
 
 
+def _is_meaningful_stock_name(name: Optional[str], stock_code: str) -> bool:
+    text = str(name or "").strip()
+    normalized_code = str(stock_code or "").strip().upper()
+    if not text:
+        return False
+    if text.lower() in {"unknown", "unnamed stock"}:
+        return False
+    if text == "待确认股票":
+        return False
+    if text.upper() == normalized_code:
+        return False
+    if text.startswith("股票"):
+        return False
+    return True
+
+
 class StockService:
     """
     股票数据服务
@@ -31,6 +47,39 @@ class StockService:
     def __init__(self):
         """初始化股票数据服务"""
         self.repo = StockRepository()
+
+    def validate_ticker_exists(self, stock_code: str) -> Dict[str, Any]:
+        """Check whether the ticker resolves to a meaningful market entity."""
+        normalized_code = str(stock_code or "").strip().upper()
+        if not normalized_code:
+            return {"stock_code": normalized_code, "exists": False, "stock_name": None}
+
+        try:
+            from data_provider.base import DataFetcherManager
+
+            manager = DataFetcherManager()
+            stock_name = manager.get_stock_name(normalized_code, allow_realtime=False)
+            if _is_meaningful_stock_name(stock_name, normalized_code):
+                return {
+                    "stock_code": normalized_code,
+                    "exists": True,
+                    "stock_name": str(stock_name).strip(),
+                }
+
+            quote = manager.get_realtime_quote(normalized_code)
+            quote_name = getattr(quote, "name", None) if quote is not None else None
+            if _is_meaningful_stock_name(quote_name, normalized_code):
+                return {
+                    "stock_code": normalized_code,
+                    "exists": True,
+                    "stock_name": str(quote_name).strip(),
+                }
+        except ImportError:
+            logger.warning("DataFetcherManager 未找到，无法执行股票代码真实性校验")
+        except Exception as e:
+            logger.warning("股票代码真实性校验失败 %s: %s", normalized_code, e)
+
+        return {"stock_code": normalized_code, "exists": False, "stock_name": None}
     
     def get_realtime_quote(self, stock_code: str) -> Optional[Dict[str, Any]]:
         """

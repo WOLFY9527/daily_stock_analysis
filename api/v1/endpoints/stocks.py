@@ -24,6 +24,7 @@ from api.v1.schemas.stocks import (
     StockHistoryResponse,
     StockIntradayResponse,
     StockQuote,
+    StockValidationResponse,
 )
 from api.v1.schemas.common import ErrorResponse
 from src.services.image_stock_extractor import (
@@ -239,6 +240,36 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
     ]
     codes = list(dict.fromkeys(i.code for i in extract_items if i.code))
     return ExtractFromImageResponse(codes=codes, items=extract_items, raw_text=None)
+
+
+@router.get(
+    "/{stock_code}/validate",
+    response_model=StockValidationResponse,
+    responses={
+        200: {"description": "股票代码真实性校验结果"},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="校验股票代码是否存在",
+    description="在触发分析前校验股票代码是否能解析为真实标的",
+)
+def validate_stock_ticker(stock_code: str) -> StockValidationResponse:
+    try:
+        service = StockService()
+        result = service.validate_ticker_exists(stock_code)
+        return StockValidationResponse(
+            stock_code=result.get("stock_code", stock_code),
+            exists=bool(result.get("exists")),
+            stock_name=result.get("stock_name"),
+        )
+    except Exception as e:
+        logger.error(f"校验股票代码失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"校验股票代码失败: {str(e)}"
+            }
+        )
 
 
 @router.get(

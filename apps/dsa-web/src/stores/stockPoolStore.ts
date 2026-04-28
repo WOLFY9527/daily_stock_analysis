@@ -12,6 +12,7 @@ const PAGE_SIZE = 20;
 const SELECTED_HISTORY_ID_STORAGE_KEY = 'dsa-selected-history-id';
 const TASK_QUEUE_STORAGE_KEY = 'dsa-task-queue-v1';
 const REPORT_SNAPSHOT_STORAGE_KEY = 'dsa-history-report-snapshots-v1';
+const DEPRECATED_HISTORY_STORAGE_KEYS = ['history', 'recentHistory', 'cachedHistory', REPORT_SNAPSHOT_STORAGE_KEY] as const;
 type SelectionSource = 'manual' | 'autocomplete' | 'import' | 'image';
 
 type FetchHistoryOptions = {
@@ -97,30 +98,63 @@ function normalizeSnapshotKey(stockCode?: string): string {
   return String(stockCode || '').trim().toUpperCase();
 }
 
-function readPersistedReportSnapshots(): Record<string, AnalysisReport> {
-  if (typeof window === 'undefined') {
-    return {};
+function isZombieStockLabel(value: unknown): boolean {
+  const text = String(value || '').trim();
+  const normalized = text.toLowerCase();
+  if (!text) {
+    return false;
   }
-
-  const raw = window.localStorage.getItem(REPORT_SNAPSHOT_STORAGE_KEY);
-  if (!raw) {
-    return {};
+  if (normalized === '待确认股票' || normalized === 'unknown' || normalized === 'unnamed stock') {
+    return true;
   }
-
-  try {
-    const parsed = JSON.parse(raw) as Record<string, AnalysisReport>;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+  return /^股票[A-Z0-9.]+$/i.test(text);
 }
 
-function persistReportSnapshots(snapshots: Record<string, AnalysisReport>): void {
+function isZombieHistoryPayload(payload: unknown): boolean {
+  if (Array.isArray(payload)) {
+    return payload.length > 0 && payload.every((item) => /^[A-Z]{1,5}$|^\d{6}$/.test(String(item || '').trim().toUpperCase()));
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (/stock(name|code)?/i.test(key) && isZombieStockLabel(value)) {
+      return true;
+    }
+    if (typeof value === 'object' && value !== null && isZombieHistoryPayload(value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function purgeZombieDashboardStorage(): void {
   if (typeof window === 'undefined') {
     return;
   }
 
-  window.localStorage.setItem(REPORT_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshots));
+  for (const key of DEPRECATED_HISTORY_STORAGE_KEYS) {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      continue;
+    }
+
+    let shouldRemove = key === REPORT_SNAPSHOT_STORAGE_KEY;
+    if (!shouldRemove) {
+      try {
+        shouldRemove = isZombieHistoryPayload(JSON.parse(raw));
+      } catch {
+        shouldRemove = true;
+      }
+    }
+
+    if (shouldRemove) {
+      window.localStorage.removeItem(key);
+    }
+  }
 }
 
 function touchTask(task: TaskInfo): TaskInfo {
@@ -211,7 +245,7 @@ const initialState = {
   hasMore: true,
   currentPage: 1,
   selectedReport: null as AnalysisReport | null,
-  reportSnapshotsByStockCode: readPersistedReportSnapshots() as Record<string, AnalysisReport>,
+  reportSnapshotsByStockCode: {} as Record<string, AnalysisReport>,
   isLoadingReport: false,
   activeTasks: readPersistedTasks() as TaskInfo[],
   markdownDrawerOpen: false,
@@ -243,7 +277,6 @@ function cacheReportSnapshot(
     [snapshotKey]: report,
   };
 
-  persistReportSnapshots(nextSnapshots);
   set({ reportSnapshotsByStockCode: nextSnapshots });
 }
 
@@ -663,7 +696,6 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(TASK_QUEUE_STORAGE_KEY);
       window.localStorage.removeItem(SELECTED_HISTORY_ID_STORAGE_KEY);
-      window.localStorage.removeItem(REPORT_SNAPSHOT_STORAGE_KEY);
     }
     set({
       ...initialState,

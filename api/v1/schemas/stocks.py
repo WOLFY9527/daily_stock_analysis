@@ -134,3 +134,11 @@ class StockIntradayResponse(BaseModel):
     range: str = Field(..., description="时间范围")
     source: Optional[str] = Field(None, description="数据源")
     data: List[IntradayBar] = Field(default_factory=list, description="分钟行情列表")
+
+
+class StockValidationResponse(BaseModel):
+    """股票代码真实性校验响应"""
+
+    stock_code: str = Field(..., description="股票代码")
+    exists: bool = Field(..., description="股票代码是否存在")
+    stock_name: Optional[str] = Field(None, description="解析出的股票名称")
