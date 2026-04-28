@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
@@ -301,8 +301,11 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('Ghost dashboard 承接中')).not.toBeInTheDocument();
-    expect(screen.getAllByText('待分析').length).toBeGreaterThan(0);
-    expect(screen.getByText('输入股票代码后将在此原位刷新 AI 判断。')).toBeInTheDocument();
+    expect(screen.queryByText('待分析')).not.toBeInTheDocument();
+    expect(screen.queryByText('等待输入')).not.toBeInTheDocument();
+    expect(screen.queryByText('等待分析')).not.toBeInTheDocument();
+    expect(screen.queryByText('输入股票代码后将在此原位刷新 AI 判断。')).not.toBeInTheDocument();
+    expect(screen.queryByText('首页卡片会始终保留在这里，未分析字段先保持中性占位，等待你提交股票代码或打开完成历史。')).not.toBeInTheDocument();
     expect(screen.getByText('建仓区间')).toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
@@ -410,7 +413,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('180.45-189.17 (Target zone)')).toBeInTheDocument();
     expect(screen.getByText('164.39 (Technical invalidation)')).toBeInTheDocument();
     expect(screen.getByText('Market Cap (Latest)')).toBeInTheDocument();
-    expect(screen.getByText('-')).toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
     expect(screen.queryByText('N/A (field pending)')).not.toBeInTheDocument();
     expect(screen.queryByText('回踩支撑确认')).not.toBeInTheDocument();
     expect(screen.queryByText('总市值(最新值)')).not.toBeInTheDocument();
@@ -793,7 +796,9 @@ describe('HomeSurfacePage', () => {
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
-    expect(await screen.findByText('深度分析请求已发出')).toBeInTheDocument();
+    expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
+    expect(screen.queryByText('WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。')).not.toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
     deferred.resolve({
       taskId: 'task-loading-state',
       status: 'pending',
@@ -830,7 +835,6 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
-    expect(await screen.findByText('深度分析请求已发出')).toBeInTheDocument();
     await waitFor(() => expect(analysisApi.analyzeAsync).toHaveBeenCalledWith({
       stockCode: 'MSFT',
       reportType: 'detailed',
@@ -838,11 +842,109 @@ describe('HomeSurfacePage', () => {
       originalQuery: 'MSFT',
       selectionSource: 'manual',
     }));
+    expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
     expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
     expect(screen.queryByText('未找到股票代码 MSFT，请检查是否退市或输入有误')).not.toBeInTheDocument();
   });
 
-  it('falls back to demo data with a toast when the analysis API fails', async () => {
+  it('updates pending analysis cards in place when the async task completes', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValueOnce({
+      taskId: 'task-nflx',
+      status: 'pending',
+      message: 'submitted',
+    });
+
+    renderSurface();
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'nflx' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    await waitFor(() => expect(analysisApi.analyzeAsync).toHaveBeenCalled());
+    await waitFor(() => expect(useStockPoolStore.getState().activeTasks.some((task) => task.taskId === 'task-nflx')).toBe(true));
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+
+    act(() => {
+      useStockPoolStore.getState().syncTaskUpdated({
+        taskId: 'task-nflx',
+        stockCode: 'NFLX',
+        stockName: 'Netflix',
+        status: 'completed',
+        progress: 100,
+        message: 'completed',
+        reportType: 'detailed',
+        createdAt: '2026-04-27T09:00:00Z',
+        updatedAt: '2026-04-27T09:03:00Z',
+        result: {
+          report: {
+            ...defaultHistoryReport,
+            meta: {
+              ...defaultHistoryReport.meta,
+              id: 9,
+              queryId: 'q9',
+              stockCode: 'NFLX',
+              stockName: 'Netflix',
+            },
+            summary: {
+              ...defaultHistoryReport.summary,
+              analysisSummary: 'Netflix completion replaced neutral cards.',
+              trendPrediction: 'Streaming margin recovery is confirmed.',
+              sentimentScore: 74,
+              sentimentLabel: 'Bullish',
+            },
+            strategy: {
+              idealBuy: '92.20 - 95.10',
+              stopLoss: '88.40',
+              takeProfit: '104.80',
+            },
+            details: {
+              standardReport: {
+                ...defaultHistoryReport.details.standardReport,
+                summaryPanel: {
+                  stock: 'Netflix',
+                  ticker: 'NFLX',
+                  oneSentence: 'Netflix completion replaced neutral cards.',
+                },
+                decisionContext: {
+                  shortTermView: 'Streaming margin recovery is confirmed.',
+                },
+                decisionPanel: {
+                  idealEntry: '92.20 - 95.10',
+                  target: '104.80',
+                  stopLoss: '88.40',
+                  buildStrategy: 'Add only after the completed report confirms margin recovery.',
+                },
+                reasonLayer: {
+                  coreReasons: ['Completed LLM report confirmed the refreshed thesis.'],
+                },
+                technicalFields: [
+                  { label: 'MACD', value: 'Second expansion above zero' },
+                  { label: 'Moving Averages', value: 'MA20 lifting MA60' },
+                ],
+                fundamentalFields: [
+                  { label: 'Revenue Growth', value: '+12.4%' },
+                  { label: 'Free Cash Flow', value: '$7.7B' },
+                ],
+              },
+            },
+          },
+        },
+      });
+    });
+
+    expect(await screen.findByText('Netflix completion replaced neutral cards.')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
+    expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
+  });
+
+  it('keeps neutral cards instead of demo data when the analysis API fails', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     const deferred = createDeferred<never>();
     vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
@@ -858,18 +960,21 @@ describe('HomeSurfacePage', () => {
         category: 'upstream_unavailable',
       })));
 
-    expect(await screen.findByText('AI 引擎调用过载，已加载本地快照数据')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
-    expect(screen.getByText('甲骨文')).toBeInTheDocument();
+    expect(screen.queryByText('AI 引擎调用过载，已加载本地快照数据')).not.toBeInTheDocument();
+    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
     expect(screen.queryByText('待确认股票')).not.toBeInTheDocument();
-    expect(screen.getByText('偏多')).toBeInTheDocument();
-    expect(screen.getByText('短线技术偏强，均线结构偏多')).toBeInTheDocument();
-    expect(screen.getByText('持有。技术结构：价格位于 MA20 上方，防守位在近期支撑带；若回踩企稳，趋势延续概率更高。')).toBeInTheDocument();
-    expect(screen.getByText('技术面与基本面相互印证，资金承接良好，综合建议以持有为主。')).toBeInTheDocument();
-    expect(screen.getByText('短线动能充沛，价格沿五日线攀升')).toBeInTheDocument();
-    expect(screen.getByText('趋势支撑确认，回踩不破可视作介入点')).toBeInTheDocument();
-    expect(screen.getByText('总市值体量充足，流动性承接极强')).toBeInTheDocument();
-    expect(screen.getByText('估值仍在成长溢价区，需业绩继续兑现')).toBeInTheDocument();
+    expect(screen.getAllByText('AAPL').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    expect(screen.queryByText('偏多')).not.toBeInTheDocument();
+    expect(screen.queryByText('短线技术偏强，均线结构偏多')).not.toBeInTheDocument();
+    expect(screen.queryByText('持有。技术结构：价格位于 MA20 上方，防守位在近期支撑带；若回踩企稳，趋势延续概率更高。')).not.toBeInTheDocument();
+    expect(screen.queryByText('技术面与基本面相互印证，资金承接良好，综合建议以持有为主。')).not.toBeInTheDocument();
+    expect(screen.queryByText('短线动能充沛，价格沿五日线攀升')).not.toBeInTheDocument();
+    expect(screen.queryByText('趋势支撑确认，回踩不破可视作介入点')).not.toBeInTheDocument();
+    expect(screen.queryByText('总市值体量充足，流动性承接极强')).not.toBeInTheDocument();
+    expect(screen.queryByText('估值仍在成长溢价区，需业绩继续兑现')).not.toBeInTheDocument();
     expect(screen.queryByText(/RateLimitError/i)).not.toBeInTheDocument();
   });
 
@@ -898,8 +1003,10 @@ describe('HomeSurfacePage', () => {
       message: 'submitted',
     });
 
-    expect(await screen.findByText('深度分析请求已发出')).toBeInTheDocument();
-    expect(screen.getByText('输入股票代码后将在此原位刷新 AI 判断。')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
+    expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
+    expect(screen.queryByText('输入股票代码后将在此原位刷新 AI 判断。')).not.toBeInTheDocument();
+    expect(screen.queryByText('WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。')).not.toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();

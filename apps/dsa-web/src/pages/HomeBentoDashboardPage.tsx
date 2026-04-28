@@ -15,8 +15,6 @@ import type {
   DecisionChartTimeframe,
   DecisionChartTimeframeId,
 } from '../components/home-bento/HomeSignalCandlestickChart';
-import { createApiError } from '../api/error';
-import { withFallback } from '../api/withFallback';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
@@ -53,10 +51,6 @@ type DrawerPayload = {
 
 type DashboardLocale = 'zh' | 'en';
 type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
-type AnalyzeFlowResult =
-  | { mode: 'submitted'; stockCode: string }
-  | { mode: 'noop' }
-  | { mode: 'fallback'; stockCode: string };
 type PendingHistoryDelete =
   | { mode: 'single'; recordIds: number[] }
   | { mode: 'visible'; recordIds: number[] };
@@ -81,6 +75,7 @@ type DecisionChartSeriesPreset = {
 const DEFAULT_DECISION_TIMEFRAME_ID: DecisionChartTimeframeId = 'swing';
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
 const TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
+const EMPTY_FIELD_VALUE = '-';
 
 function normalizeDetailKey(value?: string): string {
   return String(value || '').toLowerCase().replace(/[\s/()%+.\-_:]+/g, '');
@@ -101,6 +96,38 @@ function isPendingMetricValue(value?: string): boolean {
 
 function sanitizeMetricValue(value?: string): string {
   return isPendingMetricValue(value) ? '-' : String(value || '').trim();
+}
+
+function isPeLikeMetric(label: string): boolean {
+  const key = normalizeDetailKey(label);
+  return key === 'pe' || key.includes('市盈率') || key.includes('peratio') || key.includes('pettm') || key.includes('forwardpe');
+}
+
+function neutralFieldValue(label: string): string {
+  return isPeLikeMetric(label) ? 'N/A' : EMPTY_FIELD_VALUE;
+}
+
+function neutralizeDashboardFields(fields: DashboardField[]): DashboardField[] {
+  return fields.map((field) => {
+    const value = neutralFieldValue(field.label);
+    return {
+      ...field,
+      value,
+      rawValue: value,
+      tone: 'neutral',
+      details: value,
+    };
+  });
+}
+
+function neutralizeDashboardSignals(signals: DashboardSignal[]): DashboardSignal[] {
+  return signals.map((signal) => ({
+    ...signal,
+    value: EMPTY_FIELD_VALUE,
+    rawValue: EMPTY_FIELD_VALUE,
+    tone: 'neutral',
+    details: EMPTY_FIELD_VALUE,
+  }));
 }
 
 function buildCandles(
@@ -789,122 +816,15 @@ function resolveDashboardPayload(locale: DashboardLocale, ticker: string): Dashb
   });
 }
 
-function resolveDemoFallbackTicker(ticker: string): string {
-  const normalizedTicker = normalizeTickerQuery(ticker);
-  if (normalizedTicker && DASHBOARD_VARIANTS.zh[normalizedTicker]) {
-    return normalizedTicker;
-  }
-  return 'ORCL';
-}
-
-function buildAnalysisFallbackDashboard(locale: DashboardLocale, ticker: string): DashboardPayload {
-  const fallbackTicker = resolveDemoFallbackTicker(ticker);
-  const seed = resolveDashboardPayload(locale, fallbackTicker);
-
-  if (locale === 'en') {
-    return enrichDashboardPayload(locale, {
-      ...seed,
-      decision: {
-        ...seed.decision,
-        heroValue: '6.8',
-        signalLabel: 'Constructive',
-        signalTone: 'bullish',
-        scoreValue: 'Short-term structure is constructive and the moving-average stack still leans bullish.',
-        badge: 'AI engine overloaded · local snapshot active',
-        chartLabel: 'Local Snapshot',
-        summary: 'Hold. Price is still above MA20 with nearby support intact, so the cleaner path is to wait for an orderly pullback confirmation.',
-        reasonBody: 'Technical and fundamental signals still reinforce each other, liquidity absorption remains healthy, and the local snapshot keeps the hold thesis intact.',
-      },
-      strategy: {
-        ...seed.strategy,
-        metrics: [
-          { label: 'Entry Zone', value: 'Pull back into the MA20 support band', tone: 'neutral' },
-          { label: 'Target', value: 'Scale out near the prior breakout shelf', tone: 'bullish' },
-          { label: 'Stop', value: 'Reassess if the recent support band fails', tone: 'bearish' },
-        ],
-        positionBody: 'Keep sizing patient, add only after the pullback stabilizes, and avoid chasing while the remote engine is degraded.',
-      },
-      tech: {
-        ...seed.tech,
-        signals: [
-          { label: 'MA5', value: 'Short-term momentum stays active with price climbing along the 5-day line', tone: 'bullish' },
-          { label: 'MA10', value: 'Trend support is confirmed and orderly pullbacks still qualify as entries', tone: 'bullish' },
-          { label: 'MA20', value: 'MA20 continues to carry MA60, preserving the medium-term bullish stack', tone: 'bullish' },
-          { label: 'MA60', value: 'The long-cycle bull/bear divider is still rising, so the core trend remains intact', tone: 'bullish' },
-          { label: 'RSI', value: 'Momentum is firm without an obvious exhaustion print', tone: 'neutral' },
-        ],
-      },
-      fundamentals: {
-        ...seed.fundamentals,
-        metrics: [
-          { label: 'Market Cap', value: 'Scale remains deep enough to support institutional liquidity', tone: 'bullish' },
-          { label: 'Total Shares', value: 'Share count remains stable and dilution pressure looks contained', tone: 'neutral' },
-          { label: 'PE Ratio', value: 'Valuation still assumes growth, so execution needs to keep proving out', tone: 'neutral' },
-          { label: 'Free Float', value: 'Float size remains balanced enough for orderly turnover', tone: 'neutral' },
-          { label: 'Cash Buffer', value: 'Balance-sheet flexibility still supports the current holding thesis', tone: 'bullish' },
-          { label: 'Ownership Mix', value: 'Positioning remains orderly rather than panic-driven', tone: 'neutral' },
-        ],
-      },
-    });
-  }
-
-  return enrichDashboardPayload(locale, {
-    ...seed,
-    decision: {
-      ...seed.decision,
-      heroValue: '6.8',
-      signalLabel: '偏多',
-      signalTone: 'bullish',
-      scoreValue: '短线技术偏强，均线结构偏多',
-      badge: 'AI 引擎过载 · 本地快照接管',
-      chartLabel: '本地快照',
-      summary: '持有。技术结构：价格位于 MA20 上方，防守位在近期支撑带；若回踩企稳，趋势延续概率更高。',
-      reasonBody: '技术面与基本面相互印证，资金承接良好，综合建议以持有为主。',
-    },
-    strategy: {
-      ...seed.strategy,
-      metrics: [
-        { label: '建仓区间', value: '回踩 MA20 与近期支撑带', tone: 'neutral' },
-        { label: '目标位', value: '前高突破带分批兑现', tone: 'bullish' },
-        { label: '止损位', value: '近期支撑失守后重估', tone: 'bearish' },
-      ],
-      positionBody: '仓位以耐心承接为主，只在回踩企稳后逐步加仓，避免在 AI 引擎降级时追高放大误差。',
-    },
-    tech: {
-      ...seed.tech,
-      signals: [
-        { label: 'MA5', value: '短线动能充沛，价格沿五日线攀升', tone: 'bullish' },
-        { label: 'MA10', value: '趋势支撑确认，回踩不破可视作介入点', tone: 'bullish' },
-        { label: 'MA20', value: 'MA20 托举 MA60，中期多头排列延续', tone: 'bullish' },
-        { label: 'MA60', value: '长线牛熊分界线稳步上移，中线底仓逻辑未坏', tone: 'bullish' },
-        { label: 'RSI', value: '强势但未失真，暂未出现明显透支信号', tone: 'neutral' },
-      ],
-    },
-    fundamentals: {
-      ...seed.fundamentals,
-      metrics: [
-        { label: '总市值', value: '总市值体量充足，流动性承接极强', tone: 'bullish' },
-        { label: '总股本', value: '总股本规模稳定，摊薄压力相对可控', tone: 'neutral' },
-        { label: '市盈率', value: '估值仍在成长溢价区，需业绩继续兑现', tone: 'neutral' },
-        { label: '流通盘', value: '流通盘规模适中，换手承接相对平衡', tone: 'neutral' },
-        { label: '现金缓冲', value: '资金缓冲充足，持有逻辑具备继续跟踪空间', tone: 'bullish' },
-        { label: '筹码结构', value: '承接秩序稳定，未见明显恐慌性松动', tone: 'neutral' },
-      ],
-    },
-  });
-}
-
 function buildInPlacePlaceholderDashboard(
   locale: DashboardLocale,
   ticker?: string | null,
-  mode: 'idle' | 'queued' = 'idle',
 ): DashboardPayload {
-  const normalizedTicker = normalizeTickerQuery(ticker ?? undefined) || '--';
+  const normalizedTicker = normalizeTickerQuery(ticker ?? undefined) || EMPTY_FIELD_VALUE;
   const base = DASHBOARD_VARIANTS[locale].NVDA;
-  const isQueued = mode === 'queued';
-  const company = normalizedTicker === '--'
-    ? (locale === 'en' ? 'Awaiting Ticker' : '待分析')
-    : normalizedTicker;
+  const neutralStrategyMetrics = neutralizeDashboardFields(base.strategy.metrics);
+  const neutralTechSignals = neutralizeDashboardSignals(base.tech.signals);
+  const neutralFundamentals = neutralizeDashboardFields(base.fundamentals.metrics);
 
   return enrichDashboardPayload(locale, {
     ...base,
@@ -912,59 +832,31 @@ function buildInPlacePlaceholderDashboard(
     ticker: normalizedTicker,
     decision: {
       ...base.decision,
-      company,
-      heroValue: locale === 'en' ? (isQueued ? 'SYNC' : '--') : (isQueued ? '同步中' : '--'),
+      company: normalizedTicker,
+      heroValue: EMPTY_FIELD_VALUE,
       heroUnit: '',
-      heroLabel: locale === 'en' ? (isQueued ? 'Queue state' : 'Status') : (isQueued ? '队列状态' : '当前状态'),
-      signalLabel: locale === 'en' ? (isQueued ? 'Queued' : 'Waiting') : (isQueued ? '已入队' : '待分析'),
+      heroLabel: locale === 'en' ? 'Status' : '当前状态',
+      signalLabel: EMPTY_FIELD_VALUE,
       signalTone: 'neutral',
-      scoreLabel: locale === 'en' ? (isQueued ? 'Current step' : 'In-place update') : (isQueued ? '当前阶段' : '原位更新'),
-      scoreValue: locale === 'en'
-        ? (isQueued ? 'Deep research request is running' : 'The AI decision card will refresh in place after you submit a ticker.')
-        : (isQueued ? '深度分析请求已发出' : '输入股票代码后将在此原位刷新 AI 判断。'),
-      badge: locale === 'en' ? (isQueued ? 'Queued' : 'Awaiting ticker') : (isQueued ? '已入队' : '等待输入'),
-      chartLabel: locale === 'en' ? (isQueued ? 'Awaiting first report' : 'Awaiting analysis') : (isQueued ? '等待首份报告' : '等待分析'),
-      summary: locale === 'en'
-        ? (isQueued
-          ? 'WolfyStock accepted this ticker. The existing card shell stays visible while the first completed report is being generated.'
-          : 'All homepage cards stay visible here. Empty fields remain neutral until you submit a ticker or open completed history.')
-        : (isQueued
-          ? 'WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。'
-          : '首页卡片会始终保留在这里，未分析字段先保持中性占位，等待你提交股票代码或打开完成历史。'),
-      reasonBody: locale === 'en'
-        ? (isQueued
-          ? 'No completed history exists yet, so WolfyStock keeps this same analysis surface live and fills it as soon as the backend returns.'
-          : 'No completed history is loaded yet. Missing values stay neutral instead of switching to a separate waiting dashboard.')
-        : (isQueued
-          ? '当前还没有完成历史，因此 WolfyStock 会保持这套分析卡片在线，等后端返回后直接回填。'
-          : '当前还没有完成历史，缺失字段会保持中性占位，而不是切到单独的等待页。'),
+      scoreLabel: locale === 'en' ? 'Signal Direction' : '信号方向',
+      scoreValue: EMPTY_FIELD_VALUE,
+      badge: EMPTY_FIELD_VALUE,
+      chartLabel: EMPTY_FIELD_VALUE,
+      summary: EMPTY_FIELD_VALUE,
+      reasonBody: EMPTY_FIELD_VALUE,
     },
     strategy: {
       ...base.strategy,
-      metrics: [
-        { label: locale === 'en' ? 'Entry Zone' : '建仓区间', value: '-', tone: 'neutral' },
-        { label: locale === 'en' ? 'Target' : '目标位', value: '--', tone: 'neutral' },
-        { label: locale === 'en' ? 'Stop' : '止损位', value: '--', tone: 'neutral' },
-      ],
-      positionBody: locale === 'en'
-        ? 'The strategy card stays in place and fills once the first completed LLM report provides real ranges.'
-        : '执行策略卡片会保留在原位，等第一份完整 LLM 报告返回真实区间后再回填。',
+      metrics: neutralStrategyMetrics,
+      positionBody: EMPTY_FIELD_VALUE,
     },
     tech: {
       ...base.tech,
-      signals: base.tech.signals.map((item) => ({
-        ...item,
-        value: '-',
-        tone: 'neutral',
-      })),
+      signals: neutralTechSignals,
     },
     fundamentals: {
       ...base.fundamentals,
-      metrics: base.fundamentals.metrics.map((item) => ({
-        ...item,
-        value: item.label.toLowerCase().includes('pe') || item.label.includes('市盈率') ? 'N/A' : '-',
-        tone: 'neutral',
-      })),
+      metrics: neutralFundamentals,
     },
   });
 }
@@ -1164,6 +1056,10 @@ function buildTechSignalHeadline(locale: DashboardLocale, ticker: string, label:
   const raw = sanitizeMetricValue(value);
   const isEnglish = locale === 'en';
 
+  if (raw === EMPTY_FIELD_VALUE) {
+    return EMPTY_FIELD_VALUE;
+  }
+
   if (key === 'macd') {
     if (/below zero|零轴下方|收敛|compression/i.test(raw)) {
       return isEnglish ? 'Momentum is compressing below zero, so the bounce still needs proof' : '零轴下方动能收敛，反弹仍待确认';
@@ -1325,24 +1221,35 @@ function mapStandardFields(
   fallback: DashboardField[],
   count: number,
 ) : DashboardField[] {
-  if (!fields || fields.length === 0) {
-    return fallback.slice(0, count);
-  }
+  const visibleFields = (fields || []).filter((field) => field.label).slice(0, count);
 
-  return fields
-    .filter((field) => field.label && field.value)
-    .slice(0, count)
-    .map((field, index) => {
-      const fallbackField = fallback.find((item) => normalizeDetailKey(item.label) === normalizeDetailKey(field.label)) || fallback[index];
-      const localizedValue = localizeMetricValue(locale, field.value, fallbackField?.value || field.value);
-      return {
-        label: localizeFieldLabel(locale, field.label, fallbackField?.label || field.label),
-        value: localizedValue,
-        rawValue: localizedValue,
-        tone: toneFromFieldValue(field.value || localizedValue),
-        details: fallbackField?.details,
-      };
-    });
+  return Array.from({ length: count }, (_, index) => {
+    const field = visibleFields[index];
+    const fallbackField = field
+      ? fallback.find((item) => normalizeDetailKey(item.label) === normalizeDetailKey(field.label)) || fallback[index]
+      : fallback[index];
+    const neutralFallback = fallbackField || {
+      label: field?.label || EMPTY_FIELD_VALUE,
+      value: EMPTY_FIELD_VALUE,
+      rawValue: EMPTY_FIELD_VALUE,
+      tone: 'neutral' as const,
+      details: EMPTY_FIELD_VALUE,
+    };
+
+    if (!field) {
+      return neutralFallback;
+    }
+
+    const localizedValue = localizeMetricValue(locale, field.value, neutralFallback.value || EMPTY_FIELD_VALUE);
+    const isEmpty = isPendingMetricValue(localizedValue);
+    return {
+      label: localizeFieldLabel(locale, field.label, neutralFallback.label || field.label),
+      value: localizedValue,
+      rawValue: localizedValue,
+      tone: isEmpty ? 'neutral' : toneFromFieldValue(field.value || localizedValue),
+      details: isEmpty ? neutralFallback.details : undefined,
+    };
+  });
 }
 
 function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
@@ -1466,7 +1373,12 @@ function buildFundamentalMetricDetails(locale: DashboardLocale, ticker: string, 
 
 function buildStrategyMetricDetails(locale: DashboardLocale, label: string, value: string): string {
   const key = normalizeDetailKey(label);
+  const rawValue = sanitizeMetricValue(value);
   const isEnglish = locale === 'en';
+
+  if (rawValue === EMPTY_FIELD_VALUE) {
+    return EMPTY_FIELD_VALUE;
+  }
 
   if (key === '建仓区间' || key === 'entryzone') {
     return isEnglish
@@ -1637,6 +1549,8 @@ function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload
 function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisReport): DashboardPayload {
   const stockCode = normalizeTickerQuery(report.meta.stockCode || 'NVDA');
   const seed = resolveDashboardPayload(locale, stockCode);
+  const neutralTechSignals = neutralizeDashboardSignals(seed.tech.signals);
+  const neutralFundamentals = neutralizeDashboardFields(seed.fundamentals.metrics);
   const standardReport = report.details?.standardReport;
   const summaryPanel = standardReport?.summaryPanel;
   const decisionPanel = standardReport?.decisionPanel;
@@ -1647,29 +1561,32 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   const sentimentTone = toneFromScore(report.summary.sentimentScore);
   const scoreText = typeof report.summary.sentimentScore === 'number'
     ? (report.summary.sentimentScore / 10).toFixed(1)
-    : seed.decision.heroValue;
+    : EMPTY_FIELD_VALUE;
   const reasonBody = reasonLayer?.coreReasons?.[0]
     || reasonLayer?.topCatalyst
     || reasonLayer?.latestKeyUpdate
     || report.summary.analysisSummary
-    || seed.decision.reasonBody;
+    || EMPTY_FIELD_VALUE;
   const badge = [
     summaryPanel?.operationAdvice,
     reasonLayer?.topCatalyst,
     reasonLayer?.newsValueTier,
-  ].filter(Boolean).slice(0, 2).join(' · ') || seed.decision.badge;
+  ].filter(Boolean).slice(0, 2).join(' · ') || EMPTY_FIELD_VALUE;
   const rawCompany = report.meta.stockName || summaryPanel?.stock || stockCode;
-  const rawSignalLabel = report.summary.sentimentLabel || seed.decision.signalLabel;
-  const rawScoreValue = decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || seed.decision.scoreValue;
-  const rawSummary = summaryPanel?.oneSentence || report.summary.analysisSummary || seed.decision.summary;
-  const entryValue = decisionPanel?.idealEntry || decisionPanel?.support || report.strategy?.idealBuy || seed.strategy.metrics[0]?.value || '--';
-  const targetValue = decisionPanel?.target || decisionPanel?.targetZone || report.strategy?.takeProfit || seed.strategy.metrics[1]?.value || '--';
-  const stopValue = decisionPanel?.stopLoss || report.strategy?.stopLoss || seed.strategy.metrics[2]?.value || '--';
+  const rawSignalLabel = report.summary.sentimentLabel || EMPTY_FIELD_VALUE;
+  const rawScoreValue = decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || EMPTY_FIELD_VALUE;
+  const rawSummary = summaryPanel?.oneSentence || report.summary.analysisSummary || EMPTY_FIELD_VALUE;
+  const entryValue = decisionPanel?.idealEntry || decisionPanel?.support || report.strategy?.idealBuy || EMPTY_FIELD_VALUE;
+  const targetValue = decisionPanel?.target || decisionPanel?.targetZone || report.strategy?.takeProfit || EMPTY_FIELD_VALUE;
+  const stopValue = decisionPanel?.stopLoss || report.strategy?.stopLoss || EMPTY_FIELD_VALUE;
   const positionBody = decisionPanel?.buildStrategy
     || decisionPanel?.holderAdvice
     || decisionPanel?.noPositionAdvice
     || report.summary.operationAdvice
-    || seed.strategy.positionBody;
+    || EMPTY_FIELD_VALUE;
+  const localizedEntryValue = localizeMetricValue(locale, entryValue, EMPTY_FIELD_VALUE);
+  const localizedTargetValue = localizeMetricValue(locale, targetValue, EMPTY_FIELD_VALUE);
+  const localizedStopValue = localizeMetricValue(locale, stopValue, EMPTY_FIELD_VALUE);
 
   return enrichDashboardPayload(locale, {
     ...seed,
@@ -1678,42 +1595,42 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
       ...seed.decision,
       company: localizeCompanyName(locale, rawCompany, seed.decision.company, stockCode),
       heroValue: scoreText,
-      signalLabel: localizeSentimentLabel(locale, rawSignalLabel, seed.decision.signalLabel),
+      signalLabel: localizeSentimentLabel(locale, rawSignalLabel, EMPTY_FIELD_VALUE),
       signalTone: sentimentTone,
-      scoreValue: localizeNarrativeText(locale, rawScoreValue, seed.decision.scoreValue),
-      badge: localizeNarrativeText(locale, badge, seed.decision.badge),
-      summary: localizeNarrativeText(locale, rawSummary, seed.decision.summary),
+      scoreValue: localizeNarrativeText(locale, rawScoreValue, EMPTY_FIELD_VALUE),
+      badge: localizeNarrativeText(locale, badge, EMPTY_FIELD_VALUE),
+      summary: localizeNarrativeText(locale, rawSummary, EMPTY_FIELD_VALUE),
       reasonTitle: locale === 'en' ? 'Latest Report Context' : '最近报告归因',
-      reasonBody: localizeNarrativeText(locale, reasonBody, seed.decision.reasonBody),
+      reasonBody: localizeNarrativeText(locale, reasonBody, EMPTY_FIELD_VALUE),
     },
     strategy: {
       ...seed.strategy,
       metrics: [
         {
           label: locale === 'en' ? 'Entry Zone' : '建仓区间',
-          value: localizeMetricValue(locale, entryValue, seed.strategy.metrics[0]?.value || '--'),
+          value: localizedEntryValue,
           tone: 'neutral',
         },
         {
           label: locale === 'en' ? 'Target' : '目标位',
-          value: localizeMetricValue(locale, targetValue, seed.strategy.metrics[1]?.value || '--'),
-          tone: 'bullish',
+          value: localizedTargetValue,
+          tone: isPendingMetricValue(localizedTargetValue) ? 'neutral' : 'bullish',
         },
         {
           label: locale === 'en' ? 'Stop' : '止损位',
-          value: localizeMetricValue(locale, stopValue, seed.strategy.metrics[2]?.value || '--'),
-          tone: 'bearish',
+          value: localizedStopValue,
+          tone: isPendingMetricValue(localizedStopValue) ? 'neutral' : 'bearish',
         },
       ],
-      positionBody: localizeNarrativeText(locale, positionBody, seed.strategy.positionBody),
+      positionBody: localizeNarrativeText(locale, positionBody, EMPTY_FIELD_VALUE),
     },
     tech: {
       ...seed.tech,
-      signals: mapStandardFields(locale, technicalFields, seed.tech.signals, 5).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
+      signals: mapStandardFields(locale, technicalFields, neutralTechSignals, 5).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
     },
     fundamentals: {
       ...seed.fundamentals,
-      metrics: mapStandardFields(locale, fundamentalFields, seed.fundamentals.metrics, 6),
+      metrics: mapStandardFields(locale, fundamentalFields, neutralFundamentals, 6),
     },
   });
 }
@@ -1730,7 +1647,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
-  const [analysisFallbackMode, setAnalysisFallbackMode] = useState(false);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
@@ -1738,7 +1654,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [isHistoryDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
-  const findLatestHistoryItemForStock = useStockPoolStore((state) => state.findLatestHistoryItemForStock);
   const selectHistoryItem = useStockPoolStore((state) => state.selectHistoryItem);
   const selectCachedHistoryForStock = useStockPoolStore((state) => state.selectCachedHistoryForStock);
   const deleteHistoryRecords = useStockPoolStore((state) => state.deleteHistoryRecords);
@@ -1762,13 +1677,21 @@ const HomeBentoDashboardPage: React.FC = () => {
   );
   const isBusy = isAnalyzing || isDashboardLoading;
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
-  const activeHistoryItem = activeTicker ? findLatestHistoryItemForStock(activeTicker) : null;
   const shouldShowHistoryTransitionSkeleton = isDashboardLoading && !pendingAnalysisTicker;
+  const completedTaskReport = useMemo(() => {
+    const taskTicker = pendingAnalysisTicker || activeTicker;
+    if (!taskTicker) {
+      return null;
+    }
+    return activeTasks.find(
+      (task) => normalizeTickerQuery(task.stockCode) === taskTicker && task.status === 'completed' && task.result?.report,
+    )?.result?.report || null;
+  }, [activeTasks, activeTicker, pendingAnalysisTicker]);
   const dashboardData = useMemo<DashboardPayload | null>(() => {
     const effectiveTicker = activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
 
-    if (analysisFallbackMode && effectiveTicker) {
-      return buildAnalysisFallbackDashboard(locale, effectiveTicker);
+    if (completedTaskReport && effectiveTicker && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker) {
+      return buildDashboardFromReport(locale, completedTaskReport);
     }
 
     if (selectedReport && effectiveTicker && selectedTicker === effectiveTicker) {
@@ -1776,15 +1699,11 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     if (pendingAnalysisTicker && effectiveTicker === pendingAnalysisTicker) {
-      return buildInPlacePlaceholderDashboard(locale, effectiveTicker, 'queued');
+      return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
     }
 
-    if (effectiveTicker && activeHistoryItem) {
-      return resolveDashboardPayload(locale, effectiveTicker);
-    }
-
-    return buildInPlacePlaceholderDashboard(locale, effectiveTicker, 'idle');
-  }, [activeHistoryItem, activeTicker, analysisFallbackMode, locale, pendingAnalysisTicker, recentHistoryItems, selectedReport, selectedTicker]);
+    return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
+  }, [activeTicker, completedTaskReport, locale, pendingAnalysisTicker, recentHistoryItems, selectedReport, selectedTicker]);
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -1857,16 +1776,12 @@ const HomeBentoDashboardPage: React.FC = () => {
   }, [hasHydratedInitialTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
-    if (selectedTicker) {
+    if (selectedTicker && !activeTicker) {
       setActiveTicker(selectedTicker);
       return;
     }
 
-    if (recentHistoryItems.length === 0) {
-      setActiveTicker(null);
-      setAnalysisFallbackMode(false);
-    }
-  }, [recentHistoryItems, selectedTicker]);
+  }, [activeTicker, selectedTicker]);
 
   useEffect(() => {
     if (pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
@@ -1899,12 +1814,12 @@ const HomeBentoDashboardPage: React.FC = () => {
       return;
     }
 
-    selectCachedHistoryForStock(pendingAnalysisTicker);
     setActiveTicker(pendingAnalysisTicker);
     setPendingAnalysisTicker(null);
     setDashboardLoading(false);
+    void refreshHistory(true);
     void focusLatestHistoryForStock(pendingAnalysisTicker);
-  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, selectCachedHistoryForStock]);
+  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory]);
 
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
@@ -1922,73 +1837,43 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     setStatusToast(null);
-    setAnalysisFallbackMode(false);
     clearError();
     setDashboardLoading(true);
     setActiveTicker(normalizedTicker);
     setPendingAnalysisTicker(normalizedTicker);
     setSearchQuery('');
 
-    const latestExistingHistory = findLatestHistoryItemForStock(normalizedTicker);
-    if (latestExistingHistory) {
-      selectCachedHistoryForStock(normalizedTicker);
-    } else {
-      setDashboardLoading(false);
-    }
-
-    let result;
     try {
-      result = await withFallback<AnalyzeFlowResult>(
-        async (): Promise<AnalyzeFlowResult> => {
-          const nextResult = await submitAnalysis({
-            stockCode: normalizedTicker,
-            originalQuery: normalizedTicker,
-            selectionSource: 'manual',
-          });
-
-          if (nextResult.ok) {
-            return { mode: 'submitted' as const, stockCode: nextResult.stockCode };
-          }
-
-          if (nextResult.duplicate || !nextResult.error) {
-            return { mode: 'noop' as const };
-          }
-
-          throw createApiError(nextResult.error);
-        },
-        {
-          fallback: (): AnalyzeFlowResult => ({
-            mode: 'fallback' as const,
-            stockCode: resolveDemoFallbackTicker(normalizedTicker),
-          }),
-        },
-      );
-    } catch {
-      setDashboardLoading(false);
-      return;
-    }
-
-    if (result.data.mode === 'submitted') {
-      await refreshHistory(true);
-      const latestHistoryId = await focusLatestHistoryForStock(result.data.stockCode);
-      setActiveTicker(result.data.stockCode);
-      if (latestHistoryId) {
-        setPendingAnalysisTicker(null);
-      }
-    } else if (result.data.mode === 'fallback') {
-      setActiveTicker(result.data.stockCode);
-      setPendingAnalysisTicker(null);
-      setAnalysisFallbackMode(true);
-      clearError();
-      setStatusToast({
-        message: locale === 'en'
-          ? 'AI engine is temporarily unavailable. Loaded local snapshot data.'
-          : 'AI 引擎调用过载，已加载本地快照数据',
-        tone: 'warning',
+      const result = await submitAnalysis({
+        stockCode: normalizedTicker,
+        originalQuery: normalizedTicker,
+        selectionSource: 'manual',
       });
-    }
 
-    setDashboardLoading(false);
+      if (result.ok) {
+        setActiveTicker(result.stockCode);
+        void refreshHistory(true);
+        return;
+      }
+
+      if (result.duplicate) {
+        return;
+      }
+
+      setPendingAnalysisTicker(null);
+      setStatusToast({
+        message: result.error?.message || (locale === 'en' ? 'Analysis request failed.' : '分析请求失败'),
+        tone: 'error',
+      });
+    } catch {
+      setPendingAnalysisTicker(null);
+      setStatusToast({
+        message: locale === 'en' ? 'Analysis request failed.' : '分析请求失败',
+        tone: 'error',
+      });
+    } finally {
+      setDashboardLoading(false);
+    }
   };
 
   const handleHistoryClick = async (historyItem: HistoryItem) => {
@@ -1999,7 +1884,6 @@ const HomeBentoDashboardPage: React.FC = () => {
 
     setHistoryDrawerOpen(false);
     setStatusToast(null);
-    setAnalysisFallbackMode(false);
     setPendingAnalysisTicker(null);
     clearError();
     setActiveTicker(normalizedTicker);
