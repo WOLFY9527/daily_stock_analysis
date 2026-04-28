@@ -25,6 +25,7 @@ import {
   useSafariRenderReady,
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
+import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 
@@ -893,9 +894,17 @@ function buildAnalysisFallbackDashboard(locale: DashboardLocale, ticker: string)
   });
 }
 
-function buildPendingAnalysisDashboard(locale: DashboardLocale, ticker: string): DashboardPayload {
-  const normalizedTicker = normalizeTickerQuery(ticker) || 'NVDA';
+function buildInPlacePlaceholderDashboard(
+  locale: DashboardLocale,
+  ticker?: string | null,
+  mode: 'idle' | 'queued' = 'idle',
+): DashboardPayload {
+  const normalizedTicker = normalizeTickerQuery(ticker ?? undefined) || '--';
   const base = DASHBOARD_VARIANTS[locale].NVDA;
+  const isQueued = mode === 'queued';
+  const company = normalizedTicker === '--'
+    ? (locale === 'en' ? 'Awaiting Ticker' : '待分析')
+    : normalizedTicker;
 
   return enrichDashboardPayload(locale, {
     ...base,
@@ -903,39 +912,49 @@ function buildPendingAnalysisDashboard(locale: DashboardLocale, ticker: string):
     ticker: normalizedTicker,
     decision: {
       ...base.decision,
-      company: normalizedTicker,
-      heroValue: locale === 'en' ? 'SYNC' : '同步中',
+      company,
+      heroValue: locale === 'en' ? (isQueued ? 'SYNC' : '--') : (isQueued ? '同步中' : '--'),
       heroUnit: '',
-      heroLabel: locale === 'en' ? 'Queue state' : '队列状态',
-      signalLabel: locale === 'en' ? 'Queued' : '已入队',
+      heroLabel: locale === 'en' ? (isQueued ? 'Queue state' : 'Status') : (isQueued ? '队列状态' : '当前状态'),
+      signalLabel: locale === 'en' ? (isQueued ? 'Queued' : 'Waiting') : (isQueued ? '已入队' : '待分析'),
       signalTone: 'neutral',
-      scoreLabel: locale === 'en' ? 'Current step' : '当前阶段',
-      scoreValue: locale === 'en' ? 'Deep research request is running' : '深度分析请求已发出',
-      badge: locale === 'en' ? 'Ghost dashboard active' : 'Ghost dashboard 承接中',
-      chartLabel: locale === 'en' ? 'Awaiting first report' : '等待首份报告',
+      scoreLabel: locale === 'en' ? (isQueued ? 'Current step' : 'In-place update') : (isQueued ? '当前阶段' : '原位更新'),
+      scoreValue: locale === 'en'
+        ? (isQueued ? 'Deep research request is running' : 'The AI decision card will refresh in place after you submit a ticker.')
+        : (isQueued ? '深度分析请求已发出' : '输入股票代码后将在此原位刷新 AI 判断。'),
+      badge: locale === 'en' ? (isQueued ? 'Queued' : 'Awaiting ticker') : (isQueued ? '已入队' : '等待输入'),
+      chartLabel: locale === 'en' ? (isQueued ? 'Awaiting first report' : 'Awaiting analysis') : (isQueued ? '等待首份报告' : '等待分析'),
       summary: locale === 'en'
-        ? 'WolfyStock has accepted this ticker and is waiting for the first completed report to land.'
-        : 'WolfyStock 已接受该股票代码，正在等待第一份完整报告回填首页。',
+        ? (isQueued
+          ? 'WolfyStock accepted this ticker. The existing card shell stays visible while the first completed report is being generated.'
+          : 'All homepage cards stay visible here. Empty fields remain neutral until you submit a ticker or open completed history.')
+        : (isQueued
+          ? 'WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。'
+          : '首页卡片会始终保留在这里，未分析字段先保持中性占位，等待你提交股票代码或打开完成历史。'),
       reasonBody: locale === 'en'
-        ? 'No completed local history is available yet, so the homepage keeps a neutral ghost dashboard instead of falling back to stale presets.'
-        : '当前还没有可展示的本地完成历史，因此首页保持中性 ghost dashboard，而不是回退到旧预设或提前报错。',
+        ? (isQueued
+          ? 'No completed history exists yet, so WolfyStock keeps this same analysis surface live and fills it as soon as the backend returns.'
+          : 'No completed history is loaded yet. Missing values stay neutral instead of switching to a separate waiting dashboard.')
+        : (isQueued
+          ? '当前还没有完成历史，因此 WolfyStock 会保持这套分析卡片在线，等后端返回后直接回填。'
+          : '当前还没有完成历史，缺失字段会保持中性占位，而不是切到单独的等待页。'),
     },
     strategy: {
       ...base.strategy,
       metrics: [
-        { label: locale === 'en' ? 'Entry Zone' : '建仓区间', value: locale === 'en' ? 'Pending analysis' : '等待分析完成', tone: 'neutral' },
+        { label: locale === 'en' ? 'Entry Zone' : '建仓区间', value: '-', tone: 'neutral' },
         { label: locale === 'en' ? 'Target' : '目标位', value: '--', tone: 'neutral' },
         { label: locale === 'en' ? 'Stop' : '止损位', value: '--', tone: 'neutral' },
       ],
       positionBody: locale === 'en'
-        ? 'The execution module stays empty until the first finished LLM report provides a real range.'
-        : '执行策略区域会保持空白，直到第一份 LLM 完整报告返回真实区间。',
+        ? 'The strategy card stays in place and fills once the first completed LLM report provides real ranges.'
+        : '执行策略卡片会保留在原位，等第一份完整 LLM 报告返回真实区间后再回填。',
     },
     tech: {
       ...base.tech,
       signals: base.tech.signals.map((item) => ({
         ...item,
-        value: locale === 'en' ? 'Awaiting live scan' : '等待实时扫描',
+        value: '-',
         tone: 'neutral',
       })),
     },
@@ -943,7 +962,7 @@ function buildPendingAnalysisDashboard(locale: DashboardLocale, ticker: string):
       ...base.fundamentals,
       metrics: base.fundamentals.metrics.map((item) => ({
         ...item,
-        value: locale === 'en' ? 'Awaiting first report' : '等待首份报告',
+        value: item.label.toLowerCase().includes('pe') || item.label.includes('市盈率') ? 'N/A' : '-',
         tone: 'neutral',
       })),
     },
@@ -1085,6 +1104,9 @@ function replaceEnglishFragments(raw: string): string {
 function localizeCompanyName(locale: DashboardLocale, raw: string | undefined, fallback: string, ticker: string): string {
   const value = String(raw || '').trim();
   if (!value) {
+    return fallback || ticker;
+  }
+  if (locale === 'zh' && !containsCjk(value) && containsCjk(fallback)) {
     return fallback || ticker;
   }
   if (locale === 'en' && (value === '待确认股票' || containsCjk(value))) {
@@ -1704,7 +1726,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
-  const [pendingTicker, setPendingTicker] = useState<string | null>(null);
   const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
@@ -1724,37 +1745,46 @@ const HomeBentoDashboardPage: React.FC = () => {
   const isDeletingHistory = useStockPoolStore((state) => state.isDeletingHistory);
   const submitAnalysis = useStockPoolStore((state) => state.submitAnalysis);
   const clearError = useStockPoolStore((state) => state.clearError);
+  const loadInitialHistory = useStockPoolStore((state) => state.loadInitialHistory);
+  const hydrateRecentTasks = useStockPoolStore((state) => state.hydrateRecentTasks);
+  const activeTasks = useStockPoolStore((state) => state.activeTasks);
+  const syncTaskCreated = useStockPoolStore((state) => state.syncTaskCreated);
+  const syncTaskUpdated = useStockPoolStore((state) => state.syncTaskUpdated);
+  const syncTaskFailed = useStockPoolStore((state) => state.syncTaskFailed);
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
   const recentHistoryItems = useMemo(
     () => historyItems.filter((item) => !item.isTest).slice(0, 8),
     [historyItems],
   );
+  const hasRunningTasks = useMemo(
+    () => activeTasks.some((task) => task.status === 'pending' || task.status === 'processing'),
+    [activeTasks],
+  );
   const isBusy = isAnalyzing || isDashboardLoading;
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
   const activeHistoryItem = activeTicker ? findLatestHistoryItemForStock(activeTicker) : null;
+  const shouldShowHistoryTransitionSkeleton = isDashboardLoading && !pendingAnalysisTicker;
   const dashboardData = useMemo<DashboardPayload | null>(() => {
-    if (!activeTicker) {
-      return null;
+    const effectiveTicker = activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
+
+    if (analysisFallbackMode && effectiveTicker) {
+      return buildAnalysisFallbackDashboard(locale, effectiveTicker);
     }
 
-    if (analysisFallbackMode) {
-      return buildAnalysisFallbackDashboard(locale, activeTicker);
-    }
-
-    if (selectedReport && selectedTicker === activeTicker) {
+    if (selectedReport && effectiveTicker && selectedTicker === effectiveTicker) {
       return buildDashboardFromReport(locale, selectedReport);
     }
 
-    if (pendingAnalysisTicker === activeTicker && !activeHistoryItem) {
-      return buildPendingAnalysisDashboard(locale, activeTicker);
+    if (pendingAnalysisTicker && effectiveTicker === pendingAnalysisTicker) {
+      return buildInPlacePlaceholderDashboard(locale, effectiveTicker, 'queued');
     }
 
-    return resolveDashboardPayload(locale, activeTicker);
-  }, [activeHistoryItem, activeTicker, analysisFallbackMode, locale, pendingAnalysisTicker, selectedReport, selectedTicker]);
-  const shouldRenderDashboardShell = Boolean(
-    (activeTicker && (Boolean(dashboardData) || isDashboardLoading))
-    || (pendingTicker && isDashboardLoading),
-  );
+    if (effectiveTicker && activeHistoryItem) {
+      return resolveDashboardPayload(locale, effectiveTicker);
+    }
+
+    return buildInPlacePlaceholderDashboard(locale, effectiveTicker, 'idle');
+  }, [activeHistoryItem, activeTicker, analysisFallbackMode, locale, pendingAnalysisTicker, recentHistoryItems, selectedReport, selectedTicker]);
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -1796,8 +1826,17 @@ const HomeBentoDashboardPage: React.FC = () => {
 
   useEffect(() => {
     purgeZombieDashboardStorage();
-    void refreshHistory(true);
-  }, [refreshHistory]);
+  }, []);
+
+  useDashboardLifecycle({
+    loadInitialHistory,
+    refreshHistory,
+    hydrateRecentTasks,
+    syncTaskCreated,
+    syncTaskUpdated,
+    syncTaskFailed,
+    hasRunningTasks,
+  });
 
   useEffect(() => {
     if (hasHydratedInitialTicker) {
@@ -1833,7 +1872,6 @@ const HomeBentoDashboardPage: React.FC = () => {
     if (pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
       setPendingAnalysisTicker(null);
       setDashboardLoading(false);
-      setPendingTicker(null);
     }
   }, [pendingAnalysisTicker, selectedTicker]);
 
@@ -1848,6 +1886,25 @@ const HomeBentoDashboardPage: React.FC = () => {
 
     return () => window.clearTimeout(timer);
   }, [statusToast]);
+
+  useEffect(() => {
+    if (!pendingAnalysisTicker) {
+      return;
+    }
+
+    const completedTask = activeTasks.find(
+      (task) => normalizeTickerQuery(task.stockCode) === pendingAnalysisTicker && task.status === 'completed' && task.result?.report,
+    );
+    if (!completedTask) {
+      return;
+    }
+
+    selectCachedHistoryForStock(pendingAnalysisTicker);
+    setActiveTicker(pendingAnalysisTicker);
+    setPendingAnalysisTicker(null);
+    setDashboardLoading(false);
+    void focusLatestHistoryForStock(pendingAnalysisTicker);
+  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, selectCachedHistoryForStock]);
 
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
@@ -1869,13 +1926,14 @@ const HomeBentoDashboardPage: React.FC = () => {
     clearError();
     setDashboardLoading(true);
     setActiveTicker(normalizedTicker);
-    setPendingTicker(normalizedTicker);
     setPendingAnalysisTicker(normalizedTicker);
     setSearchQuery('');
 
     const latestExistingHistory = findLatestHistoryItemForStock(normalizedTicker);
     if (latestExistingHistory) {
       selectCachedHistoryForStock(normalizedTicker);
+    } else {
+      setDashboardLoading(false);
     }
 
     let result;
@@ -1911,7 +1969,6 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     if (result.data.mode === 'submitted') {
-      setPendingTicker(null);
       await refreshHistory(true);
       const latestHistoryId = await focusLatestHistoryForStock(result.data.stockCode);
       setActiveTicker(result.data.stockCode);
@@ -1919,7 +1976,6 @@ const HomeBentoDashboardPage: React.FC = () => {
         setPendingAnalysisTicker(null);
       }
     } else if (result.data.mode === 'fallback') {
-      setPendingTicker(null);
       setActiveTicker(result.data.stockCode);
       setPendingAnalysisTicker(null);
       setAnalysisFallbackMode(true);
@@ -1999,7 +2055,7 @@ const HomeBentoDashboardPage: React.FC = () => {
         </div>
       ) : null}
       <main className="w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 min-w-0 overflow-y-auto no-scrollbar" data-testid="home-bento-main">
-        {shouldRenderDashboardShell ? (() => {
+        {(() => {
           const readyCopy = dashboardData;
           return (
             <div
@@ -2063,7 +2119,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                   </button>
                 </form>
                 <div className="min-h-0 flex-1">
-                  {isDashboardLoading || !readyCopy ? (
+                  {shouldShowHistoryTransitionSkeleton || !readyCopy ? (
                     <DashboardSkeletonCard
                       testId="home-bento-loading-decision-card"
                       className="min-h-[32rem]"
@@ -2098,7 +2154,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                 className="min-w-0 xl:col-span-3 flex flex-col gap-6"
                 data-testid="home-bento-secondary-stack"
               >
-                {isDashboardLoading || !readyCopy ? (
+                {shouldShowHistoryTransitionSkeleton || !readyCopy ? (
                   <>
                     <DashboardSkeletonCard testId="home-bento-loading-strategy-card" rows={3} />
                     <div
@@ -2142,122 +2198,7 @@ const HomeBentoDashboardPage: React.FC = () => {
               </div>
             </div>
           );
-        })() : (
-          <div
-            data-testid="home-bento-zero-state"
-            data-bento-grid="ghost"
-            className="w-full grid grid-cols-1 gap-6 xl:grid-cols-5"
-          >
-            <div
-              className="flex min-h-0 flex-col gap-6 xl:col-span-2"
-              data-testid="home-bento-zero-state-primary"
-            >
-              <form
-                className="flex h-12 w-full min-w-0 shrink-0 gap-3"
-                data-testid="home-bento-omnibar"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleAnalyze();
-                }}
-              >
-                <div
-                  className="group relative flex min-w-0 flex-1 items-center overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] shadow-lg transition-all focus-within:border-white/20 focus-within:bg-white/[0.04]"
-                  data-testid="home-bento-omnibar-input-shell"
-                >
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                    <Search className="h-4 w-4 text-white/40" />
-                  </div>
-                  <input
-                    data-testid="home-bento-omnibar-input"
-                    type="text"
-                    value={searchQuery}
-                    onChange={(event) => {
-                      setSearchQuery(event.target.value);
-                    }}
-                    autoComplete="off"
-                    disabled={isBusy}
-                    className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
-                    placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
-                  data-testid="home-bento-analyze-button"
-                >
-                  {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
-                </button>
-                <button
-                  ref={openHistoryDrawerButton.ref}
-                  type="button"
-                  aria-label={locale === 'en' ? 'History' : '历史记录'}
-                  onClick={openHistoryDrawerButton.onClick}
-                  onPointerUp={openHistoryDrawerButton.onPointerUp}
-                  disabled={isBusy}
-                  className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
-                  data-testid="home-bento-history-drawer-trigger"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-                  </svg>
-                </button>
-              </form>
-              <div
-                className="group relative flex h-[500px] flex-col overflow-hidden rounded-[24px] border border-dashed border-white/10 bg-white/[0.01] p-6"
-                data-testid="home-bento-zero-state-hero"
-              >
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent animate-ghost-scan" />
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_48%)] opacity-70" />
-                <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
-                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.02]">
-                    <Search className="h-6 w-6 text-white/30" aria-hidden="true" />
-                  </div>
-                  <h3 className="mb-2 text-center text-sm font-bold uppercase tracking-[0.28em] text-white/50">
-                    {standbyCopy.title}
-                  </h3>
-                  <p className="max-w-[220px] text-center text-xs leading-relaxed text-white/30">
-                    {standbyCopy.body}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div
-              className="flex min-w-0 flex-col gap-6 xl:col-span-3"
-              data-testid="home-bento-zero-state-secondary"
-            >
-              <div
-                className="flex h-32 items-center justify-center rounded-[24px] border border-dashed border-white/5 bg-white/[0.01] px-6 text-center"
-                data-testid="home-bento-zero-state-strategy"
-              >
-                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/20">
-                  {standbyCopy.strategyLocked}
-                </span>
-              </div>
-              <div
-                className="grid flex-1 grid-cols-1 gap-6 md:grid-cols-2"
-                data-testid="home-bento-zero-state-secondary-grid"
-              >
-                <div
-                  className="flex min-h-[181px] items-center justify-center rounded-[24px] border border-dashed border-white/5 bg-white/[0.01] px-6 text-center"
-                  data-testid="home-bento-zero-state-tech"
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/20">
-                    {standbyCopy.techWaiting}
-                  </span>
-                </div>
-                <div
-                  className="flex min-h-[181px] items-center justify-center rounded-[24px] border border-dashed border-white/5 bg-white/[0.01] px-6 text-center"
-                  data-testid="home-bento-zero-state-fundamentals"
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/20">
-                    {standbyCopy.fundamentalsWaiting}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        })()}
       </main>
 
       <DeepReportDrawer

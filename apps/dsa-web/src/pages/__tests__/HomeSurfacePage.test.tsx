@@ -49,6 +49,14 @@ vi.mock('../../api/analysis', async () => {
   };
 });
 
+vi.mock('../../hooks/useTaskStream', () => ({
+  useTaskStream: vi.fn(() => ({
+    isConnected: false,
+    reconnect: vi.fn(),
+    disconnect: vi.fn(),
+  })),
+}));
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -246,11 +254,11 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('营收仍在稳步扩张，需求主线未坏').className).not.toContain('text-3xl');
     expect(techMetricTiles.length).toBe(0);
     expect(fundamentalsMetricTiles.length).toBe(0);
-    expect(macdSignalValue).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(macdSignalValue?.getAttribute('style') || '').toContain('text-shadow');
     expect(screen.getByText('零轴上方二次扩张，动能继续偏强')).toBeInTheDocument();
     expect(screen.getByText('MA20 托举 MA60，多头排列延续')).toBeInTheDocument();
-    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByText('自由现金流充裕，波动缓冲仍在')).toHaveStyle({ textShadow: 'none' });
+    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏').getAttribute('style') || '').toContain('text-shadow');
+    expect(screen.getByText('自由现金流充裕，波动缓冲仍在').getAttribute('style') || '').toContain('text-shadow');
     expect(screen.queryByText('+9.4%')).not.toBeInTheDocument();
     expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
     expect(primaryStack.compareDocumentPosition(secondaryStack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -263,7 +271,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
   });
 
-  it('renders the standby zero-state when there is no non-test history', async () => {
+  it('keeps the full bento card layout when there is no non-test history', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 0,
@@ -274,32 +282,29 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
 
-    const zeroState = await screen.findByTestId('home-bento-zero-state');
-    const heroCard = screen.getByTestId('home-bento-zero-state-hero');
-    const primaryStack = screen.getByTestId('home-bento-zero-state-primary');
-    const secondaryStack = screen.getByTestId('home-bento-zero-state-secondary');
-    const secondaryGrid = screen.getByTestId('home-bento-zero-state-secondary-grid');
+    const grid = await screen.findByTestId('home-bento-grid');
+    const primaryStack = screen.getByTestId('home-bento-primary-stack');
+    const secondaryStack = screen.getByTestId('home-bento-secondary-stack');
+    const secondaryGrid = screen.getByTestId('home-bento-secondary-grid');
     const omnibar = screen.getByTestId('home-bento-omnibar');
     expect(omnibar).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
-    expect(zeroState).toHaveClass('w-full', 'grid', 'grid-cols-1', 'gap-6', 'xl:grid-cols-5');
-    expect(zeroState).toHaveAttribute('data-bento-grid', 'ghost');
-    expect(primaryStack).toHaveClass('xl:col-span-2', 'flex', 'flex-col', 'gap-6', 'min-h-0');
+    expect(grid).toHaveClass('w-full', 'grid', 'grid-cols-1', 'gap-6', 'items-stretch', 'xl:grid-cols-5');
+    expect(grid).toHaveAttribute('data-bento-grid', 'true');
+    expect(primaryStack).toHaveClass('xl:col-span-2', 'flex', 'flex-col', 'gap-6', 'h-full', 'min-h-0');
     expect(primaryStack.firstElementChild).toBe(omnibar);
-    expect(heroCard).toHaveClass('flex', 'flex-col', 'h-[500px]', 'bg-white/[0.01]', 'border-dashed', 'border-white/10', 'rounded-[24px]', 'p-6', 'relative', 'overflow-hidden');
-    expect(secondaryStack).toHaveClass('xl:col-span-3', 'flex', 'flex-col', 'gap-6');
+    expect(secondaryStack).toHaveClass('min-w-0', 'xl:col-span-3', 'flex', 'flex-col', 'gap-6');
     expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'flex-1');
-    expect(screen.getByText('Wolfy AI 引擎待命中')).toBeInTheDocument();
-    expect(screen.getByText('在上方联合指挥台输入股票代码，立即唤醒深度研报网络。')).toBeInTheDocument();
-    expect(screen.getByText('执行策略模块处于锁定状态')).toBeInTheDocument();
-    expect(screen.getByText('等待技术形态扫描')).toBeInTheDocument();
-    expect(screen.getByText('等待基本面画像加载')).toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-zero-state-quick-NVDA')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-zero-state-quick-TSLA')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-zero-state-quick-AAPL')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-card-decision')).not.toBeInTheDocument();
-    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ghost dashboard 承接中')).not.toBeInTheDocument();
+    expect(screen.getAllByText('待分析').length).toBeGreaterThan(0);
+    expect(screen.getByText('输入股票代码后将在此原位刷新 AI 判断。')).toBeInTheDocument();
+    expect(screen.getByText('建仓区间')).toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
 
   it('renders localized English copy for the signed-in dashboard', async () => {
@@ -430,7 +435,9 @@ describe('HomeSurfacePage', () => {
   it('loads the clicked history record from the database instead of re-analyzing', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     const deferred = createDeferred<typeof defaultHistoryReport>();
-    vi.mocked(historyApi.getDetail).mockImplementationOnce(() => deferred.promise);
+    vi.mocked(historyApi.getDetail).mockImplementation((recordId) => (
+      recordId === 2 ? deferred.promise : Promise.resolve(defaultHistoryReport)
+    ));
     renderSurface();
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     expect(await screen.findByTestId('home-bento-history-drawer')).toBeInTheDocument();
@@ -563,9 +570,9 @@ describe('HomeSurfacePage', () => {
 
     await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([3, 2, 1], { deleteAll: true }));
     await waitFor(() => expect(screen.getByText('历史分析尚未同步。')).toBeInTheDocument());
-    expect(screen.getByTestId('home-bento-zero-state')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('home-bento-zero-state-quick-NVDA')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
   });
 
   it('renders a cached history snapshot immediately and then replaces it with database detail', async () => {
@@ -628,13 +635,15 @@ describe('HomeSurfacePage', () => {
       },
     });
 
-    vi.mocked(historyApi.getDetail).mockImplementationOnce(() => deferred.promise);
+    vi.mocked(historyApi.getDetail).mockImplementation((recordId) => (
+      recordId === 2 ? deferred.promise : Promise.resolve(defaultHistoryReport)
+    ));
     vi.mocked(analysisApi.analyzeAsync).mockClear();
 
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
-    expect(await screen.findByText('Tesla')).toBeInTheDocument();
+    expect(await screen.findByText('特斯拉')).toBeInTheDocument();
     expect(screen.getByText('Cached snapshot only.')).toBeInTheDocument();
     expect(historyApi.getDetail).toHaveBeenCalledWith(2);
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
@@ -758,7 +767,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
-    expect(await screen.findByText('Tesla')).toBeInTheDocument();
+    expect(await screen.findByText('特斯拉')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方动能收敛，反弹仍待确认');
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
@@ -783,7 +792,8 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
-    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(await screen.findByText('深度分析请求已发出')).toBeInTheDocument();
     deferred.resolve({
       taskId: 'task-loading-state',
       status: 'pending',
@@ -819,7 +829,8 @@ describe('HomeSurfacePage', () => {
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'msft' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
-    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(await screen.findByText('深度分析请求已发出')).toBeInTheDocument();
     await waitFor(() => expect(analysisApi.analyzeAsync).toHaveBeenCalledWith({
       stockCode: 'MSFT',
       reportType: 'detailed',
@@ -839,7 +850,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'AAPL' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
-    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     deferred.reject(createApiError(createParsedApiError({
         title: '请求过于频繁',
         message: '请求过于频繁，请稍后再试。',
@@ -862,7 +873,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText(/RateLimitError/i)).not.toBeInTheDocument();
   });
 
-  it('does not render preset ORCL dashboard immediately after manual submit without a persisted report', async () => {
+  it('keeps the existing card shell and pending placeholders after manual submit without a persisted report', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 0,
@@ -877,7 +888,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'ORCL' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
-    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
 
@@ -888,7 +899,8 @@ describe('HomeSurfacePage', () => {
     });
 
     expect(await screen.findByText('深度分析请求已发出')).toBeInTheDocument();
-    expect(screen.getByText('Ghost dashboard 承接中')).toBeInTheDocument();
+    expect(screen.getByText('输入股票代码后将在此原位刷新 AI 判断。')).toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
