@@ -241,7 +241,7 @@ const AdminLogsPage: React.FC = () => {
   return (
     <section
       data-testid="admin-logs-workspace"
-      className="flex h-full min-h-0 w-full flex-1 min-w-0 flex-col gap-6 overflow-y-auto px-6 py-8 md:px-8 xl:px-12"
+      className="flex min-h-0 w-full flex-1 min-w-0 flex-col gap-6"
     >
       <GlassCard as="section" className="p-6">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,64rem)] xl:items-end">

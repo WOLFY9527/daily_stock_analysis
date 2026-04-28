@@ -1263,7 +1263,7 @@ const PortfolioPage: React.FC = () => {
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
           isSafariReady,
-          'w-full h-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] min-w-0 bg-transparent text-white/72',
+          'w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
         <section className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-12">

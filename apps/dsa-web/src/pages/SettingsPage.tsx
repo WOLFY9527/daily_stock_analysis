@@ -3003,7 +3003,7 @@ const SettingsPage: React.FC = () => {
     >
       <div
         data-testid="settings-workspace"
-        className="flex w-full flex-1 min-w-0 flex-col gap-8 px-6 py-8 md:flex-row md:px-8 xl:px-12"
+        className="flex w-full flex-1 min-w-0 flex-col gap-8 md:flex-row"
       >
         <aside className="w-full shrink-0 self-start md:sticky md:top-8 md:w-64">
           <div className="flex flex-col gap-6">

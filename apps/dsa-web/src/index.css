@@ -1417,13 +1417,6 @@ html[data-theme] :where(
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding-left: clamp(0.08rem, 0.5vw, 0.34rem);
-}
-
-@media (max-width: 1023px) {
-  .theme-main-lane {
-    padding-left: 0;
-  }
 }
 
 .theme-panel-solid {
@@ -6542,7 +6535,7 @@ body::after {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding-inline: 0;
+  padding-inline: clamp(0.8rem, 1.8vw, 1.6rem);
 }
 
 .backtest-v1-page,
@@ -6911,7 +6904,7 @@ body::after {
 
 @media (min-width: 1440px) {
   .shell-content-frame.shell-content-frame--backtest {
-    padding-inline: 0;
+    padding-inline: clamp(0.8rem, 1.8vw, 1.6rem);
   }
 
   .backtest-workbench-shell {
@@ -11551,7 +11544,7 @@ html[data-theme='spacex'] .shell-content-frame.shell-content-frame--backtest {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding-inline: 0;
+  padding-inline: var(--wolfy-shell-safe-x);
 }
 
 @media (min-width: 1600px) {
@@ -13633,7 +13626,6 @@ html[data-theme='spacex'] .shell-main-column--scanner.shell-main-column--page-sc
 
 html[data-theme='spacex'] .shell-main-column {
   min-width: 0;
-  padding-left: 0;
 }
 
 html[data-theme='spacex'] .shell-header-nav {
@@ -16173,7 +16165,6 @@ html[data-theme='spacex'] .theme-shell--page-scroll .shell-content-frame--page-s
 html[data-theme='spacex'] .shell-main-column {
   min-width: 0;
   width: 100%;
-  padding-left: 0;
 }
 
 html[data-theme='spacex'] .shell-main-column--scanner {

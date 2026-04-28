@@ -138,7 +138,7 @@ const PersonalSettingsPage: React.FC = () => {
   return (
     <section
       data-testid="personal-settings-workspace"
-      className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-8 px-6 py-8 md:px-8 xl:px-12"
+      className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-8"
     >
       <WorkspacePageHeader
         eyebrow={t('settings.personalEyebrow')}

@@ -1164,7 +1164,7 @@ const BacktestPage: React.FC = () => {
       data-testid="backtest-bento-page"
       aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 flex flex-col min-w-0 min-h-0 px-6 pt-6 pb-12 md:px-8 xl:px-12 bg-transparent')}
+      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 flex flex-col gap-6 min-w-0 min-h-0 bg-transparent')}
     >
       <div
         data-testid="backtest-subnav"
@@ -1188,7 +1188,7 @@ const BacktestPage: React.FC = () => {
 
       <main
         data-testid="backtest-v1-page"
-        className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent pt-6"
+        className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.div

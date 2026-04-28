@@ -1700,7 +1700,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
       className={getSafariReadySurfaceClassName(
         isSafariReady,
-        `${BENTO_SURFACE_ROOT_CLASS} workspace-width-wide w-full flex-1 min-h-0 flex flex-col overflow-x-hidden bg-transparent`,
+        `${BENTO_SURFACE_ROOT_CLASS} w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent`,
       )}
     >
       {statusToast ? (
@@ -1712,7 +1712,7 @@ const HomeBentoDashboardPage: React.FC = () => {
           </div>
         </div>
       ) : null}
-      <main className="w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 min-w-0 overflow-y-auto no-scrollbar" data-testid="home-bento-main">
+      <main className="w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0" data-testid="home-bento-main">
         {(() => {
           const readyCopy = dashboardData;
           return (

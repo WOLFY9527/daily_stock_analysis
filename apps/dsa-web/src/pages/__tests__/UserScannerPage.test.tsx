@@ -373,7 +373,8 @@ describe('UserScannerPage', () => {
   it('shows user-facing copy without admin jargon in zh', async () => {
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('user-scanner-workspace')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
+    expect(await screen.findByTestId('user-scanner-workspace')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'gap-6', 'min-h-0', 'min-w-0');
+    expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('user-scanner-bento-page').className).not.toContain('overflow-hidden');
     expect(screen.getByTestId('user-scanner-bento-page')).toHaveClass('w-full', 'flex-1', 'min-h-0', 'min-w-0');
     expect(screen.getByTestId('user-scanner-workspace')).toHaveClass('min-h-0');

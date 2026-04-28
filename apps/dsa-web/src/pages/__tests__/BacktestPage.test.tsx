@@ -890,10 +890,12 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'min-w-0', 'min-h-0', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'bg-transparent');
+    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'gap-6', 'min-w-0', 'min-h-0', 'bg-transparent');
+    expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('container', 'mx-auto', 'max-w-[1600px]');
     expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
-    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'pt-6', 'bg-transparent');
+    expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
+    expect(screen.getByTestId('backtest-v1-page')).not.toHaveClass('pt-6');
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.historicalTab') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'page.normalMode') })).toHaveAttribute('aria-selected', 'true');

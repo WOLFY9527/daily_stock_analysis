@@ -273,7 +273,7 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
     expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
-    expect(document.querySelector('.shell-main-column')).toHaveClass('relative', 'w-full', 'min-w-0');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('relative', 'w-full', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
     expect(document.documentElement.dataset.scannerShell).toBe('true');
     expect(document.body.dataset.scannerShell).toBe('true');
   });
@@ -322,6 +322,7 @@ describe('Shell', () => {
 
     expect(document.querySelector('.shell-masthead')).toHaveClass('w-full');
     expect(document.querySelector('.shell-masthead__inner')).toHaveClass('w-full');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'min-w-0');
     expect(document.querySelector('.theme-page-transition')).toHaveClass('w-full', 'min-w-0');
   });
 

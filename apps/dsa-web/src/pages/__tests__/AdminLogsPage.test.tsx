@@ -124,7 +124,8 @@ describe('AdminLogsPage', () => {
     const { container } = render(<AdminLogsPage />);
 
     expect(container.querySelectorAll('main')).toHaveLength(0);
-    expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-6');
+    expect(screen.getByTestId('admin-logs-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8', 'overflow-y-auto');
     expect(screen.getByTestId('admin-logs-workspace')).not.toHaveClass('max-w-[1600px]', 'mx-auto', 'px-4');
     expect(await screen.findByText(translate('zh', 'adminLogs.scopeTitle'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'adminLogs.sessionListTitle'))).toBeInTheDocument();

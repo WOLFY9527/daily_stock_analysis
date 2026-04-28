@@ -18,8 +18,13 @@ export function useSafariRenderReady<T extends HTMLElement = HTMLDivElement>(del
 
   useEffect(() => {
     let releaseTimer = 0;
+    let fallbackTimer = 0;
     let frameA = 0;
     let frameB = 0;
+
+    fallbackTimer = window.setTimeout(() => {
+      setIsReady(true);
+    }, delayMs + 500);
 
     frameA = window.requestAnimationFrame(() => {
       repaintElement(surfaceRef.current);
@@ -35,6 +40,7 @@ export function useSafariRenderReady<T extends HTMLElement = HTMLDivElement>(del
       window.cancelAnimationFrame(frameA);
       window.cancelAnimationFrame(frameB);
       window.clearTimeout(releaseTimer);
+      window.clearTimeout(fallbackTimer);
     };
   }, [delayMs]);
 

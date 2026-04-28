@@ -110,7 +110,8 @@ describe('PersonalSettingsPage', () => {
     );
 
     expect(container.querySelectorAll('main')).toHaveLength(0);
-    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-8');
+    expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('max-w-4xl', 'mx-auto');
     expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
     expect(screen.getByText(zh('settings.personalGuestPreferencesBody'))).toBeInTheDocument();
@@ -156,7 +157,8 @@ describe('PersonalSettingsPage', () => {
     );
 
     expect(container.querySelectorAll('main')).toHaveLength(0);
-    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-8');
+    expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('link', { name: zh('nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
     expect(screen.getByRole('link', { name: zh('adminNav.logs') })).toHaveAttribute('href', '/admin/logs');

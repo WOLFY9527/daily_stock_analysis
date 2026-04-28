@@ -478,7 +478,8 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('settings-bento-page')).toHaveClass('bento-surface-root');
     expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
     expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByTestId('settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-8');
+    expect(screen.getByTestId('settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     expect(screen.getByTestId('settings-workspace')).not.toHaveClass('max-w-[1600px]', 'mx-auto', 'px-4');
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();
