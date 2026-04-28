@@ -132,6 +132,31 @@ function isZombieHistoryPayload(payload: unknown): boolean {
   return false;
 }
 
+function hasFailedAnalysisText(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  return /all llm models failed|serviceunavailable|rate limit|ratelimiterror|timeout|timed out|分析过程出错|llm.*failed/i.test(value);
+}
+
+function isFailedAnalysisPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+
+  for (const value of Object.values(payload)) {
+    if (hasFailedAnalysisText(value)) {
+      return true;
+    }
+    if (typeof value === 'object' && value !== null && isFailedAnalysisPayload(value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function purgeZombieDashboardStorage(): void {
   if (typeof window === 'undefined') {
     return;
@@ -271,6 +296,9 @@ function cacheReportSnapshot(
 ): void {
   const snapshotKey = normalizeSnapshotKey(report?.meta.stockCode);
   if (!snapshotKey || !report) {
+    return;
+  }
+  if (isZombieHistoryPayload(report) || isFailedAnalysisPayload(report)) {
     return;
   }
 

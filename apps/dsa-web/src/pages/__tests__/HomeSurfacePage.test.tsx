@@ -332,7 +332,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('Latest Report Context')).toBeInTheDocument();
   });
 
-  it('sanitizes Chinese report fields when the dashboard is viewed in English', async () => {
+  it('neutralizes stale failed reports when the dashboard is viewed in English', async () => {
     window.localStorage.setItem('dsa-ui-language', 'en');
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getDetail).mockImplementation((recordId) => {
@@ -407,13 +407,18 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-item-3'));
 
     await waitFor(() => expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument());
-    expect(await screen.findByText('Oracle')).toBeInTheDocument();
-    expect(screen.getByText('Bullish')).toBeInTheDocument();
-    expect(screen.getByText('172.92-178.04 (Pullback support confirmed)')).toBeInTheDocument();
-    expect(screen.getByText('180.45-189.17 (Target zone)')).toBeInTheDocument();
-    expect(screen.getByText('164.39 (Technical invalidation)')).toBeInTheDocument();
-    expect(screen.getByText('Market Cap (Latest)')).toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getAllByText('ORCL').length).toBeGreaterThan(0));
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(8);
+    expect(screen.getAllByText('N/A').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Bullish')).not.toBeInTheDocument();
+    expect(screen.queryByText('172.92-178.04 (Pullback support confirmed)')).not.toBeInTheDocument();
+    expect(screen.queryByText('180.45-189.17 (Target zone)')).not.toBeInTheDocument();
+    expect(screen.queryByText('164.39 (Technical invalidation)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Market Cap (Latest)')).not.toBeInTheDocument();
     expect(screen.queryByText('N/A (field pending)')).not.toBeInTheDocument();
     expect(screen.queryByText('回踩支撑确认')).not.toBeInTheDocument();
     expect(screen.queryByText('总市值(最新值)')).not.toBeInTheDocument();
@@ -446,7 +451,11 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByTestId('home-bento-history-drawer')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
-    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument();
     expect(historyApi.getDetail).toHaveBeenCalledWith(2);
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
 
@@ -848,6 +857,64 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('未找到股票代码 MSFT，请检查是否退市或输入有误')).not.toBeInTheDocument();
   });
 
+  it('renders sparse completed reports with neutral values instead of local demo presets', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [
+        { id: 8, queryId: 'q8', stockCode: 'TSLA', stockName: 'Tesla', companyName: 'Tesla', createdAt: '2026-04-27T10:00:00Z', generatedAt: '2026-04-27T10:02:00Z', isTest: false },
+      ],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      meta: {
+        ...defaultHistoryReport.meta,
+        id: 8,
+        queryId: 'q8',
+        stockCode: 'TSLA',
+        stockName: 'Tesla',
+      },
+      summary: {
+        analysisSummary: '',
+        operationAdvice: '',
+        trendPrediction: '',
+        sentimentScore: undefined,
+        sentimentLabel: '',
+      },
+      strategy: {},
+      details: {
+        standardReport: {
+          summaryPanel: {
+            stock: 'Tesla',
+            ticker: 'TSLA',
+            oneSentence: '',
+          },
+          decisionPanel: {},
+          decisionContext: {},
+          reasonLayer: {},
+          technicalFields: [],
+          fundamentalFields: [],
+        },
+      },
+    });
+
+    renderSurface();
+
+    await screen.findByTestId('home-bento-card-decision');
+    expect(screen.getAllByText('TSLA').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(8);
+    expect(screen.getAllByText('N/A').length).toBeGreaterThan(0);
+    expect(screen.queryByText('反弹验证')).not.toBeInTheDocument();
+    expect(screen.queryByText('事件驱动后仍需量能确认')).not.toBeInTheDocument();
+    expect(screen.queryByText('166.00 - 171.50')).not.toBeInTheDocument();
+    expect(screen.queryByText('首波反弹已有量能，但续航还需二次确认')).not.toBeInTheDocument();
+  });
+
   it('updates pending analysis cards in place when the async task completes', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValue({
@@ -961,6 +1028,7 @@ describe('HomeSurfacePage', () => {
       })));
 
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
+    expect(await screen.findByText('LLM 分析失败，请稍后重试')).toBeInTheDocument();
     expect(screen.queryByText('AI 引擎调用过载，已加载本地快照数据')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();

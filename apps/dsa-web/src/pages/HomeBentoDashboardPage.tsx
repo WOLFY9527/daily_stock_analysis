@@ -103,6 +103,40 @@ function isPeLikeMetric(label: string): boolean {
   return key === 'pe' || key.includes('市盈率') || key.includes('peratio') || key.includes('pettm') || key.includes('forwardpe');
 }
 
+function isZombieStockLabel(value: unknown): boolean {
+  const text = String(value || '').trim();
+  const normalized = text.toLowerCase();
+  return normalized === '待确认股票' || normalized === 'unknown' || normalized === 'unnamed stock' || /^股票[A-Z0-9.]+$/i.test(text);
+}
+
+function hasFailedAnalysisText(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  return /all llm models failed|serviceunavailable|rate limit|ratelimiterror|timeout|timed out|分析过程出错|llm.*failed/i.test(value);
+}
+
+function hasUntrustedReportMarker(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (/stock(name)?$/i.test(key) && isZombieStockLabel(value)) {
+      return true;
+    }
+    if (hasFailedAnalysisText(value)) {
+      return true;
+    }
+    if (typeof value === 'object' && value !== null && hasUntrustedReportMarker(value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function neutralFieldValue(label: string): string {
   return isPeLikeMetric(label) ? 'N/A' : EMPTY_FIELD_VALUE;
 }
@@ -790,32 +824,6 @@ function resolveHistoryCompanyLabel(historyItem: HistoryItem): string {
   return `${companyName} (${ticker})`;
 }
 
-function resolveDashboardPayload(locale: DashboardLocale, ticker: string): DashboardPayload {
-  const normalizedTicker = normalizeTickerQuery(ticker) || 'NVDA';
-  const variant = DASHBOARD_VARIANTS[locale][normalizedTicker];
-  if (variant) {
-    return enrichDashboardPayload(locale, variant);
-  }
-
-  const base = DASHBOARD_VARIANTS[locale].NVDA;
-  return enrichDashboardPayload(locale, {
-    ...base,
-    instrument: normalizedTicker,
-    ticker: normalizedTicker,
-    decision: {
-      ...base.decision,
-      company: normalizedTicker,
-      badge: locale === 'en' ? 'Awaiting refreshed analysis' : '等待最新分析刷新',
-      summary: locale === 'en'
-        ? 'This ticker does not have a dedicated local preset yet, so the dashboard is using a generic live shell while analysis refreshes.'
-        : '当前股票尚未配置专属本地预设，仪表盘先以通用动态骨架承接，等待分析结果回填。',
-      reasonBody: locale === 'en'
-        ? 'Search submission updated the dashboard state immediately. Historical analysis, if available, will overwrite these placeholders next.'
-        : '搜索提交已立即刷新首页状态，若历史分析存在，将优先用历史结果回填当前占位数据。',
-    },
-  });
-}
-
 function buildInPlacePlaceholderDashboard(
   locale: DashboardLocale,
   ticker?: string | null,
@@ -861,34 +869,9 @@ function buildInPlacePlaceholderDashboard(
   });
 }
 
-function DashboardSkeletonCard({
-  testId,
-  className,
-  rows = 4,
-}: {
-  testId: string;
-  className?: string;
-  rows?: number;
-}) {
-  return (
-    <div
-      data-testid={testId}
-      className={`h-full w-full rounded-[24px] border border-white/5 bg-white/[0.02] p-6 backdrop-blur-2xl ${className || ''}`}
-    >
-      <div className="flex h-full animate-pulse flex-col gap-4">
-        <div className="h-3 w-24 rounded-full bg-white/8" />
-        <div className="h-10 w-32 rounded-2xl bg-white/10" />
-        <div className="grid flex-1 gap-3">
-          {Array.from({ length: rows }).map((_, index) => (
-            <div
-              key={`${testId}-${index + 1}`}
-              className={`rounded-2xl ${index % 2 === 0 ? 'bg-white/[0.06]' : 'bg-white/[0.04]'} ${index === 0 ? 'h-16' : 'h-12'}`}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+function resolveLocalizedCompanyFallback(locale: DashboardLocale, ticker: string): string {
+  const normalizedTicker = normalizeTickerQuery(ticker);
+  return DASHBOARD_VARIANTS[locale][normalizedTicker]?.decision.company || normalizedTicker || EMPTY_FIELD_VALUE;
 }
 
 function toneFromScore(score?: number): SignalTone {
@@ -995,7 +978,7 @@ function replaceEnglishFragments(raw: string): string {
 
 function localizeCompanyName(locale: DashboardLocale, raw: string | undefined, fallback: string, ticker: string): string {
   const value = String(raw || '').trim();
-  if (!value) {
+  if (!value || isZombieStockLabel(value)) {
     return fallback || ticker;
   }
   if (locale === 'zh' && !containsCjk(value) && containsCjk(fallback)) {
@@ -1127,11 +1110,14 @@ function buildTechSignalHeadline(locale: DashboardLocale, ticker: string, label:
 
 function buildFundamentalMetricHeadline(locale: DashboardLocale, label: string, value: string): string {
   const key = normalizeDetailKey(label);
+  if (String(value || '').trim().toUpperCase() === 'N/A') {
+    return 'N/A';
+  }
   const raw = sanitizeMetricValue(value);
   const isEnglish = locale === 'en';
 
-  if (raw === '-') {
-    return '-';
+  if (raw === '-' || raw === 'N/A') {
+    return raw;
   }
 
   if (key === '收入增速' || key === 'revenuegrowth') {
@@ -1257,8 +1243,8 @@ function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: 
   const rawValue = sanitizeMetricValue(value);
   const isEnglish = locale === 'en';
 
-  if (rawValue === '-') {
-    return '-';
+  if (rawValue === '-' || rawValue === 'N/A') {
+    return rawValue;
   }
 
   if (key === 'macd') {
@@ -1318,6 +1304,9 @@ function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: 
 
 function buildFundamentalMetricDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
   const key = normalizeDetailKey(label);
+  if (String(value || '').trim().toUpperCase() === 'N/A') {
+    return 'N/A';
+  }
   const rawValue = sanitizeMetricValue(value);
   const isEnglish = locale === 'en';
 
@@ -1548,7 +1537,11 @@ function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload
 
 function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisReport): DashboardPayload {
   const stockCode = normalizeTickerQuery(report.meta.stockCode || 'NVDA');
-  const seed = resolveDashboardPayload(locale, stockCode);
+  if (hasUntrustedReportMarker(report)) {
+    return buildInPlacePlaceholderDashboard(locale, stockCode);
+  }
+
+  const seed = buildInPlacePlaceholderDashboard(locale, stockCode);
   const neutralTechSignals = neutralizeDashboardSignals(seed.tech.signals);
   const neutralFundamentals = neutralizeDashboardFields(seed.fundamentals.metrics);
   const standardReport = report.details?.standardReport;
@@ -1593,7 +1586,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     ticker: stockCode,
     decision: {
       ...seed.decision,
-      company: localizeCompanyName(locale, rawCompany, seed.decision.company, stockCode),
+      company: localizeCompanyName(locale, rawCompany, resolveLocalizedCompanyFallback(locale, stockCode), stockCode),
       heroValue: scoreText,
       signalLabel: localizeSentimentLabel(locale, rawSignalLabel, EMPTY_FIELD_VALUE),
       signalTone: sentimentTone,
@@ -1677,7 +1670,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   );
   const isBusy = isAnalyzing || isDashboardLoading;
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
-  const shouldShowHistoryTransitionSkeleton = isDashboardLoading && !pendingAnalysisTicker;
   const completedTaskReport = useMemo(() => {
     const taskTicker = pendingAnalysisTicker || activeTicker;
     if (!taskTicker) {
@@ -1687,7 +1679,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       (task) => normalizeTickerQuery(task.stockCode) === taskTicker && task.status === 'completed' && task.result?.report,
     )?.result?.report || null;
   }, [activeTasks, activeTicker, pendingAnalysisTicker]);
-  const dashboardData = useMemo<DashboardPayload | null>(() => {
+  const dashboardData = useMemo<DashboardPayload>(() => {
     const effectiveTicker = activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
 
     if (completedTaskReport && effectiveTicker && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker) {
@@ -1710,20 +1702,10 @@ const HomeBentoDashboardPage: React.FC = () => {
       ? {
         analyzeButton: 'Analyze',
         omnibarPlaceholder: 'Enter a valid ticker...',
-        title: 'Wolfy AI Engine Standing By',
-        body: 'Enter a ticker in the command deck above to wake the deep research network instantly.',
-        strategyLocked: 'Execution strategy module is locked',
-        techWaiting: 'Awaiting technical structure scan',
-        fundamentalsWaiting: 'Awaiting fundamental profile load',
       }
       : {
         analyzeButton: '分析',
         omnibarPlaceholder: '输入有效股票代码...',
-        title: 'Wolfy AI 引擎待命中',
-        body: '在上方联合指挥台输入股票代码，立即唤醒深度研报网络。',
-        strategyLocked: '执行策略模块处于锁定状态',
-        techWaiting: '等待技术形态扫描',
-        fundamentalsWaiting: '等待基本面画像加载',
       }
   ), [locale]);
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
@@ -1740,8 +1722,8 @@ const HomeBentoDashboardPage: React.FC = () => {
   }), [t]);
 
   useEffect(() => {
-    document.title = copy?.documentTitle || `WolfyStock | ${standbyCopy.title}`;
-  }, [copy?.documentTitle, standbyCopy.title]);
+    document.title = copy.documentTitle;
+  }, [copy.documentTitle]);
 
   useEffect(() => {
     purgeZombieDashboardStorage();
@@ -1761,6 +1743,9 @@ const HomeBentoDashboardPage: React.FC = () => {
     if (hasHydratedInitialTicker) {
       return;
     }
+    if (pendingAnalysisTicker) {
+      return;
+    }
 
     const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode);
     if (!nextTicker) {
@@ -1773,15 +1758,19 @@ const HomeBentoDashboardPage: React.FC = () => {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [hasHydratedInitialTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
+  }, [hasHydratedInitialTicker, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
+    if (pendingAnalysisTicker) {
+      return;
+    }
+
     if (selectedTicker && !activeTicker) {
       setActiveTicker(selectedTicker);
       return;
     }
 
-  }, [activeTicker, selectedTicker]);
+  }, [activeTicker, pendingAnalysisTicker, selectedTicker]);
 
   useEffect(() => {
     if (pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
@@ -1841,6 +1830,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     setDashboardLoading(true);
     setActiveTicker(normalizedTicker);
     setPendingAnalysisTicker(normalizedTicker);
+    setHasHydratedInitialTicker(true);
     setSearchQuery('');
 
     try {
@@ -1862,13 +1852,13 @@ const HomeBentoDashboardPage: React.FC = () => {
 
       setPendingAnalysisTicker(null);
       setStatusToast({
-        message: result.error?.message || (locale === 'en' ? 'Analysis request failed.' : '分析请求失败'),
+        message: locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试',
         tone: 'error',
       });
     } catch {
       setPendingAnalysisTicker(null);
       setStatusToast({
-        message: locale === 'en' ? 'Analysis request failed.' : '分析请求失败',
+        message: locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试',
         tone: 'error',
       });
     } finally {
@@ -1932,8 +1922,8 @@ const HomeBentoDashboardPage: React.FC = () => {
       {statusToast ? (
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
           <div className={statusToast.tone === 'warning'
-            ? 'rounded-2xl border border-red-400/35 bg-red-950/82 px-4 py-3 text-sm font-semibold text-red-50 shadow-[0_18px_50px_rgba(127,29,29,0.35)] backdrop-blur-xl'
-            : 'rounded-2xl border border-amber-300/35 bg-amber-950/82 px-4 py-3 text-sm font-semibold text-amber-50 shadow-[0_18px_50px_rgba(120,53,15,0.35)] backdrop-blur-xl'}>
+            ? 'rounded-2xl border border-amber-300/35 bg-amber-950/82 px-4 py-3 text-sm font-semibold text-amber-50 shadow-[0_18px_50px_rgba(120,53,15,0.35)] backdrop-blur-xl'
+            : 'rounded-2xl border border-red-400/35 bg-red-950/82 px-4 py-3 text-sm font-semibold text-red-50 shadow-[0_18px_50px_rgba(127,29,29,0.35)] backdrop-blur-xl'}>
             {statusToast.message}
           </div>
         </div>
@@ -2003,82 +1993,59 @@ const HomeBentoDashboardPage: React.FC = () => {
                   </button>
                 </form>
                 <div className="min-h-0 flex-1">
-                  {shouldShowHistoryTransitionSkeleton || !readyCopy ? (
-                    <DashboardSkeletonCard
-                      testId="home-bento-loading-decision-card"
-                      className="min-h-[32rem]"
-                      rows={5}
-                    />
-                  ) : (
-                    <DecisionCard
-                      eyebrow={readyCopy.decision.eyebrow}
-                      company={readyCopy.decision.company}
-                      ticker={readyCopy.ticker}
-                      heroValue={readyCopy.decision.heroValue}
-                      heroUnit={readyCopy.decision.heroUnit}
-                      heroLabel={readyCopy.decision.heroLabel}
-                      signalLabel={readyCopy.decision.signalLabel}
-                      signalTone={readyCopy.decision.signalTone}
-                      scoreLabel={readyCopy.decision.scoreLabel}
-                      scoreValue={readyCopy.decision.scoreValue}
-                      badge={readyCopy.decision.badge}
-                      chartLabel={readyCopy.decision.chartLabel}
-                      summary={readyCopy.decision.summary}
-                      chartTimeframes={readyCopy.chartTimeframes}
-                      defaultTimeframeId={readyCopy.defaultTimeframeId}
-                      locale={locale}
-                      reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                      detailLabel={readyCopy.decision.detailLabel}
-                      onOpenDetails={() => setActiveDrawer('decision')}
-                    />
-                  )}
+                  <DecisionCard
+                    eyebrow={readyCopy.decision.eyebrow}
+                    company={readyCopy.decision.company}
+                    ticker={readyCopy.ticker}
+                    heroValue={readyCopy.decision.heroValue}
+                    heroUnit={readyCopy.decision.heroUnit}
+                    heroLabel={readyCopy.decision.heroLabel}
+                    signalLabel={readyCopy.decision.signalLabel}
+                    signalTone={readyCopy.decision.signalTone}
+                    scoreLabel={readyCopy.decision.scoreLabel}
+                    scoreValue={readyCopy.decision.scoreValue}
+                    badge={readyCopy.decision.badge}
+                    chartLabel={readyCopy.decision.chartLabel}
+                    summary={readyCopy.decision.summary}
+                    chartTimeframes={readyCopy.chartTimeframes}
+                    defaultTimeframeId={readyCopy.defaultTimeframeId}
+                    locale={locale}
+                    reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
+                    detailLabel={readyCopy.decision.detailLabel}
+                    onOpenDetails={() => setActiveDrawer('decision')}
+                  />
                 </div>
               </div>
               <div
                 className="min-w-0 xl:col-span-3 flex flex-col gap-6"
                 data-testid="home-bento-secondary-stack"
               >
-                {shouldShowHistoryTransitionSkeleton || !readyCopy ? (
-                  <>
-                    <DashboardSkeletonCard testId="home-bento-loading-strategy-card" rows={3} />
-                    <div
-                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
-                      data-testid="home-bento-secondary-grid"
-                    >
-                      <DashboardSkeletonCard testId="home-bento-loading-tech-card" rows={4} />
-                      <DashboardSkeletonCard testId="home-bento-loading-fundamentals-card" rows={4} />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <StrategyCard
-                      title={readyCopy.strategy.title}
-                      subtitle={readyCopy.strategy.subtitle}
-                      metrics={readyCopy.strategy.metrics}
-                      positionLabel={readyCopy.strategy.positionLabel}
-                      positionBody={readyCopy.strategy.positionBody}
-                      detailLabel={readyCopy.strategy.detailLabel}
-                      onOpenDetails={() => setActiveDrawer('strategy')}
-                    />
-                    <div
-                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
-                      data-testid="home-bento-secondary-grid"
-                    >
-                      <TechCard
-                        title={readyCopy.tech.title}
-                        signals={readyCopy.tech.signals}
-                        detailLabel={readyCopy.tech.detailLabel}
-                        onOpenDetails={() => setActiveDrawer('tech')}
-                      />
-                      <FundamentalsCard
-                        title={readyCopy.fundamentals.title}
-                        metrics={readyCopy.fundamentals.metrics}
-                        detailLabel={readyCopy.fundamentals.detailLabel}
-                        onOpenDetails={() => setActiveDrawer('fundamentals')}
-                      />
-                    </div>
-                  </>
-                )}
+                <StrategyCard
+                  title={readyCopy.strategy.title}
+                  subtitle={readyCopy.strategy.subtitle}
+                  metrics={readyCopy.strategy.metrics}
+                  positionLabel={readyCopy.strategy.positionLabel}
+                  positionBody={readyCopy.strategy.positionBody}
+                  detailLabel={readyCopy.strategy.detailLabel}
+                  onOpenDetails={() => setActiveDrawer('strategy')}
+                />
+                <div
+                  className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                  data-testid="home-bento-secondary-grid"
+                >
+                  <TechCard
+                    title={readyCopy.tech.title}
+                    signals={readyCopy.tech.signals}
+                    detailLabel={readyCopy.tech.detailLabel}
+                    onOpenDetails={() => setActiveDrawer('tech')}
+                  />
+                  <FundamentalsCard
+                    title={readyCopy.fundamentals.title}
+                    metrics={readyCopy.fundamentals.metrics}
+                    detailLabel={readyCopy.fundamentals.detailLabel}
+                    onOpenDetails={() => setActiveDrawer('fundamentals')}
+                  />
+                </div>
               </div>
             </div>
           );

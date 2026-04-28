@@ -396,6 +396,43 @@ describe('stockPoolStore', () => {
     expect(window.localStorage.getItem('cachedHistory')).toBeNull();
   });
 
+  it('does not cache zombie report snapshots from task results', () => {
+    useStockPoolStore.setState({
+      historyItems: [
+        { ...historyItem, id: 2, queryId: 'q-2', stockCode: 'NVDA', stockName: 'NVIDIA' },
+      ],
+    });
+
+    useStockPoolStore.getState().syncTaskCreated({
+      taskId: 'task-zombie',
+      stockCode: 'NVDA',
+      stockName: '待确认股票',
+      status: 'completed',
+      progress: 100,
+      reportType: 'detailed',
+      createdAt: '2026-04-27T10:00:00Z',
+      result: {
+        report: {
+          ...historyReport,
+          meta: {
+            ...historyReport.meta,
+            id: 2,
+            queryId: 'q-2',
+            stockCode: 'NVDA',
+            stockName: '待确认股票',
+          },
+          summary: {
+            ...historyReport.summary,
+            analysisSummary: '分析过程出错: All LLM models failed',
+          },
+        },
+      },
+    });
+
+    expect(useStockPoolStore.getState().reportSnapshotsByStockCode).toEqual({});
+    expect(useStockPoolStore.getState().selectCachedHistoryForStock('NVDA')).toBe(false);
+  });
+
   it('ignores late task updates after a task has been removed', () => {
     const pendingTask = {
       taskId: 'task-1',
