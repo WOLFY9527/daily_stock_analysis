@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
@@ -31,11 +32,18 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl';
-const PORTFOLIO_SELECT_CLASS = 'w-full';
-const PORTFOLIO_BUTTON_CLASS = 'theme-panel-subtle border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/72 px-3 py-1.5 text-sm text-foreground hover:bg-[var(--overlay-hover)]';
-const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'border-white/12 bg-white text-black hover:border-white/30 hover:bg-white/92';
-const PORTFOLIO_GHOST_BUTTON_CLASS = 'border-transparent bg-transparent px-0 py-0 text-xs text-secondary-text hover:text-foreground';
+const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-[24px] p-6';
+const PORTFOLIO_FIELD_LABEL_CLASS = 'text-[10px] text-white/40 uppercase tracking-widest font-bold';
+const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/20';
+const PORTFOLIO_SELECT_CLASS = 'w-full [&_select]:rounded-xl [&_select]:border-white/10 [&_select]:bg-white/[0.04] [&_select]:text-white';
+const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-12 w-full rounded-2xl !border-transparent !bg-white px-5 !font-bold !text-black shadow-[0_20px_60px_rgba(255,255,255,0.12)] hover:!bg-white hover:brightness-110 hover:scale-[1.01]';
+const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
+const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border border-white/10 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
+const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-lg border-0 bg-transparent p-0 text-white/30 hover:bg-red-500/10 hover:text-red-400';
+const PORTFOLIO_SEGMENT_LIST_CLASS = 'w-full rounded-2xl border border-white/5 bg-black/30 p-1';
+const PORTFOLIO_SEGMENT_BUTTON_CLASS = 'rounded-xl border-0 px-3 py-2 text-xs font-bold uppercase tracking-widest text-white/45';
+const PORTFOLIO_SEGMENT_ACTIVE_CLASS = 'bg-white/10 text-white shadow-none';
+const PORTFOLIO_SEGMENT_INACTIVE_CLASS = 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white/70';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -1021,19 +1029,28 @@ const PortfolioPage: React.FC = () => {
   }, []);
 
   const historyPanelContent = (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] xl:bg-transparent">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--theme-panel-subtle-border)] px-5 py-4">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] lg:bg-transparent">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-0 pb-4">
         <div>
           <h2 className="text-xs text-muted-text uppercase tracking-widest">{historyDrawerTitle}</h2>
           <p className="mt-2 text-sm text-secondary-text">{copy.pageLabel} {eventPage}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void loadEvents()}>{copy.refreshLedger}</Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className={PORTFOLIO_ICON_BUTTON_CLASS}
+            onClick={() => void loadEvents()}
+            aria-label={copy.refreshLedger}
+            title={copy.refreshLedger}
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          </Button>
           <Button
             type="button"
             variant="ghost"
             onClick={() => setIsHistoryDrawerOpen(false)}
-            className="h-9 w-9 rounded-full border border-[var(--theme-panel-subtle-border)] text-secondary-text hover:bg-[var(--overlay-hover)] hover:text-foreground xl:hidden"
+            className={`${PORTFOLIO_ICON_BUTTON_CLASS} lg:hidden`}
             aria-label={language === 'en' ? 'Close order history' : '关闭历史记录'}
           >
             <span aria-hidden="true">×</span>
@@ -1041,7 +1058,7 @@ const PortfolioPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-5">
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar pt-5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <SegmentedControl
@@ -1052,13 +1069,15 @@ const PortfolioPage: React.FC = () => {
                 { value: 'cash', label: copy.cashLedger },
                 { value: 'corporate', label: copy.corporateLedger },
               ]}
-              listClassName="w-auto"
-              buttonClassName="flex-none text-xs"
+              listClassName={`${PORTFOLIO_SEGMENT_LIST_CLASS} w-auto`}
+              buttonClassName={`${PORTFOLIO_SEGMENT_BUTTON_CLASS} flex-none`}
+              activeButtonClassName={PORTFOLIO_SEGMENT_ACTIVE_CLASS}
+              inactiveButtonClassName={PORTFOLIO_SEGMENT_INACTIVE_CLASS}
             />
             <div className="flex items-center gap-2 text-xs text-secondary-text">
-              <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</Button>
+              <Button type="button" variant="secondary" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} disabled={eventPage <= 1} onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>{copy.prevPage}</Button>
               <span>{copy.pageLabel} {eventPage}</span>
-              <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</Button>
+              <Button type="button" variant="secondary" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} disabled={!historyHasNextPage} onClick={() => setEventPage((prev) => prev + 1)}>{copy.nextPage}</Button>
             </div>
           </div>
 
@@ -1067,14 +1086,14 @@ const PortfolioPage: React.FC = () => {
               <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
             ) : (
               tradeEvents.map((item) => (
-                <div key={`trade-${item.id}`} className="theme-panel-subtle rounded-[24px] px-5 py-4 transition-colors hover:bg-[var(--overlay-hover)]">
+                <div key={`trade-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span></div>
                       <div className="mt-1 text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
                     </div>
-                    <Button type="button" variant="ghost" className={PORTFOLIO_GHOST_BUTTON_CLASS} onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })}>
-                      {copy.deleteConfirm}
+                    <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -1087,14 +1106,14 @@ const PortfolioPage: React.FC = () => {
               <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
             ) : (
               cashEvents.map((item) => (
-                <div key={`cash-${item.id}`} className="theme-panel-subtle rounded-[24px] px-5 py-4 transition-colors hover:bg-[var(--overlay-hover)]">
+                <div key={`cash-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-foreground">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-muted-text">{item.currency}</span></div>
                       <div className="mt-1 text-xs text-muted-text">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
                     </div>
-                    <Button type="button" variant="ghost" className={PORTFOLIO_GHOST_BUTTON_CLASS} onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })}>
-                      {copy.deleteConfirm}
+                    <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -1107,7 +1126,7 @@ const PortfolioPage: React.FC = () => {
               <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
             ) : (
               corporateEvents.map((item) => (
-                <div key={`corporate-${item.id}`} className="theme-panel-subtle rounded-[24px] px-5 py-4 transition-colors hover:bg-[var(--overlay-hover)]">
+                <div key={`corporate-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatCorporateActionLabel(item.actionType, language)}</span></div>
@@ -1117,8 +1136,8 @@ const PortfolioPage: React.FC = () => {
                         {item.splitRatio != null ? ` · ${copy.splitRatio} ${item.splitRatio}` : ''}
                       </div>
                     </div>
-                    <Button type="button" variant="ghost" className={PORTFOLIO_GHOST_BUTTON_CLASS} onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })}>
-                      {copy.deleteConfirm}
+                    <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -1155,25 +1174,29 @@ const PortfolioPage: React.FC = () => {
           'w-full h-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 overflow-y-auto no-scrollbar min-w-0 bg-transparent text-white/72',
         )}
       >
-        <section className="grid w-full flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-12 xl:grid-cols-10">
-          <section className="theme-panel-glass lg:col-span-4 xl:col-span-2 h-full flex flex-col rounded-[18px] overflow-hidden">
-            <div className="shrink-0 px-4 pt-4">
+        <section className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-12">
+          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:col-span-3 lg:h-full lg:overflow-hidden`}>
+            <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm text-muted-text uppercase tracking-widest">Trade Station</h2>
                 </div>
                 <Button
                   type="button"
-                  variant="secondary"
-                  className="shrink-0 whitespace-nowrap rounded-md border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/72 px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-[var(--overlay-hover)]"
+                  variant="ghost"
+                  className={PORTFOLIO_ICON_BUTTON_CLASS}
                   onClick={() => void handleRefreshFx()}
                   disabled={!hasAccounts || isLoading || fxRefreshing}
+                  aria-label={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
+                  title={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
                 >
-                  {fxRefreshing ? copy.refreshingFx : copy.refreshFx}
+                  <RefreshCw className={`h-4 w-4 ${fxRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
                 </Button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2.5">
                 <Select
+                  label="ACCOUNT"
+                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                   value={String(selectedAccount)}
                   onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
                   options={[
@@ -1183,6 +1206,8 @@ const PortfolioPage: React.FC = () => {
                   className={PORTFOLIO_SELECT_CLASS}
                 />
                 <Select
+                  label="COST METHOD"
+                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                   value={costMethod}
                   onChange={(value) => setCostMethod(value as PortfolioCostMethod)}
                   options={[
@@ -1192,7 +1217,7 @@ const PortfolioPage: React.FC = () => {
                   className={PORTFOLIO_SELECT_CLASS}
                 />
               </div>
-              <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-[var(--theme-panel-subtle-border)] py-2">
+              <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-white/5 py-2">
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="text-foreground">{formatMoney(totalCash, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="text-foreground">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
@@ -1210,7 +1235,7 @@ const PortfolioPage: React.FC = () => {
               ) : null}
             </div>
 
-            <div className="shrink-0 border-b border-[var(--theme-panel-subtle-border)] px-4 pt-1">
+            <div className="shrink-0 border-b border-white/5 pt-4 pb-4">
               <SegmentedControl
                 value={leftTab}
                 onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync')}
@@ -1219,16 +1244,16 @@ const PortfolioPage: React.FC = () => {
                   { value: 'account', label: language === 'en' ? 'Account' : '账户' },
                   { value: 'sync', label: language === 'en' ? 'Sync' : '同步' },
                 ]}
-                listClassName="w-full justify-start rounded-none border-0 bg-transparent p-0"
-                buttonClassName="flex-none rounded-none border-b-2 border-transparent px-0 py-2 text-xs uppercase tracking-[0.14em]"
-                activeButtonClassName="border-b-[var(--border-strong)] bg-transparent shadow-none"
-                inactiveButtonClassName="bg-transparent shadow-none"
+                listClassName={PORTFOLIO_SEGMENT_LIST_CLASS}
+                buttonClassName={PORTFOLIO_SEGMENT_BUTTON_CLASS}
+                activeButtonClassName={PORTFOLIO_SEGMENT_ACTIVE_CLASS}
+                inactiveButtonClassName={PORTFOLIO_SEGMENT_INACTIVE_CLASS}
               />
             </div>
 
             <div
               data-testid="portfolio-trade-station-scroll"
-              className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-3.5"
+              className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar"
             >
               {leftTab === 'trade' ? (
                 <div className="flex flex-col gap-2">
@@ -1244,8 +1269,10 @@ const PortfolioPage: React.FC = () => {
                         { value: 'fund', label: language === 'en' ? 'Cash Transfer' : '资金划转' },
                         { value: 'corporate', label: language === 'en' ? 'Corporate Action' : '公司行为' },
                       ]}
-                      listClassName="w-full"
-                      buttonClassName="text-xs"
+                      listClassName={PORTFOLIO_SEGMENT_LIST_CLASS}
+                      buttonClassName={PORTFOLIO_SEGMENT_BUTTON_CLASS}
+                      activeButtonClassName={PORTFOLIO_SEGMENT_ACTIVE_CLASS}
+                      inactiveButtonClassName={PORTFOLIO_SEGMENT_INACTIVE_CLASS}
                     />
                   </div>
                   {tradeType === 'stock' ? (
@@ -1253,39 +1280,41 @@ const PortfolioPage: React.FC = () => {
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualTrade}</p>
                       <form className="space-y-1.5" onSubmit={handleTradeSubmit}>
                         <div className="grid grid-cols-2 gap-3">
-                          <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input label="TRADE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <Select className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.tradeUidPlaceholder} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                          <Select label="SIDE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
+                          <Input label="REFERENCE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder="optional" value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.quantity} value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.price} value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                          <Input label="QUANTITY" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                          <Input label="PRICE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.feeOptional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.taxOptional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+                          <Input label="FEE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+                          <Input label="TAX" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                         </div>
-                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
                         <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitTrade}</Button>
                       </form>
                     </div>
                   ) : null}
 
                   {tradeType === 'fund' ? (
-                    <SectionShell className="rounded-[18px] p-3" contentClassName="space-y-1.5">
+                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-3" contentClassName="space-y-1.5">
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCash}</p>
                       <form className="space-y-1.5" onSubmit={handleCashSubmit}>
                         <div className="grid grid-cols-2 gap-3">
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
-                          <Select className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
+                          <Input label="EVENT DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+                          <Select label="DIRECTION" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
                         </div>
                         <div data-testid="portfolio-cash-amount-currency-grid" className="grid grid-cols-2 gap-3">
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder={copy.amount} value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+                          <Input label="AMOUNT" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder="0.00" value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
                           <Select
                             data-testid="portfolio-cash-currency-select"
+                            label="CURRENCY"
+                            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                             className={PORTFOLIO_SELECT_CLASS}
                             value={cashForm.currency}
                             onChange={(value) => setCashForm((prev) => ({ ...prev, currency: value }))}
@@ -1293,26 +1322,26 @@ const PortfolioPage: React.FC = () => {
                             placeholder={copy.currencyOptional(snapshotCurrency)}
                           />
                         </div>
-                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
                         <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCash}</Button>
                       </form>
                     </SectionShell>
                   ) : null}
 
                   {tradeType === 'corporate' ? (
-                    <SectionShell className="rounded-[18px] p-3" contentClassName="space-y-1.5">
+                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-3" contentClassName="space-y-1.5">
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCorporate}</p>
                       <form className="space-y-1.5" onSubmit={handleCorporateSubmit}>
                         <div className="grid grid-cols-2 gap-3">
-                          <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.stockCode} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input label="EFFECTIVE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
                         </div>
-                        <Select className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
+                        <Select label="ACTION TYPE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
                         <div className="grid grid-cols-2 gap-3">
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.dividendPerShare} value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
-                          <Input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.splitRatio} value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
+                          <Input label="DIVIDEND" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
+                          <Input label="SPLIT RATIO" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
                         </div>
-                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.notePlaceholder} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
                         <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
                       </form>
                     </SectionShell>
@@ -1328,7 +1357,7 @@ const PortfolioPage: React.FC = () => {
                       <Button
                         type="button"
                         variant="secondary"
-                        className={PORTFOLIO_BUTTON_CLASS}
+                        className={PORTFOLIO_SECONDARY_BUTTON_CLASS}
                         onClick={() => {
                           setShowCreateAccount((prev) => !prev);
                           setAccountCreateError(null);
@@ -1337,8 +1366,8 @@ const PortfolioPage: React.FC = () => {
                       >
                         {showCreateAccount ? copy.collapseCreate : copy.createAccount}
                       </Button>
-                      <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
-                        {isLoading ? copy.refreshingData : copy.refreshData}
+                      <Button type="button" variant="ghost" className={PORTFOLIO_ICON_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading} aria-label={isLoading ? copy.refreshingData : copy.refreshData} title={isLoading ? copy.refreshingData : copy.refreshData}>
+                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
                       </Button>
                     </div>
                   </div>
@@ -1354,15 +1383,15 @@ const PortfolioPage: React.FC = () => {
                     ))}
                   </div>
                   {(showCreateAccount || !hasAccounts) ? (
-                    <form className="theme-panel-subtle space-y-3 rounded-[18px] p-4" onSubmit={handleCreateAccount}>
+                    <form className="space-y-3 rounded-2xl border border-white/5 bg-white/[0.02] p-4" onSubmit={handleCreateAccount}>
                       {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
                       {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
-                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
+                      <Input label="ACCOUNT NAME" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="Core Portfolio" value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
                       <div className="grid grid-cols-2 gap-4">
-                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
-                        <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.baseCurrencyPlaceholder} value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
+                        <Input label="BROKER" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="Demo" value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
+                        <Input label="BASE CCY" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="CNY" value={accountForm.baseCurrency} onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))} />
                       </div>
-                      <Select className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(value) => setAccountForm((prev) => ({ ...prev, market: value as 'cn' | 'hk' | 'us' | 'global' }))} options={[{ value: 'cn', label: copy.marketCn }, { value: 'hk', label: copy.marketHk }, { value: 'us', label: copy.marketUs }, { value: 'global', label: copy.marketGlobal }]} />
+                      <Select label="MARKET" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={accountForm.market} onChange={(value) => setAccountForm((prev) => ({ ...prev, market: value as 'cn' | 'hk' | 'us' | 'global' }))} options={[{ value: 'cn', label: copy.marketCn }, { value: 'hk', label: copy.marketHk }, { value: 'us', label: copy.marketUs }, { value: 'global', label: copy.marketGlobal }]} />
                       <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={accountCreating}>{accountCreating ? copy.creatingAccount : copy.createAccount}</Button>
                     </form>
                   ) : null}
@@ -1373,8 +1402,8 @@ const PortfolioPage: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.dataSyncTitle}</p>
-                    <Button type="button" variant="secondary" className={PORTFOLIO_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading}>
-                      {isLoading ? copy.refreshingData : copy.refreshData}
+                    <Button type="button" variant="ghost" className={PORTFOLIO_ICON_BUTTON_CLASS} onClick={() => void handleRefresh()} disabled={isLoading} aria-label={isLoading ? copy.refreshingData : copy.refreshData} title={isLoading ? copy.refreshingData : copy.refreshData}>
+                      <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
                     </Button>
                   </div>
                   <div className="text-xs text-secondary-text space-y-1">
@@ -1382,9 +1411,9 @@ const PortfolioPage: React.FC = () => {
                     <p>{writableAccount ? `${writableAccount.name} (#${writableAccount.id})` : copy.brokerFallbackEmpty}</p>
                     <p>{selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
                   </div>
-                  <Select className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={setSelectedBroker} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} />
+                  <Select label="BROKER" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={setSelectedBroker} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} />
                   {selectedBroker === 'ibkr' ? (
-                    <SectionShell className="rounded-[18px] p-4" contentClassName="space-y-3">
+                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="space-y-1 text-xs text-secondary-text">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{copy.ibkrReadOnlyTitle}</p>
@@ -1393,9 +1422,9 @@ const PortfolioPage: React.FC = () => {
                         <PillBadge variant="info">{copy.readOnlyBadge}</PillBadge>
                       </div>
                       {ibkrConnection ? <p className="text-sm text-foreground">{ibkrConnection.connectionName}</p> : null}
-                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
-                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
-                      <Input className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
+                      <Input label="API BASE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
+                      <Input label="ACCOUNT REF" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
+                      <Input label="SESSION TOKEN" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
                       <Checkbox checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySsl(e.target.checked)} label={copy.verifyIbkrSsl} containerClassName="text-xs text-secondary-text" />
                       <Button type="button" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
                         {ibkrSyncing ? copy.syncing : copy.syncIbkr}
@@ -1411,7 +1440,7 @@ const PortfolioPage: React.FC = () => {
                       ) : null}
                     </SectionShell>
                   ) : (
-                    <div className="theme-panel-subtle rounded-[18px] px-4 py-4 text-xs text-secondary-text">
+                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4 text-xs text-secondary-text">
                       {copy.brokerImportHint}
                     </div>
                   )}
@@ -1420,10 +1449,10 @@ const PortfolioPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="lg:col-span-8 xl:col-span-5 h-full flex flex-col gap-4 min-h-0">
+          <section className="flex flex-col gap-6 lg:col-span-5 lg:h-full lg:min-h-0">
             <div
               data-testid="portfolio-total-assets-card"
-              className="theme-panel-glass shrink-0 rounded-[18px] p-4 flex justify-between items-end gap-3"
+              className={`${PORTFOLIO_GLASS_CARD_CLASS} shrink-0 flex justify-between items-end gap-3`}
             >
               <div className="min-w-0">
                 <h1 className="text-xs text-muted-text uppercase tracking-widest mb-2">{totalAssetsTitle}</h1>
@@ -1447,9 +1476,9 @@ const PortfolioPage: React.FC = () => {
 
             <div
               data-testid="portfolio-current-holdings-panel"
-              className="theme-panel-glass flex-1 min-h-0 flex flex-col rounded-[18px] overflow-hidden"
+              className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:min-h-0 lg:flex-1 lg:overflow-hidden`}
             >
-              <div className="shrink-0 p-4 border-b border-[var(--theme-panel-subtle-border)] flex justify-between items-center gap-3">
+              <div className="shrink-0 border-b border-white/5 pb-4 flex justify-between items-center gap-3">
                 <h2 className="min-w-0 text-xs text-muted-text uppercase tracking-widest">
                   Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
                 </h2>
@@ -1460,21 +1489,21 @@ const PortfolioPage: React.FC = () => {
                   onClick={openHistoryDrawerButton.onClick}
                   onPointerUp={openHistoryDrawerButton.onPointerUp}
                   data-testid="portfolio-history-drawer-trigger"
-                  className="shrink-0 rounded-full border border-[var(--theme-panel-subtle-border)] px-3 py-1.5 text-xs text-secondary-text hover:bg-[var(--overlay-hover)] hover:text-foreground xl:hidden"
+                  className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55 hover:bg-white/10 hover:text-white lg:hidden"
                 >
                   {historyDrawerLabel}
                 </Button>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-4">
-                <div className="flex flex-col gap-2">
+              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar">
+                <div className="flex flex-col">
                   {positionRows.length === 0 ? (
-                    <div className="theme-panel-subtle px-6 py-5 rounded-3xl text-sm text-secondary-text">{copy.noPositions}</div>
+                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-6 py-5 text-sm text-secondary-text">{copy.noPositions}</div>
                   ) : (
                     positionRows.map((row) => (
                       <div
                         key={`${row.accountId}-${row.symbol}-${row.market}`}
-                        className="theme-panel-subtle flex items-center justify-between gap-4 px-4 py-3 rounded-[18px] hover:bg-[var(--overlay-hover)] transition-colors"
+                        className="flex items-center justify-between gap-4 border-b border-white/5 px-1 py-3 transition-colors hover:bg-white/[0.03]"
                       >
                         <div className="min-w-0">
                           <div className="text-lg text-foreground font-medium truncate">{row.symbol}</div>
@@ -1498,8 +1527,8 @@ const PortfolioPage: React.FC = () => {
           </section>
 
           {isXlViewport ? (
-            <section className="hidden xl:flex xl:col-span-3 xl:min-h-0">
-            <div className="theme-panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[18px]">
+            <section className="hidden lg:flex lg:col-span-4 lg:min-h-0">
+            <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex h-full min-h-0 w-full flex-col overflow-hidden`}>
               {historyPanelContent}
             </div>
             </section>
@@ -1522,7 +1551,7 @@ const PortfolioPage: React.FC = () => {
             aria-label={historyDrawerTitle}
             className="absolute inset-y-0 right-0 flex w-full justify-end"
           >
-            <div className="flex h-full w-full max-w-md flex-col border-l border-[var(--theme-panel-subtle-border)] shadow-2xl">
+            <div className="flex h-full w-full max-w-md flex-col border-l border-white/5 shadow-2xl">
               {historyPanelContent}
             </div>
           </aside>

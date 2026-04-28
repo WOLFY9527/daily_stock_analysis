@@ -12,6 +12,7 @@ import { EyeToggleIcon } from './EyeToggleIcon';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  labelClassName?: string;
   hint?: string;
   error?: string;
   trailingAction?: React.ReactNode;
@@ -27,6 +28,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = ({ 
   label, 
+  labelClassName,
   hint, 
   error, 
   className = '', 
@@ -99,7 +101,7 @@ export const Input = ({
 
   return (
     <div className="input-field flex flex-col">
-      {label ? <label htmlFor={inputId} className="theme-field-label mb-2">{label}</label> : null}
+      {label ? <label htmlFor={inputId} className={cn('theme-field-label mb-2', labelClassName)}>{label}</label> : null}
       <div className="input-field__control relative flex items-center">
         {leadingIcon && (
           <div className="input-field__icon absolute left-3 z-10 pointer-events-none">

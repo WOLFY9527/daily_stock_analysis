@@ -18,6 +18,7 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
   onChange: (value: string) => void;
   options: SelectOption[];
   label?: string;
+  labelClassName?: string;
   placeholder?: string;
   className?: string;
   searchable?: boolean;
@@ -31,6 +32,7 @@ export const Select: React.FC<SelectProps> = ({
   onChange,
   options,
   label,
+  labelClassName,
   placeholder,
   disabled = false,
   className = '',
@@ -43,7 +45,7 @@ export const Select: React.FC<SelectProps> = ({
 
   return (
     <div className={cn('select-field flex flex-col', className)}>
-      {label ? <label htmlFor={resolvedId} className="theme-field-label mb-2">{label}</label> : null}
+      {label ? <label htmlFor={resolvedId} className={cn('theme-field-label mb-2', labelClassName)}>{label}</label> : null}
       <div className="select-field__control relative">
         <select
           id={resolvedId}
