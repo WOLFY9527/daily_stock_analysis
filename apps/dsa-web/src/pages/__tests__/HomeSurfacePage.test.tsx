@@ -181,21 +181,22 @@ describe('HomeSurfacePage', () => {
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
-    expect(omnibar).toHaveClass('w-full', 'flex', 'gap-3', 'h-12', 'mb-6', 'shrink-0');
+    expect(omnibar).toHaveClass('flex', 'h-12', 'w-full', 'min-w-0', 'shrink-0', 'gap-3');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
     expect(main.className).not.toContain('overflow-hidden');
-    expect(main.firstElementChild).toBe(omnibar);
-    expect(main.children[1]).toBe(grid);
+    expect(main.firstElementChild).toBe(grid);
     expect(grid).toHaveClass('w-full', 'grid', 'grid-cols-1', 'items-stretch', 'gap-6', 'xl:grid-cols-5');
     expect(grid.className).not.toContain('flex-1');
     expect(primaryStack).toHaveClass('xl:col-span-2', 'flex', 'flex-col', 'gap-6', 'h-full', 'min-h-0');
     expect(grid.firstElementChild).toBe(primaryStack);
+    expect(primaryStack.firstElementChild).toBe(omnibar);
     expect(secondaryStack).toHaveClass('xl:col-span-3', 'flex', 'flex-col', 'gap-6', 'min-w-0');
     expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'flex-1', 'items-stretch');
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
-    expect(homeSearch).toHaveClass('bg-white/[0.02]', 'border', 'border-white/5', 'text-sm', 'rounded-2xl', 'pl-11', 'shadow-lg');
+    expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'shadow-lg');
+    expect(homeSearch).toHaveClass('bg-transparent', 'text-sm', 'leading-none', 'pl-11', 'caret-white');
     expect(screen.getByTestId('home-bento-analyze-button')).toHaveTextContent('分析');
     expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-2xl', 'bg-white/[0.05]', 'border', 'border-white/10', 'backdrop-blur-md');
     expect(within(omnibar).getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
@@ -254,6 +255,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
     expect(primaryStack.compareDocumentPosition(secondaryStack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(omnibar.compareDocumentPosition(screen.getByTestId('home-bento-card-decision')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(omnibar.parentElement).toBe(primaryStack);
     expect(strategyCard.compareDocumentPosition(secondaryGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(techCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
@@ -274,6 +276,7 @@ describe('HomeSurfacePage', () => {
 
     const zeroState = await screen.findByTestId('home-bento-zero-state');
     const heroCard = screen.getByTestId('home-bento-zero-state-hero');
+    const primaryStack = screen.getByTestId('home-bento-zero-state-primary');
     const secondaryStack = screen.getByTestId('home-bento-zero-state-secondary');
     const secondaryGrid = screen.getByTestId('home-bento-zero-state-secondary-grid');
     const omnibar = screen.getByTestId('home-bento-omnibar');
@@ -281,7 +284,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(zeroState).toHaveClass('w-full', 'grid', 'grid-cols-1', 'gap-6', 'xl:grid-cols-5');
     expect(zeroState).toHaveAttribute('data-bento-grid', 'ghost');
-    expect(heroCard).toHaveClass('xl:col-span-2', 'flex', 'flex-col', 'h-[500px]', 'bg-white/[0.01]', 'border-dashed', 'border-white/10', 'rounded-[24px]', 'p-6', 'relative', 'overflow-hidden');
+    expect(primaryStack).toHaveClass('xl:col-span-2', 'flex', 'flex-col', 'gap-6', 'min-h-0');
+    expect(primaryStack.firstElementChild).toBe(omnibar);
+    expect(heroCard).toHaveClass('flex', 'flex-col', 'h-[500px]', 'bg-white/[0.01]', 'border-dashed', 'border-white/10', 'rounded-[24px]', 'p-6', 'relative', 'overflow-hidden');
     expect(secondaryStack).toHaveClass('xl:col-span-3', 'flex', 'flex-col', 'gap-6');
     expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'flex-1');
     expect(screen.getByText('Wolfy AI 引擎待命中')).toBeInTheDocument();
@@ -785,7 +790,7 @@ describe('HomeSurfacePage', () => {
       message: 'submitted',
     });
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
-    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('TSLA');
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
     expect(analysisApi.analyzeAsync).toHaveBeenCalled();
   });
 
@@ -801,21 +806,29 @@ describe('HomeSurfacePage', () => {
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
-  it('blocks analysis when the backend ticker validation reports that the symbol does not exist', async () => {
+  it('submits analysis immediately for a valid ticker even when no local history exists', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
-    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
-      stockCode: 'ZZZZZ',
-      exists: false,
-      stockName: null,
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
     });
     renderSurface();
 
-    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'zzzzz' } });
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'msft' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
-    expect(await screen.findByText('未找到股票代码 ZZZZZ，请检查是否退市或输入有误')).toBeInTheDocument();
-    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('ZZZZZ');
-    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('home-bento-loading-decision-card')).toBeInTheDocument();
+    await waitFor(() => expect(analysisApi.analyzeAsync).toHaveBeenCalledWith({
+      stockCode: 'MSFT',
+      reportType: 'detailed',
+      stockName: undefined,
+      originalQuery: 'MSFT',
+      selectionSource: 'manual',
+    }));
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(screen.queryByText('未找到股票代码 MSFT，请检查是否退市或输入有误')).not.toBeInTheDocument();
   });
 
   it('falls back to demo data with a toast when the analysis API fails', async () => {
@@ -857,11 +870,6 @@ describe('HomeSurfacePage', () => {
       limit: 20,
       items: [],
     });
-    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
-      stockCode: 'ORCL',
-      exists: true,
-      stockName: 'Oracle',
-    });
     const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
     vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
 
@@ -879,7 +887,9 @@ describe('HomeSurfacePage', () => {
       message: 'submitted',
     });
 
-    await waitFor(() => expect(screen.getByTestId('home-bento-zero-state')).toBeInTheDocument());
+    expect(await screen.findByText('深度分析请求已发出')).toBeInTheDocument();
+    expect(screen.getByText('Ghost dashboard 承接中')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
   });

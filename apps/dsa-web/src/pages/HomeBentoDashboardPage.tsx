@@ -16,7 +16,6 @@ import type {
   DecisionChartTimeframeId,
 } from '../components/home-bento/HomeSignalCandlestickChart';
 import { createApiError } from '../api/error';
-import { stocksApi } from '../api/stocks';
 import { withFallback } from '../api/withFallback';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -894,6 +893,63 @@ function buildAnalysisFallbackDashboard(locale: DashboardLocale, ticker: string)
   });
 }
 
+function buildPendingAnalysisDashboard(locale: DashboardLocale, ticker: string): DashboardPayload {
+  const normalizedTicker = normalizeTickerQuery(ticker) || 'NVDA';
+  const base = DASHBOARD_VARIANTS[locale].NVDA;
+
+  return enrichDashboardPayload(locale, {
+    ...base,
+    instrument: normalizedTicker,
+    ticker: normalizedTicker,
+    decision: {
+      ...base.decision,
+      company: normalizedTicker,
+      heroValue: locale === 'en' ? 'SYNC' : '同步中',
+      heroUnit: '',
+      heroLabel: locale === 'en' ? 'Queue state' : '队列状态',
+      signalLabel: locale === 'en' ? 'Queued' : '已入队',
+      signalTone: 'neutral',
+      scoreLabel: locale === 'en' ? 'Current step' : '当前阶段',
+      scoreValue: locale === 'en' ? 'Deep research request is running' : '深度分析请求已发出',
+      badge: locale === 'en' ? 'Ghost dashboard active' : 'Ghost dashboard 承接中',
+      chartLabel: locale === 'en' ? 'Awaiting first report' : '等待首份报告',
+      summary: locale === 'en'
+        ? 'WolfyStock has accepted this ticker and is waiting for the first completed report to land.'
+        : 'WolfyStock 已接受该股票代码，正在等待第一份完整报告回填首页。',
+      reasonBody: locale === 'en'
+        ? 'No completed local history is available yet, so the homepage keeps a neutral ghost dashboard instead of falling back to stale presets.'
+        : '当前还没有可展示的本地完成历史，因此首页保持中性 ghost dashboard，而不是回退到旧预设或提前报错。',
+    },
+    strategy: {
+      ...base.strategy,
+      metrics: [
+        { label: locale === 'en' ? 'Entry Zone' : '建仓区间', value: locale === 'en' ? 'Pending analysis' : '等待分析完成', tone: 'neutral' },
+        { label: locale === 'en' ? 'Target' : '目标位', value: '--', tone: 'neutral' },
+        { label: locale === 'en' ? 'Stop' : '止损位', value: '--', tone: 'neutral' },
+      ],
+      positionBody: locale === 'en'
+        ? 'The execution module stays empty until the first finished LLM report provides a real range.'
+        : '执行策略区域会保持空白，直到第一份 LLM 完整报告返回真实区间。',
+    },
+    tech: {
+      ...base.tech,
+      signals: base.tech.signals.map((item) => ({
+        ...item,
+        value: locale === 'en' ? 'Awaiting live scan' : '等待实时扫描',
+        tone: 'neutral',
+      })),
+    },
+    fundamentals: {
+      ...base.fundamentals,
+      metrics: base.fundamentals.metrics.map((item) => ({
+        ...item,
+        value: locale === 'en' ? 'Awaiting first report' : '等待首份报告',
+        tone: 'neutral',
+      })),
+    },
+  });
+}
+
 function DashboardSkeletonCard({
   testId,
   className,
@@ -1649,6 +1705,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [pendingTicker, setPendingTicker] = useState<string | null>(null);
+  const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
@@ -1660,6 +1717,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [isHistoryDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
   const focusLatestHistoryForStock = useStockPoolStore((state) => state.focusLatestHistoryForStock);
+  const findLatestHistoryItemForStock = useStockPoolStore((state) => state.findLatestHistoryItemForStock);
   const selectHistoryItem = useStockPoolStore((state) => state.selectHistoryItem);
   const selectCachedHistoryForStock = useStockPoolStore((state) => state.selectCachedHistoryForStock);
   const deleteHistoryRecords = useStockPoolStore((state) => state.deleteHistoryRecords);
@@ -1672,6 +1730,8 @@ const HomeBentoDashboardPage: React.FC = () => {
     [historyItems],
   );
   const isBusy = isAnalyzing || isDashboardLoading;
+  const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
+  const activeHistoryItem = activeTicker ? findLatestHistoryItemForStock(activeTicker) : null;
   const dashboardData = useMemo<DashboardPayload | null>(() => {
     if (!activeTicker) {
       return null;
@@ -1681,10 +1741,16 @@ const HomeBentoDashboardPage: React.FC = () => {
       return buildAnalysisFallbackDashboard(locale, activeTicker);
     }
 
-    return selectedReport && normalizeTickerQuery(selectedReport.meta.stockCode) === activeTicker
-      ? buildDashboardFromReport(locale, selectedReport)
-      : resolveDashboardPayload(locale, activeTicker);
-  }, [activeTicker, analysisFallbackMode, locale, selectedReport]);
+    if (selectedReport && selectedTicker === activeTicker) {
+      return buildDashboardFromReport(locale, selectedReport);
+    }
+
+    if (pendingAnalysisTicker === activeTicker && !activeHistoryItem) {
+      return buildPendingAnalysisDashboard(locale, activeTicker);
+    }
+
+    return resolveDashboardPayload(locale, activeTicker);
+  }, [activeHistoryItem, activeTicker, analysisFallbackMode, locale, pendingAnalysisTicker, selectedReport, selectedTicker]);
   const shouldRenderDashboardShell = Boolean(
     (activeTicker && (Boolean(dashboardData) || isDashboardLoading))
     || (pendingTicker && isDashboardLoading),
@@ -1752,7 +1818,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   }, [hasHydratedInitialTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
-    const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
     if (selectedTicker) {
       setActiveTicker(selectedTicker);
       return;
@@ -1762,7 +1827,15 @@ const HomeBentoDashboardPage: React.FC = () => {
       setActiveTicker(null);
       setAnalysisFallbackMode(false);
     }
-  }, [recentHistoryItems, selectedReport?.meta.stockCode]);
+  }, [recentHistoryItems, selectedTicker]);
+
+  useEffect(() => {
+    if (pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
+      setPendingAnalysisTicker(null);
+      setDashboardLoading(false);
+      setPendingTicker(null);
+    }
+  }, [pendingAnalysisTicker, selectedTicker]);
 
   useEffect(() => {
     if (!statusToast) {
@@ -1795,32 +1868,14 @@ const HomeBentoDashboardPage: React.FC = () => {
     setAnalysisFallbackMode(false);
     clearError();
     setDashboardLoading(true);
+    setActiveTicker(normalizedTicker);
     setPendingTicker(normalizedTicker);
+    setPendingAnalysisTicker(normalizedTicker);
     setSearchQuery('');
 
-    try {
-      const validation = await stocksApi.verifyTickerExists(normalizedTicker);
-      if (!validation.exists) {
-        setStatusToast({
-          message: locale === 'en'
-            ? `Ticker ${normalizedTicker} was not found. Check for delisting or a typo.`
-            : `未找到股票代码 ${normalizedTicker}，请检查是否退市或输入有误`,
-          tone: 'error',
-        });
-        setPendingTicker(null);
-        setDashboardLoading(false);
-        return;
-      }
-    } catch {
-      setStatusToast({
-        message: locale === 'en'
-          ? 'Ticker validation is temporarily unavailable. Please try again.'
-          : '股票代码校验暂时不可用，请稍后重试',
-        tone: 'error',
-      });
-      setPendingTicker(null);
-      setDashboardLoading(false);
-      return;
+    const latestExistingHistory = findLatestHistoryItemForStock(normalizedTicker);
+    if (latestExistingHistory) {
+      selectCachedHistoryForStock(normalizedTicker);
     }
 
     let result;
@@ -1859,10 +1914,14 @@ const HomeBentoDashboardPage: React.FC = () => {
       setPendingTicker(null);
       await refreshHistory(true);
       const latestHistoryId = await focusLatestHistoryForStock(result.data.stockCode);
-      setActiveTicker(latestHistoryId ? result.data.stockCode : null);
+      setActiveTicker(result.data.stockCode);
+      if (latestHistoryId) {
+        setPendingAnalysisTicker(null);
+      }
     } else if (result.data.mode === 'fallback') {
       setPendingTicker(null);
       setActiveTicker(result.data.stockCode);
+      setPendingAnalysisTicker(null);
       setAnalysisFallbackMode(true);
       clearError();
       setStatusToast({
@@ -1885,6 +1944,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     setHistoryDrawerOpen(false);
     setStatusToast(null);
     setAnalysisFallbackMode(false);
+    setPendingAnalysisTicker(null);
     clearError();
     setActiveTicker(normalizedTicker);
 
@@ -1939,54 +1999,6 @@ const HomeBentoDashboardPage: React.FC = () => {
         </div>
       ) : null}
       <main className="w-full flex-1 flex flex-col px-6 md:px-8 xl:px-12 pt-6 pb-12 min-h-0 min-w-0 overflow-y-auto no-scrollbar" data-testid="home-bento-main">
-        <form
-          className="w-full flex gap-3 h-12 mb-6 shrink-0"
-          data-testid="home-bento-omnibar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleAnalyze();
-          }}
-        >
-          <div className="relative flex-1 group">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-              <Search className="h-4 w-4 text-white/40" />
-            </div>
-            <input
-              data-testid="home-bento-omnibar-input"
-              type="text"
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-              }}
-              autoComplete="off"
-              disabled={isBusy}
-              className="w-full h-full rounded-2xl border border-white/5 bg-white/[0.02] pl-11 pr-4 text-sm text-white outline-none transition-all shadow-lg placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.04]"
-              placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isBusy}
-            className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
-            data-testid="home-bento-analyze-button"
-          >
-            {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
-          </button>
-          <button
-            ref={openHistoryDrawerButton.ref}
-            type="button"
-            aria-label={locale === 'en' ? 'History' : '历史记录'}
-            onClick={openHistoryDrawerButton.onClick}
-            onPointerUp={openHistoryDrawerButton.onPointerUp}
-            disabled={isBusy}
-            className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
-            data-testid="home-bento-history-drawer-trigger"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-            </svg>
-          </button>
-        </form>
         {shouldRenderDashboardShell ? (() => {
           const readyCopy = dashboardData;
           return (
@@ -1999,6 +2011,57 @@ const HomeBentoDashboardPage: React.FC = () => {
                 className="xl:col-span-2 flex h-full min-h-0 flex-col gap-6"
                 data-testid="home-bento-primary-stack"
               >
+                <form
+                  className="flex h-12 w-full min-w-0 shrink-0 gap-3"
+                  data-testid="home-bento-omnibar"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleAnalyze();
+                  }}
+                >
+                  <div
+                    className="group relative flex min-w-0 flex-1 items-center overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] shadow-lg transition-all focus-within:border-white/20 focus-within:bg-white/[0.04]"
+                    data-testid="home-bento-omnibar-input-shell"
+                  >
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                      <Search className="h-4 w-4 text-white/40" />
+                    </div>
+                    <input
+                      data-testid="home-bento-omnibar-input"
+                      type="text"
+                      value={searchQuery}
+                      onChange={(event) => {
+                        setSearchQuery(event.target.value);
+                      }}
+                      autoComplete="off"
+                      disabled={isBusy}
+                      className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
+                      placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isBusy}
+                    className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
+                    data-testid="home-bento-analyze-button"
+                  >
+                    {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
+                  </button>
+                  <button
+                    ref={openHistoryDrawerButton.ref}
+                    type="button"
+                    aria-label={locale === 'en' ? 'History' : '历史记录'}
+                    onClick={openHistoryDrawerButton.onClick}
+                    onPointerUp={openHistoryDrawerButton.onPointerUp}
+                    disabled={isBusy}
+                    className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
+                    data-testid="home-bento-history-drawer-trigger"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+                    </svg>
+                  </button>
+                </form>
                 <div className="min-h-0 flex-1">
                   {isDashboardLoading || !readyCopy ? (
                     <DashboardSkeletonCard
@@ -2086,21 +2149,77 @@ const HomeBentoDashboardPage: React.FC = () => {
             className="w-full grid grid-cols-1 gap-6 xl:grid-cols-5"
           >
             <div
-              className="group relative flex h-[500px] flex-col overflow-hidden rounded-[24px] border border-dashed border-white/10 bg-white/[0.01] p-6 xl:col-span-2"
-              data-testid="home-bento-zero-state-hero"
+              className="flex min-h-0 flex-col gap-6 xl:col-span-2"
+              data-testid="home-bento-zero-state-primary"
             >
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent animate-ghost-scan" />
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_48%)] opacity-70" />
-              <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.02]">
-                  <Search className="h-6 w-6 text-white/30" aria-hidden="true" />
+              <form
+                className="flex h-12 w-full min-w-0 shrink-0 gap-3"
+                data-testid="home-bento-omnibar"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleAnalyze();
+                }}
+              >
+                <div
+                  className="group relative flex min-w-0 flex-1 items-center overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] shadow-lg transition-all focus-within:border-white/20 focus-within:bg-white/[0.04]"
+                  data-testid="home-bento-omnibar-input-shell"
+                >
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                    <Search className="h-4 w-4 text-white/40" />
+                  </div>
+                  <input
+                    data-testid="home-bento-omnibar-input"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => {
+                      setSearchQuery(event.target.value);
+                    }}
+                    autoComplete="off"
+                    disabled={isBusy}
+                    className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
+                    placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
+                  />
                 </div>
-                <h3 className="mb-2 text-center text-sm font-bold uppercase tracking-[0.28em] text-white/50">
-                  {standbyCopy.title}
-                </h3>
-                <p className="max-w-[220px] text-center text-xs leading-relaxed text-white/30">
-                  {standbyCopy.body}
-                </p>
+                <button
+                  type="submit"
+                  disabled={isBusy}
+                  className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
+                  data-testid="home-bento-analyze-button"
+                >
+                  {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
+                </button>
+                <button
+                  ref={openHistoryDrawerButton.ref}
+                  type="button"
+                  aria-label={locale === 'en' ? 'History' : '历史记录'}
+                  onClick={openHistoryDrawerButton.onClick}
+                  onPointerUp={openHistoryDrawerButton.onPointerUp}
+                  disabled={isBusy}
+                  className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
+                  data-testid="home-bento-history-drawer-trigger"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+                  </svg>
+                </button>
+              </form>
+              <div
+                className="group relative flex h-[500px] flex-col overflow-hidden rounded-[24px] border border-dashed border-white/10 bg-white/[0.01] p-6"
+                data-testid="home-bento-zero-state-hero"
+              >
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent animate-ghost-scan" />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_48%)] opacity-70" />
+                <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.02]">
+                    <Search className="h-6 w-6 text-white/30" aria-hidden="true" />
+                  </div>
+                  <h3 className="mb-2 text-center text-sm font-bold uppercase tracking-[0.28em] text-white/50">
+                    {standbyCopy.title}
+                  </h3>
+                  <p className="max-w-[220px] text-center text-xs leading-relaxed text-white/30">
+                    {standbyCopy.body}
+                  </p>
+                </div>
               </div>
             </div>
             <div

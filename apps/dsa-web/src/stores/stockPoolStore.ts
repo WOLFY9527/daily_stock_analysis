@@ -215,6 +215,7 @@ export interface StockPoolState {
   hydrateRecentTasks: () => Promise<void>;
   loadMoreHistory: () => Promise<void>;
   selectHistoryItem: (recordId: number) => Promise<AnalysisReport | null>;
+  findLatestHistoryItemForStock: (stockCode: string) => HistoryItem | null;
   selectCachedHistoryForStock: (stockCode: string) => boolean;
   toggleHistorySelection: (recordId: number) => void;
   toggleSelectAllVisible: () => void;
@@ -446,6 +447,11 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       });
       return null;
     }
+  },
+
+  findLatestHistoryItemForStock: (stockCode) => {
+    const matchedHistory = get().historyItems.find((item) => isSameStockCode(item.stockCode, stockCode));
+    return matchedHistory ?? null;
   },
 
   selectCachedHistoryForStock: (stockCode) => {
