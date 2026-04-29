@@ -152,9 +152,11 @@ const AdminLogsPage: React.FC = () => {
   const locale = language as AdminLogsLanguage;
   const [activityTypeFilter, setActivityTypeFilter] = useState<'all' | 'admin_action' | 'user_activity'>('all');
   const [stockFilter, setStockFilter] = useState('');
+  const [taskIdFilter, setTaskIdFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [keywordFilter, setKeywordFilter] = useState('');
+  const [modelFilter, setModelFilter] = useState('');
   const [sessions, setSessions] = useState<ExecutionLogSessionSummary[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ExecutionLogSessionDetail | null>(null);
@@ -176,10 +178,12 @@ const AdminLogsPage: React.FC = () => {
     try {
       const response = await adminLogsApi.listSessions(
         {
+          taskId: taskIdFilter.trim() || undefined,
           stock: stockFilter.trim() || undefined,
           status: statusFilter.trim() || undefined,
           category: categoryFilter.trim() || undefined,
           provider: keywordFilter.trim() || undefined,
+          model: modelFilter.trim() || undefined,
           limit: 100,
         },
       );
@@ -192,7 +196,7 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingList(false);
     }
-  }, [categoryFilter, keywordFilter, statusFilter, stockFilter]);
+  }, [categoryFilter, keywordFilter, modelFilter, statusFilter, stockFilter, taskIdFilter]);
 
   useEffect(() => {
     document.title = t('adminLogs.documentTitle');
@@ -251,7 +255,7 @@ const AdminLogsPage: React.FC = () => {
             <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-white/36">{t('adminLogs.scopeTitle')}</p>
             <p className="mt-2 text-[13px] leading-relaxed text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[10rem_9rem_11rem_minmax(0,1fr)_9rem_auto]">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[10rem_9rem_12rem_12rem_minmax(0,1fr)_9rem_auto]">
             <label className="sr-only" htmlFor="admin-logs-activity-type">{t('adminLogs.activityTypeLabel')}</label>
             <select
               id="admin-logs-activity-type"
@@ -272,6 +276,15 @@ const AdminLogsPage: React.FC = () => {
               placeholder={t('adminLogs.stockFilterPlaceholder')}
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value)}
+            />
+            <label className="sr-only" htmlFor="admin-logs-task-filter">{locale === 'en' ? 'Task ID' : '任务 ID'}</label>
+            <input
+              id="admin-logs-task-filter"
+              aria-label={locale === 'en' ? 'Task ID' : '任务 ID'}
+              className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+              placeholder={locale === 'en' ? 'Filter task ID' : '按任务 ID 过滤'}
+              value={taskIdFilter}
+              onChange={(e) => setTaskIdFilter(e.target.value)}
             />
             <label className="sr-only" htmlFor="admin-logs-category-filter">{t('adminLogs.categoryFilterLabel')}</label>
             <select
@@ -297,9 +310,18 @@ const AdminLogsPage: React.FC = () => {
               id="admin-logs-provider-filter"
               aria-label={t('adminLogs.providerFilterLabel')}
               className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-              placeholder={t('adminLogs.providerFilterPlaceholder')}
+              placeholder={locale === 'en' ? 'Data source / provider' : '数据源 / Provider'}
               value={keywordFilter}
               onChange={(e) => setKeywordFilter(e.target.value)}
+            />
+            <label className="sr-only" htmlFor="admin-logs-model-filter">{locale === 'en' ? 'Model version' : '模型版本'}</label>
+            <input
+              id="admin-logs-model-filter"
+              aria-label={locale === 'en' ? 'Model version' : '模型版本'}
+              className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+              placeholder={locale === 'en' ? 'LLM model version' : 'LLM 模型版本'}
+              value={modelFilter}
+              onChange={(e) => setModelFilter(e.target.value)}
             />
             <label className="sr-only" htmlFor="admin-logs-status-filter">{t('adminLogs.statusFilterLabel')}</label>
             <select
@@ -380,6 +402,11 @@ const AdminLogsPage: React.FC = () => {
                       <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '摘要' : 'Summary'}</p>
                       <p className="mt-1 break-words text-sm font-medium text-foreground md:mt-0">{summaryTitle}</p>
                       <p className="break-all text-xs text-muted-text">{item.sessionId}</p>
+                      {item.taskId ? (
+                        <p className="break-all text-xs text-muted-text">
+                          {locale === 'en' ? 'Task ID' : '任务 ID'}: {item.taskId}
+                        </p>
+                      ) : null}
                       <p className="mt-2 break-words text-xs text-secondary-text">
                         {summary.actorDisplay || t('adminLogs.unavailable')} · {resolveRoleLabel(String(summary.actorRole || ''), t)} · {resolveSessionKindLabel(String(summary.sessionKind || ''), t)}
                       </p>
@@ -524,6 +551,11 @@ const AdminLogsPage: React.FC = () => {
                                 </span>
                               ) : null}
                               <span className="break-all text-xs text-muted-text">{event.target || t('adminLogs.unavailable')}</span>
+                              {event.errorCode ? (
+                                <span className="rounded-full border border-rose-400/20 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-100">
+                                  {event.errorCode}
+                                </span>
+                              ) : null}
                             </div>
                             {event.message ? (
                               <p className="mt-1 break-words text-xs text-secondary-text">{event.message}</p>

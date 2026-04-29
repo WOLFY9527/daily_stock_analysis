@@ -96,6 +96,7 @@ function normalizeSessionDetail(payload: Record<string, unknown>): ExecutionLogS
 export const adminLogsApi = {
   listSessions: async (
     params: {
+      taskId?: string;
       stock?: string;
       status?: string;
       category?: string;

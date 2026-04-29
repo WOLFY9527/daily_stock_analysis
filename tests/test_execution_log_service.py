@@ -69,6 +69,31 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertTrue(sessions[0]["readable_summary"]["destructive"])
         self.assertEqual(detail["events"][0]["detail"]["action"], "factory_reset_system")
 
+    def test_list_sessions_filters_by_task_id(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            service.start_session(
+                task_id="task-a",
+                stock_code="TSLA",
+                stock_name="Tesla",
+                configured_execution={},
+                actor={"user_id": "user-1", "role": "user"},
+                subsystem="analysis",
+            )
+            service.start_session(
+                task_id="task-b",
+                stock_code="NVDA",
+                stock_name="NVIDIA",
+                configured_execution={},
+                actor={"user_id": "user-1", "role": "user"},
+                subsystem="analysis",
+            )
+
+            items, total = service.list_sessions(task_id="task-b", limit=10)
+
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["task_id"], "task-b")
+
 
 if __name__ == "__main__":
     unittest.main()

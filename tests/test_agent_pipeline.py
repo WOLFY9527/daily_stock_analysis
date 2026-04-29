@@ -794,6 +794,42 @@ class TestAgentConstructionChain(unittest.TestCase):
         self.assertEqual(result.content, "final answer")
         self.assertEqual(result.model, "deepseek/deepseek-v4-pro")
 
+    @patch("src.agent.llm_adapter.Router")
+    def test_llm_adapter_flattens_deepseek_v4_flash_content_blocks(self, _mock_router):
+        mock_cfg = MagicMock()
+        mock_cfg.agent_litellm_model = "deepseek/deepseek-v4-flash"
+        mock_cfg.litellm_model = None
+        mock_cfg.litellm_fallback_models = []
+        mock_cfg.llm_model_list = []
+        mock_cfg.llm_temperature = 0.7
+        mock_cfg.gemini_api_keys = []
+        mock_cfg.anthropic_api_keys = []
+        mock_cfg.openai_api_keys = []
+        mock_cfg.deepseek_api_keys = []
+        mock_cfg.openai_base_url = None
+
+        from src.agent.llm_adapter import LLMToolAdapter
+        adapter = LLMToolAdapter(config=mock_cfg)
+
+        response = MagicMock()
+        response.choices = [
+            MagicMock(
+                message=MagicMock(
+                    content=[
+                        {"type": "reasoning", "content": "hidden reasoning"},
+                        {"type": "output_text", "text": "flash answer"},
+                    ],
+                    tool_calls=None,
+                )
+            )
+        ]
+        response.usage = MagicMock(prompt_tokens=3, completion_tokens=5, total_tokens=8)
+
+        result = adapter._parse_litellm_response(response, "deepseek/deepseek-v4-flash")
+
+        self.assertEqual(result.content, "flash answer")
+        self.assertEqual(result.model, "deepseek/deepseek-v4-flash")
+
 
 # ============================================================
 # _safe_int tests

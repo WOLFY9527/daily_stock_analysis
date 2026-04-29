@@ -1156,6 +1156,7 @@ class ExecutionLogService:
     def list_sessions(
         self,
         *,
+        task_id: Optional[str] = None,
         stock_code: Optional[str] = None,
         status: Optional[str] = None,
         category: Optional[str] = None,
@@ -1168,6 +1169,7 @@ class ExecutionLogService:
         offset: int = 0,
     ) -> Tuple[List[Dict[str, Any]], int]:
         rows, total = self.db.list_execution_log_sessions(
+            task_id=task_id,
             stock_code=stock_code,
             status=status,
             category=category,

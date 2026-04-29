@@ -5711,6 +5711,7 @@ class DatabaseManager:
     def list_execution_log_sessions(
         self,
         *,
+        task_id: Optional[str] = None,
         stock_code: Optional[str] = None,
         status: Optional[str] = None,
         category: Optional[str] = None,
@@ -5725,6 +5726,8 @@ class DatabaseManager:
         """List execution sessions with optional event-level filtering."""
         with self.get_session() as session:
             session_filters = []
+            if task_id:
+                session_filters.append(ExecutionLogSession.task_id == task_id)
             if stock_code:
                 session_filters.append(ExecutionLogSession.code == stock_code)
             if status:

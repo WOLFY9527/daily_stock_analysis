@@ -42,6 +42,7 @@ def _parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:
     summary="List admin execution log sessions",
 )
 def list_execution_log_sessions(
+    task_id: Optional[str] = Query(default=None, description="Filter by task ID"),
     stock: Optional[str] = Query(default=None, description="Filter by stock code"),
     status: Optional[str] = Query(default=None, description="Filter by overall status"),
     category: Optional[str] = Query(default=None, description="Filter by phase category"),
@@ -56,6 +57,7 @@ def list_execution_log_sessions(
 ):
     service = ExecutionLogService()
     items, total = service.list_sessions(
+        task_id=(task_id or "").strip() or None,
         stock_code=(stock or "").strip() or None,
         status=(status or "").strip() or None,
         category=(category or "").strip() or None,
