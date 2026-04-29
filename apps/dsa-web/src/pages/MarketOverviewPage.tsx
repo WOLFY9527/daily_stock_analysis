@@ -10,7 +10,9 @@ import { MacroIndicatorsCard } from '../components/market-overview/MacroIndicato
 import { MarketSentimentCard } from '../components/market-overview/MarketSentimentCard';
 import { MarketOverviewCard } from '../components/market-overview/MarketOverviewCard';
 import { VolatilityCard } from '../components/market-overview/VolatilityCard';
+import { resolveMarketOverviewDisplayLabel } from '../components/market-overview/marketOverviewLabels';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { GlassCard } from '../components/common';
 
 type PanelState = {
   indices?: MarketOverviewPanel;
@@ -32,9 +34,9 @@ type CardKey = PanelKey;
 type CategoryKey = 'all' | 'us' | 'cn' | 'macro' | 'crypto';
 
 const CATEGORY_CARDS: Record<CategoryKey, CardKey[]> = {
-  all: ['sentiment', 'macro', 'rates', 'fxCommodities'],
-  us: ['indices', 'fundsFlow', 'volatility', 'rates', 'sentiment', 'fxCommodities', 'crypto'],
-  cn: ['cnIndices', 'cnFlows', 'cnBreadth', 'sectorRotation', 'rates', 'fxCommodities'],
+  all: ['sentiment', 'fxCommodities', 'rates'],
+  us: ['indices', 'fundsFlow', 'sentiment', 'volatility'],
+  cn: ['cnIndices', 'cnFlows', 'cnBreadth', 'sectorRotation'],
   macro: ['rates', 'fxCommodities', 'macro', 'volatility'],
   crypto: ['crypto'],
 };
@@ -84,14 +86,25 @@ function findPanelItem(panel: MarketOverviewPanel | undefined, symbols: string[]
   return panel?.items.find((item) => normalizedSymbols.includes(item.symbol.toUpperCase()));
 }
 
+function filterPanelItems(panel: MarketOverviewPanel | undefined, symbols: string[]): MarketOverviewPanel | undefined {
+  if (!panel) {
+    return undefined;
+  }
+  const normalizedSymbols = new Set(symbols.map((symbol) => symbol.toUpperCase()));
+  return {
+    ...panel,
+    items: panel.items.filter((item) => normalizedSymbols.has(item.symbol.toUpperCase())),
+  };
+}
+
 function buildHeroAnchors(panels: PanelState): HeroAnchor[] {
   return [
-    { key: 'SPX', label: 'S&P 500', item: findPanelItem(panels.indices, ['SPX']) },
+    { key: 'SPX', label: '标普500', item: findPanelItem(panels.indices, ['SPX']) },
     { key: 'CSI300', label: '沪深300', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.indices, ['CSI300']) },
-    { key: 'BTC', label: 'BTC', item: findPanelItem(panels.crypto, ['BTC']) },
-    { key: 'VIX', label: 'VIX', item: findPanelItem(panels.volatility, ['VIX']) },
-    { key: 'US10Y', label: 'US10Y', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y']) },
-    { key: 'DXY', label: 'DXY', item: findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY']) },
+    { key: 'BTC', label: '比特币', item: findPanelItem(panels.crypto, ['BTC']) },
+    { key: 'VIX', label: '恐慌指数', item: findPanelItem(panels.volatility, ['VIX']) },
+    { key: 'US10Y', label: '美债10年期', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y']) },
+    { key: 'DXY', label: '美元指数', item: findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY']) },
   ];
 }
 
@@ -119,27 +132,36 @@ function heroToneClass(item: MarketOverviewItem | undefined): string {
 }
 
 const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => (
-  <section
+  <GlassCard
+    as="section"
     data-testid="market-overview-hero-ribbon"
-    className="grid grid-cols-3 gap-3 border-b border-white/5 pb-5 md:grid-cols-6 md:gap-4"
+    className="overflow-hidden p-0"
     aria-label="Cross asset hero ribbon"
   >
-    {anchors.map((anchor) => (
-      <div
-        key={anchor.key}
-        data-testid={`market-overview-hero-${anchor.key}`}
-        className="min-w-0 border-l border-white/8 bg-white/[0.018] px-3 py-2.5"
-      >
-        <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/36">{anchor.label}</p>
-        <p className="mt-1 truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
-          {formatHeroValue(anchor.item?.value)}
-        </p>
-        <p className={`mt-1 font-mono text-xs font-semibold ${heroToneClass(anchor.item)}`}>
-          {formatHeroChange(anchor.item?.changePct)}
-        </p>
-      </div>
-    ))}
-  </section>
+    <div className="grid grid-cols-2 divide-x divide-y divide-white/5 sm:grid-cols-3 md:grid-cols-6 md:divide-y-0">
+      {anchors.map((anchor) => {
+        const displayLabel = anchor.item ? resolveMarketOverviewDisplayLabel(anchor.item) : { primary: anchor.label, secondary: anchor.key };
+        return (
+          <div
+            key={anchor.key}
+            data-testid={`market-overview-hero-${anchor.key}`}
+            className="min-w-0 bg-white/[0.018] px-4 py-3.5"
+          >
+            <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/50">
+              {displayLabel.primary}
+              {displayLabel.secondary ? <span className="ml-1 text-white/28">({displayLabel.secondary})</span> : null}
+            </p>
+            <p className="mt-1 truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
+              {formatHeroValue(anchor.item?.value)}
+            </p>
+            <p className={`mt-1 font-mono text-xs font-semibold ${heroToneClass(anchor.item)}`}>
+              {formatHeroChange(anchor.item?.changePct)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  </GlassCard>
 );
 
 const MarketOverviewPage: React.FC = () => {
@@ -253,10 +275,15 @@ const MarketOverviewPage: React.FC = () => {
     { key: 'crypto', label: t('marketOverviewPage.categories.crypto') },
   ], [t]);
 
+  const usIndicesPanel = useMemo(
+    () => filterPanelItems(panels.indices, ['SPX', 'NASDAQ', 'DJIA', 'RUT']),
+    [panels.indices],
+  );
+
   const cardNodes = useMemo<Record<CardKey, React.ReactNode>>(() => ({
     indices: (
       <IndexTrendsCard
-        panel={panels.indices}
+        panel={usIndicesPanel}
         loading={loading && !panels.indices}
         refreshing={refreshingPanel === 'indices'}
         onRefresh={() => {
@@ -398,7 +425,7 @@ const MarketOverviewPage: React.FC = () => {
         }}
       />
     ),
-  }), [loading, panels, refreshPanel, refreshingPanel, t]);
+  }), [loading, panels, refreshPanel, refreshingPanel, t, usIndicesPanel]);
 
   const visibleOrder = cardOrders[activeCategory].filter((cardKey) => CATEGORY_CARDS[activeCategory].includes(cardKey));
   const columns = [0, 1, 2].map((columnIndex) => visibleOrder.filter((_, index) => index % 3 === columnIndex));

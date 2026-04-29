@@ -9,6 +9,7 @@ import {
   formatMetricValue,
   getDirectionTone,
 } from './marketOverviewUtils';
+import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
   tone = 'text-white/35',
@@ -80,6 +81,7 @@ export const MarketOverviewDataRow: React.FC<{
 }> = ({ item, neutralLabel, valueClassName, valueDigitsBelowHundred = 2 }) => {
   const direction = item.riskDirection || 'neutral';
   const tone = getDirectionTone(direction);
+  const displayLabel = resolveMarketOverviewDisplayLabel(item);
   const sparklineTone = direction === 'increasing'
     ? 'text-red-400'
     : direction === 'decreasing'
@@ -91,8 +93,10 @@ export const MarketOverviewDataRow: React.FC<{
       <div className="flex w-32 shrink-0 items-center gap-2">
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
         <div className="min-w-0">
-          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{item.label}</p>
-          <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-widest text-white/22">{item.symbol}</p>
+          <p className="truncate text-[10px] font-semibold tracking-widest text-white/65">{displayLabel.primary}</p>
+          {displayLabel.secondary ? (
+            <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-widest text-white/25">{displayLabel.secondary}</p>
+          ) : null}
         </div>
       </div>
       <div className="w-24 shrink-0">

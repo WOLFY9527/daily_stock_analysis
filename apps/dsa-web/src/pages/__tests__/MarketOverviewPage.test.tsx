@@ -214,25 +214,29 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-hero-DXY')).toBeInTheDocument();
 
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /宏观经济与流动性/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /商品与外汇/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /宏观经济与流动性/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /全球核心指数走势/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /ETF 资金流向/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /市场宽度与赚钱效应/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /加密货币行情/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步最新行情/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /刷新 情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /刷新 宏观经济与流动性/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 商品与外汇/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 利率与债券市场/i })).toBeInTheDocument();
     expect(screen.queryByText(/同步完成/i)).not.toBeInTheDocument();
 
     expect(await screen.findByTestId('market-overview-hero-SPX')).toBeInTheDocument();
-    expect(screen.getAllByText('BTC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/比特币/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/标普500/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/美债10年期/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/美元指数/i).length).toBeGreaterThan(0);
     expect(screen.getByText('76,837.04')).toBeInTheDocument();
     expect(screen.getByText(/贪婪与恐慌指数/i)).toBeInTheDocument();
     expect(screen.getByText('26.00')).toBeInTheDocument();
     expect(screen.getByText(/更新失败/i)).toBeInTheDocument();
-    expect(screen.getAllByText('US10Y').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/US10Y/i).length).toBeGreaterThan(0);
     expect(screen.queryByText('Fed Funds')).not.toBeInTheDocument();
     expect(screen.queryByText('pts')).not.toBeInTheDocument();
 
@@ -252,22 +256,27 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /资金流向/i })).toBeInTheDocument();
-    expect(screen.getByText('USD/CNH')).toBeInTheDocument();
-    expect(screen.getByText('中国10年国债收益率')).toBeInTheDocument();
+    expect(screen.queryByText('USD/CNH')).not.toBeInTheDocument();
+    expect(screen.queryByText('中国10年国债收益率')).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '0');
     expect(screen.getByTestId('market-overview-card-cnFlows')).toHaveAttribute('data-market-card-rank', '1');
     expect(screen.getByTestId('market-overview-card-cnBreadth')).toHaveAttribute('data-market-card-rank', '2');
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
     expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ETF 资金流向/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getAllByText('DXY').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: /利率与债券市场/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /商品与外汇/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('CSI 300')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shanghai Composite')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shenzhen Component')).not.toBeInTheDocument();
+    expect(screen.queryByText('DXY')).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '0');
     expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-rank', '1');
-    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '2');
+    expect(screen.getByTestId('market-overview-card-sentiment')).toHaveAttribute('data-market-card-rank', '2');
+    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '3');
 
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
     expect(marketApi.getRates).toHaveBeenCalledTimes(1);
@@ -280,7 +289,7 @@ describe('MarketOverviewPage', () => {
 
     expect(await screen.findByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /宏观经济与流动性/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
   });
 
   it('refreshes only the requested panel when a card refresh icon is clicked', async () => {
@@ -352,13 +361,13 @@ describe('MarketOverviewPage', () => {
     expect(window.localStorage.getItem('market-overview-order-all')).toContain('fxCommodities');
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
-    const ratesCard = screen.getByTestId('market-overview-card-rates');
+    const sectorCard = screen.getByTestId('market-overview-card-sectorRotation');
     const cnIndicesCard = screen.getByTestId('market-overview-card-cnIndices');
 
-    fireEvent.dragStart(ratesCard);
+    fireEvent.dragStart(sectorCard);
     fireEvent.dragOver(cnIndicesCard);
     fireEvent.drop(cnIndicesCard);
 
-    expect(window.localStorage.getItem('market-overview-order-cn')).toContain('rates');
+    expect(window.localStorage.getItem('market-overview-order-cn')).toContain('sectorRotation');
   });
 });
