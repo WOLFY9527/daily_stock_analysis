@@ -32,3 +32,33 @@ def get_crypto(current_user: Optional[CurrentUser] = Depends(get_optional_curren
 @router.get("/sentiment", summary="Get realtime market sentiment snapshot")
 def get_sentiment(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_market_sentiment(actor=_actor(current_user))
+
+
+@router.get("/cn-indices", summary="Get China and Hong Kong index snapshot")
+def get_cn_indices(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_cn_indices(actor=_actor(current_user))
+
+
+@router.get("/cn-breadth", summary="Get China market breadth snapshot")
+def get_cn_breadth(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_cn_breadth(actor=_actor(current_user))
+
+
+@router.get("/cn-flows", summary="Get China and Hong Kong capital flow snapshot")
+def get_cn_flows(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_cn_flows(actor=_actor(current_user))
+
+
+@router.get("/sector-rotation", summary="Get sector and theme rotation snapshot")
+def get_sector_rotation(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_sector_rotation(actor=_actor(current_user))
+
+
+@router.get("/rates", summary="Get global rates and bond market snapshot")
+def get_rates(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_rates(actor=_actor(current_user))
+
+
+@router.get("/fx-commodities", summary="Get FX and commodities snapshot")
+def get_fx_commodities(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_fx_commodities(actor=_actor(current_user))

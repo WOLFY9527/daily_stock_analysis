@@ -17,6 +17,12 @@ vi.mock('../../api/market', () => ({
   marketApi: {
     getCrypto: vi.fn(),
     getSentiment: vi.fn(),
+    getCnIndices: vi.fn(),
+    getCnBreadth: vi.fn(),
+    getCnFlows: vi.fn(),
+    getSectorRotation: vi.fn(),
+    getRates: vi.fn(),
+    getFxCommodities: vi.fn(),
   },
 }));
 
@@ -102,6 +108,26 @@ const sentimentPanel = () => ({
   errorMessage: '更新失败：已回退到最近一次有效数据',
 });
 
+const snapshotPanel = (panelName: string, symbol: string, label = symbol) => ({
+  panelName,
+  lastRefreshAt: '2026-04-29T10:00:00',
+  status: 'success' as const,
+  logSessionId: `${panelName}-log`,
+  items: [
+    {
+      symbol,
+      label,
+      value: 100,
+      unit: 'pts',
+      changePct: 1.2,
+      riskDirection: 'decreasing' as const,
+      trend: [96, 98, 100],
+      source: 'fallback',
+      hoverDetails: ['fallback snapshot'],
+    },
+  ],
+});
+
 describe('MarketOverviewPage', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -111,6 +137,42 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketOverviewApi.getMacro).mockResolvedValue(macroPanel());
     vi.mocked(marketApi.getCrypto).mockResolvedValue(cryptoPanel());
     vi.mocked(marketApi.getSentiment).mockResolvedValue(sentimentPanel());
+    vi.mocked(marketApi.getCnIndices).mockResolvedValue(snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数'));
+    vi.mocked(marketApi.getCnBreadth).mockResolvedValue(snapshotPanel('ChinaBreadthCard', 'BREADTH', '赚钱效应'));
+    vi.mocked(marketApi.getCnFlows).mockResolvedValue(snapshotPanel('ChinaFlowsCard', 'NORTHBOUND', '北向资金'));
+    vi.mocked(marketApi.getSectorRotation).mockResolvedValue(snapshotPanel('SectorRotationCard', 'AI', 'AI / 算力'));
+    vi.mocked(marketApi.getRates).mockResolvedValue({
+      ...snapshotPanel('RatesCard', 'US10Y', 'US 10Y'),
+      items: [
+        ...snapshotPanel('RatesCard', 'US10Y', 'US 10Y').items,
+        {
+          symbol: 'CN10Y',
+          label: '中国10年国债收益率',
+          value: 2.35,
+          unit: '%',
+          changePct: -1.5,
+          riskDirection: 'decreasing' as const,
+          trend: [2.4, 2.37, 2.35],
+          source: 'fallback',
+        },
+      ],
+    });
+    vi.mocked(marketApi.getFxCommodities).mockResolvedValue({
+      ...snapshotPanel('FxCommoditiesCard', 'DXY', 'DXY'),
+      items: [
+        ...snapshotPanel('FxCommoditiesCard', 'DXY', 'DXY').items,
+        {
+          symbol: 'USDCNH',
+          label: 'USD/CNH',
+          value: 7.24,
+          unit: '',
+          changePct: 0.2,
+          riskDirection: 'increasing' as const,
+          trend: [7.2, 7.22, 7.24],
+          source: 'fallback',
+        },
+      ],
+    });
   });
 
   afterEach(() => {
@@ -121,6 +183,11 @@ describe('MarketOverviewPage', () => {
   it('renders every market overview card with localized copy and source attribution', async () => {
     render(<MarketOverviewPage />);
 
+    expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '美股' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'A股/港股' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '全球宏观' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '加密货币' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /大市全景监控/i })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
@@ -132,6 +199,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('button', { name: /刷新 情绪与资金面/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /刷新 ETF 资金流向/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /刷新 宏观经济与流动性/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 A股与港股指数/i })).toBeInTheDocument();
     expect(screen.queryByText(/同步完成/i)).not.toBeInTheDocument();
 
     expect((await screen.findAllByText('SPX')).length).toBeGreaterThan(0);
@@ -144,6 +212,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText(/更新失败/i)).toBeInTheDocument();
     expect(screen.getAllByText('ETF').length).toBeGreaterThan(0);
     expect(screen.getAllByText('US10Y').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('上证指数').length).toBeGreaterThan(0);
     expect(screen.queryByText('Fed Funds')).not.toBeInTheDocument();
     expect(screen.queryByText('pts')).not.toBeInTheDocument();
 
@@ -151,6 +220,41 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
     expect(screen.getByText(/数据驱动: BINANCE/i)).toBeInTheDocument();
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+  });
+
+  it('switches market categories without refetching all cards', async () => {
+    render(<MarketOverviewPage />);
+
+    await waitFor(() => expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    expect(screen.getByRole('button', { name: 'A股/港股' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /资金流向/i })).toBeInTheDocument();
+    expect(screen.getByText('USD/CNH')).toBeInTheDocument();
+    expect(screen.getByText('中国10年国债收益率')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+    expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /ETF 资金流向/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
+    expect(screen.getAllByText('DXY').length).toBeGreaterThan(0);
+
+    expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
+    expect(marketApi.getRates).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps other cards visible when one initial API request fails', async () => {
+    vi.mocked(marketApi.getCnBreadth).mockRejectedValueOnce(new Error('breadth down'));
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
   });
 
   it('refreshes only the requested panel when a card refresh icon is clicked', async () => {
@@ -168,6 +272,24 @@ describe('MarketOverviewPage', () => {
     expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
     expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(1);
     expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps stale card data visible while refreshing a single card', async () => {
+    let resolveRefresh: ((value: ReturnType<typeof snapshotPanel>) => void) | undefined;
+    vi.mocked(marketApi.getCnIndices)
+      .mockResolvedValueOnce(snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数'))
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }));
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByText('上证指数')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /刷新 A股与港股指数/i }));
+    expect(screen.getByText('上证指数')).toBeInTheDocument();
+
+    resolveRefresh?.(snapshotPanel('ChinaIndicesCard', '399001.SZ', '深证成指'));
+    expect(await screen.findByText('深证成指')).toBeInTheDocument();
   });
 
   it('polls market cards on the configured interval', async () => {
@@ -199,6 +321,16 @@ describe('MarketOverviewPage', () => {
     fireEvent.dragOver(indicesCard);
     fireEvent.drop(indicesCard);
 
-    expect(window.localStorage.getItem('market-overview-card-order')).toContain('crypto');
+    expect(window.localStorage.getItem('market-overview-order-all')).toContain('crypto');
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    const ratesCard = screen.getByTestId('market-overview-card-rates');
+    const cnIndicesCard = screen.getByTestId('market-overview-card-cnIndices');
+
+    fireEvent.dragStart(ratesCard);
+    fireEvent.dragOver(cnIndicesCard);
+    fireEvent.drop(cnIndicesCard);
+
+    expect(window.localStorage.getItem('market-overview-order-cn')).toContain('rates');
   });
 });

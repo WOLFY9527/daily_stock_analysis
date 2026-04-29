@@ -40,6 +40,13 @@ const RESOURCES = {
         loading: '同步中',
       },
       loading: '正在拉取最新市场数据...',
+      categories: {
+        all: '全部',
+        us: '美股',
+        cn: 'A股/港股',
+        macro: '全球宏观',
+        crypto: '加密货币',
+      },
       cards: {
         indexTrends: {
           eyebrow: '全球指数扫描',
@@ -94,6 +101,42 @@ const RESOURCES = {
           title: '宏观经济与流动性',
           description: '把收益率曲线、美元、黄金、原油、通胀与信用利差收敛到同一宏观风险框架。',
           source: '数据驱动: YFINANCE / FRED',
+        },
+        cnIndices: {
+          eyebrow: '中国资产',
+          title: 'A股与港股指数',
+          description: '上证、深成指、创业板、科创、宽基、恒指、恒生科技与富时A50期货的核心脉搏。',
+          source: '数据来源: FALLBACK / PUBLIC',
+        },
+        cnBreadth: {
+          eyebrow: '赚钱效应',
+          title: '市场宽度与赚钱效应',
+          description: '跟踪上涨家数、下跌家数、涨跌停、新高新低和上涨比例，判断指数背后的真实参与度。',
+          source: '数据来源: FALLBACK / PUBLIC',
+        },
+        cnFlows: {
+          eyebrow: '跨境与杠杆资金',
+          title: '资金流向',
+          description: '北向资金、南向资金、主力资金、ETF 净申购与融资余额变化压缩到一张资金温度卡。',
+          source: '数据来源: FALLBACK / PUBLIC',
+        },
+        sectorRotation: {
+          eyebrow: '主题强弱',
+          title: '行业与主题强弱',
+          description: '按相对强弱排名展示 AI / 算力、半导体、机器人、低空经济、港股科技等方向。',
+          source: '数据来源: FALLBACK / PUBLIC',
+        },
+        rates: {
+          eyebrow: '利率曲线',
+          title: '利率与债券市场',
+          description: '美债 2Y/10Y/30Y、利差、中国10年国债、DR007、SHIBOR 与 LPR 的利率环境。',
+          source: '数据来源: FALLBACK / PUBLIC',
+        },
+        fxCommodities: {
+          eyebrow: '美元、人民币与商品',
+          title: '商品与外汇',
+          description: 'DXY、USD/CNH、主要外汇、黄金、原油与铜，观察全球风险资产的外部压力。',
+          source: '数据来源: FALLBACK / PUBLIC',
         },
       },
       footer: {
@@ -2784,6 +2827,13 @@ const RESOURCES = {
         loading: 'Syncing',
       },
       loading: 'Pulling the latest market data...',
+      categories: {
+        all: 'All',
+        us: 'US',
+        cn: 'China/HK',
+        macro: 'Global Macro',
+        crypto: 'Crypto',
+      },
       cards: {
         indexTrends: {
           eyebrow: 'Global index scan',
@@ -2838,6 +2888,42 @@ const RESOURCES = {
           title: 'Macro Indicators',
           description: 'Yield curve, DXY, gold, oil, inflation, and credit spread context in one macro frame.',
           source: 'DATA SOURCE: YAHOO FINANCE / FRED',
+        },
+        cnIndices: {
+          eyebrow: 'China assets',
+          title: 'China & Hong Kong Indices',
+          description: 'Shanghai, Shenzhen, ChiNext, STAR 50, broad CN indices, Hang Seng, HSTECH, and FTSE A50 futures.',
+          source: 'DATA SOURCE: FALLBACK / PUBLIC',
+        },
+        cnBreadth: {
+          eyebrow: 'Market breadth',
+          title: 'Breadth & Participation',
+          description: 'Advancers, decliners, limit-up/down, new highs/lows, and participation score behind the index move.',
+          source: 'DATA SOURCE: FALLBACK / PUBLIC',
+        },
+        cnFlows: {
+          eyebrow: 'Cross-border capital',
+          title: 'Capital Flow',
+          description: 'Northbound, southbound, main-board active flow, ETF creation, and margin balance changes.',
+          source: 'DATA SOURCE: FALLBACK / PUBLIC',
+        },
+        sectorRotation: {
+          eyebrow: 'Theme strength',
+          title: 'Sector & Theme Rotation',
+          description: 'Relative strength ranking across AI compute, semis, robotics, low-altitude economy, HK tech, and cyclicals.',
+          source: 'DATA SOURCE: FALLBACK / PUBLIC',
+        },
+        rates: {
+          eyebrow: 'Yield curves',
+          title: 'Rates & Bonds',
+          description: 'US 2Y/10Y/30Y, curve spreads, China 10Y CGB, DR007, SHIBOR, and LPR liquidity context.',
+          source: 'DATA SOURCE: FALLBACK / PUBLIC',
+        },
+        fxCommodities: {
+          eyebrow: 'Dollar, CNH, commodities',
+          title: 'FX & Commodities',
+          description: 'DXY, USD/CNH, major FX, gold, crude, and copper as external pressure gauges for risk assets.',
+          source: 'DATA SOURCE: FALLBACK / PUBLIC',
         },
       },
       footer: {
