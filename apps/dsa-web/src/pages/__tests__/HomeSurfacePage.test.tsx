@@ -1034,6 +1034,103 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
   });
 
+  it('updates pending analysis cards in place when completed task payload only exposes snake_case standard_report', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValueOnce({
+      taskId: 'task-amd',
+      status: 'pending',
+      message: 'submitted',
+    });
+
+    renderSurface();
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'amd' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    await waitFor(() => expect(useStockPoolStore.getState().activeTasks.some((task) => task.taskId === 'task-amd')).toBe(true));
+
+    act(() => {
+      useStockPoolStore.getState().syncTaskUpdated({
+        taskId: 'task-amd',
+        stockCode: 'AMD',
+        stockName: 'AMD',
+        status: 'completed',
+        progress: 100,
+        message: 'completed',
+        reportType: 'detailed',
+        createdAt: '2026-04-27T09:00:00Z',
+        updatedAt: '2026-04-27T09:03:00Z',
+        result: {
+          queryId: 'q-amd',
+          stockCode: 'AMD',
+          stockName: 'AMD',
+          createdAt: '2026-04-27T09:03:00Z',
+          report: {
+            ...defaultHistoryReport,
+            meta: {
+              ...defaultHistoryReport.meta,
+              id: 10,
+              queryId: 'q-amd',
+              stockCode: 'AMD',
+              stockName: 'AMD',
+            },
+            summary: {
+              ...defaultHistoryReport.summary,
+              analysisSummary: 'AMD task payload normalized from snake_case report blocks.',
+              trendPrediction: 'Accelerator demand remains firm.',
+              sentimentScore: 76,
+              sentimentLabel: 'Bullish',
+            },
+            strategy: {
+              idealBuy: '152.00 - 155.00',
+              stopLoss: '147.80',
+              takeProfit: '168.40',
+            },
+            details: {
+              standard_report: {
+                summary_panel: {
+                  stock: 'AMD',
+                  ticker: 'AMD',
+                  one_sentence: 'AMD task payload normalized from snake_case report blocks.',
+                },
+                decision_context: {
+                  short_term_view: 'Accelerator demand remains firm.',
+                },
+                decision_panel: {
+                  ideal_entry: '152.00 - 155.00',
+                  target: '168.40',
+                  stop_loss: '147.80',
+                  build_strategy: 'Only add after the completed task confirms sustained demand.',
+                },
+                reason_layer: {
+                  core_reasons: ['Snake case task payload still populated the in-place dashboard.'],
+                },
+                technical_fields: [
+                  { label: 'MACD', value: 'Positive spread widening' },
+                  { label: 'Moving Averages', value: 'MA20 above MA60' },
+                ],
+                fundamental_fields: [
+                  { label: 'Revenue Growth', value: '+18.2%' },
+                  { label: 'Free Cash Flow', value: '$2.4B' },
+                ],
+              },
+            },
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('AMD task payload normalized from snake_case report blocks.');
+    });
+    expect(screen.getByText('152.00 - 155.00')).toBeInTheDocument();
+  });
+
   it('keeps neutral cards instead of demo data when the analysis API fails', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     const deferred = createDeferred<never>();

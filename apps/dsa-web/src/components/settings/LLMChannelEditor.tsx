@@ -27,7 +27,7 @@ const CHANNEL_PRESETS: Record<string, ChannelPreset> = {
     label: 'DeepSeek 官方',
     protocol: 'deepseek',
     baseUrl: 'https://api.deepseek.com/v1',
-    placeholder: 'deepseek-chat,deepseek-reasoner',
+    placeholder: 'deepseek-chat,deepseek-v4-pro,deepseek-v4-flash,deepseek-reasoner',
   },
   dashscope: {
     label: '通义千问（Dashscope）',
@@ -102,7 +102,7 @@ const PROTOCOL_OPTIONS: Array<{ value: ChannelProtocol; label: string }> = [
 
 const MODEL_PLACEHOLDERS: Record<ChannelProtocol, string> = {
   openai: 'gpt-4o-mini,deepseek-chat,qwen-plus',
-  deepseek: 'deepseek-chat,deepseek-reasoner',
+  deepseek: 'deepseek-chat,deepseek-v4-pro,deepseek-v4-flash,deepseek-reasoner',
   gemini: 'gemini-2.5-flash,gemini-2.5-pro',
   anthropic: 'claude-3-5-sonnet-20241022',
   vertex_ai: 'gemini-2.5-flash',

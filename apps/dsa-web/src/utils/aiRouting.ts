@@ -25,6 +25,8 @@ export const KNOWN_GATEWAY_MODEL_PRESETS: GatewayPresetMap = {
   deepseek: [
     'deepseek/deepseek-chat',
     'deepseek/deepseek-reasoner',
+    'deepseek/deepseek-v4-pro',
+    'deepseek/deepseek-v4-flash',
   ],
   zhipu: [
     'zhipu/glm-4-flash',

@@ -764,6 +764,28 @@ class GeminiAnalyzer:
         """Check if LiteLLM is properly configured with at least one API key."""
         return self._router is not None or self._litellm_available
 
+    @staticmethod
+    def _extract_litellm_text_content(response: Any) -> str:
+        """Extract plain text from OpenAI-compatible string or content-block responses."""
+        if not response or not getattr(response, "choices", None):
+            return ""
+        choice = response.choices[0]
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            fragments: List[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = str(item.get("text") or item.get("content") or "").strip()
+                else:
+                    text = str(getattr(item, "text", "") or getattr(item, "content", "") or "").strip()
+                if text:
+                    fragments.append(text)
+            return " ".join(fragments).strip()
+        return str(content or "").strip()
+
     def _call_litellm(
         self,
         prompt: str,
@@ -844,7 +866,8 @@ class GeminiAnalyzer:
                     call_kwargs.update(extra_litellm_params(model, config))
                     response = litellm.completion(**call_kwargs)
 
-                if response and response.choices and response.choices[0].message.content:
+                text_content = self._extract_litellm_text_content(response)
+                if text_content:
                     usage: Dict[str, Any] = {}
                     if response.usage:
                         usage = {
@@ -872,7 +895,7 @@ class GeminiAnalyzer:
                                     "message": f"Model {skipped_model} skipped because a previous model already succeeded.",
                                 }
                             )
-                    return (response.choices[0].message.content, model, usage, attempt_trace)
+                    return (text_content, model, usage, attempt_trace)
                 raise ValueError("LLM returned empty response")
 
             except Exception as e:

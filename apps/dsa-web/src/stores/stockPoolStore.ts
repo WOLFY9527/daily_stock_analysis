@@ -4,6 +4,7 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { historyApi } from '../api/history';
 import type { DeleteHistoryOptions } from '../api/history';
+import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import type { AnalysisReport, HistoryItem, HistoryListResponse, TaskInfo } from '../types/analysis';
 import { translateForCurrentLanguage } from '../i18n/core';
 import { MAX_RECENT_TASKS, sortTasksByPriority } from '../utils/taskQueue';
@@ -208,6 +209,27 @@ function upsertTask(tasks: TaskInfo[], task: TaskInfo): TaskInfo[] {
     });
   }
   return sortTasksByPriority(nextTasks);
+}
+
+function normalizeTaskReport(task: TaskInfo): TaskInfo {
+  const existingResult = task.result;
+  const report = existingResult?.report;
+  if (!report) {
+    return task;
+  }
+
+  const normalizedReport = normalizeFrontendReportContract(report);
+
+  return {
+    ...task,
+    result: {
+      queryId: existingResult?.queryId || normalizedReport.meta.queryId || task.taskId,
+      stockCode: existingResult?.stockCode || normalizedReport.meta.stockCode || task.stockCode,
+      stockName: existingResult?.stockName || normalizedReport.meta.stockName || task.stockName || normalizedReport.meta.stockCode,
+      createdAt: existingResult?.createdAt || normalizedReport.meta.createdAt || task.updatedAt || task.createdAt,
+      report: normalizedReport,
+    },
+  };
 }
 
 export interface StockPoolState {
@@ -421,7 +443,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
   hydrateRecentTasks: async () => {
     try {
       const response = await analysisApi.getTasks({ limit: MAX_RECENT_TASKS });
-      const hydrated = sortTasksByPriority((response.tasks || []).map((task) => ({
+      const hydrated = sortTasksByPriority((response.tasks || []).map((task) => normalizeTaskReport({
         ...task,
         updatedAt: task.updatedAt || task.completedAt || task.startedAt || task.createdAt,
       })));
@@ -707,11 +729,12 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     if (dismissedTaskIds.has(task.taskId)) {
       return;
     }
-    const nextTasks = upsertTask(get().activeTasks, task);
+    const normalizedTask = normalizeTaskReport(task);
+    const nextTasks = upsertTask(get().activeTasks, normalizedTask);
     persistTasks(nextTasks);
     set({ activeTasks: nextTasks });
-    if (task.result?.report) {
-      cacheReportSnapshot(get, set, task.result.report);
+    if (normalizedTask.result?.report) {
+      cacheReportSnapshot(get, set, normalizedTask.result.report);
     }
   },
 
@@ -723,11 +746,12 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     if (index < 0) {
       return;
     }
-    const nextTasks = upsertTask(get().activeTasks, task);
+    const normalizedTask = normalizeTaskReport(task);
+    const nextTasks = upsertTask(get().activeTasks, normalizedTask);
     persistTasks(nextTasks);
     set({ activeTasks: nextTasks });
-    if (task.result?.report) {
-      cacheReportSnapshot(get, set, task.result.report);
+    if (normalizedTask.result?.report) {
+      cacheReportSnapshot(get, set, normalizedTask.result.report);
     }
   },
 

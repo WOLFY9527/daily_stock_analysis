@@ -68,6 +68,68 @@ class TestAnalyzerGenerateText:
             assert gen_cfg["max_tokens"] == 2048
             assert gen_cfg["temperature"] == 0.7
 
+    def test_call_litellm_extracts_text_from_deepseek_v4_content_blocks(self):
+        with patch("src.analyzer.get_config") as mock_cfg, patch("src.analyzer.litellm.completion") as mock_completion:
+            cfg = MagicMock()
+            cfg.litellm_model = "deepseek/deepseek-v4-pro"
+            cfg.litellm_fallback_models = []
+            cfg.gemini_api_keys = []
+            cfg.anthropic_api_keys = []
+            cfg.openai_api_keys = []
+            cfg.deepseek_api_keys = ["sk-deepseek-testkey-1234"]
+            cfg.llm_model_list = []
+            cfg.openai_base_url = None
+            mock_cfg.return_value = cfg
+
+            from src.analyzer import GeminiAnalyzer
+
+            analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
+            analyzer._router = None
+            analyzer._litellm_available = True
+
+            mock_completion.return_value = type(
+                "MockResponse",
+                (),
+                {
+                    "choices": [
+                        type(
+                            "Choice",
+                            (),
+                            {
+                                "message": type(
+                                    "Message",
+                                    (),
+                                    {
+                                        "content": [
+                                            {"type": "text", "text": "DeepSeek v4 says hello"},
+                                        ],
+                                    },
+                                )(),
+                            },
+                        )(),
+                    ],
+                    "usage": type(
+                        "Usage",
+                        (),
+                        {
+                            "prompt_tokens": 10,
+                            "completion_tokens": 12,
+                            "total_tokens": 22,
+                        },
+                    )(),
+                },
+            )()
+
+            text, model, usage, attempt_trace = analyzer._call_litellm(
+                "Say hello",
+                generation_config={"max_tokens": 64, "temperature": 0},
+            )
+
+            assert text == "DeepSeek v4 says hello"
+            assert model == "deepseek/deepseek-v4-pro"
+            assert usage["total_tokens"] == 22
+            assert attempt_trace[-1]["result"] == "succeeded"
+
 
 # ---------------------------------------------------------------------------
 # market_analyzer uses generate_text(), not private attributes

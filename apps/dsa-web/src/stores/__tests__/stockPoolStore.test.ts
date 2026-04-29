@@ -479,6 +479,61 @@ describe('stockPoolStore', () => {
     expect(state.activeTasks).toHaveLength(0);
   });
 
+  it('normalizes completed task reports before caching snapshots', () => {
+    const pendingTask = {
+      taskId: 'task-1',
+      stockCode: 'NFLX',
+      stockName: 'Netflix',
+      status: 'pending' as const,
+      progress: 0,
+      reportType: 'detailed',
+      createdAt: '2026-03-18T08:00:00Z',
+    };
+
+    useStockPoolStore.getState().syncTaskCreated(pendingTask);
+    useStockPoolStore.getState().syncTaskUpdated({
+      ...pendingTask,
+      status: 'completed',
+      progress: 100,
+      result: {
+        queryId: 'q-task-1',
+        stockCode: 'NFLX',
+        stockName: 'Netflix',
+        createdAt: '2026-03-18T08:05:00Z',
+        report: {
+          meta: {
+            queryId: 'q-task-1',
+            stockCode: 'NFLX',
+            stockName: 'Netflix',
+            reportType: 'detailed',
+            createdAt: '2026-03-18T08:05:00Z',
+          },
+          summary: {
+            analysisSummary: 'Recovered from task payload.',
+            operationAdvice: 'Hold',
+            trendPrediction: 'Constructive',
+            sentimentScore: 68,
+          },
+          details: {
+            standard_report: {
+              summary_panel: {
+                ticker: 'NFLX',
+                one_sentence: 'Recovered from task payload.',
+              },
+              decision_panel: {
+                ideal_entry: '610-620',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const snapshot = useStockPoolStore.getState().reportSnapshotsByStockCode.NFLX;
+    expect(snapshot?.details?.standardReport?.summaryPanel?.ticker).toBe('NFLX');
+    expect(snapshot?.details?.standardReport?.decisionPanel?.idealEntry).toBe('610-620');
+  });
+
   it('does not backfill unknown failed tasks from SSE updates', () => {
     useStockPoolStore.getState().syncTaskFailed({
       taskId: 'task-404',

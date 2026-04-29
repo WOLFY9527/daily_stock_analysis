@@ -6,6 +6,19 @@ import {
 } from '../aiRouting';
 
 describe('aiRouting', () => {
+  it('includes DeepSeek v4 curated presets for provider-scoped selection', () => {
+    const options = getGatewayModelOptions(
+      'deepseek',
+      new Map(),
+      [],
+      [],
+    );
+
+    expect(options).toContain('deepseek/deepseek-chat');
+    expect(options).toContain('deepseek/deepseek-v4-pro');
+    expect(options).toContain('deepseek/deepseek-v4-flash');
+  });
+
   it('does not backfill stale saved Zhipu models that are not declared or curated', () => {
     const declaredByGateway = new Map<string, string[]>([
       ['zhipu', ['glm-4']],
