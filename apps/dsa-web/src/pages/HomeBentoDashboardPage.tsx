@@ -1037,7 +1037,7 @@ function compactDashboardSignals(locale: DashboardLocale, signals: DashboardSign
     return {
       ...signal,
       value: compactValue,
-      rawValue: compactValue,
+      rawValue: signal.rawValue || signal.value,
     };
   });
 }

@@ -3,7 +3,7 @@ import { PanelRightOpen } from 'lucide-react';
 import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
-import { CARD_BUTTON_CLASS, getToneTextClass, getToneTextStyle } from './theme';
+import { CARD_BUTTON_CLASS } from './theme';
 
 type StrategyMetric = {
   label: string;
@@ -36,6 +36,15 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const isEntryMetric = (label: string) => label === '建仓区间' || label === 'Entry Zone';
+  const getMetricValueClass = (tone: StrategyMetric['tone']) => {
+    if (tone === 'bullish') {
+      return 'text-emerald-400';
+    }
+    if (tone === 'bearish') {
+      return 'text-red-400';
+    }
+    return 'text-white';
+  };
   const positionParagraphs = positionBody
     .split(/\n+/)
     .map((paragraph) => paragraph.trim())
@@ -62,17 +71,16 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
       )}
     >
       <div className="grid h-full gap-7 md:grid-cols-2">
-        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3.5 self-start">
+        <div className="mt-4 grid w-full grid-cols-2 gap-x-8 gap-y-6 self-start">
           {metrics.map((metric) => (
             <div
               key={metric.label}
-              className={`${isEntryMetric(metric.label) ? 'col-span-2 flex flex-col gap-1' : 'flex flex-col gap-1'} min-w-0`}
+              className={`${isEntryMetric(metric.label) ? 'col-span-2' : ''} flex min-w-0 flex-col gap-1.5`}
               data-testid={`home-bento-strategy-metric-${metric.label}`}
             >
-              <Label micro as="p" className="block truncate">{metric.label}</Label>
+              <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
               <p
-                className={`break-words whitespace-normal text-lg font-bold leading-tight ${getToneTextClass(metric.tone || 'neutral')}`}
-                style={getToneTextStyle(metric.tone || 'neutral', false)}
+                className={`break-words whitespace-normal text-sm font-medium leading-relaxed ${getMetricValueClass(metric.tone || 'neutral')}`}
               >
                 {metric.value}
               </p>

@@ -305,7 +305,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-5 backdrop-blur-xl md:px-6">
+          <div className="flex flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-4 backdrop-blur-xl md:px-6">
             <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
               <Label micro className="text-white/30">{isEnglish ? 'SUPPORTING INDICATORS' : '量化佐证指标'}</Label>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/28">
@@ -316,15 +316,15 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               {supportingIndicators.map((indicator) => (
                 <div
                   key={indicator.label}
-                  className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 py-3 text-xs md:text-[13px]"
+                  className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 py-2 text-xs"
                 >
                   <div className="min-w-0">
-                    <Label micro className="text-white/26">{indicator.label}</Label>
+                    <Label micro className="text-[10px] text-white/40">{indicator.label}</Label>
                   </div>
-                  <div className={`min-w-0 font-semibold uppercase tracking-[0.14em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
+                  <div className={`min-w-0 text-xs font-medium uppercase tracking-[0.12em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
                     <span className="block truncate">{indicator.value}</span>
                   </div>
-                  <div className="min-w-0 text-right text-white/56">
+                  <div className="min-w-0 text-right text-xs font-medium text-white/56">
                     <span className="block truncate">{indicator.context}</span>
                   </div>
                 </div>

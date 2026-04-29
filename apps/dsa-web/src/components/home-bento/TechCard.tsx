@@ -8,6 +8,8 @@ type TechSignal = {
   label: string;
   value: string;
   tone: SignalTone;
+  rawValue?: string;
+  details?: string;
 };
 
 type TechCardProps = {
@@ -34,6 +36,14 @@ export const TechCard: React.FC<TechCardProps> = ({
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
 
+  const getSignalDescription = (signal: TechSignal): string | null => {
+    const description = String(signal.details || signal.rawValue || '').trim();
+    if (!description || description === signal.value || isMutedValue(description)) {
+      return null;
+    }
+    return description;
+  };
+
   return (
     <BentoCard
       eyebrow={title}
@@ -54,24 +64,37 @@ export const TechCard: React.FC<TechCardProps> = ({
       )}
     >
       <div className="divide-y divide-white/5 px-1">
-        {signals.map((signal) => (
-          <div
-            key={signal.label}
-            data-testid={`home-bento-tech-signal-${signal.label}`}
-            className="flex items-center justify-between gap-6 py-3"
-          >
-            <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
-              {signal.label}
-            </span>
-            <span
-              className={`min-w-0 text-right text-sm font-medium ${
-                isMutedValue(signal.value) ? 'text-white/20' : 'text-white'
-              }`}
+        {signals.map((signal) => {
+          const description = getSignalDescription(signal);
+          return (
+            <div
+              key={signal.label}
+              data-testid={`home-bento-tech-signal-${signal.label}`}
+              className="flex flex-col gap-1 border-b border-white/5 py-2 last:border-b-0"
             >
-              {signal.value}
-            </span>
-          </div>
-        ))}
+              <div className="flex min-w-0 items-center justify-between gap-4">
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                  {signal.label}
+                </span>
+                <span
+                  className={`min-w-0 text-right text-xs font-medium ${
+                    isMutedValue(signal.value) ? 'text-white/20' : 'text-white'
+                  }`}
+                >
+                  {signal.value}
+                </span>
+              </div>
+              {description ? (
+                <p
+                  className="w-full overflow-hidden text-xs leading-5 text-white/50 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                  data-testid={`home-bento-tech-signal-detail-${signal.label}`}
+                >
+                  {description}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </BentoCard>
   );
