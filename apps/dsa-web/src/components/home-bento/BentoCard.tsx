@@ -54,7 +54,7 @@ export const BentoCard: React.FC<BentoCardProps> = ({
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="relative z-10 mt-4 flex-1">{children}</div>
+      <div className="relative z-10 mt-4 min-h-0 flex-1">{children}</div>
     </div>
   </section>
 );

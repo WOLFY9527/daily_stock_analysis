@@ -145,41 +145,6 @@ function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): Support
         ];
 }
 
-function splitInsightBlocks(text: string): string[] {
-  const normalized = text.trim();
-  if (!normalized || normalized === '-') {
-    return ['-'];
-  }
-
-  const sentenceParts = normalized
-    .split(/(?<=[。！？!?；;])\s*/u)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (sentenceParts.length >= 2) {
-    const midpoint = Math.ceil(sentenceParts.length / 2);
-    return [
-      sentenceParts.slice(0, midpoint).join(' '),
-      sentenceParts.slice(midpoint).join(' '),
-    ].filter(Boolean);
-  }
-
-  const clauseParts = normalized
-    .split(/[，,]\s*/u)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (clauseParts.length >= 3) {
-    const midpoint = Math.ceil(clauseParts.length / 2);
-    return [
-      `${clauseParts.slice(0, midpoint).join('，')}${normalized.includes('，') ? '。' : ''}`.trim(),
-      clauseParts.slice(midpoint).join('，').trim(),
-    ].filter(Boolean);
-  }
-
-  return [normalized];
-}
-
 export const DecisionCard: React.FC<DecisionCardProps> = ({
   company,
   detailLabel,
@@ -205,7 +170,6 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
   const insightCopy = reason.body || summary || scoreValue || '-';
-  const insightBlocks = splitInsightBlocks(insightCopy);
   const sectorLabel = (sector || (isEnglish ? 'UNCLASSIFIED' : '未分类')).toUpperCase();
 
   return (
@@ -214,7 +178,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       tone={signalTone}
       accentGlow
       accentGlowClassName={SYSTEM_ACCENT_GLOW_CLASS}
-      className="h-full w-full rounded-[24px]"
+      className="flex h-full w-full flex-col overflow-hidden rounded-[24px]"
+      contentClassName="min-h-0"
       testId="home-bento-card-decision"
       action={(
         <button
@@ -230,7 +195,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </button>
       )}
     >
-      <div className="flex h-full flex-col gap-5">
+      <div className="flex h-full min-h-0 flex-col gap-5">
         <div className="flex flex-wrap items-start justify-between gap-3" data-testid="home-bento-decision-company-header">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -246,30 +211,31 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2 pb-6"
+          data-testid="home-bento-decision-scroll-body"
+        >
           <div
-            className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between"
+            className="flex items-baseline gap-12 mt-6 mb-8"
             data-testid="home-bento-decision-hero-row"
           >
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0">
               <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
-              <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
-                <span
-                  className={`text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
-                  data-testid="home-bento-decision-signal-hero"
-                  style={getActionToneStyle(signalTone)}
-                >
-                  {signalCommand.command}
-                </span>
-              </div>
+              <span
+                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
+                data-testid="home-bento-decision-signal-hero"
+                style={getActionToneStyle(signalTone)}
+              >
+                {signalCommand.command}
+              </span>
             </div>
 
             <div
-              className="min-w-0 rounded-[24px] border border-white/[0.08] bg-white/[0.03] px-5 py-4 text-right xl:min-w-[10rem]"
+              className="min-w-0 text-left"
               data-testid="home-bento-decision-core-metrics"
             >
               <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
-              <div className="mt-2 flex items-end justify-end gap-2">
+              <div className="mt-3 flex items-end gap-2">
                 <p
                   className="font-mono text-5xl font-semibold leading-none text-white"
                   data-testid="home-bento-decision-score"
@@ -281,46 +247,41 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             </div>
           </div>
 
-          <div className="max-w-2xl" data-testid="home-bento-decision-insight">
+          <div
+            className="max-w-3xl text-sm text-white/70 leading-relaxed mb-10"
+            data-testid="home-bento-decision-insight"
+          >
             <Label micro className="text-white/28">{isEnglish ? 'AI INSIGHT' : '执行主线'}</Label>
-            <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2 xl:gap-x-6">
-              {insightBlocks.map((block, index) => (
-                <p
-                  key={`${block}-${index}`}
-                  className="text-sm leading-6 text-white/72"
-                  data-testid={index === 0 ? 'home-bento-decision-insight-copy' : undefined}
+            <p className="mt-3" data-testid="home-bento-decision-insight-copy">
+              {insightCopy}
+            </p>
+          </div>
+
+          <div className="flex flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-5 backdrop-blur-xl md:px-6">
+            <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
+              <Label micro className="text-white/30">{isEnglish ? 'SUPPORTING INDICATORS' : '量化佐证指标'}</Label>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/28">
+                {isEnglish ? 'SIMULATED FEED' : '模拟信号流'}
+              </span>
+            </div>
+            <div className="divide-y divide-white/6" data-testid="home-bento-decision-support-grid">
+              {supportingIndicators.map((indicator) => (
+                <div
+                  key={indicator.label}
+                  className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 py-3 text-xs md:text-[13px]"
                 >
-                  {block}
-                </p>
+                  <div className="min-w-0">
+                    <Label micro className="text-white/26">{indicator.label}</Label>
+                  </div>
+                  <div className={`min-w-0 font-semibold uppercase tracking-[0.14em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
+                    <span className="block truncate">{indicator.value}</span>
+                  </div>
+                  <div className="min-w-0 text-right text-white/56">
+                    <span className="block truncate">{indicator.context}</span>
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-        </div>
-
-        <div className="flex flex-1 flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-5 backdrop-blur-xl md:px-6">
-          <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
-            <Label micro className="text-white/30">{isEnglish ? 'SUPPORTING INDICATORS' : '量化佐证指标'}</Label>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/28">
-              {isEnglish ? 'SIMULATED FEED' : '模拟信号流'}
-            </span>
-          </div>
-          <div className="flex-1 divide-y divide-white/6" data-testid="home-bento-decision-support-grid">
-            {supportingIndicators.map((indicator) => (
-              <div
-                key={indicator.label}
-                className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 py-3 text-xs md:text-[13px]"
-              >
-                <div className="min-w-0">
-                  <Label micro className="text-white/26">{indicator.label}</Label>
-                </div>
-                <div className={`min-w-0 font-semibold uppercase tracking-[0.14em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
-                  <span className="block truncate">{indicator.value}</span>
-                </div>
-                <div className="min-w-0 text-right text-white/56">
-                  <span className="block truncate">{indicator.context}</span>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </div>

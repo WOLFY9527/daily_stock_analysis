@@ -234,6 +234,14 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-core-metrics')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-insight')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('h-full', 'overflow-hidden', 'flex', 'flex-col');
+    expect(screen.getByTestId('home-bento-decision-scroll-body')).toHaveClass('flex-1', 'overflow-y-auto', 'pr-2', 'pb-6');
+    expect(screen.getByTestId('home-bento-decision-hero-row')).toHaveClass('flex', 'items-baseline', 'gap-12', 'mt-6', 'mb-8');
+    expect(screen.getByTestId('home-bento-decision-hero-row').className).not.toContain('justify-between');
+    expect(screen.getByTestId('home-bento-decision-core-metrics').className).not.toContain('border');
+    expect(screen.getByTestId('home-bento-decision-core-metrics').className).not.toContain('bg-');
+    expect(screen.getByTestId('home-bento-decision-insight')).toHaveClass('max-w-3xl', 'text-sm', 'text-white/70', 'leading-relaxed', 'mb-10');
+    expect(screen.getByTestId('home-bento-decision-insight').className).not.toContain('grid');
     expect(screen.getByText('AI 动作')).toBeInTheDocument();
     expect(screen.getByText('执行主线')).toBeInTheDocument();
     expect(screen.getByText('量化佐证指标')).toBeInTheDocument();
