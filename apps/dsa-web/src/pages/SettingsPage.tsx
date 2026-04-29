@@ -7,7 +7,6 @@ import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, In
 import {
   CARD_BUTTON_CLASS,
   PageBriefDrawer,
-  PageChrome,
   type BentoHeroItem,
 } from '../components/home-bento';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
@@ -2990,52 +2989,14 @@ const SettingsPage: React.FC = () => {
     },
   ];
   return (
-    <PageChrome
-      pageTestId="settings-bento-page"
-      pageClassName="workspace-page workspace-page--settings gemini-bento-page--settings"
-      scrollMode="contained"
-      headerClassName="shadow-soft-card-strong"
-        eyebrow={t('settings.eyebrow')}
-        title={t('settings.title')}
-        description={t('settings.subtitle')}
-        actions={(
-          <>
-            <button
-              type="button"
-              className={CARD_BUTTON_CLASS}
-              data-testid="settings-bento-drawer-trigger"
-              onClick={() => setIsBriefDrawerOpen(true)}
-            >
-              <PanelRightOpen className="h-4 w-4" />
-              <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
-            </button>
-            <Button
-              type="button"
-              variant="settings-secondary"
-              className="border-border/50 bg-muted/30 hover:border-border/70"
-              onClick={resetDraft}
-              disabled={isLoading || isSaving || adminLocked}
-            >
-              {t('settings.reset')}
-            </Button>
-            <Button
-              type="button"
-              variant="settings-primary"
-              onClick={handleSave}
-              disabled={adminSaveDisabled}
-              isLoading={isSaving}
-              loadingText={t('settings.saving')}
-            >
-              {isSaving ? t('settings.saving') : `${t('settings.save')}${dirtyCount ? ` (${dirtyCount})` : ''}`}
-            </Button>
-          </>
-        )}
-      heroItems={heroItems}
-      heroTestId="settings-bento-hero"
+    <div
+      data-testid="settings-bento-page"
+      data-bento-surface="true"
+      className="flex-1 flex w-full h-full min-h-0 overflow-hidden"
     >
       <div
         data-testid="settings-workspace"
-        className="flex w-full flex-1 min-w-0 flex-col gap-8 md:flex-row"
+        className="flex h-full min-h-0 w-full max-w-none flex-1 flex-col gap-8 px-6 md:flex-row md:px-8 xl:px-12"
       >
         <aside className="w-full shrink-0 self-start md:sticky md:top-8 md:w-64">
           <div className="flex flex-col gap-6">
@@ -3075,12 +3036,49 @@ const SettingsPage: React.FC = () => {
           </div>
         </aside>
 
-        <section className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden">
+        <section className="flex min-h-0 flex-1 min-w-0 flex-col">
           <div
             data-testid="settings-main-panel"
-            className="flex min-h-0 flex-1 min-w-0 flex-col overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            className="flex-1 min-w-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2 pb-12"
           >
-            <div className="space-y-4 pb-2">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/5 pb-4">
+                <div>
+                  <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{t('settings.eyebrow')}</p>
+                  <h1 className="mt-2 text-2xl font-semibold text-foreground">{t('settings.title')}</h1>
+                  <p className="mt-2 max-w-4xl text-sm leading-6 text-secondary-text">{t('settings.subtitle')}</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className={CARD_BUTTON_CLASS}
+                    data-testid="settings-bento-drawer-trigger"
+                    onClick={() => setIsBriefDrawerOpen(true)}
+                  >
+                    <PanelRightOpen className="h-4 w-4" />
+                    <span>{language === 'en' ? 'Open brief' : '查看摘要'}</span>
+                  </button>
+                  <Button
+                    type="button"
+                    variant="settings-secondary"
+                    className="border-border/50 bg-muted/30 hover:border-border/70"
+                    onClick={resetDraft}
+                    disabled={isLoading || isSaving || adminLocked}
+                  >
+                    {t('settings.reset')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="settings-primary"
+                    onClick={handleSave}
+                    disabled={adminSaveDisabled}
+                    isLoading={isSaving}
+                    loadingText={t('settings.saving')}
+                  >
+                    {isSaving ? t('settings.saving') : `${t('settings.save')}${dirtyCount ? ` (${dirtyCount})` : ''}`}
+                  </Button>
+                </div>
+              </div>
               {loadError ? (
                 <ApiErrorAlert
                   error={loadError}
@@ -3093,6 +3091,7 @@ const SettingsPage: React.FC = () => {
               {activePanel === 'overview' ? (
                 <SystemControlPlane
                   t={t}
+                  overviewStats={heroItems}
                   globalAdminStats={globalAdminStats}
                   isRunningAdminAction={isRunningAdminAction}
                   adminActionDialog={adminActionDialog}
@@ -4462,7 +4461,7 @@ const SettingsPage: React.FC = () => {
             : <ApiErrorAlert error={toast.error} />}
         </div>
       ) : null}
-    </PageChrome>
+    </div>
   );
 };
 

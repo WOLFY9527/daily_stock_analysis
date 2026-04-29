@@ -1,5 +1,6 @@
 import type React from 'react';
 import { Button, Disclosure, GlassCard } from '../common';
+import { BentoHeroStrip, type BentoHeroItem } from '../home-bento';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
@@ -16,6 +17,7 @@ type TranslateFn = (key: string, vars?: Record<string, string | number | undefin
 
 type SystemControlPlaneProps = {
   t: TranslateFn;
+  overviewStats: BentoHeroItem[];
   globalAdminStats: AdminStat[];
   isRunningAdminAction: boolean;
   adminActionDialog: AdminActionDialogKey;
@@ -27,6 +29,7 @@ type SystemControlPlaneProps = {
 
 const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
   t,
+  overviewStats,
   globalAdminStats,
   isRunningAdminAction,
   adminActionDialog,
@@ -39,7 +42,9 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
     title={t('settings.controlPlaneTitle')}
     description={t('settings.controlPlaneDesc')}
   >
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
+    <div className="space-y-4">
+      <BentoHeroStrip items={overviewStats} testId="settings-bento-hero" />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
       <GlassCard className="px-4 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -165,6 +170,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           ) : null}
         </div>
       </Disclosure>
+      </div>
     </div>
   </SettingsSectionCard>
 );

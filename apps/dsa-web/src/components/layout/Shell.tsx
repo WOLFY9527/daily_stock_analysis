@@ -191,8 +191,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         <div
           className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full px-6 pt-6 pb-12 md:px-8 xl:px-12${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
-            <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col">
+          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+            <div key={location.pathname} className={`theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {children ?? <Outlet />}
             </div>
           </main>

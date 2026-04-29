@@ -486,11 +486,9 @@ describe('SettingsPage', () => {
     const { container } = render(<SettingsPage />);
 
     expect(screen.getByTestId('settings-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('settings-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
-    expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(screen.getByTestId('settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-8');
-    expect(screen.getByTestId('settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
+    expect(screen.getByTestId('settings-bento-page')).toHaveClass('flex-1', 'flex', 'w-full', 'h-full', 'min-h-0', 'overflow-hidden');
+    expect(screen.queryByTestId('settings-bento-hero')).not.toBeInTheDocument();
+    expect(screen.getByTestId('settings-workspace')).toHaveClass('w-full', 'max-w-none', 'flex-1', 'min-h-0', 'gap-8', 'px-6', 'md:px-8', 'xl:px-12');
     expect(screen.getByTestId('settings-workspace')).not.toHaveClass('max-w-[1600px]', 'mx-auto', 'px-4');
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();
@@ -527,6 +525,8 @@ describe('SettingsPage', () => {
       render(<SettingsPage />);
 
       expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
+      expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
+      expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
       expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
       expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
       expect(getMaintenancePanel()).not.toHaveAttribute('open');

@@ -15894,6 +15894,12 @@ html[data-theme='spacex'] .theme-page-transition--page-scroll {
   scrollbar-gutter: auto;
 }
 
+html[data-theme='spacex'] .theme-page-transition--system-control {
+  overflow: hidden;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
 html[data-theme='spacex'] .theme-page-transition::-webkit-scrollbar {
   width: 9px;
   height: 9px;
