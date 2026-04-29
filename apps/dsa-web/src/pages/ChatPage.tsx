@@ -292,6 +292,7 @@ const ChatPage: React.FC = () => {
   const chatConsoleTitle = language === 'en' ? 'Research console' : '综合控制台';
   const mobileConsoleTitle = language === 'en' ? 'Chat console' : '问股控制台';
   const hasMessages = messages.length > 0;
+  const showEmptyState = !hasMessages && !loading;
 
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
@@ -738,6 +739,112 @@ const ChatPage: React.FC = () => {
     </div>
   );
 
+  const renderComposerBody = () => (
+    <>
+      <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
+        <button
+          ref={startNewChatMobileButton.ref}
+          type="button"
+          onClick={startNewChatMobileButton.onClick}
+          onPointerUp={startNewChatMobileButton.onPointerUp}
+          aria-label={chat('newChatTitle')}
+          className="flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
+        >
+          + {language === 'en' ? 'New chat' : '新对话'}
+        </button>
+        <button
+          ref={openConsoleButton.ref}
+          type="button"
+          onClick={openConsoleButton.onClick}
+          onPointerUp={openConsoleButton.onPointerUp}
+          data-testid="chat-bento-brief-trigger"
+          className={CARD_BUTTON_CLASS}
+          title={language === 'en' ? 'Open console' : '打开控制台'}
+        >
+          <PanelRightOpen className="h-4 w-4" />
+          <span>{language === 'en' ? 'Console' : '控制台'}</span>
+        </button>
+      </div>
+
+      {sendToast ? (
+        <p className={`mb-3 text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
+          {sendToast.message}
+        </p>
+      ) : null}
+
+      {chatError ? (
+        <ApiErrorAlert
+          error={chatError}
+          className="mb-3"
+          actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
+          onAction={
+            chatError.category === 'local_connection_failed'
+              ? () => {
+                  window.location.reload();
+                }
+              : undefined
+          }
+        />
+      ) : null}
+
+      <div className="mx-auto w-full max-w-4xl">
+        <div
+          data-testid="chat-composer-omnibar"
+          className="relative mx-auto w-full max-w-4xl rounded-3xl border border-white/[0.05] bg-white/[0.04] p-2 shadow-2xl backdrop-blur-2xl"
+        >
+          <textarea
+            ref={composerTextareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={chat('inputPlaceholder')}
+            disabled={loading}
+            rows={1}
+            className="min-h-[56px] max-h-48 w-full resize-none border-none bg-transparent px-4 py-3 pr-16 text-sm text-white outline-none ring-0 placeholder:text-white/30 disabled:cursor-not-allowed disabled:opacity-50"
+            onInput={(e) => {
+              const textarea = e.target as HTMLTextAreaElement;
+              textarea.style.height = 'auto';
+              textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+            }}
+          />
+          {isGenerating ? (
+            <button
+              type="button"
+              onClick={handleStopGeneration}
+              className="absolute bottom-2.5 right-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-all active:scale-95 hover:bg-white/20"
+              aria-label={chat('stopGeneration')}
+              title={chat('stopGeneration')}
+            >
+              <div className="h-3 w-3 rounded-sm bg-current transition-colors" />
+            </button>
+          ) : (
+            <button
+              ref={sendMessageButton.ref}
+              type="button"
+              onClick={sendMessageButton.onClick}
+              onPointerUp={sendMessageButton.onPointerUp}
+              disabled={!input.trim() || loading}
+              className="absolute bottom-2.5 right-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={chat('notifyAction')}
+              title={chat('notifyAction')}
+            >
+              <ArrowUp className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <p className="mt-3 text-center text-[10px] text-white/30">
+          {composerDisclaimer}
+        </p>
+      </div>
+
+      {isFollowUpContextLoading ? (
+        <p className="mt-3 text-center text-xs text-secondary-text">
+          {chat('followUpContextLoading')}
+        </p>
+      ) : null}
+    </>
+  );
+
   return (
     <div
       ref={surfaceRef}
@@ -773,112 +880,144 @@ const ChatPage: React.FC = () => {
             data-testid="chat-main-panel"
             className="flex h-full flex-1 min-w-0 flex-col lg:border-r lg:border-white/5"
           >
-            <main
-              id="chat-scroll-container"
-              data-testid="chat-main"
-              onWheel={() => {
-                isAutoScroll.current = false;
-              }}
-              onTouchMove={() => {
-                isAutoScroll.current = false;
-              }}
-              onScroll={(e) => {
-                const target = e.target as HTMLElement;
-                if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
-                  isAutoScroll.current = true;
-                }
-              }}
-              className="w-full flex-1 overflow-y-auto no-scrollbar"
-            >
-              <div
-                data-testid="chat-message-scroll"
-                className="w-full min-h-full"
+            {showEmptyState ? (
+              <main
+                id="chat-scroll-container"
+                data-testid="chat-main"
+                className="flex h-full flex-1 flex-col overflow-hidden"
               >
                 <div
-                  data-testid="chat-message-stream"
-                  className="flex min-h-full w-full min-w-0 flex-col gap-8 px-6 pb-8 pt-6 md:px-8 xl:px-12"
+                  data-testid="chat-empty-state"
+                  className="flex-1 overflow-y-auto flex flex-col items-center justify-center pb-10"
                 >
-                  {skillsLoadError ? (
-                    <ApiErrorAlert
-                      error={skillsLoadError}
-                      actionLabel={chat('retryLoadSkills')}
-                      onAction={() => {
-                        void loadSkills();
-                      }}
-                    />
-                  ) : null}
+                  <div className="flex w-full max-w-5xl flex-col items-center gap-12 px-6 pt-6 text-center md:px-8 xl:px-12">
+                    {skillsLoadError ? (
+                      <ApiErrorAlert
+                        error={skillsLoadError}
+                        actionLabel={chat('retryLoadSkills')}
+                        onAction={() => {
+                          void loadSkills();
+                        }}
+                      />
+                    ) : null}
 
-                  {messages.length === 0 && !loading ? (
-                    <div
-                      data-testid="chat-empty-state"
-                      className="flex min-h-full w-full flex-1 flex-col items-center justify-center gap-12 pb-24 pt-10 text-center"
-                    >
-                      <div className="flex w-full max-w-4xl flex-col items-center">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
-                          <svg
-                            className="h-7 w-7"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            aria-hidden="true"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={1.5}
-                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                            />
-                          </svg>
-                        </div>
-                        <h3 className="mt-6 text-2xl font-semibold tracking-tight text-white md:text-[2rem]">{chat('emptyTitle')}</h3>
-                        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/62">
-                          {chat('emptyBody')}
-                        </p>
+                    <div className="flex w-full max-w-4xl flex-col items-center">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
+                        <svg
+                          className="h-7 w-7"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                          />
+                        </svg>
                       </div>
+                      <h3 className="mt-6 text-2xl font-semibold tracking-tight text-white md:text-[2rem]">{chat('emptyTitle')}</h3>
+                      <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/62">
+                        {chat('emptyBody')}
+                      </p>
+                    </div>
 
-                      <div className="grid w-full max-w-5xl grid-cols-1 place-items-stretch gap-6 lg:grid-cols-3">
-                        {starterPromptCards.map((card) => (
-                          <GlassCard
-                            key={card.id}
-                            as="button"
-                            data-testid={`chat-starter-card-${card.id}`}
-                            onClick={() => {
-                              void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
-                            }}
-                            className="min-w-0 rounded-2xl border border-white/5 bg-white/[0.02] p-6 text-left transition-colors duration-150 hover:bg-white/[0.05]"
-                          >
-                            <p className="mb-2 break-words whitespace-normal text-sm font-bold text-white">{chat(`starterCards.${card.id}.title`)}</p>
+                    <div className="grid w-full max-w-5xl grid-cols-1 gap-6 lg:grid-cols-3">
+                      {starterPromptCards.map((card) => (
+                        <GlassCard
+                          key={card.id}
+                          as="button"
+                          data-testid={`chat-starter-card-${card.id}`}
+                          onClick={() => {
+                            void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
+                          }}
+                          className="flex min-w-0 flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-8 py-6 text-center transition-colors duration-150 hover:bg-white/[0.05]"
+                        >
+                          <div className="flex flex-col items-center justify-center gap-3">
+                            <p className="break-words whitespace-normal text-sm font-bold text-white">{chat(`starterCards.${card.id}.title`)}</p>
                             <p className="break-words whitespace-normal text-xs leading-relaxed text-white/60">
                               {chat(`starterCards.${card.id}.description`)}
                             </p>
-                            <p className="mt-4 break-words whitespace-normal text-xs leading-relaxed text-white/38">
+                            <p className="break-words whitespace-normal text-xs leading-relaxed text-white/38">
                               {chat(`starterCards.${card.id}.prompt`)}
                             </p>
-                          </GlassCard>
+                          </div>
+                        </GlassCard>
+                      ))}
+                    </div>
+
+                    {quickQuestions.length > 0 ? (
+                      <div
+                        data-testid="chat-quick-question-cloud"
+                        className="flex flex-wrap justify-center gap-3"
+                      >
+                        {quickQuestions.map((q) => (
+                          <button
+                            key={q.id}
+                            type="button"
+                            onClick={() => handleQuickQuestion(q)}
+                            className="inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-white/5 bg-white/[0.02] px-5 py-2.5 text-xs text-white/60 transition-all hover:bg-white/[0.05] hover:text-white"
+                          >
+                            {chat(`quickQuestions.${q.id}`)}
+                          </button>
                         ))}
                       </div>
+                    ) : null}
+                  </div>
+                </div>
 
-                      {quickQuestions.length > 0 ? (
-                        <div
-                          data-testid="chat-quick-question-cloud"
-                          className="mb-6 flex flex-wrap justify-center gap-3"
-                        >
-                          {quickQuestions.map((q) => (
-                            <button
-                              key={q.id}
-                              type="button"
-                              onClick={() => handleQuickQuestion(q)}
-                              className="inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-white/5 bg-white/[0.02] px-5 py-2.5 text-xs text-white/60 transition-all hover:bg-white/[0.05] hover:text-white"
-                            >
-                              {chat(`quickQuestions.${q.id}`)}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
+                <div data-testid="chat-input-shell" className="flex-none w-full pb-8 pt-4">
+                  <div data-testid="chat-input-gradient" className="w-full">
+                    <div
+                      data-testid="chat-console-inner"
+                      className="w-full px-6 md:px-8 xl:px-12"
+                    >
+                      {renderComposerBody()}
                     </div>
-                  ) : (
-                    <div className="flex w-full flex-col gap-6">
-                      {messages.map((msg, index) => {
+                  </div>
+                </div>
+              </main>
+            ) : (
+              <>
+                <main
+                  id="chat-scroll-container"
+                  data-testid="chat-main"
+                  onWheel={() => {
+                    isAutoScroll.current = false;
+                  }}
+                  onTouchMove={() => {
+                    isAutoScroll.current = false;
+                  }}
+                  onScroll={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+                      isAutoScroll.current = true;
+                    }
+                  }}
+                  className="w-full flex-1 overflow-y-auto no-scrollbar"
+                >
+                  <div
+                    data-testid="chat-message-scroll"
+                    className="w-full min-h-full"
+                  >
+                    <div
+                      data-testid="chat-message-stream"
+                      className="flex min-h-full w-full min-w-0 flex-col gap-8 px-6 pb-8 pt-6 md:px-8 xl:px-12"
+                    >
+                      {skillsLoadError ? (
+                        <ApiErrorAlert
+                          error={skillsLoadError}
+                          actionLabel={chat('retryLoadSkills')}
+                          onAction={() => {
+                            void loadSkills();
+                          }}
+                        />
+                      ) : null}
+
+                      <div className="flex w-full flex-col gap-6">
+                        {messages.map((msg, index) => {
                         const displayContent = msg.role === 'assistant'
                           ? normalizeAssistantMessageContent(msg.content)
                           : msg.content;
@@ -956,142 +1095,43 @@ const ChatPage: React.FC = () => {
                             </div>
                           </div>
                         );
-                      })}
-                    </div>
-                  )}
-
-                  {loading ? (
-                    <div className="flex w-full gap-4 pt-2">
-                      <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
-                        AI
+                        })}
                       </div>
-                      <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
-                        <div className="flex items-center gap-2.5 text-sm text-secondary-text">
-                          <div className="relative h-4 w-4 flex-shrink-0">
-                            <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
-                            <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+
+                      {loading ? (
+                        <div className="flex w-full gap-4 pt-2">
+                          <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-semibold text-white/72">
+                            AI
                           </div>
-                          <span className="text-secondary-text">
-                            {getCurrentStage(progressSteps)}
-                          </span>
+                          <div className="flex-1 min-w-0 overflow-hidden rounded-2xl bg-white/[0.03] px-5 py-4">
+                            <div className="flex items-center gap-2.5 text-sm text-secondary-text">
+                              <div className="relative h-4 w-4 flex-shrink-0">
+                                <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
+                                <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
+                              </div>
+                              <span className="text-secondary-text">
+                                {getCurrentStage(progressSteps)}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              </div>
-            </main>
-
-            <footer data-testid="chat-input-shell" className="mt-auto mb-8 w-full">
-              <div data-testid="chat-input-gradient" className="w-full pb-6 pt-2">
-                <div
-                  data-testid="chat-console-inner"
-                  className="w-full px-6 md:px-8 xl:px-12"
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
-                    <button
-                      ref={startNewChatMobileButton.ref}
-                      type="button"
-                      onClick={startNewChatMobileButton.onClick}
-                      onPointerUp={startNewChatMobileButton.onPointerUp}
-                      aria-label={chat('newChatTitle')}
-                      className="flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
-                    >
-                      + {language === 'en' ? 'New chat' : '新对话'}
-                    </button>
-                    <button
-                      ref={openConsoleButton.ref}
-                      type="button"
-                      onClick={openConsoleButton.onClick}
-                      onPointerUp={openConsoleButton.onPointerUp}
-                      data-testid="chat-bento-brief-trigger"
-                      className={CARD_BUTTON_CLASS}
-                      title={language === 'en' ? 'Open console' : '打开控制台'}
-                    >
-                      <PanelRightOpen className="h-4 w-4" />
-                      <span>{language === 'en' ? 'Console' : '控制台'}</span>
-                    </button>
                   </div>
+                </main>
 
-                  {sendToast ? (
-                    <p className={`mb-3 text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                      {sendToast.message}
-                    </p>
-                  ) : null}
-
-                  {chatError ? (
-                    <ApiErrorAlert
-                      error={chatError}
-                      className="mb-3"
-                      actionLabel={chatError.category === 'local_connection_failed' ? chat('reloadPageAction') : undefined}
-                      onAction={
-                        chatError.category === 'local_connection_failed'
-                          ? () => {
-                              window.location.reload();
-                            }
-                          : undefined
-                      }
-                    />
-                  ) : null}
-
-                  <div className="mx-auto mt-auto w-full max-w-4xl">
+                <footer data-testid="chat-input-shell" className="mt-auto mb-8 w-full">
+                  <div data-testid="chat-input-gradient" className="w-full pb-6 pt-2">
                     <div
-                      data-testid="chat-composer-omnibar"
-                      className="relative mx-auto w-full max-w-4xl rounded-3xl border border-white/[0.05] bg-white/[0.04] p-2 shadow-2xl backdrop-blur-2xl"
+                      data-testid="chat-console-inner"
+                      className="w-full px-6 md:px-8 xl:px-12"
                     >
-                      <textarea
-                        ref={composerTextareaRef}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder={chat('inputPlaceholder')}
-                        disabled={loading}
-                        rows={1}
-                        className="min-h-[56px] max-h-48 w-full resize-none border-none bg-transparent px-4 py-3 pr-16 text-sm text-white outline-none ring-0 placeholder:text-white/30 disabled:cursor-not-allowed disabled:opacity-50"
-                        onInput={(e) => {
-                          const textarea = e.target as HTMLTextAreaElement;
-                          textarea.style.height = 'auto';
-                          textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-                        }}
-                      />
-                      {isGenerating ? (
-                        <button
-                          type="button"
-                          onClick={handleStopGeneration}
-                          className="absolute bottom-2.5 right-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-all active:scale-95 hover:bg-white/20"
-                          aria-label={chat('stopGeneration')}
-                          title={chat('stopGeneration')}
-                        >
-                          <div className="h-3 w-3 rounded-sm bg-current transition-colors" />
-                        </button>
-                      ) : (
-                        <button
-                          ref={sendMessageButton.ref}
-                          type="button"
-                          onClick={sendMessageButton.onClick}
-                          onPointerUp={sendMessageButton.onPointerUp}
-                          disabled={!input.trim() || loading}
-                          className="absolute bottom-2.5 right-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label={chat('notifyAction')}
-                          title={chat('notifyAction')}
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </button>
-                      )}
+                      {renderComposerBody()}
                     </div>
-                    <p className="mt-3 text-center text-[10px] text-white/30">
-                      {composerDisclaimer}
-                    </p>
                   </div>
-
-                  {isFollowUpContextLoading ? (
-                    <p className="mt-3 text-xs text-secondary-text">
-                      {chat('followUpContextLoading')}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </footer>
+                </footer>
+              </>
+            )}
           </section>
 
           <aside
