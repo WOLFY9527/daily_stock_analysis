@@ -61,6 +61,8 @@ _OPT_IN_THINKING_MODELS: Dict[str, dict] = {
     "deepseek-chat": {"thinking": {"type": "enabled"}},
 }
 
+_TEXT_CONTENT_BLOCK_TYPES = {"text", "output_text", "input_text"}
+
 
 def _model_matches(model: str, entries: List[str]) -> bool:
     """Check if model name matches any entry (exact or prefix with version suffix)."""
@@ -98,6 +100,42 @@ def get_thinking_extra_body(model: str) -> Optional[dict]:
     if _model_matches(model, _AUTO_THINKING_MODELS):
         return None
     return _get_opt_in_payload(model, _OPT_IN_THINKING_MODELS)
+
+
+def _extract_text_from_message_content(content: Any) -> str:
+    """Flatten provider content-block arrays into plain text for downstream parsing."""
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return str(content or "").strip()
+
+    fragments: List[str] = []
+    for item in content:
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                fragments.append(text)
+            continue
+
+        if isinstance(item, dict):
+            item_type = str(item.get("type") or "").strip().lower()
+            if item_type and item_type not in _TEXT_CONTENT_BLOCK_TYPES:
+                continue
+            text = str(item.get("text") or (item.get("content") if not item_type else "") or "").strip()
+        else:
+            item_type = str(getattr(item, "type", "") or "").strip().lower()
+            if item_type and item_type not in _TEXT_CONTENT_BLOCK_TYPES:
+                continue
+            text = str(
+                getattr(item, "text", "")
+                or (getattr(item, "content", "") if not item_type else "")
+                or ""
+            ).strip()
+
+        if text:
+            fragments.append(text)
+
+    return " ".join(fragments).strip()
 
 
 # ============================================================
@@ -388,7 +426,7 @@ class LLMToolAdapter:
         """Parse litellm OpenAI-compatible response into LLMResponse."""
         choice = response.choices[0]
         tool_calls: List[ToolCall] = []
-        text_content = choice.message.content
+        text_content = _extract_text_from_message_content(choice.message.content)
         # DeepSeek/Qwen thinking mode; not in standard OpenAI type, accessed via getattr
         reasoning_content = getattr(choice.message, "reasoning_content", None)
 

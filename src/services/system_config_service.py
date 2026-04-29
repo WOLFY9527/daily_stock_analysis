@@ -41,6 +41,7 @@ from src.storage import get_db
 logger = logging.getLogger(__name__)
 
 FACTORY_RESET_CONFIRMATION_PHRASE = "FACTORY RESET"
+_TEXT_CONTENT_BLOCK_TYPES = {"text", "output_text", "input_text"}
 
 
 class ConfigValidationError(Exception):
@@ -328,14 +329,17 @@ class SystemConfigService:
         resolved_protocol = resolve_llm_channel_protocol(protocol, base_url=base_url, models=raw_models, channel_name=name)
         resolved_models = [normalize_llm_channel_model(model, resolved_protocol, base_url) for model in raw_models]
         resolved_model = resolved_models[0]
+        max_tokens = 8
+        if resolved_model.startswith("deepseek/deepseek-v4-"):
+            max_tokens = 64
         api_keys = [segment.strip() for segment in api_key.split(",") if segment.strip()]
         selected_api_key = api_keys[0] if api_keys else ""
 
         call_kwargs: Dict[str, Any] = {
             "model": resolved_model,
-            "messages": [{"role": "user", "content": "Reply with OK"}],
+            "messages": [{"role": "user", "content": "Reply with OK only"}],
             "temperature": 0,
-            "max_tokens": 8,
+            "max_tokens": max_tokens,
             "timeout": max(5.0, float(timeout_seconds)),
         }
         if selected_api_key:
@@ -518,10 +522,23 @@ class SystemConfigService:
         if isinstance(content, list):
             fragments: List[str] = []
             for item in content:
-                if isinstance(item, dict):
-                    text = str(item.get("text") or item.get("content") or "").strip()
+                if isinstance(item, str):
+                    text = item.strip()
                 else:
-                    text = str(getattr(item, "text", "") or getattr(item, "content", "") or "").strip()
+                    if isinstance(item, dict):
+                        item_type = str(item.get("type") or "").strip().lower()
+                        if item_type and item_type not in _TEXT_CONTENT_BLOCK_TYPES:
+                            continue
+                        text = str(item.get("text") or (item.get("content") if not item_type else "") or "").strip()
+                    else:
+                        item_type = str(getattr(item, "type", "") or "").strip().lower()
+                        if item_type and item_type not in _TEXT_CONTENT_BLOCK_TYPES:
+                            continue
+                        text = str(
+                            getattr(item, "text", "")
+                            or (getattr(item, "content", "") if not item_type else "")
+                            or ""
+                        ).strip()
                 if text:
                     fragments.append(text)
             return " ".join(fragments).strip()

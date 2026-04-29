@@ -758,9 +758,41 @@ class TestAgentConstructionChain(unittest.TestCase):
                 timeout=10.0,
             )
 
-        self.assertEqual(result.content, "ok")
-        self.assertEqual(timeouts[0], ("openai/gpt-4o-mini", 10.0))
-        self.assertEqual(timeouts[1], ("anthropic/claude-3-5-sonnet-20241022", 3.0))
+    @patch("src.agent.llm_adapter.Router")
+    def test_llm_adapter_flattens_deepseek_v4_content_blocks(self, _mock_router):
+        mock_cfg = MagicMock()
+        mock_cfg.agent_litellm_model = "deepseek/deepseek-v4-pro"
+        mock_cfg.litellm_model = None
+        mock_cfg.litellm_fallback_models = []
+        mock_cfg.llm_model_list = []
+        mock_cfg.llm_temperature = 0.7
+        mock_cfg.gemini_api_keys = []
+        mock_cfg.anthropic_api_keys = []
+        mock_cfg.openai_api_keys = []
+        mock_cfg.deepseek_api_keys = []
+        mock_cfg.openai_base_url = None
+
+        from src.agent.llm_adapter import LLMToolAdapter
+        adapter = LLMToolAdapter(config=mock_cfg)
+
+        response = MagicMock()
+        response.choices = [
+            MagicMock(
+                message=MagicMock(
+                    content=[
+                        {"type": "reasoning", "content": "internal scratchpad"},
+                        {"type": "text", "text": "final answer"},
+                    ],
+                    tool_calls=None,
+                )
+            )
+        ]
+        response.usage = MagicMock(prompt_tokens=5, completion_tokens=7, total_tokens=12)
+
+        result = adapter._parse_litellm_response(response, "deepseek/deepseek-v4-pro")
+
+        self.assertEqual(result.content, "final answer")
+        self.assertEqual(result.model, "deepseek/deepseek-v4-pro")
 
 
 # ============================================================

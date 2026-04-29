@@ -167,4 +167,39 @@ describe('LLMChannelEditor', () => {
       latency: 123,
     }))).toBeInTheDocument();
   });
+
+  it('keeps DeepSeek v4 model selection on the success feedback path', async () => {
+    vi.mocked(systemConfigApi.testLLMChannel).mockResolvedValue({
+      success: true,
+      message: 'ok',
+      resolvedModel: 'deepseek/deepseek-v4-pro',
+      latencyMs: 88,
+    });
+
+    renderEditor(
+      <LLMChannelEditor
+        items={[
+          { key: 'LLM_CHANNELS', value: 'deepseek' },
+          { key: 'LLM_DEEPSEEK_PROTOCOL', value: 'deepseek' },
+          { key: 'LLM_DEEPSEEK_BASE_URL', value: 'https://api.deepseek.com/v1' },
+          { key: 'LLM_DEEPSEEK_ENABLED', value: 'true' },
+          { key: 'LLM_DEEPSEEK_API_KEY', value: 'secret-key' },
+          { key: 'LLM_DEEPSEEK_MODELS', value: 'deepseek-v4-pro,deepseek-v4-flash' },
+        ]}
+        onSaveItems={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(translate('zh', 'settings.llmEditor.channelPreset.deepseek')) }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'settings.llmEditor.testAction') }));
+
+    expect(await screen.findByText(translate('zh', 'settings.llmEditor.testSuccess', {
+      model: 'deepseek/deepseek-v4-pro',
+      latency: 88,
+    }))).toBeInTheDocument();
+    expect(systemConfigApi.testLLMChannel).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: 'deepseek',
+      models: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+    }), expect.anything());
+  });
 });

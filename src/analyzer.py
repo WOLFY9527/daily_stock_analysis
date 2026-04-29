@@ -48,6 +48,8 @@ from src.schemas.report_schema import AnalysisReportSchema
 
 logger = logging.getLogger(__name__)
 
+_TEXT_CONTENT_BLOCK_TYPES = {"text", "output_text", "input_text"}
+
 
 def check_content_integrity(result: "AnalysisResult") -> Tuple[bool, List[str]]:
     """
@@ -777,10 +779,23 @@ class GeminiAnalyzer:
         if isinstance(content, list):
             fragments: List[str] = []
             for item in content:
-                if isinstance(item, dict):
-                    text = str(item.get("text") or item.get("content") or "").strip()
+                if isinstance(item, str):
+                    text = item.strip()
                 else:
-                    text = str(getattr(item, "text", "") or getattr(item, "content", "") or "").strip()
+                    if isinstance(item, dict):
+                        item_type = str(item.get("type") or "").strip().lower()
+                        if item_type and item_type not in _TEXT_CONTENT_BLOCK_TYPES:
+                            continue
+                        text = str(item.get("text") or (item.get("content") if not item_type else "") or "").strip()
+                    else:
+                        item_type = str(getattr(item, "type", "") or "").strip().lower()
+                        if item_type and item_type not in _TEXT_CONTENT_BLOCK_TYPES:
+                            continue
+                        text = str(
+                            getattr(item, "text", "")
+                            or (getattr(item, "content", "") if not item_type else "")
+                            or ""
+                        ).strip()
                 if text:
                     fragments.append(text)
             return " ".join(fragments).strip()

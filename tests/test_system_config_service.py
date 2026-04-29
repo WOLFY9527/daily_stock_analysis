@@ -616,6 +616,66 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["resolved_model"], "openai/glm-4-flash")
 
     @patch("litellm.completion")
+    def test_test_llm_channel_accepts_deepseek_v4_text_content_blocks(self, mock_completion) -> None:
+        mock_completion.return_value = type(
+            "MockResponse",
+            (),
+            {
+                "choices": [
+                    type(
+                        "Choice",
+                        (),
+                        {
+                            "message": type(
+                                "Message",
+                                (),
+                                {
+                                    "content": [
+                                        {"type": "reasoning", "content": "internal scratchpad"},
+                                        {"type": "text", "text": "OK"},
+                                    ]
+                                },
+                            )()
+                        },
+                    )()
+                ],
+            },
+        )()
+
+        payload = self.service.test_llm_channel(
+            name="deepseek",
+            protocol="deepseek",
+            base_url="https://api.deepseek.com/v1",
+            api_key="sk-test-value",
+            models=["deepseek-v4-pro"],
+        )
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["resolved_protocol"], "deepseek")
+        self.assertEqual(payload["resolved_model"], "deepseek/deepseek-v4-pro")
+
+    @patch("litellm.completion")
+    def test_test_llm_channel_uses_safer_token_budget_for_deepseek_v4(self, mock_completion) -> None:
+        mock_completion.return_value = type(
+            "MockResponse",
+            (),
+            {
+                "choices": [type("Choice", (), {"message": type("Message", (), {"content": "OK"})()})()],
+            },
+        )()
+
+        payload = self.service.test_llm_channel(
+            name="deepseek",
+            protocol="deepseek",
+            base_url="https://api.deepseek.com/v1",
+            api_key="sk-test-value",
+            models=["deepseek-v4-pro"],
+        )
+
+        self.assertTrue(payload["success"])
+        self.assertGreaterEqual(mock_completion.call_args.kwargs["max_tokens"], 32)
+
+    @patch("litellm.completion")
     def test_test_llm_channel_empty_response_returns_actionable_error(self, mock_completion) -> None:
         mock_completion.return_value = type(
             "MockResponse",
