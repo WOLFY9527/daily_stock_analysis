@@ -1,3 +1,7 @@
+## 2026-04-29
+
+- 💬 **WolfyStock 问股主视图去廉价对话感重构** — `apps/dsa-web/src/pages/ChatPage.tsx` 的空态主视图现在改为居中玻璃陈列：三张研究入口卡片与快捷问题标签统一收口到中轴，快捷标签使用更轻的药丸玻璃材质并强制 `justify-center` 对齐，不再出现整体左偏和文字重心漂移。底部输入区同步移除旧的厚重外壳，改为独立悬浮的 Gemini 风格输入舱：placeholder 内嵌到 textarea，发送按钮内置到右下角，输入前后状态对比更清晰，底部只保留一行低对比度免责声明，主视觉区与输入舱之间也补足了安全留白。配套回归已更新到 `ChatPage.test.tsx`，并通过 Safari 新标签页在 `http://127.0.0.1:4175/chat` 做了手工验证。
+
 ## 2026-04-28
 
 - 🧭 **WolfyStock 全局页面间距统一到 Portfolio 标准** — `apps/dsa-web` 现在把持仓页原本最舒适的页面 gutter（`pt-6 px-6 md:px-8 xl:px-12 pb-12`）上移到共享 `Shell` 的 `<main>`，Home / Guest / Portfolio / Backtest / Scanner / Chat / Settings / Admin Logs 等页面根节点不再各自重复外层 padding 或滚动 gutter，切换路由时内容左边缘与上边缘保持同一套坐标。同步清理了 Backtest 旧的 frame padding override 与 `theme-main-lane` 私有左缩进，并为 Safari readiness 增加 rAF 兜底超时，避免真实 Safari 偶发停在透明态。配套回归覆盖已更新到对应页面测试与 `Shell.test.tsx`，并通过 WebKit 几何验证确认 Home / Portfolio / Backtest / Scanner / Chat 在 1440px 视口下根内容边界一致。
