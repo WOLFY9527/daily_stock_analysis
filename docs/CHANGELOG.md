@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 📈 **WolfyStock 新增独立市场总览面板** — 新增 `/market-overview` 独立路由与 `GET /api/v1/market-overview/*` 后端接口，覆盖美股/A股主要指数、波动率、情绪、资金流和宏观指标五类卡片。后端通过短 TTL 缓存减少外部行情请求，并为每次面板刷新写入 `market_overview` 执行日志，管理员可在 `/admin/logs` 审计对应 panel、endpoint、时间戳、状态与原始响应摘要。前端新增 Gemini dark Bento 面板和 focused smoke 覆盖。
+
 - 🧠 **WolfyStock 首页 AI 决断卡品牌化与投研化重构** — `apps/dsa-web` 的 Home Bento 决断卡将分析中原位 spinner 替换为旋转发光的 WolfyStock Logo，并把完成态报告统一回收到同一张投研决断卡：Ticker 旁强制展示公司全称与 Sector，Action / Score / Direction 升级为主视觉指标，AI Insight 压缩为单段技术结论，并对泛化“综合建议”话术自动降噪为均线、量价、RSI 驱动的专业判断。配套回归已更新到 `HomeSurfacePage.test.tsx`，并通过 focused Vitest、lint、build 与 in-app browser 首页手工验收。
 
 - 🧭 **系统设置模型库与数据源库去卡片化** — `apps/dsa-web` 的 `/settings/system` 管理控制面将 Provider Library、Data Routing 与 Data Source Library 从多列 Bento 卡片墙改为高密度纵向数据行：左侧固定名称列与状态点，中部能力/状态微型标签，右侧收拢管理操作，并按 `LLM PROVIDERS`、`MARKET DATA`、`FUNDAMENTALS`、`NEWS & SENTIMENT` 等语义标题分组，降低海量配置项的扫描成本。配套回归已更新到 Settings 相关单测，并通过 lint、build、in-app browser DOM 检查与 Safari 实机视觉验证。

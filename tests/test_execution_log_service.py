@@ -69,6 +69,26 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertTrue(sessions[0]["readable_summary"]["destructive"])
         self.assertEqual(detail["events"][0]["detail"]["action"], "factory_reset_system")
 
+    def test_record_market_overview_fetch_persists_panel_audit_fields(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.record_market_overview_fetch(
+                panel_name="VolatilityCard",
+                endpoint_url="/api/v1/market-overview/volatility",
+                status="success",
+                fetch_timestamp="2026-04-29T10:00:00",
+                raw_response={"cache": "hit"},
+                actor={"user_id": "user-1", "username": "alice", "role": "user"},
+            )
+            detail = service.get_session_detail(session_id)
+
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail["readable_summary"]["subsystem"], "market_overview")
+        self.assertEqual(detail["events"][0]["phase"], "market_overview")
+        self.assertEqual(detail["events"][0]["detail"]["panel_name"], "VolatilityCard")
+        self.assertEqual(detail["events"][0]["detail"]["endpoint_url"], "/api/v1/market-overview/volatility")
+        self.assertEqual(detail["events"][0]["detail"]["raw_response"], {"cache": "hit"})
+
     def test_list_sessions_filters_by_task_id(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

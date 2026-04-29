@@ -433,6 +433,71 @@ class ExecutionLogService:
         )
         return session_id
 
+    def record_market_overview_fetch(
+        self,
+        *,
+        panel_name: str,
+        endpoint_url: str,
+        status: str,
+        fetch_timestamp: str,
+        error_message: Optional[str] = None,
+        raw_response: Optional[Dict[str, Any]] = None,
+        actor: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        session_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        normalized_status = "completed" if str(status).lower() == "success" else "failed"
+        detail = {
+            "category": "market_overview",
+            "action": "panel_fetch",
+            "panel_name": panel_name,
+            "fetch_timestamp": fetch_timestamp,
+            "endpoint_url": endpoint_url,
+            "status": status,
+            "error_message": _masked_message(error_message),
+            "raw_response": raw_response or {},
+            "outcome": _outcome_from_status(normalized_status),
+        }
+        summary = self._merge_summary(
+            {"market_overview": detail},
+            self._summary_meta(
+                actor=actor,
+                session_kind="user_activity",
+                subsystem="market_overview",
+                action_name="panel_fetch",
+                destructive=False,
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id="market_overview_fetch",
+            code=None,
+            name=panel_name,
+            overall_status=normalized_status,
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="market_overview",
+            step="panel_fetch",
+            target=panel_name,
+            status=normalized_status,
+            truth_level="actual",
+            message=_masked_message(error_message) if error_message else f"{panel_name} refreshed via {endpoint_url}",
+            detail=detail,
+            event_at=started_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status=normalized_status,
+            truth_level="actual",
+            summary=summary,
+            ended_at=started_at,
+        )
+        return session_id
+
     def _append_configured_events(self, session_id: str, configured: Dict[str, Any]) -> None:
         ai = configured.get("ai") if isinstance(configured, dict) else {}
         data = configured.get("data") if isinstance(configured, dict) else {}

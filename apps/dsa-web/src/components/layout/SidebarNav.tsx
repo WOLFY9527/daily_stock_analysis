@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Archive,
+  Activity,
   BriefcaseBusiness,
   Globe,
   Home,
@@ -66,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
   { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareText, badge: 'completion' },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
+  { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
   { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
 ];
 

@@ -169,7 +169,7 @@ class HistoryService:
             # Convert to response format
             items = []
             for record in records:
-                raw_result = parse_json_field(record.raw_result)
+                raw_result = parse_json_field(getattr(record, "raw_result", None))
                 persisted_report = raw_result.get("persisted_report") if isinstance(raw_result, dict) else None
                 persisted_meta = (
                     persisted_report.get("meta")
@@ -199,7 +199,7 @@ class HistoryService:
                     "is_test": bool(
                         persisted_meta.get("is_test")
                         if persisted_meta.get("is_test") is not None
-                        else record.is_test
+                        else getattr(record, "is_test", False)
                     ),
                 })
             
