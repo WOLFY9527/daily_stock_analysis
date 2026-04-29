@@ -221,10 +221,13 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-chart-workspace')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('LONG');
+    expect(screen.getByTestId('home-bento-decision-hero-row')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('BUY');
     expect(screen.getByTestId('home-bento-decision-core-metrics')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-insight')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
-    expect(screen.getByText('AI 信号方向')).toBeInTheDocument();
+    expect(screen.getByText('AI 动作')).toBeInTheDocument();
+    expect(screen.getByText('执行主线')).toBeInTheDocument();
     expect(screen.getByText('量化佐证指标')).toBeInTheDocument();
     expect(screen.getByText('均线排列')).toBeInTheDocument();
     expect(screen.getByText('资金承接')).toBeInTheDocument();
@@ -232,8 +235,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('MACD-12/26/9')).toBeInTheDocument();
     expect(screen.getByText('量能确认')).toBeInTheDocument();
     expect(screen.getByText('金叉')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-breakout-reason')).toBeInTheDocument();
-    expect(screen.getByText('最近报告归因')).toBeInTheDocument();
+    expect(screen.queryByText('AI 信号方向')).not.toBeInTheDocument();
+    expect(screen.queryByText('最近报告归因')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
     expect(strategyCard).toHaveClass('w-full', 'rounded-[24px]');
     expect(strategyCard.className).not.toContain('xl:col-span-1');
@@ -337,13 +340,15 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByRole('link', { name: /backtest/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Lock the range first, then decide the pace.')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-chart-workspace')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('LONG');
-    expect(screen.getByText('AI SIGNAL DIRECTION')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('BUY');
+    expect(screen.getByText('ACTION')).toBeInTheDocument();
+    expect(screen.getByText('AI INSIGHT')).toBeInTheDocument();
     expect(screen.getByText('SUPPORTING INDICATORS')).toBeInTheDocument();
     expect(screen.getByText('MA ALIGNMENT')).toBeInTheDocument();
     expect(screen.getByText('LIQUIDITY AB.')).toBeInTheDocument();
     expect(screen.getByText('BULL CROSSOVER')).toBeInTheDocument();
-    expect(screen.getByText('Latest Report Context')).toBeInTheDocument();
+    expect(screen.queryByText('AI SIGNAL DIRECTION')).not.toBeInTheDocument();
+    expect(screen.queryByText('Latest Report Context')).not.toBeInTheDocument();
   });
 
   it('neutralizes stale failed reports when the dashboard is viewed in English', async () => {
@@ -670,7 +675,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
     expect(await screen.findByText('特斯拉')).toBeInTheDocument();
-    expect(screen.getByText('Cached snapshot only.')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('Cached snapshot only.');
     expect(historyApi.getDetail).toHaveBeenCalledWith(2);
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
 
@@ -720,8 +725,10 @@ describe('HomeSurfacePage', () => {
       },
     });
 
-    expect(await screen.findByText('Persisted database detail replaced the cached snapshot.')).toBeInTheDocument();
-    expect(screen.queryByText('Cached snapshot only.')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('Persisted database detail replaced the cached snapshot.');
+      expect(screen.getByTestId('home-bento-decision-insight').textContent).not.toContain('Cached snapshot only.');
+    });
   });
 
   it('keeps TSLA drill-down content synchronized with the active dashboard payload', async () => {
@@ -1020,7 +1027,9 @@ describe('HomeSurfacePage', () => {
       });
     });
 
-    expect(await screen.findByText('Netflix completion replaced neutral cards.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('Netflix completion replaced neutral cards.');
+    });
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
   });

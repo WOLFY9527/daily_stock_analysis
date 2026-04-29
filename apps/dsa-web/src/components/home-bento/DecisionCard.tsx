@@ -5,11 +5,8 @@ import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import {
   CARD_BUTTON_CLASS,
-  CARD_KICKER_CLASS,
-  PANEL_METRIC_CLASS,
   SYSTEM_ACCENT_GLOW_CLASS,
   type SignalTone,
-  getToneBorderClass,
   getToneTextClass,
   getToneTextStyle,
 } from './theme';
@@ -47,8 +44,8 @@ type DecisionCardProps = {
 function getSignalCommand(locale: 'zh' | 'en', tone: SignalTone): { bias: string; command: string } {
   if (tone === 'bearish') {
     return locale === 'en'
-      ? { command: 'SHORT', bias: 'BEARISH' }
-      : { command: 'SHORT', bias: '看空' };
+      ? { command: 'SELL', bias: 'BEARISH' }
+      : { command: 'SELL', bias: '看空' };
   }
 
   if (tone === 'neutral') {
@@ -58,8 +55,8 @@ function getSignalCommand(locale: 'zh' | 'en', tone: SignalTone): { bias: string
   }
 
   return locale === 'en'
-    ? { command: 'LONG', bias: 'BULLISH' }
-    : { command: 'LONG', bias: '看多' };
+    ? { command: 'BUY', bias: 'BULLISH' }
+    : { command: 'BUY', bias: '看多' };
 }
 
 function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): SupportingIndicator[] {
@@ -121,13 +118,11 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   company,
   detailLabel,
   eyebrow,
-  heroLabel,
   heroUnit,
   heroValue,
   locale,
   onOpenDetails,
   reason,
-  scoreLabel,
   scoreValue,
   signalLabel,
   signalTone,
@@ -142,6 +137,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const signalCommand = getSignalCommand(locale, signalTone);
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
+  const signalDirection = signalLabel || signalCommand.bias;
+  const insightCopy = [scoreValue, summary, reason.body].filter(Boolean).join(isEnglish ? '. ' : '。');
 
   return (
     <BentoCard
@@ -166,59 +163,65 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       )}
     >
       <div className="flex h-full flex-col gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-end gap-2">
               <span className="min-w-0 truncate text-lg font-semibold leading-tight text-white">{company}</span>
               <span className="text-xs font-mono uppercase tracking-[0.22em] text-white/40">{ticker}</span>
             </div>
-            <div className={`mt-3 inline-flex min-h-8 items-center gap-2 rounded-full border px-3 py-1 text-sm ${getToneBorderClass(signalTone)}`}>
-              <span className="h-2 w-2 rounded-full bg-current" />
-              <span className="min-w-0 break-words whitespace-normal">{badge}</span>
-            </div>
-          </div>
-          <div className={`${PANEL_METRIC_CLASS} min-w-[12rem] max-w-full px-4 py-3`}>
-            <p className={CARD_KICKER_CLASS}>{scoreLabel}</p>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-white/78">{scoreValue}</p>
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(16rem,0.95fr)]">
-          <div className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-5 backdrop-blur-xl md:px-6">
-            <Label micro className="text-white/32">{isEnglish ? 'AI SIGNAL DIRECTION' : 'AI 信号方向'}</Label>
-            <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
-              <span
-                className={`text-3xl font-semibold leading-none md:text-4xl ${getToneTextClass(signalTone)}`}
-                data-testid="home-bento-decision-signal-hero"
-                style={getToneTextStyle(signalTone, true)}
-              >
-                {signalCommand.command}
-              </span>
-              <span className={`pb-1 text-sm font-semibold uppercase tracking-[0.22em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
-                {signalLabel || signalCommand.bias}
-              </span>
+        <div className="flex flex-col gap-5">
+          <div
+            className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between"
+            data-testid="home-bento-decision-hero-row"
+          >
+            <div className="min-w-0 flex-1">
+              <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
+              <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
+                <span
+                  className={`text-5xl font-black leading-none tracking-[-0.06em] md:text-6xl ${getToneTextClass(signalTone)}`}
+                  data-testid="home-bento-decision-signal-hero"
+                  style={getToneTextStyle(signalTone, true)}
+                >
+                  {signalCommand.command}
+                </span>
+                <span
+                  className={`pb-1 text-xs font-semibold uppercase tracking-[0.28em] text-white/55 ${getToneTextClass(signalTone)}`}
+                  style={getToneTextStyle(signalTone, true)}
+                >
+                  {badge}
+                </span>
+              </div>
             </div>
-            <p className="mt-4 max-w-3xl text-sm leading-[1.7] text-white/72">{summary}</p>
+
+            <div
+              className="grid min-w-0 gap-5 sm:grid-cols-2 xl:min-w-[18rem] xl:gap-8"
+              data-testid="home-bento-decision-core-metrics"
+            >
+              <div className="min-w-0">
+                <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
+                <div className="mt-2 flex items-end gap-2">
+                  <p className="text-4xl font-black leading-none text-white">{heroValue}</p>
+                  <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <Label micro className="text-white/28">{isEnglish ? 'DIRECTION' : '方向'}</Label>
+                <p
+                  className={`mt-2 text-2xl font-semibold leading-none ${getToneTextClass(signalTone)}`}
+                  style={getToneTextStyle(signalTone, true)}
+                >
+                  {signalDirection}
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1" data-testid="home-bento-decision-core-metrics">
-            <div className={`${PANEL_METRIC_CLASS} flex flex-col gap-1`}>
-              <Label micro>{heroLabel}</Label>
-              <p className="text-2xl font-semibold leading-none text-white">
-                {heroValue}
-                <span className="ml-1 text-sm font-medium text-white/42">{heroUnit}</span>
-              </p>
-            </div>
-            <div className={`${PANEL_METRIC_CLASS} flex flex-col gap-1`}>
-              <Label micro>{isEnglish ? 'BIAS' : '方向'}</Label>
-              <p className={`text-lg font-semibold leading-tight ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
-                {signalCommand.bias}
-              </p>
-            </div>
-            <div className={`${PANEL_METRIC_CLASS} flex flex-col gap-1 sm:col-span-2 xl:col-span-1`}>
-              <Label micro>{isEnglish ? 'OPERATING THESIS' : '执行主线'}</Label>
-              <p className="text-sm leading-[1.7] text-white/70">{scoreValue}</p>
-            </div>
+          <div className="max-w-3xl" data-testid="home-bento-decision-insight">
+            <Label micro className="text-white/28">{isEnglish ? 'AI INSIGHT' : '执行主线'}</Label>
+            <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-white/70">{insightCopy}</p>
           </div>
         </div>
 
@@ -247,11 +250,6 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="shrink-0 border-t border-white/5 pt-4" data-testid="home-bento-breakout-reason">
-          <Label micro as="h4" className="mb-1 text-white/30">{reason.title}</Label>
-          <p className="text-xs leading-[1.75] text-white/60">{reason.body}</p>
         </div>
       </div>
     </BentoCard>
