@@ -60,11 +60,27 @@ export interface ExecutionLogSessionSummary {
     scannerCoverageSummary?: string | null;
     summaryParagraph?: string | null;
     status?: string;
+    operationCategory?: string | null;
+    operationType?: string | null;
+    operationTarget?: string | null;
+    operationStatus?: string | null;
+    keyMetric?: string | null;
   };
 }
 
 export interface ExecutionLogSessionDetail extends ExecutionLogSessionSummary {
   events: ExecutionLogEvent[];
+  operationDetail?: {
+    operationCategory?: string | null;
+    operationType?: string | null;
+    target?: string | null;
+    status?: string | null;
+    keyMetric?: string | null;
+    aiCalls?: Array<Record<string, unknown>>;
+    dataSourceCalls?: Array<Record<string, unknown>>;
+    timeline?: Array<Record<string, unknown>>;
+    diagnostics?: Array<Record<string, unknown>>;
+  };
 }
 
 export interface ExecutionLogSessionListResponse {
@@ -90,6 +106,9 @@ function normalizeSessionDetail(payload: Record<string, unknown>): ExecutionLogS
       ? normalized.readableSummary
       : {},
     events: Array.isArray(normalized.events) ? normalized.events : [],
+    operationDetail: normalized.operationDetail && typeof normalized.operationDetail === 'object'
+      ? normalized.operationDetail
+      : {},
   };
 }
 

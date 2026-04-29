@@ -147,6 +147,46 @@ function formatScannerCoverageMeta(
   return t('adminLogs.providersMeta', { providers, fallbackCount, failureCount });
 }
 
+function operationText(value: unknown, fallback = '--'): string {
+  const text = String(value ?? '').trim();
+  return text || fallback;
+}
+
+function operationStatusClass(status?: string | null): string {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (['success', 'succeeded', 'completed', 'ok'].includes(normalized)) {
+    return 'theme-log-status theme-log-status--success';
+  }
+  if (['partial fail', 'partial_success', 'fallback', 'warning', 'switched_to_fallback'].includes(normalized)) {
+    return 'theme-log-status theme-log-status--warning';
+  }
+  if (['fail', 'failed', 'error'].includes(normalized)) {
+    return 'theme-log-status theme-log-status--danger';
+  }
+  return 'theme-log-status';
+}
+
+function asRecordList(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item)) : [];
+}
+
+function downloadLogJson(detail: ExecutionLogSessionDetail): void {
+  const blob = new Blob([JSON.stringify(detail, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `wolfystock-log-${detail.sessionId}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyLogJson(detail: ExecutionLogSessionDetail): Promise<void> {
+  const text = JSON.stringify(detail, null, 2);
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+  }
+}
+
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
   const locale = language as AdminLogsLanguage;
@@ -310,7 +350,7 @@ const AdminLogsPage: React.FC = () => {
               id="admin-logs-provider-filter"
               aria-label={t('adminLogs.providerFilterLabel')}
               className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-              placeholder={locale === 'en' ? 'Data source / provider' : '数据源 / Provider'}
+              placeholder={t('adminLogs.providerFilterPlaceholder')}
               value={keywordFilter}
               onChange={(e) => setKeywordFilter(e.target.value)}
             />
@@ -362,11 +402,13 @@ const AdminLogsPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl bg-white/[0.015]">
-            <div className="hidden grid-cols-[11rem_8rem_11rem_minmax(0,1fr)] gap-4 border-b border-white/5 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
+            <div className="hidden grid-cols-[11rem_minmax(7rem,1fr)_12rem_8rem_minmax(8rem,1fr)_8rem] gap-4 border-b border-white/5 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
               <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-              <div>{locale === 'zh' ? '级别' : 'Level'}</div>
-              <div>{locale === 'zh' ? '模块' : 'Module'}</div>
-              <div>{locale === 'zh' ? '摘要' : 'Summary'}</div>
+              <div>{t('adminLogs.operationTarget')}</div>
+              <div>{t('adminLogs.operationType')}</div>
+              <div>{locale === 'zh' ? '状态' : 'Status'}</div>
+              <div>{t('adminLogs.keyMetric')}</div>
+              <div>{locale === 'zh' ? '操作' : 'Action'}</div>
             </div>
             <div className="divide-y divide-white/5">
               {filteredSessions.map((item) => {
@@ -377,31 +419,39 @@ const AdminLogsPage: React.FC = () => {
                 const summaryTitle = item.name || item.code || t('adminLogs.unavailable');
                 const timeText = (item.startedAt && new Date(item.startedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')) || t('adminLogs.unavailable');
                 const moduleText = `${resolveSubsystemLabel(String(summary.subsystem || ''), t)}${summary.sessionKind ? ` · ${resolveSessionKindLabel(String(summary.sessionKind || ''), t)}` : ''}`;
+                const operationType = sourceText(summary.operationType, moduleText);
+                const operationTarget = sourceText(summary.operationTarget, summaryTitle);
+                const operationStatus = sourceText(summary.operationStatus, item.overallStatus);
+                const keyMetric = sourceText(summary.keyMetric, t('adminLogs.unavailable'));
                 return (
                   <button
                     key={item.sessionId}
                     type="button"
                     onClick={() => setSelectedSessionId(item.sessionId)}
-                    className={`grid w-full gap-3 px-4 py-4 text-left transition-colors md:grid-cols-[11rem_8rem_11rem_minmax(0,1fr)] ${selected ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'}`}
+                    className={`grid w-full gap-3 px-4 py-4 text-left transition-colors md:grid-cols-[11rem_minmax(7rem,1fr)_12rem_8rem_minmax(8rem,1fr)_8rem] ${selected ? 'bg-white/[0.05]' : 'hover:bg-white/[0.02]'}`}
                   >
                     <div className="min-w-0">
                       <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '时间' : 'Time'}</p>
                       <p className="mt-1 text-sm text-secondary-text md:mt-0">{timeText}</p>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '级别' : 'Level'}</p>
-                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] md:mt-0 ${cls}`}>
-                        {resolveStatusLabel(item.overallStatus, t)}
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{t('adminLogs.operationTarget')}</p>
+                      <p className="mt-1 break-words text-sm font-medium text-foreground md:mt-0">{operationTarget}</p>
+                      <p className="break-all text-[11px] text-muted-text">{item.sessionId}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{t('adminLogs.operationType')}</p>
+                      <p className="mt-1 break-words text-sm text-secondary-text md:mt-0">{operationType}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '状态' : 'Status'}</p>
+                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] md:mt-0 ${operationStatusClass(operationStatus) || cls}`}>
+                        {operationStatus}
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '模块' : 'Module'}</p>
-                      <p className="mt-1 text-sm text-secondary-text md:mt-0">{moduleText}</p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{locale === 'zh' ? '摘要' : 'Summary'}</p>
-                      <p className="mt-1 break-words text-sm font-medium text-foreground md:mt-0">{summaryTitle}</p>
-                      <p className="break-all text-xs text-muted-text">{item.sessionId}</p>
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/32 md:hidden">{t('adminLogs.keyMetric')}</p>
+                      <p className="mt-1 break-words text-sm text-secondary-text md:mt-0">{keyMetric}</p>
                       {item.taskId ? (
                         <p className="break-all text-xs text-muted-text">
                           {locale === 'en' ? 'Task ID' : '任务 ID'}: {item.taskId}
@@ -433,6 +483,11 @@ const AdminLogsPage: React.FC = () => {
                         ) : null}
                       </div>
                     </div>
+                    <div className="min-w-0">
+                      <span className="btn-secondary inline-flex rounded-xl px-3 py-1.5 text-xs">
+                        {t('adminLogs.viewDetails')}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
@@ -455,6 +510,11 @@ const AdminLogsPage: React.FC = () => {
                 const readable = detail.readableSummary || {};
                 const events = Array.isArray(detail.events) ? detail.events : [];
                 const notificationState = String(readable.notificationClassification || '').trim();
+                const operationDetail = detail.operationDetail || {};
+                const aiCalls = asRecordList(operationDetail.aiCalls);
+                const dataSourceCalls = asRecordList(operationDetail.dataSourceCalls);
+                const operationTimeline = asRecordList(operationDetail.timeline);
+                const diagnostics = asRecordList(operationDetail.diagnostics);
                 return (
                   <>
                     <div>
@@ -463,6 +523,112 @@ const AdminLogsPage: React.FC = () => {
                       </h2>
                       <p className="mt-1 break-all text-xs text-muted-text">{detail.sessionId}</p>
                     </div>
+                    <section className="rounded-2xl border border-white/5 bg-white/[0.018] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.22em] text-white/36">{t('adminLogs.operationType')}</p>
+                          <h3 className="mt-1 text-lg font-semibold text-foreground">
+                            {sourceText(operationDetail.operationType || readable.operationType, t('adminLogs.unavailable'))}
+                          </h3>
+                          <p className="mt-1 text-sm text-secondary-text">
+                            {t('adminLogs.operationTarget')}: {sourceText(operationDetail.target || readable.operationTarget, t('adminLogs.unavailable'))}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className={`rounded-full px-2.5 py-1 text-xs ${operationStatusClass(String(operationDetail.status || readable.operationStatus || detail.overallStatus))}`}>
+                            {sourceText(operationDetail.status || readable.operationStatus || detail.overallStatus, t('adminLogs.unavailable'))}
+                          </span>
+                          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-secondary-text">
+                            {t('adminLogs.keyMetric')}: {sourceText(operationDetail.keyMetric || readable.keyMetric, t('adminLogs.unavailable'))}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyLogJson(detail)}>
+                          {t('adminLogs.copyDetails')}
+                        </button>
+                        <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => downloadLogJson(detail)}>
+                          {t('adminLogs.exportDetails')}
+                        </button>
+                      </div>
+                    </section>
+                    <details className="rounded-2xl bg-white/[0.015] p-4" open>
+                      <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.aiInvocationTable')}</summary>
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="min-w-full text-left text-xs">
+                          <thead className="text-white/40">
+                            <tr>
+                              <th className="py-2 pr-4">{t('adminLogs.modelColumn')}</th>
+                              <th className="py-2 pr-4">{t('adminLogs.versionColumn')}</th>
+                              <th className="py-2 pr-4">{t('adminLogs.statusColumn')}</th>
+                              <th className="py-2 pr-4">{t('adminLogs.notesColumn')}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {aiCalls.length ? aiCalls.map((call, index) => (
+                              <tr key={`${operationText(call.model)}-${index}`}>
+                                <td className="py-2 pr-4 text-foreground">{operationText(call.model)}</td>
+                                <td className="py-2 pr-4 text-secondary-text">{operationText(call.version)}</td>
+                                <td className="py-2 pr-4"><span className={`rounded-full px-2 py-0.5 ${operationStatusClass(String(call.status || ''))}`}>{operationText(call.status)}</span></td>
+                                <td className="py-2 pr-4 text-secondary-text">{operationText(call.notes || call.fallbackChain || call.error)}</td>
+                              </tr>
+                            )) : (
+                              <tr><td className="py-3 text-muted-text" colSpan={4}>{t('adminLogs.emptyOperationTable')}</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                    <details className="rounded-2xl bg-white/[0.015] p-4" open>
+                      <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.dataSourceTable')}</summary>
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="min-w-full text-left text-xs">
+                          <thead className="text-white/40">
+                            <tr>
+                              <th className="py-2 pr-4">{t('adminLogs.sourceColumn')}</th>
+                              <th className="py-2 pr-4">{t('adminLogs.statusColumn')}</th>
+                              <th className="py-2 pr-4">{t('adminLogs.errorColumn')}</th>
+                              <th className="py-2 pr-4">{t('adminLogs.retryFallbackColumn')}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {dataSourceCalls.length ? dataSourceCalls.map((call, index) => (
+                              <tr key={`${operationText(call.source)}-${index}`}>
+                                <td className="py-2 pr-4 text-foreground">{operationText(call.source)}</td>
+                                <td className="py-2 pr-4"><span className={`rounded-full px-2 py-0.5 ${operationStatusClass(String(call.status || ''))}`}>{operationText(call.status)}</span></td>
+                                <td className="py-2 pr-4 text-secondary-text">{operationText(call.error)}</td>
+                                <td className="py-2 pr-4 text-secondary-text">{operationText(call.retryFallback || call.notes)}</td>
+                              </tr>
+                            )) : (
+                              <tr><td className="py-3 text-muted-text" colSpan={4}>{t('adminLogs.emptyOperationTable')}</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                    <details className="rounded-2xl bg-white/[0.015] p-4" open>
+                      <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.operationTimelineTitle')}</summary>
+                      <div className="mt-3 space-y-2">
+                        {operationTimeline.length ? operationTimeline.map((item, index) => (
+                          <div key={`${operationText(item.label)}-${index}`} className="rounded-xl border border-white/5 bg-black/10 px-3 py-2 text-xs">
+                            <p className="text-foreground">{operationText(item.label)}</p>
+                            <p className="mt-1 text-muted-text">{operationText(item.timestamp)} · {operationText(item.category)} · {operationText(item.status)}</p>
+                          </div>
+                        )) : <p className="text-xs text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>}
+                      </div>
+                    </details>
+                    <details className="rounded-2xl bg-white/[0.015] p-4" open>
+                      <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.diagnosticsTitle')}</summary>
+                      <div className="mt-3 space-y-2">
+                        {diagnostics.length ? diagnostics.map((item, index) => (
+                          <div key={`${operationText(item.source)}-${index}`} className="rounded-xl border border-rose-400/15 bg-rose-500/5 px-3 py-2 text-xs">
+                            <p className="text-rose-100">{operationText(item.message)}</p>
+                            <p className="mt-1 text-muted-text">{operationText(item.source)} · {operationText(item.severity)}</p>
+                            {item.stackTrace ? <p className="mt-1 break-words font-mono text-[11px] text-rose-100/80">{operationText(item.stackTrace)}</p> : null}
+                          </div>
+                        )) : <p className="text-xs text-muted-text">{t('adminLogs.noDiagnostics')}</p>}
+                      </div>
+                    </details>
                     <section className="rounded-2xl bg-white/[0.015] p-4">
                       <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.executiveSummary')}</h3>
                       <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">

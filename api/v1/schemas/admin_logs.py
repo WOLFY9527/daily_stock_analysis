@@ -42,6 +42,7 @@ class ExecutionLogSessionSummaryModel(BaseModel):
 
 class ExecutionLogSessionDetailModel(ExecutionLogSessionSummaryModel):
     events: List[ExecutionLogEventModel] = Field(default_factory=list)
+    operation_detail: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ExecutionLogSessionListResponse(BaseModel):

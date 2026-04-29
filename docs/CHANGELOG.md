@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 🧾 **管理员日志统一展示单股分析、市场扫描与回测操作链路** — `/api/v1/admin/logs/sessions` 在保留既有 `execution_log_sessions` / `execution_log_events` 存储兼容性的基础上，补充标准化 `operation_*` 摘要与 `operation_detail` 明细视图，按 Single Stock Analysis、Market Scanning、Backtesting 归类目标、状态、关键指标、AI 调用、数据源/API 调用、fallback、错误诊断和时间线。`apps/dsa-web/src/pages/AdminLogsPage.tsx` 同步改为统一的可展开详情布局，列表直接展示时间、目标、操作类型、状态、关键指标与 `[View Details]`，详情区提供 AI 模型调用表、数据源/API 表、执行时间线、错误诊断以及完整日志复制/JSON 导出。
+
 - 🎛️ **Market Overview 页面去网格、恢复滚动并拆除嵌套黑卡** — `apps/dsa-web/src/pages/MarketOverviewPage.tsx` 按 WolfyStock 工作区骨架重建页面容器：移除背景网格与绝对定位遮罩，外层改为 `w-full flex-1 flex flex-col min-w-0 min-h-0 pt-8 px-6 md:px-8 xl:px-12`，主内容区改为隐藏滚动条但可自然下滑的 `flex-1 overflow-y-auto ... pb-12`，修复底部内容被截断的问题。`apps/dsa-web/src/components/market-overview/MarketOverviewCard.tsx` 同步把各 panel 外层统一收敛到标准 `GlassCard` 材质 `bg-white/[0.02] border border-white/5 rounded-[24px] p-6`，删除指标级别的小黑底/边框卡片和 `YFINANCE` 来源废话标签，将数据重排为父卡片内部的高密度无框信息块，点位采用更聚焦的 `font-mono` 主数值，涨跌幅改为无底色文本，Sparkline 压低为细线走势，整体显著降噪并减少空间浪费。
 
 - 📈 **WolfyStock 新增独立市场总览面板** — 新增 `/market-overview` 独立路由与 `GET /api/v1/market-overview/*` 后端接口，覆盖美股/A股主要指数、波动率、情绪、资金流和宏观指标五类卡片。后端通过短 TTL 缓存减少外部行情请求，并为每次面板刷新写入 `market_overview` 执行日志，管理员可在 `/admin/logs` 审计对应 panel、endpoint、时间戳、状态与原始响应摘要。前端新增 Gemini dark Bento 面板和 focused smoke 覆盖。

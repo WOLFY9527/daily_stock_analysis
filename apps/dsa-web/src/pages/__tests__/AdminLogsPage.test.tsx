@@ -169,6 +169,88 @@ describe('AdminLogsPage', () => {
     }))).toBeInTheDocument();
   });
 
+  it('renders unified operation detail tables, diagnostics, and copy export controls', async () => {
+    listSessions.mockResolvedValueOnce({
+      total: 1,
+      items: [
+        {
+          sessionId: 'analysis-tsla',
+          code: 'TSLA',
+          name: 'TSLA analysis',
+          overallStatus: 'partial_success',
+          startedAt: '2026-04-29T11:02:00Z',
+          readableSummary: {
+            actorDisplay: 'Alice',
+            actorRole: 'user',
+            sessionKind: 'user_activity',
+            subsystem: 'analysis',
+            operationCategory: 'single_stock_analysis',
+            operationType: 'Single Stock Analysis',
+            operationTarget: 'TSLA',
+            operationStatus: 'partial fail',
+            keyMetric: 'Score 5.2',
+          },
+        },
+      ],
+    });
+    getSessionDetail.mockResolvedValueOnce({
+      sessionId: 'analysis-tsla',
+      code: 'TSLA',
+      name: 'TSLA analysis',
+      overallStatus: 'partial_success',
+      startedAt: '2026-04-29T11:02:00Z',
+      readableSummary: {
+        actorDisplay: 'Alice',
+        actorRole: 'user',
+        sessionKind: 'user_activity',
+        subsystem: 'analysis',
+        operationCategory: 'single_stock_analysis',
+        operationType: 'Single Stock Analysis',
+        operationTarget: 'TSLA',
+        operationStatus: 'partial fail',
+        keyMetric: 'Score 5.2',
+      },
+      operationDetail: {
+        operationCategory: 'single_stock_analysis',
+        operationType: 'Single Stock Analysis',
+        target: 'TSLA',
+        status: 'partial fail',
+        keyMetric: 'Score 5.2',
+        aiCalls: [
+          { model: 'deepseek-v4-pro', version: 'v4-pro', status: 'success', notes: 'Initial model call succeeded' },
+          { model: 'gemini-2.5-flash', version: '2.5-flash', status: 'fail', notes: 'Service unavailable, code 503', fallbackChain: 'gemini-2.5-flash -> alpaca' },
+        ],
+        dataSourceCalls: [
+          { source: 'Finnhub', status: 'success', error: '', retryFallback: 'primary', notes: 'Data fetched' },
+          { source: 'Yahoo Finance', status: 'fail', error: 'Timeout error', retryFallback: 'fallback to Finnhub' },
+        ],
+        timeline: [
+          { timestamp: '2026-04-29T11:02:01Z', label: 'deepseek-v4-pro call started', status: 'success', category: 'ai' },
+          { timestamp: '2026-04-29T11:02:03Z', label: 'Yahoo Finance call failed', status: 'fail', category: 'data' },
+        ],
+        diagnostics: [
+          { severity: 'error', message: 'Timeout error', source: 'Yahoo Finance', stackTrace: 'TimeoutError: Yahoo Finance' },
+        ],
+      },
+      events: [],
+    });
+
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByText('Single Stock Analysis')).toBeInTheDocument();
+    expect(screen.getByText('TSLA')).toBeInTheDocument();
+    expect(screen.getByText('Score 5.2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(translate('zh', 'adminLogs.viewDetails')) })).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'adminLogs.aiInvocationTable'))).toBeInTheDocument();
+    expect(screen.getByText('deepseek-v4-pro')).toBeInTheDocument();
+    expect(screen.getByText('gemini-2.5-flash')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'adminLogs.dataSourceTable'))).toBeInTheDocument();
+    expect(screen.getByText('Yahoo Finance')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'adminLogs.diagnosticsTitle'))).toBeInTheDocument();
+    expect(screen.getByText('TimeoutError: Yahoo Finance')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'adminLogs.copyDetails') })).toBeInTheDocument();
+  });
+
   it('renders a visible empty timeline state instead of crashing when detail events are missing', async () => {
     getSessionDetail.mockResolvedValueOnce({
       sessionId: 'admin-action-1',
@@ -191,7 +273,7 @@ describe('AdminLogsPage', () => {
     await waitFor(() => {
       expect(screen.getByText(translate('zh', 'adminLogs.emptyTimelineTitle'))).toBeInTheDocument();
     });
-    expect(screen.getByText(translate('zh', 'adminLogs.emptyTimelineBody'))).toBeInTheDocument();
+    expect(screen.getAllByText(translate('zh', 'adminLogs.emptyTimelineBody')).length).toBeGreaterThan(0);
   });
 
   it('formats detail summary values instead of exposing raw role and confirmation keys', async () => {

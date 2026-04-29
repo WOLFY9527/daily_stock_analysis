@@ -1046,6 +1046,222 @@ class ExecutionLogService:
         return None
 
     @staticmethod
+    def _operation_status_label(status: Any) -> str:
+        normalized = _as_str(status).lower()
+        if normalized in {"completed", "success", "succeeded", "ok"}:
+            return "success"
+        if normalized in {"partial", "partial_success", "timeout_unknown", "timed_out", "timeout", "switched_to_fallback"}:
+            return "partial fail"
+        if normalized in {"failed", "failed_runtime", "error", "empty_result", "invalid_response", "insufficient_fields"}:
+            return "fail"
+        return normalized or "unknown"
+
+    @staticmethod
+    def _operation_kind(summary: Dict[str, Any], code: Optional[str], name: Optional[str], task_id: Optional[str]) -> Tuple[str, str]:
+        meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
+        subsystem = _as_str(meta.get("subsystem")).lower()
+        task = _as_str(task_id).lower()
+        label = f"{_as_str(name)} {_as_str(task_id)}".lower()
+        if subsystem == "scanner" or "scanner" in task:
+            return "market_scanning", "Market Scanning"
+        if subsystem == "backtest" or "backtest" in task or "backtest" in label:
+            return "backtesting", "Backtesting"
+        if code or subsystem == "analysis":
+            return "single_stock_analysis", "Single Stock Analysis"
+        return "other", _as_str(meta.get("action_name")) or _as_str(name) or "System Operation"
+
+    @staticmethod
+    def _runtime_metric(runtime: Dict[str, Any]) -> Optional[str]:
+        for key in ("score", "final_score", "rating_score", "total_score"):
+            value = runtime.get(key)
+            if value is not None and _as_str(value):
+                return f"Score {value}"
+        metrics = runtime.get("metrics") if isinstance(runtime.get("metrics"), dict) else {}
+        for key in ("score", "total_return", "return_pct", "profit_loss", "pnl", "completion_status"):
+            value = metrics.get(key)
+            if value is not None and _as_str(value):
+                label = key.replace("_", " ").title()
+                suffix = "%" if key == "return_pct" and "%" not in _as_str(value) else ""
+                return f"{label} {value}{suffix}"
+        return None
+
+    def _operation_summary_fields(
+        self,
+        *,
+        overall_status: str,
+        summary: Dict[str, Any],
+        code: Optional[str] = None,
+        name: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Compatibility view for Admin Logs list rows.
+
+        The persisted schema remains session/event based; these derived fields
+        give the frontend a stable operation format across stock analysis,
+        scanner runs, and backtests without migrating historical rows.
+        """
+        runtime = self._runtime_from_summary(summary)
+        category, operation_type = self._operation_kind(summary, code, name, task_id)
+        scanner_run = summary.get("scanner_run") if isinstance(summary.get("scanner_run"), dict) else {}
+        backtest = summary.get("backtest") if isinstance(summary.get("backtest"), dict) else {}
+
+        if category == "market_scanning":
+            scan_label = _as_str(scanner_run.get("profile_label")) or _as_str(scanner_run.get("profile")) or _as_str(name) or "market scan"
+            target = scan_label
+            shortlist = scanner_run.get("shortlist_count")
+            coverage = scanner_run.get("coverage") if isinstance(scanner_run.get("coverage"), dict) else {}
+            success_rate = coverage.get("success_rate") or coverage.get("provider_success_rate")
+            metric_parts = []
+            if shortlist is not None:
+                metric_parts.append(f"{shortlist} candidates")
+            if success_rate is not None:
+                metric_parts.append(f"{success_rate} success rate")
+            key_metric = ", ".join(metric_parts) or _as_str(scanner_run.get("coverage_summary")) or None
+        elif category == "backtesting":
+            target = (
+                _as_str(backtest.get("backtest_id"))
+                or _as_str(backtest.get("strategy"))
+                or _as_str(runtime.get("backtest_id"))
+                or _as_str(runtime.get("strategy"))
+                or _as_str(name)
+                or _as_str(task_id)
+                or "backtest"
+            )
+            key_metric = self._runtime_metric(runtime) or _as_str(backtest.get("key_metric")) or _as_str(backtest.get("status")) or None
+        elif category == "single_stock_analysis":
+            target = _as_str(code) or _as_str(name) or _as_str(task_id) or "stock"
+            key_metric = self._runtime_metric(runtime)
+        else:
+            target = _as_str(code) or _as_str(name) or _as_str(task_id) or operation_type
+            key_metric = self._runtime_metric(runtime)
+
+        return {
+            "operation_category": category,
+            "operation_type": operation_type,
+            "operation_target": target,
+            "operation_status": self._operation_status_label(overall_status),
+            "key_metric": key_metric,
+        }
+
+    @staticmethod
+    def _status_for_operator(status: Any) -> str:
+        normalized = _as_str(status).lower()
+        if normalized in {"completed", "success", "succeeded", "ok", "selected"}:
+            return "success"
+        if normalized in {"switched_to_fallback", "partial", "partial_success", "timeout", "timed_out", "timeout_unknown", "insufficient_fields"}:
+            return "fallback" if normalized == "switched_to_fallback" else "partial fail"
+        if normalized in {"failed", "error", "empty_result", "invalid_response", "failed_runtime"}:
+            return "fail"
+        return normalized or "unknown"
+
+    def _build_operation_detail(
+        self,
+        *,
+        session: Dict[str, Any],
+        summary: Dict[str, Any],
+        events: List[Dict[str, Any]],
+        readable: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build the unified detail drawer payload from existing event rows."""
+        ai_calls: List[Dict[str, Any]] = []
+        data_calls: List[Dict[str, Any]] = []
+        timeline: List[Dict[str, Any]] = []
+        diagnostics: List[Dict[str, Any]] = []
+
+        for event in events:
+            phase = _as_str(event.get("phase")).lower()
+            category = _as_str(event.get("category")).lower() or phase
+            detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
+            attempt = detail.get("attempt") if isinstance(detail.get("attempt"), dict) else {}
+            status = self._status_for_operator(event.get("status"))
+            target = _as_str(event.get("target"))
+            message = _masked_message(_as_str(event.get("message"))) or _masked_message(_as_str(detail.get("reason"))) or ""
+            fallback_chain = detail.get("fallback_chain") or attempt.get("fallback_chain")
+            stack_trace = detail.get("stack_trace") or attempt.get("stack_trace") or attempt.get("traceback")
+            response = detail.get("response") or attempt.get("response")
+
+            if phase.startswith("ai_") or phase == "ai":
+                ai_calls.append(
+                    {
+                        "model": target or _as_str(attempt.get("model")) or "AI model",
+                        "version": _as_str(attempt.get("version")) or _as_str(attempt.get("model_version")) or _as_str(detail.get("version")) or None,
+                        "status": status,
+                        "notes": message or None,
+                        "fallback_chain": fallback_chain,
+                        "executed_at": event.get("event_at"),
+                        "error": _masked_message(_as_str(detail.get("reason"))) or None,
+                    }
+                )
+            if phase.startswith("data_") or category.startswith("data_") or category in {"scanner", "market_overview"}:
+                data_calls.append(
+                    {
+                        "source": target or _as_str(attempt.get("source")) or _as_str(attempt.get("provider")) or category,
+                        "status": status,
+                        "error": _masked_message(_as_str(detail.get("reason"))) or (message if status in {"fail", "partial fail"} else None),
+                        "retry_fallback": _as_str(fallback_chain) or ("fallback" if status == "fallback" else None),
+                        "notes": message or None,
+                        "executed_at": event.get("event_at"),
+                        "response": response,
+                    }
+                )
+
+            action = _as_str(event.get("action")) or _as_str(event.get("step")) or "event"
+            label = f"{target} {action}".strip()
+            if status == "fallback":
+                label = f"Fallback triggered: {label}"
+            elif status == "fail":
+                label = f"{label} failed"
+            timeline.append(
+                {
+                    "timestamp": event.get("event_at"),
+                    "label": label,
+                    "status": status,
+                    "category": category or phase,
+                    "message": message or None,
+                }
+            )
+            if status in {"fail", "partial fail", "fallback"} or stack_trace or event.get("error_code"):
+                diagnostics.append(
+                    {
+                        "severity": "error" if status == "fail" else "warning",
+                        "source": target or category or phase,
+                        "message": message or _masked_message(_as_str(event.get("error_code"))) or status,
+                        "stack_trace": _masked_message(_as_str(stack_trace)) if stack_trace else None,
+                        "error_code": event.get("error_code"),
+                        "fallback_chain": fallback_chain,
+                    }
+                )
+
+        scanner_run = summary.get("scanner_run") if isinstance(summary.get("scanner_run"), dict) else {}
+        providers = scanner_run.get("providers_used") if isinstance(scanner_run.get("providers_used"), list) else []
+        existing_sources = {_as_str(item.get("source")).lower() for item in data_calls if isinstance(item, dict)}
+        for provider in providers:
+            provider_name = _as_str(provider)
+            if provider_name and provider_name.lower() not in existing_sources:
+                data_calls.append(
+                    {
+                        "source": provider_name,
+                        "status": "success",
+                        "error": None,
+                        "retry_fallback": None,
+                        "notes": "Provider recorded by scanner diagnostics.",
+                        "executed_at": session.get("started_at"),
+                    }
+                )
+
+        return {
+            "operation_category": readable.get("operation_category"),
+            "operation_type": readable.get("operation_type"),
+            "target": readable.get("operation_target"),
+            "status": readable.get("operation_status"),
+            "key_metric": readable.get("key_metric"),
+            "ai_calls": ai_calls,
+            "data_source_calls": data_calls,
+            "timeline": timeline,
+            "diagnostics": diagnostics,
+        }
+
+    @staticmethod
     def _phase_attempt_events(events: List[Dict[str, Any]], phase: str) -> List[Dict[str, Any]]:
         phase_key = str(phase or "").strip().lower()
         attempts: List[Dict[str, Any]] = []
@@ -1216,6 +1432,10 @@ class ExecutionLogService:
             "scanner_coverage_summary": scanner_coverage_summary,
             "summary_paragraph": summary_paragraph or None,
             "status": _as_str(overall_status) or "unknown",
+            **self._operation_summary_fields(
+                overall_status=overall_status,
+                summary=summary,
+            ),
         }
 
     def list_sessions(
@@ -1254,6 +1474,15 @@ class ExecutionLogService:
                 summary=summary,
                 events=None,
             )
+            row["readable_summary"].update(
+                self._operation_summary_fields(
+                    overall_status=str(row.get("overall_status") or "unknown"),
+                    summary=summary,
+                    code=row.get("code"),
+                    name=row.get("name"),
+                    task_id=row.get("task_id"),
+                )
+            )
             items.append(row)
         return items, total
 
@@ -1279,10 +1508,26 @@ class ExecutionLogService:
             next_event["reason"] = reason
             enriched_events.append(next_event)
 
-        detail["readable_summary"] = self.build_readable_summary(
+        readable = self.build_readable_summary(
             overall_status=str(detail.get("overall_status") or "unknown"),
             summary=summary,
             events=enriched_events,
         )
+        readable.update(
+            self._operation_summary_fields(
+                overall_status=str(detail.get("overall_status") or "unknown"),
+                summary=summary,
+                code=detail.get("code"),
+                name=detail.get("name"),
+                task_id=detail.get("task_id"),
+            )
+        )
+        detail["readable_summary"] = readable
         detail["events"] = enriched_events
+        detail["operation_detail"] = self._build_operation_detail(
+            session=detail,
+            summary=summary,
+            events=enriched_events,
+            readable=readable,
+        )
         return detail
