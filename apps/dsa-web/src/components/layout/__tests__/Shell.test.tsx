@@ -118,6 +118,10 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: '问股' })).toHaveClass('text-sm', 'font-bold', 'text-white');
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--chat', 'shell-content-frame--wide');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('shell-main-column--chat', 'p-0');
+    expect(document.querySelector('.shell-main-column')).not.toHaveClass('px-6', 'pt-6', 'pb-12', 'md:px-8', 'xl:px-12');
+    expect(document.querySelector('.theme-page-transition')).toHaveClass('theme-page-transition--chat', 'h-full', 'min-h-0');
   });
 
   it('shows the guest navigation routes without member-only account controls', () => {

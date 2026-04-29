@@ -203,16 +203,15 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('chat-bento-page')).toHaveClass('bento-surface-root');
-    expect(screen.getByTestId('chat-bento-page')).toHaveClass('flex', 'flex-col', 'gap-6', 'bg-[#030303]', 'min-h-0', 'min-w-0');
+    expect(screen.getByTestId('chat-bento-page')).toHaveClass('flex', 'h-full', 'flex-col', 'overflow-hidden', 'bg-[#030303]', 'min-h-0', 'min-w-0');
     expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('workspace-page--chat', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
-    expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('h-full', 'min-h-full', 'overflow-hidden');
+    expect(screen.getByTestId('chat-bento-page')).not.toHaveClass('min-h-full', 'gap-6');
     expect(container.querySelectorAll('main')).toHaveLength(1);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'overflow-hidden', 'bg-transparent');
     expect(screen.queryByTestId('chat-history-pane')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-main-shell')).toHaveClass('flex', 'flex-1', 'min-w-0', 'overflow-hidden');
-    expect(screen.getByTestId('chat-main-panel')).toHaveClass('flex', 'h-full', 'flex-1', 'min-w-0', 'flex-col');
-    expect(screen.getByTestId('chat-main-panel')).not.toHaveClass('relative');
+    expect(screen.getByTestId('chat-main-shell')).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-1', 'min-w-0', 'overflow-hidden');
+    expect(screen.getByTestId('chat-main-panel')).toHaveClass('relative', 'flex', 'h-full', 'min-h-0', 'flex-1', 'min-w-0', 'flex-col');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
     expect(screen.getByTestId('chat-main')).toHaveAttribute('id', 'chat-scroll-container');
     expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'flex', 'flex-col', 'h-full', 'overflow-hidden');
@@ -225,12 +224,13 @@ describe('ChatPage', () => {
     expect(screen.queryByTestId('chat-message-stream')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-center');
     expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('pb-10', 'pb-8', 'mb-8');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('w-full', 'mt-auto', 'pt-4');
-    expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('pb-8', 'pb-10', 'mb-8');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('w-full', 'shrink-0');
+    expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('mt-auto', 'pt-4', 'pb-8', 'pb-10', 'mb-8');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('absolute', 'bottom-0', 'left-0', 'z-50', 'pointer-events-none');
-    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full');
-    expect(screen.getByTestId('chat-input-gradient')).not.toHaveClass('px-6');
-    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'px-6', 'md:px-8', 'xl:px-12');
+    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'shrink-0', 'px-6', 'pb-6', 'pt-4', 'md:px-8', 'xl:px-12');
+    expect(screen.getByTestId('chat-input-gradient')).not.toHaveClass('pb-20', 'mb-32');
+    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full');
+    expect(screen.getByTestId('chat-console-inner')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12');
     expect(screen.getByTestId('chat-console-inner')).not.toHaveClass('max-w-4xl', 'mx-auto');
     expect(screen.getByTestId('chat-input-shell').parentElement).toBe(screen.getByTestId('chat-main'));
     expect(screen.getByTestId('chat-input-shell').parentElement).not.toBe(screen.getByTestId('chat-main-panel'));
@@ -246,9 +246,9 @@ describe('ChatPage', () => {
       'p-2',
       'shadow-2xl',
     );
-    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('mt-2', 'mb-0', 'text-[10px]', 'text-center', 'text-white/30');
+    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('mt-3', 'text-[10px]', 'text-center', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-hidden', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
+    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('flex', 'flex-wrap', 'gap-2.5');
     expect(mockLoadInitialSession).toHaveBeenCalled();

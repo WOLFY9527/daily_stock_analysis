@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 .no-scrollbar {
@@ -9,7 +10,7 @@
   display: none;
 }
 
-/* SpaceX live refactor: global tokens now favor D-DIN typography, spectral-white ghost controls, translucent panels, and a strict home workspace grid without changing application behavior. */
+/* SpaceX live refactor: global tokens now favor Inter typography, spectral-white ghost controls, translucent panels, and a strict home workspace grid without changing application behavior. */
 
 html {
   font-size: calc(16px * var(--ui-font-scale-desktop, 1));
@@ -19,20 +20,26 @@ html {
    1B. Canonical Theme Tokens (Terminal / Cyberpunk / Geek DOS)
    ========================================= */
 :root {
-  --font-ui:
+  --font-stack-sans:
     "Inter",
-    "Segoe UI",
-    "SF Pro Display",
-    system-ui,
     -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans SC",
+    "Microsoft YaHei",
     sans-serif;
-  --font-mono:
+  --font-stack-mono:
     "JetBrains Mono",
-    "IBM Plex Mono",
+    ui-monospace,
     "SFMono-Regular",
     Menlo,
     Monaco,
     monospace;
+  --font-ui:
+    var(--font-stack-sans);
+  --font-mono:
+    var(--font-stack-mono);
 
   --bg-page-hsl: 218 31% 9%;
   --bg-sidebar-hsl: 219 32% 12%;
@@ -443,6 +450,8 @@ html[data-theme] {
 
 /* ============ Base Styles ============ */
 body {
+  @apply font-sans text-white antialiased;
+
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
@@ -450,6 +459,8 @@ body {
   font-family: var(--font-ui, var(--theme-ui-font));
   background: var(--bg-page);
   color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition:
     background-color 0.24s ease,
     color 0.24s ease;
@@ -480,7 +491,7 @@ body[data-scanner-shell='true'],
   z-index: 1400;
   display: grid;
   place-items: center;
-  overflow: hidden;
+  overflow: visible;
   background:
     radial-gradient(circle at 18% 18%, rgb(255 76 108 / 0.18), transparent 34%),
     radial-gradient(circle at 82% 16%, rgb(52 243 208 / 0.16), transparent 30%),
@@ -521,17 +532,39 @@ body[data-scanner-shell='true'],
 .app-boot-splash__inner {
   position: relative;
   z-index: 2;
-  width: min(92vw, 420px);
+  width: min(92vw, 34rem);
   text-align: center;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .app-boot-splash__logo-wrap {
   position: relative;
   margin: 0 auto;
-  width: clamp(144px, 28vw, 196px);
+  width: clamp(176px, 26vw, 240px);
   aspect-ratio: 1 / 1;
   display: grid;
   place-items: center;
+  padding: clamp(2rem, 5vw, 4rem);
+  overflow: visible;
+  background: transparent;
+  box-sizing: content-box;
+}
+
+.app-boot-splash__logo-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgb(255 90 126 / 0.16), transparent 42%),
+    radial-gradient(circle, rgb(57 240 203 / 0.12), transparent 62%);
+  filter: blur(18px);
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 .app-boot-splash__ring {
@@ -3513,10 +3546,10 @@ button[data-variant="home-action-report"]:hover {
 }
 
 html[data-theme] {
-  --font-ui: Inter, "Segoe UI", Arial, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Space Mono", "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+  --font-ui: var(--font-stack-sans);
+  --font-mono: var(--font-stack-mono);
   --theme-ui-font: var(--font-ui);
-  --theme-heading-font: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+  --theme-heading-font: var(--font-ui);
   --theme-label-font-family: var(--font-mono);
   --theme-label-font-size: 0.72rem;
   --theme-label-font-weight: 400;
@@ -5816,19 +5849,10 @@ html[data-theme] .product-empty-state {
 
 :root {
   --font-display:
-    "D-DIN",
-    "DIN Alternate",
-    "Arial Narrow",
-    Arial,
-    sans-serif;
-  --font-ui: var(--font-display);
+    var(--font-stack-sans);
+  --font-ui: var(--font-stack-sans);
   --font-mono:
-    "IBM Plex Mono",
-    "JetBrains Mono",
-    "SFMono-Regular",
-    Menlo,
-    Monaco,
-    monospace;
+    var(--font-stack-mono);
 
   --theme-button-radius: 999px;
   --theme-panel-radius-lg: 1.5rem;
@@ -5980,9 +6004,13 @@ html {
 }
 
 body {
+  @apply font-sans text-white antialiased;
+
   font-family: var(--font-ui);
   background: var(--theme-shell-bg);
   color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body::before {
@@ -8973,6 +9001,7 @@ button[data-variant='danger-subtle']:hover {
   z-index: 9999;
   display: grid;
   place-items: center;
+  overflow: visible;
   background:
     radial-gradient(circle at 50% -10%, hsl(var(--accent-primary-hsl) / 0.08), transparent 28%),
     linear-gradient(180deg, hsl(var(--bg-page-hsl)) 0%, hsl(var(--bg-page-hsl) / 0.94) 100%);
@@ -8987,8 +9016,13 @@ button[data-variant='danger-subtle']:hover {
 }
 
 .app-boot-splash__inner {
-  width: min(92vw, 26rem);
+  width: min(92vw, 34rem);
   text-align: center;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .app-boot-splash__eyebrow {
@@ -8997,11 +9031,15 @@ button[data-variant='danger-subtle']:hover {
 
 .app-boot-splash__logo-wrap {
   position: relative;
-  width: clamp(144px, 28vw, 196px);
+  width: clamp(176px, 26vw, 240px);
   aspect-ratio: 1;
   margin: 1.15rem auto 0;
   display: grid;
   place-items: center;
+  padding: clamp(2rem, 5vw, 4rem);
+  overflow: visible;
+  background: transparent;
+  box-sizing: content-box;
 }
 
 .app-boot-splash__logo {
@@ -9344,16 +9382,12 @@ html[data-theme] .input-focus-glow:focus {
 html[data-theme='spacex'] {
   color-scheme: dark;
   --font-display:
-    "D-DIN",
-    "DIN Alternate",
-    "Arial Narrow",
-    Arial,
-    sans-serif;
-  --font-ui: var(--font-display);
-  --theme-ui-font: var(--font-display);
-  --theme-heading-font: var(--font-display);
-  --theme-label-font-family: var(--font-display);
-  --theme-button-font-family: var(--font-display);
+    var(--font-stack-sans);
+  --font-ui: var(--font-stack-sans);
+  --theme-ui-font: var(--font-ui);
+  --theme-heading-font: var(--font-ui);
+  --theme-label-font-family: var(--font-ui);
+  --theme-button-font-family: var(--font-ui);
   --theme-button-font-weight: 700;
   --theme-button-letter-spacing: 0.12em;
   --theme-button-text-transform: uppercase;
@@ -10205,8 +10239,7 @@ html[data-theme='spacex'] .report-generation-stage,
 html[data-theme='spacex'] .home-report-stage__surface,
 html[data-theme='spacex'] .home-report-stage__empty,
 html[data-theme='spacex'] .workspace-status-strip,
-html[data-theme='spacex'] .auth-panel,
-html[data-theme='spacex'] .app-boot-splash__inner {
+html[data-theme='spacex'] .auth-panel {
   border: 1px solid rgba(240, 240, 250, 0.12);
   background: rgba(0, 0, 0, 0.46);
   backdrop-filter: blur(12px);
@@ -10797,12 +10830,21 @@ html[data-theme='spacex'] .auth-panel__foot {
 }
 
 html[data-theme='spacex'] .app-boot-splash {
-  background: linear-gradient(180deg, rgba(8, 8, 12, 1) 0%, rgba(0, 0, 0, 1) 100%);
+  overflow: visible;
+  background:
+    radial-gradient(circle at 50% 64%, rgba(255, 109, 142, 0.13), transparent 22rem),
+    radial-gradient(circle at 50% 60%, rgba(115, 247, 220, 0.1), transparent 26rem),
+    linear-gradient(180deg, rgba(8, 8, 12, 1) 0%, rgba(0, 0, 0, 1) 100%);
 }
 
 html[data-theme='spacex'] .app-boot-splash__inner {
-  width: min(92vw, 26rem);
-  padding: 1.4rem 1.3rem;
+  width: min(92vw, 34rem);
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
   text-align: center;
 }
 
@@ -10973,7 +11015,6 @@ html[data-theme='spacex'] .workspace-page--chat .workspace-header-actions {
     width: min(100vw - 1.1rem, 1240px);
   }
 
-html[data-theme='spacex'] .app-boot-splash__inner,
 html[data-theme='spacex'] .auth-panel,
 html[data-theme='spacex'] .home-command-surface,
 html[data-theme='spacex'] .home-recent-log,

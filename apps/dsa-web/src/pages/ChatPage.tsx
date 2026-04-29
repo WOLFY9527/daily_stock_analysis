@@ -832,7 +832,7 @@ const ChatPage: React.FC = () => {
             </button>
           )}
         </div>
-        <p className="mb-0 mt-2 text-center text-[10px] text-white/30">
+        <p className="mt-3 text-center text-[10px] text-white/30">
           {composerDisclaimer}
         </p>
       </div>
@@ -854,12 +854,12 @@ const ChatPage: React.FC = () => {
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
       className={getSafariReadySurfaceClassName(
         isSafariReady,
-        'gemini-bento-page bento-surface-root gemini-bento-page--chat w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-[#030303]',
+        'gemini-bento-page bento-surface-root gemini-bento-page--chat flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-[#030303]',
       )}
     >
       <div
         data-testid="chat-workspace"
-        className="flex w-full min-h-0 flex-1 min-w-0 overflow-hidden bg-transparent"
+        className="flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-transparent"
       >
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
@@ -874,11 +874,11 @@ const ChatPage: React.FC = () => {
 
         <div
           data-testid="chat-main-shell"
-          className="flex flex-1 min-w-0 overflow-hidden"
+          className="flex h-full min-h-0 flex-1 min-w-0 overflow-hidden"
         >
           <section
             data-testid="chat-main-panel"
-            className="flex h-full flex-1 min-w-0 flex-col lg:border-r lg:border-white/5"
+            className="relative flex h-full min-h-0 flex-1 min-w-0 flex-col lg:border-r lg:border-white/5"
           >
             {showEmptyState ? (
               <main
@@ -955,11 +955,11 @@ const ChatPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div data-testid="chat-input-shell" className="mt-auto w-full pt-4">
-                  <div data-testid="chat-input-gradient" className="w-full">
+                <div data-testid="chat-input-shell" className="shrink-0 w-full">
+                  <div data-testid="chat-input-gradient" className="w-full shrink-0 px-6 pb-6 pt-4 md:px-8 xl:px-12">
                     <div
                       data-testid="chat-console-inner"
-                      className="w-full px-6 md:px-8 xl:px-12"
+                      className="w-full"
                     >
                       {renderComposerBody()}
                     </div>
@@ -983,7 +983,7 @@ const ChatPage: React.FC = () => {
                       isAutoScroll.current = true;
                     }
                   }}
-                  className="w-full flex-1 overflow-y-auto no-scrollbar"
+                  className="min-h-0 w-full flex-1 overflow-y-auto no-scrollbar"
                 >
                   <div
                     data-testid="chat-message-scroll"
@@ -1107,11 +1107,11 @@ const ChatPage: React.FC = () => {
                   </div>
                 </main>
 
-                <footer data-testid="chat-input-shell" className="mt-auto mb-8 w-full">
-                  <div data-testid="chat-input-gradient" className="w-full pb-6 pt-2">
+                <footer data-testid="chat-input-shell" className="shrink-0 w-full">
+                  <div data-testid="chat-input-gradient" className="w-full shrink-0 px-6 pb-6 pt-4 md:px-8 xl:px-12">
                     <div
                       data-testid="chat-console-inner"
-                      className="w-full px-6 md:px-8 xl:px-12"
+                      className="w-full"
                     >
                       {renderComposerBody()}
                     </div>
@@ -1123,7 +1123,7 @@ const ChatPage: React.FC = () => {
 
           <aside
             data-testid="chat-strategy-panel"
-            className="hidden h-full w-full shrink-0 flex-col gap-5 overflow-hidden border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-5 no-scrollbar lg:flex lg:w-[320px] xl:w-[360px]"
+            className="hidden h-full min-h-0 w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-5 no-scrollbar lg:flex lg:w-[320px] xl:w-[360px]"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
