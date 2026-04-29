@@ -91,6 +91,27 @@ function getActionToneStyle(tone: SignalTone): React.CSSProperties {
   };
 }
 
+function getConvictionPercent(value: string, unit: string): number {
+  const parsedValue = Number.parseFloat(value);
+  const parsedUnit = Number.parseFloat(unit.replace(/[^0-9.]/g, ''));
+  const base = Number.isFinite(parsedUnit) && parsedUnit > 0 ? parsedUnit : parsedValue <= 5 ? 5 : 10;
+  const rawPercent = Number.isFinite(parsedValue) ? (parsedValue / base) * 100 : 0;
+  return Math.max(0, Math.min(100, Math.round(rawPercent)));
+}
+
+function getConvictionSegmentClass(tone: SignalTone, active: boolean): string {
+  if (!active) {
+    return 'bg-white/[0.08]';
+  }
+  if (tone === 'bearish') {
+    return 'bg-rose-300 shadow-[0_0_10px_rgba(248,113,113,0.55)]';
+  }
+  if (tone === 'neutral') {
+    return 'bg-slate-200 shadow-[0_0_10px_rgba(226,232,240,0.35)]';
+  }
+  return 'bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.5)]';
+}
+
 function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): SupportingIndicator[] {
   if (tone === 'bearish') {
     return locale === 'en'
@@ -171,6 +192,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const isEnglish = locale === 'en';
   const insightCopy = reason.body || summary || scoreValue || '-';
   const sectorLabel = (sector || (isEnglish ? 'UNCLASSIFIED' : '未分类')).toUpperCase();
+  const convictionPercent = getConvictionPercent(heroValue, heroUnit);
+  const activeConvictionSegments = Math.ceil(convictionPercent / 20);
 
   return (
     <BentoCard
@@ -178,8 +201,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       tone={signalTone}
       accentGlow
       accentGlowClassName={SYSTEM_ACCENT_GLOW_CLASS}
-      className="flex h-full w-full flex-col overflow-hidden rounded-[24px]"
-      contentClassName="min-h-0"
+      className="w-full overflow-visible rounded-[24px] xl:flex xl:h-full xl:flex-col xl:overflow-hidden"
+      contentClassName="h-auto xl:h-full xl:min-h-0"
       testId="home-bento-card-decision"
       action={(
         <button
@@ -195,7 +218,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </button>
       )}
     >
-      <div className="flex h-full min-h-0 flex-col gap-5">
+      <div className="flex h-auto flex-col gap-5 xl:h-full xl:min-h-0">
         <div className="flex flex-wrap items-start justify-between gap-3" data-testid="home-bento-decision-company-header">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -212,38 +235,65 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </div>
 
         <div
-          className="min-h-0 flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2 pb-6"
+          className="pr-2 pb-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[&::-webkit-scrollbar]:hidden xl:[-ms-overflow-style:none] xl:[scrollbar-width:none]"
           data-testid="home-bento-decision-scroll-body"
         >
           <div
-            className="flex items-baseline gap-12 mt-6 mb-8"
+            className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 mt-6 mb-8"
             data-testid="home-bento-decision-hero-row"
           >
-            <div className="min-w-0">
-              <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
-              <span
-                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
-                data-testid="home-bento-decision-signal-hero"
-                style={getActionToneStyle(signalTone)}
+            <div className="flex items-baseline gap-8" data-testid="home-bento-decision-action-score">
+              <div className="min-w-0">
+                <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
+                <span
+                  className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
+                  data-testid="home-bento-decision-signal-hero"
+                  style={getActionToneStyle(signalTone)}
+                >
+                  {signalCommand.command}
+                </span>
+              </div>
+
+              <div
+                className="min-w-0 text-left"
+                data-testid="home-bento-decision-core-metrics"
               >
-                {signalCommand.command}
-              </span>
+                <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
+                <div className="mt-3 flex items-end gap-2">
+                  <p
+                    className="font-mono text-5xl font-semibold leading-none text-white"
+                    data-testid="home-bento-decision-score"
+                  >
+                    {heroValue}
+                  </p>
+                  <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
+                </div>
+              </div>
             </div>
 
-            <div
-              className="min-w-0 text-left"
-              data-testid="home-bento-decision-core-metrics"
-            >
-              <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
-              <div className="mt-3 flex items-end gap-2">
-                <p
-                  className="font-mono text-5xl font-semibold leading-none text-white"
-                  data-testid="home-bento-decision-score"
+            <div className="w-full xl:w-72 flex-shrink-0" data-testid="home-bento-decision-conviction">
+              <div className="flex items-end justify-between gap-4">
+                <Label micro className="text-white/40">{isEnglish ? 'AI CONVICTION' : '确信度'}</Label>
+                <span
+                  className="font-mono text-3xl font-semibold leading-none text-white"
+                  data-testid="home-bento-decision-conviction-value"
                 >
-                  {heroValue}
-                </p>
-                <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
+                  {convictionPercent}%
+                </span>
               </div>
+              <div className="mt-4 grid grid-cols-5 gap-2">
+                {Array.from({ length: 5 }, (_, index) => {
+                  const isActive = index < activeConvictionSegments;
+                  return (
+                    <div
+                      key={index}
+                      className={`h-3 min-w-0 ${getConvictionSegmentClass(signalTone, isActive)}`}
+                      data-testid={`home-bento-decision-conviction-segment-${index + 1}`}
+                    />
+                  );
+                })}
+              </div>
+              <div className="mt-2 h-px w-full bg-gradient-to-r from-white/0 via-white/18 to-white/0" />
             </div>
           </div>
 

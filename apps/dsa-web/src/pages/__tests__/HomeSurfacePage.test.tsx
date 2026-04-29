@@ -234,10 +234,15 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-core-metrics')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-insight')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('h-full', 'overflow-hidden', 'flex', 'flex-col');
-    expect(screen.getByTestId('home-bento-decision-scroll-body')).toHaveClass('flex-1', 'overflow-y-auto', 'pr-2', 'pb-6');
-    expect(screen.getByTestId('home-bento-decision-hero-row')).toHaveClass('flex', 'items-baseline', 'gap-12', 'mt-6', 'mb-8');
-    expect(screen.getByTestId('home-bento-decision-hero-row').className).not.toContain('justify-between');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('w-full', 'overflow-visible', 'xl:h-full', 'xl:overflow-hidden');
+    expect(screen.getByTestId('home-bento-card-decision')).not.toHaveClass('h-full', 'overflow-hidden');
+    expect(screen.getByTestId('home-bento-decision-scroll-body')).toHaveClass('xl:min-h-0', 'xl:flex-1', 'xl:overflow-y-auto', 'pr-2', 'pb-6');
+    expect(screen.getByTestId('home-bento-decision-scroll-body')).not.toHaveClass('overflow-y-auto');
+    expect(screen.getByTestId('home-bento-decision-hero-row')).toHaveClass('flex', 'flex-col', 'xl:flex-row', 'justify-between', 'items-start', 'xl:items-center', 'gap-8', 'mt-6', 'mb-8');
+    expect(screen.getByTestId('home-bento-decision-action-score')).toHaveClass('flex', 'items-baseline', 'gap-8');
+    expect(screen.getByTestId('home-bento-decision-conviction')).toHaveClass('w-full', 'xl:w-72', 'flex-shrink-0');
+    expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('78%');
+    expect(screen.getAllByTestId(/home-bento-decision-conviction-segment-/).filter((segment) => segment.className.includes('shadow-')).length).toBe(4);
     expect(screen.getByTestId('home-bento-decision-core-metrics').className).not.toContain('border');
     expect(screen.getByTestId('home-bento-decision-core-metrics').className).not.toContain('bg-');
     expect(screen.getByTestId('home-bento-decision-insight')).toHaveClass('max-w-3xl', 'text-sm', 'text-white/70', 'leading-relaxed', 'mb-10');
@@ -265,7 +270,7 @@ describe('HomeSurfacePage', () => {
     expect(techCard.className).not.toContain('xl:col-span-1');
     expect(fundamentalsCard).toHaveClass('w-full', 'h-full', 'rounded-[24px]');
     expect(fundamentalsCard.className).not.toContain('xl:col-span-1');
-    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('w-full', 'h-full', 'rounded-[24px]');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('w-full', 'xl:h-full', 'rounded-[24px]');
     expect(screen.getByTestId('home-bento-card-decision').className).not.toContain('xl:col-span-2');
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
