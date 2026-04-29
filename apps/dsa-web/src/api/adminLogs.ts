@@ -78,6 +78,9 @@ export interface ExecutionLogSessionDetail extends ExecutionLogSessionSummary {
     keyMetric?: string | null;
     aiCalls?: Array<Record<string, unknown>>;
     dataSourceCalls?: Array<Record<string, unknown>>;
+    systemFallbacks?: Array<string | Record<string, unknown>>;
+    systemOperation?: Record<string, unknown>;
+    finalResult?: string | null;
     timeline?: Array<Record<string, unknown>>;
     diagnostics?: Array<Record<string, unknown>>;
   };

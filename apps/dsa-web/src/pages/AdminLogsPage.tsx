@@ -7,7 +7,7 @@ import { useI18n } from '../contexts/UiLanguageContext';
 
 type AdminLogsLanguage = 'zh' | 'en';
 type TranslateFn = (key: string, params?: Record<string, string | number | undefined>) => string;
-type OperationType = 'single_stock_analysis' | 'market_scan' | 'backtest' | 'other';
+type OperationType = 'single_stock_analysis' | 'market_scan' | 'backtest' | 'system_operation' | 'other';
 type NormalizedStatus = 'success' | 'partial' | 'failed' | 'running' | 'unknown';
 
 const STATUS_CLASS: Record<NormalizedStatus, string> = {
@@ -18,7 +18,7 @@ const STATUS_CLASS: Record<NormalizedStatus, string> = {
   unknown: 'theme-log-status',
 };
 
-const OPERATION_OPTIONS: OperationType[] = ['single_stock_analysis', 'market_scan', 'backtest'];
+const OPERATION_OPTIONS: OperationType[] = ['single_stock_analysis', 'market_scan', 'backtest', 'system_operation'];
 const STATUS_OPTIONS: NormalizedStatus[] = ['success', 'partial', 'failed'];
 
 const MOCK_WOLFY_LOG_DETAILS: ExecutionLogSessionDetail[] = [
@@ -178,6 +178,49 @@ const MOCK_WOLFY_LOG_DETAILS: ExecutionLogSessionDetail[] = [
     },
     events: [],
   },
+  {
+    sessionId: 'mock-system-login-admin',
+    name: 'Admin login',
+    overallStatus: 'success',
+    truthLevel: 'mock',
+    startedAt: '2026-04-29T20:59:00',
+    endedAt: '2026-04-29T20:59:02',
+    readableSummary: {
+      actorDisplay: 'admin',
+      actorRole: 'admin',
+      sessionKind: 'system_event',
+      subsystem: 'auth',
+      operationCategory: 'system_operation',
+      operationType: '系统操作',
+      operationTarget: '登录',
+      operationStatus: '成功',
+      keyMetric: '管理员登录',
+      summaryParagraph: '管理员 admin 登录成功，系统记录认证事件。',
+    },
+    operationDetail: {
+      operationCategory: 'system_operation',
+      operationType: '系统操作',
+      target: '登录',
+      status: '成功',
+      keyMetric: '管理员登录',
+      systemOperation: {
+        action: 'login',
+        actor: 'admin',
+        time: '2026-04-29T20:59:00',
+        status: '成功',
+        reason: '',
+      },
+      aiCalls: [],
+      dataSourceCalls: [],
+      systemFallbacks: [],
+      finalResult: '成功',
+      timeline: [
+        { timestamp: '2026-04-29T20:59:00', label: '管理员登录成功', category: 'auth', status: '成功' },
+      ],
+      diagnostics: [],
+    },
+    events: [],
+  },
 ];
 
 function text(value: unknown, fallback = '--'): string {
@@ -198,6 +241,7 @@ function normalizeOperationType(summary?: ExecutionLogSessionSummary['readableSu
   const raw = `${summary?.operationCategory || ''} ${summary?.operationType || ''} ${summary?.subsystem || ''}`.toLowerCase();
   if (raw.includes('backtest') || raw.includes('回测')) return 'backtest';
   if (raw.includes('market_scan') || raw.includes('scanner') || raw.includes('扫描')) return 'market_scan';
+  if (raw.includes('system_operation') || raw.includes('system_event') || raw.includes('auth') || raw.includes('系统操作') || raw.includes('登录') || raw.includes('注册') || raw.includes('修改密码') || raw.includes('权限')) return 'system_operation';
   if (raw.includes('single_stock') || raw.includes('单股票') || raw.includes('analysis')) return 'single_stock_analysis';
   return 'other';
 }
@@ -206,6 +250,7 @@ function operationIcon(type: OperationType): string {
   if (type === 'single_stock_analysis') return 'A';
   if (type === 'market_scan') return 'S';
   if (type === 'backtest') return 'B';
+  if (type === 'system_operation') return 'O';
   return 'L';
 }
 
@@ -214,6 +259,7 @@ function operationLabel(type: OperationType, locale: AdminLogsLanguage): string 
     single_stock_analysis: { zh: '单股票分析', en: 'Single stock analysis' },
     market_scan: { zh: '市场扫描', en: 'Market scan' },
     backtest: { zh: '回测', en: 'Backtest' },
+    system_operation: { zh: '系统操作', en: 'System operation' },
     other: { zh: '其他', en: 'Other' },
   };
   return labels[type][locale];
@@ -239,6 +285,10 @@ function roleLabel(role: unknown, t: TranslateFn): string {
 
 function asRecordList(value: unknown): Array<Record<string, unknown>> {
   return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item)) : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function detailForSummary(summary: ExecutionLogSessionSummary): ExecutionLogSessionDetail {
@@ -353,6 +403,7 @@ const AdminLogsPage: React.FC = () => {
   const locale = language as AdminLogsLanguage;
   const [operationFilter, setOperationFilter] = useState<'all' | OperationType>('all');
   const [targetFilter, setTargetFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | NormalizedStatus>('all');
   const [fromTime, setFromTime] = useState('');
   const [toTime, setToTime] = useState('');
@@ -395,20 +446,27 @@ const AdminLogsPage: React.FC = () => {
     const fromMs = formatDateInput(fromTime);
     const toMs = formatDateInput(toTime);
     const target = targetFilter.trim().toLowerCase();
+    const user = userFilter.trim().toLowerCase();
     return sessions.filter((item) => {
       const summary = item.readableSummary || {};
       const operationType = normalizeOperationType(summary);
       const status = normalizeStatus(summary.operationStatus || item.overallStatus);
       const startedMs = item.startedAt ? new Date(item.startedAt).getTime() : null;
       const targetText = `${summary.operationTarget || ''} ${item.code || ''} ${item.name || ''}`.toLowerCase();
+      const userText = `${summary.actorDisplay || ''} ${summary.actorUsername || ''} ${summary.actorUserId || ''} ${summary.actorRole || ''}`.toLowerCase();
       if (operationFilter !== 'all' && operationType !== operationFilter) return false;
       if (statusFilter !== 'all' && status !== statusFilter) return false;
       if (target && !targetText.includes(target)) return false;
+      if (user && !userText.includes(user)) return false;
       if (fromMs != null && startedMs != null && startedMs < fromMs) return false;
       if (toMs != null && startedMs != null && startedMs > toMs) return false;
       return true;
+    }).sort((a, b) => {
+      const left = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+      const right = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+      return right - left;
     });
-  }, [fromTime, operationFilter, sessions, statusFilter, targetFilter, toTime]);
+  }, [fromTime, operationFilter, sessions, statusFilter, targetFilter, toTime, userFilter]);
 
   const openDetail = useCallback(async (summary: ExecutionLogSessionSummary) => {
     setSelectedDetail(detailForSummary(summary));
@@ -432,7 +490,11 @@ const AdminLogsPage: React.FC = () => {
   const dataSourceCalls = asRecordList(operationDetail.dataSourceCalls);
   const timeline = asRecordList(operationDetail.timeline);
   const diagnostics = asRecordList(operationDetail.diagnostics);
-  const systemFallbacks = diagnostics.filter((item) => /fallback|回退/i.test(`${item.message || ''} ${item.source || ''}`));
+  const explicitFallbacks = Array.isArray(operationDetail.systemFallbacks) ? operationDetail.systemFallbacks : [];
+  const systemFallbacks = explicitFallbacks.length
+    ? explicitFallbacks.map((item) => (typeof item === 'string' ? { source: 'System', message: item } : item)).filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
+    : diagnostics.filter((item) => /fallback|回退/i.test(`${item.message || ''} ${item.source || ''}`));
+  const systemOperation = asRecord(operationDetail.systemOperation);
   const drawerStatus = normalizeStatus(String(operationDetail.status || readable.operationStatus || drawerDetail?.overallStatus || ''));
   const drawerOperationType = normalizeOperationType(readable);
 
@@ -448,7 +510,7 @@ const AdminLogsPage: React.FC = () => {
               <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
               <p className="mt-3 text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[12rem_minmax(0,1fr)_10rem_12rem_12rem_auto]">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[12rem_minmax(0,1fr)_10rem_10rem_12rem_12rem_auto]">
               <label className="sr-only" htmlFor="admin-logs-operation-filter">{t('adminLogs.operationType')}</label>
               <select
                 id="admin-logs-operation-filter"
@@ -470,6 +532,15 @@ const AdminLogsPage: React.FC = () => {
                 placeholder={locale === 'zh' ? '股票 / 策略名称' : 'Ticker / strategy'}
                 value={targetFilter}
                 onChange={(event) => setTargetFilter(event.target.value)}
+              />
+              <label className="sr-only" htmlFor="admin-logs-user-filter">{t('adminLogs.userFilterLabel')}</label>
+              <input
+                id="admin-logs-user-filter"
+                aria-label={t('adminLogs.userFilterLabel')}
+                className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                placeholder={locale === 'zh' ? '用户' : 'User'}
+                value={userFilter}
+                onChange={(event) => setUserFilter(event.target.value)}
               />
               <label className="sr-only" htmlFor="admin-logs-status-filter">{t('adminLogs.statusFilterLabel')}</label>
               <select
@@ -538,7 +609,7 @@ const AdminLogsPage: React.FC = () => {
                 const status = normalizeStatus(summary.operationStatus || item.overallStatus);
                 const target = text(summary.operationTarget || item.code || item.name, t('adminLogs.unavailable'));
                 return (
-                  <div key={item.sessionId} className="grid gap-3 px-4 py-4 md:grid-cols-[11rem_minmax(9rem,1fr)_11rem_8rem_minmax(8rem,1fr)_8rem] md:items-center">
+                  <div key={item.sessionId} data-testid="admin-log-row" className="grid gap-3 px-4 py-4 md:grid-cols-[11rem_minmax(9rem,1fr)_11rem_8rem_minmax(8rem,1fr)_8rem] md:items-center">
                     <p className="text-sm text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
                     <div className="min-w-0">
                       <p className="break-words text-sm font-semibold text-foreground">{target}</p>
@@ -603,6 +674,19 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </section>
 
+            {drawerOperationType === 'system_operation' ? (
+              <section data-testid="system-operation-detail" className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
+                <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '系统操作详情' : 'System operation details'}</h3>
+                <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+                  <p className="text-secondary-text"><span>{locale === 'zh' ? '操作类型:' : 'Operation type:'}</span> <span className="text-foreground">{text(systemOperation.action || operationDetail.operationType || readable.operationType)}</span></p>
+                  <p className="text-secondary-text"><span>{locale === 'zh' ? '操作用户:' : 'Operation user:'}</span> <span className="text-foreground">{text(systemOperation.actor || readable.actorDisplay || readable.actorUsername, 'admin')}</span></p>
+                  <p className="text-secondary-text"><span>{locale === 'zh' ? '操作时间:' : 'Operation time:'}</span> <span className="text-foreground">{formatDateTime(systemOperation.time || drawerDetail.startedAt, locale)}</span></p>
+                  <p className="text-secondary-text"><span>{locale === 'zh' ? '执行结果:' : 'Result:'}</span> <span className="text-foreground">{text(systemOperation.status || operationDetail.finalResult || operationDetail.status || readable.operationStatus)}</span></p>
+                  <p className="text-secondary-text md:col-span-2"><span>{locale === 'zh' ? '失败原因:' : 'Failure reason:'}</span> <span className="text-foreground">{text(systemOperation.reason || readable.topFailureReason, '--')}</span></p>
+                </div>
+              </section>
+            ) : null}
+
             <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
               <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'}</summary>
               <div className="mt-4 space-y-3">
@@ -635,7 +719,7 @@ const AdminLogsPage: React.FC = () => {
               <section className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
                 <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '最终执行结果' : 'Final result'}</h3>
                 <p className="mt-3 text-sm leading-6 text-secondary-text">
-                  {text(readable.summaryParagraph || readable.topFailureReason || operationDetail.status || drawerDetail.overallStatus, t('adminLogs.unavailable'))}
+                  {text(operationDetail.finalResult || readable.summaryParagraph || readable.topFailureReason || operationDetail.status || drawerDetail.overallStatus, t('adminLogs.unavailable'))}
                 </p>
               </section>
             </section>

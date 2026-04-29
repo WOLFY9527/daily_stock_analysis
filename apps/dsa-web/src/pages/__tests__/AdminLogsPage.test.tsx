@@ -85,6 +85,23 @@ const sessionItems = [
       keyMetric: 'Data gap',
     },
   },
+  {
+    sessionId: 'system-login-admin',
+    name: 'Admin login',
+    overallStatus: 'completed',
+    startedAt: '2026-04-29T12:10:00Z',
+    readableSummary: {
+      actorDisplay: 'admin',
+      actorRole: 'admin',
+      sessionKind: 'system_event',
+      subsystem: 'auth',
+      operationCategory: 'system_operation',
+      operationType: '系统操作',
+      operationTarget: '登录',
+      operationStatus: '成功',
+      keyMetric: 'IP 127.0.0.1',
+    },
+  },
 ];
 
 const detailById = {
@@ -175,6 +192,31 @@ const detailById = {
     },
     events: [],
   },
+  'system-login-admin': {
+    ...sessionItems[3],
+    operationDetail: {
+      operationCategory: 'system_operation',
+      operationType: '系统操作',
+      target: '登录',
+      status: '成功',
+      keyMetric: 'IP 127.0.0.1',
+      systemOperation: {
+        action: 'login',
+        actor: 'admin',
+        time: '2026-04-29T12:10:00Z',
+        status: '成功',
+      },
+      aiCalls: [],
+      dataSourceCalls: [],
+      systemFallbacks: [],
+      finalResult: '成功',
+      timeline: [
+        { timestamp: '2026-04-29T12:10:00Z', label: '管理员登录成功', status: '成功', category: 'auth' },
+      ],
+      diagnostics: [],
+    },
+    events: [],
+  },
 };
 
 describe('AdminLogsPage', () => {
@@ -193,8 +235,10 @@ describe('AdminLogsPage', () => {
 
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0');
     expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    expect(screen.getByText('登录')).toBeInTheDocument();
     expect(screen.getByText('US pre-open')).toBeInTheDocument();
     expect(screen.getByText('MA crossover')).toBeInTheDocument();
+    expect(screen.getAllByText('系统操作').length).toBeGreaterThan(0);
     expect(screen.getAllByText('单股票分析').length).toBeGreaterThan(0);
     expect(screen.getAllByText('市场扫描').length).toBeGreaterThan(0);
     expect(screen.getAllByText('回测').length).toBeGreaterThan(0);
@@ -212,6 +256,7 @@ describe('AdminLogsPage', () => {
       target: { value: 'market_scan' },
     });
     expect(screen.getByText('US pre-open')).toBeInTheDocument();
+    expect(screen.queryByText('登录')).not.toBeInTheDocument();
     expect(screen.queryByText('TSLA')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationType')), {
@@ -235,12 +280,27 @@ describe('AdminLogsPage', () => {
     fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.statusFilterLabel')), {
       target: { value: 'all' },
     });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.userFilterLabel')), {
+      target: { value: 'admin' },
+    });
+    expect(screen.getByText('登录')).toBeInTheDocument();
+    expect(screen.getByText('TSLA')).toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText('开始时间'), {
       target: { value: '2026-04-29T00:00' },
     });
     expect(screen.getByText('TSLA')).toBeInTheDocument();
     expect(screen.getByText('US pre-open')).toBeInTheDocument();
     expect(screen.queryByText('MA crossover')).not.toBeInTheDocument();
+  });
+
+  it('orders log entries by newest operation time first', async () => {
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    const rows = screen.getAllByTestId('admin-log-row');
+    expect(within(rows[0]).getByText('登录')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('TSLA')).toBeInTheDocument();
   });
 
   it('opens a drawer with complete LLM calls, data-source calls, fallback records, and final result', async () => {
@@ -265,6 +325,23 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('导出 JSON')).toBeInTheDocument();
   });
 
+  it('opens system operation details with operation user, time, result, and reason fields', async () => {
+    render(<AdminLogsPage />);
+
+    const row = await screen.findByText('登录');
+    const rowContainer = row.closest('[data-testid="admin-log-row"]');
+    expect(rowContainer).not.toBeNull();
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getAllByText('系统操作').length).toBeGreaterThan(0);
+    const detail = screen.getByTestId('system-operation-detail');
+    expect(within(detail).getByText('操作类型:')).toBeInTheDocument();
+    expect(within(detail).getByText('操作用户:')).toBeInTheDocument();
+    expect(within(detail).getByText('操作时间:')).toBeInTheDocument();
+    expect(within(detail).getByText('失败原因:')).toBeInTheDocument();
+  });
+
   it('keeps the drawer usable when the detail request fails after opening from summary data', async () => {
     getSessionDetail.mockRejectedValueOnce({ parsedError: { message: 'failed' } });
     render(<AdminLogsPage />);
@@ -286,9 +363,11 @@ describe('AdminLogsPage', () => {
     expect(await screen.findByRole('heading', { name: translate('en', 'adminLogs.pageTitle') })).toBeInTheDocument();
     expect(screen.getByLabelText(translate('en', 'adminLogs.operationType'))).toBeInTheDocument();
     expect(screen.getByLabelText(translate('en', 'adminLogs.statusFilterLabel'))).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('en', 'adminLogs.userFilterLabel'))).toBeInTheDocument();
     expect(screen.getAllByText('Single stock analysis').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Market scan').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Backtest').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('System operation').length).toBeGreaterThan(0);
   });
 
   it('keeps long values readable in the list and drawer', async () => {
