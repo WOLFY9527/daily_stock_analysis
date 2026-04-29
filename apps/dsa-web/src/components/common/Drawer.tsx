@@ -24,6 +24,7 @@ interface DrawerProps {
   zIndex?: number;
   side?: 'left' | 'right';
   closeOnBackdropClick?: boolean;
+  bodyClassName?: string;
 }
 
 export const Drawer: React.FC<DrawerProps> = ({
@@ -35,6 +36,7 @@ export const Drawer: React.FC<DrawerProps> = ({
   zIndex = 50,
   side = 'right',
   closeOnBackdropClick = true,
+  bodyClassName,
 }) => {
   const { t } = useI18n();
   const generatedId = useId();
@@ -234,7 +236,12 @@ export const Drawer: React.FC<DrawerProps> = ({
               </svg>
             </button>
           </div>
-          <div className="drawer__body flex h-full min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5 [padding-bottom:max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]">
+          <div
+            className={cn(
+              'drawer__body flex h-full min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5 [padding-bottom:max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]',
+              bodyClassName,
+            )}
+          >
             {children}
           </div>
         </div>

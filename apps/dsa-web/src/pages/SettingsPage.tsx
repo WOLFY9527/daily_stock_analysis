@@ -106,6 +106,12 @@ const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold upperca
 const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-xl px-3 py-2 text-left text-sm transition-colors';
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3';
+const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] px-4 py-4';
+const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
+const DRAWER_TEXTAREA_CLASS = 'min-h-[6rem] w-full resize-y rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white transition-all placeholder:text-white/20 focus:border-indigo-500/50 focus:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-60';
+const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
+const DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!px-3 [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
 type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
 type DataSourceLibraryEntry = {
   key: string;
@@ -3037,12 +3043,12 @@ const SettingsPage: React.FC = () => {
           </div>
         </aside>
 
-        <section className="flex min-h-0 flex-1 min-w-0 flex-col">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col pl-2 pr-0 md:pr-8">
           <div
             data-testid="settings-main-panel"
-            className="flex-1 min-w-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2 pb-12"
+            className="min-w-0 flex-1 overflow-y-auto pb-12 pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            <div className="space-y-4">
+            <div className="mx-auto w-full max-w-5xl space-y-4">
               <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/5 pb-6">
                 <div>
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('settings.eyebrow')}</p>
@@ -3259,17 +3265,18 @@ const SettingsPage: React.FC = () => {
         title={activeDataRoutingGroup ? activeDataRoutingGroup.role : t('settings.dataRoutingCompactTitle')}
         width="max-w-[min(100vw,48rem)]"
         zIndex={77}
+        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         {activeDataRoutingGroup ? (
-          <div className="space-y-4">
-            <GlassCard className="px-4 py-4">
+          <div className="space-y-3">
+            <div className={DRAWER_PANEL_CLASS}>
               <p className="text-sm font-semibold text-foreground">{activeDataRoutingGroup.role}</p>
               <p className="mt-1 text-xs text-secondary-text">
                 {activeDataRoutingGroup.values.length
                   ? activeDataRoutingGroup.values.map((source) => prettySourceLabel(source)).join(' -> ')
                   : t('settings.notConfigured')}
               </p>
-            </GlassCard>
+            </div>
 
             <div className="grid gap-3">
               <Select
@@ -3280,28 +3287,35 @@ const SettingsPage: React.FC = () => {
                 placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
                 disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length === 0}
               />
-              <Select
-                label={t('settings.sourceBackup')}
-                value={activeDataRoutingGroup.route.backup}
-                onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'backup', value)}
-                options={activeDataRoutingGroup.available
-                  .filter((source) => source !== activeDataRoutingGroup.route.primary)
-                  .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
-                placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
-                disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 2}
-              />
-              {activeDataRoutingGroup.allowFallback ? (
-                <Select
-                  label={t('settings.sourceSecondaryBackup')}
-                  value={('fallback' in activeDataRoutingGroup.route ? activeDataRoutingGroup.route.fallback : '') || ''}
-                  onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'fallback', value)}
-                  options={activeDataRoutingGroup.available
-                    .filter((source) => source !== activeDataRoutingGroup.route.primary && source !== activeDataRoutingGroup.route.backup)
-                    .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
-                  placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
-                  disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 3}
-                />
-              ) : null}
+              <details>
+                <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
+                  配置高级参数 (Advanced Settings) ▾
+                </summary>
+                <div className="mt-3 grid gap-3">
+                  <Select
+                    label={t('settings.sourceBackup')}
+                    value={activeDataRoutingGroup.route.backup}
+                    onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'backup', value)}
+                    options={activeDataRoutingGroup.available
+                      .filter((source) => source !== activeDataRoutingGroup.route.primary)
+                      .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
+                    placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
+                    disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 2}
+                  />
+                  {activeDataRoutingGroup.allowFallback ? (
+                    <Select
+                      label={t('settings.sourceSecondaryBackup')}
+                      value={('fallback' in activeDataRoutingGroup.route ? activeDataRoutingGroup.route.fallback : '') || ''}
+                      onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'fallback', value)}
+                      options={activeDataRoutingGroup.available
+                        .filter((source) => source !== activeDataRoutingGroup.route.primary && source !== activeDataRoutingGroup.route.backup)
+                        .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
+                      placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
+                      disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 3}
+                    />
+                  ) : null}
+                </div>
+              </details>
             </div>
 
             <div className="flex justify-end">
@@ -3325,6 +3339,7 @@ const SettingsPage: React.FC = () => {
         title={t('settings.runtimeSummaryVisibilityTitle')}
         width="max-w-[min(100vw,36rem)]"
         zIndex={77}
+        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-4">
           <GlassCard className="px-4 py-4">
@@ -3372,6 +3387,7 @@ const SettingsPage: React.FC = () => {
         title={rawFieldsSectionTitle}
         width="max-w-[min(100vw,48rem)]"
         zIndex={77}
+        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-3">
           {activeItems.map((item) => (
@@ -3398,6 +3414,7 @@ const SettingsPage: React.FC = () => {
         title={t('settings.aiRoutingDrawerTitle')}
         width="max-w-[min(100vw,54rem)]"
         zIndex={78}
+        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-4">
           <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
@@ -3913,10 +3930,11 @@ const SettingsPage: React.FC = () => {
           : t('settings.aiProviderDrawerTitleFallback')}
         width="max-w-[min(100vw,34rem)]"
         zIndex={79}
+        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         {quickProviderDrawerItem ? (
-          <div className="space-y-4">
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
+          <div className="space-y-3">
+            <div className={DRAWER_PANEL_CLASS}>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">{quickProviderDrawerItem.label}</p>
                 <span className={GHOST_TAG_CLASS}>
@@ -3940,7 +3958,7 @@ const SettingsPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
+            <div className={DRAWER_SECTION_CLASS}>
               <Input
                 type="password"
                 allowTogglePassword
@@ -3988,22 +4006,26 @@ const SettingsPage: React.FC = () => {
                   {quickProviderTestState[quickProviderDrawerItem.key].text}
                 </p>
               ) : null}
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                size="sm"
-                variant="settings-secondary"
-                className={CONTROL_GHOST_BUTTON_CLASS}
-                onClick={() => {
-                  jumpToProviderAdvancedConfig(quickProviderDrawerItem.key);
-                  setQuickProviderDrawerProvider(null);
-                }}
-                disabled={adminLocked || isSaving}
-              >
-                {t('settings.aiDirectProviderAdvancedEntryForProvider', { provider: quickProviderDrawerItem.label })}
-              </Button>
+              <details>
+                <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
+                  配置高级参数 (Advanced Settings) ▾
+                </summary>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="settings-secondary"
+                    className={CONTROL_GHOST_BUTTON_CLASS}
+                    onClick={() => {
+                      jumpToProviderAdvancedConfig(quickProviderDrawerItem.key);
+                      setQuickProviderDrawerProvider(null);
+                    }}
+                    disabled={adminLocked || isSaving}
+                  >
+                    {t('settings.aiDirectProviderAdvancedEntryForProvider', { provider: quickProviderDrawerItem.label })}
+                  </Button>
+                </div>
+              </details>
             </div>
           </div>
         ) : null}
@@ -4015,6 +4037,7 @@ const SettingsPage: React.FC = () => {
         title={t('settings.aiAdvancedDrawerTitle')}
         width="max-w-[min(100vw,56rem)]"
         zIndex={80}
+        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-4">
           <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
@@ -4081,10 +4104,11 @@ const SettingsPage: React.FC = () => {
             : t('settings.dataSourceDrawerTitleFallback')}
         width="max-w-[min(100vw,44rem)]"
         zIndex={81}
+        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         {dataSourceEditorMode === 'view' && dataSourceEditorEntry ? (
-          <div className="space-y-4">
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
+          <div className="space-y-3">
+            <div className={DRAWER_PANEL_CLASS}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-foreground">{dataSourceEditorEntry.label}</p>
@@ -4179,21 +4203,26 @@ const SettingsPage: React.FC = () => {
                 />
               ))}
               {dataSourceEditorEntry.management.extraField ? (
-                <div className="space-y-2">
-                  <Select
-                    label={t(dataSourceEditorEntry.management.extraField.labelKey)}
-                    value={managedBuiltinDataSourceDraft.extraValue || dataSourceEditorEntry.management.extraField.defaultValue}
-                    onChange={(value) => setManagedBuiltinDataSourceDraft((prev) => ({
-                      ...prev,
-                      extraValue: value,
-                    }))}
-                    options={dataSourceEditorEntry.management.extraField.options}
-                    disabled={isSaving}
-                  />
-                  <p className="text-xs text-muted-text">
-                    {t(dataSourceEditorEntry.management.extraField.hintKey)}
-                  </p>
-                </div>
+                <details>
+                  <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
+                    配置高级参数 (Advanced Settings) ▾
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    <Select
+                      label={t(dataSourceEditorEntry.management.extraField.labelKey)}
+                      value={managedBuiltinDataSourceDraft.extraValue || dataSourceEditorEntry.management.extraField.defaultValue}
+                      onChange={(value) => setManagedBuiltinDataSourceDraft((prev) => ({
+                        ...prev,
+                        extraValue: value,
+                      }))}
+                      options={dataSourceEditorEntry.management.extraField.options}
+                      disabled={isSaving}
+                    />
+                    <p className="text-xs text-muted-text">
+                      {t(dataSourceEditorEntry.management.extraField.hintKey)}
+                    </p>
+                  </div>
+                </details>
               ) : null}
             </div>
 
@@ -4223,8 +4252,8 @@ const SettingsPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
+          <div className="space-y-3">
+            <div className={DRAWER_PANEL_CLASS}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-foreground">
@@ -4294,49 +4323,56 @@ const SettingsPage: React.FC = () => {
                   hint={t('settings.dataSourceFieldSecretKeyHint')}
                 />
               ) : null}
-              <Input
-                label={t('settings.dataSourceEditorBaseUrl')}
-                value={dataSourceEditorDraft.baseUrl}
-                onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, baseUrl: event.target.value }))}
-                disabled={isSaving}
-                hint={t('settings.dataSourceEditorBaseUrlHint')}
-                placeholder="https://example.com/v1"
-              />
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">{t('settings.dataSourceEditorDescription')}</label>
-                <textarea
-                  value={dataSourceEditorDraft.description}
-                  onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, description: event.target.value }))}
-                  disabled={isSaving}
-                  className="min-h-[7rem] w-full rounded-xl border border-subtle bg-card px-4 py-3 text-sm text-foreground shadow-soft-card transition-all focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                />
-              </div>
-              <div>
-                <p className="mb-2 text-sm font-medium text-foreground">{t('settings.dataSourceEditorCapabilities')}</p>
-                <div className="flex flex-wrap gap-2">
-                  {DATA_SOURCE_CAPABILITY_OPTIONS.map((capability) => {
-                    const active = dataSourceEditorDraft.capabilities.includes(capability);
-                    return (
-                      <button
-                        key={capability}
-                        type="button"
-                        className={active
-                          ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white'
-                          : 'rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40 hover:bg-white/10'}
-                        onClick={() => setDataSourceEditorDraft((prev) => {
-                          const nextCapabilities = active
-                            ? prev.capabilities.filter((item) => item !== capability)
-                            : [...prev.capabilities, capability];
-                          return { ...prev, capabilities: nextCapabilities };
-                        })}
-                        disabled={isSaving}
-                      >
-                        {t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability])}
-                      </button>
-                    );
-                  })}
+              <details>
+                <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
+                  配置高级参数 (Advanced Settings) ▾
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <Input
+                    label={t('settings.dataSourceEditorBaseUrl')}
+                    value={dataSourceEditorDraft.baseUrl}
+                    onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, baseUrl: event.target.value }))}
+                    disabled={isSaving}
+                    hint={t('settings.dataSourceEditorBaseUrlHint')}
+                    placeholder="https://example.com/v1"
+                  />
+                  <div>
+                    <label className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorDescription')}</label>
+                    <textarea
+                      value={dataSourceEditorDraft.description}
+                      onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, description: event.target.value }))}
+                      disabled={isSaving}
+                      className={DRAWER_TEXTAREA_CLASS}
+                    />
+                  </div>
+                  <div>
+                    <p className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorCapabilities')}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {DATA_SOURCE_CAPABILITY_OPTIONS.map((capability) => {
+                        const active = dataSourceEditorDraft.capabilities.includes(capability);
+                        return (
+                          <button
+                            key={capability}
+                            type="button"
+                            className={active
+                              ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white'
+                              : 'rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40 hover:bg-white/10'}
+                            onClick={() => setDataSourceEditorDraft((prev) => {
+                              const nextCapabilities = active
+                                ? prev.capabilities.filter((item) => item !== capability)
+                                : [...prev.capabilities, capability];
+                              return { ...prev, capabilities: nextCapabilities };
+                            })}
+                            disabled={isSaving}
+                          >
+                            {t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability])}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </details>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">

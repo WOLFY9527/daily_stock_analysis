@@ -21,6 +21,7 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
   labelClassName?: string;
   placeholder?: string;
   className?: string;
+  controlClassName?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
   emptyText?: string;
@@ -36,6 +37,7 @@ export const Select: React.FC<SelectProps> = ({
   placeholder,
   disabled = false,
   className = '',
+  controlClassName = '',
   ...props
 }) => {
   const { t } = useI18n();
@@ -57,6 +59,7 @@ export const Select: React.FC<SelectProps> = ({
             'select-surface input-surface theme-focus-ring h-10 w-full appearance-none rounded-xl border px-4 py-2 pr-9 text-sm text-foreground',
             'theme-focus-ring transition-all duration-200',
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+            controlClassName,
           )}
         >
           {resolvedPlaceholder && (

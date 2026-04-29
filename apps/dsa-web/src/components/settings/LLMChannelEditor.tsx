@@ -11,6 +11,8 @@ type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_
 
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
+const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-4 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
 
 interface ChannelPreset {
   label: string;
@@ -288,39 +290,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
       </div>
 
       {expanded ? (
-        <div className="settings-surface-overlay-soft space-y-4 px-4 py-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Input
-              label={t('settings.llmEditor.fieldName')}
-              value={channel.name}
-              disabled={busy}
-              onChange={(e) => onUpdate(index, 'name', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-              placeholder={t('settings.llmEditor.placeholderName')}
-            />
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">{t('settings.llmEditor.fieldProtocol')}</label>
-              <Select
-                value={channel.protocol}
-                onChange={(v) => onUpdate(index, 'protocol', normalizeProtocol(v))}
-                options={PROTOCOL_OPTIONS}
-                disabled={busy}
-                placeholder={t('settings.llmEditor.placeholderProtocol')}
-              />
-            </div>
-          </div>
-
-          <Input
-            label={t('settings.llmEditor.fieldBaseUrl')}
-            value={channel.baseUrl}
-            disabled={busy}
-            onChange={(e) => onUpdate(index, 'baseUrl', e.target.value)}
-            placeholder={
-              channel.protocol === 'gemini' || channel.protocol === 'anthropic'
-                ? t('settings.llmEditor.placeholderOfficialEmpty')
-                : preset?.baseUrl || t('settings.llmEditor.placeholderBaseUrl')
-            }
-          />
-
+        <div className="space-y-3 bg-white/[0.01] px-4 py-4">
           <Input
             label={t('settings.llmEditor.fieldApiKey')}
             type="password"
@@ -344,14 +314,53 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
             placeholder={preset?.placeholder || MODEL_PLACEHOLDERS[channel.protocol]}
           />
 
-          <Input
-            label={t('settings.llmEditor.fieldExtraHeaders')}
-            value={channel.extraHeaders}
-            disabled={busy}
-            onChange={(e) => onUpdate(index, 'extraHeaders', e.target.value)}
-            placeholder='{"x-env":"staging"}'
-            hint={t('settings.llmEditor.extraHeadersHint')}
-          />
+          <details>
+            <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
+              配置高级参数 (Advanced Settings) ▾
+            </summary>
+            <div className="mt-3 space-y-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Input
+                  label={t('settings.llmEditor.fieldName')}
+                  value={channel.name}
+                  disabled={busy}
+                  onChange={(e) => onUpdate(index, 'name', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  placeholder={t('settings.llmEditor.placeholderName')}
+                />
+                <div>
+                  <label className={DRAWER_LABEL_CLASS}>{t('settings.llmEditor.fieldProtocol')}</label>
+                  <Select
+                    value={channel.protocol}
+                    onChange={(v) => onUpdate(index, 'protocol', normalizeProtocol(v))}
+                    options={PROTOCOL_OPTIONS}
+                    disabled={busy}
+                    placeholder={t('settings.llmEditor.placeholderProtocol')}
+                  />
+                </div>
+              </div>
+
+              <Input
+                label={t('settings.llmEditor.fieldBaseUrl')}
+                value={channel.baseUrl}
+                disabled={busy}
+                onChange={(e) => onUpdate(index, 'baseUrl', e.target.value)}
+                placeholder={
+                  channel.protocol === 'gemini' || channel.protocol === 'anthropic'
+                    ? t('settings.llmEditor.placeholderOfficialEmpty')
+                    : preset?.baseUrl || t('settings.llmEditor.placeholderBaseUrl')
+                }
+              />
+
+              <Input
+                label={t('settings.llmEditor.fieldExtraHeaders')}
+                value={channel.extraHeaders}
+                disabled={busy}
+                onChange={(e) => onUpdate(index, 'extraHeaders', e.target.value)}
+                placeholder='{"x-env":"staging"}'
+                hint={t('settings.llmEditor.extraHeadersHint')}
+              />
+            </div>
+          </details>
 
           <div className="flex flex-wrap items-center gap-2 border-t settings-border-soft pt-3">
             <Button
@@ -1163,7 +1172,11 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
           </div>
 
           {!providerScopedMode && managesRuntimeConfig ? (
-            <div className="settings-surface rounded-[1.35rem] border settings-border p-4 shadow-soft-card">
+            <details>
+              <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
+                配置高级参数 (Advanced Settings) ▾
+              </summary>
+              <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-4">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <span className="settings-accent-text text-xs font-medium uppercase tracking-wider">{t('settings.llmEditor.runtimeTitle')}</span>
@@ -1172,7 +1185,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 <Badge variant="default" className="settings-border settings-surface-hover text-muted-text">{t('settings.llmEditor.runtimeBadge')}</Badge>
               </div>
               <div className="mb-4">
-                <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.temperatureLabel')}</label>
+                <label className={DRAWER_LABEL_CLASS}>{t('settings.llmEditor.temperatureLabel')}</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
@@ -1200,7 +1213,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.primaryModelLabel')}</label>
+                    <label className={DRAWER_LABEL_CLASS}>{t('settings.llmEditor.primaryModelLabel')}</label>
                     <Select
                       value={runtimeConfig.primaryModel}
                       onChange={setPrimaryModel}
@@ -1211,7 +1224,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.agentModelLabel')}</label>
+                    <label className={DRAWER_LABEL_CLASS}>{t('settings.llmEditor.agentModelLabel')}</label>
                     <Select
                       value={runtimeConfig.agentPrimaryModel}
                       onChange={(value) => setRuntimeConfig((previous) => ({
@@ -1225,7 +1238,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs text-muted-text">{t('settings.llmEditor.fallbackLabel')}</label>
+                    <label className={DRAWER_LABEL_CLASS}>{t('settings.llmEditor.fallbackLabel')}</label>
                     <div className="space-y-2 rounded-xl border border-border/30 bg-background/10 p-3">
                       {availableModels.map((model) => (
                         <label key={model} className="flex items-center gap-2 text-sm text-secondary-text">
@@ -1246,7 +1259,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">{t('settings.llmEditor.visionModelLabel')}</label>
+                    <label className={DRAWER_LABEL_CLASS}>{t('settings.llmEditor.visionModelLabel')}</label>
                     <Select
                       value={runtimeConfig.visionModel}
                       onChange={(value) => setRuntimeConfig((previous) => ({ ...previous, visionModel: value }))}
@@ -1257,7 +1270,8 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   </div>
                 </div>
               )}
-            </div>
+              </div>
+            </details>
           ) : providerScopedMode ? null : (
             <SupportBanner
               tone="warning"

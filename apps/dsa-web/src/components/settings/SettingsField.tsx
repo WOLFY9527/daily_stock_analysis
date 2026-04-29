@@ -210,7 +210,7 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
       )}
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <label className="text-sm font-semibold text-foreground" htmlFor={controlId}>
+        <label className="theme-field-label" htmlFor={controlId}>
           {title}
         </label>
           {schema?.isSensitive ? (
