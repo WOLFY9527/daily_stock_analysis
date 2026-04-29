@@ -1131,6 +1131,93 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('152.00 - 155.00')).toBeInTheDocument();
   });
 
+  it('renders a datasource status panel with expandable failure details for the focused task', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+
+    act(() => {
+      useStockPoolStore.getState().syncTaskCreated({
+        taskId: 'task-tsla-runtime',
+        stockCode: 'TSLA',
+        stockName: 'Tesla',
+        status: 'processing',
+        progress: 62,
+        message: '正在分析价格信号、基本面与新闻证据...',
+        reportType: 'detailed',
+        createdAt: '2026-04-27T09:00:00Z',
+        updatedAt: '2026-04-27T09:02:00Z',
+        execution: {
+          ai: {
+            model: 'deepseek/deepseek-chat',
+            provider: 'deepseek',
+            gateway: 'deepseek-primary',
+            modelTruth: 'actual',
+            providerTruth: 'actual',
+            gatewayTruth: 'actual',
+            fallbackOccurred: false,
+            fallbackTruth: 'actual',
+            configuredPrimaryModel: 'deepseek/deepseek-chat',
+          },
+          data: {
+            market: {
+              source: 'alpaca',
+              truth: 'actual',
+              fallbackOccurred: false,
+              status: 'ok',
+              finalReason: '行情请求成功。',
+            },
+            fundamentals: {
+              source: 'fmp',
+              truth: 'actual',
+              fallbackOccurred: true,
+              status: 'partial',
+              finalReason: 'finnhub 限流后已切换到 FMP。',
+            },
+            news: {
+              source: 'gnews',
+              truth: 'actual',
+              fallbackOccurred: false,
+              status: 'failed',
+              finalReason: '429 Too Many Requests',
+            },
+            sentiment: {
+              source: 'tavily_filtered',
+              truth: 'inferred',
+              fallbackOccurred: false,
+              status: 'configured_not_used',
+              finalReason: '新闻源失败，情绪聚合未执行。',
+            },
+          },
+          report: {
+            standardReport: {
+              status: 'failed',
+              present: false,
+              truth: 'actual',
+              path: 'task.result.report.details.standard_report',
+              finalReason: 'standard_report 尚未生成，首页卡片仍在等待结构化结果。',
+            },
+          },
+          steps: [
+            { key: 'data_fetch', status: 'partial' },
+            { key: 'ai_analysis', status: 'partial' },
+            { key: 'standard_report', status: 'failed' },
+          ],
+        },
+      });
+    });
+
+    const panel = await screen.findByTestId('home-bento-runtime-panel');
+    expect(within(panel).getByText(/TSLA/)).toBeInTheDocument();
+    expect(within(panel).getByText(/deepseek\/deepseek-chat/)).toBeInTheDocument();
+    expect(within(panel).getByText(/alpaca/)).toBeInTheDocument();
+    expect(within(panel).getByText(/gnews/)).toBeInTheDocument();
+    expect(within(panel).getByText(/429 Too Many Requests/)).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /standard_report/i })).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByRole('button', { name: /standard_report/i }));
+    expect(await within(panel).findByText(/首页卡片仍在等待结构化结果/)).toBeInTheDocument();
+  });
+
   it('keeps neutral cards instead of demo data when the analysis API fails', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     const deferred = createDeferred<never>();

@@ -328,6 +328,8 @@ export interface RuntimeExecutionField {
   truth?: 'actual' | 'inferred' | 'unavailable' | string;
   fallbackOccurred?: boolean;
   status?: string;
+  finalReason?: string | null;
+  sourceChain?: Array<Record<string, unknown>>;
 }
 
 export interface RuntimeExecutionSummary {
@@ -341,12 +343,24 @@ export interface RuntimeExecutionSummary {
     fallbackOccurred?: boolean;
     fallbackTruth?: 'actual' | 'inferred' | 'unavailable' | string;
     configuredPrimaryModel?: string | null;
+    configuredPrimaryGateway?: string | null;
+    configuredBackupGateway?: string | null;
+    attemptChain?: Array<Record<string, unknown>>;
   };
   data?: {
     market?: RuntimeExecutionField;
-    fundamentals?: RuntimeExecutionField & { sourceChain?: Array<Record<string, unknown>> };
+    fundamentals?: RuntimeExecutionField;
     news?: RuntimeExecutionField;
     sentiment?: RuntimeExecutionField;
+  };
+  report?: {
+    standardReport?: {
+      status?: string;
+      present?: boolean;
+      truth?: 'actual' | 'inferred' | 'unavailable' | string;
+      path?: string;
+      finalReason?: string | null;
+    };
   };
   notification?: {
     attempted?: boolean;

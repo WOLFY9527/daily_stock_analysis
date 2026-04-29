@@ -222,6 +222,51 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response["query_id"], "q-top-level")
         self.assertIs(response["notification_result"], notification_result)
 
+    def test_build_analysis_response_marks_standard_report_delivery_in_runtime_execution(self) -> None:
+        service = AnalysisService()
+        response = service._build_analysis_response(
+            SimpleNamespace(
+                code="NVDA",
+                name="NVIDIA",
+                query_id="q-runtime-report",
+                current_price=125.3,
+                change_pct=1.87,
+                model_used="deepseek/deepseek-chat",
+                analysis_summary="等待确认",
+                operation_advice="持有",
+                trend_prediction="看多",
+                sentiment_score=78,
+                news_summary="news",
+                technical_analysis="tech",
+                fundamental_analysis="fundamental",
+                risk_warning="risk",
+                report_language="zh",
+                market_snapshot={},
+                dashboard={
+                    "core_conclusion": {"one_sentence": "NVIDIA remains in a valid trend."},
+                    "intelligence": {"risk_alerts": []},
+                },
+                runtime_execution={"steps": [{"key": "ai_analysis", "status": "ok"}]},
+                notification_result={"attempted": False, "status": "not_configured", "success": None},
+                get_sniper_points=lambda: {},
+            ),
+            "q-runtime-report",
+            report_type="full",
+        )
+
+        runtime_execution = response["runtime_execution"]
+        self.assertIsInstance(runtime_execution, dict)
+        self.assertEqual(runtime_execution["report"]["standard_report"]["status"], "ok")
+        self.assertTrue(runtime_execution["report"]["standard_report"]["present"])
+        self.assertEqual(
+            runtime_execution["report"]["standard_report"]["path"],
+            "task.result.report.details.standard_report",
+        )
+        self.assertIn(
+            {"key": "standard_report", "status": "ok"},
+            runtime_execution["steps"],
+        )
+
     def test_analyze_stock_attaches_persisted_report_after_successful_completion(self) -> None:
         service = AnalysisService()
         pipeline_instance = MagicMock()

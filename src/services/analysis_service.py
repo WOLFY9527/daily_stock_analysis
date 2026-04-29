@@ -208,12 +208,47 @@ class AnalysisService:
             query_id=resolved_query_id,
             report_type=report_type,
         )
+        runtime_execution = self._attach_report_delivery_runtime(
+            getattr(result, "runtime_execution", None),
+            report,
+        )
 
         return {
             "stock_code": result.code,
             "stock_name": stock_name,
             "query_id": resolved_query_id,
             "report": report,
-            "runtime_execution": getattr(result, "runtime_execution", None),
+            "runtime_execution": runtime_execution,
             "notification_result": getattr(result, "notification_result", None),
         }
+
+    @staticmethod
+    def _attach_report_delivery_runtime(
+        runtime_execution: Optional[Dict[str, Any]],
+        report: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        runtime = dict(runtime_execution) if isinstance(runtime_execution, dict) else {}
+        details = report.get("details") if isinstance(report.get("details"), dict) else {}
+        standard_report = details.get("standard_report")
+        has_standard_report = isinstance(standard_report, dict)
+
+        runtime_report = runtime.get("report") if isinstance(runtime.get("report"), dict) else {}
+        runtime["report"] = {
+            **runtime_report,
+            "standard_report": {
+                "status": "ok" if has_standard_report else "failed",
+                "present": has_standard_report,
+                "truth": "actual",
+                "path": "task.result.report.details.standard_report",
+                "final_reason": None if has_standard_report else "standard_report 缺失，首页标准卡片无法消费结构化结果。",
+            },
+        }
+
+        existing_steps = runtime.get("steps") if isinstance(runtime.get("steps"), list) else []
+        next_steps = [
+            step for step in existing_steps
+            if not (isinstance(step, dict) and str(step.get("key") or "").strip() == "standard_report")
+        ]
+        next_steps.append({"key": "standard_report", "status": "ok" if has_standard_report else "failed"})
+        runtime["steps"] = next_steps
+        return runtime
