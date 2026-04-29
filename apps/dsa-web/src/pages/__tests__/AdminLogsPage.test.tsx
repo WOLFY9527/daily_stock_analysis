@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import AdminLogsPage from '../AdminLogsPage';
@@ -32,288 +32,268 @@ vi.mock('../../components/common', async (importOriginal) => {
   };
 });
 
+const sessionItems = [
+  {
+    sessionId: 'analysis-tsla',
+    code: 'TSLA',
+    name: 'TSLA analysis',
+    overallStatus: 'partial_success',
+    startedAt: '2026-04-29T11:02:00Z',
+    readableSummary: {
+      actorDisplay: 'admin',
+      actorRole: 'admin',
+      sessionKind: 'user_activity',
+      subsystem: 'analysis',
+      operationCategory: 'single_stock_analysis',
+      operationType: '单股票分析',
+      operationTarget: 'TSLA',
+      operationStatus: '部分失败',
+      keyMetric: 'Score 5.2',
+    },
+  },
+  {
+    sessionId: 'scanner-us',
+    name: 'US pre-open scanner',
+    overallStatus: 'completed',
+    startedAt: '2026-04-29T09:20:00Z',
+    readableSummary: {
+      actorDisplay: 'admin',
+      actorRole: 'admin',
+      sessionKind: 'admin_action',
+      subsystem: 'scanner',
+      operationCategory: 'market_scan',
+      operationType: '市场扫描',
+      operationTarget: 'US pre-open',
+      operationStatus: '成功',
+      keyMetric: 'Shortlist 12',
+    },
+  },
+  {
+    sessionId: 'backtest-ma',
+    name: 'MA crossover backtest',
+    overallStatus: 'failed',
+    startedAt: '2026-04-28T08:05:00Z',
+    readableSummary: {
+      actorDisplay: 'admin',
+      actorRole: 'admin',
+      sessionKind: 'user_activity',
+      subsystem: 'analysis',
+      operationCategory: 'backtest',
+      operationType: '回测',
+      operationTarget: 'MA crossover',
+      operationStatus: '失败',
+      keyMetric: 'Data gap',
+    },
+  },
+];
+
+const detailById = {
+  'analysis-tsla': {
+    ...sessionItems[0],
+    operationDetail: {
+      operationCategory: 'single_stock_analysis',
+      operationType: '单股票分析',
+      target: 'TSLA',
+      status: '部分失败',
+      keyMetric: 'Score 5.2',
+      aiCalls: [
+        {
+          model: 'deepseek-v4-pro',
+          version: '1.0',
+          request: { symbol: 'TSLA', temperature: 0.2 },
+          response: { error: 'rate_limited' },
+          status: '失败',
+          reason: '高负载',
+          fallback: '回退使用 alpaca',
+        },
+        {
+          model: 'alpaca',
+          version: '2026-04',
+          request: { symbol: 'TSLA' },
+          response: { decision: 'hold' },
+          status: '成功',
+        },
+      ],
+      dataSourceCalls: [
+        {
+          api: 'Finnhub',
+          request: { symbol: 'TSLA' },
+          response: { quote: 'ok' },
+          status: '成功',
+        },
+        {
+          api: 'Yahoo',
+          request: { symbol: 'TSLA', range: '6mo' },
+          response: { error: 'timeout' },
+          status: '失败',
+          reason: '超时',
+        },
+      ],
+      timeline: [
+        { timestamp: '2026-04-29T11:02:01Z', label: 'deepseek-v4-pro call started', status: '成功', category: 'llm' },
+      ],
+      diagnostics: [
+        { severity: 'warning', message: '回退到备用模型', source: 'LLM Router' },
+        { severity: 'error', message: 'Yahoo 超时', source: 'Yahoo' },
+      ],
+    },
+    events: [],
+  },
+  'scanner-us': {
+    ...sessionItems[1],
+    operationDetail: {
+      operationCategory: 'market_scan',
+      operationType: '市场扫描',
+      target: 'US pre-open',
+      status: '成功',
+      keyMetric: 'Shortlist 12',
+      aiCalls: [],
+      dataSourceCalls: [
+        { api: 'Alpaca', request: { market: 'us' }, response: { symbols: 450 }, status: '成功' },
+      ],
+      timeline: [],
+      diagnostics: [],
+    },
+    events: [],
+  },
+  'backtest-ma': {
+    ...sessionItems[2],
+    operationDetail: {
+      operationCategory: 'backtest',
+      operationType: '回测',
+      target: 'MA crossover',
+      status: '失败',
+      keyMetric: 'Data gap',
+      aiCalls: [],
+      dataSourceCalls: [
+        { api: 'Local Parquet', request: { symbol: 'MSFT' }, response: { rows: 0 }, status: '失败', reason: '历史数据不足' },
+      ],
+      timeline: [],
+      diagnostics: [
+        { severity: 'error', message: 'Local parquet returned no rows', source: 'Backtest Engine' },
+      ],
+    },
+    events: [],
+  },
+};
+
 describe('AdminLogsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLanguage = 'zh';
     listSessions.mockResolvedValue({
-      total: 2,
-      items: [
-        {
-          sessionId: 'admin-action-1',
-          name: 'Factory reset',
-          overallStatus: 'completed',
-          startedAt: '2026-04-15T10:00:00Z',
-          readableSummary: {
-            actorDisplay: 'Bootstrap Admin',
-            actorRole: 'admin',
-            sessionKind: 'admin_action',
-            subsystem: 'system_control',
-            actionName: 'factory_reset_system',
-            destructive: true,
-          },
-        },
-        {
-          sessionId: 'scanner-run-1',
-          name: 'Scanner run',
-          overallStatus: 'completed',
-          startedAt: '2026-04-15T08:40:00Z',
-          readableSummary: {
-            actorDisplay: 'Bootstrap Admin',
-            actorRole: 'admin',
-            sessionKind: 'admin_action',
-            subsystem: 'scanner',
-            actionName: 'scanner_run',
-            destructive: false,
-            scannerRunId: 88,
-            scannerMarket: 'us',
-            scannerShortlistCount: 5,
-            scannerFallbackCount: 1,
-            scannerProvidersUsed: ['alpaca', 'twelve_data'],
-            scannerCoverageSummary: 'Scanned 180 symbols, shortlisted 5.',
-          },
-        },
-        {
-          sessionId: 'user-activity-1',
-          name: 'AAPL analysis',
-          overallStatus: 'completed',
-          startedAt: '2026-04-15T09:00:00Z',
-          readableSummary: {
-            actorDisplay: 'Alice',
-            actorRole: 'user',
-            sessionKind: 'user_activity',
-            subsystem: 'analysis',
-            actionName: 'analyze_stock',
-            destructive: false,
-          },
-        },
-      ],
+      total: sessionItems.length,
+      items: sessionItems,
     });
-    getSessionDetail.mockImplementation(async (sessionId: string) => ({
-      sessionId,
-      name: sessionId === 'admin-action-1' ? 'Factory reset' : sessionId === 'scanner-run-1' ? 'Scanner run' : 'AAPL analysis',
-      overallStatus: 'completed',
-      readableSummary: {
-        actorDisplay: sessionId === 'admin-action-1' || sessionId === 'scanner-run-1' ? 'Bootstrap Admin' : 'Alice',
-        actorRole: sessionId === 'admin-action-1' || sessionId === 'scanner-run-1' ? 'admin' : 'user',
-        sessionKind: sessionId === 'admin-action-1' || sessionId === 'scanner-run-1' ? 'admin_action' : 'user_activity',
-        subsystem: sessionId === 'admin-action-1' ? 'system_control' : sessionId === 'scanner-run-1' ? 'scanner' : 'analysis',
-        actionName: sessionId === 'admin-action-1' ? 'factory_reset_system' : sessionId === 'scanner-run-1' ? 'scanner_run' : 'analyze_stock',
-        destructive: sessionId === 'admin-action-1',
-        scannerRunId: sessionId === 'scanner-run-1' ? 88 : undefined,
-        scannerMarket: sessionId === 'scanner-run-1' ? 'us' : undefined,
-        scannerShortlistCount: sessionId === 'scanner-run-1' ? 5 : undefined,
-        scannerFallbackCount: sessionId === 'scanner-run-1' ? 1 : undefined,
-        scannerProvidersUsed: sessionId === 'scanner-run-1' ? ['alpaca', 'twelve_data'] : undefined,
-        scannerCoverageSummary: sessionId === 'scanner-run-1' ? 'Scanned 180 symbols, shortlisted 5.' : undefined,
-      },
-      events: [
-        {
-          id: 1,
-          phase: sessionId === 'admin-action-1' ? 'system' : sessionId === 'scanner-run-1' ? 'scanner' : 'ai_model',
-          status: 'completed',
-          detail: {
-            action: sessionId === 'admin-action-1' ? 'factory_reset_system' : sessionId === 'scanner-run-1' ? 'scanner_run' : 'analyze_stock',
-          },
-        },
-      ],
-    }));
+    getSessionDetail.mockImplementation(async (sessionId: keyof typeof detailById) => detailById[sessionId]);
   });
 
-  it('renders global admin observability metadata for both admin actions and user activity', async () => {
-    const { container } = render(<AdminLogsPage />);
-
-    expect(container.querySelectorAll('main')).toHaveLength(0);
-    expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-6');
-    expect(screen.getByTestId('admin-logs-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8', 'overflow-y-auto');
-    expect(screen.getByTestId('admin-logs-workspace')).not.toHaveClass('max-w-[1600px]', 'mx-auto', 'px-4');
-    expect(await screen.findByText(translate('zh', 'adminLogs.scopeTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.sessionListTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.sessionDetailTitle'))).toBeInTheDocument();
-    expect((await screen.findAllByText('Bootstrap Admin')).length).toBeGreaterThan(0);
-    expect(screen.getByText('AAPL analysis')).toBeInTheDocument();
-    expect(screen.getAllByText(new RegExp(`${translate('zh', 'adminLogs.subsystemLabel.system_control')}|${translate('zh', 'adminLogs.subsystemLabel.analysis')}`)).length).toBeGreaterThan(0);
-  });
-
-  it('filters between admin/system actions and user activity', async () => {
+  it('renders the WolfyStock log list with operation icons, statuses, and filters', async () => {
     render(<AdminLogsPage />);
 
-    expect((await screen.findAllByText('Factory reset')).length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.activityTypeLabel')), {
-      target: { value: 'admin_action' },
-    });
-
-    await waitFor(() => {
-      expect(screen.getAllByText('Factory reset').length).toBeGreaterThan(0);
-    });
-    expect(screen.queryByText('AAPL analysis')).not.toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0');
+    expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    expect(screen.getByText('US pre-open')).toBeInTheDocument();
+    expect(screen.getByText('MA crossover')).toBeInTheDocument();
+    expect(screen.getAllByText('单股票分析').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('市场扫描').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('回测').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('部分失败').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('成功').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('失败').length).toBeGreaterThan(0);
   });
 
-  it('renders scanner observability metadata in admin logs', async () => {
+  it('filters by operation type, target, status, and time range', async () => {
     render(<AdminLogsPage />);
 
-    expect(await screen.findByText('Scanner run')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.scannerRunMeta', { runId: 88 }))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.scannerShortlistMeta', { count: 5 }))).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Scanner run/ }));
+    expect(await screen.findByText('TSLA')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByText(/Scanned 180 symbols, shortlisted 5./)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationType')), {
+      target: { value: 'market_scan' },
     });
-    expect(screen.getByText(/alpaca/)).toBeInTheDocument();
-    expect(screen.getByText(/twelve_data/)).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.providersMeta', {
-      providers: 'alpaca, twelve_data',
-      fallbackCount: 1,
-      failureCount: 0,
-    }))).toBeInTheDocument();
-  });
+    expect(screen.getByText('US pre-open')).toBeInTheDocument();
+    expect(screen.queryByText('TSLA')).not.toBeInTheDocument();
 
-  it('renders unified operation detail tables, diagnostics, and copy export controls', async () => {
-    listSessions.mockResolvedValueOnce({
-      total: 1,
-      items: [
-        {
-          sessionId: 'analysis-tsla',
-          code: 'TSLA',
-          name: 'TSLA analysis',
-          overallStatus: 'partial_success',
-          startedAt: '2026-04-29T11:02:00Z',
-          readableSummary: {
-            actorDisplay: 'Alice',
-            actorRole: 'user',
-            sessionKind: 'user_activity',
-            subsystem: 'analysis',
-            operationCategory: 'single_stock_analysis',
-            operationType: 'Single Stock Analysis',
-            operationTarget: 'TSLA',
-            operationStatus: 'partial fail',
-            keyMetric: 'Score 5.2',
-          },
-        },
-      ],
+    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationType')), {
+      target: { value: 'all' },
     });
-    getSessionDetail.mockResolvedValueOnce({
-      sessionId: 'analysis-tsla',
-      code: 'TSLA',
-      name: 'TSLA analysis',
-      overallStatus: 'partial_success',
-      startedAt: '2026-04-29T11:02:00Z',
-      readableSummary: {
-        actorDisplay: 'Alice',
-        actorRole: 'user',
-        sessionKind: 'user_activity',
-        subsystem: 'analysis',
-        operationCategory: 'single_stock_analysis',
-        operationType: 'Single Stock Analysis',
-        operationTarget: 'TSLA',
-        operationStatus: 'partial fail',
-        keyMetric: 'Score 5.2',
-      },
-      operationDetail: {
-        operationCategory: 'single_stock_analysis',
-        operationType: 'Single Stock Analysis',
-        target: 'TSLA',
-        status: 'partial fail',
-        keyMetric: 'Score 5.2',
-        aiCalls: [
-          { model: 'deepseek-v4-pro', version: 'v4-pro', status: 'success', notes: 'Initial model call succeeded' },
-          { model: 'gemini-2.5-flash', version: '2.5-flash', status: 'fail', notes: 'Service unavailable, code 503', fallbackChain: 'gemini-2.5-flash -> alpaca' },
-        ],
-        dataSourceCalls: [
-          { source: 'Finnhub', status: 'success', error: '', retryFallback: 'primary', notes: 'Data fetched' },
-          { source: 'Yahoo Finance', status: 'fail', error: 'Timeout error', retryFallback: 'fallback to Finnhub' },
-        ],
-        timeline: [
-          { timestamp: '2026-04-29T11:02:01Z', label: 'deepseek-v4-pro call started', status: 'success', category: 'ai' },
-          { timestamp: '2026-04-29T11:02:03Z', label: 'Yahoo Finance call failed', status: 'fail', category: 'data' },
-        ],
-        diagnostics: [
-          { severity: 'error', message: 'Timeout error', source: 'Yahoo Finance', stackTrace: 'TimeoutError: Yahoo Finance' },
-        ],
-      },
-      events: [],
+    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationTarget')), {
+      target: { value: 'MA' },
     });
+    expect(screen.getByText('MA crossover')).toBeInTheDocument();
+    expect(screen.queryByText('US pre-open')).not.toBeInTheDocument();
 
-    render(<AdminLogsPage />);
-
-    expect(await screen.findByText('Single Stock Analysis')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationTarget')), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.statusFilterLabel')), {
+      target: { value: 'partial' },
+    });
     expect(screen.getByText('TSLA')).toBeInTheDocument();
-    expect(screen.getByText('Score 5.2')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: new RegExp(translate('zh', 'adminLogs.viewDetails')) })).toBeInTheDocument();
-    expect(await screen.findByText(translate('zh', 'adminLogs.aiInvocationTable'))).toBeInTheDocument();
+    expect(screen.queryByText('MA crossover')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.statusFilterLabel')), {
+      target: { value: 'all' },
+    });
+    fireEvent.change(screen.getByLabelText('开始时间'), {
+      target: { value: '2026-04-29T00:00' },
+    });
+    expect(screen.getByText('TSLA')).toBeInTheDocument();
+    expect(screen.getByText('US pre-open')).toBeInTheDocument();
+    expect(screen.queryByText('MA crossover')).not.toBeInTheDocument();
+  });
+
+  it('opens a drawer with complete LLM calls, data-source calls, fallback records, and final result', async () => {
+    render(<AdminLogsPage />);
+
+    const row = await screen.findByText('TSLA');
+    const rowContainer = row.closest('.grid');
+    expect(rowContainer).not.toBeNull();
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(await screen.findByText('LLM 调用链')).toBeInTheDocument();
     expect(screen.getByText('deepseek-v4-pro')).toBeInTheDocument();
-    expect(screen.getByText('gemini-2.5-flash')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.dataSourceTable'))).toBeInTheDocument();
-    expect(screen.getByText('Yahoo Finance')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.diagnosticsTitle'))).toBeInTheDocument();
-    expect(screen.getByText('TimeoutError: Yahoo Finance')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('zh', 'adminLogs.copyDetails') })).toBeInTheDocument();
+    expect(screen.getByText('alpaca')).toBeInTheDocument();
+    expect(screen.getByText('数据源调用')).toBeInTheDocument();
+    expect(screen.getByText('Finnhub')).toBeInTheDocument();
+    expect(screen.getByText('Yahoo')).toBeInTheDocument();
+    expect(screen.getByText('系统回退记录')).toBeInTheDocument();
+    expect(screen.getAllByText(/回退到备用模型/).length).toBeGreaterThan(0);
+    expect(screen.getByText('最终执行结果')).toBeInTheDocument();
+    expect(screen.getByText('复制完整日志')).toBeInTheDocument();
+    expect(screen.getByText('导出 JSON')).toBeInTheDocument();
   });
 
-  it('renders a visible empty timeline state instead of crashing when detail events are missing', async () => {
-    getSessionDetail.mockResolvedValueOnce({
-      sessionId: 'admin-action-1',
-      name: 'Factory reset',
-      overallStatus: 'completed',
-      readableSummary: {
-        actorDisplay: 'Bootstrap Admin',
-        actorRole: 'admin',
-        sessionKind: 'admin_action',
-        subsystem: 'system_control',
-        actionName: 'factory_reset_system',
-      },
-    });
-
+  it('keeps the drawer usable when the detail request fails after opening from summary data', async () => {
+    getSessionDetail.mockRejectedValueOnce({ parsedError: { message: 'failed' } });
     render(<AdminLogsPage />);
 
-    expect(await screen.findByText('Factory reset')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Factory reset/ }));
+    const row = await screen.findByText('TSLA');
+    const rowContainer = row.closest('.grid');
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
-    await waitFor(() => {
-      expect(screen.getByText(translate('zh', 'adminLogs.emptyTimelineTitle'))).toBeInTheDocument();
-    });
-    expect(screen.getAllByText(translate('zh', 'adminLogs.emptyTimelineBody')).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('api-error')).toBeInTheDocument();
+    expect(screen.getAllByText('TSLA').length).toBeGreaterThan(1);
   });
 
-  it('formats detail summary values instead of exposing raw role and confirmation keys', async () => {
-    render(<AdminLogsPage />);
-
-    expect(await screen.findByText('Factory reset')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Factory reset/ }));
-
-    await waitFor(() => {
-      expect(screen.getByText(`${translate('zh', 'adminLogs.actorRole')}:`)).toBeInTheDocument();
-    });
-    expect(screen.getByText(translate('zh', 'adminLogs.role.admin'))).toBeInTheDocument();
-    expect(screen.getAllByText(translate('zh', 'adminLogs.activityType.admin_action')).length).toBeGreaterThan(0);
-    expect(screen.getByText(translate('zh', 'adminLogs.subsystemLabel.system_control'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'adminLogs.boolean.yes'))).toBeInTheDocument();
-    expect(screen.queryByText('common.confirm')).not.toBeInTheDocument();
-  });
-
-  it('renders English page-local copy on /en routes', async () => {
+  it('renders English page-local copy on English routes', async () => {
     mockLanguage = 'en';
 
     render(<AdminLogsPage />);
 
     expect(await screen.findByRole('heading', { name: translate('en', 'adminLogs.pageTitle') })).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'adminLogs.scopeTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'adminLogs.sessionListTitle'))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'adminLogs.sessionDetailTitle'))).toBeInTheDocument();
-    expect(screen.getByLabelText(translate('en', 'adminLogs.stockFilterLabel'))).toHaveAttribute('placeholder', translate('en', 'adminLogs.stockFilterPlaceholder'));
-    expect(screen.getByLabelText(translate('en', 'adminLogs.providerFilterLabel'))).toHaveAttribute('placeholder', translate('en', 'adminLogs.providerFilterPlaceholder'));
-    expect(screen.getByRole('button', { name: translate('en', 'adminLogs.refreshButton') })).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'adminLogs.scannerRunMeta', { runId: 88 }))).toBeInTheDocument();
-    expect(screen.getByText(translate('en', 'adminLogs.scannerShortlistMeta', { count: 5 }))).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('en', 'adminLogs.operationType'))).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('en', 'adminLogs.statusFilterLabel'))).toBeInTheDocument();
+    expect(screen.getAllByText('Single stock analysis').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Market scan').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Backtest').length).toBeGreaterThan(0);
   });
 
-  it('keeps long values readable and shows page-local placeholders for missing detail fields', async () => {
+  it('keeps long values readable in the list and drawer', async () => {
     const longSessionId = 'session-with-an-extremely-long-identifier-that-should-wrap-instead-of-being-cut-off-0123456789';
     const longName = 'Very long admin log title that should stay readable in the list instead of truncating the only visible copy';
-    const longTarget = 'provider/fallback/target/with/a/very/long/path/that/should-wrap-cleanly/without-breaking-the-detail-layout';
-    const longMessage = 'A very long timeline message that should remain fully visible to operators while wrapping inside the card instead of forcing horizontal overflow in the detail column.';
-
     listSessions.mockResolvedValueOnce({
       total: 1,
       items: [
@@ -325,10 +305,8 @@ describe('AdminLogsPage', () => {
           readableSummary: {
             actorDisplay: 'Bootstrap Admin',
             actorRole: 'admin',
-            sessionKind: 'admin_action',
-            subsystem: 'system_control',
-            actionName: 'factory_reset_system',
-            finalAiModel: null,
+            operationTarget: longName,
+            operationStatus: '成功',
           },
         },
       ],
@@ -337,59 +315,28 @@ describe('AdminLogsPage', () => {
       sessionId: longSessionId,
       name: longName,
       overallStatus: 'completed',
-      queryId: null,
-      taskId: null,
       readableSummary: {
         actorDisplay: 'Bootstrap Admin',
         actorRole: 'admin',
-        sessionKind: 'admin_action',
-        subsystem: 'system_control',
-        actionName: 'factory_reset_system',
-        destructive: false,
-        finalAiModel: null,
-        finalMarketSource: null,
-        finalFundamentalSource: null,
-        finalNewsSource: null,
-        finalSentimentSource: null,
-        topFailureReason: null,
+        operationTarget: longName,
+        operationStatus: '成功',
       },
-      events: [
-        {
-          id: 7,
-          phase: 'system',
-          category: 'system',
-          action: 'completed',
-          outcome: 'completed',
-          target: longTarget,
-          status: 'completed',
-          truthLevel: 'confirmed',
-          message: longMessage,
-          eventAt: null,
-        },
-      ],
+      operationDetail: {
+        target: longName,
+        status: '成功',
+        aiCalls: [],
+        dataSourceCalls: [],
+        timeline: [],
+        diagnostics: [],
+      },
+      events: [],
     });
 
     render(<AdminLogsPage />);
 
-    const listButton = await screen.findByRole('button', { name: new RegExp(longName) });
-    expect(listButton).toBeInTheDocument();
-
-    const listName = within(listButton).getByText(longName);
+    const listName = await screen.findByText(longName);
     expect(listName.className).toContain('break-words');
     expect(listName.className).not.toContain('truncate');
-
-    const listSessionId = within(listButton).getByText(longSessionId);
-    expect(listSessionId.className).toContain('break-all');
-    expect(listSessionId.className).not.toContain('truncate');
-
-    fireEvent.click(listButton);
-
-    await waitFor(() => {
-      expect(screen.getByText(translate('zh', 'adminLogs.timelineTitle'))).toBeInTheDocument();
-    });
-    expect(screen.getByText(`${translate('zh', 'adminLogs.outcome')}: ${translate('zh', 'adminLogs.outcomeState.completed')}`)).toBeInTheDocument();
-    expect(screen.getByText(longTarget).className).toContain('break-all');
-    expect(screen.getByText(longMessage).className).toContain('break-words');
-    expect(screen.getAllByText(translate('zh', 'adminLogs.unavailable')).length).toBeGreaterThan(0);
+    expect(screen.getByText(longSessionId).className).toContain('break-all');
   });
 });
