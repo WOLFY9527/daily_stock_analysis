@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 🎛️ **Market Overview 页面去网格、恢复滚动并拆除嵌套黑卡** — `apps/dsa-web/src/pages/MarketOverviewPage.tsx` 按 WolfyStock 工作区骨架重建页面容器：移除背景网格与绝对定位遮罩，外层改为 `w-full flex-1 flex flex-col min-w-0 min-h-0 pt-8 px-6 md:px-8 xl:px-12`，主内容区改为隐藏滚动条但可自然下滑的 `flex-1 overflow-y-auto ... pb-12`，修复底部内容被截断的问题。`apps/dsa-web/src/components/market-overview/MarketOverviewCard.tsx` 同步把各 panel 外层统一收敛到标准 `GlassCard` 材质 `bg-white/[0.02] border border-white/5 rounded-[24px] p-6`，删除指标级别的小黑底/边框卡片和 `YFINANCE` 来源废话标签，将数据重排为父卡片内部的高密度无框信息块，点位采用更聚焦的 `font-mono` 主数值，涨跌幅改为无底色文本，Sparkline 压低为细线走势，整体显著降噪并减少空间浪费。
+
 - 📈 **WolfyStock 新增独立市场总览面板** — 新增 `/market-overview` 独立路由与 `GET /api/v1/market-overview/*` 后端接口，覆盖美股/A股主要指数、波动率、情绪、资金流和宏观指标五类卡片。后端通过短 TTL 缓存减少外部行情请求，并为每次面板刷新写入 `market_overview` 执行日志，管理员可在 `/admin/logs` 审计对应 panel、endpoint、时间戳、状态与原始响应摘要。前端新增 Gemini dark Bento 面板和 focused smoke 覆盖。
 
 - 🧠 **WolfyStock 首页 AI 决断卡品牌化与投研化重构** — `apps/dsa-web` 的 Home Bento 决断卡将分析中原位 spinner 替换为旋转发光的 WolfyStock Logo，并把完成态报告统一回收到同一张投研决断卡：Ticker 旁强制展示公司全称与 Sector，Action / Score / Direction 升级为主视觉指标，AI Insight 压缩为单段技术结论，并对泛化“综合建议”话术自动降噪为均线、量价、RSI 驱动的专业判断。配套回归已更新到 `HomeSurfacePage.test.tsx`，并通过 focused Vitest、lint、build 与 in-app browser 首页手工验收。

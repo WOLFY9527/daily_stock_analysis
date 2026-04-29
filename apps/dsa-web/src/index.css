@@ -9521,6 +9521,19 @@ html[data-theme='spacex'] .theme-shell {
   background: transparent;
 }
 
+html[data-theme='spacex'][data-market-overview-shell='true'] body,
+html[data-theme='spacex'] body[data-market-overview-shell='true'],
+html[data-theme='spacex'] #root[data-market-overview-shell='true'] {
+  background: #02070d;
+}
+
+html[data-theme='spacex'][data-market-overview-shell='true'] body::before,
+html[data-theme='spacex'] body[data-market-overview-shell='true']::before,
+html[data-theme='spacex'][data-market-overview-shell='true'] body::after,
+html[data-theme='spacex'] body[data-market-overview-shell='true']::after {
+  background: none;
+}
+
 html[data-theme='spacex'] .shell-masthead {
   position: sticky;
   top: 0;

@@ -58,6 +58,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const location = useLocation();
   const surfacePathname = stripLocalePrefix(location.pathname);
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
+  const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
   const isSystemControlRoute = surfacePathname.startsWith('/settings/system');
   const shellViewportClass = 'h-full min-h-0';
@@ -150,10 +151,27 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     };
   }, [isScannerRoute]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const appRoot = document.getElementById('root');
+
+    if (isMarketOverviewRoute) {
+      root.dataset.marketOverviewShell = 'true';
+      body.dataset.marketOverviewShell = 'true';
+      appRoot?.setAttribute('data-market-overview-shell', 'true');
+    }
+    return () => {
+      delete root.dataset.marketOverviewShell;
+      delete body.dataset.marketOverviewShell;
+      appRoot?.removeAttribute('data-market-overview-shell');
+    };
+  }, [isMarketOverviewRoute]);
+
   return (
     <ShellRailContext.Provider value={railContextValue}>
       <div
-        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}`}
+        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}${isMarketOverviewRoute ? ' theme-shell--market-overview' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
         <header className="shell-masthead shrink-0 w-full">
