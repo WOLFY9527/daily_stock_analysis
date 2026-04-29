@@ -1,6 +1,8 @@
 import type React from 'react';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
+import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
   tone = 'text-white/35',
@@ -32,9 +34,18 @@ export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: strin
   );
 };
 
-export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel }> = ({ panel }) => (
-  <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3 text-xs text-white/35">
-    <span>Last refresh: {panel?.lastRefreshAt ? new Date(panel.lastRefreshAt).toLocaleString() : 'pending'}</span>
-    <span>Log: {panel?.logSessionId || 'pending'}</span>
-  </div>
-);
+export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; sourceLabel: string }> = ({ panel, sourceLabel }) => {
+  const { t } = useI18n();
+  const timestamp = formatMarketOverviewTimestamp(panel?.lastRefreshAt);
+
+  return (
+    <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
+      <span className="text-[10px] uppercase tracking-widest text-white/30">
+        {t('marketOverviewPage.footer.lastRefresh', {
+          timestamp: timestamp || t('marketOverviewPage.footer.pending'),
+        })}
+      </span>
+      <span className="text-[10px] uppercase tracking-widest text-white/30">{sourceLabel}</span>
+    </div>
+  );
+};

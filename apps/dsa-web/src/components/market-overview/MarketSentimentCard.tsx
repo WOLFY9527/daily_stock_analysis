@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
 import {
@@ -10,38 +11,36 @@ import {
   MarketOverviewPanelFooter,
 } from './marketOverviewPrimitives';
 
-const GAUGE_TOOLTIP = '市场动量 30% | 股价强度 25% | 期权多空比 20% | 波动率需求 15% | 避险需求 10%';
-
-const sentimentLabels: Record<string, string> = {
-  PUTCALL: '避险情绪等级',
-  BULLBEAR: '资金面空头回补',
-  AAII: '股权风险偏好',
-};
-
 function resolvePrimaryItem(items: MarketOverviewItem[]): MarketOverviewItem | undefined {
   return items.find((item) => item.symbol.toUpperCase() === 'FGI') || items[0];
 }
 
-function describeSentiment(score?: number | null): string {
+function describeSentiment(score: number | null | undefined, t: (key: string) => string): string {
   if (score === null || score === undefined) {
-    return 'Neutral';
+    return t('marketOverviewPage.cards.sentiment.states.neutral');
   }
   if (score >= 75) {
-    return 'Greed';
+    return t('marketOverviewPage.cards.sentiment.states.greed');
   }
   if (score >= 55) {
-    return 'Risk-on';
+    return t('marketOverviewPage.cards.sentiment.states.riskOn');
   }
   if (score >= 40) {
-    return 'Balanced';
+    return t('marketOverviewPage.cards.sentiment.states.balanced');
   }
   if (score >= 25) {
-    return 'Defensive';
+    return t('marketOverviewPage.cards.sentiment.states.defensive');
   }
-  return 'Fear';
+  return t('marketOverviewPage.cards.sentiment.states.fear');
 }
 
 export const MarketSentimentCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => {
+  const { t } = useI18n();
+  const sentimentLabels: Record<string, string> = {
+    PUTCALL: t('marketOverviewPage.cards.sentiment.labels.putcall'),
+    BULLBEAR: t('marketOverviewPage.cards.sentiment.labels.bullbear'),
+    AAII: t('marketOverviewPage.cards.sentiment.labels.aaii'),
+  };
   const status = panel?.status || (loading ? 'loading' : 'failure');
   const items = panel?.items || [];
   const primary = resolvePrimaryItem(items);
@@ -54,11 +53,11 @@ export const MarketSentimentCard: React.FC<{ panel?: MarketOverviewPanel; loadin
       <div className="flex h-full flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">Market sentiment</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">情绪与资金面</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.eyebrow')}</p>
+            <h2 className="mt-2 text-xl font-semibold text-white">{t('marketOverviewPage.cards.sentiment.title')}</h2>
           </div>
           <span className={cn('text-[10px] font-semibold uppercase tracking-widest', status === 'success' ? 'text-emerald-400' : 'text-red-400')}>
-            {status}
+            {t(`marketOverviewPage.status.${status}`)}
           </span>
         </div>
 
@@ -69,15 +68,15 @@ export const MarketSentimentCard: React.FC<{ panel?: MarketOverviewPanel; loadin
         ) : null}
 
         {primary ? (
-          <div className="rounded-2xl border border-white/6 bg-white/[0.015] p-5" title={GAUGE_TOOLTIP}>
+          <div className="rounded-2xl border border-white/6 bg-white/[0.015] p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">Fear & greed index</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.primaryLabel')}</p>
                 <p className="mt-2 text-3xl font-bold font-mono text-white">{formatMetricValue(primary, 0)}</p>
-                <p className="mt-1 text-xs uppercase tracking-widest text-white/28">{describeSentiment(primary.value)}</p>
+                <p className="mt-1 text-xs uppercase tracking-widest text-white/28">{describeSentiment(primary.value, t)}</p>
               </div>
               <span className={cn('pt-1 text-[11px] font-bold', getDirectionTone(primary.riskDirection))}>
-                {primary.changePct === null || primary.changePct === undefined ? 'neutral' : `${primary.changePct >= 0 ? '+' : ''}${primary.changePct.toFixed(2)}%`}
+                {primary.changePct === null || primary.changePct === undefined ? t('marketOverviewPage.direction.neutral') : `${primary.changePct >= 0 ? '+' : ''}${primary.changePct.toFixed(2)}%`}
               </span>
             </div>
 
@@ -106,8 +105,8 @@ export const MarketSentimentCard: React.FC<{ panel?: MarketOverviewPanel; loadin
                   strokeWidth="2"
                   strokeLinecap="round"
                 />
-                <text x="16" y="94" fill="rgba(255,255,255,0.34)" fontSize="9" letterSpacing="1.6">FEAR</text>
-                <text x="111" y="94" fill="rgba(255,255,255,0.34)" fontSize="9" letterSpacing="1.6">GREED</text>
+                <text x="16" y="94" fill="rgba(255,255,255,0.34)" fontSize="9" letterSpacing="1.6">{t('marketOverviewPage.cards.sentiment.gaugeLeft')}</text>
+                <text x="111" y="94" fill="rgba(255,255,255,0.34)" fontSize="9" letterSpacing="1.6">{t('marketOverviewPage.cards.sentiment.gaugeRight')}</text>
               </svg>
             </div>
           </div>
@@ -121,7 +120,7 @@ export const MarketSentimentCard: React.FC<{ panel?: MarketOverviewPanel; loadin
                   {sentimentLabels[item.symbol] || item.label}
                 </p>
                 <span className={cn('shrink-0 text-[11px] font-bold', getDirectionTone(item.riskDirection))}>
-                  {item.changePct === null || item.changePct === undefined ? 'neutral' : `${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
+                  {item.changePct === null || item.changePct === undefined ? t('marketOverviewPage.direction.neutral') : `${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
                 </span>
               </div>
               <p className="mt-3 truncate text-2xl font-mono text-white">{formatMetricValue(item)}</p>
@@ -135,11 +134,11 @@ export const MarketSentimentCard: React.FC<{ panel?: MarketOverviewPanel; loadin
 
         {loading ? (
           <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
-            Loading live market data...
+            {t('marketOverviewPage.loading')}
           </div>
         ) : null}
 
-        <MarketOverviewPanelFooter panel={panel} />
+        <MarketOverviewPanelFooter panel={panel} sourceLabel={t('marketOverviewPage.cards.sentiment.source')} />
       </div>
     </GlassCard>
   );

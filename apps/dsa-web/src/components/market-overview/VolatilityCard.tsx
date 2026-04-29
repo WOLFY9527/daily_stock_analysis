@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
 import {
@@ -26,6 +27,7 @@ function clampNeedle(value?: number | null): number {
 }
 
 export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => {
+  const { t } = useI18n();
   const status = panel?.status || (loading ? 'loading' : 'failure');
   const items = panel?.items || [];
   const primary = resolvePrimaryItem(items);
@@ -37,11 +39,11 @@ export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: b
       <div className="flex h-full flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">Risk pressure</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Volatility</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.volatility.eyebrow')}</p>
+            <h2 className="mt-2 text-xl font-semibold text-white">{t('marketOverviewPage.cards.volatility.title')}</h2>
           </div>
           <span className={cn('text-[10px] font-semibold uppercase tracking-widest', status === 'success' ? 'text-emerald-400' : 'text-red-400')}>
-            {status}
+            {t(`marketOverviewPage.status.${status}`)}
           </span>
         </div>
 
@@ -55,12 +57,12 @@ export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: b
           <div className="rounded-2xl border border-white/6 bg-white/[0.015] p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">Volatility index</p>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.volatility.primaryLabel')}</p>
                 <p className="text-3xl font-bold font-mono text-white">{formatMetricValue(primary)}</p>
-                <p className="mt-1 text-xs uppercase tracking-widest text-white/28">VIX (实时脉搏)</p>
+                <p className="mt-1 text-xs uppercase tracking-widest text-white/28">{t('marketOverviewPage.cards.volatility.primaryMeta')}</p>
               </div>
               <span className={cn('pt-1 text-[11px] font-bold', getDirectionTone(primary.riskDirection))}>
-                {formatChangeSummary(primary)}
+                {formatChangeSummary(primary, t('marketOverviewPage.direction.neutral'))}
               </span>
             </div>
 
@@ -74,9 +76,9 @@ export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: b
                 />
               </div>
               <div className="mt-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-white/35">
-                <span>Complacent</span>
+                <span>{t('marketOverviewPage.cards.volatility.left')}</span>
                 <span>{primary.value?.toFixed(2) ?? 'N/A'}</span>
-                <span>Panic</span>
+                <span>{t('marketOverviewPage.cards.volatility.right')}</span>
               </div>
             </div>
           </div>
@@ -88,7 +90,7 @@ export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: b
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{item.label}</p>
                 <span className={cn('shrink-0 text-[11px] font-bold', getDirectionTone(item.riskDirection))}>
-                  {item.changePct === null || item.changePct === undefined ? 'neutral' : `${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
+                  {item.changePct === null || item.changePct === undefined ? t('marketOverviewPage.direction.neutral') : `${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
                 </span>
               </div>
               <p className="mt-3 truncate text-2xl font-mono text-white">{formatMetricValue(item)}</p>
@@ -102,11 +104,11 @@ export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: b
 
         {loading ? (
           <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
-            Loading live market data...
+            {t('marketOverviewPage.loading')}
           </div>
         ) : null}
 
-        <MarketOverviewPanelFooter panel={panel} />
+        <MarketOverviewPanelFooter panel={panel} sourceLabel={t('marketOverviewPage.cards.volatility.source')} />
       </div>
     </GlassCard>
   );

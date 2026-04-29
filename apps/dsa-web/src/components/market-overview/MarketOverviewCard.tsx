@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { MarketOverviewPanel } from '../../api/marketOverview';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
 import { formatMetricValue, getDirectionTone } from './marketOverviewUtils';
@@ -12,6 +13,7 @@ type MarketOverviewCardProps = {
   title: string;
   eyebrow: string;
   description: string;
+  sourceLabel: string;
   panel?: MarketOverviewPanel;
   loading?: boolean;
   className?: string;
@@ -21,11 +23,14 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
   title,
   eyebrow,
   description,
+  sourceLabel,
   panel,
   loading = false,
   className,
 }) => {
+  const { t } = useI18n();
   const status = panel?.status || (loading ? 'loading' : 'failure');
+  const formatFallbackDirection = (direction: string) => t(`marketOverviewPage.direction.${direction}`);
 
   return (
     <GlassCard
@@ -47,7 +52,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
             status === 'success' ? 'text-emerald-400' : 'text-red-400',
           )}
           >
-            {status}
+            {t(`marketOverviewPage.status.${status}`)}
           </span>
         </div>
 
@@ -76,7 +81,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
                     </div>
                   </div>
                   <span className={cn('shrink-0 text-xs font-bold', getDirectionTone(direction))}>
-                    {item.changePct === null || item.changePct === undefined ? direction : `${item.changePct.toFixed(2)}%`}
+                    {item.changePct === null || item.changePct === undefined ? formatFallbackDirection(direction) : `${item.changePct.toFixed(2)}%`}
                   </span>
                 </div>
                 <div className="mt-3">
@@ -90,11 +95,11 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
 
         {loading ? (
           <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
-            Loading live market data...
+            {t('marketOverviewPage.loading')}
           </div>
         ) : null}
 
-        <MarketOverviewPanelFooter panel={panel} />
+        <MarketOverviewPanelFooter panel={panel} sourceLabel={sourceLabel} />
       </div>
     </GlassCard>
   );

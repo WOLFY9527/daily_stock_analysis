@@ -46,11 +46,14 @@ function formatSignedPercent(value?: number | null): string | null {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
-export function formatChangeSummary(item: Pick<MarketOverviewItem, 'value' | 'changePct'>): string {
+export function formatChangeSummary(
+  item: Pick<MarketOverviewItem, 'value' | 'changePct'>,
+  neutralLabel = 'neutral',
+): string {
   const absoluteChange = estimateAbsoluteChange(item);
   const changePct = formatSignedPercent(item.changePct);
   if (absoluteChange === null && !changePct) {
-    return 'neutral';
+    return neutralLabel;
   }
   if (absoluteChange === null) {
     return changePct!;

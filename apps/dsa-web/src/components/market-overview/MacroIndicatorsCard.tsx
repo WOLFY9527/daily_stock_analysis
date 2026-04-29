@@ -1,14 +1,20 @@
 import type React from 'react';
 import type { MarketOverviewPanel } from '../../api/marketOverview';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { MarketOverviewCard } from './MarketOverviewCard';
 
-export const MacroIndicatorsCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => (
-  <MarketOverviewCard
-    title="Macro Indicators"
-    eyebrow="Rates + commodities"
-    description="Yield curve, DXY, gold, oil, Fed, inflation, and credit spread context."
-    panel={panel}
-    loading={loading}
-    className="xl:col-span-4"
-  />
-);
+export const MacroIndicatorsCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => {
+  const { t } = useI18n();
+
+  return (
+    <MarketOverviewCard
+      title={t('marketOverviewPage.cards.macro.title')}
+      eyebrow={t('marketOverviewPage.cards.macro.eyebrow')}
+      description={t('marketOverviewPage.cards.macro.description')}
+      sourceLabel={t('marketOverviewPage.cards.macro.source')}
+      panel={panel}
+      loading={loading}
+      className="xl:col-span-4"
+    />
+  );
+};

@@ -44,23 +44,25 @@ describe('MarketOverviewPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders every market overview card with fetched data and log status', async () => {
+  it('renders every market overview card with localized copy and source attribution', async () => {
     render(<MarketOverviewPage />);
 
-    expect(screen.getByRole('heading', { name: /Market Overview/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Volatility/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /大市全景监控/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /同步最新行情/i })).toBeInTheDocument();
 
     expect((await screen.findAllByText('SPX')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/VIX \(实时脉搏\)/i)).toBeInTheDocument();
-    expect(screen.getByText(/Fear & greed index/i)).toBeInTheDocument();
+    expect(screen.getByText(/VIX 实时脉搏/i)).toBeInTheDocument();
+    expect(screen.getByText(/贪婪与恐慌指数/i)).toBeInTheDocument();
     expect(screen.getAllByText('ETF').length).toBeGreaterThan(0);
     expect(screen.getAllByText('US10Y').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Complacent/i)).toBeInTheDocument();
-    expect(screen.getByText(/Panic/i)).toBeInTheDocument();
+    expect(screen.getByText(/平静/i)).toBeInTheDocument();
+    expect(screen.getByText(/警戒/i)).toBeInTheDocument();
 
     expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText(/Log:/i).length).toBeGreaterThanOrEqual(5);
+    expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/数据驱动: CBOE/i)).toBeInTheDocument();
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
   });
 });
