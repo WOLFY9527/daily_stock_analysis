@@ -9524,7 +9524,7 @@ html[data-theme='spacex'] .theme-shell {
 html[data-theme='spacex'][data-market-overview-shell='true'] body,
 html[data-theme='spacex'] body[data-market-overview-shell='true'],
 html[data-theme='spacex'] #root[data-market-overview-shell='true'] {
-  background: #02070d;
+  background: #030303;
 }
 
 html[data-theme='spacex'][data-market-overview-shell='true'] body::before,
@@ -9532,6 +9532,15 @@ html[data-theme='spacex'] body[data-market-overview-shell='true']::before,
 html[data-theme='spacex'][data-market-overview-shell='true'] body::after,
 html[data-theme='spacex'] body[data-market-overview-shell='true']::after {
   background: none;
+}
+
+html[data-theme='spacex'] .theme-shell--market-overview,
+html[data-theme='spacex'] .theme-shell--market-overview::after,
+html[data-theme='spacex'] .theme-shell--market-overview .shell-content-frame,
+html[data-theme='spacex'] .theme-shell--market-overview .shell-main-column,
+html[data-theme='spacex'] .theme-shell--market-overview .theme-main-lane {
+  background: #030303;
+  background-image: none;
 }
 
 html[data-theme='spacex'] .shell-masthead {

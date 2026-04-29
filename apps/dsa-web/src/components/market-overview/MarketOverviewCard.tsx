@@ -1,7 +1,12 @@
 import type React from 'react';
-import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
+import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
+import { formatMetricValue, getDirectionTone } from './marketOverviewUtils';
+import {
+  MarketOverviewPanelFooter,
+  MarketOverviewSparkline,
+} from './marketOverviewPrimitives';
 
 type MarketOverviewCardProps = {
   title: string;
@@ -11,48 +16,6 @@ type MarketOverviewCardProps = {
   loading?: boolean;
   className?: string;
 };
-
-const riskTone = {
-  increasing: 'text-red-400',
-  decreasing: 'text-emerald-400',
-  neutral: 'text-white/45',
-};
-
-function formatValue(item: MarketOverviewItem): string {
-  if (item.value === null || item.value === undefined) {
-    return 'N/A';
-  }
-  return Math.abs(item.value) >= 100
-    ? item.value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-    : item.value.toFixed(2);
-}
-
-function Sparkline({ values, tone }: { values?: number[]; tone: string }) {
-  const points = Array.isArray(values) ? values.filter((value) => Number.isFinite(value)) : [];
-  if (points.length < 2) {
-    return <div className="h-10" data-testid="market-overview-sparkline" />;
-  }
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const span = max - min || 1;
-  const path = points.map((value, index) => {
-    const x = (index / (points.length - 1)) * 100;
-    const y = 36 - ((value - min) / span) * 30;
-    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
-  }).join(' ');
-
-  return (
-    <svg
-      viewBox="0 0 100 40"
-      className={cn('h-10 w-full overflow-visible', tone)}
-      preserveAspectRatio="none"
-      data-testid="market-overview-sparkline"
-      aria-hidden="true"
-    >
-      <path d={path} fill="none" stroke="currentColor" strokeWidth="1.8" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
 
 export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
   title,
@@ -108,16 +71,16 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
                   <div className="min-w-0">
                     <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{item.label}</p>
                     <div className="mt-2 flex items-end gap-2">
-                      <p className="min-w-0 truncate text-2xl font-mono text-white">{formatValue(item)}</p>
+                      <p className="min-w-0 truncate text-2xl font-mono text-white">{formatMetricValue(item)}</p>
                       {item.unit ? <span className="pb-0.5 text-[10px] uppercase tracking-widest text-white/25">{item.unit}</span> : null}
                     </div>
                   </div>
-                  <span className={cn('shrink-0 text-xs font-bold', riskTone[direction])}>
+                  <span className={cn('shrink-0 text-xs font-bold', getDirectionTone(direction))}>
                     {item.changePct === null || item.changePct === undefined ? direction : `${item.changePct.toFixed(2)}%`}
                   </span>
                 </div>
                 <div className="mt-3">
-                  <Sparkline values={item.trend} tone={sparklineTone} />
+                  <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="mt-0 h-10" />
                 </div>
                 <div className="mt-2 text-[10px] uppercase tracking-widest text-white/24">{item.symbol}</div>
               </article>
@@ -131,10 +94,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
           </div>
         ) : null}
 
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3 text-xs text-white/35">
-          <span>Last refresh: {panel?.lastRefreshAt ? new Date(panel.lastRefreshAt).toLocaleString() : 'pending'}</span>
-          <span>Log: {panel?.logSessionId || 'pending'}</span>
-        </div>
+        <MarketOverviewPanelFooter panel={panel} />
       </div>
     </GlassCard>
   );

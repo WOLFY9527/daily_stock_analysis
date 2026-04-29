@@ -51,7 +51,7 @@ const MarketOverviewPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full flex-1 flex flex-col min-w-0 min-h-0 bg-[#02070d] pt-8 px-6 text-white md:px-8 xl:px-12">
+    <div className="w-full flex-1 flex flex-col min-w-0 min-h-0 bg-[#030303] pt-8 px-6 text-white md:px-8 xl:px-12">
       <div className="flex-1 overflow-y-auto pb-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-6">
           <WorkspacePageHeader

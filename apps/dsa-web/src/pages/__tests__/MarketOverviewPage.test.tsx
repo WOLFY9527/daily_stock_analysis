@@ -48,12 +48,16 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect(screen.getByRole('heading', { name: /Market Overview/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Volatility/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
 
     expect((await screen.findAllByText('SPX')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('VIX').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('FGI').length).toBeGreaterThan(0);
+    expect(screen.getByText(/VIX \(实时脉搏\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Fear & greed index/i)).toBeInTheDocument();
     expect(screen.getAllByText('ETF').length).toBeGreaterThan(0);
     expect(screen.getAllByText('US10Y').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Complacent/i)).toBeInTheDocument();
+    expect(screen.getByText(/Panic/i)).toBeInTheDocument();
 
     expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText(/Log:/i).length).toBeGreaterThanOrEqual(5);
