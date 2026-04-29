@@ -173,7 +173,7 @@ describe('HomeSurfacePage', () => {
   it('renders the signed-in bento dashboard for authenticated users', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
-    await screen.findByText('甲骨文');
+    await screen.findByText('Oracle Corporation');
     const root = screen.getByTestId('home-bento-dashboard');
     const grid = screen.getByTestId('home-bento-grid');
     const main = screen.getByTestId('home-bento-main');
@@ -231,7 +231,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-chart-workspace')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-hero-row')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('BUY');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('买');
     expect(screen.getByTestId('home-bento-decision-core-metrics')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-insight')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
@@ -246,6 +246,11 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('金叉')).toBeInTheDocument();
     expect(screen.queryByText('AI 信号方向')).not.toBeInTheDocument();
     expect(screen.queryByText('最近报告归因')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('买');
+    expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Oracle Corporation');
+    expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('TECHNOLOGY');
+    expect(screen.getByTestId('home-bento-decision-score')).toHaveTextContent('7.8');
+    expect(screen.getByTestId('home-bento-decision-direction')).toHaveTextContent('Bullish');
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
     expect(strategyCard).toHaveClass('w-full', 'rounded-[24px]');
     expect(strategyCard.className).not.toContain('xl:col-span-1');
@@ -349,6 +354,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-secondary-grid')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
+    expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).toHaveAttribute('src', '/wolfystock-logo-mark.png');
+    expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).toHaveClass('animate-spin', 'shadow-[0_0_15px_rgba(79,70,229,0.3)]');
     expect(screen.getByTestId('home-bento-inplace-loading-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-fundamentals')).toBeInTheDocument();
     expect(screen.getByText('Wolfy AI 引擎推理中...')).toBeInTheDocument();
@@ -690,6 +697,9 @@ describe('HomeSurfacePage', () => {
                 target: '183.00',
                 stopLoss: '159.20',
               },
+              reasonLayer: {
+                coreReasons: ['Cached snapshot only.'],
+              },
               technicalFields: [
                 { label: 'MACD', value: '零轴下方收敛' },
                 { label: 'MA20', value: '167.80' },
@@ -714,8 +724,8 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
-    expect(await screen.findByText('特斯拉')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('Cached snapshot only.');
+    expect(await screen.findByText('Tesla, Inc.')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toContain('Cached snapshot only.');
     expect(historyApi.getDetail).toHaveBeenCalledWith(2);
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
 
@@ -756,6 +766,9 @@ describe('HomeSurfacePage', () => {
             target: '184.20',
             stopLoss: '162.80',
           },
+          reasonLayer: {
+            coreReasons: ['Persisted database detail replaced the cached snapshot.'],
+          },
           technicalFields: [
             { label: 'MACD', value: '金叉后继续放大' },
             { label: 'MA20', value: '168.20' },
@@ -766,8 +779,8 @@ describe('HomeSurfacePage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('Persisted database detail replaced the cached snapshot.');
-      expect(screen.getByTestId('home-bento-decision-insight').textContent).not.toContain('Cached snapshot only.');
+      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toContain('Persisted database detail replaced the cached snapshot.');
+      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).not.toContain('Cached snapshot only.');
     });
   });
 
@@ -840,7 +853,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
-    expect(await screen.findByText('特斯拉')).toBeInTheDocument();
+    expect(await screen.findByText('Tesla, Inc.')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方动能收敛，反弹仍待确认');
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
@@ -1072,7 +1085,14 @@ describe('HomeSurfacePage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('Netflix completion replaced neutral cards.');
+      const finalCard = screen.getByTestId('home-bento-analysis-result-card');
+      expect(finalCard).toHaveTextContent('Netflix Inc.');
+      expect(finalCard).toHaveTextContent('COMMUNICATION SERVICES');
+      expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('买');
+      expect(screen.getByTestId('home-bento-decision-score')).toHaveTextContent('7.4');
+      expect(screen.getByTestId('home-bento-decision-direction')).toHaveTextContent('Bullish');
+      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toBe('Completed LLM report confirmed the refreshed thesis.');
+      expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
     });
     expect(screen.getAllByText('104.80').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
@@ -1171,7 +1191,7 @@ describe('HomeSurfacePage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('AMD task payload normalized from snake_case report blocks.');
+      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('Snake case task payload still populated the in-place dashboard.');
     });
     expect(screen.getAllByText('168.40').length).toBeGreaterThan(0);
     expect(screen.getAllByText('147.80').length).toBeGreaterThan(0);
@@ -1361,7 +1381,7 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
     expect(await screen.findByText('LLM 分析失败，请稍后重试')).toBeInTheDocument();
     expect(screen.queryByText('AI 引擎调用过载，已加载本地快照数据')).not.toBeInTheDocument();
-    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
     expect(screen.queryByText('待确认股票')).not.toBeInTheDocument();
     expect(screen.getAllByText('AAPL').length).toBeGreaterThan(0);
@@ -1393,8 +1413,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
-    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
-    expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
 
     deferred.resolve({
       taskId: 'task-orcl',
@@ -1410,7 +1429,6 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-inplace-loading-strategy')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
-    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
-    expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
   });
 });

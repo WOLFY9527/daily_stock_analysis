@@ -37,6 +37,7 @@ type DecisionCardProps = {
   scoreValue: string;
   signalLabel: string;
   signalTone: SignalTone;
+  sector?: string;
   summary: string;
   ticker: string;
 };
@@ -45,18 +46,18 @@ function getSignalCommand(locale: 'zh' | 'en', tone: SignalTone): { bias: string
   if (tone === 'bearish') {
     return locale === 'en'
       ? { command: 'SELL', bias: 'BEARISH' }
-      : { command: 'SELL', bias: '看空' };
+      : { command: '卖', bias: '看空' };
   }
 
   if (tone === 'neutral') {
     return locale === 'en'
       ? { command: 'HOLD', bias: 'NEUTRAL' }
-      : { command: 'HOLD', bias: '中性' };
+      : { command: '苟', bias: '中性' };
   }
 
   return locale === 'en'
     ? { command: 'BUY', bias: 'BULLISH' }
-    : { command: 'BUY', bias: '看多' };
+    : { command: '买', bias: '看多' };
 }
 
 function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): SupportingIndicator[] {
@@ -126,6 +127,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   scoreValue,
   signalLabel,
   signalTone,
+  sector,
   summary,
   ticker,
 }) => {
@@ -138,7 +140,9 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
   const signalDirection = signalLabel || signalCommand.bias;
-  const insightCopy = [scoreValue, summary, reason.body].filter(Boolean).join(isEnglish ? '. ' : '。');
+  const insightCopy = reason.body || summary || scoreValue || '-';
+  const sectorLabel = (sector || (isEnglish ? 'UNCLASSIFIED' : '未分类')).toUpperCase();
+  const conciseBadge = badge && badge.length <= 24 ? badge : signalDirection;
 
   return (
     <BentoCard
@@ -163,11 +167,17 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       )}
     >
       <div className="flex h-full flex-col gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3" data-testid="home-bento-decision-company-header">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-end gap-2">
-              <span className="min-w-0 truncate text-lg font-semibold leading-tight text-white">{company}</span>
-              <span className="text-xs font-mono uppercase tracking-[0.22em] text-white/40">{ticker}</span>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-mono text-xs font-semibold uppercase tracking-[0.22em] text-white/42">{ticker}</span>
+              <span className="min-w-0 truncate text-xl font-bold leading-tight text-white">{company}</span>
+            </div>
+            <div
+              className="mt-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/34"
+              data-testid="home-bento-decision-sector"
+            >
+              {sectorLabel}
             </div>
           </div>
         </div>
@@ -191,7 +201,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                   className={`pb-1 text-xs font-semibold uppercase tracking-[0.28em] text-white/55 ${getToneTextClass(signalTone)}`}
                   style={getToneTextStyle(signalTone, true)}
                 >
-                  {badge}
+                  {conciseBadge}
                 </span>
               </div>
             </div>
@@ -203,7 +213,12 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               <div className="min-w-0">
                 <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
                 <div className="mt-2 flex items-end gap-2">
-                  <p className="text-4xl font-black leading-none text-white">{heroValue}</p>
+                  <p
+                    className="font-mono text-4xl font-semibold leading-none text-white"
+                    data-testid="home-bento-decision-score"
+                  >
+                    {heroValue}
+                  </p>
                   <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
                 </div>
               </div>
@@ -211,6 +226,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                 <Label micro className="text-white/28">{isEnglish ? 'DIRECTION' : '方向'}</Label>
                 <p
                   className={`mt-2 text-2xl font-semibold leading-none ${getToneTextClass(signalTone)}`}
+                  data-testid="home-bento-decision-direction"
                   style={getToneTextStyle(signalTone, true)}
                 >
                   {signalDirection}
@@ -221,7 +237,12 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
 
           <div className="max-w-3xl" data-testid="home-bento-decision-insight">
             <Label micro className="text-white/28">{isEnglish ? 'AI INSIGHT' : '执行主线'}</Label>
-            <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-white/70">{insightCopy}</p>
+            <p
+              className="mt-3 line-clamp-3 text-sm leading-relaxed text-white/70"
+              data-testid="home-bento-decision-insight-copy"
+            >
+              {insightCopy}
+            </p>
           </div>
         </div>
 

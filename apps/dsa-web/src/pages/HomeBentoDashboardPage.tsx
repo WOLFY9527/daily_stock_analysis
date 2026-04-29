@@ -2,7 +2,6 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import {
-  AnalysisResultCard,
   BentoCard,
   BENTO_SURFACE_ROOT_CLASS,
   DecisionCard,
@@ -155,6 +154,86 @@ function neutralizeDashboardSignals(signals: DashboardSignal[]): DashboardSignal
   }));
 }
 
+const COMPANY_PROFILES: Record<string, { company: string; sector: string }> = {
+  AAPL: { company: 'Apple Inc.', sector: 'Technology' },
+  AMD: { company: 'Advanced Micro Devices, Inc.', sector: 'Technology' },
+  APP: { company: 'AppLovin Corporation', sector: 'Technology' },
+  MSFT: { company: 'Microsoft Corporation', sector: 'Technology' },
+  NFLX: { company: 'Netflix Inc.', sector: 'Communication Services' },
+  NVDA: { company: 'NVIDIA Corporation', sector: 'Technology' },
+  ORCL: { company: 'Oracle Corporation', sector: 'Technology' },
+  TSLA: { company: 'Tesla, Inc.', sector: 'Consumer Cyclical' },
+};
+
+function resolveCompanyProfile(ticker: string, rawCompany?: string): { company: string; sector: string } {
+  const normalizedTicker = normalizeTickerQuery(ticker);
+  const knownProfile = COMPANY_PROFILES[normalizedTicker];
+  const cleanedCompany = String(rawCompany || '')
+    .replace(new RegExp(`\\s*[（(]${normalizedTicker}[）)]\\s*$`, 'i'), '')
+    .trim();
+
+  if (knownProfile) {
+    return knownProfile;
+  }
+
+  return {
+    company: cleanedCompany && cleanedCompany.toUpperCase() !== normalizedTicker ? cleanedCompany : normalizedTicker || EMPTY_FIELD_VALUE,
+    sector: 'Unclassified',
+  };
+}
+
+function isGenericInsightText(value?: string): boolean {
+  return /综合建议|结合技术|基本面与情绪|继续跟踪|多维数据|综合评估|建议关注/i.test(String(value || ''));
+}
+
+function buildTechnicalInsightFallback(
+  locale: DashboardLocale,
+  tone: SignalTone,
+  technicalFields?: StandardReportField[],
+): string {
+  const fieldText = (technicalFields || [])
+    .map((field) => `${field.label} ${field.value}`)
+    .join(' ');
+  const hasOverbought = /rsi\s*:?\s*(6[8-9]|[7-9]\d)|RSI[^\d]*(6[8-9]|[7-9]\d)|超买/i.test(fieldText);
+  const hasBullishMa = /多头|MA5|MA10|MA20|MA60|above|lifting|bull/i.test(fieldText);
+  const hasBearishMa = /下压|跌破|below|bear|weak/i.test(fieldText);
+
+  if (locale === 'en') {
+    if (tone === 'bearish' || hasBearishMa) {
+      return 'Trend tape is losing sponsorship: moving-average pressure remains overhead, downside confirmation is not fully priced, and risk should be cut before adding exposure.';
+    }
+    if (tone === 'bullish' || hasBullishMa) {
+      return hasOverbought
+        ? 'The tape remains in bullish moving-average alignment with acceptable volume confirmation, but RSI is stretched into an overbought band, so near-term strength should be trimmed rather than chased.'
+        : 'The tape is holding bullish moving-average alignment with improving momentum confirmation; pullbacks into the short-term support cluster remain the cleaner execution window.';
+    }
+    return 'The setup is still a repair trade: short-term averages are stabilizing, but momentum confirmation is incomplete, so wait for a second volume expansion before increasing risk.';
+  }
+
+  if (tone === 'bearish' || hasBearishMa) {
+    return '技术面仍受均线压制，空头动能尚未完全释放，量价结构没有给出有效反包信号，短线应先降风险而不是补仓。';
+  }
+  if (tone === 'bullish' || hasBullishMa) {
+    return hasOverbought
+      ? '技术面呈现均线多头排列，量价配合理想，但 RSI 已进入超买区，短线更适合逢高减仓而不是追价。'
+      : '技术面维持均线多头排列，动能确认仍在，回踩短期支撑簇时更适合分批试仓，放量跌破则立即收缩风险。';
+  }
+  return '技术面处于均线修复段，短线动能尚未完全失效，但量价确认不足，当前以等待二次放量和支撑回踩确认为主。';
+}
+
+function resolveInsightBody(
+  locale: DashboardLocale,
+  tone: SignalTone,
+  candidates: Array<string | undefined>,
+  technicalFields?: StandardReportField[],
+): string {
+  const primary = candidates.map((value) => String(value || '').trim()).find(Boolean);
+  if (!primary || primary === EMPTY_FIELD_VALUE || isGenericInsightText(primary)) {
+    return buildTechnicalInsightFallback(locale, tone, technicalFields);
+  }
+  return primary;
+}
+
 const CONTENT: Record<DashboardLocale, {
     documentTitle: string;
   eyebrow: string;
@@ -178,6 +257,7 @@ const CONTENT: Record<DashboardLocale, {
     scoreValue: string;
     badge: string;
     chartLabel: string;
+    sector?: string;
     summary: string;
     reasonTitle: string;
     reasonBody: string;
@@ -620,6 +700,7 @@ function buildInPlacePlaceholderDashboard(
 ): DashboardPayload {
   const normalizedTicker = normalizeTickerQuery(ticker ?? undefined) || EMPTY_FIELD_VALUE;
   const base = DASHBOARD_VARIANTS[locale].NVDA;
+  const companyProfile = resolveCompanyProfile(normalizedTicker);
   const neutralStrategyMetrics = neutralizeDashboardFields(base.strategy.metrics);
   const neutralTechSignals = neutralizeDashboardSignals(base.tech.signals);
   const neutralFundamentals = neutralizeDashboardFields(base.fundamentals.metrics);
@@ -630,7 +711,8 @@ function buildInPlacePlaceholderDashboard(
     ticker: normalizedTicker,
     decision: {
       ...base.decision,
-      company: normalizedTicker,
+      company: companyProfile.company,
+      sector: companyProfile.sector,
       heroValue: EMPTY_FIELD_VALUE,
       heroUnit: '',
       heroLabel: locale === 'en' ? 'Status' : '当前状态',
@@ -657,11 +739,6 @@ function buildInPlacePlaceholderDashboard(
       metrics: neutralFundamentals,
     },
   });
-}
-
-function resolveLocalizedCompanyFallback(locale: DashboardLocale, ticker: string): string {
-  const normalizedTicker = normalizeTickerQuery(ticker);
-  return DASHBOARD_VARIANTS[locale][normalizedTicker]?.decision.company || normalizedTicker || EMPTY_FIELD_VALUE;
 }
 
 function toneFromScore(score?: number): SignalTone {
@@ -764,20 +841,6 @@ function replaceEnglishFragments(raw: string): string {
     .replace(/[（(]回踩支撑确认[）)]/g, ' (Pullback support confirmed)')
     .replace(/[（(]目标区间[）)]/g, ' (Target zone)')
     .replace(/[（(]技术失效位[）)]/g, ' (Technical invalidation)');
-}
-
-function localizeCompanyName(locale: DashboardLocale, raw: string | undefined, fallback: string, ticker: string): string {
-  const value = String(raw || '').trim();
-  if (!value || isZombieStockLabel(value)) {
-    return fallback || ticker;
-  }
-  if (locale === 'zh' && !containsCjk(value) && containsCjk(fallback)) {
-    return fallback || ticker;
-  }
-  if (locale === 'en' && (value === '待确认股票' || containsCjk(value))) {
-    return fallback || ticker;
-  }
-  return value;
 }
 
 function localizeSentimentLabel(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
@@ -1342,17 +1405,25 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   const scoreText = typeof report.summary.sentimentScore === 'number'
     ? (report.summary.sentimentScore / 10).toFixed(1)
     : EMPTY_FIELD_VALUE;
-  const reasonBody = reasonLayer?.coreReasons?.[0]
-    || reasonLayer?.topCatalyst
-    || reasonLayer?.latestKeyUpdate
-    || report.summary.analysisSummary
-    || EMPTY_FIELD_VALUE;
+  const reasonBody = resolveInsightBody(
+    locale,
+    sentimentTone,
+    [
+      reasonLayer?.coreReasons?.[0],
+      reasonLayer?.topCatalyst,
+      reasonLayer?.latestKeyUpdate,
+      summaryPanel?.oneSentence,
+      report.summary.analysisSummary,
+    ],
+    technicalFields,
+  );
   const badge = [
     summaryPanel?.operationAdvice,
     reasonLayer?.topCatalyst,
     reasonLayer?.newsValueTier,
   ].filter(Boolean).slice(0, 2).join(' · ') || EMPTY_FIELD_VALUE;
-  const rawCompany = report.meta.stockName || summaryPanel?.stock || stockCode;
+  const rawCompany = report.meta.companyName || report.meta.stockName || summaryPanel?.stock || stockCode;
+  const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
   const rawSignalLabel = report.summary.sentimentLabel || EMPTY_FIELD_VALUE;
   const rawScoreValue = decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || EMPTY_FIELD_VALUE;
   const rawSummary = summaryPanel?.oneSentence || report.summary.analysisSummary || EMPTY_FIELD_VALUE;
@@ -1373,7 +1444,8 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     ticker: stockCode,
     decision: {
       ...seed.decision,
-      company: localizeCompanyName(locale, rawCompany, resolveLocalizedCompanyFallback(locale, stockCode), stockCode),
+      company: companyProfile.company,
+      sector: companyProfile.sector,
       heroValue: scoreText,
       signalLabel: localizeSentimentLabel(locale, rawSignalLabel, EMPTY_FIELD_VALUE),
       signalTone: sentimentTone,
@@ -1439,7 +1511,11 @@ function InPlaceDecisionSkeleton({ locale, ticker }: { locale: DashboardLocale; 
         </div>
 
         <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-[28px] border border-indigo-400/10 bg-black/10 px-5 py-10">
-          <div className="h-7 w-7 rounded-full border border-indigo-200/25 border-t-indigo-200/80 shadow-[0_0_24px_rgba(129,140,248,0.35)] animate-spin" />
+          <img
+            src="/wolfystock-logo-mark.png"
+            alt="WolfyStock analyzing"
+            className="h-9 w-9 rounded-full object-contain shadow-[0_0_15px_rgba(79,70,229,0.3)] animate-spin"
+          />
           <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-indigo-100/70">
             {locale === 'en' ? 'Wolfy AI reasoning...' : 'Wolfy AI 引擎推理中...'}
           </p>
@@ -1928,30 +2004,31 @@ const HomeBentoDashboardPage: React.FC = () => {
                         locale={locale}
                         ticker={pendingAnalysisTicker || activeTicker || readyCopy.ticker}
                       />
-                    ) : completedTaskReport ? (
-                      <AnalysisResultCard
-                        language={locale}
-                        report={completedTaskReport}
-                      />
                     ) : (
-                      <DecisionCard
-                        eyebrow={readyCopy.decision.eyebrow}
-                        company={readyCopy.decision.company}
-                        ticker={readyCopy.ticker}
-                        heroValue={readyCopy.decision.heroValue}
-                        heroUnit={readyCopy.decision.heroUnit}
-                        heroLabel={readyCopy.decision.heroLabel}
-                        signalLabel={readyCopy.decision.signalLabel}
-                        signalTone={readyCopy.decision.signalTone}
-                        scoreLabel={readyCopy.decision.scoreLabel}
-                        scoreValue={readyCopy.decision.scoreValue}
-                        badge={readyCopy.decision.badge}
-                        summary={readyCopy.decision.summary}
-                        locale={locale}
-                        reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                        detailLabel={readyCopy.decision.detailLabel}
-                        onOpenDetails={() => setActiveDrawer('decision')}
-                      />
+                      <div
+                        className="h-full"
+                        data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}
+                      >
+                        <DecisionCard
+                          eyebrow={readyCopy.decision.eyebrow}
+                          company={readyCopy.decision.company}
+                          ticker={readyCopy.ticker}
+                          heroValue={readyCopy.decision.heroValue}
+                          heroUnit={readyCopy.decision.heroUnit}
+                          heroLabel={readyCopy.decision.heroLabel}
+                          signalLabel={readyCopy.decision.signalLabel}
+                          signalTone={readyCopy.decision.signalTone}
+                          sector={readyCopy.decision.sector}
+                          scoreLabel={readyCopy.decision.scoreLabel}
+                          scoreValue={readyCopy.decision.scoreValue}
+                          badge={readyCopy.decision.badge}
+                          summary={readyCopy.decision.summary}
+                          locale={locale}
+                          reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
+                          detailLabel={readyCopy.decision.detailLabel}
+                          onOpenDetails={() => setActiveDrawer('decision')}
+                        />
+                      </div>
                     )}
                   </div>
                 </div>

@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 🧠 **WolfyStock 首页 AI 决断卡品牌化与投研化重构** — `apps/dsa-web` 的 Home Bento 决断卡将分析中原位 spinner 替换为旋转发光的 WolfyStock Logo，并把完成态报告统一回收到同一张投研决断卡：Ticker 旁强制展示公司全称与 Sector，Action / Score / Direction 升级为主视觉指标，AI Insight 压缩为单段技术结论，并对泛化“综合建议”话术自动降噪为均线、量价、RSI 驱动的专业判断。配套回归已更新到 `HomeSurfacePage.test.tsx`，并通过 focused Vitest、lint、build 与 in-app browser 首页手工验收。
+
 - 🧭 **系统设置模型库与数据源库去卡片化** — `apps/dsa-web` 的 `/settings/system` 管理控制面将 Provider Library、Data Routing 与 Data Source Library 从多列 Bento 卡片墙改为高密度纵向数据行：左侧固定名称列与状态点，中部能力/状态微型标签，右侧收拢管理操作，并按 `LLM PROVIDERS`、`MARKET DATA`、`FUNDAMENTALS`、`NEWS & SENTIMENT` 等语义标题分组，降低海量配置项的扫描成本。配套回归已更新到 Settings 相关单测，并通过 lint、build、in-app browser DOM 检查与 Safari 实机视觉验证。
 
 - 🧠 **WolfyStock 首页分析进度改为用户态五阶段动画** — `apps/dsa-web` 的 Home Bento 分析任务视图现在只展示总进度、`LLM / Technical / Fundamental / News / Sentiment` 五阶段状态，以及完成后的最终摘要卡（BUY / SELL / NEUTRAL、评分、目标位、止损位）。首页不再渲染模型名、数据源、`standard_report`、底层错误或 backend 调试文案；进度轮询失败时保持通用 `Analysis in progress` 等待态。后端同步新增安全的任务进度契约，避免队列 `TaskInfo` 无 `updated_at` 时让 `/progress` 崩溃。配套回归覆盖已补到 `HomeSurfacePage.test.tsx`、`tests/test_analysis_api_contract.py` 与 `tests/test_system_config_service.py`，并通过 WebKit / Chromium 进度流可见验证与 Safari 实机页面冒烟检查。
