@@ -809,8 +809,11 @@ const ChatPage: React.FC = () => {
                   ) : null}
 
                   {messages.length === 0 && !loading ? (
-                    <div data-testid="chat-empty-state" className="flex min-h-full w-full flex-1 flex-col gap-12">
-                      <div className="max-w-4xl">
+                    <div
+                      data-testid="chat-empty-state"
+                      className="flex min-h-full w-full flex-1 flex-col items-center justify-center gap-10 pb-20 pt-6 text-center md:pb-24"
+                    >
+                      <div className="flex w-full max-w-4xl flex-col items-center">
                         <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
                           <svg
                             className="h-7 w-7"
@@ -833,7 +836,7 @@ const ChatPage: React.FC = () => {
                         </p>
                       </div>
 
-                      <div className="grid place-items-stretch gap-4 lg:grid-cols-3">
+                      <div className="grid w-full max-w-5xl place-items-stretch gap-4 lg:grid-cols-3">
                         {starterPromptCards.map((card) => (
                           <GlassCard
                             key={card.id}
@@ -856,13 +859,16 @@ const ChatPage: React.FC = () => {
                       </div>
 
                       {quickQuestions.length > 0 ? (
-                        <div className="mt-auto flex flex-wrap gap-2.5 pt-4">
+                        <div
+                          data-testid="chat-quick-question-cloud"
+                          className="mb-6 flex flex-wrap justify-center gap-3"
+                        >
                           {quickQuestions.map((q) => (
                             <button
                               key={q.id}
                               type="button"
                               onClick={() => handleQuickQuestion(q)}
-                              className="rounded-full border border-white/8 bg-white/[0.02] px-4 py-2 text-sm text-secondary-text transition-colors duration-150 hover:bg-white/[0.05] hover:text-foreground"
+                              className="inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-white/5 bg-white/[0.02] px-5 py-2.5 text-xs text-white/60 transition-all hover:bg-white/[0.05] hover:text-white"
                             >
                               {chat(`quickQuestions.${q.id}`)}
                             </button>
@@ -976,14 +982,8 @@ const ChatPage: React.FC = () => {
               </div>
             </main>
 
-            <footer
-              data-testid="chat-input-shell"
-              className="mt-auto w-full border-t border-white/5"
-            >
-              <div
-                data-testid="chat-input-gradient"
-                className="w-full bg-gradient-to-t from-[#030303] via-[#030303]/98 to-[#030303]/72 pt-6 pb-6"
-              >
+            <footer data-testid="chat-input-shell" className="mt-auto w-full">
+              <div data-testid="chat-input-gradient" className="w-full pb-6 pt-2">
                 <div
                   data-testid="chat-console-inner"
                   className="w-full px-6 md:px-8 xl:px-12"
@@ -1034,11 +1034,11 @@ const ChatPage: React.FC = () => {
                     />
                   ) : null}
 
-                  <div
-                    data-testid="chat-composer-omnibar"
-                    className="relative flex w-full flex-col rounded-[24px] border border-white/10 bg-white/[0.02] p-2 text-white backdrop-blur-3xl transition-all duration-300 hover:border-white/20 focus-within:border-indigo-500/50 focus-within:bg-white/[0.04] focus-within:shadow-[0_0_30px_rgba(99,102,241,0.1)]"
-                  >
-                    <div className="flex items-end gap-3">
+                  <div className="mx-auto w-full max-w-4xl">
+                    <div
+                      data-testid="chat-composer-omnibar"
+                      className="relative w-full max-w-4xl mx-auto rounded-3xl border border-white/10 bg-white/[0.03] p-2 shadow-2xl backdrop-blur-xl"
+                    >
                       <textarea
                         ref={composerTextareaRef}
                         value={input}
@@ -1047,23 +1047,18 @@ const ChatPage: React.FC = () => {
                         placeholder={chat('inputPlaceholder')}
                         disabled={loading}
                         rows={1}
-                        className="min-h-[60px] max-h-[200px] w-full flex-1 resize-none border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-[56px] max-h-48 w-full resize-none border-none bg-transparent px-4 py-3 pr-16 text-sm text-white outline-none ring-0 placeholder:text-white/30 disabled:cursor-not-allowed disabled:opacity-50"
                         onInput={(e) => {
                           const textarea = e.target as HTMLTextAreaElement;
                           textarea.style.height = 'auto';
                           textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
                         }}
                       />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-3 px-4 pb-2">
-                      <span className="text-[10px] font-medium tracking-wide text-white/30">
-                        {composerDisclaimer}
-                      </span>
                       {isGenerating ? (
                         <button
                           type="button"
                           onClick={handleStopGeneration}
-                          className="group flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors active:scale-95 hover:bg-indigo-400/30 hover:text-white"
+                          className="absolute bottom-2.5 right-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-all active:scale-95 hover:bg-white/20"
                           aria-label={chat('stopGeneration')}
                           title={chat('stopGeneration')}
                         >
@@ -1076,7 +1071,7 @@ const ChatPage: React.FC = () => {
                           onClick={sendMessageButton.onClick}
                           onPointerUp={sendMessageButton.onPointerUp}
                           disabled={!input.trim() || loading}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-indigo-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                          className="absolute bottom-2.5 right-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-40"
                           aria-label={chat('notifyAction')}
                           title={chat('notifyAction')}
                         >
@@ -1084,6 +1079,9 @@ const ChatPage: React.FC = () => {
                         </button>
                       )}
                     </div>
+                    <p className="mt-3 text-center text-[10px] text-white/30">
+                      {composerDisclaimer}
+                    </p>
                   </div>
 
                   {isFollowUpContextLoading ? (

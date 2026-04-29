@@ -225,9 +225,9 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('flex-1', 'overflow-y-auto');
     expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-8', 'flex', 'flex-col', 'gap-8', 'min-h-full');
     expect(screen.getByTestId('chat-message-stream')).not.toHaveClass('max-w-4xl', 'mx-auto');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('mt-auto', 'w-full', 'border-t', 'border-white/5');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('mt-auto', 'w-full');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('absolute', 'bottom-0', 'left-0', 'z-50', 'pointer-events-none');
-    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'bg-gradient-to-t', 'from-[#030303]', 'via-[#030303]/98', 'to-[#030303]/72', 'pt-6', 'pb-6');
+    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'pt-2', 'pb-6');
     expect(screen.getByTestId('chat-input-gradient')).not.toHaveClass('px-6');
     expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'px-6', 'md:px-8', 'xl:px-12');
     expect(screen.getByTestId('chat-console-inner')).not.toHaveClass('max-w-4xl', 'mx-auto');
@@ -235,15 +235,17 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-input-shell').parentElement).not.toBe(screen.getByTestId('chat-main'));
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
-      'rounded-[24px]',
+      'max-w-4xl',
+      'mx-auto',
+      'rounded-3xl',
       'border-white/10',
-      'bg-white/[0.02]',
-      'backdrop-blur-3xl',
+      'bg-white/[0.03]',
+      'backdrop-blur-xl',
       'border',
-      'flex',
-      'flex-col',
+      'p-2',
+      'shadow-2xl',
     );
-    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('text-[10px]', 'font-medium', 'tracking-wide', 'text-white/30');
+    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('text-[10px]', 'text-center', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-hidden', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
@@ -328,15 +330,27 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('w-full', 'min-h-full', 'flex', 'flex-col', 'gap-12');
-    expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('items-center', 'justify-center');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('w-full', 'min-h-full', 'flex', 'flex-col', 'items-center', 'justify-center', 'gap-10', 'pb-20');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
     expect(entryDecisionCard).toHaveClass('rounded-2xl', 'border-white/6', 'bg-white/[0.03]', 'p-5', 'hover:border-white/16', 'hover:bg-white/[0.05]');
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.entryDecision.title')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.positionReview.title')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.eventFollowUp.title')).length).toBeGreaterThan(0);
     expect(screen.getByText(translate('zh', 'chat.emptyBody'))).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'chat.quickQuestions.q3'))).toBeInTheDocument();
+    expect(screen.getByTestId('chat-quick-question-cloud')).toHaveClass('flex', 'flex-wrap', 'justify-center', 'gap-3');
+    expect(screen.getByText(translate('zh', 'chat.quickQuestions.q3'))).toHaveClass(
+      'inline-flex',
+      'items-center',
+      'justify-center',
+      'px-5',
+      'py-2.5',
+      'rounded-xl',
+      'bg-white/[0.02]',
+      'border-white/5',
+      'text-xs',
+      'text-white/60',
+      'whitespace-nowrap',
+    );
     expect(screen.queryByTestId('chat-footer-starter-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-footer-quick-questions')).not.toBeInTheDocument();
   });
