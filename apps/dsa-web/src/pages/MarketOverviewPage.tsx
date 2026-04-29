@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { MarketOverviewPanel } from '../api/marketOverview';
+import type { MarketOverviewItem, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import { marketApi } from '../api/market';
 import { CryptoCard } from '../components/market-overview/CryptoCard';
@@ -31,24 +31,10 @@ type PanelKey = keyof PanelState;
 type CardKey = PanelKey;
 type CategoryKey = 'all' | 'us' | 'cn' | 'macro' | 'crypto';
 
-const DEFAULT_CARD_ORDER: CardKey[] = [
-  'indices',
-  'volatility',
-  'crypto',
-  'sentiment',
-  'fundsFlow',
-  'macro',
-  'cnIndices',
-  'cnBreadth',
-  'cnFlows',
-  'sectorRotation',
-  'rates',
-  'fxCommodities',
-];
 const CATEGORY_CARDS: Record<CategoryKey, CardKey[]> = {
-  all: DEFAULT_CARD_ORDER,
-  us: ['indices', 'rates', 'volatility', 'fundsFlow', 'sentiment', 'fxCommodities', 'crypto'],
-  cn: ['cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'fxCommodities', 'rates'],
+  all: ['sentiment', 'macro', 'rates', 'fxCommodities'],
+  us: ['indices', 'fundsFlow', 'volatility', 'rates', 'sentiment', 'fxCommodities', 'crypto'],
+  cn: ['cnIndices', 'cnFlows', 'cnBreadth', 'sectorRotation', 'rates', 'fxCommodities'],
   macro: ['rates', 'fxCommodities', 'macro', 'volatility'],
   crypto: ['crypto'],
 };
@@ -86,6 +72,75 @@ function persistCardOrder(category: CategoryKey, order: CardKey[]): void {
   }
   window.localStorage.setItem(CATEGORY_STORAGE_KEYS[category], JSON.stringify(order));
 }
+
+type HeroAnchor = {
+  key: string;
+  label: string;
+  item?: MarketOverviewItem;
+};
+
+function findPanelItem(panel: MarketOverviewPanel | undefined, symbols: string[]): MarketOverviewItem | undefined {
+  const normalizedSymbols = symbols.map((symbol) => symbol.toUpperCase());
+  return panel?.items.find((item) => normalizedSymbols.includes(item.symbol.toUpperCase()));
+}
+
+function buildHeroAnchors(panels: PanelState): HeroAnchor[] {
+  return [
+    { key: 'SPX', label: 'S&P 500', item: findPanelItem(panels.indices, ['SPX']) },
+    { key: 'CSI300', label: '沪深300', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.indices, ['CSI300']) },
+    { key: 'BTC', label: 'BTC', item: findPanelItem(panels.crypto, ['BTC']) },
+    { key: 'VIX', label: 'VIX', item: findPanelItem(panels.volatility, ['VIX']) },
+    { key: 'US10Y', label: 'US10Y', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y']) },
+    { key: 'DXY', label: 'DXY', item: findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY']) },
+  ];
+}
+
+function formatHeroValue(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '-';
+  }
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: Math.abs(value) >= 100 ? 2 : 3,
+  }).format(value);
+}
+
+function formatHeroChange(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'N/A';
+  }
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function heroToneClass(item: MarketOverviewItem | undefined): string {
+  if (!item || item.changePct == null) {
+    return 'text-white/35';
+  }
+  return item.changePct >= 0 ? 'text-emerald-400' : 'text-red-400';
+}
+
+const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => (
+  <section
+    data-testid="market-overview-hero-ribbon"
+    className="grid grid-cols-3 gap-3 border-b border-white/5 pb-5 md:grid-cols-6 md:gap-4"
+    aria-label="Cross asset hero ribbon"
+  >
+    {anchors.map((anchor) => (
+      <div
+        key={anchor.key}
+        data-testid={`market-overview-hero-${anchor.key}`}
+        className="min-w-0 border-l border-white/8 bg-white/[0.018] px-3 py-2.5"
+      >
+        <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/36">{anchor.label}</p>
+        <p className="mt-1 truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
+          {formatHeroValue(anchor.item?.value)}
+        </p>
+        <p className={`mt-1 font-mono text-xs font-semibold ${heroToneClass(anchor.item)}`}>
+          {formatHeroChange(anchor.item?.changePct)}
+        </p>
+      </div>
+    ))}
+  </section>
+);
 
 const MarketOverviewPage: React.FC = () => {
   const { t } = useI18n();
@@ -347,6 +402,7 @@ const MarketOverviewPage: React.FC = () => {
 
   const visibleOrder = cardOrders[activeCategory].filter((cardKey) => CATEGORY_CARDS[activeCategory].includes(cardKey));
   const columns = [0, 1, 2].map((columnIndex) => visibleOrder.filter((_, index) => index % 3 === columnIndex));
+  const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
 
   return (
     <div className="w-full flex-1 flex flex-col min-w-0 min-h-0 bg-[#030303] text-white">
@@ -371,6 +427,7 @@ const MarketOverviewPage: React.FC = () => {
               ))}
             </div>
           </div>
+          {activeCategory === 'all' ? <CrossAssetHeroRibbon anchors={heroAnchors} /> : null}
           <main className="flex flex-col items-start gap-6 xl:flex-row">
             {columns.map((columnCards, columnIndex) => (
               <div key={columnIndex} className="flex w-full flex-col gap-6 xl:w-[calc((100%_-_3rem)/3)]">
@@ -378,6 +435,7 @@ const MarketOverviewPage: React.FC = () => {
                   <div
                     key={cardKey}
                     data-testid={`market-overview-card-${cardKey}`}
+                    data-market-card-rank={visibleOrder.indexOf(cardKey)}
                     draggable
                     onDragStart={() => setDraggingCard(cardKey)}
                     onDragEnd={() => setDraggingCard(null)}
