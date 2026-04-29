@@ -41,6 +41,7 @@ import {
 } from '../components/settings';
 
 type SettingsDomain = 'ai_models' | 'data_sources' | 'advanced';
+type SettingsWorkspacePanel = 'overview' | SettingsDomain;
 type RoutingTier = 'primary' | 'backup' | 'fallback';
 type RouteModelMode = 'provider_default' | 'explicit';
 type ModelInputMode = 'preset' | 'custom';
@@ -733,6 +734,7 @@ const SettingsPage: React.FC = () => {
   const isDesktopViewport = useIsDesktopViewport();
   const { language, t } = useI18n();
   const { passwordChangeable } = useAuth();
+  const isSystemSettingsSurface = typeof window !== 'undefined' && window.location.pathname.includes('/settings/system');
 
   const {
     categories,
@@ -758,6 +760,7 @@ const SettingsPage: React.FC = () => {
     adminUnlockToken,
   } = useSystemConfig();
   const [activeDomain, setActiveDomain] = useState<SettingsDomain>('advanced');
+  const [activePanel, setActivePanel] = useState<SettingsWorkspacePanel>(isSystemSettingsSurface ? 'overview' : 'advanced');
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -895,6 +898,7 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     const inferredDomain = categoryDomainMap.get(activeCategory) || 'advanced';
     setActiveDomain((previous) => (previous === inferredDomain ? previous : inferredDomain));
+    setActivePanel((previous) => (previous === 'overview' ? previous : inferredDomain));
   }, [activeCategory, categoryDomainMap]);
 
   useEffect(() => {
@@ -910,7 +914,12 @@ const SettingsPage: React.FC = () => {
     }
   }, [activeCategory, domainCategories, domainCategorySet, setActiveCategory]);
 
-  const domainNavItems = useMemo(() => ([
+  const panelNavItems = useMemo(() => ([
+    {
+      domain: 'overview' as const,
+      title: t('settings.controlPlaneTitle'),
+      desc: t('settings.controlPlaneDesc'),
+    },
     {
       domain: 'ai_models' as const,
       title: t('settings.domainAiTitle'),
@@ -2876,7 +2885,30 @@ const SettingsPage: React.FC = () => {
     resolveQuickProviderCredential,
     resolveQuickProviderTestModel,
   ]);
-  const activeDomainTitle = domainNavItems.find((item) => item.domain === activeDomain)?.title || activeDomain;
+  const activeDomainTitle = panelNavItems.find((item) => item.domain === activePanel)?.title
+    || panelNavItems.find((item) => item.domain === activeDomain)?.title
+    || activeDomain;
+
+  const handleSelectPanel = useCallback((panel: SettingsWorkspacePanel) => {
+    setActivePanel(panel);
+    if (panel === 'overview') {
+      return;
+    }
+    setActiveDomain(panel);
+    const firstCategory = categories.find(
+      (category) => (categoryDomainMap.get(category.category) || 'advanced') === panel,
+    )?.category;
+    if (firstCategory) {
+      setActiveCategory(firstCategory);
+    }
+  }, [categories, categoryDomainMap, setActiveCategory]);
+
+  const handleSelectCategory = useCallback((category: string) => {
+    setActiveCategory(category);
+    const nextDomain = categoryDomainMap.get(category) || 'advanced';
+    setActiveDomain(nextDomain);
+    setActivePanel(nextDomain);
+  }, [categoryDomainMap, setActiveCategory]);
   const dataRoutingGroups = [
     {
       key: 'market' as const,
@@ -2961,7 +2993,7 @@ const SettingsPage: React.FC = () => {
     <PageChrome
       pageTestId="settings-bento-page"
       pageClassName="workspace-page workspace-page--settings gemini-bento-page--settings"
-      scrollMode="page"
+      scrollMode="contained"
       headerClassName="shadow-soft-card-strong"
         eyebrow={t('settings.eyebrow')}
         title={t('settings.title')}
@@ -3009,28 +3041,20 @@ const SettingsPage: React.FC = () => {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-1">
               <p className="mb-4 px-3 text-xs font-bold uppercase tracking-[0.22em] text-white/40">{t('settings.title')}</p>
-              {DOMAIN_ORDER.map((domain) => {
-                const nav = domainNavItems.find((item) => item.domain === domain);
+              {panelNavItems.map((panel) => {
+                const nav = panelNavItems.find((item) => item.domain === panel.domain);
                 if (!nav) {
                   return null;
                 }
-                const isActive = activeDomain === domain;
+                const isActive = activePanel === panel.domain;
                 return (
                   <button
-                    key={domain}
+                    key={panel.domain}
                     type="button"
                     className={isActive
                       ? `${CONSOLE_NAV_BUTTON_CLASS} border border-white/10 bg-white/[0.08] font-medium text-white`
                       : `${CONSOLE_NAV_BUTTON_CLASS} border border-transparent text-white/60 hover:border-white/8 hover:bg-white/[0.02] hover:text-white`}
-                    onClick={() => {
-                      setActiveDomain(domain);
-                      const firstCategory = categories.find(
-                        (category) => (categoryDomainMap.get(category.category) || 'advanced') === domain,
-                      )?.category;
-                      if (firstCategory) {
-                        setActiveCategory(firstCategory);
-                      }
-                    }}
+                    onClick={() => handleSelectPanel(panel.domain)}
                   >
                     <span className="block">{nav.title}</span>
                     <span className="mt-1 block text-xs text-white/40">{nav.desc}</span>
@@ -3044,181 +3068,187 @@ const SettingsPage: React.FC = () => {
                 categories={domainCategories}
                 itemsByCategory={itemsByCategory}
                 activeCategory={activeCategory}
-                onSelect={setActiveCategory}
+                onSelect={handleSelectCategory}
                 disabled={adminLocked}
               />
             </div>
           </div>
         </aside>
 
-        <section className="flex min-h-0 flex-1 flex-col gap-8">
+        <section className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden">
+          <div
+            data-testid="settings-main-panel"
+            className="flex min-h-0 flex-1 min-w-0 flex-col overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          >
+            <div className="space-y-4 pb-2">
+              {loadError ? (
+                <ApiErrorAlert
+                  error={loadError}
+                  actionLabel={retryAction === 'load' ? t('settings.retryLoad') : t('settings.reload')}
+                  onAction={() => void retry()}
+                  className="mb-4"
+                />
+              ) : null}
 
-      <SystemControlPlane
-        t={t}
-        globalAdminStats={globalAdminStats}
-        isRunningAdminAction={isRunningAdminAction}
-        adminActionDialog={adminActionDialog}
-        adminActionMessage={adminActionMessage}
-        adminActionTone={adminActionTone}
-        onOpenAdminLogs={() => window.location.assign(buildAdminLogsPath())}
-        onSetAdminActionDialog={setAdminActionDialog}
-      />
+              {activePanel === 'overview' ? (
+                <SystemControlPlane
+                  t={t}
+                  globalAdminStats={globalAdminStats}
+                  isRunningAdminAction={isRunningAdminAction}
+                  adminActionDialog={adminActionDialog}
+                  adminActionMessage={adminActionMessage}
+                  adminActionTone={adminActionTone}
+                  onOpenAdminLogs={() => window.location.assign(buildAdminLogsPath())}
+                  onSetAdminActionDialog={setAdminActionDialog}
+                />
+              ) : isLoading ? (
+                <SettingsLoading />
+              ) : (
+                <div className="space-y-4">
+                  {activeDomain === 'ai_models' ? (
+                    <AIProviderConfig
+                      t={t}
+                      aiRoutingScope={aiRoutingScope}
+                      aiRouteRows={aiRouteRows}
+                      configuredProvidersText={configuredProvidersText}
+                      routeStatus={t(`settings.aiRouteStatus.${aiSummary.routeStatus}`)}
+                      routeMissingButApiConfigured={aiSummary.routeMissingButApiConfigured}
+                      selectorReadinessMismatch={aiSelectorReadinessMismatch}
+                      aiRoutingError={aiRoutingError}
+                      providerCards={quickProviderCards}
+                      aiChannelConfigRef={aiChannelConfigRef}
+                      adminLocked={adminLocked}
+                      isSaving={isSaving}
+                      onOpenAiRoutingDrawer={openAiRoutingDrawer}
+                      onOpenQuickProviderDrawer={openQuickProviderDrawer}
+                      onJumpToProviderAdvancedConfig={jumpToProviderAdvancedConfig}
+                      onSaveDirectProviderKeys={() => void saveDirectProviderKeys()}
+                      onJumpToAiChannelConfig={jumpToAiChannelConfig}
+                    />
+                  ) : null}
 
-      {loadError ? (
-        <ApiErrorAlert
-          error={loadError}
-          actionLabel={retryAction === 'load' ? t('settings.retryLoad') : t('settings.reload')}
-          onAction={() => void retry()}
-          className="mb-4"
-        />
-      ) : null}
+                  {activeDomain === 'data_sources' ? (
+                    <DataSourceConfig
+                      t={t}
+                      dataRoutingGroups={dataRoutingGroups}
+                      dataSourceLibrary={dataSourceLibrary}
+                      adminLocked={adminLocked}
+                      isSaving={isSaving}
+                      prettySourceLabel={prettySourceLabel}
+                      sourceToneClass={sourceToneClass}
+                      priorityLabel={priorityLabel}
+                      onOpenDataRoutingDrawer={setDataRoutingDrawerKey}
+                      onOpenCreateDataSourceDrawer={openCreateDataSourceDrawer}
+                      onOpenEditDataSourceDrawer={openEditDataSourceDrawer}
+                      onValidateDataSource={(sourceId) => {
+                        void validateDataSourceEntry(sourceId);
+                      }}
+                    />
+                  ) : null}
 
-      {isLoading ? (
-        <SettingsLoading />
-      ) : (
-        <div className="space-y-4">
-          {activeDomain === 'ai_models' ? (
-            <AIProviderConfig
-              t={t}
-              aiRoutingScope={aiRoutingScope}
-              aiRouteRows={aiRouteRows}
-              configuredProvidersText={configuredProvidersText}
-              routeStatus={t(`settings.aiRouteStatus.${aiSummary.routeStatus}`)}
-              routeMissingButApiConfigured={aiSummary.routeMissingButApiConfigured}
-              selectorReadinessMismatch={aiSelectorReadinessMismatch}
-              aiRoutingError={aiRoutingError}
-              providerCards={quickProviderCards}
-              aiChannelConfigRef={aiChannelConfigRef}
-              adminLocked={adminLocked}
-              isSaving={isSaving}
-              onOpenAiRoutingDrawer={openAiRoutingDrawer}
-              onOpenQuickProviderDrawer={openQuickProviderDrawer}
-              onJumpToProviderAdvancedConfig={jumpToProviderAdvancedConfig}
-              onSaveDirectProviderKeys={() => void saveDirectProviderKeys()}
-              onJumpToAiChannelConfig={jumpToAiChannelConfig}
-            />
-          ) : null}
+                  {activeDomain === 'advanced' ? (
+                    <SystemLogsConfig
+                      t={t}
+                      showRuntimeExecutionSummary={showRuntimeExecutionSummary}
+                      adminLocked={adminLocked}
+                      isSaving={isSaving}
+                      onOpenRuntimeVisibilityDrawer={() => setRuntimeVisibilityDrawerOpen(true)}
+                    />
+                  ) : null}
 
-          {activeDomain === 'data_sources' ? (
-            <DataSourceConfig
-              t={t}
-              dataRoutingGroups={dataRoutingGroups}
-              dataSourceLibrary={dataSourceLibrary}
-              adminLocked={adminLocked}
-              isSaving={isSaving}
-              prettySourceLabel={prettySourceLabel}
-              sourceToneClass={sourceToneClass}
-              priorityLabel={priorityLabel}
-              onOpenDataRoutingDrawer={setDataRoutingDrawerKey}
-              onOpenCreateDataSourceDrawer={openCreateDataSourceDrawer}
-              onOpenEditDataSourceDrawer={openEditDataSourceDrawer}
-              onValidateDataSource={(sourceId) => {
-                void validateDataSourceEntry(sourceId);
-              }}
-            />
-          ) : null}
+                  {!isDesktopViewport ? (
+                    <Disclosure
+                      summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
+                      className="rounded-2xl border border-white/5 bg-white/[0.02]"
+                      bodyClassName="space-y-3"
+                    >
+                      <SettingsCategoryNav
+                        categories={domainCategories}
+                        itemsByCategory={itemsByCategory}
+                        activeCategory={activeCategory}
+                        onSelect={handleSelectCategory}
+                        disabled={adminLocked}
+                        hideHeader
+                      />
+                    </Disclosure>
+                  ) : null}
 
-          {activeDomain === 'advanced' ? (
-            <SystemLogsConfig
-              t={t}
-              showRuntimeExecutionSummary={showRuntimeExecutionSummary}
-              adminLocked={adminLocked}
-              isSaving={isSaving}
-              onOpenRuntimeVisibilityDrawer={() => setRuntimeVisibilityDrawerOpen(true)}
-            />
-          ) : null}
+                  {saveError ? (
+                    <ApiErrorAlert
+                      className="mt-4"
+                      error={saveError}
+                      actionLabel={retryAction === 'save' ? t('settings.retrySave') : undefined}
+                      onAction={retryAction === 'save' ? () => void retry() : undefined}
+                    />
+                  ) : null}
 
-          {!isDesktopViewport ? (
-            <Disclosure
-              summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
-              className="rounded-2xl border border-white/5 bg-white/[0.02]"
-              bodyClassName="space-y-3"
-            >
-              <SettingsCategoryNav
-                categories={domainCategories}
-                itemsByCategory={itemsByCategory}
-                activeCategory={activeCategory}
-                onSelect={setActiveCategory}
-                disabled={adminLocked}
-                hideHeader
-              />
-            </Disclosure>
-          ) : null}
+                  {activeCategory === 'system' ? <AuthSettingsCard /> : null}
+                  {activeCategory === 'base' ? (
+                    <SettingsSectionCard
+                      title={t('settings.importTitle')}
+                      description={t('settings.importDesc')}
+                    >
+                      <IntelligentImport
+                        stockListValue={
+                          (activeItems.find((i) => i.key === 'STOCK_LIST')?.value as string) ?? ''
+                        }
+                        onMergeStockList={async (value) => {
+                          if (adminLocked) {
+                            return;
+                          }
+                          await saveExternalItems([{ key: 'STOCK_LIST', value }], t('settings.success'));
+                        }}
+                        disabled={isSaving || isLoading || adminLocked}
+                      />
+                    </SettingsSectionCard>
+                  ) : null}
+                  {activeCategory === 'system' && passwordChangeable ? (
+                    <ChangePasswordCard />
+                  ) : null}
 
-          {saveError ? (
-            <ApiErrorAlert
-              className="mt-4"
-              error={saveError}
-              actionLabel={retryAction === 'save' ? t('settings.retrySave') : undefined}
-              onAction={retryAction === 'save' ? () => void retry() : undefined}
-            />
-          ) : null}
-
-          {activeCategory === 'system' ? <AuthSettingsCard /> : null}
-          {activeCategory === 'base' ? (
-            <SettingsSectionCard
-              title={t('settings.importTitle')}
-              description={t('settings.importDesc')}
-            >
-              <IntelligentImport
-                stockListValue={
-                  (activeItems.find((i) => i.key === 'STOCK_LIST')?.value as string) ?? ''
-                }
-                onMergeStockList={async (value) => {
-                  if (adminLocked) {
-                    return;
-                  }
-                  await saveExternalItems([{ key: 'STOCK_LIST', value }], t('settings.success'));
-                }}
-                disabled={isSaving || isLoading || adminLocked}
-              />
-            </SettingsSectionCard>
-          ) : null}
-          {activeCategory === 'system' && passwordChangeable ? (
-            <ChangePasswordCard />
-          ) : null}
-
-          {activeItems.length ? (
-            <SettingsSectionCard
-              title={rawFieldsSectionTitle}
-              description={rawFieldsSectionDescription}
-            >
-              <GlassCard className="px-4 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{activeCategoryLabel}</p>
-                    <p className="mt-1 text-xs leading-5 text-secondary-text">
-                      {activeItems.length
-                        ? `${rawFieldsSummaryText} · ${activeItems.length}`
-                        : activeCategoryDescription}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="settings-secondary"
-                    data-testid="raw-fields-drawer-trigger"
-                    onClick={() => setRawFieldsDrawerOpen(true)}
-                    disabled={adminLocked || isSaving}
-                  >
-                    {shouldCollapseRawFields ? rawFieldsToggleLabel : t('settings.dataSourceManageAction')}
-                  </Button>
+                  {activeItems.length ? (
+                    <SettingsSectionCard
+                      title={rawFieldsSectionTitle}
+                      description={rawFieldsSectionDescription}
+                    >
+                      <GlassCard className="px-4 py-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{activeCategoryLabel}</p>
+                            <p className="mt-1 text-xs leading-5 text-secondary-text">
+                              {activeItems.length
+                                ? `${rawFieldsSummaryText} · ${activeItems.length}`
+                                : activeCategoryDescription}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="settings-secondary"
+                            data-testid="raw-fields-drawer-trigger"
+                            onClick={() => setRawFieldsDrawerOpen(true)}
+                            disabled={adminLocked || isSaving}
+                          >
+                            {shouldCollapseRawFields ? rawFieldsToggleLabel : t('settings.dataSourceManageAction')}
+                          </Button>
+                        </div>
+                      </GlassCard>
+                    </SettingsSectionCard>
+                  ) : (
+                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
+                      <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
+                      <p className="mt-2 text-sm font-semibold text-foreground">
+                        {t('settings.noItems')}
+                      </p>
+                      <p className="mt-2 text-xs leading-6 text-muted-text">
+                        {activeCategoryDescription}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </GlassCard>
-            </SettingsSectionCard>
-          ) : (
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
-              <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
-              <p className="mt-2 text-sm font-semibold text-foreground">
-                {t('settings.noItems')}
-              </p>
-              <p className="mt-2 text-xs leading-6 text-muted-text">
-                {activeCategoryDescription}
-              </p>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
         </section>
       </div>
 

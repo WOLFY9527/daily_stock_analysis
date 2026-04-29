@@ -294,6 +294,21 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
   });
 
+  it('treats the system settings route as a wide workspace surface', () => {
+    render(
+      <MemoryRouter initialEntries={['/settings/system']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+  });
+
   it('adds a dedicated content-frame modifier for the backtest route', () => {
     render(
       <MemoryRouter initialEntries={['/backtest']}>

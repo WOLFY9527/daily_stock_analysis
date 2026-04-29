@@ -13614,6 +13614,12 @@ html[data-theme='spacex'] .shell-content-frame--scanner {
   padding-bottom: 0;
 }
 
+html[data-theme='spacex'] .shell-content-frame--system-control {
+  max-width: none;
+  margin: 0;
+  padding-inline: 0;
+}
+
 html[data-theme='spacex'] .shell-main-column--scanner {
   min-height: calc(100vh - var(--shell-masthead-height) - 1.15rem);
   overflow: hidden;

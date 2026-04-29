@@ -343,6 +343,16 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
   };
 }
 
+async function withSystemSettingsPath(run: () => Promise<void> | void) {
+  const previousPath = window.location.pathname;
+  window.history.replaceState({}, '', '/settings/system');
+  try {
+    await run();
+  } finally {
+    window.history.replaceState({}, '', previousPath);
+  }
+}
+
 async function openAiRoutingDrawer() {
   fireEvent.click(screen.getByRole('button', { name: '编辑任务路由' }));
   await waitFor(() => {
@@ -434,6 +444,7 @@ function buildDataSourceConfigItem(key: string, value: string) {
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, '', '/');
     window.innerWidth = 1280;
     window.dispatchEvent(new Event('resize'));
     window.sessionStorage.clear();
@@ -512,15 +523,42 @@ describe('SettingsPage', () => {
       adminUnlockExpiresAt: null,
     }));
 
-    render(<SettingsPage />);
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
 
-    expect(await screen.findByText('全局控制面概览')).toBeInTheDocument();
-    expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
-    expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
-    expect(getMaintenancePanel()).not.toHaveAttribute('open');
-    expect(screen.getByText('认证与登录保护')).toBeInTheDocument();
-    expect(screen.getByText('修改密码')).toBeInTheDocument();
-    expect(screen.queryByText('锁定状态下仅可浏览，无法修改系统级配置。')).not.toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
+      expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
+      expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
+      expect(getMaintenancePanel()).not.toHaveAttribute('open');
+      expect(screen.queryByText('认证与登录保护')).not.toBeInTheDocument();
+      expect(screen.queryByText('修改密码')).not.toBeInTheDocument();
+      expect(screen.queryByText('锁定状态下仅可浏览，无法修改系统级配置。')).not.toBeInTheDocument();
+    });
+  });
+
+  it('mounts only one primary panel at a time and keeps the system overview isolated by default', async () => {
+    const previousPath = window.location.pathname;
+    window.history.replaceState({}, '', '/settings/system');
+
+    try {
+      render(<SettingsPage />);
+
+      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: zh('settings.runtimeSummaryVisibilityTitle') })).not.toBeInTheDocument();
+      expect(screen.getByTestId('settings-main-panel')).toHaveClass(
+        'overflow-y-auto',
+        '[&::-webkit-scrollbar]:hidden',
+        '[-ms-overflow-style:none]',
+        '[scrollbar-width:none]',
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /数据源/ }));
+
+      expect(await screen.findByRole('heading', { name: '数据源配置' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: zh('settings.controlPlaneTitle') })).not.toBeInTheDocument();
+    } finally {
+      window.history.replaceState({}, '', previousPath);
+    }
   });
 
   it('keeps the admin control plane focused on global domains without personal notification settings', async () => {
@@ -532,61 +570,67 @@ describe('SettingsPage', () => {
   });
 
   it('confirms and runs bounded admin maintenance actions at action level', async () => {
-    render(<SettingsPage />);
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
 
-    openMaintenancePanel();
-    fireEvent.click(screen.getByRole('button', { name: '重置运行时缓存' }));
+      openMaintenancePanel();
+      fireEvent.click(screen.getByRole('button', { name: '重置运行时缓存' }));
 
-    expect(await screen.findByText('确认重置运行时缓存')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+      expect(await screen.findByText('确认重置运行时缓存')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
 
-    await waitFor(() => {
-      expect(resetRuntimeCaches).toHaveBeenCalledTimes(1);
-    });
-    await waitFor(() => {
-      expect(screen.getByText(/成功:运行时 provider\/search 缓存已重置。/)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(resetRuntimeCaches).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/成功:运行时 provider\/search 缓存已重置。/)).toBeInTheDocument();
+      });
     });
   });
 
   it('separates safe maintenance from factory reset and requires a typed phrase before destructive execution', async () => {
-    render(<SettingsPage />);
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
 
-    openMaintenancePanel();
-    expect(screen.getByText('维护操作')).toBeInTheDocument();
-    expect(screen.getByText('工厂重置 / 系统初始化')).toBeInTheDocument();
+      openMaintenancePanel();
+      expect(screen.getByText('维护操作')).toBeInTheDocument();
+      expect(screen.getByText('工厂重置 / 系统初始化')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '执行工厂重置' }));
+      fireEvent.click(screen.getByRole('button', { name: '执行工厂重置' }));
 
-    expect(await screen.findByText('确认工厂重置')).toBeInTheDocument();
-    const confirmButton = screen.getByRole('button', { name: '确认执行' });
-    expect(confirmButton).toBeDisabled();
+      expect(await screen.findByText('确认工厂重置')).toBeInTheDocument();
+      const confirmButton = screen.getByRole('button', { name: '确认执行' });
+      expect(confirmButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('输入确认短语'), { target: { value: 'WRONG' } });
-    expect(confirmButton).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('输入确认短语'), { target: { value: 'WRONG' } });
+      expect(confirmButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('输入确认短语'), { target: { value: 'FACTORY RESET' } });
-    expect(confirmButton).not.toBeDisabled();
+      fireEvent.change(screen.getByLabelText('输入确认短语'), { target: { value: 'FACTORY RESET' } });
+      expect(confirmButton).not.toBeDisabled();
 
-    fireEvent.click(confirmButton);
+      fireEvent.click(confirmButton);
 
-    await waitFor(() => {
-      expect(factoryResetSystem).toHaveBeenCalledWith({ confirmationPhrase: 'FACTORY RESET' });
+      await waitFor(() => {
+        expect(factoryResetSystem).toHaveBeenCalledWith({ confirmationPhrase: 'FACTORY RESET' });
+      });
     });
   });
 
   it('keeps maintenance and destructive actions out of the primary control-plane surface until expanded', async () => {
-    render(<SettingsPage />);
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
 
-    expect(await screen.findByText('全局控制面概览')).toBeInTheDocument();
-    expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
-    expect(getMaintenancePanel()).not.toHaveAttribute('open');
+      expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
+      expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
+      expect(getMaintenancePanel()).not.toHaveAttribute('open');
 
-    openMaintenancePanel();
+      openMaintenancePanel();
 
-    expect(getMaintenancePanel()).toHaveAttribute('open');
-    expect(screen.getByRole('button', { name: '查看系统执行日志' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '重置运行时缓存' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '执行工厂重置' })).toBeInTheDocument();
+      expect(getMaintenancePanel()).toHaveAttribute('open');
+      expect(screen.getByRole('button', { name: '查看系统执行日志' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '重置运行时缓存' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '执行工厂重置' })).toBeInTheDocument();
+    });
   });
 
   it('resets local drafts from the page header button', () => {
@@ -1541,11 +1585,13 @@ describe('SettingsPage', () => {
       activeCategory: 'system',
     }));
 
-    render(<SettingsPage />);
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: zh('settings.basicTitle') })).not.toBeInTheDocument();
-    expect(screen.queryByText(zh('settings.basicDesc'))).not.toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: zh('settings.basicTitle') })).not.toBeInTheDocument();
+      expect(screen.queryByText(zh('settings.basicDesc'))).not.toBeInTheDocument();
+    });
   });
 
   it('creates a custom data source and exposes it only in the matching routing selector', async () => {

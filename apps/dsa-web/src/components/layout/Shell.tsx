@@ -59,12 +59,14 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const surfacePathname = stripLocalePrefix(location.pathname);
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
+  const isSystemControlRoute = surfacePathname.startsWith('/settings/system');
   const shellViewportClass = 'h-full min-h-0';
   const shellFrameOverflowClass = '';
   const isWideRoute = surfacePathname === '/'
     || surfacePathname.startsWith('/scanner')
     || surfacePathname.startsWith('/chat')
-    || surfacePathname.startsWith('/portfolio');
+    || surfacePathname.startsWith('/portfolio')
+    || isSystemControlRoute;
   const isDesktop = useIsDesktopViewport();
   const previousPathnameRef = useRef(location.pathname);
   const didInitializeViewportRef = useRef(false);
@@ -187,7 +189,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}`}
+          className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
           <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full px-6 pt-6 pb-12 md:px-8 xl:px-12${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
             <div key={location.pathname} className="theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col">
