@@ -62,3 +62,23 @@ def get_rates(current_user: Optional[CurrentUser] = Depends(get_optional_current
 @router.get("/fx-commodities", summary="Get FX and commodities snapshot")
 def get_fx_commodities(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_fx_commodities(actor=_actor(current_user))
+
+
+@router.get("/temperature", summary="Get computed market temperature scores")
+def get_temperature(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_market_temperature(actor=_actor(current_user))
+
+
+@router.get("/market-briefing", summary="Get rule-based market briefing")
+def get_market_briefing(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_market_briefing(actor=_actor(current_user))
+
+
+@router.get("/futures", summary="Get futures and premarket direction")
+def get_futures(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_futures(actor=_actor(current_user))
+
+
+@router.get("/cn-short-sentiment", summary="Get China short-term sentiment snapshot")
+def get_cn_short_sentiment(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_cn_short_sentiment(actor=_actor(current_user))

@@ -137,6 +137,57 @@ class MarketOverviewService:
             actor=actor,
         )
 
+    def get_market_temperature(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            inputs = self._build_market_temperature_inputs()
+            source = "computed" if not inputs.get("fallback_notice") else "mixed"
+        except Exception:
+            inputs = self._fallback_market_temperature_inputs()
+            source = "fallback"
+        scores = self._compute_market_temperature_scores(inputs)
+        return {
+            "source": source,
+            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+            "scores": scores,
+        }
+
+    def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            inputs = self._build_market_temperature_inputs()
+            source = "computed" if not inputs.get("fallback_notice") else "mixed"
+        except Exception:
+            inputs = self._fallback_market_temperature_inputs()
+            source = "fallback"
+        scores = self._compute_market_temperature_scores(inputs)
+        return {
+            "source": source,
+            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+            "items": self._build_market_briefing_items(inputs, scores, source),
+        }
+
+    def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            payload = self._fetch_futures_snapshot()
+            payload.setdefault("source", "public")
+        except Exception:
+            payload = self._fallback_futures_snapshot()
+            payload["source"] = "fallback"
+        payload.setdefault("updatedAt", datetime.now().isoformat(timespec="seconds"))
+        payload.setdefault("items", [])
+        if not payload["items"]:
+            payload = self._fallback_futures_snapshot()
+        return payload
+
+    def get_cn_short_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            payload = self._fetch_cn_short_sentiment_snapshot()
+            payload.setdefault("source", "public")
+        except Exception:
+            payload = self._fallback_cn_short_sentiment_snapshot()
+            payload["source"] = "fallback"
+        payload.setdefault("updatedAt", datetime.now().isoformat(timespec="seconds"))
+        return payload
+
     def _panel(
         self,
         cache_key: str,
@@ -555,6 +606,12 @@ class MarketOverviewService:
     def _fetch_fx_commodities_snapshot(self) -> Dict[str, Any]:
         return self._fallback_fx_commodities_snapshot()
 
+    def _fetch_futures_snapshot(self) -> Dict[str, Any]:
+        return self._fallback_futures_snapshot()
+
+    def _fetch_cn_short_sentiment_snapshot(self) -> Dict[str, Any]:
+        return self._fallback_cn_short_sentiment_snapshot()
+
     def _fallback_cn_indices_snapshot(self) -> Dict[str, Any]:
         items = [
             ("上证指数", "000001.SH", 3120.55, 12.30, 0.39, "CN", [3098, 3105, 3112, 3120.55]),
@@ -646,6 +703,279 @@ class MarketOverviewService:
             self._metric_item("铜", "COPPER", 4.72, 0.08, 1.72, "USD/lb", [4.50, 4.58, 4.66, 4.72], explanation="铜上涨提示经济复苏预期。"),
         ]
         return self._card_snapshot(items, explanation="美元走强时风险资产可能承压；人民币走弱会压制 A股/港股情绪。")
+
+    def _fallback_futures_snapshot(self) -> Dict[str, Any]:
+        updated_at = datetime.now().isoformat(timespec="seconds")
+        rows = [
+            ("纳指期货", "NQ", 18420.5, 65.2, 0.35, "US", "premarket", [18320, 18380, 18400, 18420.5]),
+            ("标普500期货", "ES", 5238.25, 14.5, 0.28, "US", "premarket", [5208, 5218, 5229, 5238.25]),
+            ("道指期货", "YM", 38980.0, 72.0, 0.19, "US", "premarket", [38820, 38890, 38930, 38980]),
+            ("罗素2000期货", "RTY", 2094.6, -3.8, -0.18, "US", "premarket", [2108, 2102, 2098, 2094.6]),
+            ("富时A50期货", "CN00Y", 12580.0, 38.0, 0.30, "CN", "day", [12420, 12488, 12542, 12580]),
+            ("恒指期货", "HSI_F", 17712.0, 128.0, 0.73, "HK", "day", [17490, 17580, 17640, 17712]),
+            ("日经期货", "NKY_F", 38620.0, -90.0, -0.23, "JP", "day", [38880, 38740, 38690, 38620]),
+        ]
+        return {
+            "source": "fallback",
+            "updatedAt": updated_at,
+            "items": [
+                {
+                    "name": name,
+                    "symbol": symbol,
+                    "value": value,
+                    "change": change,
+                    "changePercent": change_percent,
+                    "market": market,
+                    "session": session,
+                    "sparkline": sparkline,
+                    "source": "fallback",
+                    "updatedAt": updated_at,
+                }
+                for name, symbol, value, change, change_percent, market, session, sparkline in rows
+            ],
+        }
+
+    def _fallback_cn_short_sentiment_snapshot(self) -> Dict[str, Any]:
+        metrics = {
+            "limitUpCount": 68,
+            "limitDownCount": 18,
+            "failedLimitUpRate": 24.5,
+            "maxConsecutiveLimitUps": 5,
+            "yesterdayLimitUpPerformance": 2.8,
+            "firstBoardCount": 42,
+            "secondBoardCount": 12,
+            "highBoardCount": 6,
+            "twentyCmLimitUpCount": 9,
+            "stRiskLevel": "normal",
+        }
+        score = self._compute_cn_short_sentiment_score(metrics)
+        return {
+            "source": "fallback",
+            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+            "sentimentScore": score,
+            "summary": self._build_cn_short_sentiment_summary(metrics, score),
+            "metrics": metrics,
+        }
+
+    def _build_market_temperature_inputs(self) -> Dict[str, Any]:
+        indices = self._fallback_cn_indices_snapshot()
+        breadth = self._fallback_cn_breadth_snapshot()
+        flows = self._fallback_cn_flows_snapshot()
+        sectors = self._fallback_sector_rotation_snapshot()
+        rates = self._fallback_rates_snapshot()
+        fx = self._fallback_fx_commodities_snapshot()
+        futures = self._fallback_futures_snapshot()
+        sentiment = {
+            "items": [
+                self._metric_item("Fear & Greed", "FGI", 56, 4, 7.7, "score", [44, 48, 52, 56], explanation="风险情绪改善。")
+            ],
+            "fallbackUsed": True,
+        }
+        return {
+            "indices": indices,
+            "breadth": breadth,
+            "flows": flows,
+            "sectors": sectors,
+            "rates": rates,
+            "fx": fx,
+            "futures": futures,
+            "sentiment": sentiment,
+            "fallback_notice": True,
+        }
+
+    def _fallback_market_temperature_inputs(self) -> Dict[str, Any]:
+        indices = self._fallback_cn_indices_snapshot()
+        breadth = self._fallback_cn_breadth_snapshot()
+        flows = self._fallback_cn_flows_snapshot()
+        sectors = self._fallback_sector_rotation_snapshot()
+        rates = self._fallback_rates_snapshot()
+        fx = self._fallback_fx_commodities_snapshot()
+        futures = self._fallback_futures_snapshot()
+        sentiment = {
+            "items": [
+                self._metric_item("Fear & Greed", "FGI", 50, 0, 0, "score", [48, 49, 50, 50], explanation="备用情绪数据。")
+            ],
+            "fallbackUsed": True,
+        }
+        return {
+            "indices": indices,
+            "breadth": breadth,
+            "flows": flows,
+            "sectors": sectors,
+            "rates": rates,
+            "fx": fx,
+            "futures": futures,
+            "sentiment": sentiment,
+            "fallback_notice": True,
+        }
+
+    def _compute_market_temperature_scores(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        us_index_change = self._avg_change(inputs.get("futures", {}).get("items", []), {"NQ", "ES", "YM", "RTY"})
+        vix_change = self._item_change(inputs.get("rates", {}).get("items", []), "VIX")
+        fear_greed = self._item_value(inputs.get("sentiment", {}).get("items", []), "FGI")
+        etf_flow = self._item_value(inputs.get("flows", {}).get("items", []), "CN_ETF")
+        us10y_change = self._item_change(inputs.get("rates", {}).get("items", []), "US10Y")
+        dxy_change = self._item_change(inputs.get("fx", {}).get("items", []), "DXY")
+        cn_index_change = self._avg_change(inputs.get("indices", {}).get("items", []), {"000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "HSI.HK", "HSTECH.HK"})
+        adv_ratio = self._item_value(inputs.get("breadth", {}).get("items", []), "ADV_RATIO")
+        limit_up = self._item_value(inputs.get("breadth", {}).get("items", []), "LIMIT_UP")
+        limit_down = self._item_value(inputs.get("breadth", {}).get("items", []), "LIMIT_DOWN")
+        northbound = self._item_value(inputs.get("flows", {}).get("items", []), "NORTHBOUND")
+        usdcnh_change = self._item_change(inputs.get("fx", {}).get("items", []), "USDCNH")
+        theme_change = self._avg_change(inputs.get("sectors", {}).get("items", [])[:3], None)
+        oil_change = self._item_change(inputs.get("fx", {}).get("items", []), "WTI")
+        gold_change = self._item_change(inputs.get("fx", {}).get("items", []), "GOLD")
+        dr007_change = self._item_change(inputs.get("rates", {}).get("items", []), "DR007")
+        shibor_change = self._item_change(inputs.get("rates", {}).get("items", []), "SHIBOR")
+
+        us = 40
+        us += 15 if (us_index_change or 0) > 0 else -8
+        us += 15 if (vix_change or -1) < 0 else -10
+        us += 15 if (fear_greed or 50) > 50 else -8
+        us += 10 if (etf_flow or 0) > 0 else -5
+        us += 10 if (us10y_change or 1) < 0 else -8
+        us += 10 if (dxy_change or 1) < 0 else -8
+
+        cn = 35
+        cn += 15 if (cn_index_change or 0) > 0 else -8
+        cn += 20 if (adv_ratio or 0) > 55 else -10
+        cn += 15 if (limit_up or 0) > (limit_down or 0) else -10
+        cn += 10 if (northbound or 0) > 0 else -5
+        cn += 10 if (usdcnh_change or 1) < 0 else -5
+        cn += 10 if (theme_change or 0) > 0 else -5
+
+        macro = 35
+        macro += 15 if (us10y_change or 0) > 0 else -6
+        macro += 15 if (dxy_change or 0) > 0 else -6
+        macro += 15 if (vix_change or 0) > 0 else -6
+        macro += 10 if (oil_change or 0) > 0 else -4
+        macro += 8 if (gold_change or 0) > 1.5 else 3 if (gold_change or 0) > 0 else 0
+
+        liquidity = 50
+        liquidity += 10 if (etf_flow or 0) > 0 else -6
+        liquidity += 10 if (dxy_change or 1) < 0 else -8
+        liquidity += 10 if (us10y_change or 1) < 0 else -8
+        liquidity += 10 if (dr007_change or 1) < 0 else -5
+        liquidity += 10 if (shibor_change or 1) < 0 else -5
+        liquidity += 10 if (northbound or 0) > 0 else -5
+
+        us_value = self._clamp_score(us)
+        cn_value = self._clamp_score(cn)
+        macro_value = self._clamp_score(macro)
+        liquidity_value = self._clamp_score(liquidity)
+        overall_value = self._clamp_score(us_value * 0.3 + cn_value * 0.3 + liquidity_value * 0.2 + (100 - macro_value) * 0.2)
+        return {
+            "overall": self._temperature_score(overall_value, "风险偏好改善，但宏观压力仍需关注。"),
+            "usRiskAppetite": self._temperature_score(us_value, "美股指数与风险情绪同步改善。"),
+            "cnMoneyEffect": self._temperature_score(cn_value, "指数表现尚可，市场宽度决定赚钱效应。"),
+            "macroPressure": self._pressure_score(macro_value, "美元、利率与波动率共同决定宏观压力。"),
+            "liquidity": self._temperature_score(liquidity_value, "资金环境结合 ETF、利率、美元和跨境资金判断。"),
+        }
+
+    def _build_market_briefing_items(self, inputs: Dict[str, Any], scores: Dict[str, Any], source: str) -> List[Dict[str, str]]:
+        items = [
+            {
+                "title": f"美股风险偏好{scores['usRiskAppetite']['label']}",
+                "message": "主要股指期货与 Fear & Greed 改善时，风险偏好更偏进攻；若 VIX 或美元反向走强，需要降低追涨假设。",
+                "severity": "positive" if scores["usRiskAppetite"]["value"] >= 60 else "neutral",
+                "category": "us",
+            },
+            {
+                "title": f"A股赚钱效应{scores['cnMoneyEffect']['label']}",
+                "message": "指数上涨、上涨家数占比和涨停跌停结构共同决定赚钱效应，结构性行情中需关注主题持续性。",
+                "severity": "positive" if scores["cnMoneyEffect"]["value"] >= 60 else "neutral",
+                "category": "cn",
+            },
+            {
+                "title": "宏观压力仍需关注" if scores["macroPressure"]["value"] >= 55 else "宏观压力相对平稳",
+                "message": "美债收益率、美元指数、原油和黄金同步上行时，成长股估值与风险资产可能承压。",
+                "severity": "warning" if scores["macroPressure"]["value"] >= 55 else "neutral",
+                "category": "macro",
+            },
+            {
+                "title": f"流动性环境{scores['liquidity']['label']}",
+                "message": "ETF 资金、DR007、SHIBOR、美债利率、DXY 与北向资金共同描述可交易流动性。",
+                "severity": "positive" if scores["liquidity"]["value"] >= 60 else "neutral",
+                "category": "liquidity",
+            },
+            {
+                "title": "风险提示",
+                "message": "当前部分数据为备用源，仅供趋势参考。" if source != "computed" or inputs.get("fallback_notice") else "若美元、利率和波动率同步升温，应下调风险偏好判断。",
+                "severity": "risk" if source != "computed" or inputs.get("fallback_notice") else "warning",
+                "category": "risk",
+            },
+        ]
+        return items
+
+    def _temperature_score(self, value: int, description: str) -> Dict[str, Any]:
+        return {
+            "value": value,
+            "label": self._temperature_label(value),
+            "trend": "improving" if value >= 61 else "stable" if value >= 46 else "cooling",
+            "description": description,
+        }
+
+    def _pressure_score(self, value: int, description: str) -> Dict[str, Any]:
+        return {
+            "value": value,
+            "label": "偏高" if value >= 61 else "中性偏高" if value >= 55 else self._temperature_label(value),
+            "trend": "rising" if value >= 55 else "stable",
+            "description": description,
+        }
+
+    @staticmethod
+    def _temperature_label(value: int) -> str:
+        if value <= 25:
+            return "极冷"
+        if value <= 45:
+            return "偏冷"
+        if value <= 60:
+            return "中性"
+        if value <= 75:
+            return "偏暖"
+        return "过热"
+
+    @staticmethod
+    def _clamp_score(value: float) -> int:
+        return int(round(max(0, min(100, value))))
+
+    def _avg_change(self, items: List[Dict[str, Any]], symbols: Optional[set[str]]) -> Optional[float]:
+        values = []
+        for item in items:
+            if symbols is not None and str(item.get("symbol")) not in symbols:
+                continue
+            value = self._clean_number(item.get("changePercent", item.get("change_pct")))
+            if value is not None:
+                values.append(value)
+        return sum(values) / len(values) if values else None
+
+    def _item_value(self, items: List[Dict[str, Any]], symbol: str) -> Optional[float]:
+        for item in items:
+            if str(item.get("symbol")) == symbol:
+                return self._clean_number(item.get("value", item.get("price")))
+        return None
+
+    def _item_change(self, items: List[Dict[str, Any]], symbol: str) -> Optional[float]:
+        for item in items:
+            if str(item.get("symbol")) == symbol:
+                return self._clean_number(item.get("changePercent", item.get("change_pct", item.get("change"))))
+        return None
+
+    def _compute_cn_short_sentiment_score(self, metrics: Dict[str, Any]) -> int:
+        score = 45
+        score += 18 if metrics["limitUpCount"] > metrics["limitDownCount"] * 2 else -12
+        score += 12 if metrics["failedLimitUpRate"] <= 25 else -15
+        score += 10 if metrics["maxConsecutiveLimitUps"] >= 5 else -8
+        score += 8 if metrics["yesterdayLimitUpPerformance"] > 0 else -8
+        score += 7 if metrics["highBoardCount"] >= 5 else -4
+        return self._clamp_score(score)
+
+    def _build_cn_short_sentiment_summary(self, metrics: Dict[str, Any], score: int) -> str:
+        if score >= 60 and metrics["limitUpCount"] > metrics["limitDownCount"]:
+            return "涨停家数占优，炸板率可控，短线情绪偏暖。"
+        if score <= 45:
+            return "涨停偏少或炸板率偏高，短线接力风险偏高。"
+        return "短线情绪中性，题材持续性仍需观察。"
 
     def _card_snapshot(self, items: List[Dict[str, Any]], explanation: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {

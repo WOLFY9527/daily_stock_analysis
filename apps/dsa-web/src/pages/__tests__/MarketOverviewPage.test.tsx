@@ -23,6 +23,10 @@ vi.mock('../../api/market', () => ({
     getSectorRotation: vi.fn(),
     getRates: vi.fn(),
     getFxCommodities: vi.fn(),
+    getTemperature: vi.fn(),
+    getMarketBriefing: vi.fn(),
+    getFutures: vi.fn(),
+    getCnShortSentiment: vi.fn(),
   },
 }));
 
@@ -128,6 +132,56 @@ const snapshotPanel = (panelName: string, symbol: string, label = symbol) => ({
   ],
 });
 
+const temperaturePayload = () => ({
+  source: 'computed',
+  updatedAt: '2026-04-29T10:00:00',
+  scores: {
+    overall: { value: 62, label: '偏暖', trend: 'improving' as const, description: '风险偏好改善，但宏观压力仍需关注。' },
+    usRiskAppetite: { value: 68, label: '偏暖', trend: 'improving' as const, description: '美股指数与风险情绪同步改善。' },
+    cnMoneyEffect: { value: 55, label: '中性', trend: 'stable' as const, description: '指数表现尚可，但市场宽度一般。' },
+    macroPressure: { value: 58, label: '中性偏高', trend: 'rising' as const, description: '美元与利率走强。' },
+    liquidity: { value: 52, label: '中性', trend: 'stable' as const, description: '资金环境整体平稳。' },
+  },
+});
+
+const briefingPayload = () => ({
+  source: 'computed',
+  updatedAt: '2026-04-29T10:00:00',
+  items: [
+    { title: '美股风险偏好偏暖', message: '主要指数走强，VIX 回落。', severity: 'positive' as const, category: 'us' },
+    { title: 'A股赚钱效应中性', message: '指数上涨但上涨家数占比一般。', severity: 'neutral' as const, category: 'cn' },
+    { title: '宏观压力仍需关注', message: '美债收益率和美元指数同步走强。', severity: 'warning' as const, category: 'macro' },
+  ],
+});
+
+const futuresPayload = () => ({
+  source: 'fallback',
+  updatedAt: '2026-04-29T10:00:00',
+  items: [
+    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback' },
+    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback' },
+  ],
+});
+
+const cnShortSentimentPayload = () => ({
+  source: 'fallback',
+  updatedAt: '2026-04-29T10:00:00',
+  sentimentScore: 64,
+  summary: '涨停家数占优，炸板率可控，短线情绪偏暖。',
+  metrics: {
+    limitUpCount: 68,
+    limitDownCount: 18,
+    failedLimitUpRate: 24.5,
+    maxConsecutiveLimitUps: 5,
+    yesterdayLimitUpPerformance: 2.8,
+    firstBoardCount: 42,
+    secondBoardCount: 12,
+    highBoardCount: 6,
+    twentyCmLimitUpCount: 9,
+    stRiskLevel: 'normal',
+  },
+});
+
 describe('MarketOverviewPage', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -188,6 +242,10 @@ describe('MarketOverviewPage', () => {
         },
       ],
     });
+    vi.mocked(marketApi.getTemperature).mockResolvedValue(temperaturePayload());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValue(briefingPayload());
+    vi.mocked(marketApi.getFutures).mockResolvedValue(futuresPayload());
+    vi.mocked(marketApi.getCnShortSentiment).mockResolvedValue(cnShortSentimentPayload());
   });
 
   afterEach(() => {
@@ -206,6 +264,16 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByRole('heading', { name: /大市全景监控/i })).not.toBeInTheDocument();
 
     expect(await screen.findByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
+    expect(screen.getByTestId('market-temperature-strip')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
+    expect(screen.getByText(/综合市场温度/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/美股风险偏好/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/A股赚钱效应/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/全球宏观压力/i)).toBeInTheDocument();
+    expect(screen.getByText(/流动性环境/i)).toBeInTheDocument();
+    expect(screen.getByTestId('market-briefing-card')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /今日市场解读/i })).toBeInTheDocument();
+    expect(screen.getByText(/美股风险偏好偏暖/i)).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-hero-SPX')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-hero-CSI300')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-hero-BTC')).toBeInTheDocument();
@@ -216,11 +284,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /商品与外汇/i })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /宏观经济与流动性/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /全球核心指数走势/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /ETF 资金流向/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /市场宽度与赚钱效应/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /加密货币行情/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /同步最新行情/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /刷新 情绪与资金面/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /刷新 商品与外汇/i })).toBeInTheDocument();
@@ -232,7 +297,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByText(/标普500/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/美债10年期/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/美元指数/i).length).toBeGreaterThan(0);
-    expect(screen.getByText('76,837.04')).toBeInTheDocument();
+    expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0);
     expect(screen.getByText(/贪婪与恐慌指数/i)).toBeInTheDocument();
     expect(screen.getByText('26.00')).toBeInTheDocument();
     expect(screen.getByText(/更新失败/i)).toBeInTheDocument();
@@ -253,16 +318,20 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expect(screen.getByRole('button', { name: 'A股/港股' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /今日市场解读/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /资金流向/i })).toBeInTheDocument();
     expect(screen.queryByText('USD/CNH')).not.toBeInTheDocument();
     expect(screen.queryByText('中国10年国债收益率')).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-cnFlows')).toHaveAttribute('data-market-card-rank', '1');
-    expect(screen.getByTestId('market-overview-card-cnBreadth')).toHaveAttribute('data-market-card-rank', '2');
+    expect(screen.getByTestId('market-overview-card-cnShortSentiment')).toHaveAttribute('data-market-card-rank', '0');
+    expect(screen.getByTestId('market-overview-card-futures')).toHaveAttribute('data-market-card-rank', '1');
+    expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '2');
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
+    expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ETF 资金流向/i })).toBeInTheDocument();
@@ -273,10 +342,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText('Shanghai Composite')).not.toBeInTheDocument();
     expect(screen.queryByText('Shenzhen Component')).not.toBeInTheDocument();
     expect(screen.queryByText('DXY')).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-rank', '1');
-    expect(screen.getByTestId('market-overview-card-sentiment')).toHaveAttribute('data-market-card-rank', '2');
-    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '3');
+    expect(screen.getByTestId('market-overview-card-futures')).toHaveAttribute('data-market-card-rank', '0');
+    expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '1');
+    expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-rank', '2');
 
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
     expect(marketApi.getRates).toHaveBeenCalledTimes(1);
@@ -288,6 +356,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect(await screen.findByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
   });
@@ -308,6 +377,23 @@ describe('MarketOverviewPage', () => {
     expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
     expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(1);
     expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1);
+    expect(marketApi.getFutures).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps fallback summary modules visible when new APIs fail', async () => {
+    vi.mocked(marketApi.getTemperature).mockRejectedValueOnce(new Error('temperature down'));
+    vi.mocked(marketApi.getMarketBriefing).mockRejectedValueOnce(new Error('briefing down'));
+    vi.mocked(marketApi.getFutures).mockRejectedValueOnce(new Error('futures down'));
+    vi.mocked(marketApi.getCnShortSentiment).mockRejectedValueOnce(new Error('sentiment down'));
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /今日市场解读/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+    expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
   });
 
   it('keeps stale card data visible while refreshing a single card', async () => {
