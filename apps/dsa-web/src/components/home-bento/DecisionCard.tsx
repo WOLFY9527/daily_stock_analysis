@@ -235,43 +235,41 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </div>
 
         <div
-          className="pr-2 pb-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[&::-webkit-scrollbar]:hidden xl:[-ms-overflow-style:none] xl:[scrollbar-width:none]"
+          className="overflow-visible pr-2 pb-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[&::-webkit-scrollbar]:hidden xl:[-ms-overflow-style:none] xl:[scrollbar-width:none]"
           data-testid="home-bento-decision-scroll-body"
         >
           <div
-            className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 mt-6 mb-8"
+            className="grid w-full grid-cols-2 items-end gap-8 mt-6 mb-10 xl:grid-cols-3"
             data-testid="home-bento-decision-hero-row"
           >
-            <div className="flex items-baseline gap-12" data-testid="home-bento-decision-action-score">
-              <div className="min-w-0">
-                <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
-                <span
-                  className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
-                  data-testid="home-bento-decision-signal-hero"
-                  style={getActionToneStyle(signalTone)}
-                >
-                  {signalCommand.command}
-                </span>
-              </div>
+            <div className="col-span-1 min-w-0" data-testid="home-bento-decision-action">
+              <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
+              <span
+                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
+                data-testid="home-bento-decision-signal-hero"
+                style={getActionToneStyle(signalTone)}
+              >
+                {signalCommand.command}
+              </span>
+            </div>
 
+            <div className="col-span-1 min-w-0" data-testid="home-bento-decision-score">
+              <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
               <div
-                className="min-w-0 text-left"
+                className="mt-3 flex items-end gap-2"
                 data-testid="home-bento-decision-core-metrics"
               >
-                <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
-                <div className="mt-3 flex items-end gap-2">
-                  <p
-                    className="font-mono text-5xl font-semibold leading-none text-white"
-                    data-testid="home-bento-decision-score"
-                  >
-                    {heroValue}
-                  </p>
-                  <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
-                </div>
+                <p
+                  className="font-mono text-5xl font-semibold leading-none text-white"
+                  data-testid="home-bento-decision-score-value"
+                >
+                  {heroValue}
+                </p>
+                <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
               </div>
             </div>
 
-            <div className="w-full xl:w-72 flex-shrink-0" data-testid="home-bento-decision-conviction">
+            <div className="col-span-2 min-w-0 w-full xl:col-span-1" data-testid="home-bento-decision-conviction">
               <div className="flex items-end justify-between gap-4">
                 <Label micro className="text-white/40">{isEnglish ? 'AI CONVICTION' : '确信度'}</Label>
                 <span
