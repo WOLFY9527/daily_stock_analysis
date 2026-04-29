@@ -192,7 +192,7 @@ describe('ChatPage', () => {
     expect(screen.queryByText(/429|rate limit exceeded/i)).not.toBeInTheDocument();
   });
 
-  it('renders a three-column workspace with a dedicated right-side strategy console and docked composer', async () => {
+  it('renders a widened chat workspace with a right-side console toggle and non-overlay composer', async () => {
     const { container } = render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -209,26 +209,27 @@ describe('ChatPage', () => {
     expect(container.querySelectorAll('main')).toHaveLength(1);
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'overflow-hidden', 'bg-transparent');
-    const historyPane = screen.getByTestId('chat-history-pane');
-    expect(historyPane).toHaveClass('w-64', 'shrink-0', 'hidden', 'md:flex', 'flex-col', 'border-r', 'border-white/5', 'bg-white/[0.01]');
-    expect(screen.getByTestId('chat-history-list')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'px-3', 'pb-4', 'flex', 'flex-col', 'gap-1');
+    expect(screen.queryByTestId('chat-history-pane')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-main-shell')).toHaveClass('flex', 'flex-1', 'min-w-0', 'overflow-hidden');
-    expect(screen.getByTestId('chat-main-panel')).toHaveClass('relative', 'flex', 'flex-1', 'min-w-0', 'flex-col', 'border-r', 'border-white/5');
+    expect(screen.getByTestId('chat-main-panel')).toHaveClass('flex', 'flex-1', 'min-w-0', 'flex-col');
+    expect(screen.getByTestId('chat-main-panel')).not.toHaveClass('relative');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
     expect(screen.getByTestId('chat-main')).toHaveAttribute('id', 'chat-scroll-container');
     expect(screen.getByTestId('chat-main')).toHaveClass('flex-1', 'overflow-y-auto', 'no-scrollbar', 'w-full');
     expect(screen.getByTestId('chat-main')).not.toHaveClass('relative');
     expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('w-full');
+    expect(screen.queryByRole('heading', { name: translate('zh', 'chat.title') })).not.toBeInTheDocument();
+    expect(screen.queryByTitle('查看摘要')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-message-scroll')).toHaveClass('w-full', 'min-h-full');
     expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('flex-1', 'overflow-y-auto');
-    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'px-6', 'md:px-8', 'xl:px-12', 'pt-8', 'pb-48', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-8', 'flex', 'flex-col', 'gap-8', 'min-h-full');
     expect(screen.getByTestId('chat-message-stream')).not.toHaveClass('max-w-4xl', 'mx-auto');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('absolute', 'bottom-0', 'left-0', 'w-full', 'z-50', 'pointer-events-none');
-    expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('bg-[#050505]/95', 'border-t');
-    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'bg-gradient-to-t', 'from-[#030303]', 'via-[#030303]/95', 'to-transparent', 'pt-20', 'pb-8');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('mt-auto', 'w-full', 'border-t', 'border-white/5');
+    expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('absolute', 'bottom-0', 'left-0', 'z-50', 'pointer-events-none');
+    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'bg-gradient-to-t', 'from-[#030303]', 'via-[#030303]/98', 'to-[#030303]/72', 'pt-6', 'pb-6');
     expect(screen.getByTestId('chat-input-gradient')).not.toHaveClass('px-6');
-    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'pointer-events-auto', 'px-6', 'md:px-8', 'xl:px-12');
+    expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full', 'px-6', 'md:px-8', 'xl:px-12');
     expect(screen.getByTestId('chat-console-inner')).not.toHaveClass('max-w-4xl', 'mx-auto');
     expect(screen.getByTestId('chat-input-shell').parentElement).toBe(screen.getByTestId('chat-main-panel'));
     expect(screen.getByTestId('chat-input-shell').parentElement).not.toBe(screen.getByTestId('chat-main'));
@@ -244,14 +245,34 @@ describe('ChatPage', () => {
     );
     expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('text-[10px]', 'font-medium', 'tracking-wide', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'w-full', 'lg:w-[280px]', 'xl:w-[320px]', 'shrink-0', 'flex-col', 'gap-6', 'overflow-y-auto', 'no-scrollbar', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-6');
+    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-hidden', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
+    expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('flex', 'flex-wrap', 'gap-2.5');
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId('chat-bento-brief-trigger'));
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: translate('zh', 'chat.title') })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '问股控制台' })).toBeInTheDocument();
+  });
+
+  it('switches the right-side console between engines and history', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-console-mode-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-strategy-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-history-list')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '历史记录' }));
+
+    expect(screen.getByTestId('chat-history-list')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-strategy-grid')).not.toBeInTheDocument();
   });
 
   it('exposes a prominent new-chat action in the header and clears the current thread', async () => {
@@ -263,8 +284,8 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    const newChatButton = await screen.findByRole('button', { name: translate('zh', 'chat.newChatTitle') });
-    fireEvent.click(newChatButton);
+    const newChatButtons = await screen.findAllByRole('button', { name: translate('zh', 'chat.newChatTitle') });
+    fireEvent.click(newChatButtons[0]);
 
     expect(mockStartNewChat).toHaveBeenCalledTimes(1);
   });
@@ -307,10 +328,10 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('w-full');
-    expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('min-h-full', 'items-center', 'justify-center');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('w-full', 'min-h-full', 'flex', 'flex-col', 'gap-12');
+    expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('items-center', 'justify-center');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
-    expect(entryDecisionCard).toHaveClass('rounded-[28px]', 'border-white/8', 'bg-white/[0.03]', 'hover:border-white/20', 'hover:bg-white/[0.04]', 'backdrop-blur-2xl');
+    expect(entryDecisionCard).toHaveClass('rounded-2xl', 'border-white/6', 'bg-white/[0.03]', 'p-5', 'hover:border-white/16', 'hover:bg-white/[0.05]');
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.entryDecision.title')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.positionReview.title')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.eventFollowUp.title')).length).toBeGreaterThan(0);
@@ -485,6 +506,8 @@ describe('ChatPage', () => {
         </ShellRailHarness>
       </MemoryRouter>
     );
+
+    fireEvent.click(screen.getByRole('button', { name: '历史记录' }));
 
     const sessionCard = await screen.findByRole('button', {
       name: translate('zh', 'chat.switchToConversation', { title: '请简要分析 600519' }),
@@ -822,7 +845,9 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(translate('en', 'chat.historyTitle'))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+
+    expect((await screen.findAllByText(translate('en', 'chat.historyTitle'))).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', {
       name: translate('en', 'chat.switchToConversation', { title: '请简要分析 600519' }),
     })).toBeInTheDocument();
