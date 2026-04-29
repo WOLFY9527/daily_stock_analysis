@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ArrowUp, Download, PanelRightOpen, SendHorizontal } from 'lucide-react';
+import { ArrowUp, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -832,7 +832,7 @@ const ChatPage: React.FC = () => {
             </button>
           )}
         </div>
-        <p className="mt-3 text-center text-[10px] text-white/30">
+        <p className="mb-0 mt-2 text-center text-[10px] text-white/30">
           {composerDisclaimer}
         </p>
       </div>
@@ -888,7 +888,7 @@ const ChatPage: React.FC = () => {
               >
                 <div
                   data-testid="chat-empty-state"
-                  className="flex-1 overflow-y-auto flex flex-col items-center justify-center pb-10"
+                  className="flex flex-1 flex-col items-center justify-center overflow-y-auto"
                 >
                   <div className="flex w-full max-w-5xl flex-col items-center gap-12 px-6 pt-6 text-center md:px-8 xl:px-12">
                     {skillsLoadError ? (
@@ -902,23 +902,10 @@ const ChatPage: React.FC = () => {
                     ) : null}
 
                     <div className="flex w-full max-w-4xl flex-col items-center">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
-                        <svg
-                          className="h-7 w-7"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          aria-hidden="true"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                          />
-                        </svg>
+                      <div className="mb-3 flex items-center justify-center gap-3">
+                        <Lightbulb className="h-6 w-6 text-white/80" aria-hidden="true" />
+                        <h1 className="text-3xl font-bold text-white">{chat('emptyTitle')}</h1>
                       </div>
-                      <h3 className="mt-6 text-2xl font-semibold tracking-tight text-white md:text-[2rem]">{chat('emptyTitle')}</h3>
                       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/62">
                         {chat('emptyBody')}
                       </p>
@@ -968,7 +955,7 @@ const ChatPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div data-testid="chat-input-shell" className="flex-none w-full pb-8 pt-4">
+                <div data-testid="chat-input-shell" className="mt-auto w-full pt-4">
                   <div data-testid="chat-input-gradient" className="w-full">
                     <div
                       data-testid="chat-console-inner"

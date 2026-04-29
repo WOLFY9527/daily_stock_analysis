@@ -223,8 +223,10 @@ describe('ChatPage', () => {
     expect(screen.queryByTitle('查看摘要')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-scroll')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-stream')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-center', 'pb-10');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('flex-none', 'w-full', 'pb-8', 'pt-4');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-center');
+    expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('pb-10', 'pb-8', 'mb-8');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('w-full', 'mt-auto', 'pt-4');
+    expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('pb-8', 'pb-10', 'mb-8');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('absolute', 'bottom-0', 'left-0', 'z-50', 'pointer-events-none');
     expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full');
     expect(screen.getByTestId('chat-input-gradient')).not.toHaveClass('px-6');
@@ -244,7 +246,7 @@ describe('ChatPage', () => {
       'p-2',
       'shadow-2xl',
     );
-    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('text-[10px]', 'text-center', 'text-white/30');
+    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('mt-2', 'mb-0', 'text-[10px]', 'text-center', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-hidden', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
@@ -329,7 +331,8 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-center', 'pb-10');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-center');
+    expect(screen.getByRole('heading', { name: translate('zh', 'chat.emptyTitle') })).toHaveClass('text-3xl', 'font-bold', 'text-white');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
     expect(entryDecisionCard).toHaveClass('flex', 'flex-col', 'items-center', 'justify-center', 'rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'px-8', 'py-6', 'text-center', 'hover:bg-white/[0.05]');
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.entryDecision.title')).length).toBeGreaterThan(0);

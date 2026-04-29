@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 💬 **WolfyStock 问股空态继续压缩垂直浪费并移除底部叠高** — `apps/dsa-web/src/pages/ChatPage.tsx` 进一步收紧问股空态主视图：顶部灯泡图标不再单独占一行，而是与“先提一个具体问题”并到同一条 `flex items-center justify-center gap-3` 标题线上，避免顶部裁切并回收一整行高度。空态输入舱父级同时删掉额外的 `pb-8`/`mb-*` 叠加，只保留 `w-full mt-auto pt-4`，免责声明压到 `mt-2 mb-0`，让输入框在视觉上尽可能贴近组件允许的最底端而不再被额外 padding 垫高。配套回归已更新到 `ChatPage.test.tsx`，并重新通过本地测试、构建和 Safari 新标签页验收。
+
 - 💬 **WolfyStock 问股主视图改为上下分层骨架，修复输入舱悬空与空态滚动链路** — `apps/dsa-web/src/pages/ChatPage.tsx` 的问股空态主视图不再依赖 `mt-auto` 试图“碰运气”沉底，而是改成严格的上下分层：`main` 根容器固定为 `flex-1 flex flex-col h-full overflow-hidden`，上半区使用独立的 `flex-1 overflow-y-auto flex flex-col items-center justify-center pb-10` 承载标题、三张入口卡和快捷标签，下半区使用 `flex-none w-full pb-8 pt-4` 固定悬浮输入舱，从结构上消除输入框被顶到半空和细微高度溢出引发全局滚动条的问题。三张入口卡片内部也同步改成 `px-8 py-6`、`flex flex-col items-center justify-center text-center` 和 `gap-3` 的终端排版，避免文字贴边。配套回归已更新到 `ChatPage.test.tsx`，并重新通过本地测试、构建和 Safari 新标签页验收。
 
 - 💬 **WolfyStock 问股主视图二次收口，重心下沉并去胶囊卡片** — `apps/dsa-web/src/pages/ChatPage.tsx` 继续收紧问股空态主视图：主面板补成 `flex flex-col h-full`，悬浮输入舱父级加上 `mt-auto` 语义并把底部间距下沉到 `mb-8`，让输入框更贴近页面底缘而不再漂浮在中段；标题、卡片和快捷标签之间的垂直节奏同步拉大到更疏朗的 `gap-12`。三张预设入口卡片也彻底废除偏胶囊的旧材质，统一回到标准 `GlassCard` 终端材质 `bg-white/[0.02] border border-white/5 rounded-2xl p-6`，并按三列等高网格对齐。输入舱外框进一步降噪为 `border-white/[0.05]`，背景微提亮到 `bg-white/[0.04] backdrop-blur-2xl shadow-2xl`，免责声明继续保持极低对比度居中放在输入框正下方。配套回归已更新到 `ChatPage.test.tsx`，并重新走本地测试与浏览器验收。
