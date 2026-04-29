@@ -177,6 +177,7 @@ describe('HomeSurfacePage', () => {
     const root = screen.getByTestId('home-bento-dashboard');
     const grid = screen.getByTestId('home-bento-grid');
     const main = screen.getByTestId('home-bento-main');
+    const omnibarShell = screen.getByTestId('home-bento-omnibar-shell');
     const omnibar = screen.getByTestId('home-bento-omnibar');
     const primaryStack = screen.getByTestId('home-bento-primary-stack');
     const secondaryStack = screen.getByTestId('home-bento-secondary-stack');
@@ -199,12 +200,13 @@ describe('HomeSurfacePage', () => {
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
-    expect(omnibar).toHaveClass('flex', 'h-12', 'w-full', 'min-w-0', 'shrink-0', 'gap-3');
+    expect(omnibarShell).toHaveClass('mb-8', 'w-full', 'max-w-4xl', 'shrink-0');
+    expect(omnibar).toHaveClass('flex', 'h-12', 'w-full', 'min-w-0', 'gap-3');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
-    expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'min-h-0');
+    expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(main).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(main.className).not.toContain('overflow-hidden');
-    expect(main.firstElementChild).toBe(omnibar);
+    expect(main.firstElementChild).toBe(omnibarShell);
     expect(main.lastElementChild).toBe(grid);
     expect(grid).toHaveClass('flex', 'flex-col', 'w-full', 'min-h-0', 'min-w-0', 'items-stretch', 'gap-6', 'xl:flex-row', 'xl:items-start');
     expect(primaryStack).toHaveClass('flex', 'flex-col', 'h-full', 'min-h-0', 'w-full', 'xl:flex-[1.08]');
@@ -223,7 +225,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByRole('link', { name: /扫描器/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /回测/i })).not.toBeInTheDocument();
-    expect(screen.getByText('WOLFY AI 决断')).toBeInTheDocument();
+    expect(screen.getByText('WOLFY AI 决策')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
@@ -239,7 +241,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-scroll-body')).toHaveClass('xl:min-h-0', 'xl:flex-1', 'xl:overflow-y-auto', 'pr-2', 'pb-6');
     expect(screen.getByTestId('home-bento-decision-scroll-body')).not.toHaveClass('overflow-y-auto');
     expect(screen.getByTestId('home-bento-decision-hero-row')).toHaveClass('flex', 'flex-col', 'xl:flex-row', 'justify-between', 'items-start', 'xl:items-center', 'gap-8', 'mt-6', 'mb-8');
-    expect(screen.getByTestId('home-bento-decision-action-score')).toHaveClass('flex', 'items-baseline', 'gap-8');
+    expect(screen.getByTestId('home-bento-decision-action-score')).toHaveClass('flex', 'items-baseline', 'gap-12');
     expect(screen.getByTestId('home-bento-decision-conviction')).toHaveClass('w-full', 'xl:w-72', 'flex-shrink-0');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('78%');
     expect(screen.getAllByTestId(/home-bento-decision-conviction-segment-/).filter((segment) => segment.className.includes('shadow-')).length).toBe(4);
@@ -303,7 +305,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
     expect(primaryStack.compareDocumentPosition(secondaryStack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(omnibar.compareDocumentPosition(screen.getByTestId('home-bento-card-decision')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(omnibar.parentElement).toBe(main);
+    expect(omnibar.parentElement).toBe(omnibarShell);
     expect(strategyCard.compareDocumentPosition(secondaryGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(techCard.compareDocumentPosition(fundamentalsCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();

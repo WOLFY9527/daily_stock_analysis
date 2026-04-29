@@ -242,7 +242,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 mt-6 mb-8"
             data-testid="home-bento-decision-hero-row"
           >
-            <div className="flex items-baseline gap-8" data-testid="home-bento-decision-action-score">
+            <div className="flex items-baseline gap-12" data-testid="home-bento-decision-action-score">
               <div className="min-w-0">
                 <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
                 <span

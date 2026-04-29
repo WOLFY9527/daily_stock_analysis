@@ -315,7 +315,7 @@ const CONTENT: Record<DashboardLocale, {
     sessionBadge: '美股 AI 基础设施',
     regimeBadge: '动量回升',
     decision: {
-      eyebrow: 'WOLFY AI 决断',
+      eyebrow: 'WOLFY AI 决策',
       company: '英伟达',
       heroValue: '8.6',
       heroUnit: '/10',
@@ -1552,7 +1552,7 @@ function SkeletonLine({ className = '' }: { className?: string }) {
 function InPlaceDecisionSkeleton({ locale, ticker }: { locale: DashboardLocale; ticker: string }) {
   return (
     <BentoCard
-      eyebrow={locale === 'en' ? 'WOLFY AI Decision' : 'WOLFY AI 决断'}
+      eyebrow={locale === 'en' ? 'WOLFY AI DECISION' : 'WOLFY AI 决策'}
       className={`h-full w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
       testId="home-bento-card-decision"
     >
@@ -1988,58 +1988,60 @@ const HomeBentoDashboardPage: React.FC = () => {
           </div>
         </div>
       ) : null}
-      <main className="w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0" data-testid="home-bento-main">
-        <form
-          className="flex h-12 w-full min-w-0 shrink-0 gap-3"
-          data-testid="home-bento-omnibar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleAnalyze();
-          }}
-        >
-          <div
-            className="group relative flex min-w-0 flex-1 items-center overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] shadow-lg transition-all focus-within:border-white/20 focus-within:bg-white/[0.04]"
-            data-testid="home-bento-omnibar-input-shell"
+      <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
+        <div className="mb-8 w-full max-w-4xl shrink-0" data-testid="home-bento-omnibar-shell">
+          <form
+            className="flex h-12 w-full min-w-0 gap-3"
+            data-testid="home-bento-omnibar"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleAnalyze();
+            }}
           >
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-              <Search className="h-4 w-4 text-white/40" />
+            <div
+              className="group relative flex min-w-0 flex-1 items-center overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] shadow-lg transition-all focus-within:border-white/20 focus-within:bg-white/[0.04]"
+              data-testid="home-bento-omnibar-input-shell"
+            >
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                <Search className="h-4 w-4 text-white/40" />
+              </div>
+              <input
+                data-testid="home-bento-omnibar-input"
+                type="text"
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                }}
+                autoComplete="off"
+                disabled={isBusy}
+                className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
+                placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
+              />
             </div>
-            <input
-              data-testid="home-bento-omnibar-input"
-              type="text"
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-              }}
-              autoComplete="off"
+            <button
+              type="submit"
               disabled={isBusy}
-              className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
-              placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isBusy}
-            className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
-            data-testid="home-bento-analyze-button"
-          >
-            {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
-          </button>
-          <button
-            ref={openHistoryDrawerButton.ref}
-            type="button"
-            aria-label={locale === 'en' ? 'History' : '历史记录'}
-            onClick={openHistoryDrawerButton.onClick}
-            onPointerUp={openHistoryDrawerButton.onPointerUp}
-            disabled={isBusy}
-            className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
-            data-testid="home-bento-history-drawer-trigger"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-            </svg>
-          </button>
-        </form>
+              className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
+              data-testid="home-bento-analyze-button"
+            >
+              {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
+            </button>
+            <button
+              ref={openHistoryDrawerButton.ref}
+              type="button"
+              aria-label={locale === 'en' ? 'History' : '历史记录'}
+              onClick={openHistoryDrawerButton.onClick}
+              onPointerUp={openHistoryDrawerButton.onPointerUp}
+              disabled={isBusy}
+              className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
+              data-testid="home-bento-history-drawer-trigger"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+              </svg>
+            </button>
+          </form>
+        </div>
         {(() => {
           const readyCopy = dashboardData;
           return (
