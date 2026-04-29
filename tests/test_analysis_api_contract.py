@@ -347,6 +347,74 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response["report"]["meta"]["strategy_type"], "buy")
         self.assertEqual(response["report"]["summary"]["strategy_summary"], "等待确认")
 
+    def test_build_report_payload_includes_structured_analysis_detail_aliases(self) -> None:
+        service = AnalysisService()
+        result = SimpleNamespace(
+            code="TSLA",
+            name="Tesla",
+            query_id="q-detail-aliases",
+            current_price=171.22,
+            change_pct=2.41,
+            model_used="deepseek/deepseek-chat",
+            analysis_summary="等待回踩确认后再加仓。",
+            operation_advice="持有",
+            trend_prediction="震荡偏强",
+            sentiment_score=64,
+            news_summary="news",
+            technical_analysis="MACD 金叉后放大。",
+            fundamental_analysis="盈利能力保持稳定。",
+            risk_warning="波动率仍高。",
+            report_language="zh",
+            decision_type="buy",
+            confidence_level="高",
+            ma_analysis="MA20 上拐，MA60 走平。",
+            volume_analysis="回踩缩量，反弹放量。",
+            raw_response={"provider": "llm", "content": "raw ai response"},
+            dashboard={
+                "battle_plan": {
+                    "sniper_points": {
+                        "ideal_buy": "168.40 - 170.20",
+                        "stop_loss": "162.80",
+                        "take_profit": "184.20",
+                    }
+                },
+                "data_perspective": {
+                    "trend_status": {"ma_alignment": "多头修复"},
+                    "technical_indicators": {"rsi_14": "58.3", "macd": "金叉后放大"},
+                    "volume_analysis": {"volume_meaning": "回踩缩量，反弹放量"},
+                },
+            },
+            runtime_execution={"steps": []},
+            notification_result={"status": "ok"},
+            get_sniper_points=lambda: {
+                "ideal_buy": "168.40 - 170.20",
+                "stop_loss": "162.80",
+                "take_profit": "184.20",
+            },
+        )
+
+        payload = service._build_report_payload(
+            result,
+            query_id="q-detail-aliases",
+            report_type="detailed",
+        )
+
+        analysis_result = payload["details"]["analysis_result"]
+        self.assertEqual(analysis_result["decision"], "buy")
+        self.assertEqual(analysis_result["action"], "持有")
+        self.assertEqual(analysis_result["score"], 64)
+        self.assertEqual(analysis_result["confidence"], "高")
+        self.assertEqual(analysis_result["entry_price"], "168.40 - 170.20")
+        self.assertEqual(analysis_result["stop_loss"], "162.80")
+        self.assertEqual(analysis_result["take_profit"], "184.20")
+        self.assertEqual(analysis_result["technical_analysis"], "MACD 金叉后放大。")
+        self.assertEqual(analysis_result["ma_alignment"], "多头修复")
+        self.assertEqual(analysis_result["rsi"], "58.3")
+        self.assertEqual(analysis_result["macd"], "金叉后放大")
+        self.assertEqual(analysis_result["volume_dynamics"], "回踩缩量，反弹放量")
+        self.assertEqual(analysis_result["full_reasoning"], "等待回踩确认后再加仓。")
+        self.assertEqual(payload["details"]["raw_ai_response"], {"provider": "llm", "content": "raw ai response"})
+
     def test_build_analysis_report_extracts_fundamental_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

@@ -557,6 +557,260 @@ describe('HomeSurfacePage', () => {
     });
   });
 
+  it('does not neutralize a successful saved report just because fallback diagnostics mention failed model attempts', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValue({
+      ...defaultHistoryReport,
+      meta: {
+        ...defaultHistoryReport.meta,
+        id: 6,
+        queryId: 'q6',
+        stockCode: 'BMNR',
+        stockName: 'Bitmine Immersion Technologies（BMNR）',
+      },
+      summary: {
+        ...defaultHistoryReport.summary,
+        analysisSummary: 'The saved report succeeded after a fallback model attempt.',
+        operationAdvice: 'Reduce into strength, then reassess on support.',
+        trendPrediction: 'Volatile but still recoverable.',
+        sentimentScore: 36,
+        sentimentLabel: 'Bearish',
+      },
+      details: {
+        rawResult: {
+          dashboard: {
+            dataPerspective: {
+              trendStatus: {
+                maAlignment: '短期转弱，MA5 下穿 MA10，但 MA10 仍大于 MA20，均线初步缠绕。',
+              },
+              volumeAnalysis: {
+                volumeMeaning: '缩量，追价意愿偏弱。',
+              },
+            },
+            structuredAnalysis: {
+              technicals: {
+                macd: 0.2934,
+                rsi14: 49.83,
+              },
+            },
+          },
+          runtimeExecution: {
+            ai: {
+              attemptChain: [
+                { model: 'deepseek/deepseek-v4-pro', status: 'success' },
+                {
+                  model: 'gemini/gemini-2.5-flash',
+                  status: 'failed',
+                  reason: 'litellm.ServiceUnavailableError: GeminiException - high demand',
+                },
+              ],
+            },
+          },
+        },
+        contextSnapshot: {
+          enhancedContext: {
+            dataQuality: {
+              providerNotes: {
+                diagnostics: {
+                  aiAttemptChain: [
+                    { model: 'deepseek/deepseek-v4-pro', status: 'success' },
+                    {
+                      model: 'gemini/gemini-2.5-flash',
+                      status: 'failed',
+                      message: 'AI model gemini/gemini-2.5-flash failed: high demand',
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        standardReport: {
+          ...defaultHistoryReport.details.standardReport,
+          summaryPanel: {
+            ...defaultHistoryReport.details.standardReport.summaryPanel,
+            stock: 'Bitmine Immersion Technologies（BMNR）',
+            ticker: 'BMNR',
+            oneSentence: 'The saved report succeeded after a fallback model attempt.',
+          },
+          decisionContext: {
+            shortTermView: 'Volatile but still recoverable.',
+          },
+          decisionPanel: {
+            ...defaultHistoryReport.details.standardReport.decisionPanel,
+            idealEntry: '20.80',
+            target: '24.00',
+            stopLoss: '19.00',
+            buildStrategy: 'Reduce into strength, then reassess on support.',
+          },
+          reasonLayer: {
+            coreReasons: ['综合建议为减仓，结合技术、基本面与情绪继续跟踪。'],
+          },
+          technicalFields: [
+            { label: '多头/空头排列', value: '短期转弱，MA5 下穿 MA10，但 MA10 仍大于 MA20，均线初步缠绕。' },
+            { label: 'RSI14', value: '49.83' },
+            { label: '量价判断', value: '缩量，追价意愿偏弱。' },
+          ],
+          fundamentalFields: [
+            { label: 'ROE', value: '-97.33%' },
+            { label: 'Forward PE', value: '22.85x' },
+          ],
+        },
+      },
+    });
+
+    renderSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toContain('The saved report succeeded after a fallback model attempt.');
+      expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('0.2934');
+      expect(screen.getByTestId('home-bento-tech-signal-MA ALIGNMENT')).toHaveTextContent('短期转弱');
+      expect(screen.getByTestId('home-bento-tech-signal-VOLUME DYNAMICS')).toHaveTextContent('缩量，追价意愿偏弱。');
+      expect(screen.getByTestId('home-bento-strategy-metric-建仓区间')).toHaveTextContent('20.80');
+    });
+  });
+
+  it('prefers the explicitly opened history detail over a stale completed-task snapshot for the same ticker', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    useStockPoolStore.setState({
+      activeTasks: [
+        {
+          taskId: 'task-tsla-stale',
+          stockCode: 'TSLA',
+          stockName: 'Tesla',
+          status: 'completed',
+          progress: 100,
+          reportType: 'detailed',
+          createdAt: '2026-04-27T07:00:00Z',
+          updatedAt: '2026-04-27T07:06:00Z',
+          completedAt: '2026-04-27T07:06:00Z',
+          result: {
+            queryId: 'task-tsla-stale',
+            stockCode: 'TSLA',
+            stockName: 'Tesla',
+            createdAt: '2026-04-27T07:06:00Z',
+            report: {
+              meta: {
+                id: 22,
+                queryId: 'task-tsla-stale',
+                stockCode: 'TSLA',
+                stockName: 'Tesla',
+                reportType: 'detailed',
+                createdAt: '2026-04-27T07:06:00Z',
+              },
+              summary: {
+                analysisSummary: 'Stale task snapshot should not win over history detail.',
+                operationAdvice: 'Wait',
+                trendPrediction: 'Pending',
+                sentimentScore: 50,
+                sentimentLabel: 'Neutral',
+              },
+              strategy: {
+                idealBuy: '-',
+                stopLoss: '-',
+                takeProfit: '-',
+              },
+              details: {
+                standardReport: {
+                  summaryPanel: {
+                    stock: 'Tesla',
+                    ticker: 'TSLA',
+                    oneSentence: 'Stale task snapshot should not win over history detail.',
+                  },
+                  decisionContext: {
+                    shortTermView: 'Task snapshot pending replacement.',
+                  },
+                  decisionPanel: {
+                    idealEntry: '-',
+                    target: '-',
+                    stopLoss: '-',
+                    buildStrategy: 'Task snapshot pending replacement.',
+                  },
+                  reasonLayer: {
+                    coreReasons: ['Task snapshot pending replacement.'],
+                  },
+                  technicalFields: [],
+                  fundamentalFields: [],
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    vi.mocked(historyApi.getDetail).mockImplementation((recordId) => {
+      if (recordId !== 2) {
+        return Promise.resolve(defaultHistoryReport);
+      }
+      return Promise.resolve({
+        ...defaultHistoryReport,
+        meta: {
+          ...defaultHistoryReport.meta,
+          id: 2,
+          queryId: 'q2',
+          stockCode: 'TSLA',
+          stockName: 'Tesla',
+        },
+        summary: {
+          ...defaultHistoryReport.summary,
+          analysisSummary: 'Persisted history detail must override the stale task snapshot.',
+          operationAdvice: 'Trust persisted history detail.',
+          trendPrediction: 'Recovered from saved record.',
+          sentimentScore: 64,
+          sentimentLabel: 'Bullish',
+        },
+        strategy: {
+          idealBuy: '168.40 - 170.20',
+          stopLoss: '162.80',
+          takeProfit: '184.20',
+        },
+        details: {
+          standardReport: {
+            ...defaultHistoryReport.details.standardReport,
+            summaryPanel: {
+              ...defaultHistoryReport.details.standardReport.summaryPanel,
+              stock: 'Tesla',
+              ticker: 'TSLA',
+              oneSentence: 'Persisted history detail must override the stale task snapshot.',
+            },
+            decisionContext: {
+              shortTermView: 'Recovered from saved record.',
+            },
+            decisionPanel: {
+              ...defaultHistoryReport.details.standardReport.decisionPanel,
+              idealEntry: '168.40 - 170.20',
+              target: '184.20',
+              stopLoss: '162.80',
+              buildStrategy: 'Trust persisted history detail.',
+            },
+            reasonLayer: {
+              coreReasons: ['Persisted history detail must override the stale task snapshot.'],
+            },
+            technicalFields: [
+              { label: 'MACD', value: '金叉后继续放大' },
+              { label: '均线结构', value: 'MA20 重新走平' },
+              { label: '量价配合', value: '回踩缩量，反弹放量' },
+            ],
+            fundamentalFields: [
+              { label: '收入增速', value: '+8.6%' },
+              { label: 'ROE', value: '18.2%' },
+            ],
+          },
+        },
+      });
+    });
+
+    renderSurface();
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+    fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toContain('Persisted history detail must override the stale task snapshot.');
+      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).not.toContain('Stale task snapshot should not win over history detail.');
+    });
+  });
+
   it('shows canonical generated timestamps in the history drawer', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
@@ -1111,7 +1365,7 @@ describe('HomeSurfacePage', () => {
       expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('买');
       expect(screen.getByTestId('home-bento-decision-score')).toHaveTextContent('7.4');
       expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();
-      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toBe('Completed LLM report confirmed the refreshed thesis.');
+      expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toBe('Netflix completion replaced neutral cards.');
       expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
     });
     expect(screen.getAllByText('104.80').length).toBeGreaterThan(0);
@@ -1211,7 +1465,7 @@ describe('HomeSurfacePage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('Snake case task payload still populated the in-place dashboard.');
+      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('AMD task payload normalized from snake_case report blocks.');
     });
     expect(screen.getAllByText('168.40').length).toBeGreaterThan(0);
     expect(screen.getAllByText('147.80').length).toBeGreaterThan(0);

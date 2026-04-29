@@ -375,6 +375,8 @@ def get_history_detail(
         details = ReportDetails(
             news_content=result.get("news_content"),
             raw_result=result.get("raw_result"),
+            analysis_result=result.get("analysis_result"),
+            raw_ai_response=result.get("raw_ai_response"),
             context_snapshot=result.get("context_snapshot"),
             standard_report=result.get("standard_report"),
             financial_report=extracted_fundamental.get("financial_report"),

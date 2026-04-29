@@ -71,6 +71,12 @@ type DesiredFieldSpec = {
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
 const TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
 const EMPTY_FIELD_VALUE = '-';
+const UNTRUSTED_SCAN_SKIP_KEYS = new Set([
+  'rawResult',
+  'raw_result',
+  'contextSnapshot',
+  'context_snapshot',
+]);
 
 function normalizeDetailKey(value?: string): string {
   return String(value || '').toLowerCase().replace(/[\s/()%+.\-_:]+/g, '');
@@ -118,6 +124,9 @@ function hasUntrustedReportMarker(payload: unknown): boolean {
   }
 
   for (const [key, value] of Object.entries(payload)) {
+    if (UNTRUSTED_SCAN_SKIP_KEYS.has(key)) {
+      continue;
+    }
     if (/stock(name)?$/i.test(key) && isZombieStockLabel(value)) {
       return true;
     }
@@ -232,8 +241,9 @@ function resolveInsightBody(
   candidates: Array<string | undefined>,
   technicalFields?: StandardReportField[],
 ): string {
-  const primary = candidates.map((value) => String(value || '').trim()).find(Boolean);
-  if (!primary || primary === EMPTY_FIELD_VALUE || isGenericInsightText(primary)) {
+  const normalizedCandidates = candidates.map((value) => String(value || '').trim()).filter(Boolean);
+  const primary = normalizedCandidates.find((value) => value !== EMPTY_FIELD_VALUE && !isGenericInsightText(value));
+  if (!primary) {
     return buildTechnicalInsightFallback(locale, tone, technicalFields);
   }
   return primary;
@@ -912,6 +922,20 @@ function compactMetricSurprise(value: string): string {
   return String(value || '').replace(/\s*[（(][^）)]*[）)]\s*$/u, '').trim();
 }
 
+function readMetricNodeValue(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const nodeValue = (value as Record<string, unknown>).value;
+    if (nodeValue === null || nodeValue === undefined) {
+      return undefined;
+    }
+    return String(nodeValue);
+  }
+  return String(value);
+}
+
 function compactTechSignalValue(locale: DashboardLocale, label: string, value: string): string {
   const compact = compactMetricSurprise(value);
   if (isPendingMetricValue(compact)) {
@@ -1033,7 +1057,7 @@ function getTechnicalFieldSpecs(locale: DashboardLocale): DesiredFieldSpec[] {
   const isEnglish = locale === 'en';
   return [
     {
-      aliases: ['MA ALIGNMENT', 'Moving Averages', '均线结构', '均线系统'],
+      aliases: ['MA ALIGNMENT', 'Moving Averages', '均线结构', '均线系统', '多头/空头排列'],
       fallback: { label: 'MA ALIGNMENT', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
     },
     {
@@ -1045,7 +1069,7 @@ function getTechnicalFieldSpecs(locale: DashboardLocale): DesiredFieldSpec[] {
       fallback: { label: 'MACD', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
     },
     {
-      aliases: ['VOLUME DYNAMICS', 'Volume Profile', '量价配合', '成交量', 'Volume'],
+      aliases: ['VOLUME DYNAMICS', 'Volume Profile', '量价配合', '量价判断', '成交量', 'Volume'],
       fallback: {
         label: 'VOLUME DYNAMICS',
         value: EMPTY_FIELD_VALUE,
@@ -1391,7 +1415,43 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   const decisionPanel = standardReport?.decisionPanel;
   const decisionContext = standardReport?.decisionContext;
   const reasonLayer = standardReport?.reasonLayer;
-  const technicalFields = standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields;
+  const rawResult = report.details?.rawResult as Record<string, unknown> | undefined;
+  const rawDashboard = (rawResult?.dashboard as Record<string, unknown> | undefined) || {};
+  const rawDataPerspective = (rawDashboard.dataPerspective as Record<string, unknown> | undefined) || {};
+  const rawStructuredAnalysis = (rawDashboard.structuredAnalysis as Record<string, unknown> | undefined) || {};
+  const rawTechnicals = (rawStructuredAnalysis.technicals as Record<string, unknown> | undefined) || {};
+  const rawTrendStatus = (rawDataPerspective.trendStatus as Record<string, unknown> | undefined) || {};
+  const rawVolumeAnalysis = (rawDataPerspective.volumeAnalysis as Record<string, unknown> | undefined) || {};
+  const rawAlphaVantage = (rawDataPerspective.alphaVantage as Record<string, unknown> | undefined) || {};
+  const technicalFieldsBase = standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields || [];
+  const technicalFields = [...technicalFieldsBase];
+  if (!findStandardField(technicalFields, ['MACD'])) {
+    const macdValue = readMetricNodeValue(rawTechnicals.macd);
+    if (macdValue !== undefined) {
+      technicalFields.push({ label: 'MACD', value: macdValue });
+    }
+  }
+  if (!findStandardField(technicalFields, ['RSI-14', 'RSI14', 'RSI'])) {
+    const rsiValue = readMetricNodeValue(rawTechnicals.rsi14)
+      ?? readMetricNodeValue(rawTechnicals.rsi)
+      ?? readMetricNodeValue(rawAlphaVantage.rsi14)
+      ?? readMetricNodeValue(rawAlphaVantage.rsi);
+    if (rsiValue !== undefined) {
+      technicalFields.push({ label: 'RSI14', value: rsiValue });
+    }
+  }
+  if (!findStandardField(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线结构', '均线系统', '多头/空头排列'])) {
+    const maAlignment = rawTrendStatus.maAlignment;
+    if (maAlignment !== undefined) {
+      technicalFields.push({ label: '多头/空头排列', value: String(maAlignment) });
+    }
+  }
+  if (!findStandardField(technicalFields, ['VOLUME DYNAMICS', 'Volume Profile', '量价配合', '量价判断', '成交量', 'Volume'])) {
+    const volumeMeaning = rawVolumeAnalysis.volumeMeaning;
+    if (volumeMeaning !== undefined) {
+      technicalFields.push({ label: '量价判断', value: String(volumeMeaning) });
+    }
+  }
   const fundamentalFields = standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields;
   const sentimentTone = toneFromScore(report.summary.sentimentScore);
   const scoreText = typeof report.summary.sentimentScore === 'number'
@@ -1401,11 +1461,11 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     locale,
     sentimentTone,
     [
+      summaryPanel?.oneSentence,
+      report.summary.analysisSummary,
       reasonLayer?.coreReasons?.[0],
       reasonLayer?.topCatalyst,
       reasonLayer?.latestKeyUpdate,
-      summaryPanel?.oneSentence,
-      report.summary.analysisSummary,
     ],
     technicalFields,
   );

@@ -515,8 +515,8 @@ export interface DuplicateTaskError {
 
 // ============ History Types ============
 
-/** History item summary */
-export interface HistoryItem {
+/** History record summary used by the right-side list/drawer. */
+export interface HistoryRecordSummary {
   id: number;  // Record primary key ID, always present for persisted history items
   queryId: string;  // Linked analysis query ID
   stockCode: string;
@@ -530,12 +530,18 @@ export interface HistoryItem {
   isTest?: boolean;
 }
 
+/** History record detail used to restore the full home analysis surface. */
+export type HistoryRecordDetail = AnalysisReport;
+
+/** Backward-compatible alias for existing callers. */
+export type HistoryItem = HistoryRecordSummary;
+
 /** History list response */
 export interface HistoryListResponse {
   total: number;
   page: number;
   limit: number;
-  items: HistoryItem[];
+  items: HistoryRecordSummary[];
 }
 
 /** News item */

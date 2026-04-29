@@ -27,6 +27,25 @@ from src.utils.time_utils import to_beijing_iso8601
 logger = logging.getLogger(__name__)
 
 
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
+def _nested_get(payload: Any, *path: str) -> Any:
+    current = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
 class AnalysisService:
     """
     分析服务
@@ -136,6 +155,15 @@ class AnalysisService:
         report_language = normalize_report_language(getattr(result, "report_language", "zh"))
         sentiment_label = get_sentiment_label(result.sentiment_score, report_language)
         stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
+        dashboard = getattr(result, "dashboard", None) if isinstance(getattr(result, "dashboard", None), dict) else {}
+        decision_panel = _nested_get(dashboard, "battle_plan", "sniper_points") or {}
+        trend_status = _nested_get(dashboard, "data_perspective", "trend_status") or {}
+        technical_indicators = _nested_get(dashboard, "data_perspective", "technical_indicators") or {}
+        volume_block = _nested_get(dashboard, "data_perspective", "volume_analysis") or {}
+        risk_reward = _first_present(
+            _nested_get(dashboard, "battle_plan", "risk_reward"),
+            _nested_get(dashboard, "battle_plan", "盈亏比"),
+        )
         try:
             from src.services.report_renderer import build_standard_report_payload
 
@@ -143,6 +171,50 @@ class AnalysisService:
         except Exception as exc:
             logger.warning("构建 standard_report 失败，降级返回基础详情: %s", exc)
             standard_report = None
+
+        analysis_result = {
+            "decision": getattr(result, "decision_type", None),
+            "action": getattr(result, "operation_advice", None),
+            "score": getattr(result, "sentiment_score", None),
+            "confidence": getattr(result, "confidence_level", None),
+            "strategy": getattr(result, "trend_prediction", None),
+            "entry_price": _first_present(
+                sniper_points.get("ideal_buy"),
+                decision_panel.get("ideal_buy"),
+            ),
+            "secondary_entry_price": _first_present(
+                sniper_points.get("secondary_buy"),
+                decision_panel.get("secondary_buy"),
+            ),
+            "stop_loss": _first_present(
+                sniper_points.get("stop_loss"),
+                decision_panel.get("stop_loss"),
+            ),
+            "take_profit": _first_present(
+                sniper_points.get("take_profit"),
+                decision_panel.get("take_profit"),
+            ),
+            "technical_analysis": getattr(result, "technical_analysis", None),
+            "ma_alignment": _first_present(
+                trend_status.get("ma_alignment"),
+                getattr(result, "ma_analysis", None),
+            ),
+            "rsi": _first_present(
+                technical_indicators.get("rsi_14"),
+                technical_indicators.get("rsi"),
+            ),
+            "macd": _first_present(
+                technical_indicators.get("macd"),
+                getattr(result, "technical_analysis", None),
+            ),
+            "volume_dynamics": _first_present(
+                volume_block.get("volume_meaning"),
+                getattr(result, "volume_analysis", None),
+            ),
+            "risk_reward": risk_reward,
+            "full_reasoning": getattr(result, "analysis_summary", None),
+            "summary": getattr(result, "analysis_summary", None),
+        }
 
         return {
             "meta": {
@@ -180,6 +252,8 @@ class AnalysisService:
                 "fundamental_analysis": result.fundamental_analysis,
                 "risk_warning": result.risk_warning,
                 "standard_report": standard_report,
+                "analysis_result": analysis_result,
+                "raw_ai_response": getattr(result, "raw_response", None),
             }
         }
 

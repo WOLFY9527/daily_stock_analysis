@@ -172,6 +172,8 @@ class ReportDetails(BaseModel):
     
     news_content: Optional[str] = Field(None, description="新闻摘要")
     raw_result: Optional[Any] = Field(None, description="原始分析结果（JSON）")
+    analysis_result: Optional[Any] = Field(None, description="结构化分析结果（兼容明细恢复）")
+    raw_ai_response: Optional[Any] = Field(None, description="原始 AI 响应（如有）")
     context_snapshot: Optional[Any] = Field(None, description="分析时上下文快照（JSON）")
     standard_report: Optional[Any] = Field(None, description="统一标准报告数据结构（JSON）")
     financial_report: Optional[Any] = Field(None, description="结构化财报摘要（来自 fundamental_context）")

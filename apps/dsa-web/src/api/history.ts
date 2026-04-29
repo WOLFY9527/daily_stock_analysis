@@ -2,9 +2,9 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 import type {
   HistoryListResponse,
-  HistoryItem,
+  HistoryRecordDetail,
+  HistoryRecordSummary,
   HistoryFilters,
-  AnalysisReport,
   NewsIntelResponse,
   NewsIntelItem,
 } from '../types/analysis';
@@ -38,12 +38,12 @@ export const historyApi = {
       params: queryParams,
     });
 
-    const data = toCamelCase<{ total: number; page: number; limit: number; items: HistoryItem[] }>(response.data);
+    const data = toCamelCase<{ total: number; page: number; limit: number; items: HistoryRecordSummary[] }>(response.data);
     return {
       total: data.total,
       page: data.page,
       limit: data.limit,
-      items: data.items.map(item => toCamelCase<HistoryItem>(item)),
+      items: data.items.map(item => toCamelCase<HistoryRecordSummary>(item)),
     };
   },
 
@@ -51,9 +51,9 @@ export const historyApi = {
    * 获取历史报告详情
    * @param recordId 分析历史记录主键 ID（使用 ID 而非 query_id，因为 query_id 在批量分析时可能重复）
    */
-  getDetail: async (recordId: number | string): Promise<AnalysisReport> => {
+  getDetail: async (recordId: number | string): Promise<HistoryRecordDetail> => {
     const response = await apiClient.get<Record<string, unknown>>(`/api/v1/history/${recordId}`);
-    return normalizeFrontendReportContract(toCamelCase<AnalysisReport>(response.data));
+    return normalizeFrontendReportContract(toCamelCase<HistoryRecordDetail>(response.data));
   },
 
   /**

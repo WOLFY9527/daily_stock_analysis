@@ -78,6 +78,16 @@ def _resolve_history_display_names(
     return stock_name, company_name
 
 
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
 class MarkdownReportGenerationError(Exception):
     """Exception raised when Markdown report generation fails due to internal errors."""
 
@@ -828,6 +838,101 @@ class HistoryService:
             or ((raw_result or {}).get("model_used") if isinstance(raw_result, dict) else None)
         )
         model_used = normalize_model_used(model_used)
+        analysis_result_detail = {}
+        if isinstance(persisted_details.get("analysis_result"), dict):
+            analysis_result_detail.update(persisted_details.get("analysis_result") or {})
+        if isinstance(raw_result, dict):
+            analysis_result_detail = {
+                "decision": _first_present(
+                    analysis_result_detail.get("decision"),
+                    raw_result.get("decision_type"),
+                    raw_result.get("ai_decision"),
+                ),
+                "action": _first_present(
+                    analysis_result_detail.get("action"),
+                    raw_result.get("operation_advice"),
+                    raw_result.get("action"),
+                ),
+                "score": _first_present(
+                    analysis_result_detail.get("score"),
+                    raw_result.get("sentiment_score"),
+                    raw_result.get("confidence_score"),
+                ),
+                "confidence": _first_present(
+                    analysis_result_detail.get("confidence"),
+                    raw_result.get("confidence_level"),
+                    raw_result.get("confidence"),
+                ),
+                "strategy": _first_present(
+                    analysis_result_detail.get("strategy"),
+                    raw_result.get("trend_prediction"),
+                    raw_result.get("strategy"),
+                ),
+                "entry_price": _first_present(
+                    analysis_result_detail.get("entry_price"),
+                    persisted_strategy.get("ideal_buy"),
+                    raw_result.get("ideal_buy"),
+                    raw_result.get("entry_price"),
+                ),
+                "secondary_entry_price": _first_present(
+                    analysis_result_detail.get("secondary_entry_price"),
+                    persisted_strategy.get("secondary_buy"),
+                    raw_result.get("secondary_buy"),
+                ),
+                "stop_loss": _first_present(
+                    analysis_result_detail.get("stop_loss"),
+                    persisted_strategy.get("stop_loss"),
+                    raw_result.get("stop_loss"),
+                ),
+                "take_profit": _first_present(
+                    analysis_result_detail.get("take_profit"),
+                    persisted_strategy.get("take_profit"),
+                    raw_result.get("take_profit"),
+                ),
+                "technical_analysis": _first_present(
+                    analysis_result_detail.get("technical_analysis"),
+                    raw_result.get("technical_analysis"),
+                ),
+                "ma_alignment": _first_present(
+                    analysis_result_detail.get("ma_alignment"),
+                    raw_result.get("ma_analysis"),
+                ),
+                "rsi": _first_present(
+                    analysis_result_detail.get("rsi"),
+                    raw_result.get("rsi"),
+                ),
+                "macd": _first_present(
+                    analysis_result_detail.get("macd"),
+                    raw_result.get("macd"),
+                ),
+                "volume_dynamics": _first_present(
+                    analysis_result_detail.get("volume_dynamics"),
+                    raw_result.get("volume_analysis"),
+                ),
+                "risk_reward": _first_present(
+                    analysis_result_detail.get("risk_reward"),
+                    raw_result.get("risk_reward"),
+                ),
+                "full_reasoning": _first_present(
+                    analysis_result_detail.get("full_reasoning"),
+                    raw_result.get("analysis_summary"),
+                    raw_result.get("full_reasoning"),
+                ),
+                "summary": _first_present(
+                    analysis_result_detail.get("summary"),
+                    raw_result.get("analysis_summary"),
+                    raw_result.get("summary"),
+                ),
+            }
+        raw_ai_response = None
+        if isinstance(persisted_details.get("raw_ai_response"), (dict, list, str)):
+            raw_ai_response = persisted_details.get("raw_ai_response")
+        elif isinstance(raw_result, dict):
+            raw_ai_response = _first_present(
+                raw_result.get("raw_response"),
+                raw_result.get("raw_ai_response"),
+                raw_result.get("llm_response"),
+            )
         sniper_points = self._get_display_sniper_points(record, raw_result)
         time_contract = self._extract_time_contract(context_snapshot)
         stock_name, company_name = _resolve_history_display_names(
@@ -865,6 +970,8 @@ class HistoryService:
             "take_profit": persisted_strategy.get("take_profit") or sniper_points.get("take_profit"),
             "news_content": persisted_details.get("news_content") or persisted_details.get("news_summary") or record.news_content,
             "raw_result": raw_result,
+            "analysis_result": analysis_result_detail or None,
+            "raw_ai_response": raw_ai_response,
             "context_snapshot": context_snapshot,
             "standard_report": standard_report,
             "market_timestamp": persisted_meta.get("market_timestamp") or time_contract.get("market_timestamp"),
