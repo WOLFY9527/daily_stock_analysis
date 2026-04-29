@@ -10,9 +10,11 @@ export interface MarketOverviewItem {
   value?: number | null;
   unit?: string | null;
   changePct?: number | null;
+  changeText?: string | null;
   riskDirection?: MarketRiskDirection;
   trend?: number[];
   source?: string | null;
+  hoverDetails?: string[] | null;
 }
 
 export interface MarketOverviewPanel {

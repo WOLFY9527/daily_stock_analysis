@@ -59,9 +59,12 @@ function formatSignedPercent(value?: number | null): string | null {
 }
 
 export function formatChangeSummary(
-  item: Pick<MarketOverviewItem, 'value' | 'changePct'>,
+  item: Pick<MarketOverviewItem, 'value' | 'changePct' | 'changeText'>,
   neutralLabel = 'neutral',
 ): string {
+  if (item.changeText) {
+    return item.changeText;
+  }
   const absoluteChange = estimateAbsoluteChange(item);
   const changePct = formatSignedPercent(item.changePct);
   if (absoluteChange === null && !changePct) {

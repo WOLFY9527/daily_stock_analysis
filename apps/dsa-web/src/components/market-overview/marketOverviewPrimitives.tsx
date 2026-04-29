@@ -87,7 +87,7 @@ export const MarketOverviewDataRow: React.FC<{
       : 'text-white/35';
 
   return (
-    <article className="flex min-h-12 items-center gap-3 border-b border-white/[0.045] py-2.5 last:border-b-0">
+    <article className="group flex min-h-12 items-center gap-3 border-b border-white/[0.045] py-2.5 last:border-b-0">
       <div className="flex w-32 shrink-0 items-center gap-2">
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
         <div className="min-w-0">
@@ -105,6 +105,13 @@ export const MarketOverviewDataRow: React.FC<{
             {formatChangeSummary(item, neutralLabel)}
           </span>
         </div>
+        {item.hoverDetails?.length ? (
+          <div className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-1 text-[9px] uppercase tracking-widest text-white/0 transition-opacity duration-150 group-hover:text-white/28">
+            {item.hoverDetails.map((detail) => (
+              <span key={detail}>{detail}</span>
+            ))}
+          </div>
+        ) : null}
       </div>
     </article>
   );

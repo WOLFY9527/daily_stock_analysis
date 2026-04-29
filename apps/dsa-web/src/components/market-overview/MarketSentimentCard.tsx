@@ -4,6 +4,7 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
 import {
+  formatChangeSummary,
   formatMetricValue,
   getDirectionTone,
 } from './marketOverviewUtils';
@@ -84,7 +85,7 @@ export const MarketSentimentCard: React.FC<{
                 <p className="mt-1 text-xs uppercase tracking-widest text-white/28">{describeSentiment(primary.value, t)}</p>
               </div>
               <span className={cn('pt-1 text-[11px] font-bold', getDirectionTone(primary.riskDirection))}>
-                {primary.changePct === null || primary.changePct === undefined ? t('marketOverviewPage.direction.neutral') : `${primary.changePct >= 0 ? '+' : ''}${primary.changePct.toFixed(2)}%`}
+                {formatChangeSummary(primary, t('marketOverviewPage.direction.neutral'))}
               </span>
             </div>
 
@@ -128,7 +129,7 @@ export const MarketSentimentCard: React.FC<{
                   {sentimentLabels[item.symbol] || item.label}
                 </p>
                 <span className={cn('shrink-0 text-[11px] font-bold', getDirectionTone(item.riskDirection))}>
-                  {item.changePct === null || item.changePct === undefined ? t('marketOverviewPage.direction.neutral') : `${item.changePct >= 0 ? '+' : ''}${item.changePct.toFixed(2)}%`}
+                  {formatChangeSummary(item, t('marketOverviewPage.direction.neutral'))}
                 </span>
               </div>
               <p className="mt-3 truncate text-2xl font-mono text-white">{formatMetricValue(item)}</p>
@@ -136,6 +137,13 @@ export const MarketSentimentCard: React.FC<{
                 {item.unit ? <span>{item.unit}</span> : null}
                 <span>{item.symbol}</span>
               </div>
+              {item.hoverDetails?.length ? (
+                <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[9px] uppercase tracking-widest text-white/32">
+                  {item.hoverDetails.map((detail) => (
+                    <span key={detail}>{detail}</span>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

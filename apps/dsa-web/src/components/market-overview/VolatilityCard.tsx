@@ -13,19 +13,6 @@ function resolvePrimaryItem(items: MarketOverviewItem[]): MarketOverviewItem | u
   return items.find((item) => item.symbol.toUpperCase() === 'VIX') || items[0];
 }
 
-function greedFearItem(): MarketOverviewItem {
-  return {
-    symbol: 'FGI',
-    label: 'GREED / FEAR INDEX',
-    value: 65,
-    unit: 'GREED',
-    changePct: 0,
-    riskDirection: 'decreasing',
-    trend: [48, 52, 57, 61, 65],
-    source: 'layout_baseline',
-  };
-}
-
 export const VolatilityCard: React.FC<{
   panel?: MarketOverviewPanel;
   loading?: boolean;
@@ -38,7 +25,6 @@ export const VolatilityCard: React.FC<{
   const title = t('marketOverviewPage.cards.volatility.title');
   const compactItems = [
     ...(primary ? [primary] : []),
-    greedFearItem(),
     ...items.filter((item) => item.symbol !== primary?.symbol),
   ];
 

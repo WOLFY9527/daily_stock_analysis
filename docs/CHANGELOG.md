@@ -1,5 +1,6 @@
 ## 2026-04-29
 
+- 🚀 **Market Overview 新增加密行情与实时情绪快照** — `src/services/market_overview_service.py` 新增 Binance `BTC/ETH/BNB` 行情抓取、7D 趋势线与 `CNN -> Alternative.me` 情绪快照链路，并为 `/api/v1/market/crypto`、`/api/v1/market/sentiment` 加入最近一次成功数据回退。`api/v1/endpoints/market.py` 与 `api/v1/router.py` 暴露新接口；`apps/dsa-web/src/api/market.ts`、`apps/dsa-web/src/pages/MarketOverviewPage.tsx` 与新增 `CryptoCard.tsx` 把加密卡片接入现有 `/market-overview` 三列工作区，同时为情绪卡改用实时源、启用 60 秒自动轮询、卡片拖拽排序持久化与 hover 细节展示。回归覆盖新增到 `tests/api/test_market_crypto.py`、`tests/api/test_market_sentiment.py` 与 `apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx`。
 - 🧨 **Market Overview 斩首全局标题并下放局部刷新** — `apps/dsa-web/src/pages/MarketOverviewPage.tsx` 删除“大市全景监控”全局 Header、说明文案、最后更新时间和“同步最新行情”大按钮，同时去掉页面内部二次 `pt/px` 包装，让三列瀑布流直接顶到 Shell 基础内边距下方。`IndexTrendsCard.tsx`、`VolatilityCard.tsx`、`MarketSentimentCard.tsx`、`FundsFlowCard.tsx`、`MacroIndicatorsCard.tsx` 与共享 `MarketOverviewCard.tsx` 统一把同步状态标签替换为卡片标题行右侧的微型 `RefreshCcw` 纯图标按钮，并改为按卡片刷新对应 panel。
 
 - 🧱 **Market Overview 改为三列瀑布流终局版** — `apps/dsa-web/src/pages/MarketOverviewPage.tsx` 废除主工作区二维 grid，改为左列指数、中列波动率/ETF、右列情绪/宏观的三条独立 flex 列，避免长指数卡把下方卡片整体推空。`marketOverviewPrimitives.tsx` 将数据行改为固定 `w-32` 名称列、固定 `w-24` Sparkline 列与右侧 `flex-1` 等宽数值列，移除指标单位后缀并过滤 `N/A` / 空值行；相关 Market Overview 卡片同步接入过滤逻辑，回归覆盖空宏观指标隐藏。
