@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 💬 **WolfyStock 问股主视图二次收口，重心下沉并去胶囊卡片** — `apps/dsa-web/src/pages/ChatPage.tsx` 继续收紧问股空态主视图：主面板补成 `flex flex-col h-full`，悬浮输入舱父级加上 `mt-auto` 语义并把底部间距下沉到 `mb-8`，让输入框更贴近页面底缘而不再漂浮在中段；标题、卡片和快捷标签之间的垂直节奏同步拉大到更疏朗的 `gap-12`。三张预设入口卡片也彻底废除偏胶囊的旧材质，统一回到标准 `GlassCard` 终端材质 `bg-white/[0.02] border border-white/5 rounded-2xl p-6`，并按三列等高网格对齐。输入舱外框进一步降噪为 `border-white/[0.05]`，背景微提亮到 `bg-white/[0.04] backdrop-blur-2xl shadow-2xl`，免责声明继续保持极低对比度居中放在输入框正下方。配套回归已更新到 `ChatPage.test.tsx`，并重新走本地测试与浏览器验收。
+
 - 💬 **WolfyStock 问股主视图去廉价对话感重构** — `apps/dsa-web/src/pages/ChatPage.tsx` 的空态主视图现在改为居中玻璃陈列：三张研究入口卡片与快捷问题标签统一收口到中轴，快捷标签使用更轻的药丸玻璃材质并强制 `justify-center` 对齐，不再出现整体左偏和文字重心漂移。底部输入区同步移除旧的厚重外壳，改为独立悬浮的 Gemini 风格输入舱：placeholder 内嵌到 textarea，发送按钮内置到右下角，输入前后状态对比更清晰，底部只保留一行低对比度免责声明，主视觉区与输入舱之间也补足了安全留白。配套回归已更新到 `ChatPage.test.tsx`，并通过 Safari 新标签页在 `http://127.0.0.1:4175/chat` 做了手工验证。
 
 ## 2026-04-28

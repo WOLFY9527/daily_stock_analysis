@@ -771,7 +771,7 @@ const ChatPage: React.FC = () => {
         >
           <section
             data-testid="chat-main-panel"
-            className="flex flex-1 min-w-0 flex-col lg:border-r lg:border-white/5"
+            className="flex h-full flex-1 min-w-0 flex-col lg:border-r lg:border-white/5"
           >
             <main
               id="chat-scroll-container"
@@ -811,7 +811,7 @@ const ChatPage: React.FC = () => {
                   {messages.length === 0 && !loading ? (
                     <div
                       data-testid="chat-empty-state"
-                      className="flex min-h-full w-full flex-1 flex-col items-center justify-center gap-10 pb-20 pt-6 text-center md:pb-24"
+                      className="flex min-h-full w-full flex-1 flex-col items-center justify-center gap-12 pb-24 pt-10 text-center"
                     >
                       <div className="flex w-full max-w-4xl flex-col items-center">
                         <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/5 bg-white/[0.02] text-[hsl(var(--accent-primary-hsl))] backdrop-blur-xl">
@@ -836,7 +836,7 @@ const ChatPage: React.FC = () => {
                         </p>
                       </div>
 
-                      <div className="grid w-full max-w-5xl place-items-stretch gap-4 lg:grid-cols-3">
+                      <div className="grid w-full max-w-5xl grid-cols-1 place-items-stretch gap-6 lg:grid-cols-3">
                         {starterPromptCards.map((card) => (
                           <GlassCard
                             key={card.id}
@@ -845,7 +845,7 @@ const ChatPage: React.FC = () => {
                             onClick={() => {
                               void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
                             }}
-                            className="min-w-0 rounded-2xl border-white/6 bg-white/[0.03] p-5 text-left transition-colors duration-150 hover:border-white/16 hover:bg-white/[0.05]"
+                            className="min-w-0 rounded-2xl border border-white/5 bg-white/[0.02] p-6 text-left transition-colors duration-150 hover:bg-white/[0.05]"
                           >
                             <p className="mb-2 break-words whitespace-normal text-sm font-bold text-white">{chat(`starterCards.${card.id}.title`)}</p>
                             <p className="break-words whitespace-normal text-xs leading-relaxed text-white/60">
@@ -982,7 +982,7 @@ const ChatPage: React.FC = () => {
               </div>
             </main>
 
-            <footer data-testid="chat-input-shell" className="mt-auto w-full">
+            <footer data-testid="chat-input-shell" className="mt-auto mb-8 w-full">
               <div data-testid="chat-input-gradient" className="w-full pb-6 pt-2">
                 <div
                   data-testid="chat-console-inner"
@@ -1034,10 +1034,10 @@ const ChatPage: React.FC = () => {
                     />
                   ) : null}
 
-                  <div className="mx-auto w-full max-w-4xl">
+                  <div className="mx-auto mt-auto w-full max-w-4xl">
                     <div
                       data-testid="chat-composer-omnibar"
-                      className="relative w-full max-w-4xl mx-auto rounded-3xl border border-white/10 bg-white/[0.03] p-2 shadow-2xl backdrop-blur-xl"
+                      className="relative mx-auto w-full max-w-4xl rounded-3xl border border-white/[0.05] bg-white/[0.04] p-2 shadow-2xl backdrop-blur-2xl"
                     >
                       <textarea
                         ref={composerTextareaRef}

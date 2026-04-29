@@ -211,7 +211,7 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-workspace')).toHaveClass('w-full', 'flex', 'flex-1', 'min-h-0', 'overflow-hidden', 'bg-transparent');
     expect(screen.queryByTestId('chat-history-pane')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-main-shell')).toHaveClass('flex', 'flex-1', 'min-w-0', 'overflow-hidden');
-    expect(screen.getByTestId('chat-main-panel')).toHaveClass('flex', 'flex-1', 'min-w-0', 'flex-col');
+    expect(screen.getByTestId('chat-main-panel')).toHaveClass('flex', 'h-full', 'flex-1', 'min-w-0', 'flex-col');
     expect(screen.getByTestId('chat-main-panel')).not.toHaveClass('relative');
     expect(screen.getByTestId('chat-main').tagName).toBe('MAIN');
     expect(screen.getByTestId('chat-main')).toHaveAttribute('id', 'chat-scroll-container');
@@ -225,7 +225,7 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-message-scroll')).not.toHaveClass('flex-1', 'overflow-y-auto');
     expect(screen.getByTestId('chat-message-stream')).toHaveClass('w-full', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-8', 'flex', 'flex-col', 'gap-8', 'min-h-full');
     expect(screen.getByTestId('chat-message-stream')).not.toHaveClass('max-w-4xl', 'mx-auto');
-    expect(screen.getByTestId('chat-input-shell')).toHaveClass('mt-auto', 'w-full');
+    expect(screen.getByTestId('chat-input-shell')).toHaveClass('mt-auto', 'mb-8', 'w-full');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('absolute', 'bottom-0', 'left-0', 'z-50', 'pointer-events-none');
     expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'pt-2', 'pb-6');
     expect(screen.getByTestId('chat-input-gradient')).not.toHaveClass('px-6');
@@ -238,9 +238,9 @@ describe('ChatPage', () => {
       'max-w-4xl',
       'mx-auto',
       'rounded-3xl',
-      'border-white/10',
-      'bg-white/[0.03]',
-      'backdrop-blur-xl',
+      'border-white/[0.05]',
+      'bg-white/[0.04]',
+      'backdrop-blur-2xl',
       'border',
       'p-2',
       'shadow-2xl',
@@ -330,9 +330,9 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('w-full', 'min-h-full', 'flex', 'flex-col', 'items-center', 'justify-center', 'gap-10', 'pb-20');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('w-full', 'min-h-full', 'flex', 'flex-col', 'items-center', 'justify-center', 'gap-12', 'pb-24', 'pt-10');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
-    expect(entryDecisionCard).toHaveClass('rounded-2xl', 'border-white/6', 'bg-white/[0.03]', 'p-5', 'hover:border-white/16', 'hover:bg-white/[0.05]');
+    expect(entryDecisionCard).toHaveClass('rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'p-6', 'hover:bg-white/[0.05]');
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.entryDecision.title')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.positionReview.title')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.eventFollowUp.title')).length).toBeGreaterThan(0);
