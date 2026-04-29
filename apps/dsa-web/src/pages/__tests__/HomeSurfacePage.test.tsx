@@ -355,7 +355,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
     expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).toHaveAttribute('src', '/wolfystock-logo-mark.png');
-    expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).toHaveClass('animate-spin', 'shadow-[0_0_15px_rgba(79,70,229,0.3)]');
+    expect(screen.getByRole('img', { name: 'WolfyStock analyzing' })).toHaveClass('[animation:spin_2.8s_linear_infinite]', 'shadow-[0_0_22px_rgba(99,102,241,0.22)]');
     expect(screen.getByTestId('home-bento-inplace-loading-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-fundamentals')).toBeInTheDocument();
     expect(screen.getByText('Wolfy AI 引擎推理中...')).toBeInTheDocument();
@@ -387,7 +387,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByRole('link', { name: /backtest/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Lock the range first, then decide the pace.')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-chart-workspace')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('BUY');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('RECOMMEND BUY');
     expect(screen.getByText('ACTION')).toBeInTheDocument();
     expect(screen.getByText('AI INSIGHT')).toBeInTheDocument();
     expect(screen.getByText('SUPPORTING INDICATORS')).toBeInTheDocument();
@@ -473,7 +473,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-item-3'));
 
     await waitFor(() => expect(screen.queryByTestId('home-bento-loading-decision-card')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getAllByText('ORCL').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText('(ORCL)')).toBeInTheDocument());
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
@@ -980,7 +980,7 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await screen.findByTestId('home-bento-card-decision');
-    expect(screen.getAllByText('TSLA').length).toBeGreaterThan(0);
+    expect(screen.getByText('(TSLA)')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
@@ -1384,7 +1384,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();
     expect(screen.queryByText('待确认股票')).not.toBeInTheDocument();
-    expect(screen.getAllByText('AAPL').length).toBeGreaterThan(0);
+    expect(screen.getByText('(AAPL)')).toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
     expect(screen.queryByText('偏多')).not.toBeInTheDocument();
     expect(screen.queryByText('短线技术偏强，均线结构偏多')).not.toBeInTheDocument();

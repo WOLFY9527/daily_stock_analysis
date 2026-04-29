@@ -1514,7 +1514,7 @@ function InPlaceDecisionSkeleton({ locale, ticker }: { locale: DashboardLocale; 
           <img
             src="/wolfystock-logo-mark.png"
             alt="WolfyStock analyzing"
-            className="h-9 w-9 rounded-full object-contain shadow-[0_0_15px_rgba(79,70,229,0.3)] animate-spin"
+            className="h-9 w-9 rounded-full object-contain bg-white/[0.03] p-1 shadow-[0_0_22px_rgba(99,102,241,0.22)] [animation:spin_2.8s_linear_infinite]"
           />
           <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-indigo-100/70">
             {locale === 'en' ? 'Wolfy AI reasoning...' : 'Wolfy AI 引擎推理中...'}

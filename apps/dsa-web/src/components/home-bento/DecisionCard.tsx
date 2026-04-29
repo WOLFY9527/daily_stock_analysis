@@ -42,22 +42,53 @@ type DecisionCardProps = {
   ticker: string;
 };
 
-function getSignalCommand(locale: 'zh' | 'en', tone: SignalTone): { bias: string; command: string } {
-  if (tone === 'bearish') {
+function resolveSignalActionKey(signalLabel: string, tone: SignalTone): 'buy' | 'sell' | 'hold' {
+  const normalized = signalLabel.trim().toUpperCase();
+
+  if (/SELL|SHORT|BEAR/.test(normalized)) {
+    return 'sell';
+  }
+  if (/HOLD|NEUTRAL|WAIT|WATCH|OBSERVE/.test(normalized)) {
+    return 'hold';
+  }
+  if (/BUY|LONG|BULL/.test(normalized)) {
+    return 'buy';
+  }
+  return tone === 'bearish' ? 'sell' : tone === 'neutral' ? 'hold' : 'buy';
+}
+
+function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: SignalTone): { bias: string; command: string } {
+  const actionKey = resolveSignalActionKey(signalLabel, tone);
+
+  if (actionKey === 'sell') {
     return locale === 'en'
-      ? { command: 'SELL', bias: 'BEARISH' }
-      : { command: '卖', bias: '看空' };
+      ? { command: 'RECOMMEND SELL', bias: 'BEARISH' }
+      : { command: '建议卖出', bias: '看空' };
   }
 
-  if (tone === 'neutral') {
+  if (actionKey === 'hold') {
     return locale === 'en'
-      ? { command: 'HOLD', bias: 'NEUTRAL' }
-      : { command: '苟', bias: '中性' };
+      ? { command: 'NEUTRAL HOLD', bias: 'NEUTRAL' }
+      : { command: '中性观望', bias: '中性' };
   }
 
   return locale === 'en'
-    ? { command: 'BUY', bias: 'BULLISH' }
-    : { command: '买', bias: '看多' };
+    ? { command: 'RECOMMEND BUY', bias: 'BULLISH' }
+    : { command: '建议买入', bias: '看多' };
+}
+
+function getActionToneClass(tone: SignalTone): string {
+  return tone === 'neutral' ? 'text-[#AEB7CC]' : getToneTextClass(tone);
+}
+
+function getActionToneStyle(tone: SignalTone): React.CSSProperties {
+  if (tone !== 'neutral') {
+    return getToneTextStyle(tone, true);
+  }
+  return {
+    color: '#AEB7CC',
+    textShadow: '0 0 18px rgba(99, 102, 241, 0.18)',
+  };
 }
 
 function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): SupportingIndicator[] {
@@ -136,7 +167,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
     onClick: handleOpenDetailsClick,
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
-  const signalCommand = getSignalCommand(locale, signalTone);
+  const signalCommand = getSignalCommand(locale, signalLabel, signalTone);
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
   const signalDirection = signalLabel || signalCommand.bias;
@@ -170,8 +201,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-3" data-testid="home-bento-decision-company-header">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="font-mono text-xs font-semibold uppercase tracking-[0.22em] text-white/42">{ticker}</span>
               <span className="min-w-0 truncate text-xl font-bold leading-tight text-white">{company}</span>
+              <span className="font-mono text-base text-white/40">({ticker})</span>
             </div>
             <div
               className="mt-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/34"
@@ -191,15 +222,15 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
               <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
                 <span
-                  className={`text-5xl font-black leading-none tracking-[-0.06em] md:text-6xl ${getToneTextClass(signalTone)}`}
+                  className={`text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
                   data-testid="home-bento-decision-signal-hero"
-                  style={getToneTextStyle(signalTone, true)}
+                  style={getActionToneStyle(signalTone)}
                 >
                   {signalCommand.command}
                 </span>
                 <span
-                  className={`pb-1 text-xs font-semibold uppercase tracking-[0.28em] text-white/55 ${getToneTextClass(signalTone)}`}
-                  style={getToneTextStyle(signalTone, true)}
+                  className={`pb-1 text-xs font-semibold uppercase tracking-[0.28em] text-white/55 ${getActionToneClass(signalTone)}`}
+                  style={getActionToneStyle(signalTone)}
                 >
                   {conciseBadge}
                 </span>
@@ -225,9 +256,9 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               <div className="min-w-0">
                 <Label micro className="text-white/28">{isEnglish ? 'DIRECTION' : '方向'}</Label>
                 <p
-                  className={`mt-2 text-2xl font-semibold leading-none ${getToneTextClass(signalTone)}`}
+                  className={`mt-2 text-2xl font-semibold leading-none ${getActionToneClass(signalTone)}`}
                   data-testid="home-bento-decision-direction"
-                  style={getToneTextStyle(signalTone, true)}
+                  style={getActionToneStyle(signalTone)}
                 >
                   {signalDirection}
                 </p>
