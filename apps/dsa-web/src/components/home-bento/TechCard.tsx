@@ -53,12 +53,12 @@ export const TechCard: React.FC<TechCardProps> = ({
         </button>
       )}
     >
-      <div className="divide-y divide-white/5">
+      <div className="divide-y divide-white/5 px-1">
         {signals.map((signal) => (
           <div
             key={signal.label}
             data-testid={`home-bento-tech-signal-${signal.label}`}
-            className="flex items-center justify-between gap-4 py-2.5"
+            className="flex items-center justify-between gap-6 py-3"
           >
             <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
               {signal.label}

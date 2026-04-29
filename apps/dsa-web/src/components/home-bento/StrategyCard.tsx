@@ -56,12 +56,12 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
         >
-          <PanelRightOpen className="h-4 w-4" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
           <span>{detailLabel}</span>
         </button>
       )}
     >
-      <div className="grid h-full gap-6 md:grid-cols-2">
+      <div className="grid h-full gap-7 md:grid-cols-2">
         <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3.5 self-start">
           {metrics.map((metric) => (
             <div
@@ -79,7 +79,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
             </div>
           ))}
         </div>
-        <div className="border-t border-white/[0.08] pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+        <div className="border-t border-white/[0.08] pt-5 md:border-l md:border-t-0 md:pl-7 md:pt-0">
           <Label micro as="p" className="block truncate">{positionLabel}</Label>
           <div className="mt-3 space-y-2 break-words text-[13px] leading-[1.7] text-white/70 whitespace-normal">
             {(positionParagraphs.length ? positionParagraphs : [positionBody]).map((paragraph) => (

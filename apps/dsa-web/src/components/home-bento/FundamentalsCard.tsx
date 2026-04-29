@@ -74,20 +74,20 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
         </button>
       )}
     >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-4 px-1">
         {metrics.map((metric) => {
           const surprise = splitMetricSurprise(metric.value);
           const muted = isMutedValue(surprise.main);
           return (
             <div
               key={metric.label}
-              className="min-w-0"
+              className="grid min-w-0 gap-y-1"
               data-testid={`home-bento-fundamental-metric-${metric.label}`}
             >
-              <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-white/40">
+              <span className="block text-[10px] font-bold uppercase tracking-widest text-white/40">
                 {metric.label}
               </span>
-              <p className={`text-lg font-mono font-medium leading-tight ${muted ? 'text-white/20' : 'text-white'}`}>
+              <p className={`text-xl font-mono font-medium leading-tight ${muted ? 'text-white/20' : 'text-white'}`}>
                 {surprise.main}
               </p>
               {surprise.surprise ? (

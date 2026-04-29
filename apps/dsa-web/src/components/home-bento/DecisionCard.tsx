@@ -136,13 +136,48 @@ function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): Support
         { label: 'MACD-12/26/9', value: 'BULL CROSSOVER', context: 'Above zero' },
         { label: 'VOLUME CONF.', value: 'YES', context: 'Quiet pullback / active breakout' },
       ]
-    : [
-        { label: '均线排列', value: '多头', context: '均线多头排列' },
-        { label: '资金承接', value: '强力', context: '机构承接' },
-        { label: 'RSI-14', value: '68', context: '强势区' },
-        { label: 'MACD-12/26/9', value: '金叉', context: '零轴上方' },
-        { label: '量能确认', value: '是', context: '缩量回踩 / 放量突破' },
-      ];
+      : [
+          { label: '均线排列', value: '多头', context: '均线多头排列' },
+          { label: '资金承接', value: '强力', context: '机构承接' },
+          { label: 'RSI-14', value: '68', context: '强势区' },
+          { label: 'MACD-12/26/9', value: '金叉', context: '零轴上方' },
+          { label: '量能确认', value: '是', context: '缩量回踩 / 放量突破' },
+        ];
+}
+
+function splitInsightBlocks(text: string): string[] {
+  const normalized = text.trim();
+  if (!normalized || normalized === '-') {
+    return ['-'];
+  }
+
+  const sentenceParts = normalized
+    .split(/(?<=[。！？!?；;])\s*/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (sentenceParts.length >= 2) {
+    const midpoint = Math.ceil(sentenceParts.length / 2);
+    return [
+      sentenceParts.slice(0, midpoint).join(' '),
+      sentenceParts.slice(midpoint).join(' '),
+    ].filter(Boolean);
+  }
+
+  const clauseParts = normalized
+    .split(/[，,]\s*/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (clauseParts.length >= 3) {
+    const midpoint = Math.ceil(clauseParts.length / 2);
+    return [
+      `${clauseParts.slice(0, midpoint).join('，')}${normalized.includes('，') ? '。' : ''}`.trim(),
+      clauseParts.slice(midpoint).join('，').trim(),
+    ].filter(Boolean);
+  }
+
+  return [normalized];
 }
 
 export const DecisionCard: React.FC<DecisionCardProps> = ({
@@ -170,6 +205,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
   const insightCopy = reason.body || summary || scoreValue || '-';
+  const insightBlocks = splitInsightBlocks(insightCopy);
   const sectorLabel = (sector || (isEnglish ? 'UNCLASSIFIED' : '未分类')).toUpperCase();
 
   return (
@@ -189,12 +225,12 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
         >
-          <PanelRightOpen className="h-4 w-4" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
           <span>{detailLabel}</span>
         </button>
       )}
     >
-      <div className="flex h-full flex-col gap-4">
+      <div className="flex h-full flex-col gap-5">
         <div className="flex flex-wrap items-start justify-between gap-3" data-testid="home-bento-decision-company-header">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -210,7 +246,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-6">
           <div
             className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between"
             data-testid="home-bento-decision-hero-row"
@@ -245,18 +281,23 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             </div>
           </div>
 
-          <div className="max-w-3xl" data-testid="home-bento-decision-insight">
+          <div className="max-w-2xl" data-testid="home-bento-decision-insight">
             <Label micro className="text-white/28">{isEnglish ? 'AI INSIGHT' : '执行主线'}</Label>
-            <p
-              className="mt-3 line-clamp-3 text-sm leading-relaxed text-white/70"
-              data-testid="home-bento-decision-insight-copy"
-            >
-              {insightCopy}
-            </p>
+            <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2 xl:gap-x-6">
+              {insightBlocks.map((block, index) => (
+                <p
+                  key={`${block}-${index}`}
+                  className="text-sm leading-6 text-white/72"
+                  data-testid={index === 0 ? 'home-bento-decision-insight-copy' : undefined}
+                >
+                  {block}
+                </p>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-4 py-4 backdrop-blur-xl md:px-5">
+        <div className="flex flex-1 flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-5 backdrop-blur-xl md:px-6">
           <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
             <Label micro className="text-white/30">{isEnglish ? 'SUPPORTING INDICATORS' : '量化佐证指标'}</Label>
             <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/28">
