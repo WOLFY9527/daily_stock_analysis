@@ -10,6 +10,18 @@ export function getDirectionTone(direction?: MarketRiskDirection): string {
   return directionTone[direction || 'neutral'];
 }
 
+export function isRenderableMarketOverviewItem(item: MarketOverviewItem): boolean {
+  const value = item.value as unknown;
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toUpperCase();
+    return normalized !== 'N/A' && normalized !== '-';
+  }
+  return true;
+}
+
 export function formatMetricValue(
   item: Pick<MarketOverviewItem, 'value'>,
   digitsBelowHundred = 2,

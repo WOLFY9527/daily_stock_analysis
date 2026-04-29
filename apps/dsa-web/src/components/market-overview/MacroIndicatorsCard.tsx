@@ -14,7 +14,6 @@ export const MacroIndicatorsCard: React.FC<{ panel?: MarketOverviewPanel; loadin
       sourceLabel={t('marketOverviewPage.cards.macro.source')}
       panel={panel}
       loading={loading}
-      className="xl:col-span-4"
     />
   );
 };

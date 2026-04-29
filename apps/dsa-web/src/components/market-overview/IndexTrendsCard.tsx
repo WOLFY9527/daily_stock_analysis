@@ -3,6 +3,7 @@ import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
+import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MarketOverviewDataRow,
   MarketOverviewPanelFooter,
@@ -11,9 +12,10 @@ import {
 export const IndexTrendsCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => {
   const { t } = useI18n();
   const status = panel?.status || (loading ? 'loading' : 'failure');
+  const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
 
   return (
-    <GlassCard as="section" className="xl:col-span-4 flex h-full flex-col p-6">
+    <GlassCard as="section" className="flex h-full flex-col p-6">
       <div className="flex h-full flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -33,7 +35,7 @@ export const IndexTrendsCard: React.FC<{ panel?: MarketOverviewPanel; loading?: 
         ) : null}
 
         <div className="flex flex-col">
-          {(panel?.items || []).map((item) => (
+          {items.map((item) => (
             <MarketOverviewDataRow
               key={item.symbol}
               item={item}

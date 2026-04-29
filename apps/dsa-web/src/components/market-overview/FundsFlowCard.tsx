@@ -14,7 +14,6 @@ export const FundsFlowCard: React.FC<{ panel?: MarketOverviewPanel; loading?: bo
       sourceLabel={t('marketOverviewPage.cards.fundsFlow.source')}
       panel={panel}
       loading={loading}
-      className="xl:col-span-4"
     />
   );
 };

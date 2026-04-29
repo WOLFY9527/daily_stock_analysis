@@ -105,12 +105,18 @@ const MarketOverviewPage: React.FC = () => {
             className="px-0"
           />
 
-          <main className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-            <IndexTrendsCard panel={panels.indices} loading={loading && !panels.indices} />
-            <VolatilityCard panel={panels.volatility} loading={loading && !panels.volatility} />
-            <MarketSentimentCard panel={panels.sentiment} loading={loading && !panels.sentiment} />
-            <FundsFlowCard panel={panels.fundsFlow} loading={loading && !panels.fundsFlow} />
-            <MacroIndicatorsCard panel={panels.macro} loading={loading && !panels.macro} />
+          <main className="flex flex-col items-start gap-6 xl:flex-row">
+            <div className="flex w-full flex-col gap-6 xl:w-[calc((100%_-_3rem)/3)]">
+              <IndexTrendsCard panel={panels.indices} loading={loading && !panels.indices} />
+            </div>
+            <div className="flex w-full flex-col gap-6 xl:w-[calc((100%_-_3rem)/3)]">
+              <VolatilityCard panel={panels.volatility} loading={loading && !panels.volatility} />
+              <FundsFlowCard panel={panels.fundsFlow} loading={loading && !panels.fundsFlow} />
+            </div>
+            <div className="flex w-full flex-col gap-6 xl:w-[calc((100%_-_3rem)/3)]">
+              <MarketSentimentCard panel={panels.sentiment} loading={loading && !panels.sentiment} />
+              <MacroIndicatorsCard panel={panels.macro} loading={loading && !panels.macro} />
+            </div>
           </main>
         </div>
       </div>

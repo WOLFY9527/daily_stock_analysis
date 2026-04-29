@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 🧱 **Market Overview 改为三列瀑布流终局版** — `apps/dsa-web/src/pages/MarketOverviewPage.tsx` 废除主工作区二维 grid，改为左列指数、中列波动率/ETF、右列情绪/宏观的三条独立 flex 列，避免长指数卡把下方卡片整体推空。`marketOverviewPrimitives.tsx` 将数据行改为固定 `w-32` 名称列、固定 `w-24` Sparkline 列与右侧 `flex-1` 等宽数值列，移除指标单位后缀并过滤 `N/A` / 空值行；相关 Market Overview 卡片同步接入过滤逻辑，回归覆盖空宏观指标隐藏。
+
 - 📉 **Market Overview 核心指标改为高密度垂直数据行** — `apps/dsa-web/src/components/market-overview/marketOverviewPrimitives.tsx` 新增共享 `MarketOverviewDataRow`，把指数、ETF 资金流和宏观指标从横向网格胶囊改为带状态点、压缩 Sparkline、右对齐等宽数值与涨跌摘要的纵向列表。`IndexTrendsCard.tsx`、`MarketOverviewCard.tsx` 与 `VolatilityCard.tsx` 同步移除指标级实心边框容器；波动率面板将 VIX、辅助波动指标与固定 `GREED / FEAR INDEX 65.0` 行合并到同一列表，避免 VIX 右侧出现物理空缺。配套回归更新到 `apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx`，并通过 focused Vitest、lint、build 与 Safari `/market-overview` 手工验收。
 
 - 🧾 **管理员日志补齐操作级系统事件与审计筛选** — `apps/dsa-web/src/pages/AdminLogsPage.tsx` 将 `/admin/logs` 的操作类别扩展到系统操作，支持按用户筛选并在前端兜底按操作时间倒序排列；详情抽屉现在可直接展示系统操作的操作类型、操作用户、操作时间、执行结果、失败原因，并兼容 `systemFallbacks` / `finalResult` 明细字段。配套类型与中英文文案同步更新到 `apps/dsa-web/src/api/adminLogs.ts`、`apps/dsa-web/src/i18n/core.ts`，回归覆盖补到 `apps/dsa-web/src/pages/__tests__/AdminLogsPage.test.tsx`。

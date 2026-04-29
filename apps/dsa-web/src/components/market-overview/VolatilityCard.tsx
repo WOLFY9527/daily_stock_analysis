@@ -3,6 +3,7 @@ import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOv
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
+import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MarketOverviewDataRow,
   MarketOverviewPanelFooter,
@@ -28,7 +29,7 @@ function greedFearItem(): MarketOverviewItem {
 export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => {
   const { t } = useI18n();
   const status = panel?.status || (loading ? 'loading' : 'failure');
-  const items = panel?.items || [];
+  const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
   const primary = resolvePrimaryItem(items);
   const compactItems = [
     ...(primary ? [primary] : []),
@@ -37,7 +38,7 @@ export const VolatilityCard: React.FC<{ panel?: MarketOverviewPanel; loading?: b
   ];
 
   return (
-    <GlassCard as="section" className="xl:col-span-4 flex h-full flex-col p-6">
+    <GlassCard as="section" className="flex h-full flex-col p-6">
       <div className="flex h-full flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div>

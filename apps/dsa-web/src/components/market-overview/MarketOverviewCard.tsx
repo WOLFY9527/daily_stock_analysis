@@ -3,6 +3,7 @@ import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
+import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MarketOverviewDataRow,
   MarketOverviewPanelFooter,
@@ -29,6 +30,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
 }) => {
   const { t } = useI18n();
   const status = panel?.status || (loading ? 'loading' : 'failure');
+  const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
 
   return (
     <GlassCard
@@ -61,7 +63,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
         ) : null}
 
         <div className="flex flex-col">
-          {(panel?.items || []).map((item) => (
+          {items.map((item) => (
             <MarketOverviewDataRow
               key={item.symbol}
               item={item}

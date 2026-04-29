@@ -31,13 +31,29 @@ const panel = (panelName: string, symbol: string) => ({
   ],
 });
 
+const macroPanel = () => ({
+  ...panel('MacroIndicatorsCard', 'US10Y'),
+  items: [
+    ...panel('MacroIndicatorsCard', 'US10Y').items,
+    {
+      symbol: 'FEDFUNDS',
+      label: 'Fed Funds',
+      value: null,
+      unit: '%',
+      changePct: null,
+      riskDirection: 'neutral' as const,
+      trend: [],
+    },
+  ],
+});
+
 describe('MarketOverviewPage', () => {
   beforeEach(() => {
     vi.mocked(marketOverviewApi.getIndices).mockResolvedValue(panel('IndexTrendsCard', 'SPX'));
     vi.mocked(marketOverviewApi.getVolatility).mockResolvedValue(panel('VolatilityCard', 'VIX'));
     vi.mocked(marketOverviewApi.getSentiment).mockResolvedValue(panel('MarketSentimentCard', 'FGI'));
     vi.mocked(marketOverviewApi.getFundsFlow).mockResolvedValue(panel('FundsFlowCard', 'ETF'));
-    vi.mocked(marketOverviewApi.getMacro).mockResolvedValue(panel('MacroIndicatorsCard', 'US10Y'));
+    vi.mocked(marketOverviewApi.getMacro).mockResolvedValue(macroPanel());
   });
 
   afterEach(() => {
@@ -60,6 +76,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByText('US10Y').length).toBeGreaterThan(0);
     expect(screen.queryByText(/平静/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/警戒/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Fed Funds')).not.toBeInTheDocument();
+    expect(screen.queryByText('pts')).not.toBeInTheDocument();
 
     expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
