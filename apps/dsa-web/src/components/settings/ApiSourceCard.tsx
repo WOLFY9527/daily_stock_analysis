@@ -7,11 +7,11 @@ type ApiSourceCardProps = {
   kindLabel: string;
   validationLabel: string;
   validationTone: 'default' | 'success' | 'warning';
+  isConfigured: boolean;
   capabilities: string[];
   statusText: string;
   validationMessage: string;
   usedByText: string;
-  description: string;
   endpointText: string;
   internalFlagText: string;
   manageLabel: string;
@@ -30,11 +30,11 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   kindLabel,
   validationLabel,
   validationTone,
+  isConfigured,
   capabilities,
   statusText,
   validationMessage,
   usedByText,
-  description,
   endpointText,
   internalFlagText,
   manageLabel,
@@ -44,39 +44,47 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   onValidate,
 }) => (
   <div
-    className="h-fit rounded-xl bg-white/[0.015] p-3"
+    className="flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]"
     data-testid={testId}
+    data-layout="row"
   >
-    <div className="flex flex-wrap items-start justify-between gap-2 border-b border-white/5 pb-2.5">
+    <div className="flex min-w-[13rem] items-center gap-3">
+      <span
+        className={isConfigured
+          ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+          : 'h-1.5 w-1.5 shrink-0 rounded-full bg-white/20'}
+        aria-hidden="true"
+      />
       <div className="min-w-0">
-        <p className="text-base font-semibold text-foreground">{label}</p>
-        <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-text">{kindLabel}</p>
+        <p className="w-48 truncate text-sm font-bold text-white">{label}</p>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/30">{kindLabel}</p>
       </div>
-      <span className={GHOST_TAG_CLASS} data-tone={validationTone}>
-        {validationLabel}
-      </span>
     </div>
-    <div className="mt-2.5 flex flex-wrap gap-1.5">
-      {capabilities.map((capability) => (
-        <span
-          key={`${testId}-${capability}`}
-          className={GHOST_TAG_CLASS}
-        >
-          {capability}
+
+    <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap gap-2">
+        <span className={GHOST_TAG_CLASS} data-tone={validationTone}>
+          {validationLabel}
         </span>
-      ))}
+        {capabilities.map((capability) => (
+          <span
+            key={`${testId}-${capability}`}
+            className={GHOST_TAG_CLASS}
+          >
+            {capability}
+          </span>
+        ))}
+      </div>
+      <div className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/35">
+        <span className="truncate">{statusText}</span>
+        <span className="truncate">{validationMessage}</span>
+        <span className="truncate">{usedByText}</span>
+        <span className="truncate">{endpointText}</span>
+        <span className="truncate">{internalFlagText}</span>
+      </div>
     </div>
-    <div className="mt-2.5 space-y-1 text-sm text-secondary-text">
-      <p>{statusText}</p>
-      <p className="text-xs">{validationMessage}</p>
-      <p className="text-xs">{usedByText}</p>
-    </div>
-    <div className="mt-2.5 space-y-1 border-t border-white/5 pt-2.5 text-[11px] text-muted-text">
-      <p>{endpointText}</p>
-      <p>{internalFlagText}</p>
-    </div>
-    <p className="mt-2.5 line-clamp-2 border-t border-white/5 pt-2.5 text-[11px] text-muted-text">{description}</p>
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-2.5">
+
+    <div className="flex shrink-0 items-center justify-end gap-2">
       <Button
         type="button"
         size="sm"

@@ -1390,11 +1390,13 @@ describe('SettingsPage', () => {
     expect(screen.getByText('1. 任务路由')).toBeInTheDocument();
     expect(screen.getByText('2. Provider Library')).toBeInTheDocument();
     expect(screen.getByText('3. 高级配置（可选）')).toBeInTheDocument();
+    expect(screen.getByText('LLM PROVIDERS')).toBeInTheDocument();
     expect(screen.getByText('高级渠道配置')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '打开高级设置' })).toBeInTheDocument();
     expect(screen.getByTestId('ai-task-row-analysis')).toBeInTheDocument();
     expect(screen.getByTestId('ai-task-row-stock_chat')).toBeInTheDocument();
     expect(screen.getByTestId('ai-task-row-backtest')).toBeInTheDocument();
+    expect(screen.getByTestId('ai-provider-card-gemini')).toHaveAttribute('data-layout', 'row');
     expect(screen.getAllByText('GLM / Zhipu').length).toBeGreaterThan(0);
   });
 
@@ -1507,9 +1509,13 @@ describe('SettingsPage', () => {
     expect(dataSection).not.toBeNull();
     expect(within(dataSection as HTMLElement).getByText('1. 数据路由')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText('2. 数据源库')).toBeInTheDocument();
+    expect(within(dataSection as HTMLElement).getByText('MARKET DATA')).toBeInTheDocument();
+    expect(within(dataSection as HTMLElement).getByText('FUNDAMENTALS')).toBeInTheDocument();
+    expect(within(dataSection as HTMLElement).getByText('NEWS & SENTIMENT')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText('行情数据')).toBeInTheDocument();
     expect(within(dataSection as HTMLElement).getByText(/Finnhub -> Yahoo/)).toBeInTheDocument();
     const finnhubCard = within(dataSection as HTMLElement).getByTestId('data-source-card-finnhub');
+    expect(finnhubCard).toHaveAttribute('data-layout', 'row');
     expect(within(finnhubCard).getByText('Finnhub')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('行情')).toBeInTheDocument();
     expect(within(finnhubCard).getByText('基本面')).toBeInTheDocument();

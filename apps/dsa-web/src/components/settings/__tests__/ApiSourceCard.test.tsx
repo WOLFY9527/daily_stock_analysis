@@ -14,11 +14,11 @@ describe('ApiSourceCard', () => {
         kindLabel={zh('settings.dataSourceCustomKind')}
         validationLabel={zh('settings.dataSourceConfiguredPending')}
         validationTone="default"
+        isConfigured
         capabilities={[zh('settings.dataSourceCapability.news')]}
         statusText={zh('settings.dataSourceStatusConfigured')}
         validationMessage={zh('settings.dataSourceValidationConfiguredOnly')}
         usedByText={`${zh('settings.dataSourceUsedByLabel')}: ${zh('settings.dataRouteName.news')}`}
-        description="Custom news endpoint"
         endpointText={`${zh('settings.dataSourceEndpointNameLabel')}: demo_news_api`}
         internalFlagText={`${zh('settings.dataSourceInternalFlagLabel')}: ${zh('settings.dataSourceInternalFlagExternal')}`}
         manageLabel={zh('settings.dataSourceEditAction')}
@@ -29,6 +29,7 @@ describe('ApiSourceCard', () => {
     );
 
     const card = screen.getByTestId('data-source-card-demo');
+    expect(card).toHaveAttribute('data-layout', 'row');
     expect(card).toHaveTextContent(`${zh('settings.dataSourceEndpointNameLabel')}: demo_news_api`);
     expect(card).toHaveTextContent(`${zh('settings.dataSourceInternalFlagLabel')}: ${zh('settings.dataSourceInternalFlagExternal')}`);
     expect(card).toHaveTextContent(`${zh('settings.dataSourceUsedByLabel')}: ${zh('settings.dataRouteName.news')}`);
@@ -45,11 +46,11 @@ describe('ApiSourceCard', () => {
         kindLabel={zh('settings.dataSourceCustomKind')}
         validationLabel={zh('settings.dataSourceConfiguredPending')}
         validationTone="default"
+        isConfigured
         capabilities={[zh('settings.dataSourceCapability.news')]}
         statusText={zh('settings.dataSourceStatusConfigured')}
         validationMessage={zh('settings.dataSourceValidationConfiguredOnly')}
         usedByText={`${zh('settings.dataSourceUsedByLabel')}: ${zh('settings.dataRouteName.news')}`}
-        description="Custom news endpoint"
         endpointText={`${zh('settings.dataSourceEndpointNameLabel')}: demo_news_api`}
         internalFlagText={`${zh('settings.dataSourceInternalFlagLabel')}: ${zh('settings.dataSourceInternalFlagExternal')}`}
         manageLabel={zh('settings.dataSourceEditAction')}

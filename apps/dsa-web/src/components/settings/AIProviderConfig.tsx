@@ -52,6 +52,49 @@ type AIProviderConfigProps = {
 
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-white/10 pb-2 text-xs font-bold uppercase tracking-[0.2em] text-white/30 first:mt-0';
+const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]';
+
+const PROVIDER_LIBRARY_GROUPS: Array<{
+  key: string;
+  title: string;
+  keys: QuickProviderKey[];
+}> = [
+  {
+    key: 'llm',
+    title: 'LLM PROVIDERS',
+    keys: ['gemini', 'aihubmix', 'openai', 'anthropic', 'deepseek', 'zhipu'],
+  },
+  {
+    key: 'embeddings',
+    title: 'EMBEDDINGS',
+    keys: [],
+  },
+];
+
+const providerCapabilities = (provider: ProviderCard, t: TranslateFn): string[] => [
+  provider.isReady ? t('settings.aiProviderReady') : t('settings.aiProviderMissingCredential'),
+  `${t('settings.aiPresetModels')}: ${provider.presetCount}`,
+  `${t('settings.aiProviderQuickApiStatusLabel')}: ${provider.quickApiConfigured ? t('settings.enabledState') : t('settings.disabledState')}`,
+  `${t('settings.aiProviderAdvancedChannelCountLabel')}: ${provider.advancedChannelCount}`,
+];
+
+const groupedProviders = (providers: ProviderCard[]) => {
+  const byKey = new Map(providers.map((provider) => [provider.key, provider]));
+  return PROVIDER_LIBRARY_GROUPS.map((group) => ({
+    ...group,
+    items: group.keys.map((key) => byKey.get(key)).filter((provider): provider is ProviderCard => Boolean(provider)),
+  })).filter((group) => group.items.length > 0);
+};
+
+const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (
+  <span
+    className={active
+      ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+      : 'h-1.5 w-1.5 shrink-0 rounded-full bg-white/20'}
+    aria-hidden="true"
+  />
+);
 
 const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
   t,
@@ -161,63 +204,76 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
       <div className="settings-surface rounded-xl border settings-border px-4 py-4" data-testid="ai-provider-quick-section">
         <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyProviderTitle')}</p>
         <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.aiDirectProviderTitle')}</p>
-        <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-          {providerCards.map((provider) => (
-            <div
-              key={provider.key}
-              className="h-fit rounded-xl bg-white/[0.02] px-3 py-3"
-              data-testid={`ai-provider-card-${provider.key}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-foreground">{provider.label}</p>
-                <span className={GHOST_TAG_CLASS} data-ready={provider.isReady ? 'true' : 'false'}>
-                  {provider.isReady ? t('settings.aiProviderReady') : t('settings.aiProviderMissingCredential')}
-                </span>
+        <div className="mt-3 flex flex-col" data-testid="ai-provider-library-list">
+          {groupedProviders(providerCards).map((group) => (
+            <section key={group.key} aria-label={group.title}>
+              <h3 className={SECTION_HEADER_CLASS}>{group.title}</h3>
+              <div className="flex flex-col">
+                {group.items.map((provider) => (
+                  <div
+                    key={provider.key}
+                    className={ROW_CLASS}
+                    data-testid={`ai-provider-card-${provider.key}`}
+                    data-layout="row"
+                  >
+                    <div className="flex min-w-[13rem] items-center gap-3">
+                      <StatusDot active={provider.isReady} />
+                      <div className="min-w-0">
+                        <p className="w-48 truncate text-sm font-bold text-white">{provider.label}</p>
+                        <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/30">
+                          {provider.suggestedTestModel || t('settings.aiProviderTestModelMissing')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap gap-2">
+                        {providerCapabilities(provider, t).map((capability) => (
+                          <span
+                            key={`${provider.key}-${capability}`}
+                            className={GHOST_TAG_CLASS}
+                            data-ready={provider.isReady ? 'true' : 'false'}
+                          >
+                            {capability}
+                          </span>
+                        ))}
+                      </div>
+                      {provider.quickTestStatus !== 'idle' ? (
+                        <p className={provider.quickTestStatus === 'success'
+                          ? 'mt-1 text-xs text-[hsl(var(--accent-positive-hsl))]'
+                          : provider.quickTestStatus === 'error'
+                            ? 'mt-1 text-xs text-[hsl(var(--accent-warning-hsl))]'
+                            : 'mt-1 text-xs text-muted-text'}
+                        >
+                          {provider.quickTestText}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="settings-secondary"
+                        className={CONTROL_GHOST_BUTTON_CLASS}
+                        onClick={() => onOpenQuickProviderDrawer(provider.key)}
+                        disabled={adminLocked || isSaving}
+                      >
+                        {t('settings.aiProviderQuickSetupOpen')}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="settings-secondary"
+                        className={CONTROL_GHOST_BUTTON_CLASS}
+                        onClick={() => onJumpToProviderAdvancedConfig(provider.key)}
+                        disabled={adminLocked || isSaving}
+                      >
+                        {t('settings.aiDirectProviderAdvancedEntryForProvider', { provider: provider.label })}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <p className="mt-1 text-[11px] text-muted-text">
-                {t('settings.aiPresetModels')}: {provider.presetCount}
-              </p>
-              <p className="mt-1 text-[11px] text-secondary-text">
-                {t('settings.aiProviderQuickApiStatusLabel')}: {provider.quickApiConfigured ? t('settings.enabledState') : t('settings.disabledState')}
-                {' · '}
-                {t('settings.aiProviderAdvancedChannelCountLabel')}: {provider.advancedChannelCount}
-              </p>
-              <p className="mt-1 text-[11px] text-muted-text">
-                {t('settings.aiProviderTestModelLabel')}: {provider.suggestedTestModel || t('settings.aiProviderTestModelMissing')}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="settings-secondary"
-                  className={CONTROL_GHOST_BUTTON_CLASS}
-                  onClick={() => onOpenQuickProviderDrawer(provider.key)}
-                  disabled={adminLocked || isSaving}
-                >
-                  {t('settings.aiProviderQuickSetupOpen')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="settings-secondary"
-                  className={CONTROL_GHOST_BUTTON_CLASS}
-                  onClick={() => onJumpToProviderAdvancedConfig(provider.key)}
-                  disabled={adminLocked || isSaving}
-                >
-                  {t('settings.aiDirectProviderAdvancedEntryForProvider', { provider: provider.label })}
-                </Button>
-              </div>
-              {provider.quickTestStatus !== 'idle' ? (
-                <p className={provider.quickTestStatus === 'success'
-                  ? 'mt-2 text-xs text-[hsl(var(--accent-positive-hsl))]'
-                  : provider.quickTestStatus === 'error'
-                    ? 'mt-2 text-xs text-[hsl(var(--accent-warning-hsl))]'
-                    : 'mt-2 text-xs text-muted-text'}
-                >
-                  {provider.quickTestText}
-                </p>
-              ) : null}
-            </div>
+            </section>
           ))}
         </div>
         <div className="mt-3 flex justify-end">

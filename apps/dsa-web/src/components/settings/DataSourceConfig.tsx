@@ -5,6 +5,7 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
+type DataSourceCapability = DataRouteKey | 'local';
 type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin';
 
 type DataRoutingGroup = {
@@ -23,6 +24,7 @@ type DataSourceLibraryEntry = {
   validationState: DataSourceValidationState;
   validationMessage: string;
   routeUsage: DataRouteKey[];
+  capabilityKeys: DataSourceCapability[];
   capabilityLabels: string[];
   description: string;
 };
@@ -44,6 +46,55 @@ type DataSourceConfigProps = {
 
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-white/10 pb-2 text-xs font-bold uppercase tracking-[0.2em] text-white/30 first:mt-0';
+const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]';
+
+const DATA_SOURCE_LIBRARY_GROUPS: Array<{
+  key: string;
+  title: string;
+  matches: (source: DataSourceLibraryEntry) => boolean;
+}> = [
+  {
+    key: 'market',
+    title: 'MARKET DATA',
+    matches: (source) => source.capabilityKeys.includes('market'),
+  },
+  {
+    key: 'fundamentals',
+    title: 'FUNDAMENTALS',
+    matches: (source) => source.capabilityKeys.includes('fundamentals'),
+  },
+  {
+    key: 'news',
+    title: 'NEWS & SENTIMENT',
+    matches: (source) => source.capabilityKeys.includes('news')
+      || source.capabilityKeys.includes('sentiment')
+      || source.capabilityKeys.includes('local'),
+  },
+];
+
+const groupedDataSources = (sources: DataSourceLibraryEntry[]) => {
+  const assigned = new Set<string>();
+  return DATA_SOURCE_LIBRARY_GROUPS.map((group) => {
+    const items = sources.filter((source) => {
+      if (assigned.has(source.key) || !group.matches(source)) {
+        return false;
+      }
+      assigned.add(source.key);
+      return true;
+    });
+    return { ...group, items };
+  }).filter((group) => group.items.length > 0);
+};
+
+const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (
+  <span
+    className={active
+      ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+      : 'h-1.5 w-1.5 shrink-0 rounded-full bg-white/20'}
+    aria-hidden="true"
+  />
+);
 
 const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
   t,
@@ -73,47 +124,45 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
             <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.dataRoutingCompactTitle')}</p>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="mt-3 flex flex-col" data-testid="data-routing-list">
           {dataRoutingGroups.map((group) => (
-            <div key={group.role} className="h-fit rounded-xl bg-white/[0.02] p-3">
+            <div key={group.role} className={ROW_CLASS}>
+              <div className="flex min-w-[13rem] items-center gap-3">
+                <StatusDot active={group.values.length > 0} />
+                <div className="min-w-0">
+                  <p className="w-48 truncate text-sm font-bold text-white">{group.role}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/30">
+                    {group.available.length
+                      ? t('settings.dataRoutingSelectableCount', { count: group.available.length })
+                      : t('settings.dataSourceNoUsableSources')}
+                  </p>
+                </div>
+              </div>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground">{group.role}</p>
+                <div className="flex flex-wrap gap-2">
                   <span className={GHOST_TAG_CLASS}>
                     {group.values.length ? t('settings.configuredNoPriority') : t('settings.notConfigured')}
                   </span>
+                  {group.values.map((source, index) => (
+                    <span
+                      key={`${group.role}-${source}-${index}`}
+                      className={GHOST_TAG_CLASS}
+                    >
+                      <span className={sourceToneClass(index)}>{priorityLabel(index)}</span>
+                      {' · '}
+                      {prettySourceLabel(source)}
+                    </span>
+                  ))}
                 </div>
-                <p className="mt-2 break-words text-sm font-semibold text-foreground">
+                <p className="mt-1 truncate text-[11px] text-white/35">
                   {group.values.length
                     ? group.values.map((source) => prettySourceLabel(source)).join(' -> ')
-                    : t('settings.notConfigured')}
-                </p>
-                {group.values.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {group.values.map((source, index) => (
-                      <span
-                        key={`${group.role}-${source}-${index}`}
-                        className={GHOST_TAG_CLASS}
-                      >
-                        <span className={sourceToneClass(index)}>{priorityLabel(index)}</span>
-                        {' · '}
-                        {prettySourceLabel(source)}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                <p className="mt-2 text-xs text-secondary-text">
-                  {group.available.length
-                    ? group.available.map((source) => prettySourceLabel(source)).join(' · ')
-                    : t('settings.dataSourceNotRouted')}
+                    : (group.available.length
+                      ? group.available.map((source) => prettySourceLabel(source)).join(' · ')
+                      : t('settings.dataSourceNotRouted'))}
                 </p>
               </div>
-              <div className="mt-4 flex items-center justify-between gap-2">
-                <p className="text-[11px] leading-5 text-muted-text">
-                  {group.available.length
-                    ? t('settings.dataRoutingSelectableCount', { count: group.available.length })
-                    : t('settings.dataSourceNoUsableSources')}
-                </p>
+              <div className="flex shrink-0 items-center justify-end gap-2">
                 <Button
                   type="button"
                   size="sm"
@@ -148,46 +197,53 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
             {t('settings.dataSourceAddAction')}
           </Button>
         </div>
-        <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-          {dataSourceLibrary.map((source) => (
-            <ApiSourceCard
-              key={source.key}
-              testId={`data-source-card-${source.key}`}
-              label={source.label}
-              kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
-              validationLabel={source.validationState === 'builtin'
-                ? t('settings.dataSourceValidationBuiltin')
-                : source.validationState === 'validated'
-                  ? t('settings.dataSourceValidated')
-                  : source.validationState === 'failed'
-                    ? t('settings.dataSourceValidationFailed')
-                    : source.configured
-                      ? t('settings.dataSourceConfiguredPending')
-                      : t('settings.notConfigured')}
-              validationTone={source.validationState === 'failed'
-                ? 'warning'
-                : source.validationState === 'validated'
-                  ? 'success'
-                  : 'default'}
-              capabilities={source.capabilityLabels}
-              statusText={source.configured
-                ? t('settings.dataSourceStatusConfigured')
-                : t('settings.dataSourceStatusMissing')}
-              validationMessage={source.validationMessage}
-              usedByText={`${t('settings.dataSourceUsedByLabel')}: ${source.routeUsage.length
-                ? source.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
-                : t('settings.dataSourceNotRouted')}`}
-              endpointText={`${t('settings.dataSourceEndpointNameLabel')}: ${source.key}`}
-              internalFlagText={`${t('settings.dataSourceInternalFlagLabel')}: ${source.builtin
-                ? t('settings.dataSourceInternalFlagBuiltin')
-                : t('settings.dataSourceInternalFlagExternal')}`}
-              description={source.description}
-              manageLabel={source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
-              validateLabel={t('settings.dataSourceValidateAction')}
-              validateDisabled={!source.usable}
-              onManage={() => onOpenEditDataSourceDrawer(source.key)}
-              onValidate={() => onValidateDataSource(source.key)}
-            />
+        <div className="mt-3 flex flex-col" data-testid="data-source-library-list">
+          {groupedDataSources(dataSourceLibrary).map((group) => (
+            <section key={group.key} aria-label={group.title}>
+              <h3 className={SECTION_HEADER_CLASS}>{group.title}</h3>
+              <div className="flex flex-col">
+                {group.items.map((source) => (
+                  <ApiSourceCard
+                    key={source.key}
+                    testId={`data-source-card-${source.key}`}
+                    label={source.label}
+                    kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
+                    validationLabel={source.validationState === 'builtin'
+                      ? t('settings.dataSourceValidationBuiltin')
+                      : source.validationState === 'validated'
+                        ? t('settings.dataSourceValidated')
+                        : source.validationState === 'failed'
+                          ? t('settings.dataSourceValidationFailed')
+                          : source.configured
+                            ? t('settings.dataSourceConfiguredPending')
+                            : t('settings.notConfigured')}
+                    validationTone={source.validationState === 'failed'
+                      ? 'warning'
+                      : source.validationState === 'validated'
+                        ? 'success'
+                        : 'default'}
+                    isConfigured={source.usable || source.configured}
+                    capabilities={source.capabilityLabels}
+                    statusText={source.configured
+                      ? t('settings.dataSourceStatusConfigured')
+                      : t('settings.dataSourceStatusMissing')}
+                    validationMessage={source.validationMessage}
+                    usedByText={`${t('settings.dataSourceUsedByLabel')}: ${source.routeUsage.length
+                      ? source.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
+                      : t('settings.dataSourceNotRouted')}`}
+                    endpointText={`${t('settings.dataSourceEndpointNameLabel')}: ${source.key}`}
+                    internalFlagText={`${t('settings.dataSourceInternalFlagLabel')}: ${source.builtin
+                      ? t('settings.dataSourceInternalFlagBuiltin')
+                      : t('settings.dataSourceInternalFlagExternal')}`}
+                    manageLabel={source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
+                    validateLabel={t('settings.dataSourceValidateAction')}
+                    validateDisabled={!source.usable}
+                    onManage={() => onOpenEditDataSourceDrawer(source.key)}
+                    onValidate={() => onValidateDataSource(source.key)}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </GlassCard>
