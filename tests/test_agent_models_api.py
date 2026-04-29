@@ -355,6 +355,71 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
         executor.chat.assert_called_once()
         self.assertEqual(executor.chat.call_args.kwargs["context"]["skills"], [])
         self.assertEqual(payload["content"], "ok")
+
+    def test_agent_chat_records_tool_calls_into_execution_logs(self) -> None:
+        config = SimpleNamespace(is_agent_available=lambda: True)
+        executor = MagicMock()
+        executor.chat.return_value = SimpleNamespace(
+            success=True,
+            content="ok",
+            error=None,
+            tool_calls_log=[
+                {
+                    "step": 1,
+                    "tool": "get_realtime_quote",
+                    "arguments": {"stock_code": "TSLA"},
+                    "success": True,
+                    "duration": 0.12,
+                    "result_length": 48,
+                    "result_preview": {"price": 123.45},
+                },
+                {
+                    "step": 2,
+                    "tool": "search_stock_news",
+                    "arguments": {"stock_code": "TSLA"},
+                    "success": False,
+                    "duration": 0.21,
+                    "result_length": 52,
+                    "result_preview": {"error": "timeout"},
+                },
+            ],
+        )
+        request = agent.ChatRequest(message="analyze tsla", context={})
+        real_get_running_loop = asyncio.get_running_loop
+        log_service = MagicMock()
+        log_service.start_agent_tool_session.return_value = "log-session-1"
+
+        class _ImmediateLoop:
+            def __init__(self, loop):
+                self._loop = loop
+
+            def run_in_executor(self, _executor, func):
+                future = self._loop.create_future()
+                future.set_result(func())
+                return future
+
+        with patch("api.v1.endpoints.agent.get_config", return_value=config), patch(
+            "api.v1.endpoints.agent._build_executor",
+            return_value=executor,
+        ), patch(
+            "api.v1.endpoints.agent.ExecutionLogService",
+            return_value=log_service,
+            create=True,
+        ), patch(
+            "api.v1.endpoints.agent.asyncio.get_running_loop",
+            side_effect=lambda: _ImmediateLoop(real_get_running_loop()),
+        ):
+            payload = asyncio.run(
+                agent.agent_chat(
+                    request,
+                    current_user=SimpleNamespace(user_id="test-user"),
+                )
+            ).model_dump()
+
+        self.assertEqual(payload["content"], "ok")
+        log_service.start_agent_tool_session.assert_called_once()
+        self.assertEqual(log_service.append_agent_tool_call.call_count, 2)
+        log_service.finalize_agent_tool_session.assert_called_once()
 class AgentModelsSourceDetectionTestCase(unittest.TestCase):
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])

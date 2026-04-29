@@ -128,6 +128,37 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertNotIn("error", payload["modules"][1])
         service.get_task_progress.assert_called_once_with("task-1", owner_id="user-1")
 
+    def test_get_task_progress_backfills_missing_final_result_created_at(self) -> None:
+        if get_task_progress is None:
+            self.skipTest("analysis endpoint import unavailable")
+
+        service = MagicMock()
+        service.get_task_progress.return_value = {
+            "task_id": "task-1",
+            "stock_code": "TSLA",
+            "stock_name": "Tesla",
+            "status": "completed",
+            "progress": 100,
+            "message": "done",
+            "updated_at": "2026-04-29T09:02:00Z",
+            "execution_session_id": "session-1",
+            "modules": [
+                {"key": "llm", "name": "LLM", "status": "completed"},
+            ],
+            "final_result": {
+                "query_id": "query-1",
+                "stock_code": "TSLA",
+                "stock_name": "Tesla",
+                "report": {"summary": {"operation_advice": "hold"}},
+            },
+        }
+        current_user = SimpleNamespace(user_id="user-1")
+
+        payload = get_task_progress("task-1", service=service, current_user=current_user).model_dump()
+
+        self.assertEqual(payload["final_result"]["query_id"], "query-1")
+        self.assertTrue(payload["final_result"]["created_at"])
+
     def test_report_type_full_is_preserved_in_response_metadata(self) -> None:
         service = AnalysisService()
         pipeline_instance = MagicMock()

@@ -10,10 +10,11 @@
 3. 定义异步任务队列相关模型
 """
 
+from datetime import datetime
 from typing import Optional, List, Any
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from src.utils.analysis_metadata import SELECTION_SOURCE_PATTERN
 from api.v1.schemas.history import AnalysisReport
 
@@ -108,11 +109,15 @@ class AnalysisResultResponse(BaseModel):
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
     report: Optional[Any] = Field(None, description="分析报告")
-    created_at: str = Field(..., description="创建时间")
+    created_at: str | datetime = Field(default_factory=datetime.utcnow, description="创建时间")
     market_timestamp: Optional[str] = Field(None, description="市场行情时间（ISO 8601, aware）")
     market_session_date: Optional[str] = Field(None, description="市场会话日期（YYYY-MM-DD）")
     news_published_at: Optional[str] = Field(None, description="新闻发布时间（ISO 8601, aware）")
     report_generated_at: Optional[str] = Field(None, description="报告生成时间（ISO 8601, aware）")
+
+    @field_serializer("created_at")
+    def _serialize_created_at(self, value: str | datetime) -> str:
+        return value.isoformat() if isinstance(value, datetime) else str(value)
 
 
 class AnalysisPreviewRequest(BaseModel):

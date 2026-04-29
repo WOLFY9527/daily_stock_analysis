@@ -627,6 +627,9 @@ def get_task_progress(
                 "message": f"Task not found: {task_id}",
             },
         )
+    final_result = payload.get("final_result") if isinstance(payload, dict) else None
+    if isinstance(final_result, dict) and not final_result.get("created_at"):
+        final_result["created_at"] = datetime.utcnow()
     return TaskProgressResponse.model_validate(payload)
 
 

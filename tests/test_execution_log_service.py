@@ -94,6 +94,55 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(total, 1)
         self.assertEqual(items[0]["task_id"], "task-b")
 
+    def test_agent_tool_session_persists_tool_input_and_output_summaries(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.start_agent_tool_session(
+                owner_id="user-1",
+                actor={"user_id": "user-1", "display_name": "Alice", "role": "user"},
+                conversation_session_id="chat-session-1",
+                user_message="analyze tsla",
+                stock_code="TSLA",
+            )
+            service.append_agent_tool_call(
+                session_id,
+                {
+                    "step": 1,
+                    "tool": "get_realtime_quote",
+                    "arguments": {"stock_code": "TSLA"},
+                    "success": True,
+                    "duration": 0.12,
+                    "result_length": 32,
+                    "result_preview": {"price": 123.45},
+                },
+                user_id="user-1",
+                stock_code="TSLA",
+            )
+            service.finalize_agent_tool_session(
+                session_id,
+                success=True,
+                content="done",
+                error=None,
+                tool_calls_log=[
+                    {
+                        "step": 1,
+                        "tool": "get_realtime_quote",
+                        "arguments": {"stock_code": "TSLA"},
+                        "success": True,
+                    }
+                ],
+                stock_code="TSLA",
+            )
+            detail = service.get_session_detail(session_id)
+
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail["summary"]["agent_chat"]["tool_call_count"], 1)
+        tool_events = [event for event in detail["events"] if event["phase"] == "agent_tool"]
+        self.assertEqual(len(tool_events), 1)
+        self.assertEqual(tool_events[0]["detail"]["stock_code"], "TSLA")
+        self.assertEqual(tool_events[0]["detail"]["input_summary"]["stock_code"], "TSLA")
+        self.assertEqual(tool_events[0]["detail"]["output_summary"]["price"], 123.45)
+
 
 if __name__ == "__main__":
     unittest.main()

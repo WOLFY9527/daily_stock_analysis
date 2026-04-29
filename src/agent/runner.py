@@ -99,6 +99,24 @@ def serialize_tool_result(result: Any) -> str:
     return str(result)
 
 
+def summarize_tool_result_for_log(result_text: str) -> Any:
+    """Return a compact JSON-safe preview of a tool result."""
+    if not result_text:
+        return None
+    text = str(result_text).strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return text[:400]
+    if isinstance(parsed, (dict, list)):
+        return parsed
+    if parsed is None:
+        return None
+    return str(parsed)[:400]
+
+
 def _normalize_tool_stock_code(value: Any) -> Any:
     """Canonicalize stock code arguments so equivalent HK variants share one cache key."""
     if not isinstance(value, str):
@@ -616,6 +634,7 @@ def _execute_tools(
             "step": step, "tool": tc.name, "arguments": tc.arguments,
             "success": success, "duration": dur, "result_length": len(result_str),
             "cached": cached,
+            "result_preview": summarize_tool_result_for_log(result_str),
         }
         if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0 and not success:
             try:
@@ -647,6 +666,7 @@ def _execute_tools(
                     "step": step, "tool": tc_item.name, "arguments": tc_item.arguments,
                     "success": success, "duration": dur, "result_length": len(result_str),
                     "cached": cached,
+                    "result_preview": summarize_tool_result_for_log(result_str),
                 })
                 results.append({"tc": tc_item, "result_str": result_str})
         except FuturesTimeoutError:
@@ -681,6 +701,7 @@ def _execute_tools(
                         "result_length": len(result_str),
                         "cached": False,
                         "timeout": True,
+                        "result_preview": summarize_tool_result_for_log(result_str),
                     })
                     results.append({"tc": tc_item, "result_str": result_str})
         finally:

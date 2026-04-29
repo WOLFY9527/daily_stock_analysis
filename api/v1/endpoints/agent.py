@@ -4,6 +4,7 @@ Agent API endpoints.
 """
 
 import asyncio
+from contextlib import AbstractContextManager
 import json
 import logging
 import uuid
@@ -15,6 +16,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from api.deps import CurrentUser, get_current_user, require_admin_user
 from src.config import get_config
+from src.services.execution_log_service import ExecutionLogService
 from src.services.agent_model_service import list_agent_model_deployments
 
 # Tool name -> Chinese display name mapping
@@ -42,6 +44,80 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 DEPRECATED_STRATEGIES_ENDPOINT_MESSAGE = "Legacy strategy compatibility endpoint; use /api/v1/agent/skills."
+
+
+def _extract_stock_code(context: Optional[Dict[str, Any]], tool_calls_log: Optional[List[Dict[str, Any]]] = None) -> Optional[str]:
+    context_stock = str((context or {}).get("stock_code") or "").strip()
+    if context_stock:
+        return context_stock
+    for item in tool_calls_log or []:
+        if not isinstance(item, dict):
+            continue
+        arguments = item.get("arguments") if isinstance(item.get("arguments"), dict) else {}
+        stock_code = str(arguments.get("stock_code") or "").strip()
+        if stock_code:
+            return stock_code
+    return None
+
+
+class _AgentToolLoggingContext(AbstractContextManager):
+    def __init__(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        message: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self._service = ExecutionLogService()
+        self._session_id = self._service.start_agent_tool_session(
+            owner_id=user_id,
+            actor={"user_id": user_id, "role": "user"},
+            conversation_session_id=session_id,
+            user_message=message,
+            stock_code=_extract_stock_code(context),
+        )
+        self._user_id = user_id
+        self._finalized = False
+
+    def __enter__(self) -> "_AgentToolLoggingContext":
+        return self
+
+    def record_result(self, result: Any, *, context: Optional[Dict[str, Any]] = None) -> None:
+        tool_calls_log = [
+            item for item in (getattr(result, "tool_calls_log", None) or [])
+            if isinstance(item, dict)
+        ]
+        stock_code = _extract_stock_code(context, tool_calls_log)
+        for tool_call in tool_calls_log:
+            self._service.append_agent_tool_call(
+                self._session_id,
+                tool_call,
+                user_id=self._user_id,
+                stock_code=stock_code,
+            )
+        self._service.finalize_agent_tool_session(
+            self._session_id,
+            success=bool(getattr(result, "success", False)),
+            content=str(getattr(result, "content", "") or ""),
+            error=getattr(result, "error", None),
+            tool_calls_log=tool_calls_log,
+            stock_code=stock_code,
+        )
+        self._finalized = True
+
+    def __exit__(self, exc_type, exc, _tb) -> None:
+        if exc is not None and not self._finalized:
+            self._service.finalize_agent_tool_session(
+                self._session_id,
+                success=False,
+                content="",
+                error=str(exc),
+                tool_calls_log=[],
+                stock_code=None,
+            )
+            self._finalized = True
+        return None
 
 
 def _conversation_access_http_error(exc: ValueError) -> HTTPException:
@@ -212,11 +288,18 @@ async def agent_chat(
 
         # Offload the blocking call to a thread to avoid blocking the event loop.
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: executor.chat(message=request.message, session_id=session_id,
-                                  context=ctx, owner_id=current_user.user_id),
-        )
+        with _AgentToolLoggingContext(
+            user_id=current_user.user_id,
+            session_id=session_id,
+            message=request.message,
+            context=ctx,
+        ) as logging_context:
+            result = await loop.run_in_executor(
+                None,
+                lambda: executor.chat(message=request.message, session_id=session_id,
+                                      context=ctx, owner_id=current_user.user_id),
+            )
+            logging_context.record_result(result, context=ctx)
 
         return ChatResponse(
             success=result.success,
@@ -382,13 +465,20 @@ async def agent_chat_stream(
     def run_sync():
         try:
             executor = _build_executor(config, skills or None)
-            result = executor.chat(
-                message=request.message,
+            with _AgentToolLoggingContext(
+                user_id=current_user.user_id,
                 session_id=session_id,
-                progress_callback=progress_callback,
+                message=request.message,
                 context=stream_ctx,
-                owner_id=current_user.user_id,
-            )
+            ) as logging_context:
+                result = executor.chat(
+                    message=request.message,
+                    session_id=session_id,
+                    progress_callback=progress_callback,
+                    context=stream_ctx,
+                    owner_id=current_user.user_id,
+                )
+                logging_context.record_result(result, context=stream_ctx)
             asyncio.run_coroutine_threadsafe(
                 queue.put({
                     "type": "done",

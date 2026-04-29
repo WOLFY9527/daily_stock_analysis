@@ -34,6 +34,23 @@ def _as_str(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _json_safe_summary(value: Any, *, max_text: int = 400) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return value[:max_text]
+    if isinstance(value, dict):
+        return {
+            str(key)[:80]: _json_safe_summary(item, max_text=max_text)
+            for key, item in list(value.items())[:20]
+        }
+    if isinstance(value, list):
+        return [_json_safe_summary(item, max_text=max_text) for item in value[:20]]
+    return str(value)[:max_text]
+
+
 def _status_from_attempt_result(value: Any) -> str:
     status = _as_str(value).lower()
     if not status:
@@ -432,6 +449,169 @@ class ExecutionLogService:
             ended_at=started_at,
         )
         return session_id
+
+    def start_agent_tool_session(
+        self,
+        *,
+        owner_id: Optional[str],
+        actor: Optional[Dict[str, Any]],
+        conversation_session_id: str,
+        user_message: str,
+        stock_code: Optional[str] = None,
+    ) -> str:
+        session_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        summary = self._merge_summary(
+            {
+                "agent_chat": {
+                    "conversation_session_id": conversation_session_id,
+                    "request_message": _masked_message(user_message),
+                    "stock_code": _as_str(stock_code) or None,
+                    "tool_names": [],
+                    "tool_call_count": 0,
+                }
+            },
+            self._summary_meta(
+                owner_id=owner_id,
+                actor=actor,
+                session_kind="user_activity",
+                subsystem="agent_chat",
+                action_name="agent_tool_trace",
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id=f"agent_chat:{conversation_session_id}",
+            code=_as_str(stock_code) or None,
+            name="Agent chat",
+            overall_status="running",
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="agent_chat",
+            step="request_started",
+            target="chat",
+            status="started",
+            truth_level="actual",
+            message="Agent chat request started",
+            detail={
+                "category": "agent_chat",
+                "action": "started",
+                "conversation_session_id": conversation_session_id,
+                "request_message": _masked_message(user_message),
+                "stock_code": _as_str(stock_code) or None,
+            },
+            event_at=started_at,
+        )
+        return session_id
+
+    def append_agent_tool_call(
+        self,
+        session_id: str,
+        tool_call: Dict[str, Any],
+        *,
+        user_id: Optional[str] = None,
+        stock_code: Optional[str] = None,
+    ) -> None:
+        tool_name = _as_str(tool_call.get("tool")) or "unknown_tool"
+        call_stock_code = _as_str(stock_code) or _as_str((tool_call.get("arguments") or {}).get("stock_code")) or None
+        success = bool(tool_call.get("success"))
+        status = "succeeded" if success else "failed"
+        message = f"Tool {tool_name} {'succeeded' if success else 'failed'}"
+        if call_stock_code:
+            message += f" for {call_stock_code}"
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="agent_tool",
+            step=f"tool_{int(tool_call.get('step', 0) or 0)}",
+            target=tool_name,
+            status=status,
+            truth_level="actual",
+            message=message,
+            detail={
+                "category": "agent_tool",
+                "action": "succeeded" if success else "failed",
+                "outcome": "ok" if success else "failed",
+                "user_id": _as_str(user_id) or None,
+                "stock_code": call_stock_code,
+                "tool_name": tool_name,
+                "tool_step": int(tool_call.get("step", 0) or 0),
+                "input_summary": _json_safe_summary(tool_call.get("arguments") or {}),
+                "output_summary": _json_safe_summary(tool_call.get("result_preview")),
+                "duration_seconds": tool_call.get("duration"),
+                "cached": bool(tool_call.get("cached")),
+                "timeout": bool(tool_call.get("timeout")),
+                "result_length": int(tool_call.get("result_length", 0) or 0),
+            },
+            event_at=datetime.now(),
+        )
+
+    def finalize_agent_tool_session(
+        self,
+        session_id: str,
+        *,
+        success: bool,
+        content: str,
+        error: Optional[str],
+        tool_calls_log: Optional[List[Dict[str, Any]]] = None,
+        stock_code: Optional[str] = None,
+    ) -> None:
+        existing_detail = self.db.get_execution_log_session_detail(session_id) or {}
+        existing_summary = existing_detail.get("summary") if isinstance(existing_detail.get("summary"), dict) else {}
+        tool_logs = [item for item in (tool_calls_log or []) if isinstance(item, dict)]
+        tool_names = []
+        for item in tool_logs:
+            tool_name = _as_str(item.get("tool"))
+            if tool_name and tool_name not in tool_names:
+                tool_names.append(tool_name)
+        session_stock_code = _as_str(stock_code)
+        if not session_stock_code:
+            for item in tool_logs:
+                session_stock_code = _as_str((item.get("arguments") or {}).get("stock_code"))
+                if session_stock_code:
+                    break
+
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="agent_chat",
+            step="response_completed" if success else "response_failed",
+            target="chat",
+            status="completed" if success else "failed",
+            truth_level="actual",
+            message="Agent chat completed" if success else _masked_message(error) or "Agent chat failed",
+            detail={
+                "category": "agent_chat",
+                "action": "completed" if success else "failed",
+                "outcome": "ok" if success else "failed",
+                "tool_names": tool_names,
+                "tool_call_count": len(tool_logs),
+                "response_preview": _json_safe_summary(content),
+                "error": _masked_message(error),
+                "stock_code": session_stock_code or None,
+            },
+            event_at=datetime.now(),
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status="completed" if success else "failed",
+            truth_level="actual",
+            summary=self._merge_summary(
+                existing_summary,
+                {
+                    "agent_chat": {
+                        "tool_names": tool_names,
+                        "tool_call_count": len(tool_logs),
+                        "response_preview": _json_safe_summary(content),
+                        "error": _masked_message(error),
+                        "stock_code": session_stock_code or None,
+                    }
+                },
+            ),
+            ended_at=datetime.now(),
+        )
 
     def _append_configured_events(self, session_id: str, configured: Dict[str, Any]) -> None:
         ai = configured.get("ai") if isinstance(configured, dict) else {}
