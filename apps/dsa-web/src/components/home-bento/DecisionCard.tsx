@@ -45,13 +45,13 @@ type DecisionCardProps = {
 function resolveSignalActionKey(signalLabel: string, tone: SignalTone): 'buy' | 'sell' | 'hold' {
   const normalized = signalLabel.trim().toUpperCase();
 
-  if (/SELL|SHORT|BEAR/.test(normalized)) {
+  if (/SELL|SHORT|BEAR|卖|空|看空/.test(normalized)) {
     return 'sell';
   }
-  if (/HOLD|NEUTRAL|WAIT|WATCH|OBSERVE/.test(normalized)) {
+  if (/HOLD|NEUTRAL|WAIT|WATCH|OBSERVE|持有|中性|观望/.test(normalized)) {
     return 'hold';
   }
-  if (/BUY|LONG|BULL/.test(normalized)) {
+  if (/BUY|LONG|BULL|买|多|看多|乐观|偏多/.test(normalized)) {
     return 'buy';
   }
   return tone === 'bearish' ? 'sell' : tone === 'neutral' ? 'hold' : 'buy';
@@ -62,23 +62,23 @@ function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: Signal
 
   if (actionKey === 'sell') {
     return locale === 'en'
-      ? { command: 'RECOMMEND SELL', bias: 'BEARISH' }
-      : { command: '建议卖出', bias: '看空' };
+      ? { command: /STRONG|SHORT/i.test(signalLabel) ? 'STRONG SELL' : 'SELL', bias: 'BEARISH' }
+      : { command: /强|空/.test(signalLabel) ? '强力做空' : '卖出', bias: '看空' };
   }
 
   if (actionKey === 'hold') {
     return locale === 'en'
-      ? { command: 'NEUTRAL HOLD', bias: 'NEUTRAL' }
-      : { command: '中性观望', bias: '中性' };
+      ? { command: /HOLD/i.test(signalLabel) ? 'HOLD' : 'WAIT', bias: 'NEUTRAL' }
+      : { command: /持有/.test(signalLabel) ? '继续持有' : '观望', bias: '中性' };
   }
 
   return locale === 'en'
-    ? { command: 'RECOMMEND BUY', bias: 'BULLISH' }
-    : { command: '建议买入', bias: '看多' };
+    ? { command: /STRONG|LONG/i.test(signalLabel) ? 'STRONG BUY' : 'BUY', bias: 'BULLISH' }
+    : { command: /强|多/.test(signalLabel) ? '强力做多' : '买入', bias: '看多' };
 }
 
 function getActionToneClass(tone: SignalTone): string {
-  return tone === 'neutral' ? 'text-[#AEB7CC]' : getToneTextClass(tone);
+  return tone === 'neutral' ? 'text-white' : getToneTextClass(tone);
 }
 
 function getActionToneStyle(tone: SignalTone): React.CSSProperties {
@@ -86,7 +86,7 @@ function getActionToneStyle(tone: SignalTone): React.CSSProperties {
     return getToneTextStyle(tone, true);
   }
   return {
-    color: '#AEB7CC',
+    color: '#F8FAFC',
     textShadow: '0 0 18px rgba(99, 102, 241, 0.18)',
   };
 }
@@ -146,7 +146,6 @@ function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): Support
 }
 
 export const DecisionCard: React.FC<DecisionCardProps> = ({
-  badge,
   company,
   detailLabel,
   eyebrow,
@@ -170,10 +169,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const signalCommand = getSignalCommand(locale, signalLabel, signalTone);
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
-  const signalDirection = signalLabel || signalCommand.bias;
   const insightCopy = reason.body || summary || scoreValue || '-';
   const sectorLabel = (sector || (isEnglish ? 'UNCLASSIFIED' : '未分类')).toUpperCase();
-  const conciseBadge = badge && badge.length <= 24 ? badge : signalDirection;
 
   return (
     <BentoCard
@@ -228,40 +225,22 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                 >
                   {signalCommand.command}
                 </span>
-                <span
-                  className={`pb-1 text-xs font-semibold uppercase tracking-[0.28em] text-white/55 ${getActionToneClass(signalTone)}`}
-                  style={getActionToneStyle(signalTone)}
-                >
-                  {conciseBadge}
-                </span>
               </div>
             </div>
 
             <div
-              className="grid min-w-0 gap-5 sm:grid-cols-2 xl:min-w-[18rem] xl:gap-8"
+              className="min-w-0 rounded-[24px] border border-white/[0.08] bg-white/[0.03] px-5 py-4 text-right xl:min-w-[10rem]"
               data-testid="home-bento-decision-core-metrics"
             >
-              <div className="min-w-0">
-                <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
-                <div className="mt-2 flex items-end gap-2">
-                  <p
-                    className="font-mono text-4xl font-semibold leading-none text-white"
-                    data-testid="home-bento-decision-score"
-                  >
-                    {heroValue}
-                  </p>
-                  <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
-                </div>
-              </div>
-              <div className="min-w-0">
-                <Label micro className="text-white/28">{isEnglish ? 'DIRECTION' : '方向'}</Label>
+              <Label micro className="text-white/28">{isEnglish ? 'SCORE' : '评分'}</Label>
+              <div className="mt-2 flex items-end justify-end gap-2">
                 <p
-                  className={`mt-2 text-2xl font-semibold leading-none ${getActionToneClass(signalTone)}`}
-                  data-testid="home-bento-decision-direction"
-                  style={getActionToneStyle(signalTone)}
+                  className="font-mono text-5xl font-semibold leading-none text-white"
+                  data-testid="home-bento-decision-score"
                 >
-                  {signalDirection}
+                  {heroValue}
                 </p>
+                <span className="pb-1 text-sm font-medium text-white/42">{heroUnit}</span>
               </div>
             </div>
           </div>

@@ -240,7 +240,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('量化佐证指标')).toBeInTheDocument();
     expect(screen.getByText('均线排列')).toBeInTheDocument();
     expect(screen.getByText('资金承接')).toBeInTheDocument();
-    expect(screen.getByText('RSI-14')).toBeInTheDocument();
+    expect(screen.getAllByText('RSI-14').length).toBeGreaterThan(1);
     expect(screen.getByText('MACD-12/26/9')).toBeInTheDocument();
     expect(screen.getByText('量能确认')).toBeInTheDocument();
     expect(screen.getByText('金叉')).toBeInTheDocument();
@@ -250,7 +250,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Oracle Corporation');
     expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('TECHNOLOGY');
     expect(screen.getByTestId('home-bento-decision-score')).toHaveTextContent('7.8');
-    expect(screen.getByTestId('home-bento-decision-direction')).toHaveTextContent('Bullish');
+    expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
     expect(strategyCard).toHaveClass('w-full', 'rounded-[24px]');
     expect(strategyCard.className).not.toContain('xl:col-span-1');
@@ -275,18 +275,18 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('117.40')).toHaveClass('text-lg', 'font-bold');
     expect(macdSignalValue).not.toBeUndefined();
     expect(macdSignalValue).toHaveClass('text-base', 'font-bold');
-    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏')).toHaveClass('text-lg', 'font-bold');
+    expect(screen.getByTestId('home-bento-fundamental-metric-REVENUE')).toHaveTextContent('+9.4%');
     expect(screen.getByText('121.80 - 124.60').className).not.toContain('text-2xl');
-    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏').className).not.toContain('text-2xl');
-    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏').className).not.toContain('text-3xl');
+    expect(screen.getByText('+9.4%').className).not.toContain('text-2xl');
+    expect(screen.getByText('+9.4%').className).not.toContain('text-3xl');
     expect(techMetricTiles.length).toBe(0);
     expect(fundamentalsMetricTiles.length).toBe(0);
     expect(macdSignalValue?.getAttribute('style') || '').toContain('text-shadow');
-    expect(screen.getByText('零轴上方二次扩张，动能继续偏强')).toBeInTheDocument();
-    expect(screen.getByText('MA20 托举 MA60，多头排列延续')).toBeInTheDocument();
-    expect(screen.getByText('营收仍在稳步扩张，需求主线未坏').getAttribute('style') || '').toContain('text-shadow');
-    expect(screen.getByText('自由现金流充裕，波动缓冲仍在').getAttribute('style') || '').toContain('text-shadow');
-    expect(screen.queryByText('+9.4%')).not.toBeInTheDocument();
+    expect(screen.getByText('Second expansion above zero')).toBeInTheDocument();
+    expect(screen.getByText('MA20 lifting MA60')).toBeInTheDocument();
+    expect(screen.getByText('+9.4%').getAttribute('style') || '').toContain('text-shadow');
+    expect(screen.getByText('ROE')).toBeInTheDocument();
+    expect(screen.getByText('EBITDA MARGIN')).toBeInTheDocument();
     expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
     expect(primaryStack.compareDocumentPosition(secondaryStack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(omnibar.compareDocumentPosition(screen.getByTestId('home-bento-card-decision')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -387,13 +387,21 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByRole('link', { name: /backtest/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Lock the range first, then decide the pace.')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-chart-workspace')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('RECOMMEND BUY');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('BUY');
     expect(screen.getByText('ACTION')).toBeInTheDocument();
+    expect(screen.getByText('SCORE')).toBeInTheDocument();
+    expect(screen.queryByText('DIRECTION')).not.toBeInTheDocument();
     expect(screen.getByText('AI INSIGHT')).toBeInTheDocument();
     expect(screen.getByText('SUPPORTING INDICATORS')).toBeInTheDocument();
-    expect(screen.getByText('MA ALIGNMENT')).toBeInTheDocument();
+    expect(screen.getAllByText('MA ALIGNMENT').length).toBeGreaterThan(1);
     expect(screen.getByText('LIQUIDITY AB.')).toBeInTheDocument();
     expect(screen.getByText('BULL CROSSOVER')).toBeInTheDocument();
+    expect(screen.getAllByText('RSI-14').length).toBeGreaterThan(1);
+    expect(screen.getByText('VOLUME DYNAMICS')).toBeInTheDocument();
+    expect(screen.getByText('EBITDA MARGIN')).toBeInTheDocument();
+    expect(screen.getByText('LATEST EPS')).toBeInTheDocument();
+    expect(screen.getByText('FORWARD PE')).toBeInTheDocument();
+    expect(screen.getByText('PEG RATIO')).toBeInTheDocument();
     expect(screen.queryByText('AI SIGNAL DIRECTION')).not.toBeInTheDocument();
     expect(screen.queryByText('Latest Report Context')).not.toBeInTheDocument();
   });
@@ -854,11 +862,11 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
     expect(await screen.findByText('Tesla, Inc.')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方动能收敛，反弹仍待确认');
+    expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方收敛');
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
     expect(await screen.findByText('TSLA 技术下钻')).toBeInTheDocument();
-    expect(screen.getAllByText('零轴下方动能收敛，反弹仍待确认').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('零轴下方收敛').length).toBeGreaterThan(1);
     expect(screen.getByText('快慢线仍在零轴下方运行，绿柱缩短，说明空头动能在衰减；下一步要看能否形成金叉，把反弹转成可交易的趋势段。')).toBeInTheDocument();
     expect(screen.queryByText(/聚焦 MACD/)).not.toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -866,8 +874,8 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-fundamentals'));
     expect(await screen.findByText('TSLA 基本面下钻')).toBeInTheDocument();
-    expect(screen.getAllByText('营收增速放缓，期待新驱动接力').length).toBeGreaterThan(1);
-    expect(screen.getByText('汽车交付量放缓拖累整体营收增速，但储能业务的高毛利贡献正在抬升，对冲了汽车主业的增速压力。')).toBeInTheDocument();
+    expect(screen.getAllByText('+2.7%').length).toBeGreaterThan(0);
+    expect(screen.getByText('REVENUE 当前为 +2.7%，支撑说明需要继续绑定在这条基本面观测本身。')).toBeInTheDocument();
     expect(screen.queryByText(/将接入盈利质量与估值弹性描述卡/)).not.toBeInTheDocument();
   });
 
@@ -1090,7 +1098,7 @@ describe('HomeSurfacePage', () => {
       expect(finalCard).toHaveTextContent('COMMUNICATION SERVICES');
       expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('买');
       expect(screen.getByTestId('home-bento-decision-score')).toHaveTextContent('7.4');
-      expect(screen.getByTestId('home-bento-decision-direction')).toHaveTextContent('Bullish');
+      expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();
       expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toBe('Completed LLM report confirmed the refreshed thesis.');
       expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
     });

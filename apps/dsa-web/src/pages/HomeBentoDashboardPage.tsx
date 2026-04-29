@@ -63,6 +63,11 @@ type DashboardSignal = DashboardField & {
   tone: SignalTone;
 };
 
+type DesiredFieldSpec = {
+  aliases: string[];
+  fallback: DashboardField;
+};
+
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
 const TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
 const EMPTY_FIELD_VALUE = '-';
@@ -90,7 +95,7 @@ function sanitizeMetricValue(value?: string): string {
 
 function isPeLikeMetric(label: string): boolean {
   const key = normalizeDetailKey(label);
-  return key === 'pe' || key.includes('市盈率') || key.includes('peratio') || key.includes('pettm') || key.includes('forwardpe');
+  return key === 'pe' || key.includes('市盈率') || key.includes('peratio') || key.includes('pettm') || key.includes('forwardpe') || key.includes('pegratio');
 }
 
 function isZombieStockLabel(value: unknown): boolean {
@@ -330,23 +335,22 @@ const CONTENT: Record<DashboardLocale, {
     tech: {
       title: '技术形态',
       signals: [
-        { label: 'MACD', value: '零轴上方金叉', tone: 'bullish' },
-        { label: '均线结构', value: 'MA20 / MA60 扩张', tone: 'bullish' },
-        { label: '量价配合', value: '回踩缩量，突破放量', tone: 'bullish' },
-        { label: 'RSI', value: '65.4', tone: 'neutral' },
-        { label: '波动率', value: '2.4%', tone: 'neutral' },
+        { label: 'MA ALIGNMENT', value: '多头排列 (Bullish Alignment)', tone: 'bullish' },
+        { label: 'RSI-14', value: '65.4 (强势区)', tone: 'neutral' },
+        { label: 'MACD', value: '零轴上方金叉 (Bullish Crossover)', tone: 'bullish' },
+        { label: 'VOLUME DYNAMICS', value: '放量突破 (High Vol Breakout)', tone: 'bullish' },
       ],
       detailLabel: '查看结构细节',
     },
     fundamentals: {
       title: '基本面画像',
       metrics: [
-        { label: '收入增速', value: '+18.2%', tone: 'bullish' },
-        { label: '自由现金流', value: '$16.4B', tone: 'bullish' },
-        { label: '毛利率', value: '74.1%', tone: 'neutral' },
         { label: 'ROE', value: '31.8%', tone: 'bullish' },
-        { label: '市盈率 (PE)', value: '74.5', tone: 'neutral' },
-        { label: '机构持仓', value: '68.2%', tone: 'neutral' },
+        { label: 'EBITDA MARGIN', value: '42.5%', tone: 'bullish' },
+        { label: 'LATEST EPS', value: '$1.24 (超预期 +12%)', tone: 'bullish' },
+        { label: 'REVENUE', value: '$26.0B (不及预期 -2%)', tone: 'neutral' },
+        { label: 'FORWARD PE', value: '35.2x', tone: 'neutral' },
+        { label: 'PEG RATIO', value: '1.15', tone: 'neutral' },
       ],
       detailLabel: '查看基本面细节',
     },
@@ -399,23 +403,22 @@ const CONTENT: Record<DashboardLocale, {
     tech: {
       title: 'Technical Structure',
       signals: [
-        { label: 'MACD', value: 'Bullish crossover above zero', tone: 'bullish' },
-        { label: 'Moving Averages', value: 'MA20 / MA60 expansion', tone: 'bullish' },
-        { label: 'Volume Profile', value: 'Quiet pullback, active breakout', tone: 'bullish' },
-        { label: 'RSI', value: '65.4', tone: 'neutral' },
-        { label: 'Volatility', value: '2.4%', tone: 'neutral' },
+        { label: 'MA ALIGNMENT', value: 'Bullish Alignment', tone: 'bullish' },
+        { label: 'RSI-14', value: '65.4 (Strong Zone)', tone: 'neutral' },
+        { label: 'MACD', value: 'Bullish Crossover Above Zero', tone: 'bullish' },
+        { label: 'VOLUME DYNAMICS', value: 'High Vol Breakout', tone: 'bullish' },
       ],
       detailLabel: 'Open Technical Brief',
     },
     fundamentals: {
       title: 'Fundamental Profile',
       metrics: [
-        { label: 'Revenue Growth', value: '+18.2%', tone: 'bullish' },
-        { label: 'Free Cash Flow', value: '$16.4B', tone: 'bullish' },
-        { label: 'Gross Margin', value: '74.1%', tone: 'neutral' },
         { label: 'ROE', value: '31.8%', tone: 'bullish' },
-        { label: 'PE', value: '74.5', tone: 'neutral' },
-        { label: 'Institutional Ownership', value: '68.2%', tone: 'neutral' },
+        { label: 'EBITDA MARGIN', value: '42.5%', tone: 'bullish' },
+        { label: 'LATEST EPS', value: '$1.24 (Beat +12%)', tone: 'bullish' },
+        { label: 'REVENUE', value: '$26.0B (Miss -2%)', tone: 'neutral' },
+        { label: 'FORWARD PE', value: '35.2x', tone: 'neutral' },
+        { label: 'PEG RATIO', value: '1.15', tone: 'neutral' },
       ],
       detailLabel: 'Open Fundamental Brief',
     },
@@ -466,22 +469,21 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       tech: {
         ...CONTENT.zh.tech,
         signals: [
+          { label: 'MA ALIGNMENT', value: '多头排列 (Bullish Alignment)', tone: 'bullish' },
+          { label: 'RSI-14', value: '61.2 (强势区)', tone: 'neutral' },
           { label: 'MACD', value: '零轴上方二次扩张', tone: 'bullish' },
-          { label: '均线结构', value: 'MA20 托举 MA60', tone: 'bullish' },
-          { label: '量价配合', value: '突破后量能维持', tone: 'bullish' },
-          { label: 'RSI', value: '61.2', tone: 'neutral' },
-          { label: '波动率', value: '1.8%', tone: 'neutral' },
+          { label: 'VOLUME DYNAMICS', value: '突破后量能维持', tone: 'bullish' },
         ],
       },
       fundamentals: {
         ...CONTENT.zh.fundamentals,
         metrics: [
-          { label: '收入增速', value: '+9.4%', tone: 'bullish' },
-          { label: '自由现金流', value: '$12.1B', tone: 'bullish' },
-          { label: '毛利率', value: '71.6%', tone: 'neutral' },
           { label: 'ROE', value: '109.3%', tone: 'bullish' },
-          { label: '市盈率 (PE)', value: '31.2', tone: 'neutral' },
-          { label: '机构持仓', value: '44.8%', tone: 'neutral' },
+          { label: 'EBITDA MARGIN', value: '46.1%', tone: 'bullish' },
+          { label: 'LATEST EPS', value: '$1.47 (超预期 +9%)', tone: 'bullish' },
+          { label: 'REVENUE', value: '$14.1B (超预期 +3%)', tone: 'bullish' },
+          { label: 'FORWARD PE', value: '31.2x', tone: 'neutral' },
+          { label: 'PEG RATIO', value: '1.08', tone: 'neutral' },
         ],
       },
     },
@@ -515,22 +517,21 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       tech: {
         ...CONTENT.zh.tech,
         signals: [
+          { label: 'MA ALIGNMENT', value: '跌破生命线 (Below MA60)', tone: 'bearish' },
+          { label: 'RSI-14', value: '54.8 (修复区)', tone: 'neutral' },
           { label: 'MACD', value: '零轴下方收敛', tone: 'neutral' },
-          { label: '均线结构', value: 'MA20 仍在下压', tone: 'bearish' },
-          { label: '量价配合', value: '反弹放量，续航待定', tone: 'neutral' },
-          { label: 'RSI', value: '54.8', tone: 'neutral' },
-          { label: '波动率', value: '4.9%', tone: 'bearish' },
+          { label: 'VOLUME DYNAMICS', value: '反弹放量，续航待定', tone: 'neutral' },
         ],
       },
       fundamentals: {
         ...CONTENT.zh.fundamentals,
         metrics: [
-          { label: '收入增速', value: '+2.7%', tone: 'neutral' },
-          { label: '自由现金流', value: '$4.0B', tone: 'neutral' },
-          { label: '毛利率', value: '17.4%', tone: 'bearish' },
           { label: 'ROE', value: '18.9%', tone: 'neutral' },
-          { label: '市盈率 (PE)', value: '55.8', tone: 'neutral' },
-          { label: '机构持仓', value: '47.6%', tone: 'neutral' },
+          { label: 'EBITDA MARGIN', value: '12.8%', tone: 'bearish' },
+          { label: 'LATEST EPS', value: '$0.52 (不及预期 -6%)', tone: 'bearish' },
+          { label: 'REVENUE', value: '$25.2B (不及预期 -2%)', tone: 'neutral' },
+          { label: 'FORWARD PE', value: '55.8x', tone: 'neutral' },
+          { label: 'PEG RATIO', value: '2.04', tone: 'bearish' },
         ],
       },
     },
@@ -569,22 +570,21 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       tech: {
         ...CONTENT.en.tech,
         signals: [
-          { label: 'MACD', value: 'Second expansion above zero', tone: 'bullish' },
-          { label: 'Moving Averages', value: 'MA20 lifting MA60', tone: 'bullish' },
-          { label: 'Volume Profile', value: 'Breakout volume still intact', tone: 'bullish' },
-          { label: 'RSI', value: '61.2', tone: 'neutral' },
-          { label: 'Volatility', value: '1.8%', tone: 'neutral' },
+          { label: 'MA ALIGNMENT', value: 'Bullish Alignment', tone: 'bullish' },
+          { label: 'RSI-14', value: '61.2 (Strong Zone)', tone: 'neutral' },
+          { label: 'MACD', value: 'Second Expansion Above Zero', tone: 'bullish' },
+          { label: 'VOLUME DYNAMICS', value: 'Breakout Volume Intact', tone: 'bullish' },
         ],
       },
       fundamentals: {
         ...CONTENT.en.fundamentals,
         metrics: [
-          { label: 'Revenue Growth', value: '+9.4%', tone: 'bullish' },
-          { label: 'Free Cash Flow', value: '$12.1B', tone: 'bullish' },
-          { label: 'Gross Margin', value: '71.6%', tone: 'neutral' },
           { label: 'ROE', value: '109.3%', tone: 'bullish' },
-          { label: 'PE', value: '31.2', tone: 'neutral' },
-          { label: 'Institutional Ownership', value: '44.8%', tone: 'neutral' },
+          { label: 'EBITDA MARGIN', value: '46.1%', tone: 'bullish' },
+          { label: 'LATEST EPS', value: '$1.47 (Beat +9%)', tone: 'bullish' },
+          { label: 'REVENUE', value: '$14.1B (Beat +3%)', tone: 'bullish' },
+          { label: 'FORWARD PE', value: '31.2x', tone: 'neutral' },
+          { label: 'PEG RATIO', value: '1.08', tone: 'neutral' },
         ],
       },
     },
@@ -618,22 +618,21 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       tech: {
         ...CONTENT.en.tech,
         signals: [
-          { label: 'MACD', value: 'Compression below zero', tone: 'neutral' },
-          { label: 'Moving Averages', value: 'MA20 still pressing lower', tone: 'bearish' },
-          { label: 'Volume Profile', value: 'Bounce expanded, follow-through pending', tone: 'neutral' },
-          { label: 'RSI', value: '54.8', tone: 'neutral' },
-          { label: 'Volatility', value: '4.9%', tone: 'bearish' },
+          { label: 'MA ALIGNMENT', value: 'Below MA60', tone: 'bearish' },
+          { label: 'RSI-14', value: '54.8 (Repair Zone)', tone: 'neutral' },
+          { label: 'MACD', value: 'Compression Below Zero', tone: 'neutral' },
+          { label: 'VOLUME DYNAMICS', value: 'Bounce Expanded, Follow-through Pending', tone: 'neutral' },
         ],
       },
       fundamentals: {
         ...CONTENT.en.fundamentals,
         metrics: [
-          { label: 'Revenue Growth', value: '+2.7%', tone: 'neutral' },
-          { label: 'Free Cash Flow', value: '$4.0B', tone: 'neutral' },
-          { label: 'Gross Margin', value: '17.4%', tone: 'bearish' },
           { label: 'ROE', value: '18.9%', tone: 'neutral' },
-          { label: 'PE', value: '55.8', tone: 'neutral' },
-          { label: 'Institutional Ownership', value: '47.6%', tone: 'neutral' },
+          { label: 'EBITDA MARGIN', value: '12.8%', tone: 'bearish' },
+          { label: 'LATEST EPS', value: '$0.52 (Miss -6%)', tone: 'bearish' },
+          { label: 'REVENUE', value: '$25.2B (Miss -2%)', tone: 'neutral' },
+          { label: 'FORWARD PE', value: '55.8x', tone: 'neutral' },
+          { label: 'PEG RATIO', value: '2.04', tone: 'bearish' },
         ],
       },
     },
@@ -759,58 +758,14 @@ function toneFromScore(score?: number): SignalTone {
 
 function toneFromFieldValue(value?: string): SignalTone {
   const normalized = String(value || '').toLowerCase();
-  if (/(bull|up|break|expand|strong|乐观|偏多|看多|金叉|上行|突破)/.test(normalized)) {
+  if (/(bull|up|break|expand|strong|beat|above|lifting|乐观|偏多|看多|金叉|上行|突破|超预期)/.test(normalized)) {
     return 'bullish';
   }
-  if (/(bear|down|weak|risk|fall|悲观|看空|下压|回落|破位)/.test(normalized)) {
+  if (/(bear|down|weak|risk|fall|miss|below|悲观|看空|下压|回落|破位|不及预期)/.test(normalized)) {
     return 'bearish';
   }
   return 'neutral';
 }
-
-const REPORT_LABEL_EN_BY_KEY: Record<string, string> = {
-  entryzone: 'Entry Zone',
-  forwardpe一致预期: 'Forward PE (Consensus)',
-  freecashflow: 'Free Cash Flow',
-  grossmargin: 'Gross Margin',
-  institutionalownership: 'Institutional Ownership',
-  ma10: 'MA10',
-  ma20: 'MA20',
-  ma5: 'MA5',
-  ma60: 'MA60',
-  macd: 'MACD',
-  movingaverages: 'Moving Averages',
-  pe: 'PE',
-  pe一致预期: 'Forward PE (Consensus)',
-  pettm: 'PE (TTM)',
-  positionrhythm: 'Position Rhythm',
-  revenuegrowth: 'Revenue Growth',
-  roe: 'ROE',
-  rsi14: 'RSI14',
-  stop: 'Stop',
-  target: 'Target',
-  volumeprofile: 'Volume Profile',
-  均线结构: 'Moving Averages',
-  回踩支撑确认: 'Pullback support confirmed',
-  建仓区间: 'Entry Zone',
-  总股本最新值: 'Shares Outstanding (Latest)',
-  总市值最新值: 'Market Cap (Latest)',
-  技术失效位: 'Technical invalidation',
-  收入增速: 'Revenue Growth',
-  机构持仓: 'Institutional Ownership',
-  止损位: 'Stop',
-  毛利率: 'Gross Margin',
-  流通市值最新值: 'Free-Float Cap (Latest)',
-  流通股最新值: 'Free-Float Shares (Latest)',
-  波动率: 'Volatility',
-  目标位: 'Target',
-  目标区间: 'Target zone',
-  量价配合: 'Volume Profile',
-  预期市盈率一致预期: 'Forward PE (Consensus)',
-  市盈率ttm: 'PE (TTM)',
-  自由现金流: 'Free Cash Flow',
-  财报驱动后维持上沿强势: 'Post-earnings strength still holds the upper rail',
-};
 
 const REPORT_TEXT_EN_BY_KEY: Record<string, string> = {
   中性偏多: 'Neutral to bullish',
@@ -854,17 +809,6 @@ function localizeSentimentLabel(locale: DashboardLocale, raw: string | undefined
   return REPORT_TEXT_EN_BY_KEY[normalizeDetailKey(value)] || (containsCjk(value) ? fallback : value);
 }
 
-function localizeFieldLabel(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
-  const value = String(raw || '').trim();
-  if (!value) {
-    return fallback;
-  }
-  if (locale === 'zh') {
-    return value;
-  }
-  return REPORT_LABEL_EN_BY_KEY[normalizeDetailKey(value)] || (containsCjk(value) ? fallback : value);
-}
-
 function localizeMetricValue(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
   const value = sanitizeMetricValue(raw);
   if (!value) {
@@ -885,151 +829,6 @@ function localizeMetricValue(locale: DashboardLocale, raw: string | undefined, f
     return localized;
   }
   return fallback;
-}
-
-function buildTechSignalHeadline(locale: DashboardLocale, ticker: string, label: string, value: string): string {
-  const key = normalizeDetailKey(label);
-  const raw = sanitizeMetricValue(value);
-  const isEnglish = locale === 'en';
-
-  if (raw === EMPTY_FIELD_VALUE) {
-    return EMPTY_FIELD_VALUE;
-  }
-
-  if (key === 'macd') {
-    if (/below zero|零轴下方|收敛|compression/i.test(raw)) {
-      return isEnglish ? 'Momentum is compressing below zero, so the bounce still needs proof' : '零轴下方动能收敛，反弹仍待确认';
-    }
-    if (/second expansion|二次扩张/i.test(raw)) {
-      return isEnglish ? 'Momentum is expanding again above zero, keeping buyers in control' : '零轴上方二次扩张，动能继续偏强';
-    }
-    return isEnglish ? 'The bullish MACD posture still supports trend continuation' : 'MACD 仍偏多头结构，趋势延续占优';
-  }
-
-  if (key === 'ma5') {
-    return isEnglish ? 'Short-term momentum is riding the five-day line higher' : '短线动能充沛，价格沿五日线攀升';
-  }
-
-  if (key === 'ma10') {
-    return isEnglish ? 'The ten-day trend line is holding, so pullbacks still screen as entryable' : '趋势支撑确认，回踩不破可视作介入点';
-  }
-
-  if (key === 'ma20') {
-    if (/pressing lower|下压|压制/i.test(raw) || (ticker === 'TSLA' && /ma20/i.test(raw))) {
-      return isEnglish ? 'MA20 is still capping price, so the repair phase is not finished' : 'MA20 仍在压制价格，趋势修复尚未完成';
-    }
-    return isEnglish ? 'MA20 is propping up MA60, keeping the medium-term bull stack intact' : 'MA20 托举 MA60，中期多头排列延续';
-  }
-
-  if (key === 'ma60') {
-    return isEnglish ? 'The long-term bull-bear divider is still rising, so the core base remains intact' : '长线牛熊分界稳步上移，中线底仓逻辑未坏';
-  }
-
-  if (key === '均线结构' || key === 'movingaverages' || key === 'ma20ma60') {
-    if (/pressing lower|下压|压制/i.test(raw) || (ticker === 'TSLA' && /ma20/i.test(raw))) {
-      return isEnglish ? 'MA20 is still capping price, so the repair phase is not finished' : 'MA20 仍在压制价格，趋势修复尚未完成';
-    }
-    return isEnglish ? 'MA20 keeps lifting MA60, so the trend stack stays constructive' : 'MA20 托举 MA60，多头排列延续';
-  }
-
-  if (key === '量价配合' || key === 'volumeprofile') {
-    if (/follow-through pending|续航待定/i.test(raw)) {
-      return isEnglish ? 'The first bounce had volume, but follow-through still needs confirmation' : '首波反弹已有量能，但续航还需二次确认';
-    }
-    return isEnglish ? 'Pullback volume stayed calm and the breakout re-expanded cleanly' : '回踩缩量、突破放量，趋势承接仍然健康';
-  }
-
-  if (key === 'rsi' || key === 'rsi14') {
-    const numeric = Number.parseFloat(raw);
-    if (Number.isFinite(numeric) && numeric >= 70) {
-      return isEnglish ? 'RSI is hot enough to watch for short-term exhaustion' : 'RSI 已接近过热区，短线需防透支';
-    }
-    if (Number.isFinite(numeric) && numeric >= 55) {
-      return isEnglish ? 'RSI is firm but not overbought, leaving room for continuation' : 'RSI 强势但未过热，趋势仍有延续空间';
-    }
-    return isEnglish ? 'RSI has only partially repaired, so conviction still needs confirmation' : 'RSI 修复有限，信号强度仍待确认';
-  }
-
-  if (key === '波动率' || key === 'volatility') {
-    const numeric = Number.parseFloat(raw.replace('%', ''));
-    if (Number.isFinite(numeric) && numeric >= 4) {
-      return isEnglish ? 'Volatility remains elevated, so sizing should stay conservative' : '波动率仍然偏高，仓位节奏需要收敛';
-    }
-    return isEnglish ? 'Volatility remains controlled enough for staggered execution' : '波动率可控，适合按节奏分批执行';
-  }
-
-  return raw;
-}
-
-function buildFundamentalMetricHeadline(locale: DashboardLocale, label: string, value: string): string {
-  const key = normalizeDetailKey(label);
-  if (String(value || '').trim().toUpperCase() === 'N/A') {
-    return 'N/A';
-  }
-  const raw = sanitizeMetricValue(value);
-  const isEnglish = locale === 'en';
-
-  if (raw === '-' || raw === 'N/A') {
-    return raw;
-  }
-
-  if (key === '收入增速' || key === 'revenuegrowth') {
-    const numeric = Number.parseFloat(raw.replace('%', '').replace('+', ''));
-    if (Number.isFinite(numeric) && numeric >= 6) {
-      return isEnglish ? 'Revenue is still expanding, so the demand spine remains intact' : '营收仍在稳步扩张，需求主线未坏';
-    }
-    return isEnglish ? 'Growth has slowed, so the next leg needs a fresh catalyst' : '营收增速放缓，期待新驱动接力';
-  }
-
-  if (key === '自由现金流' || key === 'freecashflow') {
-    return isEnglish ? 'Free cash flow still cushions volatility and funding pressure' : '自由现金流充裕，波动缓冲仍在';
-  }
-
-  if (key === '毛利率' || key === 'grossmargin') {
-    const numeric = Number.parseFloat(raw.replace('%', ''));
-    if (Number.isFinite(numeric) && numeric >= 40) {
-      return isEnglish ? 'Margins are still rich enough to defend pricing power' : '毛利率保持高位，定价权仍然稳固';
-    }
-    return isEnglish ? 'Margins stay under pressure, so earnings quality still needs repair' : '毛利率承压，盈利质量仍待修复';
-  }
-
-  if (key === 'roe') {
-    const numeric = Number.parseFloat(raw.replace('%', ''));
-    if (Number.isFinite(numeric) && numeric >= 25) {
-      return isEnglish ? 'Capital returns remain strong, which supports operating quality' : '资本回报效率强，经营质量仍有支撑';
-    }
-    return isEnglish ? 'Returns remain healthy, but not yet at a standout level' : '资本回报仍属健康，但尚非极致强势';
-  }
-
-  if (key === '市盈率ttm' || key === '市盈率pe' || key === 'pe' || key === 'pettm') {
-    return isEnglish ? 'Valuation still sits in a growth-premium zone' : '估值仍在成长溢价区，需业绩继续兑现';
-  }
-
-  if (key === '预期市盈率一致预期' || key === 'pe一致预期' || key === 'forwardpe一致预期') {
-    return isEnglish ? 'Forward valuation is calmer than spot, but growth expectations stay high' : '远期估值较现值更温和，但成长预期仍高';
-  }
-
-  if (key === '机构持仓' || key === 'institutionalownership') {
-    return isEnglish ? 'Institutional sponsorship still looks sticky and orderly' : '机构筹码相对稳定，抛压风险可控';
-  }
-
-  if (key === '总市值最新值' || key === 'marketcaplatest') {
-    return isEnglish ? 'Market-cap liquidity still provides deep sponsorship' : '总市值体量充足，流动性承接仍强';
-  }
-
-  if (key === '流通市值最新值' || key === 'freefloatcaplatest') {
-    return isEnglish ? 'Free-float liquidity remains usable for institutional participation' : '流通市值承接尚可，交易流动性仍在线';
-  }
-
-  if (key === '总股本最新值' || key === 'sharesoutstandinglatest') {
-    return isEnglish ? 'Share count looks stable, so dilution pressure is contained' : '总股本规模稳定，摊薄压力相对可控';
-  }
-
-  if (key === '流通股最新值' || key === 'freefloatshareslatest') {
-    return isEnglish ? 'Float size remains adequate for orderly turnover' : '流通盘规模适中，换手承接相对平衡';
-  }
-
-  return raw;
 }
 
 function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined, fallback: string): string {
@@ -1054,41 +853,146 @@ function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined,
   return fallback;
 }
 
-function mapStandardFields(
+function findStandardField(fields: StandardReportField[] | undefined, aliases: string[]): StandardReportField | undefined {
+  return aliases
+    .map((alias) => normalizeDetailKey(alias))
+    .flatMap((aliasKey) => (fields || []).filter((field) => normalizeDetailKey(field.label).includes(aliasKey) || aliasKey.includes(normalizeDetailKey(field.label))))
+    .find((field) => field?.label);
+}
+
+function findFieldNumber(fields: StandardReportField[] | undefined, label: string): number | null {
+  const field = (fields || []).find((item) => normalizeDetailKey(item.label) === normalizeDetailKey(label));
+  const numeric = Number.parseFloat(String(field?.value || '').replace(/,/g, ''));
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function deriveMaAlignment(locale: DashboardLocale, fields: StandardReportField[] | undefined): DashboardField | null {
+  const ma5 = findFieldNumber(fields, 'MA5');
+  const ma10 = findFieldNumber(fields, 'MA10');
+  const ma20 = findFieldNumber(fields, 'MA20');
+  const ma60 = findFieldNumber(fields, 'MA60');
+
+  if (ma5 === null || ma10 === null || ma20 === null || ma60 === null) {
+    return null;
+  }
+
+  const isBullish = ma5 > ma10 && ma10 > ma20 && ma20 > ma60;
+  const isBearish = ma5 < ma10 && ma10 < ma20 && ma20 < ma60;
+  const tone: SignalTone = isBullish ? 'bullish' : isBearish ? 'bearish' : 'neutral';
+  const value = locale === 'en'
+    ? isBullish
+      ? 'Bullish Alignment'
+      : isBearish
+        ? 'Bearish Alignment'
+        : 'Mixed Alignment'
+    : isBullish
+      ? '多头排列 (Bullish Alignment)'
+      : isBearish
+        ? '空头排列 (Bearish Alignment)'
+        : '均线混合 (Mixed Alignment)';
+
+  return {
+    label: 'MA ALIGNMENT',
+    value,
+    rawValue: value,
+    tone,
+    details: value,
+  };
+}
+
+function formatDesiredMetricValue(label: string, value: string): string {
+  const normalizedLabel = normalizeDetailKey(label);
+  if (normalizedLabel === 'forwardpe' && /^-?\d+(?:\.\d+)?$/.test(value)) {
+    return `${value}x`;
+  }
+  return value;
+}
+
+function mapDesiredFields(
   locale: DashboardLocale,
   fields: StandardReportField[] | undefined,
-  fallback: DashboardField[],
-  count: number,
-) : DashboardField[] {
-  const visibleFields = (fields || []).filter((field) => field.label).slice(0, count);
-
-  return Array.from({ length: count }, (_, index) => {
-    const field = visibleFields[index];
-    const fallbackField = field
-      ? fallback.find((item) => normalizeDetailKey(item.label) === normalizeDetailKey(field.label)) || fallback[index]
-      : fallback[index];
-    const neutralFallback = fallbackField || {
-      label: field?.label || EMPTY_FIELD_VALUE,
-      value: EMPTY_FIELD_VALUE,
-      rawValue: EMPTY_FIELD_VALUE,
-      tone: 'neutral' as const,
-      details: EMPTY_FIELD_VALUE,
-    };
-
+  specs: DesiredFieldSpec[],
+): DashboardField[] {
+  return specs.map((spec) => {
+    const field = findStandardField(fields, spec.aliases);
     if (!field) {
-      return neutralFallback;
+      if (normalizeDetailKey(spec.fallback.label) === 'maalignment') {
+        return deriveMaAlignment(locale, fields) || spec.fallback;
+      }
+      return spec.fallback;
     }
 
-    const localizedValue = localizeMetricValue(locale, field.value, neutralFallback.value || EMPTY_FIELD_VALUE);
+    const localizedValue = formatDesiredMetricValue(
+      spec.fallback.label,
+      localizeMetricValue(locale, field.value, spec.fallback.value || EMPTY_FIELD_VALUE),
+    );
     const isEmpty = isPendingMetricValue(localizedValue);
     return {
-      label: localizeFieldLabel(locale, field.label, neutralFallback.label || field.label),
+      ...spec.fallback,
       value: localizedValue,
       rawValue: localizedValue,
       tone: isEmpty ? 'neutral' : toneFromFieldValue(field.value || localizedValue),
-      details: isEmpty ? neutralFallback.details : undefined,
+      details: isEmpty ? spec.fallback.details : undefined,
     };
   });
+}
+
+function getTechnicalFieldSpecs(locale: DashboardLocale): DesiredFieldSpec[] {
+  const isEnglish = locale === 'en';
+  return [
+    {
+      aliases: ['MA ALIGNMENT', 'Moving Averages', '均线结构', '均线系统'],
+      fallback: { label: 'MA ALIGNMENT', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+    },
+    {
+      aliases: ['RSI-14', 'RSI14', 'RSI'],
+      fallback: { label: 'RSI-14', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+    },
+    {
+      aliases: ['MACD', '趋势与反转'],
+      fallback: { label: 'MACD', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+    },
+    {
+      aliases: ['VOLUME DYNAMICS', 'Volume Profile', '量价配合', '成交量', 'Volume'],
+      fallback: {
+        label: 'VOLUME DYNAMICS',
+        value: EMPTY_FIELD_VALUE,
+        rawValue: EMPTY_FIELD_VALUE,
+        tone: 'neutral',
+        details: isEnglish ? 'Volume signal pending' : '量价信号待接入',
+      },
+    },
+  ];
+}
+
+function getFundamentalFieldSpecs(locale: DashboardLocale): DesiredFieldSpec[] {
+  const isEnglish = locale === 'en';
+  return [
+    {
+      aliases: ['ROE', '净资产收益率'],
+      fallback: { label: 'ROE', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+    },
+    {
+      aliases: ['EBITDA Margin', 'EBITDA MARGIN', 'EBITDA利润率'],
+      fallback: { label: 'EBITDA MARGIN', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+    },
+    {
+      aliases: ['Latest EPS', 'LATEST EPS', 'EPS', '最新季报'],
+      fallback: { label: 'LATEST EPS', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+    },
+    {
+      aliases: ['Revenue', 'Revenue Growth', '营收', '收入增速'],
+      fallback: { label: 'REVENUE', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+    },
+    {
+      aliases: ['Forward PE', 'Forward P/E', '远期市盈率', '预期市盈率', 'PE一致预期'],
+      fallback: { label: 'FORWARD PE', value: isEnglish ? 'N/A' : 'N/A', rawValue: 'N/A', tone: 'neutral', details: 'N/A' },
+    },
+    {
+      aliases: ['PEG Ratio', 'PEG RATIO', 'PEG'],
+      fallback: { label: 'PEG RATIO', value: 'N/A', rawValue: 'N/A', tone: 'neutral', details: 'N/A' },
+    },
+  ];
 }
 
 function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
@@ -1260,7 +1164,6 @@ function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardVaria
       signals: payload.tech.signals.map((signal) => ({
         ...signal,
         rawValue: signal.rawValue || signal.value,
-        value: buildTechSignalHeadline(locale, payload.ticker, signal.label, signal.rawValue || signal.value),
         details: signal.details || buildTechSignalDetails(locale, payload.ticker, signal.label, signal.rawValue || signal.value),
       })),
     },
@@ -1269,7 +1172,6 @@ function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardVaria
       metrics: payload.fundamentals.metrics.map((metric) => ({
         ...metric,
         rawValue: metric.rawValue || metric.value,
-        value: buildFundamentalMetricHeadline(locale, metric.label, metric.rawValue || metric.value),
         details: metric.details || buildFundamentalMetricDetails(locale, payload.ticker, metric.label, metric.rawValue || metric.value),
       })),
     },
@@ -1392,8 +1294,6 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   }
 
   const seed = buildInPlacePlaceholderDashboard(locale, stockCode);
-  const neutralTechSignals = neutralizeDashboardSignals(seed.tech.signals);
-  const neutralFundamentals = neutralizeDashboardFields(seed.fundamentals.metrics);
   const standardReport = report.details?.standardReport;
   const summaryPanel = standardReport?.summaryPanel;
   const decisionPanel = standardReport?.decisionPanel;
@@ -1478,11 +1378,11 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     },
     tech: {
       ...seed.tech,
-      signals: mapStandardFields(locale, technicalFields, neutralTechSignals, 5).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
+      signals: mapDesiredFields(locale, technicalFields, getTechnicalFieldSpecs(locale)).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
     },
     fundamentals: {
       ...seed.fundamentals,
-      metrics: mapStandardFields(locale, fundamentalFields, neutralFundamentals, 6),
+      metrics: mapDesiredFields(locale, fundamentalFields, getFundamentalFieldSpecs(locale)),
     },
   });
 }
