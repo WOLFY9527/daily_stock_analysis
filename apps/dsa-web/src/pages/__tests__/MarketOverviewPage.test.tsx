@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketOverviewPage from '../MarketOverviewPage';
 import { marketOverviewApi } from '../../api/marketOverview';
@@ -64,5 +64,21 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
     expect(screen.getByText(/数据驱动: CBOE/i)).toBeInTheDocument();
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+  });
+
+  it('refreshes all panels when the sync button is clicked', async () => {
+    render(<MarketOverviewPage />);
+
+    await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /同步最新行情/i }));
+
+    await waitFor(() => {
+      expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(2);
+      expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
+      expect(marketOverviewApi.getSentiment).toHaveBeenCalledTimes(2);
+      expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(2);
+      expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(2);
+    });
   });
 });
