@@ -1,8 +1,13 @@
 import type React from 'react';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import type { MarketOverviewPanel } from '../../api/marketOverview';
+import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
+import {
+  formatChangeSummary,
+  formatMetricValue,
+  getDirectionTone,
+} from './marketOverviewUtils';
 export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
   tone = 'text-white/35',
@@ -47,5 +52,42 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
       </span>
       <span className="text-[10px] uppercase tracking-widest text-white/30">{sourceLabel}</span>
     </div>
+  );
+};
+
+export const MarketOverviewDataRow: React.FC<{
+  item: MarketOverviewItem;
+  neutralLabel: string;
+  valueClassName?: string;
+  valueDigitsBelowHundred?: number;
+}> = ({ item, neutralLabel, valueClassName, valueDigitsBelowHundred = 2 }) => {
+  const direction = item.riskDirection || 'neutral';
+  const tone = getDirectionTone(direction);
+  const sparklineTone = direction === 'increasing'
+    ? 'text-red-400'
+    : direction === 'decreasing'
+      ? 'text-emerald-400'
+      : 'text-white/35';
+
+  return (
+    <article className="grid min-h-12 grid-cols-[minmax(96px,0.9fr)_minmax(88px,1fr)_minmax(112px,auto)] items-center gap-3 border-b border-white/[0.045] py-2.5 last:border-b-0">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{item.label}</p>
+          <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-widest text-white/22">{item.symbol}</p>
+        </div>
+      </div>
+      <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-8 min-w-0" />
+      <div className="min-w-0 text-right font-mono">
+        <p className={cn('truncate text-lg font-semibold leading-none text-white', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
+        <div className="mt-1 flex items-center justify-end gap-2">
+          <span className={cn('text-[11px] font-bold leading-none', tone)}>
+            {formatChangeSummary(item, neutralLabel)}
+          </span>
+          {item.unit ? <span className="text-[9px] uppercase tracking-widest text-white/25">{item.unit}</span> : null}
+        </div>
+      </div>
+    </article>
   );
 };

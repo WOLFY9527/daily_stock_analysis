@@ -53,12 +53,13 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('button', { name: /同步最新行情/i })).toBeInTheDocument();
 
     expect((await screen.findAllByText('SPX')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/VIX 实时脉搏/i)).toBeInTheDocument();
+    expect(screen.getByText(/GREED \/ FEAR INDEX/i)).toBeInTheDocument();
+    expect(screen.getByText('65.0')).toBeInTheDocument();
     expect(screen.getByText(/贪婪与恐慌指数/i)).toBeInTheDocument();
     expect(screen.getAllByText('ETF').length).toBeGreaterThan(0);
     expect(screen.getAllByText('US10Y').length).toBeGreaterThan(0);
-    expect(screen.getByText(/平静/i)).toBeInTheDocument();
-    expect(screen.getByText(/警戒/i)).toBeInTheDocument();
+    expect(screen.queryByText(/平静/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/警戒/i)).not.toBeInTheDocument();
 
     expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
