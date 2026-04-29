@@ -50,6 +50,9 @@ type AIProviderConfigProps = {
   onJumpToAiChannelConfig: () => void;
 };
 
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+
 const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
   t,
   aiRoutingScope,
@@ -84,14 +87,15 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {routeMissingButApiConfigured ? (
-              <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.48)] bg-[hsl(var(--accent-warning-hsl)/0.18)] px-2.5 py-1 text-[11px] font-semibold text-[hsl(var(--accent-warning-hsl))]">
+              <span className={GHOST_TAG_CLASS}>
                 {t('settings.aiConfiguredNoRoute')}
               </span>
             ) : null}
             <Button
               type="button"
               size="sm"
-              variant="settings-primary"
+              variant="settings-secondary"
+              className={CONTROL_GHOST_BUTTON_CLASS}
               onClick={onOpenAiRoutingDrawer}
               disabled={adminLocked || isSaving}
             >
@@ -116,7 +120,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-foreground">{routeRow.title}</p>
-                  <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] text-secondary-text">
+                  <span className={GHOST_TAG_CLASS}>
                     {routeRow.routeMode}
                   </span>
                 </div>
@@ -132,6 +136,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
                 type="button"
                 size="sm"
                 variant="settings-secondary"
+                className={CONTROL_GHOST_BUTTON_CLASS}
                 onClick={onOpenAiRoutingDrawer}
                 disabled={adminLocked || isSaving}
               >
@@ -156,19 +161,16 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
       <div className="settings-surface rounded-xl border settings-border px-4 py-4" data-testid="ai-provider-quick-section">
         <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyProviderTitle')}</p>
         <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.aiDirectProviderTitle')}</p>
-        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
           {providerCards.map((provider) => (
             <div
               key={provider.key}
-              className="rounded-[var(--theme-panel-radius-md)] bg-white/[0.02] px-3 py-3"
+              className="h-fit rounded-xl bg-white/[0.02] px-3 py-3"
               data-testid={`ai-provider-card-${provider.key}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">{provider.label}</p>
-                <span className={provider.isReady
-                  ? 'rounded-full bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
-                  : 'rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-muted-text'}
-                >
+                <span className={GHOST_TAG_CLASS} data-ready={provider.isReady ? 'true' : 'false'}>
                   {provider.isReady ? t('settings.aiProviderReady') : t('settings.aiProviderMissingCredential')}
                 </span>
               </div>
@@ -188,6 +190,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
                   type="button"
                   size="sm"
                   variant="settings-secondary"
+                  className={CONTROL_GHOST_BUTTON_CLASS}
                   onClick={() => onOpenQuickProviderDrawer(provider.key)}
                   disabled={adminLocked || isSaving}
                 >
@@ -197,6 +200,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
                   type="button"
                   size="sm"
                   variant="settings-secondary"
+                  className={CONTROL_GHOST_BUTTON_CLASS}
                   onClick={() => onJumpToProviderAdvancedConfig(provider.key)}
                   disabled={adminLocked || isSaving}
                 >
@@ -239,6 +243,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
             type="button"
             size="sm"
             variant="settings-secondary"
+            className={CONTROL_GHOST_BUTTON_CLASS}
             onClick={onJumpToAiChannelConfig}
             disabled={adminLocked || isSaving}
           >

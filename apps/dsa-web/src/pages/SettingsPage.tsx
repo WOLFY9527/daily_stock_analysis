@@ -5,7 +5,6 @@ import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
 import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, Input, Select } from '../components/common';
 import {
-  CARD_BUTTON_CLASS,
   PageBriefDrawer,
   type BentoHeroItem,
 } from '../components/home-bento';
@@ -105,6 +104,8 @@ type CustomDataSourceRecord = {
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
 const CONSOLE_NAV_BUTTON_CLASS = 'w-full rounded-xl px-3 py-2 text-left text-sm transition-colors';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
 type DataSourceLibraryEntry = {
   key: string;
@@ -3042,16 +3043,16 @@ const SettingsPage: React.FC = () => {
             className="flex-1 min-w-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pr-2 pb-12"
           >
             <div className="space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/5 pb-4">
+              <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/5 pb-6">
                 <div>
-                  <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{t('settings.eyebrow')}</p>
-                  <h1 className="mt-2 text-2xl font-semibold text-foreground">{t('settings.title')}</h1>
-                  <p className="mt-2 max-w-4xl text-sm leading-6 text-secondary-text">{t('settings.subtitle')}</p>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('settings.eyebrow')}</p>
+                  <h1 className="text-xl font-bold tracking-wide text-white">{t('settings.title')}</h1>
+                  <p className="mt-1 max-w-4xl text-xs leading-5 text-white/50">{t('settings.subtitle')}</p>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
-                    className={CARD_BUTTON_CLASS}
+                    className={CONTROL_GHOST_BUTTON_CLASS}
                     data-testid="settings-bento-drawer-trigger"
                     onClick={() => setIsBriefDrawerOpen(true)}
                   >
@@ -3061,7 +3062,7 @@ const SettingsPage: React.FC = () => {
                   <Button
                     type="button"
                     variant="settings-secondary"
-                    className="border-border/50 bg-muted/30 hover:border-border/70"
+                    className={CONTROL_GHOST_BUTTON_CLASS}
                     onClick={resetDraft}
                     disabled={isLoading || isSaving || adminLocked}
                   >
@@ -3070,6 +3071,7 @@ const SettingsPage: React.FC = () => {
                   <Button
                     type="button"
                     variant="settings-primary"
+                    className="rounded-lg px-3 py-1.5 text-xs"
                     onClick={handleSave}
                     disabled={adminSaveDisabled}
                     isLoading={isSaving}
@@ -3092,7 +3094,6 @@ const SettingsPage: React.FC = () => {
                 <SystemControlPlane
                   t={t}
                   overviewStats={heroItems}
-                  globalAdminStats={globalAdminStats}
                   isRunningAdminAction={isRunningAdminAction}
                   adminActionDialog={adminActionDialog}
                   adminActionMessage={adminActionMessage}
@@ -3224,6 +3225,7 @@ const SettingsPage: React.FC = () => {
                             type="button"
                             size="sm"
                             variant="settings-secondary"
+                            className={CONTROL_GHOST_BUTTON_CLASS}
                             data-testid="raw-fields-drawer-trigger"
                             onClick={() => setRawFieldsDrawerOpen(true)}
                             disabled={adminLocked || isSaving}
@@ -3552,6 +3554,7 @@ const SettingsPage: React.FC = () => {
                   type="button"
                   size="sm"
                   variant="settings-secondary"
+                  className={CONTROL_GHOST_BUTTON_CLASS}
                   onClick={() => {
                     setAiRoutingError(null);
                     setAiModelMode((prev) => ({ ...prev, backup: 'preset' }));
@@ -3881,6 +3884,7 @@ const SettingsPage: React.FC = () => {
                         type="button"
                         size="sm"
                         variant="settings-secondary"
+                        className={CONTROL_GHOST_BUTTON_CLASS}
                         onClick={() => void saveTaskRoute(task.key)}
                         disabled={disabledTaskEditor}
                       >
@@ -3915,10 +3919,7 @@ const SettingsPage: React.FC = () => {
             <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">{quickProviderDrawerItem.label}</p>
-                <span className={resolveQuickProviderCredential(quickProviderDrawerItem.key)
-                  ? 'rounded-full border border-[hsl(var(--accent-positive-hsl)/0.4)] bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
-                  : 'rounded-full border border-border/60 bg-base/70 px-2 py-0.5 text-[11px] text-muted-text'}
-                >
+                <span className={GHOST_TAG_CLASS}>
                   {resolveQuickProviderCredential(quickProviderDrawerItem.key)
                     ? t('settings.aiProviderReady')
                     : t('settings.aiProviderMissingCredential')}
@@ -3959,6 +3960,7 @@ const SettingsPage: React.FC = () => {
                   type="button"
                   size="sm"
                   variant="settings-secondary"
+                  className={CONTROL_GHOST_BUTTON_CLASS}
                   onClick={() => void testQuickProviderConnection(quickProviderDrawerItem.key)}
                   disabled={adminLocked || isSaving || quickProviderTestState[quickProviderDrawerItem.key].status === 'loading'}
                   isLoading={quickProviderTestState[quickProviderDrawerItem.key].status === 'loading'}
@@ -3993,6 +3995,7 @@ const SettingsPage: React.FC = () => {
                 type="button"
                 size="sm"
                 variant="settings-secondary"
+                className={CONTROL_GHOST_BUTTON_CLASS}
                 onClick={() => {
                   jumpToProviderAdvancedConfig(quickProviderDrawerItem.key);
                   setQuickProviderDrawerProvider(null);
@@ -4037,6 +4040,7 @@ const SettingsPage: React.FC = () => {
                       type="button"
                       size="sm"
                       variant="settings-secondary"
+                      className={CONTROL_GHOST_BUTTON_CLASS}
                       onClick={() => handleCreateAdvancedProviderChannel(advancedNavigationContext.provider)}
                       disabled={adminLocked || isSaving}
                     >
@@ -4088,7 +4092,7 @@ const SettingsPage: React.FC = () => {
                     {dataSourceEditorEntry.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
                   </p>
                 </div>
-                <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] text-secondary-text">
+                <span className={GHOST_TAG_CLASS}>
                   {dataSourceEditorEntry.validationMessage}
                 </span>
               </div>
@@ -4096,7 +4100,7 @@ const SettingsPage: React.FC = () => {
                 {dataSourceEditorEntry.capabilityLabels.map((capability) => (
                   <span
                     key={`drawer-${dataSourceEditorEntry.key}-${capability}`}
-                    className="rounded-full border border-border/50 bg-surface/45 px-2 py-0.5 text-[11px] text-secondary-text"
+                    className={GHOST_TAG_CLASS}
                   >
                     {capability}
                   </span>
@@ -4114,6 +4118,7 @@ const SettingsPage: React.FC = () => {
                 type="button"
                 size="sm"
                 variant="settings-secondary"
+                className={CONTROL_GHOST_BUTTON_CLASS}
                 onClick={() => void validateDataSourceEntry(dataSourceEditorEntry.key)}
                 disabled={adminLocked || isSaving || !dataSourceEditorEntry.usable}
               >
@@ -4129,10 +4134,7 @@ const SettingsPage: React.FC = () => {
                   <p className="text-sm font-semibold text-foreground">{dataSourceEditorEntry.label}</p>
                   <p className="mt-1 text-xs text-secondary-text">{t('settings.dataSourceBuiltinManageDesc')}</p>
                 </div>
-                <span className={dataSourceEditorEntry.configured
-                  ? 'rounded-full border border-[hsl(var(--accent-positive-hsl)/0.4)] bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
-                  : 'rounded-full border border-border/60 bg-base/70 px-2 py-0.5 text-[11px] text-muted-text'}
-                >
+                <span className={GHOST_TAG_CLASS}>
                   {dataSourceEditorEntry.credentialSchema === 'key_secret'
                     ? t('settings.dataSourceSchemaKeySecret')
                     : dataSourceEditorEntry.credentialSchema === 'single_key'
@@ -4144,7 +4146,7 @@ const SettingsPage: React.FC = () => {
                 {dataSourceEditorEntry.capabilityLabels.map((capability) => (
                   <span
                     key={`builtin-${dataSourceEditorEntry.key}-${capability}`}
-                    className="rounded-full border border-border/50 bg-surface/45 px-2 py-0.5 text-[11px] text-secondary-text"
+                    className={GHOST_TAG_CLASS}
                   >
                     {capability}
                   </span>
@@ -4202,6 +4204,7 @@ const SettingsPage: React.FC = () => {
                   type="button"
                   size="sm"
                   variant="settings-secondary"
+                  className={CONTROL_GHOST_BUTTON_CLASS}
                   onClick={() => void validateDataSourceEntry(dataSourceEditorEntry.key)}
                   disabled={isSaving}
                 >
@@ -4231,10 +4234,7 @@ const SettingsPage: React.FC = () => {
                   </p>
                   <p className="mt-1 text-xs text-secondary-text">{t('settings.dataSourceEditorDesc')}</p>
                 </div>
-                <span className={dataSourceEditorDraft.capabilities.length
-                  ? 'rounded-full border border-[hsl(var(--accent-positive-hsl)/0.4)] bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
-                  : 'rounded-full border border-border/60 bg-base/70 px-2 py-0.5 text-[11px] text-muted-text'}
-                >
+                <span className={GHOST_TAG_CLASS}>
                   {dataSourceEditorDraft.capabilities.length
                     ? t('settings.dataSourceConfiguredPending')
                     : t('settings.notConfigured')}
@@ -4321,8 +4321,8 @@ const SettingsPage: React.FC = () => {
                         key={capability}
                         type="button"
                         className={active
-                          ? 'rounded-full border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-1.5 text-xs font-medium text-foreground'
-                          : 'rounded-full border border-border/60 bg-base/60 px-3 py-1.5 text-xs text-secondary-text'}
+                          ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white'
+                          : 'rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40 hover:bg-white/10'}
                         onClick={() => setDataSourceEditorDraft((prev) => {
                           const nextCapabilities = active
                             ? prev.capabilities.filter((item) => item !== capability)

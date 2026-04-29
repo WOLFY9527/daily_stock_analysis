@@ -9,6 +9,9 @@ import { ApiErrorAlert, Badge, Button, Input, Select, SupportBanner, SupportPane
 
 type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
 
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+
 interface ChannelPreset {
   label: string;
   protocol: ChannelProtocol;
@@ -353,22 +356,18 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
           <div className="flex flex-wrap items-center gap-2 border-t settings-border-soft pt-3">
             <Button
               type="button"
-              variant="gradient"
+              variant="settings-secondary"
               size="sm"
-              className="settings-accent-badge-soft px-3 text-[11px] shadow-none"
+              className={CONTROL_GHOST_BUTTON_CLASS}
               disabled={busy}
               onClick={() => onTest(channel, index)}
             >
               {testState?.status === 'loading' ? t('settings.llmEditor.testingAction') : t('settings.llmEditor.testAction')}
             </Button>
             {testState?.text ? (
-              <span className={`rounded-full border px-2.5 py-1 text-xs ${
-                testState.status === 'success'
-                  ? 'border-success/25 bg-success/10 text-success'
-                  : testState.status === 'error'
-                    ? 'border-danger/25 bg-danger/10 text-danger'
-                    : 'border-warning/25 bg-warning/10 text-warning'
-              }`}
+              <span
+                className={GHOST_TAG_CLASS}
+                data-status={testState.status}
               >
                 {testState.text}
               </span>

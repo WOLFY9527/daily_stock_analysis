@@ -61,7 +61,7 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
                 </p>
               </div>
               <span className={cn(
-                'ml-3 rounded-full px-2 py-0.5 text-[10px] font-mono',
+                'ml-3 rounded px-1.5 py-0.5 text-[10px] font-mono',
                 isActive ? 'bg-white/[0.08] text-white/70' : 'bg-white/[0.03] text-white/40',
               )}
               >

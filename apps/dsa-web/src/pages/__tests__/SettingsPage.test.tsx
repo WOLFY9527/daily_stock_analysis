@@ -527,6 +527,8 @@ describe('SettingsPage', () => {
       expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
       expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
       expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+      expect(screen.getAllByText(zh('settings.controlPlaneStatProviders'))).toHaveLength(1);
+      expect(screen.getAllByText(zh('settings.controlPlaneStatDataSources'))).toHaveLength(1);
       expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
       expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
       expect(getMaintenancePanel()).not.toHaveAttribute('open');

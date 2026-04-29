@@ -4,21 +4,16 @@ import { BentoHeroStrip, type BentoHeroItem } from '../home-bento';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
-type AdminStat = {
-  key: string;
-  label: string;
-  value: string;
-  detail: string;
-};
-
 type AdminActionDialogKey = 'runtime_cache' | 'factory_reset' | null;
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
+
 type SystemControlPlaneProps = {
   t: TranslateFn;
   overviewStats: BentoHeroItem[];
-  globalAdminStats: AdminStat[];
   isRunningAdminAction: boolean;
   adminActionDialog: AdminActionDialogKey;
   adminActionMessage: string | null;
@@ -30,7 +25,6 @@ type SystemControlPlaneProps = {
 const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
   t,
   overviewStats,
-  globalAdminStats,
   isRunningAdminAction,
   adminActionDialog,
   adminActionMessage,
@@ -54,19 +48,9 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
             <p className="mt-1 text-base font-semibold text-foreground">{t('settings.adminSurfaceActiveTitle')}</p>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('settings.adminSurfaceActiveDesc')}</p>
           </div>
-          <span className="rounded-full border border-[hsl(var(--accent-positive-hsl)/0.36)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-positive-hsl))]">
+          <span className={GHOST_TAG_CLASS}>
             {t('settings.adminSurfaceGlobalScope')}
           </span>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {globalAdminStats.map((item) => (
-            <div key={item.key} className="rounded-xl bg-white/[0.03] px-3 py-3">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-muted-text">{item.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-foreground">{item.value}</p>
-              <p className="mt-2 text-xs leading-5 text-secondary-text">{item.detail}</p>
-            </div>
-          ))}
         </div>
       </GlassCard>
 
@@ -80,7 +64,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
               <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.controlPlaneMaintenanceSummary')}</p>
               <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.controlPlaneMaintenanceDesc')}</p>
             </div>
-            <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]">
+            <span className={GHOST_TAG_CLASS}>
               {t('settings.controlPlaneMaintenanceBadge')}
             </span>
           </div>
@@ -97,6 +81,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
               type="button"
               size="sm"
               variant="settings-secondary"
+              className={CONTROL_GHOST_BUTTON_CLASS}
               onClick={onOpenAdminLogs}
             >
               {t('settings.viewAdminLogs')}
@@ -125,6 +110,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                   type="button"
                   size="sm"
                   variant="settings-secondary"
+                  className={CONTROL_GHOST_BUTTON_CLASS}
                   onClick={() => onSetAdminActionDialog('runtime_cache')}
                   disabled={isRunningAdminAction}
                 >

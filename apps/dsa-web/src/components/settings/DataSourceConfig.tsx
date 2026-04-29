@@ -42,6 +42,9 @@ type DataSourceConfigProps = {
   onValidateDataSource: (sourceId: string) => void;
 };
 
+const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
+const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+
 const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
   t,
   dataRoutingGroups,
@@ -70,13 +73,13 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
             <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.dataRoutingCompactTitle')}</p>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
           {dataRoutingGroups.map((group) => (
-            <div key={group.role} className="rounded-2xl bg-white/[0.02] p-4">
+            <div key={group.role} className="h-fit rounded-xl bg-white/[0.02] p-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-foreground">{group.role}</p>
-                  <span className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-secondary-text">
+                  <span className={GHOST_TAG_CLASS}>
                     {group.values.length ? t('settings.configuredNoPriority') : t('settings.notConfigured')}
                   </span>
                 </div>
@@ -86,11 +89,11 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
                     : t('settings.notConfigured')}
                 </p>
                 {group.values.length ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {group.values.map((source, index) => (
                       <span
                         key={`${group.role}-${source}-${index}`}
-                        className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-secondary-text"
+                        className={GHOST_TAG_CLASS}
                       >
                         <span className={sourceToneClass(index)}>{priorityLabel(index)}</span>
                         {' · '}
@@ -115,6 +118,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
                   type="button"
                   size="sm"
                   variant="settings-secondary"
+                  className={CONTROL_GHOST_BUTTON_CLASS}
                   disabled={adminLocked || isSaving || group.available.length === 0}
                   data-testid={`data-routing-manage-${group.key}`}
                   onClick={() => onOpenDataRoutingDrawer(group.key)}
@@ -144,7 +148,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
             {t('settings.dataSourceAddAction')}
           </Button>
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
           {dataSourceLibrary.map((source) => (
             <ApiSourceCard
               key={source.key}
