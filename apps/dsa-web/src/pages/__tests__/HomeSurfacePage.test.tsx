@@ -332,6 +332,37 @@ describe('HomeSurfacePage', () => {
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
 
+  it('keeps analysis loading inside the existing bento cards', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
+    vi.mocked(analysisApi.analyzeAsync).mockReturnValueOnce(deferred.promise);
+
+    renderSurface();
+
+    await screen.findByTestId('home-bento-grid');
+    const input = screen.getByTestId('home-bento-omnibar-input');
+    fireEvent.change(input, { target: { value: 'NVDA' } });
+    fireEvent.submit(screen.getByTestId('home-bento-omnibar'));
+
+    expect(await screen.findByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-secondary-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
+    expect(screen.getByTestId('home-bento-card-strategy')).toHaveClass('animate-pulse', 'bg-white/[0.05]', 'border-indigo-500/20');
+    expect(screen.getByTestId('home-bento-inplace-loading-tech')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-inplace-loading-fundamentals')).toBeInTheDocument();
+    expect(screen.getByText('Wolfy AI 引擎推理中...')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-runtime-panel')).not.toBeInTheDocument();
+    expect(screen.queryByText('LLM')).not.toBeInTheDocument();
+    expect(screen.queryByText('Technical')).not.toBeInTheDocument();
+
+    await act(async () => {
+      deferred.resolve({ taskId: 'task-1', status: 'pending', message: 'submitted' });
+      await deferred.promise;
+    });
+  });
+
   it('renders localized English copy for the signed-in dashboard', async () => {
     window.localStorage.setItem('dsa-ui-language', 'en');
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
@@ -837,7 +868,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
     expect(screen.queryByText('WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。')).not.toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-inplace-loading-strategy')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     deferred.resolve({
       taskId: 'task-loading-state',
       status: 'pending',
@@ -882,7 +915,8 @@ describe('HomeSurfacePage', () => {
       selectionSource: 'manual',
     }));
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
     expect(screen.queryByText('未找到股票代码 MSFT，请检查是否退市或输入有误')).not.toBeInTheDocument();
   });
@@ -966,7 +1000,8 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(analysisApi.analyzeAsync).toHaveBeenCalled());
     await waitFor(() => expect(useStockPoolStore.getState().activeTasks.some((task) => task.taskId === 'task-nflx')).toBe(true));
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
 
     act(() => {
       useStockPoolStore.getState().syncTaskUpdated({
@@ -1039,7 +1074,7 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('Netflix completion replaced neutral cards.');
     });
-    expect(screen.getByText('104.80')).toBeInTheDocument();
+    expect(screen.getAllByText('104.80').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
   });
@@ -1138,11 +1173,11 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('AMD task payload normalized from snake_case report blocks.');
     });
-    expect(screen.getByText('168.40')).toBeInTheDocument();
-    expect(screen.getByText('147.80')).toBeInTheDocument();
+    expect(screen.getAllByText('168.40').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('147.80').length).toBeGreaterThan(0);
   });
 
-  it('renders a clean stage-only progress card for the focused task', async () => {
+  it('does not expose task progress internals on the home surface', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
 
@@ -1217,22 +1252,23 @@ describe('HomeSurfacePage', () => {
       });
     });
 
-    const panel = await screen.findByTestId('home-bento-task-progress-card');
-    expect(within(panel).getByText(/TSLA/)).toBeInTheDocument();
-    expect(within(panel).getAllByText('Analysis in progress').length).toBeGreaterThan(0);
-    expect(within(panel).getByText('LLM')).toBeInTheDocument();
-    expect(within(panel).getByText('Technical')).toBeInTheDocument();
-    expect(within(panel).getByText('Fundamental')).toBeInTheDocument();
-    expect(within(panel).getByText('News')).toBeInTheDocument();
-    expect(within(panel).getByText('Sentiment')).toBeInTheDocument();
-    expect(within(panel).queryByText(/deepseek\/deepseek-chat/i)).not.toBeInTheDocument();
-    expect(within(panel).queryByText(/alpaca/i)).not.toBeInTheDocument();
-    expect(within(panel).queryByText(/gnews/i)).not.toBeInTheDocument();
-    expect(within(panel).queryByText(/429 Too Many Requests/i)).not.toBeInTheDocument();
-    expect(within(panel).queryByText(/standard_report/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-task-progress-card')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
+    expect(screen.queryByText('LLM')).not.toBeInTheDocument();
+    expect(screen.queryByText('Technical')).not.toBeInTheDocument();
+    expect(screen.queryByText('Fundamental')).not.toBeInTheDocument();
+    expect(screen.queryByText('News')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sentiment')).not.toBeInTheDocument();
+    expect(screen.queryByText(/deepseek\/deepseek-chat/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/alpaca/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gnews/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/429 Too Many Requests/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/standard_report/i)).not.toBeInTheDocument();
   });
 
-  it('auto-scrolls to the final analysis summary when the task completes', async () => {
+  it('hydrates final analysis in place without auto-scrolling', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     const scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -1303,9 +1339,7 @@ describe('HomeSurfacePage', () => {
     });
 
     expect(await screen.findByTestId('home-bento-analysis-result-card')).toHaveTextContent('Netflix completion replaced neutral cards.');
-    await waitFor(() => {
-      expect(scrollIntoView).toHaveBeenCalled();
-    });
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it('keeps neutral cards instead of demo data when the analysis API fails', async () => {
@@ -1372,7 +1406,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
     expect(screen.queryByText('输入股票代码后将在此原位刷新 AI 判断。')).not.toBeInTheDocument();
     expect(screen.queryByText('WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。')).not.toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-inplace-loading-strategy')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();

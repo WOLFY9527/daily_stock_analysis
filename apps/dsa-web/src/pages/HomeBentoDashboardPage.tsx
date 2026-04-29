@@ -1,16 +1,14 @@
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import {
   AnalysisResultCard,
   BentoCard,
-  BentoGrid,
   BENTO_SURFACE_ROOT_CLASS,
   DecisionCard,
   DeepReportDrawer,
   FundamentalsCard,
   StrategyCard,
-  TaskProgressCard,
   TechCard,
   type SignalTone,
 } from '../components/home-bento';
@@ -23,8 +21,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import { translate } from '../i18n/core';
-import type { AnalysisReport, HistoryItem, StandardReportField, TaskInfo, TaskProgressModule } from '../types/analysis';
+import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
@@ -90,11 +87,6 @@ function isPendingMetricValue(value?: string): boolean {
 
 function sanitizeMetricValue(value?: string): string {
   return isPendingMetricValue(value) ? '-' : String(value || '').trim();
-}
-
-function formatRuntimeText(value: unknown, fallback = '-'): string {
-  const text = String(value || '').trim();
-  return text || fallback;
 }
 
 function isPeLikeMetric(label: string): boolean {
@@ -1423,108 +1415,107 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   });
 }
 
-function buildTaskProgressModules(
-  task: TaskInfo,
-): TaskProgressModule[] {
-  const stageNames: Record<string, string> = {
-    llm: 'LLM',
-    technical: 'Technical',
-    fundamental: 'Fundamental',
-    news: 'News',
-    sentiment: 'Sentiment',
-  };
-  const stageKeys = ['llm', 'technical', 'fundamental', 'news', 'sentiment'] as const;
-  const clampedProgress = Math.max(0, Math.min(task.progress || 0, 100));
-  const isCompleted = task.status === 'completed' || clampedProgress >= 100;
-  const runningIndex = isCompleted
-    ? stageKeys.length
-    : task.status === 'failed'
-      ? Math.min(stageKeys.length - 1, Math.floor(clampedProgress / 20))
-      : Math.min(stageKeys.length - 1, Math.floor(clampedProgress / 20));
+const SKELETON_CARD_CLASS = 'animate-pulse border-indigo-500/20 bg-white/[0.05] shadow-[0_0_42px_rgba(79,70,229,0.10)]';
+const SKELETON_LINE_CLASS = 'rounded-full bg-white/[0.08] shadow-[0_0_24px_rgba(99,102,241,0.12)]';
 
-  return stageKeys.map((key, index) => {
-    let status: TaskProgressModule['status'] = 'pending';
-    if (isCompleted) {
-      status = 'completed';
-    } else if (task.status === 'failed') {
-      status = index < runningIndex ? 'completed' : index === runningIndex ? 'failed' : 'pending';
-    } else if (index < runningIndex) {
-      status = 'completed';
-    } else if (index === runningIndex && (task.status === 'processing' || task.status === 'pending')) {
-      status = 'running';
-    }
-
-    return {
-      key,
-      name: stageNames[key],
-      status,
-    };
-  });
+function SkeletonLine({ className = '' }: { className?: string }) {
+  return <div className={`${SKELETON_LINE_CLASS} ${className}`} />;
 }
 
-function TaskRuntimePanel({
-  locale,
-  task,
-}: {
-  locale: DashboardLocale;
-  task: TaskInfo;
-}) {
+function InPlaceDecisionSkeleton({ locale, ticker }: { locale: DashboardLocale; ticker: string }) {
   return (
-    <div data-testid="home-bento-runtime-panel">
-      <TaskProgressCard
-        language={locale}
-        taskLabel={`${task.stockCode} · ${formatRuntimeText(task.stockName)}`}
-        progress={task.progress}
-        modules={buildTaskProgressModules(task)}
-      />
-    </div>
+    <BentoCard
+      eyebrow={locale === 'en' ? 'WOLFY AI Decision' : 'WOLFY AI 决断'}
+      className={`h-full w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
+      testId="home-bento-card-decision"
+    >
+      <div className="flex h-full min-h-[420px] flex-col gap-5" data-testid="home-bento-inplace-loading-decision">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <SkeletonLine className="h-5 w-36" />
+            <SkeletonLine className="mt-3 h-3 w-20" />
+          </div>
+          <span className="font-mono text-xs uppercase tracking-[0.22em] text-indigo-100/52">{ticker}</span>
+        </div>
+
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-[28px] border border-indigo-400/10 bg-black/10 px-5 py-10">
+          <div className="h-7 w-7 rounded-full border border-indigo-200/25 border-t-indigo-200/80 shadow-[0_0_24px_rgba(129,140,248,0.35)] animate-spin" />
+          <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-indigo-100/70">
+            {locale === 'en' ? 'Wolfy AI reasoning...' : 'Wolfy AI 引擎推理中...'}
+          </p>
+        </div>
+
+        <div className="grid gap-3 rounded-[28px] border border-white/[0.06] bg-black/10 p-4">
+          <SkeletonLine className="h-3 w-24" />
+          <SkeletonLine className="h-3 w-full" />
+          <SkeletonLine className="h-3 w-5/6" />
+          <SkeletonLine className="h-3 w-2/3" />
+        </div>
+      </div>
+    </BentoCard>
   );
 }
 
-function TaskStageBoard({
+function InPlaceStrategySkeleton({ locale }: { locale: DashboardLocale }) {
+  return (
+    <BentoCard
+      eyebrow={locale === 'en' ? 'Execution Strategy' : '执行策略'}
+      className={`w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
+      testId="home-bento-card-strategy"
+    >
+      <div className="grid h-full gap-6 md:grid-cols-2" data-testid="home-bento-inplace-loading-strategy">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+          <SkeletonLine className="col-span-2 h-12" />
+          <SkeletonLine className="h-12" />
+          <SkeletonLine className="h-12" />
+          <SkeletonLine className="h-12" />
+          <SkeletonLine className="h-12" />
+        </div>
+        <div className="border-t border-white/[0.08] pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+          <SkeletonLine className="h-3 w-24" />
+          <div className="mt-4 space-y-3">
+            <SkeletonLine className="h-3 w-full" />
+            <SkeletonLine className="h-3 w-11/12" />
+            <SkeletonLine className="h-3 w-4/5" />
+          </div>
+        </div>
+      </div>
+    </BentoCard>
+  );
+}
+
+function InPlaceListSkeleton({
   locale,
-  task,
+  kind,
 }: {
   locale: DashboardLocale;
-  task: TaskInfo;
+  kind: 'tech' | 'fundamentals';
 }) {
-  const modules = buildTaskProgressModules(task);
+  const title = kind === 'tech'
+    ? (locale === 'en' ? 'Technical Structure' : '技术结构')
+    : (locale === 'en' ? 'Fundamental Profile' : '基本面画像');
 
   return (
-    <BentoGrid
-      testId="home-bento-progress-summary"
-      className="auto-rows-[minmax(180px,auto)] gap-4 xl:grid-cols-10"
+    <BentoCard
+      eyebrow={title}
+      className={`h-full w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
+      testId={kind === 'tech' ? 'home-bento-card-tech' : 'home-bento-card-fundamentals'}
     >
-      {modules.map((module) => (
-        <BentoCard
-          key={module.key}
-          eyebrow={translate(locale, 'home.progressStage')}
-          title={module.name}
-          subtitle={translate(locale, `home.progressStateCopy.${module.status}`)}
-          className="xl:col-span-2 min-h-[200px] rounded-[32px] border-white/6 bg-white/[0.03]"
-          contentClassName="justify-between"
-          testId={`home-bento-stage-card-${module.key}`}
-        >
-          <div className="flex items-end justify-between gap-3">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/46">
-              {translate(locale, 'home.analysisProgress')}
-            </span>
-            <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
-              module.status === 'completed'
-                ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
-                : module.status === 'running'
-                  ? 'border-sky-300/25 bg-sky-500/10 text-sky-100'
-                  : module.status === 'failed'
-                    ? 'border-rose-400/25 bg-rose-500/10 text-rose-100'
-                    : 'border-white/10 bg-white/[0.03] text-white/56'
-            }`}
-            >
-              {translate(locale, `home.progressBadge.${module.status}`)}
-            </span>
+      <div
+        className={kind === 'tech' ? 'space-y-5' : 'grid grid-cols-2 gap-x-6 gap-y-5'}
+        data-testid={`home-bento-inplace-loading-${kind}`}
+      >
+        {Array.from({ length: kind === 'tech' ? 4 : 6 }).map((_, index) => (
+          <div
+            key={`${kind}-skeleton-${index}`}
+            className={kind === 'tech' ? 'grid gap-3 border-b border-white/[0.07] pb-5 last:border-b-0 last:pb-0' : 'min-w-0'}
+          >
+            <SkeletonLine className="h-3 w-20" />
+            <SkeletonLine className="mt-2 h-5 w-full" />
           </div>
-        </BentoCard>
-      ))}
-    </BentoGrid>
+        ))}
+      </div>
+    </BentoCard>
   );
 }
 
@@ -1533,7 +1524,6 @@ const HomeBentoDashboardPage: React.FC = () => {
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
-  const resultCardRef = useRef<HTMLDivElement | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
@@ -1570,7 +1560,6 @@ const HomeBentoDashboardPage: React.FC = () => {
     () => activeTasks.some((task) => task.status === 'pending' || task.status === 'processing'),
     [activeTasks],
   );
-  const isBusy = isAnalyzing || isDashboardLoading;
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
   const completedTaskReport = useMemo(() => {
     const taskTicker = pendingAnalysisTicker || activeTicker;
@@ -1591,7 +1580,13 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
     return activeTasks[0] || null;
   }, [activeTasks, activeTicker, pendingAnalysisTicker]);
-  const showTaskWorkflow = Boolean(focusedTask && ['pending', 'processing', 'completed', 'failed'].includes(focusedTask.status));
+  const isTaskAnalyzing = Boolean(
+    pendingAnalysisTicker
+    && focusedTask
+    && (focusedTask.status === 'pending' || focusedTask.status === 'processing'),
+  );
+  const isHomeAnalyzing = isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading);
+  const isBusy = isHomeAnalyzing || isDashboardLoading;
   const dashboardData = useMemo<DashboardPayload>(() => {
     const effectiveTicker = activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
 
@@ -1672,20 +1667,6 @@ const HomeBentoDashboardPage: React.FC = () => {
       window.clearInterval(timer);
     };
   }, [focusedTaskId, focusedTaskStatus, refreshTaskProgress]);
-
-  useEffect(() => {
-    if (!completedTaskReport || !resultCardRef.current) {
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      if (typeof resultCardRef.current?.scrollIntoView === 'function') {
-        resultCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [completedTaskReport]);
 
   useEffect(() => {
     if (hasHydratedInitialTicker) {
@@ -1923,7 +1904,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                     className="h-full shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] px-6 text-sm font-bold text-white backdrop-blur-md transition-all hover:border-white/20 hover:bg-white/[0.1] disabled:cursor-wait disabled:border-white/10 disabled:bg-white/[0.05] disabled:text-white/60"
                     data-testid="home-bento-analyze-button"
                   >
-                    {isAnalyzing ? (locale === 'en' ? 'Analyzing…' : '分析中…') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
+                    {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
                   </button>
                   <button
                     ref={openHistoryDrawerButton.ref}
@@ -1941,14 +1922,13 @@ const HomeBentoDashboardPage: React.FC = () => {
                   </button>
                 </form>
                 <div className="flex min-h-0 flex-1 flex-col gap-4">
-                  {showTaskWorkflow && focusedTask ? (
-                    <TaskRuntimePanel
-                      locale={locale}
-                      task={focusedTask}
-                    />
-                  ) : null}
-                  <div ref={resultCardRef} className="min-h-0 flex-1">
-                    {completedTaskReport ? (
+                  <div className="min-h-0 flex-1">
+                    {isHomeAnalyzing ? (
+                      <InPlaceDecisionSkeleton
+                        locale={locale}
+                        ticker={pendingAnalysisTicker || activeTicker || readyCopy.ticker}
+                      />
+                    ) : completedTaskReport ? (
                       <AnalysisResultCard
                         language={locale}
                         report={completedTaskReport}
@@ -1980,11 +1960,17 @@ const HomeBentoDashboardPage: React.FC = () => {
                 className="min-w-0 xl:col-span-3 flex flex-col gap-6"
                 data-testid="home-bento-secondary-stack"
               >
-                {showTaskWorkflow && focusedTask ? (
-                  <TaskStageBoard
-                    locale={locale}
-                    task={focusedTask}
-                  />
+                {isHomeAnalyzing ? (
+                  <>
+                    <InPlaceStrategySkeleton locale={locale} />
+                    <div
+                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                      data-testid="home-bento-secondary-grid"
+                    >
+                      <InPlaceListSkeleton locale={locale} kind="tech" />
+                      <InPlaceListSkeleton locale={locale} kind="fundamentals" />
+                    </div>
+                  </>
                 ) : (
                   <>
                     <StrategyCard
