@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 🧭 **系统设置模型库与数据源库去卡片化** — `apps/dsa-web` 的 `/settings/system` 管理控制面将 Provider Library、Data Routing 与 Data Source Library 从多列 Bento 卡片墙改为高密度纵向数据行：左侧固定名称列与状态点，中部能力/状态微型标签，右侧收拢管理操作，并按 `LLM PROVIDERS`、`MARKET DATA`、`FUNDAMENTALS`、`NEWS & SENTIMENT` 等语义标题分组，降低海量配置项的扫描成本。配套回归已更新到 Settings 相关单测，并通过 lint、build、in-app browser DOM 检查与 Safari 实机视觉验证。
+
 - 🧠 **WolfyStock 首页分析进度改为用户态五阶段动画** — `apps/dsa-web` 的 Home Bento 分析任务视图现在只展示总进度、`LLM / Technical / Fundamental / News / Sentiment` 五阶段状态，以及完成后的最终摘要卡（BUY / SELL / NEUTRAL、评分、目标位、止损位）。首页不再渲染模型名、数据源、`standard_report`、底层错误或 backend 调试文案；进度轮询失败时保持通用 `Analysis in progress` 等待态。后端同步新增安全的任务进度契约，避免队列 `TaskInfo` 无 `updated_at` 时让 `/progress` 崩溃。配套回归覆盖已补到 `HomeSurfacePage.test.tsx`、`tests/test_analysis_api_contract.py` 与 `tests/test_system_config_service.py`，并通过 WebKit / Chromium 进度流可见验证与 Safari 实机页面冒烟检查。
 
 - 💬 **WolfyStock 问股空态继续压缩垂直浪费并移除底部叠高** — `apps/dsa-web/src/pages/ChatPage.tsx` 进一步收紧问股空态主视图：顶部灯泡图标不再单独占一行，而是与“先提一个具体问题”并到同一条 `flex items-center justify-center gap-3` 标题线上，避免顶部裁切并回收一整行高度。空态输入舱父级同时删掉额外的 `pb-8`/`mb-*` 叠加，只保留 `w-full mt-auto pt-4`，免责声明压到 `mt-2 mb-0`，让输入框在视觉上尽可能贴近组件允许的最底端而不再被额外 padding 垫高。配套回归已更新到 `ChatPage.test.tsx`，并重新通过本地测试、构建和 Safari 新标签页验收。
