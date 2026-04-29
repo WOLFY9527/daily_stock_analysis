@@ -274,17 +274,17 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('133.50')).toHaveClass('text-lg', 'font-bold');
     expect(screen.getByText('117.40')).toHaveClass('text-lg', 'font-bold');
     expect(macdSignalValue).not.toBeUndefined();
-    expect(macdSignalValue).toHaveClass('text-base', 'font-bold');
+    expect(macdSignalValue).toHaveClass('text-sm', 'font-medium', 'text-right');
     expect(screen.getByTestId('home-bento-fundamental-metric-REVENUE')).toHaveTextContent('+9.4%');
     expect(screen.getByText('121.80 - 124.60').className).not.toContain('text-2xl');
     expect(screen.getByText('+9.4%').className).not.toContain('text-2xl');
     expect(screen.getByText('+9.4%').className).not.toContain('text-3xl');
     expect(techMetricTiles.length).toBe(0);
     expect(fundamentalsMetricTiles.length).toBe(0);
-    expect(macdSignalValue?.getAttribute('style') || '').toContain('text-shadow');
-    expect(screen.getByText('Second expansion above zero')).toBeInTheDocument();
-    expect(screen.getByText('MA20 lifting MA60')).toBeInTheDocument();
-    expect(screen.getByText('+9.4%').getAttribute('style') || '').toContain('text-shadow');
+    expect(macdSignalValue?.getAttribute('style') || '').toBe('');
+    expect(screen.queryByText('Second expansion above zero')).not.toBeInTheDocument();
+    expect(screen.getByText('MA20 > MA60')).toBeInTheDocument();
+    expect(screen.getByText('+9.4%').getAttribute('style') || '').toBe('');
     expect(screen.getByText('ROE')).toBeInTheDocument();
     expect(screen.getByText('EBITDA MARGIN')).toBeInTheDocument();
     expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
@@ -862,11 +862,11 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
 
     expect(await screen.findByText('Tesla, Inc.')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下方收敛');
+    expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下收敛');
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
     expect(await screen.findByText('TSLA 技术下钻')).toBeInTheDocument();
-    expect(screen.getAllByText('零轴下方收敛').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('零轴下收敛').length).toBeGreaterThan(1);
     expect(screen.getByText('快慢线仍在零轴下方运行，绿柱缩短，说明空头动能在衰减；下一步要看能否形成金叉，把反弹转成可交易的趋势段。')).toBeInTheDocument();
     expect(screen.queryByText(/聚焦 MACD/)).not.toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });

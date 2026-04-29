@@ -1,9 +1,8 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
-import { CARD_BUTTON_CLASS, getToneTextClass, getToneTextStyle, type SignalTone } from './theme';
+import { type SignalTone } from './theme';
 
 type TechSignal = {
   label: string;
@@ -17,6 +16,11 @@ type TechCardProps = {
   detailLabel: string;
   onOpenDetails: () => void;
 };
+
+function isMutedValue(value: string): boolean {
+  const normalized = String(value || '').trim().toUpperCase();
+  return normalized === '' || normalized === '-' || normalized === 'N/A';
+}
 
 export const TechCard: React.FC<TechCardProps> = ({
   title,
@@ -39,27 +43,30 @@ export const TechCard: React.FC<TechCardProps> = ({
         <button
           ref={openDetailsButtonRef}
           type="button"
-          className={CARD_BUTTON_CLASS}
+          className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-white/40 transition-colors hover:text-white"
           data-testid="home-bento-drawer-trigger-tech"
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
         >
-          <PanelRightOpen className="h-4 w-4" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
           <span>{detailLabel}</span>
         </button>
       )}
     >
-      <div className="space-y-5">
-        {signals.map((signal, index) => (
+      <div className="divide-y divide-white/5">
+        {signals.map((signal) => (
           <div
             key={signal.label}
             data-testid={`home-bento-tech-signal-${signal.label}`}
-            className="grid min-w-0 gap-2.5 border-b border-white/[0.07] pb-5 last:border-b-0 last:pb-0"
+            className="flex items-center justify-between gap-4 py-2.5"
           >
-            <Label micro className="block truncate">{signal.label}</Label>
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
+              {signal.label}
+            </span>
             <span
-              className={`block break-words whitespace-normal text-base font-bold leading-tight ${getToneTextClass(signal.tone)}`}
-              style={getToneTextStyle(signal.tone, index === 0)}
+              className={`min-w-0 text-right text-sm font-medium ${
+                isMutedValue(signal.value) ? 'text-white/20' : 'text-white'
+              }`}
             >
               {signal.value}
             </span>

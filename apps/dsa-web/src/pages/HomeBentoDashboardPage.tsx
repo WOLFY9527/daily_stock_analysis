@@ -908,6 +908,76 @@ function formatDesiredMetricValue(label: string, value: string): string {
   return value;
 }
 
+function compactMetricSurprise(value: string): string {
+  return String(value || '').replace(/\s*[（(][^）)]*[）)]\s*$/u, '').trim();
+}
+
+function compactTechSignalValue(locale: DashboardLocale, label: string, value: string): string {
+  const compact = compactMetricSurprise(value);
+  if (isPendingMetricValue(compact)) {
+    return EMPTY_FIELD_VALUE;
+  }
+
+  const key = normalizeDetailKey(label);
+  if (key === 'rsi14' || key === 'rsi') {
+    const numericMatch = compact.match(/-?\d+(?:\.\d+)?/);
+    return numericMatch ? numericMatch[0] : compact;
+  }
+
+  if (key === 'macd') {
+    if (/zero|零轴/.test(compact) && /cross|金叉/.test(compact)) {
+      return locale === 'en' ? 'Bullish Cross' : '零轴上金叉';
+    }
+    if (/zero|零轴/.test(compact) && /compress|收敛/.test(compact)) {
+      return locale === 'en' ? 'Below Zero' : '零轴下收敛';
+    }
+    if (/second expansion|二次扩张/i.test(compact)) {
+      return locale === 'en' ? '2nd Expansion' : '二次扩张';
+    }
+  }
+
+  if (key === 'volumedynamics' || key === 'volumeprofile') {
+    if (/high vol breakout|放量突破/i.test(compact)) {
+      return locale === 'en' ? 'Breakout Vol' : '放量突破';
+    }
+    if (/breakout volume intact|突破后量能维持/i.test(compact)) {
+      return locale === 'en' ? 'Vol Intact' : '量能维持';
+    }
+    if (/follow-through pending|续航待定/i.test(compact)) {
+      return locale === 'en' ? 'Follow-through Pending' : '续航待定';
+    }
+  }
+
+  if (key === 'maalignment' || key === 'movingaverages') {
+    if (/bullish alignment|多头排列/i.test(compact)) {
+      return locale === 'en' ? 'Bullish Alignment' : '多头排列';
+    }
+    if (/bearish alignment|空头排列/i.test(compact)) {
+      return locale === 'en' ? 'Bearish Alignment' : '空头排列';
+    }
+    if (/mixed alignment|均线混合/i.test(compact)) {
+      return locale === 'en' ? 'Mixed Alignment' : '均线混合';
+    }
+    if (/below ma60|跌破生命线/i.test(compact)) {
+      return locale === 'en' ? 'Below MA60' : '跌破 MA60';
+    }
+    const maComparison = compact.match(/(MA\d+)\s*(?:lifting|above|over|>|站上|高于)\s*(MA\d+)/i);
+    if (maComparison) {
+      return `${maComparison[1].toUpperCase()} > ${maComparison[2].toUpperCase()}`;
+    }
+  }
+
+  return compact;
+}
+
+function compactFundamentalMetricValue(value: string): string {
+  const compact = compactMetricSurprise(value);
+  if (String(compact).trim().toUpperCase() === 'N/A') {
+    return 'N/A';
+  }
+  return isPendingMetricValue(compact) ? EMPTY_FIELD_VALUE : compact;
+}
+
 function mapDesiredFields(
   locale: DashboardLocale,
   fields: StandardReportField[] | undefined,
@@ -933,6 +1003,28 @@ function mapDesiredFields(
       rawValue: localizedValue,
       tone: isEmpty ? 'neutral' : toneFromFieldValue(field.value || localizedValue),
       details: isEmpty ? spec.fallback.details : undefined,
+    };
+  });
+}
+
+function compactDashboardSignals(locale: DashboardLocale, signals: DashboardSignal[]): DashboardSignal[] {
+  return signals.map((signal) => {
+    const compactValue = compactTechSignalValue(locale, signal.label, signal.value);
+    return {
+      ...signal,
+      value: compactValue,
+      rawValue: compactValue,
+    };
+  });
+}
+
+function compactDashboardMetrics(metrics: DashboardField[]): DashboardField[] {
+  return metrics.map((metric) => {
+    const compactValue = compactFundamentalMetricValue(metric.value);
+    return {
+      ...metric,
+      value: compactValue,
+      rawValue: compactValue,
     };
   });
 }
@@ -1378,11 +1470,14 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     },
     tech: {
       ...seed.tech,
-      signals: mapDesiredFields(locale, technicalFields, getTechnicalFieldSpecs(locale)).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
+      signals: compactDashboardSignals(
+        locale,
+        mapDesiredFields(locale, technicalFields, getTechnicalFieldSpecs(locale)).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
+      ),
     },
     fundamentals: {
       ...seed.fundamentals,
-      metrics: mapDesiredFields(locale, fundamentalFields, getFundamentalFieldSpecs(locale)),
+      metrics: compactDashboardMetrics(mapDesiredFields(locale, fundamentalFields, getFundamentalFieldSpecs(locale))),
     },
   });
 }

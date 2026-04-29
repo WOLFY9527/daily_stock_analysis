@@ -1,9 +1,8 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
-import { CARD_BUTTON_CLASS, getToneTextClass, getToneTextStyle, type SignalTone } from './theme';
+import { type SignalTone } from './theme';
 
 type FundamentalMetric = {
   label: string;
@@ -39,6 +38,11 @@ function splitMetricSurprise(value: string): { main: string; surprise?: string; 
   };
 }
 
+function isMutedValue(value: string): boolean {
+  const normalized = String(value || '').trim().toUpperCase();
+  return normalized === '' || normalized === '-' || normalized === 'N/A';
+}
+
 export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
   title,
   metrics,
@@ -60,41 +64,43 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
         <button
           ref={openDetailsButtonRef}
           type="button"
-          className={CARD_BUTTON_CLASS}
+          className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-white/40 transition-colors hover:text-white"
           data-testid="home-bento-drawer-trigger-fundamentals"
           onClick={handleOpenDetailsClick}
           onPointerUp={handleOpenDetailsPointerUp}
         >
-          <PanelRightOpen className="h-4 w-4" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
           <span>{detailLabel}</span>
         </button>
       )}
     >
-      <div className="grid grid-cols-2 gap-3">
-        {metrics.map((metric, index) => {
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        {metrics.map((metric) => {
           const surprise = splitMetricSurprise(metric.value);
-          const metricTone = metric.tone || 'neutral';
+          const muted = isMutedValue(surprise.main);
           return (
             <div
               key={metric.label}
-              className="min-w-0 rounded-[18px] border border-white/[0.06] bg-white/[0.025] px-3.5 py-3"
+              className="min-w-0"
               data-testid={`home-bento-fundamental-metric-${metric.label}`}
             >
-              <Label micro as="p" className="block truncate">{metric.label}</Label>
-              <p
-                className={`mt-2.5 break-words whitespace-normal font-mono text-xl font-bold leading-tight ${getToneTextClass(metricTone)}`}
-                style={getToneTextStyle(metricTone, index === 0)}
-              >
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-white/40">
+                {metric.label}
+              </span>
+              <p className={`text-lg font-mono font-medium leading-tight ${muted ? 'text-white/20' : 'text-white'}`}>
                 {surprise.main}
-                {surprise.surprise ? (
-                  <span
-                    className={`mt-1 block text-[11px] font-semibold leading-tight tracking-[0.04em] ${getToneTextClass(surprise.tone)}`}
-                    style={getToneTextStyle(surprise.tone)}
-                  >
-                    {surprise.surprise}
-                  </span>
-                ) : null}
               </p>
+              {surprise.surprise ? (
+                <p className={`mt-1 text-[10px] font-medium leading-tight ${
+                  surprise.tone === 'bullish'
+                    ? 'text-emerald-400'
+                    : surprise.tone === 'bearish'
+                      ? 'text-red-400'
+                      : 'text-white/35'
+                }`}>
+                  {surprise.surprise}
+                </p>
+              ) : null}
             </div>
           );
         })}
