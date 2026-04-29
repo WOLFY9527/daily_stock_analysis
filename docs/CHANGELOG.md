@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 🧨 **Market Overview 斩首全局标题并下放局部刷新** — `apps/dsa-web/src/pages/MarketOverviewPage.tsx` 删除“大市全景监控”全局 Header、说明文案、最后更新时间和“同步最新行情”大按钮，同时去掉页面内部二次 `pt/px` 包装，让三列瀑布流直接顶到 Shell 基础内边距下方。`IndexTrendsCard.tsx`、`VolatilityCard.tsx`、`MarketSentimentCard.tsx`、`FundsFlowCard.tsx`、`MacroIndicatorsCard.tsx` 与共享 `MarketOverviewCard.tsx` 统一把同步状态标签替换为卡片标题行右侧的微型 `RefreshCcw` 纯图标按钮，并改为按卡片刷新对应 panel。
+
 - 🧱 **Market Overview 改为三列瀑布流终局版** — `apps/dsa-web/src/pages/MarketOverviewPage.tsx` 废除主工作区二维 grid，改为左列指数、中列波动率/ETF、右列情绪/宏观的三条独立 flex 列，避免长指数卡把下方卡片整体推空。`marketOverviewPrimitives.tsx` 将数据行改为固定 `w-32` 名称列、固定 `w-24` Sparkline 列与右侧 `flex-1` 等宽数值列，移除指标单位后缀并过滤 `N/A` / 空值行；相关 Market Overview 卡片同步接入过滤逻辑，回归覆盖空宏观指标隐藏。
 
 - 📉 **Market Overview 核心指标改为高密度垂直数据行** — `apps/dsa-web/src/components/market-overview/marketOverviewPrimitives.tsx` 新增共享 `MarketOverviewDataRow`，把指数、ETF 资金流和宏观指标从横向网格胶囊改为带状态点、压缩 Sparkline、右对齐等宽数值与涨跌摘要的纵向列表。`IndexTrendsCard.tsx`、`MarketOverviewCard.tsx` 与 `VolatilityCard.tsx` 同步移除指标级实心边框容器；波动率面板将 VIX、辅助波动指标与固定 `GREED / FEAR INDEX 65.0` 行合并到同一列表，避免 VIX 右侧出现物理空缺。配套回归更新到 `apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx`，并通过 focused Vitest、lint、build 与 Safari `/market-overview` 手工验收。

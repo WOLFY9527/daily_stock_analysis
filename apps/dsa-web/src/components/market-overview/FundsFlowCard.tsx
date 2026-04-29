@@ -3,7 +3,12 @@ import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { MarketOverviewCard } from './MarketOverviewCard';
 
-export const FundsFlowCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => {
+export const FundsFlowCard: React.FC<{
+  panel?: MarketOverviewPanel;
+  loading?: boolean;
+  refreshing?: boolean;
+  onRefresh: () => void;
+}> = ({ panel, loading, refreshing = false, onRefresh }) => {
   const { t } = useI18n();
 
   return (
@@ -14,6 +19,8 @@ export const FundsFlowCard: React.FC<{ panel?: MarketOverviewPanel; loading?: bo
       sourceLabel={t('marketOverviewPage.cards.fundsFlow.source')}
       panel={panel}
       loading={loading}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
     />
   );
 };

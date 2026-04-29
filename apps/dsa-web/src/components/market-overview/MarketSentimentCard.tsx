@@ -9,6 +9,7 @@ import {
 } from './marketOverviewUtils';
 import {
   MarketOverviewPanelFooter,
+  MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
 
 function resolvePrimaryItem(items: MarketOverviewItem[]): MarketOverviewItem | undefined {
@@ -34,31 +35,38 @@ function describeSentiment(score: number | null | undefined, t: (key: string) =>
   return t('marketOverviewPage.cards.sentiment.states.fear');
 }
 
-export const MarketSentimentCard: React.FC<{ panel?: MarketOverviewPanel; loading?: boolean }> = ({ panel, loading }) => {
+export const MarketSentimentCard: React.FC<{
+  panel?: MarketOverviewPanel;
+  loading?: boolean;
+  refreshing?: boolean;
+  onRefresh: () => void;
+}> = ({ panel, loading, refreshing = false, onRefresh }) => {
   const { t } = useI18n();
   const sentimentLabels: Record<string, string> = {
     PUTCALL: t('marketOverviewPage.cards.sentiment.labels.putcall'),
     BULLBEAR: t('marketOverviewPage.cards.sentiment.labels.bullbear'),
     AAII: t('marketOverviewPage.cards.sentiment.labels.aaii'),
   };
-  const status = panel?.status || (loading ? 'loading' : 'failure');
   const items = panel?.items || [];
   const primary = resolvePrimaryItem(items);
   const supporting = items.filter((item) => item.symbol !== primary?.symbol).slice(0, 3);
   const score = primary?.value ?? 50;
   const gaugeRatio = Math.min(1, Math.max(0, score / 100));
+  const title = t('marketOverviewPage.cards.sentiment.title');
 
   return (
     <GlassCard as="section" className="xl:col-span-4 flex h-full flex-col p-6">
       <div className="flex h-full flex-col gap-5">
-        <div className="flex items-start justify-between gap-4">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.eyebrow')}</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">{t('marketOverviewPage.cards.sentiment.title')}</h2>
+            <h2 className="mt-2 text-xl font-semibold text-white">{title}</h2>
           </div>
-          <span className={cn('text-[10px] font-semibold uppercase tracking-widest', status === 'success' ? 'text-emerald-400' : 'text-red-400')}>
-            {t(`marketOverviewPage.status.${status}`)}
-          </span>
+          <MarketOverviewRefreshButton
+            label={t('marketOverviewPage.refreshCard', { title })}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
         </div>
 
         {panel?.errorMessage ? (

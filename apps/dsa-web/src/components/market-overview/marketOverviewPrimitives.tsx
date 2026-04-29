@@ -1,4 +1,5 @@
 import type React from 'react';
+import { RefreshCcw } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
@@ -38,6 +39,22 @@ export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: strin
     </svg>
   );
 };
+
+export const MarketOverviewRefreshButton: React.FC<{
+  label: string;
+  refreshing?: boolean;
+  onRefresh: () => void;
+}> = ({ label, refreshing = false, onRefresh }) => (
+  <button
+    type="button"
+    aria-label={label}
+    onClick={onRefresh}
+    disabled={refreshing}
+    className="p-1.5 text-white/30 hover:text-white hover:bg-white/10 rounded-lg transition-all cursor-pointer disabled:cursor-wait disabled:text-white/45"
+  >
+    <RefreshCcw className={cn('h-4 w-4', refreshing ? 'animate-spin' : '')} aria-hidden="true" />
+  </button>
+);
 
 export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; sourceLabel: string }> = ({ panel, sourceLabel }) => {
   const { t } = useI18n();

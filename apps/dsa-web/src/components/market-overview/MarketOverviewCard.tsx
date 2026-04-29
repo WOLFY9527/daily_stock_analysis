@@ -7,6 +7,7 @@ import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MarketOverviewDataRow,
   MarketOverviewPanelFooter,
+  MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
 
 type MarketOverviewCardProps = {
@@ -16,6 +17,8 @@ type MarketOverviewCardProps = {
   sourceLabel: string;
   panel?: MarketOverviewPanel;
   loading?: boolean;
+  refreshing?: boolean;
+  onRefresh: () => void;
   className?: string;
 };
 
@@ -26,10 +29,11 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
   sourceLabel,
   panel,
   loading = false,
+  refreshing = false,
+  onRefresh,
   className,
 }) => {
   const { t } = useI18n();
-  const status = panel?.status || (loading ? 'loading' : 'failure');
   const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
 
   return (
@@ -41,19 +45,17 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
       )}
     >
       <div className="flex h-full flex-col gap-5">
-        <div className="flex items-start justify-between gap-4">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
             <h2 className="mt-2 text-xl font-semibold text-white">{title}</h2>
             <p className="mt-1 max-w-xl text-sm text-white/55">{description}</p>
           </div>
-          <span className={cn(
-            'text-[10px] font-semibold uppercase tracking-widest',
-            status === 'success' ? 'text-emerald-400' : 'text-red-400',
-          )}
-          >
-            {t(`marketOverviewPage.status.${status}`)}
-          </span>
+          <MarketOverviewRefreshButton
+            label={t('marketOverviewPage.refreshCard', { title })}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
         </div>
 
         {panel?.errorMessage ? (

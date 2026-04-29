@@ -63,10 +63,16 @@ describe('MarketOverviewPage', () => {
   it('renders every market overview card with localized copy and source attribution', async () => {
     render(<MarketOverviewPage />);
 
-    expect(screen.getByRole('heading', { name: /大市全景监控/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /大市全景监控/i })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /同步最新行情/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /同步最新行情/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 全球核心指数走势/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 波动率与风险压力/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 情绪与资金面/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 ETF 资金流向/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /刷新 宏观经济与流动性/i })).toBeInTheDocument();
+    expect(screen.queryByText(/同步完成/i)).not.toBeInTheDocument();
 
     expect((await screen.findAllByText('SPX')).length).toBeGreaterThan(0);
     expect(screen.getByText(/GREED \/ FEAR INDEX/i)).toBeInTheDocument();
@@ -85,19 +91,19 @@ describe('MarketOverviewPage', () => {
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
   });
 
-  it('refreshes all panels when the sync button is clicked', async () => {
+  it('refreshes only the requested panel when a card refresh icon is clicked', async () => {
     render(<MarketOverviewPage />);
 
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole('button', { name: /同步最新行情/i }));
+    fireEvent.click(screen.getByRole('button', { name: /刷新 波动率与风险压力/i }));
 
     await waitFor(() => {
-      expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(2);
       expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
-      expect(marketOverviewApi.getSentiment).toHaveBeenCalledTimes(2);
-      expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(2);
-      expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(2);
     });
+    expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(1);
+    expect(marketOverviewApi.getSentiment).toHaveBeenCalledTimes(1);
+    expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(1);
+    expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1);
   });
 });

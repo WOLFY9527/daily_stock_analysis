@@ -33,6 +33,7 @@ const RESOURCES = {
         lastUpdated: '最后更新: {timestamp}',
         pending: '等待同步',
       },
+      refreshCard: '刷新 {title}',
       status: {
         success: '同步完成',
         failure: '同步失败',
@@ -2770,6 +2771,7 @@ const RESOURCES = {
         lastUpdated: 'Last update: {timestamp}',
         pending: 'Pending sync',
       },
+      refreshCard: 'Refresh {title}',
       status: {
         success: 'Synced',
         failure: 'Sync failed',
