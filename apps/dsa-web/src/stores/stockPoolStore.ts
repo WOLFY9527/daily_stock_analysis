@@ -260,6 +260,7 @@ export interface StockPoolState {
   loadInitialHistory: () => Promise<void>;
   refreshHistory: (silent?: boolean) => Promise<void>;
   hydrateRecentTasks: () => Promise<void>;
+  refreshTaskProgress: (taskId: string) => Promise<void>;
   loadMoreHistory: () => Promise<void>;
   selectHistoryItem: (recordId: number) => Promise<AnalysisReport | null>;
   findLatestHistoryItemForStock: (stockCode: string) => HistoryItem | null;
@@ -453,6 +454,30 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       const persisted = sortTasksByPriority(readPersistedTasks());
       persistTasks(persisted);
       set({ activeTasks: persisted });
+    }
+  },
+
+  refreshTaskProgress: async (taskId) => {
+    const currentTask = get().activeTasks.find((task) => task.taskId === taskId);
+    if (!currentTask) {
+      return;
+    }
+
+    try {
+      const progress = await analysisApi.getTaskProgress(taskId);
+      get().syncTaskUpdated({
+        ...currentTask,
+        status: progress.status,
+        progress: progress.progress,
+        message: progress.message,
+        stockName: progress.stockName || currentTask.stockName,
+        executionSessionId: progress.executionSessionId || currentTask.executionSessionId,
+        progressModules: progress.modules || [],
+        result: progress.finalResult || currentTask.result,
+        updatedAt: progress.updatedAt || new Date().toISOString(),
+      });
+    } catch {
+      // Keep the last SSE/local snapshot if progress polling is unavailable.
     }
   },
 

@@ -83,6 +83,127 @@ class SystemConfigService:
         return build_schema_response()
 
     @staticmethod
+    def _progress_module_status(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"ok", "success", "completed", "succeeded"}:
+            return "completed"
+        if normalized in {"failed", "error", "invalid_response", "empty_result", "insufficient_fields"}:
+            return "failed"
+        if normalized in {"partial", "attempting", "waiting", "running", "processing"}:
+            return "running"
+        return "pending"
+
+    @classmethod
+    def _build_task_progress_modules(cls, task: Any) -> List[Dict[str, Any]]:
+        task_status = str(getattr(task, "status", "") or "").strip().lower()
+        task_message = str(getattr(task, "message", "") or "").strip() or None
+        task_updated_at = (
+            getattr(task, "updated_at", None)
+            or getattr(task, "completed_at", None)
+            or getattr(task, "started_at", None)
+            or getattr(task, "created_at", None)
+        )
+        updated_at = task_updated_at.isoformat() if hasattr(task_updated_at, "isoformat") else task_updated_at
+        execution = getattr(task, "execution", None) if isinstance(getattr(task, "execution", None), dict) else {}
+        data = execution.get("data") if isinstance(execution.get("data"), dict) else {}
+
+        def _field(block_key: str) -> Dict[str, Any]:
+            block = data.get(block_key) if isinstance(data.get(block_key), dict) else {}
+            return block if isinstance(block, dict) else {}
+
+        fundamentals = _field("fundamentals")
+        news = _field("news")
+        sentiment = _field("sentiment")
+        fundamentals_status = cls._progress_module_status(
+            fundamentals.get("status") or ("completed" if task_status == "completed" else None)
+        )
+        news_status = cls._progress_module_status(
+            news.get("status") or ("completed" if task_status == "completed" else None)
+        )
+        sentiment_status = cls._progress_module_status(
+            sentiment.get("status") or ("completed" if task_status == "completed" else None)
+        )
+
+        llm_status = "pending"
+        technical_status = "pending"
+        if task_status == "failed":
+            llm_status = "failed"
+            technical_status = "failed"
+        elif task_status == "completed":
+            llm_status = "completed"
+            technical_status = "completed"
+        elif task_status == "processing":
+            llm_status = "running"
+            technical_status = "running" if int(getattr(task, "progress", 0) or 0) >= 46 else "pending"
+
+        return [
+            {
+                "key": "llm",
+                "name": "LLM",
+                "status": llm_status,
+                "detail": task_message,
+                "updated_at": updated_at,
+            },
+            {
+                "key": "technical",
+                "name": "技术面",
+                "status": technical_status,
+                "detail": task_message,
+                "updated_at": updated_at,
+            },
+            {
+                "key": "fundamental",
+                "name": "基本面",
+                "status": fundamentals_status,
+                "detail": task_message,
+                "updated_at": updated_at,
+            },
+            {
+                "key": "news",
+                "name": "新闻",
+                "status": news_status,
+                "detail": task_message,
+                "updated_at": updated_at,
+            },
+            {
+                "key": "sentiment",
+                "name": "情绪",
+                "status": sentiment_status,
+                "detail": task_message,
+                "updated_at": updated_at,
+            },
+        ]
+
+    def get_task_progress(self, task_id: str, *, owner_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Return a task-scoped module progress payload for Home and admin tooling."""
+        from src.services.task_queue import get_task_queue
+
+        task = get_task_queue().get_task(task_id, owner_id=owner_id)
+        if task is None:
+            return None
+
+        task_result = task.result if isinstance(task.result, dict) else None
+        updated_at = (
+            getattr(task, "updated_at", None)
+            or getattr(task, "completed_at", None)
+            or getattr(task, "started_at", None)
+            or getattr(task, "created_at", None)
+        )
+        task_status_value = getattr(getattr(task, "status", None), "value", getattr(task, "status", "pending"))
+        return {
+            "task_id": getattr(task, "task_id", task_id),
+            "stock_code": getattr(task, "stock_code", ""),
+            "stock_name": getattr(task, "stock_name", None),
+            "status": task_status_value,
+            "progress": int(getattr(task, "progress", 0) or 0),
+            "message": getattr(task, "message", None),
+            "updated_at": updated_at.isoformat() if hasattr(updated_at, "isoformat") else None,
+            "execution_session_id": getattr(task, "execution_session_id", None),
+            "modules": self._build_task_progress_modules(task),
+            "final_result": task_result if task_status_value == "completed" else None,
+        }
+
+    @staticmethod
     def _reload_runtime_singletons() -> None:
         """Reset runtime singleton services after config reload."""
         from src.agent.tools.data_tools import reset_fetcher_manager

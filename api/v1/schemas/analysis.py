@@ -340,6 +340,28 @@ class TaskInfo(BaseModel):
     )
     execution: Optional[Any] = Field(None, description="运行执行摘要（AI/数据源/通知）")
     execution_session_id: Optional[str] = Field(None, description="管理员执行日志会话 ID")
+    progress_modules: Optional[List[Any]] = Field(None, description="模块级进度摘要")
+
+
+class TaskProgressModule(BaseModel):
+    key: str = Field(..., description="模块键")
+    name: str = Field(..., description="模块显示名")
+    status: str = Field(..., pattern="^(pending|running|completed|failed)$", description="模块状态")
+    detail: Optional[str] = Field(None, description="模块状态描述")
+    updated_at: Optional[str] = Field(None, description="最近更新时间")
+
+
+class TaskProgressResponse(BaseModel):
+    task_id: str = Field(..., description="任务 ID")
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    status: str = Field(..., pattern="^(pending|processing|completed|failed)$", description="任务状态")
+    progress: int = Field(..., ge=0, le=100, description="任务总体进度")
+    message: Optional[str] = Field(None, description="任务状态消息")
+    updated_at: Optional[str] = Field(None, description="任务最近更新时间")
+    execution_session_id: Optional[str] = Field(None, description="执行日志会话 ID")
+    modules: List[TaskProgressModule] = Field(default_factory=list, description="模块级进度列表")
+    final_result: Optional[AnalysisResultResponse] = Field(None, description="最终分析结果")
 
 
 class TaskListResponse(BaseModel):

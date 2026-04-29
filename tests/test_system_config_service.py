@@ -62,6 +62,32 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertFalse(items["GEMINI_API_KEY"]["is_masked"])
         self.assertTrue(items["GEMINI_API_KEY"]["raw_value_exists"])
 
+    def test_get_task_progress_tolerates_task_without_updated_at(self) -> None:
+        task = SimpleNamespace(
+            task_id="task-no-updated-at",
+            stock_code="TSLA",
+            stock_name="Tesla",
+            status=SimpleNamespace(value="processing"),
+            progress=41,
+            message="Analysis in progress",
+            result=None,
+            execution=None,
+            execution_session_id=None,
+            created_at=datetime(2026, 4, 29, 9, 0, 0),
+            started_at=None,
+            completed_at=None,
+        )
+        queue = MagicMock()
+        queue.get_task.return_value = task
+
+        with patch("src.services.task_queue.get_task_queue", return_value=queue):
+            payload = self.service.get_task_progress("task-no-updated-at", owner_id="user-1")
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["updated_at"], "2026-04-29T09:00:00")
+        self.assertEqual([module["key"] for module in payload["modules"]], ["llm", "technical", "fundamental", "news", "sentiment"])
+        self.assertFalse(any("model" in module or "source" in module or "error" in module for module in payload["modules"]))
+
     def test_update_preserves_masked_secret(self) -> None:
         old_version = self.manager.get_config_version()
         response = self.service.update(

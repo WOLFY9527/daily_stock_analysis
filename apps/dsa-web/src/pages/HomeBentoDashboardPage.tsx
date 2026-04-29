@@ -1,12 +1,16 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
 import {
+  AnalysisResultCard,
+  BentoCard,
+  BentoGrid,
   BENTO_SURFACE_ROOT_CLASS,
   DecisionCard,
   DeepReportDrawer,
   FundamentalsCard,
   StrategyCard,
+  TaskProgressCard,
   TechCard,
   type SignalTone,
 } from '../components/home-bento';
@@ -19,8 +23,8 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import type { AnalysisReport, HistoryItem, RuntimeExecutionSummary, StandardReportField, TaskInfo } from '../types/analysis';
-import { buildTaskExecutionSummary } from '../utils/runtimeExecution';
+import { translate } from '../i18n/core';
+import type { AnalysisReport, HistoryItem, StandardReportField, TaskInfo, TaskProgressModule } from '../types/analysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 
 type DrawerMetric = {
@@ -63,15 +67,6 @@ type DashboardSignal = DashboardField & {
   tone: SignalTone;
 };
 
-type RuntimeRow = {
-  key: string;
-  heading: string;
-  status: string;
-  source: string;
-  truth: string;
-  fallbackOccurred: boolean;
-  detail: string;
-};
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
 const TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
 const EMPTY_FIELD_VALUE = '-';
@@ -100,64 +95,6 @@ function sanitizeMetricValue(value?: string): string {
 function formatRuntimeText(value: unknown, fallback = '-'): string {
   const text = String(value || '').trim();
   return text || fallback;
-}
-
-function runtimeStatusTone(status: string): string {
-  switch (status) {
-    case 'ok':
-    case 'success':
-      return 'text-emerald-200';
-    case 'partial':
-    case 'attempting':
-    case 'configured_not_used':
-      return 'text-amber-200';
-    case 'failed':
-      return 'text-rose-200';
-    default:
-      return 'text-white/48';
-  }
-}
-
-function runtimeStatusLabel(locale: DashboardLocale, status: string): string {
-  const normalized = String(status || '').trim().toLowerCase();
-  const zh: Record<string, string> = {
-    ok: '成功',
-    success: '成功',
-    partial: '部分成功',
-    failed: '失败',
-    attempting: '执行中',
-    configured_not_used: '已配置未执行',
-    not_configured: '未配置',
-    unknown: '未知',
-  };
-  const en: Record<string, string> = {
-    ok: 'OK',
-    success: 'OK',
-    partial: 'Partial',
-    failed: 'Failed',
-    attempting: 'Running',
-    configured_not_used: 'Configured not used',
-    not_configured: 'Not configured',
-    unknown: 'Unknown',
-  };
-  return (locale === 'en' ? en : zh)[normalized] || normalized || (locale === 'en' ? 'Unknown' : '未知');
-}
-
-function runtimeTruthLabel(locale: DashboardLocale, truth: string): string {
-  const normalized = String(truth || '').trim().toLowerCase();
-  const zh: Record<string, string> = { actual: '实测', inferred: '推断', unavailable: '不可用' };
-  const en: Record<string, string> = { actual: 'Actual', inferred: 'Inferred', unavailable: 'Unavailable' };
-  return (locale === 'en' ? en : zh)[normalized] || normalized || (locale === 'en' ? 'Unavailable' : '不可用');
-}
-
-function firstAttemptReason(chain: Array<Record<string, unknown>> | undefined): string | null {
-  for (const attempt of chain || []) {
-    const reason = String(attempt.reason || attempt.message || attempt.note || '').trim();
-    if (reason) {
-      return reason;
-    }
-  }
-  return null;
 }
 
 function isPeLikeMetric(label: string): boolean {
@@ -1486,155 +1423,108 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   });
 }
 
-function buildRuntimeRows(
-  locale: DashboardLocale,
-  summary: RuntimeExecutionSummary,
+function buildTaskProgressModules(
   task: TaskInfo,
-  isStandardReportRendered: boolean,
-): RuntimeRow[] {
-  const aiAttemptReason = firstAttemptReason(summary.ai?.attemptChain);
-  const standardReport = summary.report?.standardReport;
+): TaskProgressModule[] {
+  const stageNames: Record<string, string> = {
+    llm: 'LLM',
+    technical: 'Technical',
+    fundamental: 'Fundamental',
+    news: 'News',
+    sentiment: 'Sentiment',
+  };
+  const stageKeys = ['llm', 'technical', 'fundamental', 'news', 'sentiment'] as const;
+  const clampedProgress = Math.max(0, Math.min(task.progress || 0, 100));
+  const isCompleted = task.status === 'completed' || clampedProgress >= 100;
+  const runningIndex = isCompleted
+    ? stageKeys.length
+    : task.status === 'failed'
+      ? Math.min(stageKeys.length - 1, Math.floor(clampedProgress / 20))
+      : Math.min(stageKeys.length - 1, Math.floor(clampedProgress / 20));
 
-  return [
-    {
-      key: 'llm',
-      heading: 'LLM',
-      status: String(summary.ai?.model ? 'ok' : task.status === 'failed' ? 'failed' : 'attempting'),
-      source: formatRuntimeText(summary.ai?.model || summary.ai?.provider),
-      truth: formatRuntimeText(summary.ai?.modelTruth || summary.ai?.providerTruth || 'unavailable'),
-      fallbackOccurred: Boolean(summary.ai?.fallbackOccurred),
-      detail: aiAttemptReason || (locale === 'en' ? 'Awaiting model response.' : '等待模型返回结果。'),
-    },
-    {
-      key: 'market',
-      heading: locale === 'en' ? 'Market' : '行情',
-      status: String(summary.data?.market?.status || 'unknown'),
-      source: formatRuntimeText(summary.data?.market?.source),
-      truth: formatRuntimeText(summary.data?.market?.truth || 'unavailable'),
-      fallbackOccurred: Boolean(summary.data?.market?.fallbackOccurred),
-      detail: formatRuntimeText(summary.data?.market?.finalReason, locale === 'en' ? 'No market detail recorded.' : '未记录行情调用细节。'),
-    },
-    {
-      key: 'fundamentals',
-      heading: locale === 'en' ? 'Fundamentals' : '基本面',
-      status: String(summary.data?.fundamentals?.status || 'unknown'),
-      source: formatRuntimeText(summary.data?.fundamentals?.source),
-      truth: formatRuntimeText(summary.data?.fundamentals?.truth || 'unavailable'),
-      fallbackOccurred: Boolean(summary.data?.fundamentals?.fallbackOccurred),
-      detail: formatRuntimeText(summary.data?.fundamentals?.finalReason, locale === 'en' ? 'No fundamentals detail recorded.' : '未记录基本面调用细节。'),
-    },
-    {
-      key: 'news',
-      heading: locale === 'en' ? 'News' : '新闻',
-      status: String(summary.data?.news?.status || 'unknown'),
-      source: formatRuntimeText(summary.data?.news?.source),
-      truth: formatRuntimeText(summary.data?.news?.truth || 'unavailable'),
-      fallbackOccurred: Boolean(summary.data?.news?.fallbackOccurred),
-      detail: formatRuntimeText(summary.data?.news?.finalReason, locale === 'en' ? 'No news detail recorded.' : '未记录新闻调用细节。'),
-    },
-    {
-      key: 'sentiment',
-      heading: locale === 'en' ? 'Sentiment' : '情绪',
-      status: String(summary.data?.sentiment?.status || 'unknown'),
-      source: formatRuntimeText(summary.data?.sentiment?.source),
-      truth: formatRuntimeText(summary.data?.sentiment?.truth || 'unavailable'),
-      fallbackOccurred: Boolean(summary.data?.sentiment?.fallbackOccurred),
-      detail: formatRuntimeText(summary.data?.sentiment?.finalReason, locale === 'en' ? 'No sentiment detail recorded.' : '未记录情绪调用细节。'),
-    },
-    {
-      key: 'standard_report',
-      heading: 'standard_report',
-      status: String(standardReport?.status || 'unknown'),
-      source: isStandardReportRendered
-        ? (locale === 'en' ? 'Home cards synced' : '首页卡片已消费')
-        : formatRuntimeText(standardReport?.path),
-      truth: formatRuntimeText(standardReport?.truth || 'unavailable'),
-      fallbackOccurred: false,
-      detail: formatRuntimeText(
-        standardReport?.finalReason,
-        isStandardReportRendered
-          ? (locale === 'en' ? 'Structured report has been consumed by the current home cards.' : '结构化 standard_report 已同步到当前首页卡片。')
-          : (locale === 'en' ? 'Home cards are still waiting for a structured report payload.' : '首页卡片仍在等待结构化 standard_report。'),
-      ),
-    },
-  ];
+  return stageKeys.map((key, index) => {
+    let status: TaskProgressModule['status'] = 'pending';
+    if (isCompleted) {
+      status = 'completed';
+    } else if (task.status === 'failed') {
+      status = index < runningIndex ? 'completed' : index === runningIndex ? 'failed' : 'pending';
+    } else if (index < runningIndex) {
+      status = 'completed';
+    } else if (index === runningIndex && (task.status === 'processing' || task.status === 'pending')) {
+      status = 'running';
+    }
+
+    return {
+      key,
+      name: stageNames[key],
+      status,
+    };
+  });
 }
 
 function TaskRuntimePanel({
   locale,
   task,
-  summary,
-  isStandardReportRendered,
 }: {
   locale: DashboardLocale;
   task: TaskInfo;
-  summary: RuntimeExecutionSummary;
-  isStandardReportRendered: boolean;
 }) {
-  const [expandedKey, setExpandedKey] = useState<string | null>('news');
-  const rows = useMemo(
-    () => buildRuntimeRows(locale, summary, task, isStandardReportRendered),
-    [isStandardReportRendered, locale, summary, task],
+  return (
+    <div data-testid="home-bento-runtime-panel">
+      <TaskProgressCard
+        language={locale}
+        taskLabel={`${task.stockCode} · ${formatRuntimeText(task.stockName)}`}
+        progress={task.progress}
+        modules={buildTaskProgressModules(task)}
+      />
+    </div>
   );
-  const panelTitle = locale === 'en' ? 'Data source call status' : '数据源调用状态';
+}
+
+function TaskStageBoard({
+  locale,
+  task,
+}: {
+  locale: DashboardLocale;
+  task: TaskInfo;
+}) {
+  const modules = buildTaskProgressModules(task);
 
   return (
-    <section
-      data-testid="home-bento-runtime-panel"
-      className="rounded-[24px] border border-white/6 bg-white/[0.03] p-4 backdrop-blur-2xl"
+    <BentoGrid
+      testId="home-bento-progress-summary"
+      className="auto-rows-[minmax(180px,auto)] gap-4 xl:grid-cols-10"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">{panelTitle}</p>
-          <p className="mt-1 text-sm font-semibold text-white">{task.stockCode} · {formatRuntimeText(task.stockName)}</p>
-          <p className="mt-1 text-xs text-white/52">
-            Task ID: {task.taskId} · {locale === 'en' ? 'Status' : '状态'}: <span className={runtimeStatusTone(String(task.status))}>{runtimeStatusLabel(locale, String(task.status))}</span>
-          </p>
-        </div>
-        <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-right text-[11px] text-white/62">
-          <p>{locale === 'en' ? 'Progress' : '进度'} · {task.progress}%</p>
-          <p className="mt-1 text-white/78">{formatRuntimeText(task.message, locale === 'en' ? 'Awaiting runtime message.' : '等待运行态消息。')}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-2">
-        {rows.map((row) => {
-          const expanded = expandedKey === row.key;
-          return (
-            <div key={row.key} className="overflow-hidden rounded-2xl border border-white/6 bg-black/18">
-              <button
-                type="button"
-                aria-expanded={expanded}
-                aria-label={row.key}
-                onClick={() => setExpandedKey(expanded ? null : row.key)}
-                className="flex w-full items-center gap-3 px-3 py-3 text-left"
-              >
-                {expanded ? <ChevronDown className="h-4 w-4 text-white/52" /> : <ChevronRight className="h-4 w-4 text-white/52" />}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-sm font-medium text-white">{row.heading}</span>
-                    <span className={`text-xs font-semibold ${runtimeStatusTone(row.status)}`}>{runtimeStatusLabel(locale, row.status)}</span>
-                    {row.fallbackOccurred ? (
-                      <span className="text-[10px] uppercase tracking-[0.14em] text-amber-200/88">
-                        {locale === 'en' ? 'fallback' : '已回退'}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 truncate text-xs text-white/56">
-                    {row.source} · {runtimeTruthLabel(locale, row.truth)}
-                  </p>
-                </div>
-              </button>
-              {expanded ? (
-                <div className="border-t border-white/6 px-4 py-3 text-xs leading-5 text-white/68">
-                  {row.detail}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </section>
+      {modules.map((module) => (
+        <BentoCard
+          key={module.key}
+          eyebrow={translate(locale, 'home.progressStage')}
+          title={module.name}
+          subtitle={translate(locale, `home.progressStateCopy.${module.status}`)}
+          className="xl:col-span-2 min-h-[200px] rounded-[32px] border-white/6 bg-white/[0.03]"
+          contentClassName="justify-between"
+          testId={`home-bento-stage-card-${module.key}`}
+        >
+          <div className="flex items-end justify-between gap-3">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/46">
+              {translate(locale, 'home.analysisProgress')}
+            </span>
+            <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+              module.status === 'completed'
+                ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
+                : module.status === 'running'
+                  ? 'border-sky-300/25 bg-sky-500/10 text-sky-100'
+                  : module.status === 'failed'
+                    ? 'border-rose-400/25 bg-rose-500/10 text-rose-100'
+                    : 'border-white/10 bg-white/[0.03] text-white/56'
+            }`}
+            >
+              {translate(locale, `home.progressBadge.${module.status}`)}
+            </span>
+          </div>
+        </BentoCard>
+      ))}
+    </BentoGrid>
   );
 }
 
@@ -1643,6 +1533,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
+  const resultCardRef = useRef<HTMLDivElement | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
@@ -1669,6 +1560,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const syncTaskCreated = useStockPoolStore((state) => state.syncTaskCreated);
   const syncTaskUpdated = useStockPoolStore((state) => state.syncTaskUpdated);
   const syncTaskFailed = useStockPoolStore((state) => state.syncTaskFailed);
+  const refreshTaskProgress = useStockPoolStore((state) => state.refreshTaskProgress);
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
   const recentHistoryItems = useMemo(
     () => historyItems.filter((item) => !item.isTest).slice(0, 8),
@@ -1699,17 +1591,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
     return activeTasks[0] || null;
   }, [activeTasks, activeTicker, pendingAnalysisTicker]);
-  const focusedRuntimeSummary = useMemo(
-    () => (focusedTask ? buildTaskExecutionSummary(focusedTask) : null),
-    [focusedTask],
-  );
-  const isStandardReportRendered = useMemo(() => {
-    if (!focusedTask?.result?.report?.details?.standardReport) {
-      return false;
-    }
-    const focusedQueryId = focusedTask.result.report.meta.queryId;
-    return completedTaskReport?.meta.queryId === focusedQueryId || selectedReport?.meta.queryId === focusedQueryId;
-  }, [completedTaskReport, focusedTask, selectedReport]);
+  const showTaskWorkflow = Boolean(focusedTask && ['pending', 'processing', 'completed', 'failed'].includes(focusedTask.status));
   const dashboardData = useMemo<DashboardPayload>(() => {
     const effectiveTicker = activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
 
@@ -1769,6 +1651,41 @@ const HomeBentoDashboardPage: React.FC = () => {
     syncTaskFailed,
     hasRunningTasks,
   });
+
+  const focusedTaskId = focusedTask?.taskId;
+  const focusedTaskStatus = focusedTask?.status;
+
+  useEffect(() => {
+    if (!focusedTaskId || focusedTaskStatus === 'completed' || focusedTaskStatus === 'failed') {
+      return undefined;
+    }
+
+    void refreshTaskProgress(focusedTaskId);
+    if (import.meta.env.MODE === 'test') {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      void refreshTaskProgress(focusedTaskId);
+    }, 1500);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [focusedTaskId, focusedTaskStatus, refreshTaskProgress]);
+
+  useEffect(() => {
+    if (!completedTaskReport || !resultCardRef.current) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      if (typeof resultCardRef.current?.scrollIntoView === 'function') {
+        resultCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [completedTaskReport]);
 
   useEffect(() => {
     if (hasHydratedInitialTicker) {
@@ -2024,33 +1941,38 @@ const HomeBentoDashboardPage: React.FC = () => {
                   </button>
                 </form>
                 <div className="flex min-h-0 flex-1 flex-col gap-4">
-                  {focusedTask && focusedRuntimeSummary ? (
+                  {showTaskWorkflow && focusedTask ? (
                     <TaskRuntimePanel
                       locale={locale}
                       task={focusedTask}
-                      summary={focusedRuntimeSummary}
-                      isStandardReportRendered={isStandardReportRendered}
                     />
                   ) : null}
-                  <div className="min-h-0 flex-1">
-                    <DecisionCard
-                      eyebrow={readyCopy.decision.eyebrow}
-                      company={readyCopy.decision.company}
-                      ticker={readyCopy.ticker}
-                      heroValue={readyCopy.decision.heroValue}
-                      heroUnit={readyCopy.decision.heroUnit}
-                      heroLabel={readyCopy.decision.heroLabel}
-                      signalLabel={readyCopy.decision.signalLabel}
-                      signalTone={readyCopy.decision.signalTone}
-                      scoreLabel={readyCopy.decision.scoreLabel}
-                      scoreValue={readyCopy.decision.scoreValue}
-                      badge={readyCopy.decision.badge}
-                      summary={readyCopy.decision.summary}
-                      locale={locale}
-                      reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                      detailLabel={readyCopy.decision.detailLabel}
-                      onOpenDetails={() => setActiveDrawer('decision')}
-                    />
+                  <div ref={resultCardRef} className="min-h-0 flex-1">
+                    {completedTaskReport ? (
+                      <AnalysisResultCard
+                        language={locale}
+                        report={completedTaskReport}
+                      />
+                    ) : (
+                      <DecisionCard
+                        eyebrow={readyCopy.decision.eyebrow}
+                        company={readyCopy.decision.company}
+                        ticker={readyCopy.ticker}
+                        heroValue={readyCopy.decision.heroValue}
+                        heroUnit={readyCopy.decision.heroUnit}
+                        heroLabel={readyCopy.decision.heroLabel}
+                        signalLabel={readyCopy.decision.signalLabel}
+                        signalTone={readyCopy.decision.signalTone}
+                        scoreLabel={readyCopy.decision.scoreLabel}
+                        scoreValue={readyCopy.decision.scoreValue}
+                        badge={readyCopy.decision.badge}
+                        summary={readyCopy.decision.summary}
+                        locale={locale}
+                        reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
+                        detailLabel={readyCopy.decision.detailLabel}
+                        onOpenDetails={() => setActiveDrawer('decision')}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -2058,32 +1980,41 @@ const HomeBentoDashboardPage: React.FC = () => {
                 className="min-w-0 xl:col-span-3 flex flex-col gap-6"
                 data-testid="home-bento-secondary-stack"
               >
-                <StrategyCard
-                  title={readyCopy.strategy.title}
-                  subtitle={readyCopy.strategy.subtitle}
-                  metrics={readyCopy.strategy.metrics}
-                  positionLabel={readyCopy.strategy.positionLabel}
-                  positionBody={readyCopy.strategy.positionBody}
-                  detailLabel={readyCopy.strategy.detailLabel}
-                  onOpenDetails={() => setActiveDrawer('strategy')}
-                />
-                <div
-                  className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
-                  data-testid="home-bento-secondary-grid"
-                >
-                  <TechCard
-                    title={readyCopy.tech.title}
-                    signals={readyCopy.tech.signals}
-                    detailLabel={readyCopy.tech.detailLabel}
-                    onOpenDetails={() => setActiveDrawer('tech')}
+                {showTaskWorkflow && focusedTask ? (
+                  <TaskStageBoard
+                    locale={locale}
+                    task={focusedTask}
                   />
-                  <FundamentalsCard
-                    title={readyCopy.fundamentals.title}
-                    metrics={readyCopy.fundamentals.metrics}
-                    detailLabel={readyCopy.fundamentals.detailLabel}
-                    onOpenDetails={() => setActiveDrawer('fundamentals')}
-                  />
-                </div>
+                ) : (
+                  <>
+                    <StrategyCard
+                      title={readyCopy.strategy.title}
+                      subtitle={readyCopy.strategy.subtitle}
+                      metrics={readyCopy.strategy.metrics}
+                      positionLabel={readyCopy.strategy.positionLabel}
+                      positionBody={readyCopy.strategy.positionBody}
+                      detailLabel={readyCopy.strategy.detailLabel}
+                      onOpenDetails={() => setActiveDrawer('strategy')}
+                    />
+                    <div
+                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                      data-testid="home-bento-secondary-grid"
+                    >
+                      <TechCard
+                        title={readyCopy.tech.title}
+                        signals={readyCopy.tech.signals}
+                        detailLabel={readyCopy.tech.detailLabel}
+                        onOpenDetails={() => setActiveDrawer('tech')}
+                      />
+                      <FundamentalsCard
+                        title={readyCopy.fundamentals.title}
+                        metrics={readyCopy.fundamentals.metrics}
+                        detailLabel={readyCopy.fundamentals.detailLabel}
+                        onOpenDetails={() => setActiveDrawer('fundamentals')}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           );

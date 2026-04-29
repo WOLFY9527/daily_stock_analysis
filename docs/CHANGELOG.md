@@ -1,5 +1,7 @@
 ## 2026-04-29
 
+- 🧠 **WolfyStock 首页分析进度改为用户态五阶段动画** — `apps/dsa-web` 的 Home Bento 分析任务视图现在只展示总进度、`LLM / Technical / Fundamental / News / Sentiment` 五阶段状态，以及完成后的最终摘要卡（BUY / SELL / NEUTRAL、评分、目标位、止损位）。首页不再渲染模型名、数据源、`standard_report`、底层错误或 backend 调试文案；进度轮询失败时保持通用 `Analysis in progress` 等待态。后端同步新增安全的任务进度契约，避免队列 `TaskInfo` 无 `updated_at` 时让 `/progress` 崩溃。配套回归覆盖已补到 `HomeSurfacePage.test.tsx`、`tests/test_analysis_api_contract.py` 与 `tests/test_system_config_service.py`，并通过 WebKit / Chromium 进度流可见验证与 Safari 实机页面冒烟检查。
+
 - 💬 **WolfyStock 问股空态继续压缩垂直浪费并移除底部叠高** — `apps/dsa-web/src/pages/ChatPage.tsx` 进一步收紧问股空态主视图：顶部灯泡图标不再单独占一行，而是与“先提一个具体问题”并到同一条 `flex items-center justify-center gap-3` 标题线上，避免顶部裁切并回收一整行高度。空态输入舱父级同时删掉额外的 `pb-8`/`mb-*` 叠加，只保留 `w-full mt-auto pt-4`，免责声明压到 `mt-2 mb-0`，让输入框在视觉上尽可能贴近组件允许的最底端而不再被额外 padding 垫高。配套回归已更新到 `ChatPage.test.tsx`，并重新通过本地测试、构建和 Safari 新标签页验收。
 
 - 💬 **WolfyStock 问股主视图改为上下分层骨架，修复输入舱悬空与空态滚动链路** — `apps/dsa-web/src/pages/ChatPage.tsx` 的问股空态主视图不再依赖 `mt-auto` 试图“碰运气”沉底，而是改成严格的上下分层：`main` 根容器固定为 `flex-1 flex flex-col h-full overflow-hidden`，上半区使用独立的 `flex-1 overflow-y-auto flex flex-col items-center justify-center pb-10` 承载标题、三张入口卡和快捷标签，下半区使用 `flex-none w-full pb-8 pt-4` 固定悬浮输入舱，从结构上消除输入框被顶到半空和细微高度溢出引发全局滚动条的问题。三张入口卡片内部也同步改成 `px-8 py-6`、`flex flex-col items-center justify-center text-center` 和 `gap-3` 的终端排版，避免文字贴边。配套回归已更新到 `ChatPage.test.tsx`，并重新通过本地测试、构建和 Safari 新标签页验收。

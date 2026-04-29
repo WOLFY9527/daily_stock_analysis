@@ -28,7 +28,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.deps import CurrentUser, get_config_dep, get_current_user, get_current_user_id
+from api.deps import CurrentUser, get_config_dep, get_current_user, get_current_user_id, get_system_config_service
 from api.v1.schemas.analysis import (
     AnalyzeRequest,
     AnalysisPreviewRequest,
@@ -38,6 +38,7 @@ from api.v1.schemas.analysis import (
     BatchTaskAcceptedResponse,
     BatchTaskAcceptedItem,
     BatchDuplicateTaskItem,
+    TaskProgressResponse,
     TaskStatus,
     TaskInfo,
     TaskListResponse,
@@ -62,6 +63,7 @@ from src.services.task_queue import (
     DuplicateTaskError,
     TaskStatus as TaskStatusEnum,
 )
+from src.services.system_config_service import SystemConfigService
 from src.utils.data_processing import (
     normalize_model_used,
     parse_json_field,
@@ -598,6 +600,34 @@ def get_task_list(
         processing=stats["processing"],
         tasks=task_infos,
     )
+
+
+@router.get(
+    "/tasks/{task_id}/progress",
+    response_model=TaskProgressResponse,
+    responses={
+        200: {"description": "任务模块级进度"},
+        404: {"description": "任务不存在", "model": ErrorResponse},
+    },
+    summary="查询任务模块级进度",
+    description="返回首页进度卡片所需的模块级状态，以及可用时的最终分析结果。",
+)
+def get_task_progress(
+    task_id: str,
+    service: SystemConfigService = Depends(get_system_config_service),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> TaskProgressResponse:
+    owner_id = get_current_user_id(current_user)
+    payload = service.get_task_progress(task_id, owner_id=owner_id)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "not_found",
+                "message": f"Task not found: {task_id}",
+            },
+        )
+    return TaskProgressResponse.model_validate(payload)
 
 
 # ============================================================

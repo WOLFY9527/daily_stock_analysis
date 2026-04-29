@@ -4,6 +4,8 @@ export * from './DecisionCard';
 export * from './StrategyCard';
 export * from './TechCard';
 export * from './FundamentalsCard';
+export { default as TaskProgressCard } from './TaskProgressCard';
+export { default as AnalysisResultCard } from './AnalysisResultCard';
 export * from './PageChrome';
 export * from './PageBriefDrawer';
 export * from './DeepReportDrawer';

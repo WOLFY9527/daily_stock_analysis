@@ -17,6 +17,7 @@ ensure_litellm_stub()
 try:
     from api.app import create_app
     from api.v1.endpoints.analysis import (
+        get_task_progress,
         trigger_analysis,
         _handle_sync_analysis,
         _build_analysis_report,
@@ -25,6 +26,7 @@ try:
     )
 except Exception:  # pragma: no cover - optional dependency environments
     create_app = None
+    get_task_progress = None
     trigger_analysis = None
     _handle_sync_analysis = None
     _build_analysis_report = None
@@ -96,6 +98,35 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertTrue(
             pipeline_instance.process_single_stock.call_args.kwargs["force_refresh"]
         )
+
+    def test_get_task_progress_returns_module_payload(self) -> None:
+        if get_task_progress is None:
+            self.skipTest("analysis endpoint import unavailable")
+
+        service = MagicMock()
+        service.get_task_progress.return_value = {
+            "task_id": "task-1",
+            "stock_code": "TSLA",
+            "stock_name": "Tesla",
+            "status": "processing",
+            "progress": 62,
+            "message": "正在分析价格信号、基本面与新闻证据...",
+            "updated_at": "2026-04-29T09:02:00Z",
+            "execution_session_id": "session-1",
+            "modules": [
+                {"key": "llm", "name": "LLM", "status": "running"},
+                {"key": "news", "name": "新闻", "status": "failed"},
+            ],
+            "final_result": None,
+        }
+        current_user = SimpleNamespace(user_id="user-1")
+
+        payload = get_task_progress("task-1", service=service, current_user=current_user).model_dump()
+
+        self.assertEqual(payload["task_id"], "task-1")
+        self.assertNotIn("model", payload["modules"][0])
+        self.assertNotIn("error", payload["modules"][1])
+        service.get_task_progress.assert_called_once_with("task-1", owner_id="user-1")
 
     def test_report_type_full_is_preserved_in_response_metadata(self) -> None:
         service = AnalysisService()

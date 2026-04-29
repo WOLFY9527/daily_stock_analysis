@@ -412,6 +412,27 @@ export interface AnalysisResult {
   createdAt: string;
 }
 
+export interface TaskProgressModule {
+  key: string;
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  detail?: string;
+  updatedAt?: string | null;
+}
+
+export interface TaskProgressResponse {
+  taskId: string;
+  stockCode: string;
+  stockName?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number;
+  message?: string;
+  executionSessionId?: string | null;
+  updatedAt?: string | null;
+  modules: TaskProgressModule[];
+  finalResult?: AnalysisResult | null;
+}
+
 /** Async task accepted response */
 export interface TaskAccepted {
   taskId: string;
@@ -473,6 +494,7 @@ export interface TaskInfo {
   selectionSource?: string;
   execution?: RuntimeExecutionSummary | null;
   executionSessionId?: string;
+  progressModules?: TaskProgressModule[];
 }
 
 /** Task list response */

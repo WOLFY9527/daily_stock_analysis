@@ -45,6 +45,7 @@ vi.mock('../../api/analysis', async () => {
       ...actual.analysisApi,
       analyzeAsync: vi.fn(),
       getTasks: vi.fn(),
+      getTaskProgress: vi.fn(),
     },
   };
 });
@@ -144,6 +145,14 @@ describe('HomeSurfacePage', () => {
       taskId: 'task-1',
       status: 'pending',
       message: 'submitted',
+    });
+    vi.mocked(analysisApi.getTaskProgress).mockResolvedValue({
+      taskId: 'task-1',
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      status: 'processing',
+      progress: 18,
+      modules: [],
     });
   });
 
@@ -1028,8 +1037,9 @@ describe('HomeSurfacePage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('Netflix completion replaced neutral cards.');
+      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('Netflix completion replaced neutral cards.');
     });
+    expect(screen.getByText('104.80')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
   });
@@ -1126,12 +1136,13 @@ describe('HomeSurfacePage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-bento-decision-insight').textContent).toContain('AMD task payload normalized from snake_case report blocks.');
+      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('AMD task payload normalized from snake_case report blocks.');
     });
-    expect(screen.getByText('152.00 - 155.00')).toBeInTheDocument();
+    expect(screen.getByText('168.40')).toBeInTheDocument();
+    expect(screen.getByText('147.80')).toBeInTheDocument();
   });
 
-  it('renders a datasource status panel with expandable failure details for the focused task', async () => {
+  it('renders a clean stage-only progress card for the focused task', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
 
@@ -1206,16 +1217,95 @@ describe('HomeSurfacePage', () => {
       });
     });
 
-    const panel = await screen.findByTestId('home-bento-runtime-panel');
+    const panel = await screen.findByTestId('home-bento-task-progress-card');
     expect(within(panel).getByText(/TSLA/)).toBeInTheDocument();
-    expect(within(panel).getByText(/deepseek\/deepseek-chat/)).toBeInTheDocument();
-    expect(within(panel).getByText(/alpaca/)).toBeInTheDocument();
-    expect(within(panel).getByText(/gnews/)).toBeInTheDocument();
-    expect(within(panel).getByText(/429 Too Many Requests/)).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: /standard_report/i })).toBeInTheDocument();
+    expect(within(panel).getAllByText('Analysis in progress').length).toBeGreaterThan(0);
+    expect(within(panel).getByText('LLM')).toBeInTheDocument();
+    expect(within(panel).getByText('Technical')).toBeInTheDocument();
+    expect(within(panel).getByText('Fundamental')).toBeInTheDocument();
+    expect(within(panel).getByText('News')).toBeInTheDocument();
+    expect(within(panel).getByText('Sentiment')).toBeInTheDocument();
+    expect(within(panel).queryByText(/deepseek\/deepseek-chat/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/alpaca/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/gnews/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/429 Too Many Requests/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/standard_report/i)).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(within(panel).getByRole('button', { name: /standard_report/i }));
-    expect(await within(panel).findByText(/首页卡片仍在等待结构化结果/)).toBeInTheDocument();
+  it('auto-scrolls to the final analysis summary when the task completes', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    renderSurface();
+
+    await act(async () => {
+      useStockPoolStore.getState().syncTaskCreated({
+        taskId: 'task-complete',
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        status: 'processing',
+        progress: 72,
+        reportType: 'detailed',
+        createdAt: '2026-04-29T10:00:00Z',
+        updatedAt: '2026-04-29T10:00:00Z',
+        message: 'assembling report',
+      });
+    });
+
+    await act(async () => {
+      useStockPoolStore.getState().syncTaskUpdated({
+        taskId: 'task-complete',
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        status: 'completed',
+        progress: 100,
+        reportType: 'detailed',
+        createdAt: '2026-04-29T10:00:00Z',
+        updatedAt: '2026-04-29T10:00:02Z',
+        result: {
+          queryId: 'q-nflx',
+          stockCode: 'ORCL',
+          stockName: 'Oracle',
+          createdAt: '2026-04-29T10:00:02Z',
+          report: {
+            meta: {
+              queryId: 'q-nflx',
+              stockCode: 'ORCL',
+              stockName: 'Oracle',
+              reportType: 'detailed',
+              createdAt: '2026-04-29T10:00:02Z',
+            },
+            summary: {
+              analysisSummary: 'Netflix completion replaced neutral cards.',
+              operationAdvice: 'Buy',
+              trendPrediction: 'Momentum continues.',
+              sentimentScore: 81,
+            },
+            strategy: {
+              takeProfit: '104.80',
+              stopLoss: '94.20',
+            },
+            details: {
+              standardReport: {
+                decisionPanel: {
+                  target: '104.80',
+                  stopLoss: '94.20',
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    expect(await screen.findByTestId('home-bento-analysis-result-card')).toHaveTextContent('Netflix completion replaced neutral cards.');
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalled();
+    });
   });
 
   it('keeps neutral cards instead of demo data when the analysis API fails', async () => {

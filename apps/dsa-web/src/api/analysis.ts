@@ -3,6 +3,7 @@ import { toCamelCase } from './utils';
 import type {
   AnalysisRequest,
   AnalyzeAsyncResponse,
+  TaskProgressResponse,
   TaskListResponse,
 } from '../types/analysis';
 
@@ -65,6 +66,14 @@ export const analysisApi = {
     const data = toCamelCase<TaskListResponse>(response.data);
 
     return data;
+  },
+
+  getTaskProgress: async (taskId: string): Promise<TaskProgressResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/analysis/tasks/${encodeURIComponent(taskId)}/progress`,
+    );
+
+    return toCamelCase<TaskProgressResponse>(response.data);
   },
 
   /**
