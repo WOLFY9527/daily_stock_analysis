@@ -44,6 +44,9 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
 
         self.assertIn(payload["source"], {"computed", "fallback", "mixed"})
         self.assertTrue(payload["updatedAt"])
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertTrue(payload["isFallback"])
+        self.assertIn("备用数据", payload["warning"])
         self.assertEqual(set(payload["scores"].keys()), {"overall", "usRiskAppetite", "cnMoneyEffect", "macroPressure", "liquidity"})
         for score in payload["scores"].values():
             self.assertGreaterEqual(score["value"], 0)

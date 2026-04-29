@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 import requests
@@ -13,6 +13,120 @@ import requests
 from src.services.execution_log_service import ExecutionLogService
 
 PanelPayload = Dict[str, Any]
+CN_TZ = timezone(timedelta(hours=8))
+FALLBACK_WARNING = "备用示例数据，不代表当前行情"
+
+SOURCE_LABELS = {
+    "eastmoney": "东方财富",
+    "sina": "新浪财经",
+    "yahoo": "Yahoo Finance",
+    "yfinance": "Yahoo Finance",
+    "yfinance_proxy": "Yahoo Finance",
+    "binance": "Binance",
+    "alternative": "Alternative.me",
+    "alternative_me": "Alternative.me",
+    "cnn": "CNN",
+    "computed": "系统计算",
+    "mixed": "多来源",
+    "cached": "缓存快照",
+    "fallback": "备用数据",
+    "mock": "模拟数据",
+    "public": "公开数据",
+    "unavailable": "不可用",
+}
+
+
+def _now_iso() -> str:
+    return datetime.now(CN_TZ).isoformat(timespec="seconds")
+
+
+def _parse_market_time(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=CN_TZ)
+    return parsed.astimezone(CN_TZ)
+
+
+def get_freshness_status(
+    as_of: Any,
+    category: str,
+    source: str,
+    is_fallback: bool,
+    *,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Return normalized market data freshness metadata for UI trust labeling."""
+    source_key = str(source or "").lower()
+    current = (now or datetime.now(CN_TZ)).astimezone(CN_TZ)
+    if source_key == "mock":
+        return {
+            "freshness": "mock",
+            "isFallback": True,
+            "isStale": False,
+            "delayMinutes": 0,
+            "warning": "模拟数据，不代表当前行情",
+        }
+    if is_fallback or source_key == "fallback":
+        return {
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": False,
+            "delayMinutes": 0,
+            "warning": FALLBACK_WARNING,
+        }
+
+    parsed_as_of = _parse_market_time(as_of) or current
+    delay_minutes = max(0, int((current - parsed_as_of).total_seconds() // 60))
+    category_key = str(category or "").lower()
+
+    stale_minutes = {
+        "crypto": 15,
+        "futures": 30,
+        "fx_commodity": 60,
+        "macro_rate": 60,
+    }
+    live_minutes = {
+        "crypto": 5,
+        "futures": 5,
+        "fx_commodity": 15,
+        "macro_rate": 60,
+        "equity_index": 15,
+        "breadth": 15,
+        "flows": 30,
+        "sentiment": 24 * 60,
+    }
+
+    daily_categories = {"equity_index", "breadth", "flows", "sentiment"}
+    if category_key in daily_categories:
+        days_old = (current.date() - parsed_as_of.date()).days
+        if days_old > 1 or (category_key == "sentiment" and days_old > 0):
+            freshness = "stale"
+        elif days_old == 0 and delay_minutes <= live_minutes[category_key]:
+            freshness = "live"
+        else:
+            freshness = "cached"
+    elif category_key == "macro_rate" and delay_minutes > stale_minutes["macro_rate"]:
+        freshness = "cached" if parsed_as_of.date() == current.date() else "stale"
+    else:
+        stale_after = stale_minutes.get(category_key, 60)
+        live_after = live_minutes.get(category_key, 15)
+        freshness = "live" if delay_minutes <= live_after else "stale" if delay_minutes > stale_after else "delayed"
+
+    return {
+        "freshness": freshness,
+        "isFallback": False,
+        "isStale": freshness == "stale",
+        "delayMinutes": delay_minutes,
+        "warning": "数据可能已过期，请以交易所/券商行情为准" if freshness == "stale" else None,
+    }
 
 
 class MarketOverviewService:
@@ -42,6 +156,19 @@ class MarketOverviewService:
         "DXY": ("US Dollar Index", "DX-Y.NYB", "idx"),
         "GOLD": ("Gold futures", "GC=F", "USD"),
         "OIL": ("WTI crude", "CL=F", "USD"),
+    }
+    CN_SINA_SYMBOLS = {
+        "000001.SH": "sh000001",
+        "000001.SS": "sh000001",
+        "sh000001": "sh000001",
+        "399001.SZ": "sz399001",
+        "399006.SZ": "sz399006",
+        "000688.SH": "sh000688",
+        "000300.SH": "sh000300",
+        "000300.SS": "sh000300",
+        "000905.SH": "sh000905",
+        "000852.SH": "sh000852",
+        "899050.BJ": "bj899050",
     }
 
     def get_indices(self, actor: Optional[Dict[str, Any]] = None) -> PanelPayload:
@@ -145,11 +272,15 @@ class MarketOverviewService:
             inputs = self._fallback_market_temperature_inputs()
             source = "fallback"
         scores = self._compute_market_temperature_scores(inputs)
-        return {
+        payload = {
             "source": source,
-            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+            "updatedAt": _now_iso(),
             "scores": scores,
         }
+        if inputs.get("fallback_notice"):
+            payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
+            payload["fallbackUsed"] = True
+        return self._with_market_meta(payload, "sentiment")
 
     def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         try:
@@ -159,11 +290,15 @@ class MarketOverviewService:
             inputs = self._fallback_market_temperature_inputs()
             source = "fallback"
         scores = self._compute_market_temperature_scores(inputs)
-        return {
+        payload = {
             "source": source,
-            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+            "updatedAt": _now_iso(),
             "items": self._build_market_briefing_items(inputs, scores, source),
         }
+        if inputs.get("fallback_notice"):
+            payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
+            payload["fallbackUsed"] = True
+        return self._with_market_meta(payload, "sentiment")
 
     def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         try:
@@ -172,10 +307,12 @@ class MarketOverviewService:
         except Exception:
             payload = self._fallback_futures_snapshot()
             payload["source"] = "fallback"
-        payload.setdefault("updatedAt", datetime.now().isoformat(timespec="seconds"))
+        payload.setdefault("updatedAt", _now_iso())
         payload.setdefault("items", [])
         if not payload["items"]:
             payload = self._fallback_futures_snapshot()
+        payload = self._with_market_meta(payload, "futures")
+        payload["items"] = [self._with_item_meta(item, "futures", payload) for item in payload.get("items", [])]
         return payload
 
     def get_cn_short_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -185,7 +322,8 @@ class MarketOverviewService:
         except Exception:
             payload = self._fallback_cn_short_sentiment_snapshot()
             payload["source"] = "fallback"
-        payload.setdefault("updatedAt", datetime.now().isoformat(timespec="seconds"))
+        payload.setdefault("updatedAt", _now_iso())
+        payload = self._with_market_meta(payload, "sentiment")
         return payload
 
     def _panel(
@@ -217,7 +355,10 @@ class MarketOverviewService:
 
         payload["panel_name"] = panel_name
         payload["status"] = status
-        payload.setdefault("last_refresh_at", datetime.now().isoformat(timespec="seconds"))
+        payload.setdefault("last_refresh_at", _now_iso())
+        payload.setdefault("updatedAt", payload["last_refresh_at"])
+        payload = self._with_market_meta(payload, self._category_for_cache_key(cache_key))
+        payload["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), payload) for item in payload.get("items", [])]
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
             endpoint_url=endpoint_url,
@@ -268,16 +409,19 @@ class MarketOverviewService:
             else:
                 snapshot = {
                     "items": [],
-                    "last_update": datetime.now().isoformat(timespec="seconds"),
+                    "last_update": _now_iso(),
                     "error": error_message,
                     "fallback_used": True,
                     "source": "unavailable",
                 }
                 raw_response = {"cache": "fallback_miss", "error": str(exc)}
 
-        snapshot.setdefault("last_update", datetime.now().isoformat(timespec="seconds"))
+        snapshot.setdefault("last_update", _now_iso())
+        snapshot.setdefault("updatedAt", snapshot["last_update"])
         snapshot.setdefault("error", error_message)
         snapshot.setdefault("fallback_used", fallback_used)
+        snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
+        snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
             endpoint_url=endpoint_url,
@@ -322,9 +466,11 @@ class MarketOverviewService:
                 raw_response = {"cache": "fallback_static", "error": str(exc)}
 
         snapshot.setdefault("panelName", panel_name)
-        snapshot.setdefault("updatedAt", datetime.now().isoformat(timespec="seconds"))
+        snapshot.setdefault("updatedAt", _now_iso())
         snapshot.setdefault("source", "fallback" if snapshot.get("fallbackUsed") else "mixed")
         snapshot.setdefault("items", [])
+        snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
+        snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
             endpoint_url=endpoint_url,
@@ -336,6 +482,65 @@ class MarketOverviewService:
         )
         snapshot["logSessionId"] = log_session_id
         return snapshot
+
+    def _category_for_cache_key(self, cache_key: str) -> str:
+        mapping = {
+            "indices": "equity_index",
+            "volatility": "futures",
+            "crypto": "crypto",
+            "sentiment": "sentiment",
+            "funds_flow": "flows",
+            "macro": "macro_rate",
+            "cn_indices": "equity_index",
+            "cn_breadth": "breadth",
+            "cn_flows": "flows",
+            "sector_rotation": "sentiment",
+            "rates": "macro_rate",
+            "fx_commodities": "fx_commodity",
+        }
+        return mapping.get(cache_key, "equity_index")
+
+    def _source_label(self, source: Any) -> str:
+        return SOURCE_LABELS.get(str(source or "").lower(), str(source or "公开数据"))
+
+    def _with_market_meta(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
+        source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))
+        is_fallback = bool(payload.get("fallbackUsed") or payload.get("fallback_used") or source.lower() in {"fallback", "mock"})
+        updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
+        as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
+        freshness = get_freshness_status(as_of, category, source, is_fallback)
+        return {
+            **payload,
+            "source": source,
+            "sourceLabel": payload.get("sourceLabel") or self._source_label(source),
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "freshness": freshness["freshness"],
+            "isFallback": freshness["isFallback"],
+            "isStale": freshness["isStale"],
+            "delayMinutes": freshness["delayMinutes"],
+            "warning": payload.get("warning") or freshness["warning"],
+            "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
+        }
+
+    def _with_item_meta(self, item: Dict[str, Any], category: str, panel: Dict[str, Any]) -> Dict[str, Any]:
+        source = str(item.get("source") or panel.get("source") or "mixed")
+        is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source.lower() in {"fallback", "mock"})
+        as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
+        updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
+        freshness = get_freshness_status(as_of, category, source, is_fallback)
+        return {
+            **item,
+            "source": source,
+            "sourceLabel": item.get("sourceLabel") or self._source_label(source),
+            "updatedAt": updated_at,
+            "asOf": as_of,
+            "freshness": freshness["freshness"],
+            "isFallback": freshness["isFallback"],
+            "isStale": freshness["isStale"],
+            "delayMinutes": freshness["delayMinutes"],
+            "warning": item.get("warning") or freshness["warning"],
+        }
 
     def _fetch_indices(self) -> PanelPayload:
         return self._quote_panel("IndexTrendsCard", self.INDEX_SYMBOLS)
@@ -394,7 +599,7 @@ class MarketOverviewService:
             "ETHUSDT": ("ETH", "Ethereum"),
             "BNBUSDT": ("BNB", "BNB"),
         }
-        last_update = datetime.now().isoformat(timespec="seconds")
+        last_update = _now_iso()
         items = []
         for row in ticker_rows:
             symbol = str(row.get("symbol") or "")
@@ -445,7 +650,7 @@ class MarketOverviewService:
         week_change = current - previous_week
         current_change_pct = self._percent_change(previous_day, current)
         trend = [round(value, 2) for value in values]
-        last_update = datetime.now().isoformat(timespec="seconds")
+        last_update = _now_iso()
 
         items = [
             {
@@ -589,7 +794,115 @@ class MarketOverviewService:
         return self._success_panel("MacroIndicatorsCard", items)
 
     def _fetch_cn_indices_snapshot(self) -> Dict[str, Any]:
-        return self._fallback_cn_indices_snapshot()
+        fallback = self._fallback_cn_indices_snapshot()
+        try:
+            live_quotes = self._fetch_sina_cn_index_quotes()
+        except Exception:
+            return fallback
+
+        merged_items = []
+        live_count = 0
+        for fallback_item in fallback.get("items", []):
+            symbol = str(fallback_item.get("symbol") or "")
+            quote = live_quotes.get(symbol)
+            if quote:
+                live_count += 1
+                merged_items.append({
+                    **fallback_item,
+                    **quote,
+                    "label": quote.get("name") or fallback_item.get("label"),
+                    "price": quote.get("value"),
+                    "unit": "pts",
+                    "market": fallback_item.get("market"),
+                    "source": "sina",
+                    "sourceLabel": "新浪财经",
+                    "isFallback": False,
+                    "warning": None,
+                })
+            else:
+                merged_items.append(fallback_item)
+
+        if live_count == 0:
+            return fallback
+
+        updated_at = _now_iso()
+        source = "sina" if live_count == len(merged_items) else "mixed"
+        return {
+            "source": source,
+            "sourceLabel": self._source_label(source),
+            "updatedAt": updated_at,
+            "asOf": max((str(item.get("asOf") or "") for item in merged_items), default=updated_at) or updated_at,
+            "items": merged_items,
+            "fallbackUsed": live_count != len(merged_items),
+            "warning": FALLBACK_WARNING if live_count != len(merged_items) else None,
+        }
+
+    def _fetch_sina_cn_index_quotes(self) -> Dict[str, Dict[str, Any]]:
+        sina_symbols = sorted(set(self.CN_SINA_SYMBOLS.values()))
+        response = requests.get(
+            "https://hq.sinajs.cn/list=" + ",".join(sina_symbols),
+            headers={"Referer": "https://finance.sina.com.cn/"},
+            timeout=8,
+        )
+        response.raise_for_status()
+        response.encoding = response.apparent_encoding or "gbk"
+        rows = self._parse_sina_quote_response(response.text)
+        quotes: Dict[str, Dict[str, Any]] = {}
+        for canonical_symbol, sina_symbol in self.CN_SINA_SYMBOLS.items():
+            if canonical_symbol in {"000001.SS", "sh000001", "000300.SS"}:
+                continue
+            row = rows.get(sina_symbol)
+            if not row:
+                continue
+            quote = self._sina_cn_index_item(canonical_symbol, row)
+            if quote:
+                quotes[canonical_symbol] = quote
+        return quotes
+
+    def _parse_sina_quote_response(self, text: str) -> Dict[str, List[str]]:
+        rows: Dict[str, List[str]] = {}
+        for line in text.splitlines():
+            if "hq_str_" not in line or '="' not in line:
+                continue
+            prefix, raw_values = line.split('="', 1)
+            symbol = prefix.rsplit("hq_str_", 1)[-1]
+            values = raw_values.rstrip('";').split(",")
+            if values and values[0]:
+                rows[symbol] = values
+        return rows
+
+    def _sina_cn_index_item(self, canonical_symbol: str, row: List[str]) -> Optional[Dict[str, Any]]:
+        value = self._clean_number(row[3] if len(row) > 3 else None)
+        previous = self._clean_number(row[2] if len(row) > 2 else None)
+        open_price = self._clean_number(row[1] if len(row) > 1 else None)
+        high = self._clean_number(row[4] if len(row) > 4 else None)
+        low = self._clean_number(row[5] if len(row) > 5 else None)
+        if value is None or previous is None:
+            return None
+        change = value - previous
+        change_percent = self._percent_change(previous, value) or 0.0
+        trade_date = row[30] if len(row) > 30 else ""
+        trade_time = row[31] if len(row) > 31 else ""
+        as_of = self._sina_as_of(trade_date, trade_time)
+        trend = [price for price in (open_price, low, high, value) if price is not None]
+        return {
+            "name": row[0] or canonical_symbol,
+            "symbol": canonical_symbol,
+            "value": round(value, 3),
+            "change": round(change, 3),
+            "changePercent": round(change_percent, 3),
+            "change_text": f"{change:+.2f}",
+            "sparkline": trend[-4:] or [round(value, 3)],
+            "trend": trend[-4:] or [round(value, 3)],
+            "asOf": as_of,
+        }
+
+    def _sina_as_of(self, trade_date: str, trade_time: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(f"{trade_date}T{trade_time}")
+            return parsed.replace(tzinfo=CN_TZ).isoformat(timespec="seconds")
+        except Exception:
+            return _now_iso()
 
     def _fetch_cn_breadth_snapshot(self) -> Dict[str, Any]:
         return self._fallback_cn_breadth_snapshot()
@@ -705,7 +1018,7 @@ class MarketOverviewService:
         return self._card_snapshot(items, explanation="美元走强时风险资产可能承压；人民币走弱会压制 A股/港股情绪。")
 
     def _fallback_futures_snapshot(self) -> Dict[str, Any]:
-        updated_at = datetime.now().isoformat(timespec="seconds")
+        updated_at = _now_iso()
         rows = [
             ("纳指期货", "NQ", 18420.5, 65.2, 0.35, "US", "premarket", [18320, 18380, 18400, 18420.5]),
             ("标普500期货", "ES", 5238.25, 14.5, 0.28, "US", "premarket", [5208, 5218, 5229, 5238.25]),
@@ -717,7 +1030,12 @@ class MarketOverviewService:
         ]
         return {
             "source": "fallback",
+            "sourceLabel": "备用数据",
             "updatedAt": updated_at,
+            "asOf": updated_at,
+            "fallbackUsed": True,
+            "isFallback": True,
+            "warning": FALLBACK_WARNING,
             "items": [
                 {
                     "name": name,
@@ -729,7 +1047,11 @@ class MarketOverviewService:
                     "session": session,
                     "sparkline": sparkline,
                     "source": "fallback",
+                    "sourceLabel": "备用数据",
                     "updatedAt": updated_at,
+                    "asOf": updated_at,
+                    "isFallback": True,
+                    "warning": FALLBACK_WARNING,
                 }
                 for name, symbol, value, change, change_percent, market, session, sparkline in rows
             ],
@@ -751,7 +1073,11 @@ class MarketOverviewService:
         score = self._compute_cn_short_sentiment_score(metrics)
         return {
             "source": "fallback",
-            "updatedAt": datetime.now().isoformat(timespec="seconds"),
+            "sourceLabel": "备用数据",
+            "updatedAt": _now_iso(),
+            "fallbackUsed": True,
+            "isFallback": True,
+            "warning": FALLBACK_WARNING,
             "sentimentScore": score,
             "summary": self._build_cn_short_sentiment_summary(metrics, score),
             "metrics": metrics,
@@ -978,15 +1304,31 @@ class MarketOverviewService:
         return "短线情绪中性，题材持续性仍需观察。"
 
     def _card_snapshot(self, items: List[Dict[str, Any]], explanation: Optional[str] = None) -> Dict[str, Any]:
+        updated_at = _now_iso()
         payload: Dict[str, Any] = {
             "source": "fallback",
-            "updatedAt": datetime.now().isoformat(timespec="seconds"),
-            "items": items,
-            "fallbackUsed": False,
+            "sourceLabel": "备用数据",
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "items": [self._mark_static_fallback_item(item, updated_at) for item in items],
+            "fallbackUsed": True,
+            "isFallback": True,
+            "warning": FALLBACK_WARNING,
         }
         if explanation:
             payload["explanation"] = explanation
         return payload
+
+    def _mark_static_fallback_item(self, item: Dict[str, Any], updated_at: str) -> Dict[str, Any]:
+        return {
+            **item,
+            "source": "fallback",
+            "sourceLabel": "备用数据",
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "isFallback": True,
+            "warning": FALLBACK_WARNING,
+        }
 
     def _metric_item(
         self,
@@ -1014,6 +1356,9 @@ class MarketOverviewService:
             "trend": sparkline,
             "unit": unit,
             "source": "fallback",
+            "sourceLabel": "备用数据",
+            "isFallback": True,
+            "warning": FALLBACK_WARNING,
             "risk_direction": self._risk_direction(change_percent),
             "hover_details": [text for text in (detail, explanation) if text],
         }
@@ -1105,7 +1450,7 @@ class MarketOverviewService:
     def _success_panel(panel_name: str, items: List[Dict[str, Any]]) -> PanelPayload:
         return {
             "panel_name": panel_name,
-            "last_refresh_at": datetime.now().isoformat(timespec="seconds"),
+            "last_refresh_at": _now_iso(),
             "status": "success",
             "items": items,
         }
@@ -1114,7 +1459,7 @@ class MarketOverviewService:
     def _fallback_panel(panel_name: str, error_message: str) -> PanelPayload:
         return {
             "panel_name": panel_name,
-            "last_refresh_at": datetime.now().isoformat(timespec="seconds"),
+            "last_refresh_at": _now_iso(),
             "status": "failure",
             "error_message": error_message,
             "items": [],

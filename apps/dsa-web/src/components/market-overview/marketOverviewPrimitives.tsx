@@ -1,7 +1,7 @@
 import type React from 'react';
 import { RefreshCcw } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
+import type { MarketDataFreshness, MarketDataMeta, MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 import {
@@ -10,6 +10,66 @@ import {
   getDirectionTone,
 } from './marketOverviewUtils';
 import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
+
+const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
+  live: '实时',
+  delayed: '延迟',
+  cached: '快照',
+  stale: '旧数据',
+  fallback: '备用',
+  mock: '模拟',
+  error: '异常',
+};
+
+const FRESHNESS_CLASSES: Record<MarketDataFreshness, string> = {
+  live: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200',
+  delayed: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
+  cached: 'border-white/15 bg-white/[0.06] text-white/65',
+  stale: 'border-amber-300/30 bg-amber-400/10 text-amber-200',
+  fallback: 'border-orange-300/30 bg-orange-400/10 text-orange-200',
+  mock: 'border-fuchsia-300/30 bg-fuchsia-400/10 text-fuchsia-200',
+  error: 'border-red-300/35 bg-red-400/10 text-red-200',
+};
+
+function resolveFreshness(meta?: Partial<MarketDataMeta>): MarketDataFreshness {
+  if (meta?.freshness) {
+    return meta.freshness;
+  }
+  if (meta?.isFallback || meta?.source === 'fallback') {
+    return 'fallback';
+  }
+  if (meta?.isStale) {
+    return 'stale';
+  }
+  return 'cached';
+}
+
+export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; className?: string }> = ({ freshness, className }) => {
+  const resolved = freshness || 'cached';
+  return (
+    <span
+      data-testid={`data-freshness-badge-${resolved}`}
+      className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none', FRESHNESS_CLASSES[resolved], className)}
+    >
+      {FRESHNESS_LABELS[resolved]}
+    </span>
+  );
+};
+
+function metaText(meta?: Partial<MarketDataMeta>): string[] {
+  const sourceLabel = meta?.sourceLabel || meta?.source;
+  const parts = sourceLabel ? [sourceLabel] : [];
+  const asOf = formatMarketOverviewTimestamp(meta?.asOf);
+  const updatedAt = formatMarketOverviewTimestamp(meta?.updatedAt);
+  if (asOf) {
+    parts.push(`行情时间 ${asOf}`);
+  }
+  if (updatedAt) {
+    parts.push(`更新 ${updatedAt}`);
+  }
+  return parts;
+}
+
 export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
   tone = 'text-white/35',
@@ -57,18 +117,31 @@ export const MarketOverviewRefreshButton: React.FC<{
   </button>
 );
 
-export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; sourceLabel: string }> = ({ panel, sourceLabel }) => {
+export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; sourceLabel?: string; meta?: Partial<MarketDataMeta> }> = ({ panel, sourceLabel, meta }) => {
   const { t } = useI18n();
-  const timestamp = formatMarketOverviewTimestamp(panel?.lastRefreshAt);
+  const resolvedMeta = meta || panel;
+  const fallbackUpdatedAt = panel?.lastRefreshAt
+    ? t('marketOverviewPage.footer.lastRefresh', {
+        timestamp: formatMarketOverviewTimestamp(panel.lastRefreshAt) || t('marketOverviewPage.footer.pending'),
+      })
+    : '';
+  const details = metaText(resolvedMeta);
+  if (sourceLabel && !details.length) {
+    details.push(sourceLabel);
+  }
+  const freshness = resolveFreshness(resolvedMeta);
 
   return (
-    <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
-      <span className="text-[10px] uppercase tracking-widest text-white/30">
-        {t('marketOverviewPage.footer.lastRefresh', {
-          timestamp: timestamp || t('marketOverviewPage.footer.pending'),
-        })}
-      </span>
-      <span className="text-[10px] uppercase tracking-widest text-white/30">{sourceLabel}</span>
+    <div className="mt-auto flex flex-col gap-2 border-t border-white/5 pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <DataFreshnessBadge freshness={freshness} />
+        <span className="text-[10px] uppercase tracking-widest text-white/34">
+          {details.join(' · ') || fallbackUpdatedAt || sourceLabel}
+        </span>
+      </div>
+      {resolvedMeta?.warning ? (
+        <p className="text-[10px] leading-4 text-amber-200/75">{resolvedMeta.warning}</p>
+      ) : null}
     </div>
   );
 };
@@ -82,6 +155,8 @@ export const MarketOverviewDataRow: React.FC<{
   const direction = item.riskDirection || 'neutral';
   const tone = getDirectionTone(direction);
   const displayLabel = resolveMarketOverviewDisplayLabel(item);
+  const freshness = resolveFreshness(item);
+  const itemDetails = metaText(item);
   const sparklineTone = direction === 'increasing'
     ? 'text-red-400'
     : direction === 'decreasing'
@@ -111,9 +186,16 @@ export const MarketOverviewDataRow: React.FC<{
         </div>
         {item.hoverDetails?.length ? (
           <div className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-1 text-[9px] uppercase tracking-widest text-white/0 transition-opacity duration-150 group-hover:text-white/28">
-            {item.hoverDetails.map((detail) => (
-              <span key={detail}>{detail}</span>
+            {item.hoverDetails.map((detail, index) => (
+              <span key={`${detail}-${index}`}>{detail}</span>
             ))}
+          </div>
+        ) : null}
+        {item.freshness || item.sourceLabel || item.warning ? (
+          <div className="mt-1 flex flex-wrap justify-end gap-1.5 text-[9px] text-white/30">
+            <DataFreshnessBadge freshness={freshness} className="px-1.5 text-[9px]" />
+            {itemDetails.length ? <span className="leading-4">{itemDetails.join(' · ')}</span> : null}
+            {item.warning ? <span className="w-full leading-4 text-amber-200/70">{item.warning}</span> : null}
           </div>
         ) : null}
       </div>

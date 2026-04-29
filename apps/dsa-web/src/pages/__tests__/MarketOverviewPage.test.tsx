@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketOverviewPage from '../MarketOverviewPage';
 import { marketOverviewApi } from '../../api/marketOverview';
 import { marketApi } from '../../api/market';
+import { DataFreshnessBadge } from '../../components/market-overview/marketOverviewPrimitives';
 
 vi.mock('../../api/marketOverview', () => ({
   marketOverviewApi: {
@@ -35,6 +36,13 @@ const panel = (panelName: string, symbol: string, label = symbol) => ({
   lastRefreshAt: '2026-04-29T10:00:00',
   status: 'success' as const,
   logSessionId: `${panelName}-log`,
+  source: 'yahoo',
+  sourceLabel: 'Yahoo Finance',
+  updatedAt: '2026-04-29T10:01:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'delayed' as const,
+  isFallback: false,
+  isStale: false,
   items: [
     {
       symbol,
@@ -44,6 +52,13 @@ const panel = (panelName: string, symbol: string, label = symbol) => ({
       changePct: 1.2,
       riskDirection: 'decreasing' as const,
       trend: [96, 98, 100],
+      source: 'yahoo',
+      sourceLabel: 'Yahoo Finance',
+      updatedAt: '2026-04-29T10:01:00',
+      asOf: '2026-04-29T10:00:00',
+      freshness: 'delayed' as const,
+      isFallback: false,
+      isStale: false,
     },
   ],
 });
@@ -117,6 +132,13 @@ const snapshotPanel = (panelName: string, symbol: string, label = symbol) => ({
   lastRefreshAt: '2026-04-29T10:00:00',
   status: 'success' as const,
   logSessionId: `${panelName}-log`,
+  source: 'fallback',
+  sourceLabel: '备用数据',
+  updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'fallback' as const,
+  isFallback: true,
+  warning: '备用示例数据，不代表当前行情',
   items: [
     {
       symbol,
@@ -127,6 +149,12 @@ const snapshotPanel = (panelName: string, symbol: string, label = symbol) => ({
       riskDirection: 'decreasing' as const,
       trend: [96, 98, 100],
       source: 'fallback',
+      sourceLabel: '备用数据',
+      updatedAt: '2026-04-29T10:00:00',
+      asOf: '2026-04-29T10:00:00',
+      freshness: 'fallback' as const,
+      isFallback: true,
+      warning: '备用示例数据，不代表当前行情',
       hoverDetails: ['fallback snapshot'],
     },
   ],
@@ -134,7 +162,12 @@ const snapshotPanel = (panelName: string, symbol: string, label = symbol) => ({
 
 const temperaturePayload = () => ({
   source: 'computed',
+  sourceLabel: '系统计算',
   updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'cached' as const,
+  isFallback: false,
+  isStale: false,
   scores: {
     overall: { value: 62, label: '偏暖', trend: 'improving' as const, description: '风险偏好改善，但宏观压力仍需关注。' },
     usRiskAppetite: { value: 68, label: '偏暖', trend: 'improving' as const, description: '美股指数与风险情绪同步改善。' },
@@ -146,7 +179,12 @@ const temperaturePayload = () => ({
 
 const briefingPayload = () => ({
   source: 'computed',
+  sourceLabel: '系统计算',
   updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'cached' as const,
+  isFallback: false,
+  isStale: false,
   items: [
     { title: '美股风险偏好偏暖', message: '主要指数走强，VIX 回落。', severity: 'positive' as const, category: 'us' },
     { title: 'A股赚钱效应中性', message: '指数上涨但上涨家数占比一般。', severity: 'neutral' as const, category: 'cn' },
@@ -156,16 +194,26 @@ const briefingPayload = () => ({
 
 const futuresPayload = () => ({
   source: 'fallback',
+  sourceLabel: '备用数据',
   updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'fallback' as const,
+  isFallback: true,
+  warning: '备用示例数据，不代表当前行情',
   items: [
-    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback' },
-    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback' },
+    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback' as const, isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback' as const, isFallback: true, warning: '备用示例数据，不代表当前行情' },
   ],
 });
 
 const cnShortSentimentPayload = () => ({
   source: 'fallback',
+  sourceLabel: '备用数据',
   updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'fallback' as const,
+  isFallback: true,
+  warning: '备用示例数据，不代表当前行情',
   sentimentScore: 64,
   summary: '涨停家数占优，炸板率可控，短线情绪偏暖。',
   metrics: {
@@ -204,6 +252,12 @@ describe('MarketOverviewPage', () => {
           riskDirection: 'decreasing' as const,
           trend: [3098, 3105, 3120.55],
           source: 'fallback',
+          sourceLabel: '备用数据',
+          updatedAt: '2026-04-29T10:00:00',
+          asOf: '2026-04-29T10:00:00',
+          freshness: 'fallback' as const,
+          isFallback: true,
+          warning: '备用示例数据，不代表当前行情',
         },
       ],
     });
@@ -223,6 +277,10 @@ describe('MarketOverviewPage', () => {
           riskDirection: 'decreasing' as const,
           trend: [2.4, 2.37, 2.35],
           source: 'fallback',
+          sourceLabel: '备用数据',
+          freshness: 'fallback' as const,
+          isFallback: true,
+          warning: '备用示例数据，不代表当前行情',
         },
       ],
     });
@@ -239,6 +297,10 @@ describe('MarketOverviewPage', () => {
           riskDirection: 'increasing' as const,
           trend: [7.2, 7.22, 7.24],
           source: 'fallback',
+          sourceLabel: '备用数据',
+          freshness: 'fallback' as const,
+          isFallback: true,
+          warning: '备用示例数据，不代表当前行情',
         },
       ],
     });
@@ -307,8 +369,55 @@ describe('MarketOverviewPage', () => {
 
     expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/数据来源: FALLBACK \/ PUBLIC/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/备用示例数据，不代表当前行情/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-data-quality')).toBeInTheDocument();
+    expect(screen.getByText(/当前数据质量：部分备用/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('data-freshness-badge-delayed').length).toBeGreaterThan(0);
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+  });
+
+  it('renders all data freshness badge states', () => {
+    render(
+      <div>
+        {(['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error'] as const).map((freshness) => (
+          <DataFreshnessBadge key={freshness} freshness={freshness} />
+        ))}
+      </div>,
+    );
+
+    expect(screen.getByText('实时')).toBeInTheDocument();
+    expect(screen.getByText('延迟')).toBeInTheDocument();
+    expect(screen.getByText('快照')).toBeInTheDocument();
+    expect(screen.getByText('旧数据')).toBeInTheDocument();
+    expect(screen.getByText('备用')).toBeInTheDocument();
+    expect(screen.getByText('模拟')).toBeInTheDocument();
+    expect(screen.getByText('异常')).toBeInTheDocument();
+  });
+
+  it('shows stale card data as old data', async () => {
+    vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce({
+      ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数'),
+      freshness: 'stale' as const,
+      isFallback: false,
+      isStale: true,
+      warning: '数据可能已过期，请以交易所/券商行情为准',
+      items: [
+        {
+          ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
+          freshness: 'stale' as const,
+          isFallback: false,
+          isStale: true,
+          warning: '数据可能已过期，请以交易所/券商行情为准',
+        },
+      ],
+    });
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    await waitFor(() => expect(screen.getAllByText('旧数据').length).toBeGreaterThan(0));
+    expect(screen.getAllByText(/数据可能已过期/i).length).toBeGreaterThan(0);
   });
 
   it('switches market categories without refetching all cards', async () => {
@@ -324,11 +433,11 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /资金流向/i })).toBeInTheDocument();
-    expect(screen.queryByText('USD/CNH')).not.toBeInTheDocument();
-    expect(screen.queryByText('中国10年国债收益率')).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-card-cnShortSentiment')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-futures')).toHaveAttribute('data-market-card-rank', '1');
-    expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '2');
+    expect(screen.getByText('USD/CNH')).toBeInTheDocument();
+    expect(screen.getByText('中国10年国债收益率')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '0');
+    expect(screen.getByTestId('market-overview-card-cnBreadth')).toHaveAttribute('data-market-card-rank', '1');
+    expect(screen.getByTestId('market-overview-card-cnShortSentiment')).toHaveAttribute('data-market-card-rank', '2');
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
     expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
@@ -336,15 +445,15 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ETF 资金流向/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /利率与债券市场/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /商品与外汇/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /商品与外汇/i })).toBeInTheDocument();
     expect(screen.queryByText('CSI 300')).not.toBeInTheDocument();
     expect(screen.queryByText('Shanghai Composite')).not.toBeInTheDocument();
     expect(screen.queryByText('Shenzhen Component')).not.toBeInTheDocument();
-    expect(screen.queryByText('DXY')).not.toBeInTheDocument();
+    expect(screen.getByText('DXY')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-card-futures')).toHaveAttribute('data-market-card-rank', '0');
     expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '1');
-    expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-rank', '2');
+    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '2');
 
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
     expect(marketApi.getRates).toHaveBeenCalledTimes(1);

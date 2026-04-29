@@ -1,5 +1,5 @@
 import apiClient from './index';
-import type { MarketOverviewPanel, MarketOverviewItem } from './marketOverview';
+import type { MarketDataMeta, MarketOverviewPanel, MarketOverviewItem } from './marketOverview';
 import { toCamelCase } from './utils';
 
 type MarketSnapshotItem = {
@@ -15,6 +15,14 @@ type MarketSnapshotItem = {
   sparkline?: number[];
   unit?: string | null;
   source?: string | null;
+  sourceLabel?: string | null;
+  updatedAt?: string;
+  asOf?: string;
+  freshness?: MarketDataMeta['freshness'];
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
   market?: string | null;
   explanation?: string | null;
   hoverDetails?: string[] | null;
@@ -28,6 +36,13 @@ type MarketSnapshotPayload = {
   error?: string | null;
   fallbackUsed?: boolean;
   source?: string | null;
+  sourceLabel?: string | null;
+  asOf?: string;
+  freshness?: MarketDataMeta['freshness'];
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
   logSessionId?: string | null;
 };
 
@@ -48,7 +63,15 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     changeText: item.changeText,
     riskDirection: item.riskDirection,
     trend: Array.isArray(item.trend) ? item.trend : Array.isArray(item.sparkline) ? item.sparkline : [],
-    source: item.source,
+    source: item.source || undefined,
+    sourceLabel: item.sourceLabel || undefined,
+    updatedAt: item.updatedAt,
+    asOf: item.asOf,
+    freshness: item.freshness,
+    isFallback: item.isFallback,
+    isStale: item.isStale,
+    delayMinutes: item.delayMinutes,
+    warning: item.warning,
     hoverDetails,
   };
 }
@@ -62,6 +85,15 @@ async function getPanel(path: string, panelName: string): Promise<MarketOverview
     status: payload.fallbackUsed ? 'failure' : 'success',
     errorMessage: payload.fallbackUsed ? payload.error : null,
     logSessionId: payload.logSessionId,
+    source: payload.source || undefined,
+    sourceLabel: payload.sourceLabel || undefined,
+    updatedAt: payload.updatedAt || payload.lastUpdate || new Date().toISOString(),
+    asOf: payload.asOf,
+    freshness: payload.freshness,
+    isFallback: payload.isFallback ?? payload.fallbackUsed,
+    isStale: payload.isStale,
+    delayMinutes: payload.delayMinutes,
+    warning: payload.warning,
     items: Array.isArray(payload.items) ? payload.items.map(normalizeItem) : [],
   };
 }
@@ -104,7 +136,14 @@ export type MarketTemperatureScore = {
 
 export type MarketTemperatureResponse = {
   source: 'computed' | 'fallback' | 'mixed' | string;
+  sourceLabel?: string;
   updatedAt: string;
+  asOf?: string;
+  freshness?: MarketDataMeta['freshness'];
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
   scores: {
     overall: MarketTemperatureScore;
     usRiskAppetite: MarketTemperatureScore;
@@ -123,7 +162,14 @@ export type MarketBriefingItem = {
 
 export type MarketBriefingResponse = {
   source: 'computed' | 'fallback' | 'mixed' | string;
+  sourceLabel?: string;
   updatedAt: string;
+  asOf?: string;
+  freshness?: MarketDataMeta['freshness'];
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
   items: MarketBriefingItem[];
 };
 
@@ -137,18 +183,39 @@ export type MarketFutureItem = {
   session: string;
   sparkline: number[];
   source: string;
+  sourceLabel?: string;
   updatedAt?: string;
+  asOf?: string;
+  freshness?: MarketDataMeta['freshness'];
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
 };
 
 export type MarketFuturesResponse = {
   source: 'fallback' | 'public' | 'mixed' | string;
+  sourceLabel?: string;
   updatedAt: string;
+  asOf?: string;
+  freshness?: MarketDataMeta['freshness'];
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
   items: MarketFutureItem[];
 };
 
 export type CnShortSentimentResponse = {
   source: 'fallback' | 'public' | 'mixed' | string;
+  sourceLabel?: string;
   updatedAt: string;
+  asOf?: string;
+  freshness?: MarketDataMeta['freshness'];
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
   sentimentScore: number;
   summary: string;
   metrics: {

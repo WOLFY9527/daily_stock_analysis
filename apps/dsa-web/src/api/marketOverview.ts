@@ -3,8 +3,21 @@ import { toCamelCase } from './utils';
 
 export type MarketRiskDirection = 'increasing' | 'decreasing' | 'neutral';
 export type MarketPanelStatus = 'success' | 'failure';
+export type MarketDataFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
 
-export interface MarketOverviewItem {
+export interface MarketDataMeta {
+  source: string;
+  sourceLabel?: string;
+  updatedAt: string;
+  asOf?: string;
+  freshness: MarketDataFreshness;
+  isFallback?: boolean;
+  isStale?: boolean;
+  delayMinutes?: number;
+  warning?: string | null;
+}
+
+export interface MarketOverviewItem extends Partial<MarketDataMeta> {
   symbol: string;
   label: string;
   value?: number | null;
@@ -13,11 +26,11 @@ export interface MarketOverviewItem {
   changeText?: string | null;
   riskDirection?: MarketRiskDirection;
   trend?: number[];
-  source?: string | null;
+  source?: string;
   hoverDetails?: string[] | null;
 }
 
-export interface MarketOverviewPanel {
+export interface MarketOverviewPanel extends Partial<MarketDataMeta> {
   panelName: string;
   lastRefreshAt: string;
   status: MarketPanelStatus;
@@ -34,6 +47,15 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     status: normalized.status,
     errorMessage: normalized.errorMessage,
     logSessionId: normalized.logSessionId,
+    source: normalized.source,
+    sourceLabel: normalized.sourceLabel,
+    updatedAt: normalized.updatedAt || normalized.lastRefreshAt,
+    asOf: normalized.asOf,
+    freshness: normalized.freshness,
+    isFallback: normalized.isFallback,
+    isStale: normalized.isStale,
+    delayMinutes: normalized.delayMinutes,
+    warning: normalized.warning,
     items: Array.isArray(normalized.items) ? normalized.items : [],
   };
 }

@@ -20,6 +20,7 @@ import { MarketOverviewCard } from '../components/market-overview/MarketOverview
 import { VolatilityCard } from '../components/market-overview/VolatilityCard';
 import { resolveMarketOverviewDisplayLabel } from '../components/market-overview/marketOverviewLabels';
 import {
+  DataFreshnessBadge,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
   MarketOverviewSparkline,
@@ -52,11 +53,11 @@ type CardKey = Exclude<PanelKey, 'temperature' | 'briefing'>;
 type CategoryKey = 'all' | 'us' | 'cn' | 'macro' | 'crypto';
 
 const CATEGORY_CARDS: Record<CategoryKey, CardKey[]> = {
-  all: ['futures', 'cnShortSentiment', 'sentiment', 'fxCommodities', 'rates', 'indices', 'fundsFlow', 'volatility', 'cnIndices', 'cnFlows', 'cnBreadth', 'sectorRotation', 'crypto'],
-  us: ['futures', 'indices', 'fundsFlow', 'sentiment', 'volatility'],
-  cn: ['cnShortSentiment', 'futures', 'cnIndices', 'cnFlows', 'cnBreadth', 'sectorRotation'],
-  macro: ['futures', 'rates', 'fxCommodities', 'macro', 'volatility'],
-  crypto: ['crypto'],
+  all: ['futures', 'indices', 'cnIndices', 'cnBreadth', 'rates', 'fxCommodities', 'volatility', 'fundsFlow', 'sentiment', 'crypto', 'cnShortSentiment', 'cnFlows', 'sectorRotation', 'macro'],
+  us: ['futures', 'indices', 'volatility', 'fundsFlow', 'sentiment', 'rates', 'fxCommodities'],
+  cn: ['cnIndices', 'cnBreadth', 'cnShortSentiment', 'cnFlows', 'sectorRotation', 'futures', 'fxCommodities', 'rates'],
+  macro: ['rates', 'fxCommodities', 'volatility', 'indices', 'futures'],
+  crypto: ['crypto', 'fxCommodities', 'volatility'],
 };
 const CATEGORY_STORAGE_KEYS: Record<CategoryKey, string> = {
   all: 'market-overview-order-all',
@@ -69,7 +70,11 @@ const AUTO_REFRESH_MS = 60_000;
 
 const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
   source: 'fallback',
+  sourceLabel: '备用数据',
   updatedAt: new Date(0).toISOString(),
+  freshness: 'fallback',
+  isFallback: true,
+  warning: '部分指标来自备用数据，评分仅供结构演示。',
   scores: {
     overall: { value: 50, label: '中性', trend: 'stable', description: '市场温度数据暂用备用源。' },
     usRiskAppetite: { value: 50, label: '中性', trend: 'stable', description: '美股风险偏好暂用备用源。' },
@@ -81,7 +86,11 @@ const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
 
 const FALLBACK_BRIEFING: MarketBriefingResponse = {
   source: 'fallback',
+  sourceLabel: '备用数据',
   updatedAt: new Date(0).toISOString(),
+  freshness: 'fallback',
+  isFallback: true,
+  warning: '部分指标来自备用数据，评分仅供结构演示。',
   items: [
     { title: '市场数据备用源', message: '当前部分数据为备用源，仅供趋势参考。', severity: 'risk', category: 'risk' },
     { title: '美股风险偏好中性', message: '等待主要指数、VIX 与情绪指标同步更新。', severity: 'neutral', category: 'us' },
@@ -91,20 +100,28 @@ const FALLBACK_BRIEFING: MarketBriefingResponse = {
 
 const FALLBACK_FUTURES: MarketFuturesResponse = {
   source: 'fallback',
+  sourceLabel: '备用数据',
   updatedAt: new Date(0).toISOString(),
+  freshness: 'fallback',
+  isFallback: true,
+  warning: '备用示例数据，不代表当前行情',
   items: [
-    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback' },
-    { name: '标普500期货', symbol: 'ES', value: 5238.25, change: 14.5, changePercent: 0.28, market: 'US', session: 'premarket', sparkline: [5208, 5218, 5238.25], source: 'fallback' },
-    { name: '道指期货', symbol: 'YM', value: 38980, change: 72, changePercent: 0.19, market: 'US', session: 'premarket', sparkline: [38820, 38930, 38980], source: 'fallback' },
-    { name: '罗素2000期货', symbol: 'RTY', value: 2094.6, change: -3.8, changePercent: -0.18, market: 'US', session: 'premarket', sparkline: [2108, 2098, 2094.6], source: 'fallback' },
-    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback' },
-    { name: '恒指期货', symbol: 'HSI_F', value: 17712, change: 128, changePercent: 0.73, market: 'HK', session: 'day', sparkline: [17490, 17640, 17712], source: 'fallback' },
+    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '标普500期货', symbol: 'ES', value: 5238.25, change: 14.5, changePercent: 0.28, market: 'US', session: 'premarket', sparkline: [5208, 5218, 5238.25], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '道指期货', symbol: 'YM', value: 38980, change: 72, changePercent: 0.19, market: 'US', session: 'premarket', sparkline: [38820, 38930, 38980], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '罗素2000期货', symbol: 'RTY', value: 2094.6, change: -3.8, changePercent: -0.18, market: 'US', session: 'premarket', sparkline: [2108, 2098, 2094.6], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '恒指期货', symbol: 'HSI_F', value: 17712, change: 128, changePercent: 0.73, market: 'HK', session: 'day', sparkline: [17490, 17640, 17712], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
   ],
 };
 
 const FALLBACK_CN_SHORT_SENTIMENT: CnShortSentimentResponse = {
   source: 'fallback',
+  sourceLabel: '备用数据',
   updatedAt: new Date(0).toISOString(),
+  freshness: 'fallback',
+  isFallback: true,
+  warning: '备用示例数据，不代表当前行情',
   sentimentScore: 64,
   summary: '涨停家数占优，炸板率可控，短线情绪偏暖。',
   metrics: {
@@ -250,6 +267,104 @@ function scoreTone(score: MarketTemperatureScore, pressure = false): string {
   return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-300' : score.value <= 45 ? 'text-sky-300' : 'text-white';
 }
 
+type FreshnessCountKey = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
+type DataQualitySummary = {
+  status: string;
+  counts: Record<FreshnessCountKey, number>;
+  hasConcern: boolean;
+};
+
+function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
+  const values: FreshnessCountKey[] = [];
+  const push = (freshness?: string, isFallback?: boolean, isStale?: boolean) => {
+    if (freshness && ['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error'].includes(freshness)) {
+      values.push(freshness as FreshnessCountKey);
+    } else if (isFallback) {
+      values.push('fallback');
+    } else if (isStale) {
+      values.push('stale');
+    } else {
+      values.push('cached');
+    }
+  };
+  const panelKeys: CardKey[] = ['indices', 'volatility', 'crypto', 'sentiment', 'fundsFlow', 'macro', 'cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'rates', 'fxCommodities'];
+  panelKeys.forEach((key) => {
+    const panel = panels[key] as MarketOverviewPanel | undefined;
+    if (!panel) {
+      return;
+    }
+    push(panel.freshness, panel.isFallback, panel.isStale);
+    panel.items.forEach((item) => push(item.freshness, item.isFallback, item.isStale));
+  });
+  push(panels.temperature.freshness, panels.temperature.isFallback, panels.temperature.isStale);
+  push(panels.briefing.freshness, panels.briefing.isFallback, panels.briefing.isStale);
+  push(panels.futures.freshness, panels.futures.isFallback, panels.futures.isStale);
+  panels.futures.items.forEach((item) => push(item.freshness, item.isFallback, item.isStale));
+  push(panels.cnShortSentiment.freshness, panels.cnShortSentiment.isFallback, panels.cnShortSentiment.isStale);
+  return values;
+}
+
+function summarizeDataQuality(panels: PanelState): DataQualitySummary {
+  const counts: Record<FreshnessCountKey, number> = {
+    live: 0,
+    delayed: 0,
+    cached: 0,
+    stale: 0,
+    fallback: 0,
+    mock: 0,
+    error: 0,
+  };
+  collectFreshnessValues(panels).forEach((freshness) => {
+    counts[freshness] += 1;
+  });
+  const status = counts.error > 0
+    ? '异常'
+    : counts.stale > 0
+      ? '存在旧数据'
+      : counts.fallback + counts.mock > 0
+        ? '部分备用'
+        : '良好';
+  return {
+    status,
+    counts,
+    hasConcern: counts.fallback + counts.mock + counts.stale + counts.error > 0,
+  };
+}
+
+const DataQualityOverview: React.FC<{ summary: DataQualitySummary }> = ({ summary }) => {
+  const countItems: Array<[FreshnessCountKey, string]> = [
+    ['live', '实时'],
+    ['delayed', '延迟'],
+    ['cached', '快照'],
+    ['fallback', '备用'],
+    ['stale', '旧数据'],
+    ['mock', '模拟'],
+    ['error', '异常'],
+  ];
+  return (
+    <GlassCard as="section" data-testid="market-data-quality" className="p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">DATA QUALITY</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">当前数据质量：{summary.status}</h2>
+          {summary.hasConcern ? (
+            <p className="mt-1 text-xs leading-5 text-amber-200/75">部分数据为备用或旧快照，请以交易所/券商行情为准。</p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {countItems.filter(([key]) => summary.counts[key] > 0).map(([key, label]) => (
+            <div key={key} className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1">
+              <DataFreshnessBadge freshness={key} />
+              <span className="font-mono text-xs text-white/70">{summary.counts[key]}</span>
+              <span className="sr-only">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </GlassCard>
+  );
+};
+
 const MarketTemperatureStrip: React.FC<{
   data: MarketTemperatureResponse;
   refreshing: boolean;
@@ -290,7 +405,10 @@ const MarketTemperatureStrip: React.FC<{
           );
         })}
       </div>
-      <div className="mt-2 text-[10px] uppercase tracking-widest text-white/28">SOURCE: {data.source}</div>
+      <MarketOverviewPanelFooter
+        meta={data}
+        sourceLabel={data.sourceLabel || data.source}
+      />
     </GlassCard>
   );
 };
@@ -326,7 +444,10 @@ const MarketBriefingCard: React.FC<{
           </article>
         ))}
       </div>
-      <div className="mt-2 text-[10px] uppercase tracking-widest text-white/28">SOURCE: {data.source}</div>
+      <MarketOverviewPanelFooter
+        meta={data}
+        sourceLabel={data.sourceLabel || data.source}
+      />
     </GlassCard>
   );
 };
@@ -339,7 +460,21 @@ const FuturesPremarketCard: React.FC<{
 }> = ({ data, loading = false, refreshing = false, onRefresh }) => {
   const { t } = useI18n();
   const title = t('marketOverviewPage.cards.futures.title');
-  const panel = { lastRefreshAt: data.updatedAt } as MarketOverviewPanel;
+  const panel: MarketOverviewPanel = {
+    panelName: 'FuturesPremarketCard',
+    status: data.isFallback ? 'failure' : 'success',
+    lastRefreshAt: data.updatedAt,
+    source: data.source,
+    sourceLabel: data.sourceLabel,
+    updatedAt: data.updatedAt,
+    asOf: data.asOf,
+    freshness: data.freshness,
+    isFallback: data.isFallback,
+    isStale: data.isStale,
+    delayMinutes: data.delayMinutes,
+    warning: data.warning,
+    items: [],
+  };
   return (
     <GlassCard as="section" className="flex h-full flex-col p-6">
       <div className="mb-6 flex items-center justify-between gap-4">
@@ -358,6 +493,9 @@ const FuturesPremarketCard: React.FC<{
               <div className="w-32 shrink-0 min-w-0">
                 <p className="truncate text-[10px] font-semibold tracking-widest text-white/65">{item.name}</p>
                 <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-widest text-white/25">{item.symbol} / {item.market}</p>
+                <div className="mt-1">
+                  <DataFreshnessBadge freshness={item.freshness || data.freshness || (item.source === 'fallback' ? 'fallback' : 'cached')} className="px-1.5 text-[9px]" />
+                </div>
               </div>
               <div className="w-24 shrink-0">
                 <MarketOverviewSparkline values={item.sparkline} tone={positive ? 'text-emerald-400' : 'text-red-400'} className="h-8" />
@@ -373,7 +511,7 @@ const FuturesPremarketCard: React.FC<{
         })}
       </div>
       {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
-      <MarketOverviewPanelFooter panel={panel} sourceLabel={`${t('marketOverviewPage.cards.futures.source')}: ${data.source.toUpperCase()}`} />
+      <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || `${t('marketOverviewPage.cards.futures.source')}: ${data.source.toUpperCase()}`} />
     </GlassCard>
   );
 };
@@ -386,7 +524,13 @@ const CnShortSentimentCard: React.FC<{
 }> = ({ data, loading = false, refreshing = false, onRefresh }) => {
   const { t } = useI18n();
   const title = t('marketOverviewPage.cards.cnShortSentiment.title');
-  const panel = { lastRefreshAt: data.updatedAt } as MarketOverviewPanel;
+  const panel: MarketOverviewPanel = {
+    panelName: 'CnShortSentimentCard',
+    status: data.isFallback ? 'failure' : 'success',
+    lastRefreshAt: data.updatedAt,
+    items: [],
+    ...data,
+  };
   const metrics = [
     ['limitUpCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.limitUpCount'), data.metrics.limitUpCount],
     ['limitDownCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.limitDownCount'), data.metrics.limitDownCount],
@@ -425,7 +569,7 @@ const CnShortSentimentCard: React.FC<{
         ))}
       </div>
       {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
-      <MarketOverviewPanelFooter panel={panel} sourceLabel={`${t('marketOverviewPage.cards.cnShortSentiment.source')}: ${data.source.toUpperCase()}`} />
+      <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || `${t('marketOverviewPage.cards.cnShortSentiment.source')}: ${data.source.toUpperCase()}`} />
     </GlassCard>
   );
 };
@@ -757,6 +901,7 @@ const MarketOverviewPage: React.FC = () => {
   const visibleOrder = cardOrders[activeCategory].filter((cardKey) => CATEGORY_CARDS[activeCategory].includes(cardKey));
   const columns = [0, 1, 2].map((columnIndex) => visibleOrder.filter((_, index) => index % 3 === columnIndex));
   const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
+  const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
 
   return (
     <div className="w-full flex-1 flex flex-col min-w-0 min-h-0 bg-[#030303] text-white">
@@ -789,6 +934,7 @@ const MarketOverviewPage: React.FC = () => {
               void refreshPanel('temperature', marketApi.getTemperature);
             }}
           />
+          <DataQualityOverview summary={dataQuality} />
           {activeCategory !== 'crypto' ? (
             <MarketBriefingCard
               data={panels.briefing}
