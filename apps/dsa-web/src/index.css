@@ -15822,6 +15822,111 @@ html[lang='en'][data-theme='spacex'] .report-price-chart[data-language='en'] .th
   letter-spacing: 0.02em;
 }
 
+.backtest-v1-stage :is(button[data-variant='primary'], button[data-variant='gradient'], .backtest-launch-button),
+[data-testid='normal-backtest-workspace'] button,
+[data-testid='pro-backtest-compile-bar'] button:last-child {
+  border-radius: 0.5rem;
+  border-color: rgb(16 185 129 / 0.3);
+  background: rgb(16 185 129 / 0.1);
+  color: rgb(52 211 153);
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+  box-shadow: none;
+}
+
+.backtest-v1-stage :is(button[data-variant='primary'], button[data-variant='gradient'], .backtest-launch-button):hover:not(:disabled),
+[data-testid='normal-backtest-workspace'] button:hover:not(:disabled),
+[data-testid='pro-backtest-compile-bar'] button:last-child:hover:not(:disabled) {
+  border-color: rgb(16 185 129 / 0.5);
+  background: rgb(16 185 129 / 0.2);
+  color: rgb(52 211 153);
+  box-shadow: 0 0 15px rgb(16 185 129 / 0.2);
+}
+
+.backtest-v1-stage :is(button[data-variant='secondary'], button[data-variant='outline'], button[data-variant='ghost'], .backtest-control-step, .backtest-mode-toggle__button),
+[data-testid='pro-backtest-workspace'] button:not([data-variant='primary']),
+[data-testid='pro-strategy-catalog-drawer'] button,
+[data-testid='normal-backtest-workspace'] button[data-variant='secondary'],
+[data-testid='normal-backtest-workspace'] button[data-variant='outline'],
+[data-testid='normal-backtest-workspace'] button[data-variant='ghost'] {
+  border-radius: 0.5rem;
+  border-color: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+  color: rgb(255 255 255 / 0.7);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.backtest-v1-stage :is(button[data-variant='secondary'], button[data-variant='outline'], button[data-variant='ghost'], .backtest-control-step, .backtest-mode-toggle__button):hover:not(:disabled),
+[data-testid='pro-backtest-workspace'] button:not([data-variant='primary']):hover:not(:disabled),
+[data-testid='pro-strategy-catalog-drawer'] button:hover:not(:disabled),
+[data-testid='normal-backtest-workspace'] button[data-variant='secondary']:hover:not(:disabled),
+[data-testid='normal-backtest-workspace'] button[data-variant='outline']:hover:not(:disabled),
+[data-testid='normal-backtest-workspace'] button[data-variant='ghost']:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.1);
+  color: rgb(255 255 255);
+}
+
+.backtest-v1-stage .backtest-mode-toggle__button.is-active,
+.backtest-v1-stage .backtest-control-step.is-active,
+[data-testid='pro-backtest-workspace'] button[aria-selected='true'] {
+  border-color: rgb(16 185 129 / 0.3);
+  background: rgb(16 185 129 / 0.1);
+  color: rgb(52 211 153);
+}
+
+.backtest-v1-stage :is(.product-field, label.product-field) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.backtest-v1-stage :is(input:not([type='checkbox']), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.02);
+  color: rgb(255 255 255);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.backtest-v1-stage :is(input:not([type='checkbox']), select, textarea):focus {
+  border-color: rgb(16 185 129 / 0.5);
+  background: rgb(255 255 255 / 0.05);
+  outline: none;
+}
+
+.backtest-v1-stage .product-checkbox-row,
+[data-testid='pro-backtest-workspace'] label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.backtest-v1-stage input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  accent-color: rgb(16 185 129);
+}
+
 @media (min-width: 1024px) {
   .backtest-setup-main .backtest-base-params-layout,
   .backtest-setup-main .backtest-control-grid,

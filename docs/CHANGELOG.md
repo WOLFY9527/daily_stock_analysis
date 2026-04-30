@@ -1,5 +1,7 @@
 ## 2026-04-30
 
+- 🧪 **Backtest 工作台按钮、表单与三栏布局重塑** — `apps/dsa-web` 对 `/backtest` 执行局部 UI 修复：普通/专业模式和历史评估里的回测按钮统一切到 emerald 微光主按钮或低调幽灵按钮；输入框、下拉框和复选框统一使用幽灵表单样式与 `gap-2` 垂直字段结构，避免标签与控件遮挡；历史评估工作台改为 `lg:grid-cols-12` 的 3:4:5 三栏比例，左侧步骤、中间诊断、右侧结果记录各自占位明确。此次改动保持回测 API、策略解析、历史评估状态和结果路由不变，只调整 Backtest 前端布局与视觉样式。
+
 - 🏷️ **前端状态 Badge 语义收敛** — `apps/dsa-web` 新增统一 `StatusBadge` 与状态归一化工具，把 `success/succeeded/completed`、`failed/error`、`running/attempting`、`pending/queued`、`partial`、`skipped/not_needed`、`unknown` 等前端状态展示语义收口到一个复用入口。`/admin/logs` 已切到统一 badge，`Settings` 数据源校验状态与 `Backtest` 的一部分纯展示状态也改为复用同一组件；`Market Overview` 的 `DataFreshnessBadge` 保持 freshness 专用，不与普通业务状态混合。回归新增 `StatusBadge.test.tsx`，并补充 Admin Logs / Settings / Backtest 相关断言，确保 skipped 不再被误渲染为成功、unknown 不会被误渲染为运行中。
 
 - 🎛️ **Home 信号语义色与个人偏好底座重标定** — `apps/dsa-web` 为首页决策台补上了真正受 `marketColorConvention` 驱动的动态红绿语境：`DecisionCard` 的 AI 动作 Hero、`StrategyCard` 的目标价 / 止损价以及同源 tone/glow 渲染不再写死国际市场配色，`红涨绿跌` 下买入/看多会切到 `rose`，卖出/看空切到 `emerald`，彻底消除“买入显示成白色”的语义错误。与此同时，全局字号偏好基准改为更紧凑的专业终端档位（XS=10px、S=12px、M=14px、L=16px、XL=18px），默认“标准”不再按 16px 放大整站；个人设置页“界面偏好”也同步扩容为语言、市场色彩、数据展示密度、数值缩写格式与字号五组专业选项，并全部接入本地持久化状态，为后续全局 density / number-format 联动铺好底座。

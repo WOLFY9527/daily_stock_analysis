@@ -914,7 +914,7 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
     expect(screen.getByLabelText('策略模板')).toBeInTheDocument();
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
+    expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
   });
 
   it('includes every engine-supported classic strategy in point-and-shoot mode', async () => {
@@ -1163,10 +1163,10 @@ describe('BacktestPage', () => {
     const displayBoard = screen.getByTestId('backtest-display-board');
     expect(screen.getByTestId('backtest-control-window')).toBeInTheDocument();
     expect(unifiedShell).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
-    expect(controlPanel).toHaveClass('w-full', 'xl:w-[360px]', '2xl:w-[400px]', 'shrink-0', 'flex', 'flex-col', 'gap-6');
+    expect(controlPanel).toHaveClass('col-span-1', 'lg:col-span-3', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-6');
     expect(controlPanel).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(inspectionPanel).toHaveClass('w-full', 'xl:w-[320px]', '2xl:w-[360px]', 'shrink-0', 'flex', 'flex-col', 'gap-6', 'min-w-[250px]');
-    expect(displayBoard).toHaveClass('flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6');
+    expect(inspectionPanel).toHaveClass('col-span-1', 'lg:col-span-4', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-6');
+    expect(displayBoard).toHaveClass('col-span-1', 'lg:col-span-5', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-6');
     expect(displayBoard).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
 
     expect(within(screen.getByTestId('historical-control-section-scope-samples')).getByText('范围与样本')).toBeInTheDocument();
@@ -1418,6 +1418,6 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('en', 'page.historicalTab') })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: bt('en', 'page.controlModeLabel') })).toBeInTheDocument();
     expect(screen.getByLabelText('Strategy template')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Execute backtest task' })).toHaveClass('bg-white', 'text-black', 'rounded-2xl');
+    expect(screen.getByRole('button', { name: 'Execute backtest task' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
   });
 });

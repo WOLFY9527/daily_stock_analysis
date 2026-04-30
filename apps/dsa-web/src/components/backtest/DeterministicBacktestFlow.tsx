@@ -666,7 +666,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     setPresets(deleteRuleBacktestPreset(presetId));
   }, []);
 
-  const compactInputClass = 'w-full min-w-0 truncate rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 pr-10 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
+  const compactInputClass = 'w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
   const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
   const denseCardClass = 'h-full bg-white/[0.02] border border-white/5 rounded-[24px] p-6 flex flex-col gap-5';
   const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
@@ -1359,7 +1359,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   );
 
   return (
-    <div className="w-full min-w-0 grid gap-6 xl:grid-cols-5 xl:items-start" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
+    <div className="w-full min-w-0 grid gap-8 xl:grid-cols-5 xl:items-start" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
       <div className="xl:col-span-1">
         {renderSetupSidebar()}
       </div>
@@ -1370,7 +1370,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <div className="flex flex-col gap-3">
               <SectionEyebrow>{panelMode === 'professional' ? (language === 'en' ? 'Professional mode' : '专业模式') : (language === 'en' ? 'Execution board' : '执行面板')}</SectionEyebrow>
             </div>
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-5 xl:items-stretch" data-testid="backtest-parameter-grid">
+            <div className="grid grid-cols-1 gap-8 xl:grid-cols-5 xl:items-stretch" data-testid="backtest-parameter-grid">
               {baseParamsSection}
               {executionSettingsSection}
               {strategyInputSection}

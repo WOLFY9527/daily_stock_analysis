@@ -30,9 +30,12 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   language: BacktestLanguage;
 };
 
-const compactSelectClass = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
-const compactInputClass = 'w-full min-w-0 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500/50';
+const compactSelectClass = 'w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
+const compactInputClass = 'w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
 const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
+const primaryButtonClass = 'rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/50 hover:bg-emerald-500/20 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]';
+const ghostButtonClass = 'rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white';
+const activeGhostButtonClass = 'rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/50 hover:bg-emerald-500/20';
 
 const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   language,
@@ -204,7 +207,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     : (language === 'en' ? 'Draft only' : '草稿');
 
   const renderAssetsPane = () => (
-    <div data-testid="pro-panel-assets" className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+    <div data-testid="pro-panel-assets" className="grid gap-8 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
       <GlassCard className="p-6">
         <p className={compactFieldLabelClass}>{language === 'en' ? 'Launch baseline' : '基础发射参数'}</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -276,8 +279,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   );
 
   const renderStrategyPane = () => (
-    <div data-testid="pro-panel-strategy" className="flex min-w-0 flex-col gap-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+    <div data-testid="pro-panel-strategy" className="flex min-w-0 flex-col gap-8">
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <GlassCard className="p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -302,7 +305,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <Button
               type="button"
               variant="secondary"
-              className="bg-white text-black hover:bg-white/90 hover:text-black"
+              className={ghostButtonClass}
               onClick={() => setIsCatalogDrawerOpen(true)}
               data-testid="pro-open-template-drawer"
             >
@@ -390,19 +393,19 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   );
 
   const renderOrdersPane = () => (
-    <div data-testid="pro-panel-orders" className="grid gap-6 xl:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
+    <div data-testid="pro-panel-orders" className="grid gap-8 xl:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
       <GlassCard className="p-6">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className={`rounded-2xl border px-4 py-2 text-sm transition ${ordersTab === 'routing' ? 'border-white/12 bg-white/[0.08] text-white' : 'border-white/6 bg-white/[0.02] text-white/58'}`}
+            className={ordersTab === 'routing' ? activeGhostButtonClass : ghostButtonClass}
             onClick={() => setOrdersTab('routing')}
           >
             {language === 'en' ? 'Routing' : '执行路由'}
           </button>
           <button
             type="button"
-            className={`rounded-2xl border px-4 py-2 text-sm transition ${ordersTab === 'guards' ? 'border-white/12 bg-white/[0.08] text-white' : 'border-white/6 bg-white/[0.02] text-white/58'}`}
+            className={ordersTab === 'guards' ? activeGhostButtonClass : ghostButtonClass}
             onClick={() => setOrdersTab('guards')}
           >
             {language === 'en' ? 'Risk guards' : '风险护栏'}
@@ -474,7 +477,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   );
 
   const renderExecutionPane = () => (
-    <div data-testid="pro-panel-execution" className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+    <div data-testid="pro-panel-execution" className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
       <GlassCard className="p-6">
         <p className={compactFieldLabelClass}>{language === 'en' ? 'Execution baseline' : '执行基线'}</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -509,19 +512,19 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   );
 
   const renderAnalyticsPane = () => (
-    <div data-testid="pro-panel-analytics" className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+    <div data-testid="pro-panel-analytics" className="grid gap-8 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
       <GlassCard className="p-6">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className={`rounded-2xl border px-4 py-2 text-sm transition ${analyticsTab === 'optimization' ? 'border-white/12 bg-white/[0.08] text-white' : 'border-white/6 bg-white/[0.02] text-white/58'}`}
+            className={analyticsTab === 'optimization' ? activeGhostButtonClass : ghostButtonClass}
             onClick={() => setAnalyticsTab('optimization')}
           >
             {language === 'en' ? 'Optimization' : '优化'}
           </button>
           <button
             type="button"
-            className={`rounded-2xl border px-4 py-2 text-sm transition ${analyticsTab === 'robustness' ? 'border-white/12 bg-white/[0.08] text-white' : 'border-white/6 bg-white/[0.02] text-white/58'}`}
+            className={analyticsTab === 'robustness' ? activeGhostButtonClass : ghostButtonClass}
             onClick={() => setAnalyticsTab('robustness')}
           >
             {language === 'en' ? 'Robustness' : '稳健性'}
@@ -609,7 +612,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         data-module="rule"
         className="w-full min-w-0 rounded-[32px] border border-white/5 bg-white/[0.02] p-6 shadow-[0_32px_80px_rgba(0,0,0,0.32)] backdrop-blur-sm"
       >
-        <div className="grid min-w-0 gap-6 xl:grid-cols-5 xl:items-start">
+        <div className="grid min-w-0 gap-8 xl:grid-cols-5 xl:items-start">
           <aside
             data-testid="pro-backtest-sidebar"
             className="flex min-w-0 flex-col gap-4 xl:col-span-1 xl:sticky xl:top-6"
@@ -625,10 +628,10 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                     type="button"
                     data-testid={item.testId}
                     onClick={() => jumpToPane(item)}
-                    className={`min-w-0 rounded-2xl border px-4 py-3 text-left transition ${
+                    className={`min-w-0 text-left ${
                       activePane === item.id
-                        ? 'border-indigo-400/40 bg-indigo-500/10 text-white'
-                        : 'border-white/5 bg-white/[0.02] text-white/72 hover:border-white/12 hover:bg-white/[0.05]'
+                        ? activeGhostButtonClass
+                        : ghostButtonClass
                     }`}
                   >
                     <span className="block truncate text-sm font-medium">{item.label}</span>
@@ -638,7 +641,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             </GlassCard>
           </aside>
 
-          <div className="flex min-w-0 flex-col gap-6 xl:col-span-4">
+          <div className="flex min-w-0 flex-col gap-8 xl:col-span-4">
             <div
               data-testid="pro-backtest-compile-bar"
               className="flex min-w-0 flex-col gap-4 rounded-[24px] border border-white/5 bg-white/[0.02] px-6 py-5 backdrop-blur-sm xl:flex-row xl:items-center xl:justify-between"
@@ -677,7 +680,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 </Button>
                 <Button
                   type="button"
-                  className="bg-white text-black hover:bg-white/90 hover:text-black"
+                  className={primaryButtonClass}
                   onClick={() => void handleCompileAndRun()}
                   disabled={isSubmitting}
                 >
@@ -714,11 +717,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 key={group.id}
                 type="button"
                 onClick={() => setCatalogGroupId(group.id)}
-                className={`rounded-2xl border px-4 py-2 text-sm transition ${
-                  activeCatalogGroup?.id === group.id
-                    ? 'border-white/12 bg-white/[0.08] text-white'
-                    : 'border-white/6 bg-white/[0.02] text-white/58'
-                }`}
+                className={activeCatalogGroup?.id === group.id ? activeGhostButtonClass : ghostButtonClass}
               >
                 {group.title[language]}
               </button>
@@ -783,11 +782,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                         title={template.executable
                           ? (language === 'en' ? 'Load this template into the editor' : '将该模板填入编辑器')
                           : (language === 'en' ? 'Reference only. Edit before running.' : '仅供参考，执行前请先在编辑器中修改')}
-                        className={`rounded-2xl border px-4 py-2 text-sm font-medium transition ${
-                          template.executable
-                            ? 'border-white/10 bg-white/[0.05] text-white/86 hover:border-white/20 hover:bg-white/[0.08]'
-                            : 'border-amber-500/25 bg-amber-500/10 text-amber-100 hover:border-amber-400/35 hover:bg-amber-500/14'
-                        }`}
+                        className={template.executable ? ghostButtonClass : 'rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-100 transition-all hover:border-amber-400/35 hover:bg-amber-500/15'}
                       >
                         {template.executable
                           ? (language === 'en' ? 'Load into editor' : '填入编辑器')

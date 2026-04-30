@@ -87,6 +87,7 @@ type Props = {
 };
 
 type HistoricalWizardStep = 'scope' | 'params' | 'execute' | 'results';
+const GHOST_FIELD_CLASS = 'w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
 
 const HistoricalEvaluationPanel: React.FC<Props> = ({
   normalizedCode,
@@ -205,7 +206,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             onChange={(event) => onCodeChange(event.target.value.toUpperCase())}
             onKeyDown={onCodeEnter}
             placeholder="输入股票代码，如 AAPL 或 600519"
-            className="input-surface input-focus-glow product-command-input"
+            className={GHOST_FIELD_CLASS}
             aria-label="股票代码"
           />
           <span className="product-field-help">留空时查看整体汇总；准备样本、清理样本时建议指定单一股票。</span>
@@ -216,7 +217,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
             <select
               value={samplePreset}
               onChange={(event) => onSamplePresetChange(event.target.value)}
-              className="input-surface product-command-input"
+              className={GHOST_FIELD_CLASS}
               aria-label="分析样本数"
             >
               <option value="20">20</option>
@@ -232,7 +233,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
                 max={365}
                 value={customSampleCount}
                 onChange={(event) => onCustomSampleCountChange(event.target.value)}
-                className="input-surface input-focus-glow product-command-input"
+                className={GHOST_FIELD_CLASS}
                 aria-label="自定义样本数"
               />
             ) : null}
@@ -319,7 +320,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
               max={120}
               value={evaluationBars}
               onChange={(event) => onEvaluationBarsChange(event.target.value)}
-              className="input-surface input-focus-glow product-command-input"
+              className={GHOST_FIELD_CLASS}
               aria-label="评估窗口"
             />
             <span className="product-field-help">单位是交易窗口，例如 10 = 从分析日往后评估 10 根日线。</span>
@@ -332,7 +333,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
               max={365}
               value={maturityDays}
               onChange={(event) => onMaturityDaysChange(event.target.value)}
-              className="input-surface input-focus-glow product-command-input"
+              className={GHOST_FIELD_CLASS}
               aria-label="成熟期"
             />
             <span className="product-field-help">单位是自然日，例如 14 = 仅评估 14 天前的分析记录。</span>
@@ -435,9 +436,9 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="w-full flex-1 flex flex-col xl:flex-row gap-6 min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start w-full min-w-0">
         <section
-          className="w-full xl:w-[360px] 2xl:w-[400px] shrink-0 flex flex-col gap-6"
+          className="col-span-1 lg:col-span-3 w-full min-w-0 flex flex-col gap-6"
           data-testid="backtest-control-panel"
           data-panel-mode={panelMode}
         >
@@ -506,7 +507,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         </section>
 
         <section
-          className="w-full xl:w-[320px] 2xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 min-w-[250px]"
+          className="col-span-1 lg:col-span-4 w-full min-w-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6"
           data-testid="historical-inspection-panel"
         >
           <div className="grid gap-3 min-w-0">
@@ -553,7 +554,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           </Disclosure>
         </section>
 
-        <section className="flex-1 min-w-0 flex flex-col gap-6" data-testid="backtest-display-board">
+        <section className="col-span-1 lg:col-span-5 w-full min-w-0 flex flex-col gap-6" data-testid="backtest-display-board">
           <div className="backtest-display-board__header shrink-0">
             <SectionEyebrow>显示面板</SectionEyebrow>
             <h2 className="backtest-display-board__title">结果与记录</h2>
