@@ -8,6 +8,7 @@ export type MarketDataFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fal
 export interface MarketDataMeta {
   source: string;
   sourceLabel?: string;
+  sourceType?: string;
   updatedAt: string;
   asOf?: string;
   freshness: MarketDataFreshness;
@@ -50,6 +51,7 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     logSessionId: normalized.logSessionId,
     source: normalized.source,
     sourceLabel: normalized.sourceLabel,
+    sourceType: normalized.sourceType,
     updatedAt: normalized.updatedAt || normalized.lastRefreshAt,
     asOf: normalized.asOf,
     freshness: normalized.freshness,

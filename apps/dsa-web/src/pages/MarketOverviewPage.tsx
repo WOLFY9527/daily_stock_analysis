@@ -299,8 +299,8 @@ function scoreTone(score: MarketTemperatureScore, pressure = false): string {
   return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-300' : score.value <= 45 ? 'text-sky-300' : 'text-white';
 }
 
-function confidenceLabel(confidence?: number, isReliable?: boolean): string {
-  if (isReliable === false || confidence === 0) {
+function confidenceLabel(confidence?: number): string {
+  if (confidence === 0) {
     return '数据不足';
   }
   if (confidence == null) {
@@ -366,6 +366,9 @@ function getCardMeta(panels: PanelState, cardKey: CardKey): {
 function getCardCoverageKind(panels: PanelState, cardKey: CardKey): CardCoverageKind {
   const meta = getCardMeta(panels, cardKey);
   const items = meta.items || [];
+  if (!meta.source && !meta.freshness && items.length === 0) {
+    return 'fallback';
+  }
   if (isFallbackOnlyMeta(meta)) {
     return 'fallback';
   }
@@ -558,7 +561,7 @@ const MarketTemperatureStrip: React.FC<{
     { key: 'liquidity', label: t('marketOverviewPage.temperature.liquidity') },
   ];
   const isReliable = isTemperatureReliable(data);
-  const confidenceText = confidenceLabel(data.confidence, isReliable);
+  const confidenceText = confidenceLabel(data.confidence);
   const shouldShowScores = isReliable || showPlaceholderScores;
   return (
     <GlassCard as="section" data-testid="market-temperature-strip" className="p-4">
@@ -575,7 +578,7 @@ const MarketTemperatureStrip: React.FC<{
             </span>
             {data.reliableInputCount != null || data.excludedInputCount != null ? (
               <span className="text-white/38">
-                真实输入 {data.reliableInputCount ?? 0} · 已排除备用 {data.excludedInputCount ?? 0}
+                真实输入 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0} · 排除 {data.excludedInputCount ?? 0} · confidence {formatNumber(data.confidence, 2)}
               </span>
             ) : null}
           </div>
@@ -587,7 +590,9 @@ const MarketTemperatureStrip: React.FC<{
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold text-white">市场温度：数据不足</p>
-              <p className="mt-1 text-xs leading-5 text-white/55">当前真实数据源不足，暂不生成综合判断。</p>
+              <p className="mt-1 text-xs leading-5 text-white/55">
+                {(data.reliableInputCount ?? 0) > 0 ? '真实输入不足，暂不生成综合判断。' : '当前真实数据源不足，暂不生成综合判断。'}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2 text-[11px] text-white/55">
               <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">真实 {data.reliableInputCount ?? 0}</span>
@@ -671,7 +676,7 @@ const MarketBriefingCard: React.FC<{
           <article key={`${item.category}-${item.title}`} className={cn('rounded-lg border px-3 py-2.5', lowConfidence ? severityClass.neutral : severityClass[item.severity] || severityClass.neutral)}>
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs font-semibold">{item.title}</p>
-              {item.confidence != null ? <span className="shrink-0 text-[10px] text-white/35">{confidenceLabel(item.confidence, !lowConfidence)}</span> : null}
+              {item.confidence != null ? <span className="shrink-0 text-[10px] text-white/35">{confidenceLabel(item.confidence)}</span> : null}
             </div>
             <p className="mt-1 text-xs leading-5 opacity-75">{item.message}</p>
           </article>

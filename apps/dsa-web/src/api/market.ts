@@ -17,6 +17,7 @@ type MarketSnapshotItem = {
   unit?: string | null;
   source?: string | null;
   sourceLabel?: string | null;
+  sourceType?: string | null;
   updatedAt?: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
@@ -39,6 +40,7 @@ type MarketSnapshotPayload = {
   fallbackUsed?: boolean;
   source?: string | null;
   sourceLabel?: string | null;
+  sourceType?: string | null;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
@@ -68,6 +70,7 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     trend: Array.isArray(item.trend) ? item.trend : Array.isArray(item.sparkline) ? item.sparkline : [],
     source: item.source || undefined,
     sourceLabel: item.sourceLabel || undefined,
+    sourceType: item.sourceType || undefined,
     updatedAt: item.updatedAt,
     asOf: item.asOf,
     freshness: item.freshness,
@@ -90,6 +93,7 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     logSessionId: payload.logSessionId,
     source: payload.source || undefined,
     sourceLabel: payload.sourceLabel || undefined,
+    sourceType: payload.sourceType || undefined,
     updatedAt: payload.updatedAt || payload.lastUpdate || new Date().toISOString(),
     asOf: payload.asOf,
     freshness: payload.freshness,

@@ -368,6 +368,18 @@ const unreliableTemperaturePayload = () => ({
   },
 });
 
+const limitedRealTemperaturePayload = () => ({
+  ...unreliableTemperaturePayload(),
+  source: 'mixed',
+  sourceLabel: '多来源',
+  freshness: 'stale' as const,
+  isFallback: false,
+  confidence: 0.32,
+  reliableInputCount: 2,
+  fallbackInputCount: 10,
+  excludedInputCount: 10,
+});
+
 const unreliableBriefingPayload = () => ({
   source: 'fallback',
   sourceLabel: '备用数据',
@@ -618,14 +630,28 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText(/当前真实数据源不足，暂不生成综合判断/i)).toBeInTheDocument();
     expect(screen.getByText(/可信度：数据不足/i)).toBeInTheDocument();
     expect(screen.queryByText(/综合市场温度/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/真实 0/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/备用 18/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/排除 18/i)).toBeInTheDocument();
-    expect(screen.getByText(/confidence 0/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('market-temperature-unreliable-summary')).toHaveTextContent('真实 0');
+    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('备用 18');
+    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('排除 18');
+    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('confidence 0');
     fireEvent.click(screen.getByRole('button', { name: /查看占位评分/i }));
     expect(screen.getByText(/综合市场温度/i)).toBeInTheDocument();
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
     expect(screen.getByText(/备用示例数据仅用于保持界面结构/i)).toBeInTheDocument();
+  });
+
+  it('shows limited real temperature inputs instead of collapsing them to zero', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
+
+    render(<MarketOverviewPage />);
+
+    const summary = await screen.findByTestId('market-temperature-unreliable-summary');
+    expect(summary).toHaveTextContent('市场温度：数据不足');
+    expect(summary).toHaveTextContent('真实输入不足，暂不生成综合判断');
+    expect(summary).toHaveTextContent('真实 2');
+    expect(summary).toHaveTextContent('备用 10');
+    expect(summary).toHaveTextContent('排除 10');
+    expect(screen.queryByText(/真实 0/i)).not.toBeInTheDocument();
   });
 
   it('uses a wide responsive market overview grid', async () => {
@@ -687,6 +713,37 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-card-cnIndices').closest('[data-testid="market-overview-main-grid"]')).toBeTruthy();
   });
 
+  it('counts A-share and Hong Kong mixed coverage without marking the category all fallback', async () => {
+    vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce({
+      ...snapshotPanel('ChinaIndicesCard', 'CSI300', '沪深300'),
+      source: 'mixed',
+      sourceLabel: 'Sina + 备用数据',
+      freshness: 'delayed' as const,
+      isFallback: false,
+      items: [
+        {
+          ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
+          source: 'sina',
+          sourceLabel: 'Sina',
+          freshness: 'delayed' as const,
+          isFallback: false,
+        },
+        {
+          ...snapshotPanel('ChinaIndicesCard', 'CN00Y', '富时A50期货').items[0],
+        },
+      ],
+    });
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/A股\/港股数据覆盖：真实 \d+ · 混合 [1-9]/);
+    });
+    expect(screen.queryByTestId('market-overview-category-empty-state')).not.toBeInTheDocument();
+  });
+
   it('shows category data coverage and collapses fallback-heavy category cards', async () => {
     render(<MarketOverviewPage />);
 
@@ -700,6 +757,17 @@ describe('MarketOverviewPage', () => {
 
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /行业与主题强弱/i })).toBeInTheDocument();
+  });
+
+  it('counts a real crypto card in crypto category coverage', async () => {
+    vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
+
+    expect(await screen.findByTestId('market-overview-coverage-summary')).toHaveTextContent(/加密货币数据覆盖：真实 [1-9]/);
+    expect(screen.getByTestId('market-overview-card-crypto').closest('[data-testid="market-overview-main-grid"]')).toBeTruthy();
   });
 
   it('shows an empty state when a category has no real or mixed cards', async () => {

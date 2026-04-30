@@ -27,6 +27,30 @@ CONFIDENCE_BY_FRESHNESS = {
     "error": 0.0,
 }
 
+SOURCE_TYPE_CONFIDENCE = {
+    "official_api": 1.0,
+    "exchange_public": 1.0,
+    "public_api": 0.9,
+    "unofficial_public_api": 0.7,
+    "computed_from_real": 0.6,
+}
+
+FALLBACK_SOURCE_TOKENS = ("fallback", "mock", "static", "sample")
+
+SOURCE_TYPE_BY_SOURCE = {
+    "sina": "public_api",
+    "binance": "exchange_public",
+    "binance_ws": "exchange_public",
+    "yahoo": "unofficial_public_api",
+    "yfinance": "unofficial_public_api",
+    "yfinance_proxy": "unofficial_public_api",
+    "eastmoney": "public_api",
+    "alternative": "public_api",
+    "alternative_me": "public_api",
+    "cnn": "public_api",
+    "computed": "computed_from_real",
+}
+
 SOURCE_LABELS = {
     "eastmoney": "东方财富",
     "sina": "新浪财经",
@@ -46,6 +70,80 @@ SOURCE_LABELS = {
     "public": "公开数据",
     "unavailable": "不可用",
 }
+
+
+def _has_valid_market_value(meta: Dict[str, Any]) -> bool:
+    if isinstance(meta.get("items"), list) and meta["items"]:
+        return True
+    for key in ("value", "price", "change", "changePercent", "change_pct", "sentimentScore"):
+        value = meta.get(key)
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            return True
+    return False
+
+
+def _infer_source_type(source: str, explicit: Any = None) -> str:
+    if explicit:
+        return str(explicit)
+    return SOURCE_TYPE_BY_SOURCE.get(source.lower(), "public_api" if source else "")
+
+
+def classify_market_payload_reliability(payload: Dict[str, Any], category: str = "") -> Dict[str, Any]:
+    """Classify market payload/item trust consistently for coverage and scoring."""
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    if items:
+        item_results = [classify_market_payload_reliability(item, category=category) for item in items if isinstance(item, dict)]
+        real_count = sum(1 for result in item_results if result["isReliable"])
+        fallback_count = sum(1 for result in item_results if result["kind"] in {"fallback", "stale", "error"})
+        if real_count and fallback_count:
+            kind = "mixed"
+        elif real_count:
+            kind = "real"
+        elif any(result["kind"] == "stale" for result in item_results):
+            kind = "stale"
+        elif any(result["kind"] == "error" for result in item_results):
+            kind = "error"
+        else:
+            kind = "fallback"
+        confidence = sum(result["confidenceWeight"] for result in item_results) / len(item_results) if item_results else 0.0
+        return {
+            "kind": kind,
+            "isReliable": real_count > 0,
+            "excluded": real_count == 0,
+            "excludeReason": None if real_count > 0 else kind,
+            "confidenceWeight": round(confidence, 2),
+            "sourceType": str(payload.get("sourceType") or ""),
+            "realItemCount": real_count,
+            "fallbackItemCount": fallback_count,
+        }
+
+    source = str(payload.get("source") or "").lower()
+    source_label = str(payload.get("sourceLabel") or "").lower()
+    freshness = str(payload.get("freshness") or "").lower()
+    source_type = _infer_source_type(source, payload.get("sourceType"))
+    has_error = bool(payload.get("error") or payload.get("lastError"))
+    is_fallback = bool(payload.get("isFallback") or payload.get("fallbackUsed") or payload.get("fallback_used"))
+    fallback_source = any(token in source or token in source_label for token in FALLBACK_SOURCE_TOKENS)
+    has_value = _has_valid_market_value(payload)
+
+    if has_error and not has_value:
+        return {"kind": "error", "isReliable": False, "excluded": True, "excludeReason": "error", "confidenceWeight": 0.0, "sourceType": source_type}
+    if freshness == "stale" or payload.get("isStale"):
+        return {"kind": "stale", "isReliable": False, "excluded": True, "excludeReason": "stale", "confidenceWeight": 0.0, "sourceType": source_type}
+    if freshness in {"fallback", "mock"} or is_fallback or fallback_source or source_type == "computed_from_fallback":
+        return {"kind": "fallback", "isReliable": False, "excluded": True, "excludeReason": "fallback", "confidenceWeight": 0.0, "sourceType": source_type}
+    if not has_value:
+        return {"kind": "error", "isReliable": False, "excluded": True, "excludeReason": "no_value", "confidenceWeight": 0.0, "sourceType": source_type}
+    if freshness in {"live", "cached", "delayed"} and source_type in SOURCE_TYPE_CONFIDENCE:
+        return {
+            "kind": "real",
+            "isReliable": True,
+            "excluded": False,
+            "excludeReason": None,
+            "confidenceWeight": SOURCE_TYPE_CONFIDENCE[source_type],
+            "sourceType": source_type,
+        }
+    return {"kind": "fallback", "isReliable": False, "excluded": True, "excludeReason": "unknown_source", "confidenceWeight": 0.0, "sourceType": source_type}
 
 
 def _now_iso() -> str:
@@ -655,14 +753,16 @@ class MarketOverviewService:
 
     def _with_market_meta(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
         source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))
-        is_fallback = bool(payload.get("fallbackUsed") or payload.get("fallback_used") or source.lower() in {"fallback", "mock"})
+        is_fallback = bool(payload.get("isFallback") or source.lower() in {"fallback", "mock"})
         updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
         as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
         freshness = get_freshness_status(as_of, category, source, is_fallback)
+        reliability = classify_market_payload_reliability({**payload, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
         return {
             **payload,
             "source": source,
             "sourceLabel": payload.get("sourceLabel") or self._source_label(source),
+            "sourceType": payload.get("sourceType") or reliability.get("sourceType"),
             "updatedAt": updated_at,
             "asOf": as_of,
             "freshness": freshness["freshness"],
@@ -681,10 +781,12 @@ class MarketOverviewService:
         as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
         updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
         freshness = get_freshness_status(as_of, category, source, is_fallback)
+        reliability = classify_market_payload_reliability({**item, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
         return {
             **item,
             "source": source,
             "sourceLabel": item.get("sourceLabel") or self._source_label(source),
+            "sourceType": item.get("sourceType") or reliability.get("sourceType"),
             "updatedAt": updated_at,
             "asOf": as_of,
             "freshness": freshness["freshness"],
@@ -1236,19 +1338,21 @@ class MarketOverviewService:
         }
 
     def _build_market_temperature_inputs(self) -> Dict[str, Any]:
-        indices = self._fallback_cn_indices_snapshot()
-        breadth = self._fallback_cn_breadth_snapshot()
-        flows = self._fallback_cn_flows_snapshot()
-        sectors = self._fallback_sector_rotation_snapshot()
-        rates = self._fallback_rates_snapshot()
-        fx = self._fallback_fx_commodities_snapshot()
-        futures = self._fallback_futures_snapshot()
-        sentiment = {
-            "items": [
-                self._metric_item("Fear & Greed", "FGI", 56, 4, 7.7, "score", [44, 48, 52, 56], explanation="风险情绪改善。")
-            ],
-            "fallbackUsed": True,
-        }
+        indices = self._temperature_panel("indices", self.get_cn_indices, self._fallback_cn_indices_snapshot)
+        breadth = self._temperature_panel("breadth", self.get_cn_breadth, self._fallback_cn_breadth_snapshot)
+        flows = self._temperature_panel("flows", self.get_cn_flows, self._fallback_cn_flows_snapshot)
+        sectors = self._temperature_panel("sectors", self.get_sector_rotation, self._fallback_sector_rotation_snapshot)
+        rates = self._temperature_panel("rates", self.get_rates, self._fallback_rates_snapshot)
+        volatility = self._temperature_panel("volatility", self.get_volatility, self._fallback_rates_snapshot)
+        rates["items"] = [*rates.get("items", []), *volatility.get("items", [])]
+        fx = self._temperature_panel("fx", self.get_fx_commodities, self._fallback_fx_commodities_snapshot)
+        futures = self._temperature_panel("futures", self.get_futures, self._fallback_futures_snapshot)
+        sentiment = self._temperature_panel(
+            "sentiment",
+            self.get_sentiment,
+            lambda: self._fallback_overview_panel("sentiment", "MarketSentimentCard", FALLBACK_WARNING),
+        )
+        crypto = self._temperature_panel("crypto", self.get_crypto, self._fallback_crypto_market_snapshot)
         return {
             "indices": indices,
             "breadth": breadth,
@@ -1258,6 +1362,7 @@ class MarketOverviewService:
             "fx": fx,
             "futures": futures,
             "sentiment": sentiment,
+            "crypto": crypto,
             "fallback_notice": True,
         }
 
@@ -1284,7 +1389,39 @@ class MarketOverviewService:
             "fx": fx,
             "futures": futures,
             "sentiment": sentiment,
+            "crypto": self._fallback_crypto_market_snapshot(),
             "fallback_notice": True,
+        }
+
+    def _temperature_panel(
+        self,
+        key: str,
+        fetcher: Callable[..., Dict[str, Any]],
+        fallback_factory: Callable[[], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        try:
+            panel = fetcher()
+        except Exception:
+            panel = fallback_factory()
+        category = self._category_for_cache_key(key)
+        panel = self._with_market_meta(dict(panel), category)
+        panel["items"] = [
+            self._with_temperature_input_meta(self._with_item_meta(item, category, panel), category)
+            for item in panel.get("items", [])
+            if isinstance(item, dict)
+        ]
+        return self._with_temperature_input_meta(panel, category)
+
+    def _with_temperature_input_meta(self, meta: Dict[str, Any], category: str) -> Dict[str, Any]:
+        reliability = classify_market_payload_reliability(meta, category=category)
+        return {
+            **meta,
+            "key": meta.get("key") or meta.get("symbol") or meta.get("panelName"),
+            "isReliable": reliability["isReliable"],
+            "excluded": reliability["excluded"],
+            "excludeReason": reliability["excludeReason"],
+            "confidenceWeight": reliability["confidenceWeight"],
+            "sourceType": meta.get("sourceType") or reliability.get("sourceType"),
         }
 
     def _summarize_market_temperature_confidence(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -1292,7 +1429,7 @@ class MarketOverviewService:
         reliable_count = 0
         fallback_count = 0
         excluded_count = 0
-        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment"):
+        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"):
             if key not in inputs:
                 continue
             panel = inputs.get(key) or {}
@@ -1301,7 +1438,7 @@ class MarketOverviewService:
                 panel_items = []
             if panel_items:
                 for item in panel_items:
-                    confidence = self._market_data_confidence(item if isinstance(item, dict) else {})
+                    confidence = self._market_data_confidence(item if isinstance(item, dict) else {}, self._category_for_cache_key(key))
                     confidences.append(confidence)
                     if confidence > 0:
                         reliable_count += 1
@@ -1310,7 +1447,7 @@ class MarketOverviewService:
                         excluded_count += 1
                 continue
             if isinstance(panel, dict):
-                confidence = self._market_data_confidence(panel)
+                confidence = self._market_data_confidence(panel, self._category_for_cache_key(key))
                 confidences.append(confidence)
                 if confidence > 0:
                     reliable_count += 1
@@ -1319,7 +1456,7 @@ class MarketOverviewService:
                     excluded_count += 1
 
         confidence = round(sum(confidences) / len(confidences), 2) if confidences else 0.0
-        is_reliable = reliable_count >= 4 and confidence >= 0.3
+        is_reliable = reliable_count >= 3 and confidence > 0
         return {
             "confidence": confidence,
             "reliableInputCount": reliable_count,
@@ -1330,7 +1467,7 @@ class MarketOverviewService:
 
     def _real_market_temperature_inputs(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         filtered: Dict[str, Any] = {"fallback_notice": bool(inputs.get("fallback_notice"))}
-        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment"):
+        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"):
             panel = inputs.get(key)
             if not isinstance(panel, dict):
                 filtered[key] = {"items": []}
@@ -1339,26 +1476,15 @@ class MarketOverviewService:
             items = panel.get("items") if isinstance(panel.get("items"), list) else []
             next_panel["items"] = [
                 item for item in items
-                if isinstance(item, dict) and self._market_data_confidence(item) > 0
+                if isinstance(item, dict) and self._market_data_confidence(item, self._category_for_cache_key(key)) > 0
             ]
             filtered[key] = next_panel
         return filtered
 
     @staticmethod
-    def _market_data_confidence(meta: Dict[str, Any]) -> float:
-        freshness = str(meta.get("freshness") or "").lower()
-        if freshness in CONFIDENCE_BY_FRESHNESS:
-            return CONFIDENCE_BY_FRESHNESS[freshness]
-        source = str(meta.get("source") or "").lower()
-        if meta.get("isFallback") or meta.get("fallbackUsed") or meta.get("fallback_used"):
-            return 0.0
-        if source in {"fallback", "mock", "error", "unavailable"}:
-            return 0.0
-        if source in {"live"}:
-            return 1.0
-        if source in {"cached", "computed", "mixed"}:
-            return 0.6
-        return 0.6 if source else 0.0
+    def _market_data_confidence(meta: Dict[str, Any], category: str = "") -> float:
+        reliability = classify_market_payload_reliability(meta, category=category)
+        return float(reliability["confidenceWeight"]) if reliability["isReliable"] else 0.0
 
     def _insufficient_market_temperature_scores(self) -> Dict[str, Any]:
         description = "当前真实数据不足，市场温度仅供界面演示。"
@@ -1374,6 +1500,7 @@ class MarketOverviewService:
         us_index_change = self._avg_change(inputs.get("futures", {}).get("items", []), {"NQ", "ES", "YM", "RTY"})
         vix_change = self._item_change(inputs.get("rates", {}).get("items", []), "VIX")
         fear_greed = self._item_value(inputs.get("sentiment", {}).get("items", []), "FGI")
+        crypto_change = self._avg_change(inputs.get("crypto", {}).get("items", []), {"BTC", "ETH", "BNB"})
         etf_flow = self._item_value(inputs.get("flows", {}).get("items", []), "CN_ETF")
         us10y_change = self._item_change(inputs.get("rates", {}).get("items", []), "US10Y")
         dxy_change = self._item_change(inputs.get("fx", {}).get("items", []), "DXY")
@@ -1393,6 +1520,7 @@ class MarketOverviewService:
         us += 15 if (us_index_change or 0) > 0 else -8
         us += 15 if (vix_change or -1) < 0 else -10
         us += 15 if (fear_greed or 50) > 50 else -8
+        us += 8 if (crypto_change or 0) > 0 else -4
         us += 10 if (etf_flow or 0) > 0 else -5
         us += 10 if (us10y_change or 1) < 0 else -8
         us += 10 if (dxy_change or 1) < 0 else -8
@@ -1419,6 +1547,7 @@ class MarketOverviewService:
         liquidity += 10 if (dr007_change or 1) < 0 else -5
         liquidity += 10 if (shibor_change or 1) < 0 else -5
         liquidity += 10 if (northbound or 0) > 0 else -5
+        liquidity += 5 if (crypto_change or 0) > 0 else -3
 
         us_value = self._clamp_score(us)
         cn_value = self._clamp_score(cn)

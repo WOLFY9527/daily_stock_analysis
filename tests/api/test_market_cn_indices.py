@@ -117,6 +117,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
             payload = service.get_cn_indices()
 
         self.assertEqual(payload["source"], "mixed")
+        self.assertFalse(payload["isFallback"])
         live_item = next(item for item in payload["items"] if item["symbol"] == "000001.SH")
         fallback_item = next(item for item in payload["items"] if item["symbol"] == "399001.SZ")
         self.assertEqual(live_item["source"], "sina")
@@ -124,6 +125,49 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertFalse(live_item["isFallback"])
         self.assertEqual(fallback_item["freshness"], "fallback")
         self.assertTrue(fallback_item["isFallback"])
+
+    def test_cn_indices_sina_items_are_not_fallback(self) -> None:
+        service = MarketOverviewService()
+        now = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        quotes = {
+            "000001.SH": {
+                "name": "上证指数",
+                "symbol": "000001.SH",
+                "value": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "sparkline": [4078.63, 4107.51],
+                "asOf": now,
+            },
+            "399001.SZ": {
+                "name": "深证成指",
+                "symbol": "399001.SZ",
+                "value": 10288.10,
+                "change": 48.88,
+                "changePercent": 0.48,
+                "sparkline": [10210.0, 10288.1],
+                "asOf": now,
+            },
+            "399006.SZ": {
+                "name": "创业板指",
+                "symbol": "399006.SZ",
+                "value": 1988.10,
+                "change": 8.88,
+                "changePercent": 0.45,
+                "sparkline": [1978.0, 1988.1],
+                "asOf": now,
+            },
+        }
+
+        with patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes):
+            payload = service.get_cn_indices()
+
+        self.assertIn(payload["source"], {"sina", "mixed"})
+        self.assertFalse(payload["isFallback"])
+        live_items = [item for item in payload["items"] if item["source"] == "sina"]
+        self.assertGreaterEqual(len(live_items), 3)
+        self.assertTrue(all(not item["isFallback"] for item in live_items))
+        self.assertTrue(all(item["freshness"] in {"live", "cached", "delayed"} for item in live_items))
 
     def test_cn_indices_uses_cache_within_ttl(self) -> None:
         calls = 0

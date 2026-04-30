@@ -217,6 +217,45 @@ class MarketCryptoApiTestCase(unittest.TestCase):
             self.assertIn("changePercent", item)
             self.assertIn("sparkline", item)
 
+    def test_crypto_real_snapshot_counts_as_real(self) -> None:
+        service = MarketOverviewService()
+        updated_at = datetime.now(CN_TZ).isoformat(timespec="seconds")
+        snapshot = {
+            "items": [
+                {
+                    "symbol": "BTC",
+                    "label": "Bitcoin",
+                    "price": 87000.0,
+                    "value": 87000.0,
+                    "change": 1.2,
+                    "changePercent": 1.2,
+                    "trend": [86000.0, 86500.0, 87000.0],
+                    "source": "binance",
+                    "last_update": updated_at,
+                }
+            ],
+            "last_update": updated_at,
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "fallback_used": False,
+            "fallbackUsed": False,
+            "source": "binance",
+        }
+
+        with patch.object(service, "_fetch_crypto_market_snapshot", return_value=snapshot):
+            payload = service.get_crypto()
+
+        self.assertEqual(payload["source"], "binance")
+        self.assertFalse(payload["isFallback"])
+        self.assertIn(payload["freshness"], {"live", "delayed", "cached"})
+
+        with patch.object(service, "get_crypto", return_value=payload):
+            inputs = service._build_market_temperature_inputs()
+
+        crypto_items = inputs["crypto"]["items"]
+        self.assertTrue(any(item["symbol"] == "BTC" and not item["isFallback"] for item in crypto_items))
+        self.assertGreater(service._summarize_market_temperature_confidence({"crypto": inputs["crypto"]})["reliableInputCount"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
