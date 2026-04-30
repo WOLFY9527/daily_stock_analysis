@@ -4,6 +4,8 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 import { GlassCard } from '../common';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
+  MARKET_OVERVIEW_CARD_TITLE_CLASS,
+  MARKET_OVERVIEW_GHOST_CARD_CLASS,
   MarketOverviewDataRow,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
@@ -29,12 +31,12 @@ export const VolatilityCard: React.FC<{
   ];
 
   return (
-    <GlassCard as="section" className="flex h-full flex-col p-6">
+    <GlassCard as="section" className={`${MARKET_OVERVIEW_GHOST_CARD_CLASS} flex h-full flex-col`}>
       <div className="flex h-full flex-col gap-5">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.volatility.eyebrow')}</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">{title}</h2>
+            <h2 className={`${MARKET_OVERVIEW_CARD_TITLE_CLASS} mt-2`}>{title}</h2>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -44,7 +46,7 @@ export const VolatilityCard: React.FC<{
         </div>
 
         {panel?.errorMessage ? (
-          <div className="rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          <div className="rounded-xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
             {panel.errorMessage}
           </div>
         ) : null}
@@ -62,7 +64,7 @@ export const VolatilityCard: React.FC<{
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
+          <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
             {t('marketOverviewPage.loading')}
           </div>
         ) : null}

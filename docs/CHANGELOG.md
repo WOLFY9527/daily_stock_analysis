@@ -1,5 +1,7 @@
 ## 2026-04-30
 
+- 🧊 **Market Overview 全屏 Bento 终端化重塑** — `/market-overview` 外层容器放宽到 `max-w-[1600px]`，主内容区改为 `lg:grid-cols-12` 的 8/4 非对称 Bento 轨道：核心市场温度、解读、A股/港股、情绪、加密与宏观卡留在左侧主轨，全球核心指数与 ETF 资金流向进入右侧 `max-h-[600px]` 滚动辅助轨，避免页面退化成窄屏博客式纵向堆叠。Market Overview 专用卡片统一收敛为 `bg-white/[0.02] border-white/5 rounded-xl backdrop-blur-sm p-5` 幽灵态材质，卡片标题降噪为微型大写排版，涨跌与 Sparkline 统一切到 emerald/rose 霓虹色板。此次仅调整前端布局与视觉样式，不改变 API、数据刷新、分类、拖拽排序或 fallback 行为。
+
 - 🧪 **Backtest 工作台按钮、表单与三栏布局重塑** — `apps/dsa-web` 对 `/backtest` 执行局部 UI 修复：普通/专业模式和历史评估里的回测按钮统一切到 emerald 微光主按钮或低调幽灵按钮；输入框、下拉框和复选框统一使用幽灵表单样式与 `gap-2` 垂直字段结构，避免标签与控件遮挡；历史评估工作台改为 `lg:grid-cols-12` 的 3:4:5 三栏比例，左侧步骤、中间诊断、右侧结果记录各自占位明确。此次改动保持回测 API、策略解析、历史评估状态和结果路由不变，只调整 Backtest 前端布局与视觉样式。
 
 - 🏷️ **前端状态 Badge 语义收敛** — `apps/dsa-web` 新增统一 `StatusBadge` 与状态归一化工具，把 `success/succeeded/completed`、`failed/error`、`running/attempting`、`pending/queued`、`partial`、`skipped/not_needed`、`unknown` 等前端状态展示语义收口到一个复用入口。`/admin/logs` 已切到统一 badge，`Settings` 数据源校验状态与 `Backtest` 的一部分纯展示状态也改为复用同一组件；`Market Overview` 的 `DataFreshnessBadge` 保持 freshness 专用，不与普通业务状态混合。回归新增 `StatusBadge.test.tsx`，并补充 Admin Logs / Settings / Backtest 相关断言，确保 skipped 不再被误渲染为成功、unknown 不会被误渲染为运行中。

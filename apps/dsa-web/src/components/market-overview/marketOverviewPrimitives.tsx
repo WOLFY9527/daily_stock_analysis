@@ -28,8 +28,11 @@ const FRESHNESS_CLASSES: Record<MarketDataFreshness, string> = {
   stale: 'border-amber-300/30 bg-amber-400/10 text-amber-200',
   fallback: 'border-orange-300/30 bg-orange-400/10 text-orange-200',
   mock: 'border-fuchsia-300/30 bg-fuchsia-400/10 text-fuchsia-200',
-  error: 'border-red-300/35 bg-red-400/10 text-red-200',
+  error: 'border-rose-300/35 bg-rose-400/10 text-rose-200',
 };
+
+export const MARKET_OVERVIEW_GHOST_CARD_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] p-5 backdrop-blur-sm transition-all hover:border-white/10';
+export const MARKET_OVERVIEW_CARD_TITLE_CLASS = 'mb-4 block text-[10px] font-bold uppercase tracking-widest text-white/40';
 
 function resolveFreshness(meta?: Partial<MarketDataMeta>): MarketDataFreshness {
   if (meta?.freshness) {
@@ -161,7 +164,7 @@ export const MarketOverviewDataRow: React.FC<{
   const freshness = resolveFreshness(item);
   const itemDetails = metaText(item);
   const sparklineTone = direction === 'increasing'
-    ? 'text-red-400'
+    ? 'text-rose-400'
     : direction === 'decreasing'
       ? 'text-emerald-400'
       : 'text-white/35';

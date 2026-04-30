@@ -658,8 +658,10 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect(await screen.findByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-page-container')).toHaveClass('w-full', 'max-w-[1400px]');
-    expect(screen.getByTestId('market-overview-main-grid')).toHaveClass('grid', 'grid-cols-1', 'lg:grid-cols-2', '2xl:grid-cols-3');
+    expect(screen.getByTestId('market-overview-page-container')).toHaveClass('w-full', 'max-w-[1600px]', 'px-6', 'lg:px-8');
+    expect(screen.getByTestId('market-overview-main-grid')).toHaveClass('grid', 'grid-cols-1', 'lg:grid-cols-12', 'gap-6', 'items-start', 'mt-6');
+    expect(screen.getByTestId('market-overview-primary-rail')).toHaveClass('col-span-1', 'lg:col-span-8', 'flex', 'flex-col', 'gap-6');
+    expect(screen.getByTestId('market-overview-side-rail')).toHaveClass('col-span-1', 'lg:col-span-4', 'flex', 'flex-col', 'gap-6', 'max-h-[600px]', 'overflow-y-auto', 'custom-scrollbar');
     expect(screen.getByTestId('market-overview-card-indices')).toHaveClass('min-w-0', 'w-full');
   });
 

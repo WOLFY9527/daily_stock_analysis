@@ -21,6 +21,8 @@ import { VolatilityCard } from '../components/market-overview/VolatilityCard';
 import { resolveMarketOverviewDisplayLabel } from '../components/market-overview/marketOverviewLabels';
 import {
   DataFreshnessBadge,
+  MARKET_OVERVIEW_CARD_TITLE_CLASS,
+  MARKET_OVERVIEW_GHOST_CARD_CLASS,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
   MarketOverviewSparkline,
@@ -70,6 +72,7 @@ const CATEGORY_STORAGE_KEYS: Record<CategoryKey, string> = {
 };
 const AUTO_REFRESH_MS = 60_000;
 const PANEL_REQUEST_TIMEOUT_MS = 3_000;
+const MARKET_OVERVIEW_SIDE_RAIL_CARDS = new Set<CardKey>(['indices', 'fundsFlow']);
 
 const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
   source: 'fallback',
@@ -249,14 +252,14 @@ function heroToneClass(item: MarketOverviewItem | undefined): string {
   if (!item || item.changePct == null) {
     return 'text-white/35';
   }
-  return item.changePct >= 0 ? 'text-emerald-400' : 'text-red-400';
+  return item.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400';
 }
 
 const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => (
   <GlassCard
     as="section"
     data-testid="market-overview-hero-ribbon"
-    className="overflow-hidden p-0"
+    className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'overflow-hidden p-0')}
     aria-label="Cross asset hero ribbon"
   >
     <div className="grid grid-cols-2 divide-x divide-y divide-white/5 sm:grid-cols-3 md:grid-cols-6 md:divide-y-0">
@@ -294,9 +297,9 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
 
 function scoreTone(score: MarketTemperatureScore, pressure = false): string {
   if (pressure) {
-    return score.value >= 65 ? 'text-red-300' : score.value >= 55 ? 'text-amber-300' : 'text-emerald-300';
+    return score.value >= 65 ? 'text-rose-400' : score.value >= 55 ? 'text-amber-300' : 'text-emerald-400';
   }
-  return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-300' : score.value <= 45 ? 'text-sky-300' : 'text-white';
+  return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-400' : score.value <= 45 ? 'text-sky-300' : 'text-white';
 }
 
 function confidenceLabel(confidence?: number): string {
@@ -460,7 +463,7 @@ const DataQualityOverview: React.FC<{ summary: DataQualitySummary }> = ({ summar
     ['error', '异常'],
   ];
   return (
-    <GlassCard as="section" data-testid="market-data-quality" className="p-4">
+    <GlassCard as="section" data-testid="market-data-quality" className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">DATA QUALITY</p>
@@ -564,7 +567,7 @@ const MarketTemperatureStrip: React.FC<{
   const confidenceText = confidenceLabel(data.confidence);
   const shouldShowScores = isReliable || showPlaceholderScores;
   return (
-    <GlassCard as="section" data-testid="market-temperature-strip" className="p-4">
+    <GlassCard as="section" data-testid="market-temperature-strip" className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
       <div className="mb-3 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.temperature.eyebrow')}</p>
@@ -643,7 +646,7 @@ const severityClass: Record<string, string> = {
   positive: 'border-emerald-300/20 bg-emerald-400/8 text-emerald-100',
   neutral: 'border-white/8 bg-white/[0.025] text-white/70',
   warning: 'border-amber-300/20 bg-amber-400/8 text-amber-100',
-  risk: 'border-red-300/20 bg-red-400/8 text-red-100',
+  risk: 'border-rose-300/20 bg-rose-400/8 text-rose-100',
 };
 
 const MarketBriefingCard: React.FC<{
@@ -656,7 +659,7 @@ const MarketBriefingCard: React.FC<{
   const hasWarning = Boolean(data.warning);
   const isReliable = !hasWarning && data.isReliable !== false && (data.confidence == null || data.confidence >= 0.45);
   return (
-    <GlassCard as="section" data-testid="market-briefing-card" className="p-4">
+    <GlassCard as="section" data-testid="market-briefing-card" className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
       <div className="mb-3 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.briefing.eyebrow')}</p>
@@ -716,11 +719,11 @@ const FuturesPremarketCard: React.FC<{
   };
   const fallbackOnly = isFallbackOnlyMeta({ ...data, items: data.items });
   return (
-    <GlassCard as="section" className={cn('flex h-full flex-col p-6', fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '')}>
+    <GlassCard as="section" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'flex h-full flex-col', fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '')}>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.futures.eyebrow')}</p>
-          <h2 className="mt-2 text-xl font-semibold text-white">{title}</h2>
+          <h2 className={cn(MARKET_OVERVIEW_CARD_TITLE_CLASS, 'mt-2')}>{title}</h2>
           <p className="mt-1 text-sm text-white/55">{t('marketOverviewPage.cards.futures.description')}</p>
         </div>
         <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
@@ -745,11 +748,11 @@ const FuturesPremarketCard: React.FC<{
                 </div>
               </div>
               <div className="w-24 shrink-0">
-                <MarketOverviewSparkline values={item.sparkline} tone={mutedTone ? 'text-white/30' : positive ? 'text-emerald-400' : 'text-red-400'} className="h-8" />
+                <MarketOverviewSparkline values={item.sparkline} tone={mutedTone ? 'text-white/30' : positive ? 'text-emerald-400' : 'text-rose-400'} className="h-8" />
               </div>
               <div className="min-w-0 flex-1 text-right font-mono">
                 <p className="truncate text-lg font-semibold leading-none text-white">{formatNumber(item.value)}</p>
-                <p className={cn('mt-1 text-[11px] font-bold leading-none', mutedTone ? 'text-white/45' : positive ? 'text-emerald-400' : 'text-red-400')}>
+                <p className={cn('mt-1 text-[11px] font-bold leading-none', mutedTone ? 'text-white/45' : positive ? 'text-emerald-400' : 'text-rose-400')}>
                   {item.changePercent == null ? 'N/A' : `${item.changePercent >= 0 ? '+' : ''}${item.changePercent.toFixed(2)}%`}
                 </p>
               </div>
@@ -791,11 +794,11 @@ const CnShortSentimentCard: React.FC<{
   ] as const;
   const fallbackOnly = isFallbackOnlyMeta(data);
   return (
-    <GlassCard as="section" className={cn('flex h-full flex-col p-6', fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '')}>
+    <GlassCard as="section" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'flex h-full flex-col', fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '')}>
       <div className="mb-5 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.cnShortSentiment.eyebrow')}</p>
-          <h2 className="mt-2 text-xl font-semibold text-white">{title}</h2>
+          <h2 className={cn(MARKET_OVERVIEW_CARD_TITLE_CLASS, 'mt-2')}>{title}</h2>
         </div>
         <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
       </div>
@@ -805,18 +808,18 @@ const CnShortSentimentCard: React.FC<{
           <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
         </div>
       ) : null}
-      <div className="rounded-lg border border-white/[0.06] bg-white/[0.025] p-4">
+      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 backdrop-blur-sm transition-all hover:border-white/10">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-xs text-white/45">{t('marketOverviewPage.cards.cnShortSentiment.score')}</p>
-            <p className={cn('mt-1 font-mono text-4xl font-semibold', fallbackOnly ? 'text-white/55' : 'text-emerald-300')}>{data.sentimentScore}</p>
+            <p className={cn('mt-1 font-mono text-4xl font-semibold', fallbackOnly ? 'text-white/55' : 'text-emerald-400')}>{data.sentimentScore}</p>
           </div>
           <p className="max-w-[220px] text-right text-xs leading-5 text-white/55">{data.summary}</p>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         {metrics.map(([key, label, value]) => (
-          <div key={key} className="rounded-lg border border-white/[0.045] bg-white/[0.018] px-3 py-2">
+          <div key={key} className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 backdrop-blur-sm transition-all hover:border-white/10">
             <p className="truncate text-[10px] text-white/38">{label}</p>
             <p className="mt-1 font-mono text-sm font-semibold text-white">{value}</p>
           </div>
@@ -1335,6 +1338,8 @@ const MarketOverviewPage: React.FC = () => {
   const visibleOrder = cardOrders[activeCategory].filter((cardKey) => CATEGORY_CARDS[activeCategory].includes(cardKey));
   const fallbackOnlyOrder = visibleOrder.filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
   const primaryOrder = visibleOrder.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
+  const sideRailOrder = primaryOrder.filter((cardKey) => MARKET_OVERVIEW_SIDE_RAIL_CARDS.has(cardKey));
+  const primaryRailOrder = primaryOrder.filter((cardKey) => !MARKET_OVERVIEW_SIDE_RAIL_CARDS.has(cardKey));
   const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
   const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
@@ -1373,8 +1378,8 @@ const MarketOverviewPage: React.FC = () => {
   return (
     <div className="w-full flex-1 flex flex-col min-w-0 min-h-0 bg-[#030303] text-white">
       <div className="flex-1 overflow-y-auto pb-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div data-testid="market-overview-page-container" className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-4 sm:px-6 lg:px-8">
-          <div className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-white/5 bg-[#030303]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div data-testid="market-overview-page-container" className="mx-auto flex w-full max-w-[1600px] flex-col px-6 lg:px-8">
+          <div className="sticky top-0 z-10 -mx-6 overflow-x-auto border-b border-white/5 bg-[#030303]/95 px-6 py-3 backdrop-blur lg:-mx-8 lg:px-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max min-w-full gap-2 rounded-lg bg-white/[0.03] p-1">
               {categoryTabs.map((tab) => (
                 <button
@@ -1417,8 +1422,15 @@ const MarketOverviewPage: React.FC = () => {
           {showCategoryEmptyState ? (
             <CategoryEmptyState onShowPending={() => setFallbackSectionExpanded(true)} />
           ) : null}
-          <main data-testid="market-overview-main-grid" className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-            {primaryOrder.map((cardKey) => renderCard(cardKey, primaryOrder.indexOf(cardKey)))}
+          <main data-testid="market-overview-main-grid" className="mt-6 grid w-full grid-cols-1 items-start gap-6 lg:grid-cols-12">
+            <section data-testid="market-overview-primary-rail" className="col-span-1 flex min-w-0 flex-col gap-6 lg:col-span-8">
+              {primaryRailOrder.map((cardKey) => renderCard(cardKey, primaryOrder.indexOf(cardKey)))}
+            </section>
+            {sideRailOrder.length > 0 ? (
+              <aside data-testid="market-overview-side-rail" className="col-span-1 flex min-w-0 max-h-[600px] flex-col gap-6 overflow-y-auto custom-scrollbar lg:col-span-4 lg:pr-1">
+                {sideRailOrder.map((cardKey) => renderCard(cardKey, primaryOrder.indexOf(cardKey)))}
+              </aside>
+            ) : null}
           </main>
           {fallbackOnlyOrder.length > 0 ? (
             <PendingDataSourceSection

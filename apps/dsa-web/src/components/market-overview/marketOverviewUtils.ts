@@ -1,7 +1,7 @@
 import type { MarketOverviewItem, MarketRiskDirection } from '../../api/marketOverview';
 
 const directionTone: Record<MarketRiskDirection, string> = {
-  increasing: 'text-red-400',
+  increasing: 'text-rose-400',
   decreasing: 'text-emerald-400',
   neutral: 'text-white/45',
 };

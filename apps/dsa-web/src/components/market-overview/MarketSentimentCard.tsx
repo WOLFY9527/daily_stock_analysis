@@ -9,6 +9,8 @@ import {
   getDirectionTone,
 } from './marketOverviewUtils';
 import {
+  MARKET_OVERVIEW_CARD_TITLE_CLASS,
+  MARKET_OVERVIEW_GHOST_CARD_CLASS,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
@@ -56,12 +58,12 @@ export const MarketSentimentCard: React.FC<{
   const title = t('marketOverviewPage.cards.sentiment.title');
 
   return (
-    <GlassCard as="section" className="xl:col-span-4 flex h-full flex-col p-6">
+    <GlassCard as="section" className={`${MARKET_OVERVIEW_GHOST_CARD_CLASS} flex h-full flex-col`}>
       <div className="flex h-full flex-col gap-5">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.eyebrow')}</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">{title}</h2>
+            <h2 className={`${MARKET_OVERVIEW_CARD_TITLE_CLASS} mt-2`}>{title}</h2>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -71,13 +73,13 @@ export const MarketSentimentCard: React.FC<{
         </div>
 
         {panel?.errorMessage ? (
-          <div className="rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          <div className="rounded-xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
             {panel.errorMessage}
           </div>
         ) : null}
 
         {primary ? (
-          <div className="rounded-2xl border border-white/6 bg-white/[0.015] p-5">
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 backdrop-blur-sm transition-all hover:border-white/10">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.primaryLabel')}</p>
@@ -102,7 +104,7 @@ export const MarketSentimentCard: React.FC<{
                 />
                 <defs>
                   <linearGradient id="sentimentGauge" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#f87171" />
+                    <stop offset="0%" stopColor="#fb7185" />
                     <stop offset="50%" stopColor="#6366f1" />
                     <stop offset="100%" stopColor="#34d399" />
                   </linearGradient>
@@ -123,7 +125,7 @@ export const MarketSentimentCard: React.FC<{
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {supporting.map((item) => (
-            <div key={item.symbol} className="rounded-2xl border border-white/6 bg-white/[0.015] p-4">
+            <div key={item.symbol} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 backdrop-blur-sm transition-all hover:border-white/10">
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 text-[10px] font-semibold uppercase tracking-widest text-white/40">
                   {sentimentLabels[item.symbol] || item.label}
@@ -149,7 +151,7 @@ export const MarketSentimentCard: React.FC<{
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
+          <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
             {t('marketOverviewPage.loading')}
           </div>
         ) : null}
