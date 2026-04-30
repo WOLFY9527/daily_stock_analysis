@@ -142,6 +142,9 @@ temp/
 artifacts/
 cache/
 .cache-loader/
+/ux-verification-report.*
+/runtime-write-checks.md
+/runtime-*-checks.md
 
 # keep only intentional small fixtures/examples under version control
 !tests/fixtures/
