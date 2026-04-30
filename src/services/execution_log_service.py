@@ -91,6 +91,35 @@ _STATUS_ALIASES = {
     "timed_out": "failed",
     "timeout": "failed",
 }
+_TRACE_SUCCESS_VALUES = {"succeeded", "success", "completed", "ok"}
+_TRACE_FAILED_VALUES = {
+    "failed",
+    "error",
+    "timeout",
+    "timed_out",
+    "forbidden",
+    "unauthorized",
+    "rate_limited",
+    "invalid_payload",
+    "empty_result",
+    "invalid_response",
+    "insufficient_fields",
+}
+_TRACE_SKIPPED_REASONS = {
+    "previous_provider_succeeded",
+    "previous_model_succeeded",
+    "skipped_because_previous_succeeded",
+    "not_needed",
+    "not_configured",
+    "missing_api_key",
+    "provider_unhealthy",
+    "circuit_open",
+    "unsupported_market",
+    "not_applicable",
+    "disabled_by_strategy",
+}
+_TRACE_RUNNING_VALUES = {"attempting", "running", "started", "start", "processing", "in_progress"}
+_TRACE_FAILED_HTTP_STATUSES = {401, 403, 429, 500, 502, 503, 504}
 
 
 def _masked_message(text: Optional[str]) -> Optional[str]:
@@ -250,6 +279,161 @@ def _duration_ms(started_at: Any, finished_at: Any) -> Optional[float]:
     if start is None or finish is None:
         return None
     return max(0.0, (finish - start).total_seconds() * 1000)
+
+
+def _trace_reason_message(reason: Optional[str]) -> Optional[str]:
+    normalized = _as_str(reason).lower()
+    if not normalized:
+        return None
+    if normalized == "previous_model_succeeded":
+        return "主模型已成功，无需调用备用模型"
+    if normalized in {"previous_provider_succeeded", "skipped_because_previous_succeeded"}:
+        return "主数据源已成功，无需调用备用源"
+    if normalized in {"missing_api_key", "not_configured"}:
+        return "未配置 API Key，已跳过"
+    if normalized in {"circuit_open", "provider_unhealthy"}:
+        return "数据源暂时不可用，已跳过"
+    if normalized == "unsupported_market":
+        return "当前市场不适用，已跳过"
+    if normalized in {"not_applicable", "disabled_by_strategy", "not_needed"}:
+        return "当前步骤无需执行，已跳过"
+    return None
+
+
+def normalize_trace_step_status(
+    event_or_metadata: Dict[str, Any],
+    *,
+    execution_finished: bool = False,
+    execution_status: Optional[str] = None,
+) -> Dict[str, Optional[str]]:
+    payload = event_or_metadata if isinstance(event_or_metadata, dict) else {}
+    detail = payload.get("detail") if isinstance(payload.get("detail"), dict) else {}
+    started_at = detail.get("startedAt") or payload.get("startedAt") or payload.get("event_at")
+    finished_at = detail.get("finishedAt") or payload.get("finishedAt")
+
+    def token(value: Any) -> str:
+        return _as_str(value).lower()
+
+    action = token(detail.get("action") or payload.get("action"))
+    result = token(detail.get("result") or payload.get("result") or payload.get("status"))
+    outcome = token(detail.get("outcome") or payload.get("outcome"))
+    status_token = token(detail.get("status") or payload.get("status"))
+    reason = token(detail.get("reason") or payload.get("reason"))
+    message = _masked_message(detail.get("message") or payload.get("message"))
+    error_type = token(detail.get("errorType") or payload.get("error_type") or payload.get("error_code"))
+    error_message = _masked_message(detail.get("errorMessage") or payload.get("errorMessage") or payload.get("message"))
+    http_status_raw = detail.get("httpStatus") or detail.get("http_status") or payload.get("httpStatus")
+    try:
+        http_status = int(http_status_raw) if http_status_raw is not None else None
+    except Exception:
+        http_status = None
+    text_blob = " ".join(
+        part for part in [
+            action,
+            result,
+            outcome,
+            status_token,
+            reason,
+            token(message),
+            error_type,
+            token(error_message),
+        ] if part
+    )
+
+    skipped = (
+        action == "skipped"
+        or result.startswith("skipped")
+        or outcome == "skipped"
+        or reason in _TRACE_SKIPPED_REASONS
+        or "skipped because previous" in text_blob
+        or "previous provider already succeeded" in text_blob
+        or "previous model already succeeded" in text_blob
+        or "not configured" in text_blob
+        or "missing api key" in text_blob
+        or "circuit open" in text_blob
+        or "provider unhealthy" in text_blob
+    )
+    if skipped:
+        normalized_reason = reason or ("skipped_because_previous_succeeded" if "previous" in text_blob else None)
+        friendly_message = _trace_reason_message(normalized_reason)
+        return {
+            "status": "skipped",
+            "reason": normalized_reason,
+            "message": friendly_message if not message or message == normalized_reason else message,
+        }
+
+    failed_reason = None
+    if action in {"failed", "error"} or result in _TRACE_FAILED_VALUES or outcome in {"failed", "error"}:
+        failed_reason = reason or result or outcome or action
+    elif http_status in _TRACE_FAILED_HTTP_STATUSES:
+        if http_status == 401:
+            failed_reason = "unauthorized"
+        elif http_status == 403:
+            failed_reason = "forbidden"
+        elif http_status == 429:
+            failed_reason = "rate_limited"
+        else:
+            failed_reason = "http_error"
+    elif any(keyword in text_blob for keyword in ("timeout", "timed out")):
+        failed_reason = reason or "timeout"
+    elif any(keyword in text_blob for keyword in ("forbidden", "unauthorized", "rate limit", "rate_limited", "invalid payload")):
+        failed_reason = reason or (
+            "forbidden" if "forbidden" in text_blob else
+            "unauthorized" if "unauthorized" in text_blob else
+            "rate_limited" if "rate" in text_blob else
+            "invalid_payload"
+        )
+    if failed_reason and failed_reason not in _TRACE_SKIPPED_REASONS:
+        return {
+            "status": "failed",
+            "reason": failed_reason,
+            "message": error_message or message,
+        }
+
+    success = (
+        action in _TRACE_SUCCESS_VALUES
+        or result in _TRACE_SUCCESS_VALUES
+        or outcome in {"success", "succeeded", "ok"}
+        or status_token in _TRACE_SUCCESS_VALUES
+    )
+    if success:
+        return {
+            "status": "success",
+            "reason": reason or None,
+            "message": message,
+        }
+
+    execution_still_running = _normalize_business_status(execution_status or "") == "running"
+    running = (
+        action in _TRACE_RUNNING_VALUES
+        or result in _TRACE_RUNNING_VALUES
+        or status_token in _TRACE_RUNNING_VALUES
+    )
+    if running and not finished_at:
+        if execution_finished or not execution_still_running:
+            return {
+                "status": "unknown",
+                "reason": reason or None,
+                "message": message,
+            }
+        return {
+            "status": "running",
+            "reason": reason or None,
+            "message": message,
+        }
+
+    if execution_finished and started_at and not finished_at:
+        return {
+            "status": "unknown",
+            "reason": reason or None,
+            "message": message,
+        }
+
+    return {
+        "status": "unknown",
+        "reason": reason or None,
+        "message": message,
+    }
 
 
 def _event_name_from_event(event: Dict[str, Any]) -> str:
@@ -2406,24 +2590,27 @@ class ExecutionLogService:
 
     @staticmethod
     def _extract_business_steps(events: List[Dict[str, Any]], *, execution_finished: bool = False) -> List[Dict[str, Any]]:
-        merged: Dict[Tuple[str, str, str, str, str, str], Dict[str, Any]] = {}
-        order: List[Tuple[str, str, str, str, str, str]] = []
+        merged: Dict[Tuple[str, str, str, str, str], Dict[str, Any]] = {}
+        order: List[Tuple[str, str, str, str, str]] = []
         for event in events or []:
             if not isinstance(event, dict):
                 continue
             detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
             if not bool(detail.get("business_step")):
                 continue
-            status = _normalize_business_status(detail.get("status") or event.get("status"))
+            normalized = normalize_trace_step_status(
+                {"detail": detail, **event},
+                execution_finished=execution_finished,
+                execution_status="success" if execution_finished else "running",
+            )
+            status = _as_str(normalized.get("status")) or "unknown"
             name = _as_str(detail.get("name") or event.get("step"))
-            key_status = "skipped" if status == "skipped" else "executed"
             key = (
                 name,
                 _as_str(detail.get("provider")),
                 _as_str(detail.get("model")),
                 _as_str(detail.get("endpoint") or detail.get("apiPath")),
                 _as_str(detail.get("subject") or detail.get("symbol")),
-                key_status,
             )
             current = {
                 "id": _as_str(detail.get("id")) or None,
@@ -2435,14 +2622,14 @@ class ExecutionLogService:
                 "model": _as_str(detail.get("model")) or None,
                 "endpoint": _sanitize_url(_as_str(detail.get("endpoint") or detail.get("apiPath")) or None),
                 "apiPath": _sanitize_url(_as_str(detail.get("apiPath") or detail.get("endpoint")) or None),
-                "status": "unknown" if execution_finished and status == "running" else status,
-                "reason": _as_str(detail.get("reason")) or None,
-                "message": _masked_message(detail.get("message") or event.get("message")) if (detail.get("message") or event.get("message")) else None,
+                "status": status,
+                "reason": _as_str(normalized.get("reason")) or None,
+                "message": _masked_message(normalized.get("message")) if normalized.get("message") else None,
                 "startedAt": detail.get("startedAt") or event.get("event_at"),
                 "finishedAt": detail.get("finishedAt") or (event.get("event_at") if status != "running" else None),
                 "durationMs": detail.get("durationMs"),
                 "errorType": _as_str(detail.get("errorType") or event.get("error_code")) or None,
-                "errorMessage": _masked_message(detail.get("errorMessage") or event.get("message")) if status == "failed" else None,
+                "errorMessage": _masked_message(detail.get("errorMessage") or normalized.get("message")) if status == "failed" else None,
                 "recordId": _as_str(detail.get("recordId")) or None,
                 "critical": bool(detail.get("critical")),
                 "metadata": _sanitize_metadata(detail.get("metadata") if isinstance(detail.get("metadata"), dict) else {}),
@@ -2453,17 +2640,24 @@ class ExecutionLogService:
                 continue
             previous = merged[key]
             attempts = int(previous.get("attempts") or 1) + 1
+            next_status = current["status"]
+            previous_status = _as_str(previous.get("status"))
+            if next_status == "running" and previous_status in {"success", "failed", "skipped", "unknown"}:
+                next_status = previous_status
             merged[key] = {
                 **previous,
                 **{k: v for k, v in current.items() if v not in (None, "")},
-                "status": current["status"],
+                "status": next_status,
                 "startedAt": previous.get("startedAt") or current.get("startedAt"),
+                "finishedAt": current.get("finishedAt") or previous.get("finishedAt"),
                 "metadata": {
                     **(previous.get("metadata") if isinstance(previous.get("metadata"), dict) else {}),
                     **(current.get("metadata") if isinstance(current.get("metadata"), dict) else {}),
                     "attempts": attempts,
                 },
             }
+            if merged[key]["status"] == "unknown" and previous_status in {"success", "failed", "skipped"}:
+                merged[key]["status"] = previous_status
             merged[key]["metadata"] = _sanitize_metadata(merged[key]["metadata"])
         return [merged[key] for key in order]
 
@@ -2503,7 +2697,12 @@ class ExecutionLogService:
         phase = _as_str(event.get("phase")).lower()
         step = _as_str(event.get("step")).lower()
         detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
-        if step in {"analysis_started", "analysis_finished", "task_started", "task_failed", "configured", "primary_selected", "backup_selected", "channel_selected"}:
+        action = _as_str(detail.get("action")).lower()
+        if phase == "ai_route":
+            return None
+        if step in {"analysis_started", "analysis_finished", "task_started", "task_failed", "configured", "primary_selected", "backup_selected", "channel_selected", "fallback"}:
+            return None
+        if action in {"selected", "switched"}:
             return None
         name = None
         label = None
@@ -2521,24 +2720,37 @@ class ExecutionLogService:
             name, label = "save_record", _ANALYSIS_STEP_LABELS["save_record"]
         if not name:
             return None
-        status = _normalize_business_status(event.get("status"))
-        if status == "succeeded":
-            status = "success"
-        if status not in {"success", "failed", "partial", "running", "skipped"}:
-            outcome = _outcome_from_status(status)
-            status = "success" if outcome == "ok" else ("failed" if outcome in {"failed", "timeout"} else "partial" if outcome == "partial" else "running")
-        reason = detail.get("reason") or event.get("message")
+        normalized = normalize_trace_step_status(event)
+        status = _as_str(normalized.get("status")) or "unknown"
+        attempt = detail.get("attempt") if isinstance(detail.get("attempt"), dict) else {}
+        provider = (
+            _as_str(detail.get("provider"))
+            or _as_str(attempt.get("provider"))
+            or _as_str(attempt.get("source"))
+            or _as_str(event.get("target"))
+            or _as_str(detail.get("source"))
+            or None
+        )
+        model = _as_str(attempt.get("model")) or None
+        if phase.startswith("ai_"):
+            provider = _as_str(detail.get("gateway")) or _as_str(detail.get("provider")) or provider
+            model = model or _as_str(event.get("target")) or None
+        message = _masked_message(normalized.get("message"))
+        reason = _as_str(normalized.get("reason")) or None
         return {
             "name": name,
             "label": label,
-            "provider": _as_str(event.get("target")) or _as_str(detail.get("provider")) or _as_str(detail.get("source")) or None,
+            "provider": provider,
+            "model": model,
             "apiPath": _as_str(detail.get("apiPath") or detail.get("api_path") or detail.get("endpoint_url")) or None,
             "status": status,
             "startedAt": event.get("event_at"),
             "finishedAt": event.get("event_at"),
             "durationMs": detail.get("durationMs") or detail.get("duration_ms"),
             "errorType": _as_str(event.get("error_code")) or None,
-            "errorMessage": _masked_message(reason) if status == "failed" else None,
+            "reason": reason,
+            "message": message,
+            "errorMessage": message if status == "failed" else None,
             "recordId": _as_str(detail.get("recordId") or detail.get("record_id")) or None,
             "critical": name in _CRITICAL_ANALYSIS_STEPS,
             "metadata": _sanitize_metadata(detail),
@@ -2549,20 +2761,61 @@ class ExecutionLogService:
         explicit = self._extract_business_steps(events, execution_finished=bool(detail.get("ended_at")))
         if explicit:
             return explicit
-        derived: List[Dict[str, Any]] = []
-        seen: set[Tuple[str, str, str]] = set()
+        derived: Dict[Tuple[str, str, str, str, str], Dict[str, Any]] = {}
+        order: List[Tuple[str, str, str, str, str]] = []
+        execution_finished = bool(detail.get("ended_at"))
+        execution_status = _as_str(detail.get("overall_status")) or ("success" if execution_finished else "running")
         for event in events:
             if not isinstance(event, dict):
                 continue
             step = self._step_from_runtime_event(event)
             if step is None:
                 continue
-            key = (_as_str(step.get("name")), _as_str(step.get("provider")), _as_str(step.get("finishedAt")))
-            if key in seen:
+            normalized = normalize_trace_step_status(
+                {"detail": step.get("metadata"), **step},
+                execution_finished=execution_finished,
+                execution_status=execution_status,
+            )
+            step["status"] = _as_str(normalized.get("status")) or step.get("status") or "unknown"
+            step["reason"] = _as_str(normalized.get("reason")) or step.get("reason")
+            step["message"] = _masked_message(normalized.get("message")) if normalized.get("message") else step.get("message")
+            if step["status"] == "failed" and not step.get("errorMessage"):
+                step["errorMessage"] = step.get("message")
+            if step["status"] != "running" and not step.get("finishedAt"):
+                step["finishedAt"] = step.get("startedAt")
+            identity = _as_str(step.get("model")) or _as_str(step.get("provider"))
+            key = (
+                _as_str(step.get("name")),
+                identity,
+                _as_str(step.get("apiPath") or step.get("endpoint")),
+                _as_str(step.get("recordId")),
+                _as_str(step.get("provider")) if not step.get("model") else "",
+            )
+            if key not in derived:
+                derived[key] = step
+                order.append(key)
                 continue
-            seen.add(key)
-            derived.append(step)
-        return derived
+            previous = derived[key]
+            attempts = int((previous.get("metadata") or {}).get("attempts") or 1) + 1
+            merged = {
+                **previous,
+                **{k: v for k, v in step.items() if v not in (None, "")},
+                "startedAt": previous.get("startedAt") or step.get("startedAt"),
+                "finishedAt": step.get("finishedAt") or previous.get("finishedAt"),
+                "metadata": {
+                    **(previous.get("metadata") if isinstance(previous.get("metadata"), dict) else {}),
+                    **(step.get("metadata") if isinstance(step.get("metadata"), dict) else {}),
+                    "attempts": attempts,
+                },
+            }
+            if step.get("status") == "running" and previous.get("status") in {"success", "failed", "skipped", "unknown"}:
+                merged["status"] = previous.get("status")
+            elif step.get("status") == "unknown" and previous.get("status") in {"success", "failed", "skipped"}:
+                merged["status"] = previous.get("status")
+            else:
+                merged["status"] = step.get("status")
+            derived[key] = merged
+        return [derived[key] for key in order]
 
     def _session_to_business_event(self, row: Dict[str, Any], *, include_steps: bool = False) -> Optional[Dict[str, Any]]:
         detail = self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {}

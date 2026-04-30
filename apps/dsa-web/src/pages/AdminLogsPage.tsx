@@ -414,11 +414,31 @@ function skippedReasonLabel(value: unknown, locale: AdminLogsLanguage): string {
     previous_model_succeeded: { zh: '主模型已成功，无需调用备用模型', en: 'Primary model succeeded; backup model was not called' },
     previous_provider_succeeded: { zh: '主数据源已成功，无需调用备用源', en: 'Primary provider succeeded; backup provider was not called' },
     missing_api_key: { zh: '未配置 API Key，已跳过', en: 'API key not configured; skipped' },
+    not_configured: { zh: '未配置 API Key，已跳过', en: 'API key not configured; skipped' },
     circuit_open: { zh: '数据源暂时不可用，已跳过', en: 'Provider circuit is open; skipped' },
+    provider_unhealthy: { zh: '数据源暂时不可用，已跳过', en: 'Provider unhealthy; skipped' },
     unsupported_market: { zh: '当前市场不适用，已跳过', en: 'Unsupported market; skipped' },
     disabled_by_strategy: { zh: '策略未启用，已跳过', en: 'Disabled by strategy; skipped' },
   };
   return labels[key]?.[locale] || key;
+}
+
+function stepStatsLabel(
+  counts: {
+    successStepCount?: number | null;
+    skippedStepCount?: number | null;
+    failedStepCount?: number | null;
+    unknownStepCount?: number | null;
+  },
+  locale: AdminLogsLanguage,
+): string {
+  const success = counts.successStepCount || 0;
+  const skipped = counts.skippedStepCount || 0;
+  const failed = counts.failedStepCount || 0;
+  const unknown = counts.unknownStepCount || 0;
+  return locale === 'zh'
+    ? `成功 ${success} · 跳过 ${skipped} · 失败 ${failed} · 未确认 ${unknown}`
+    : `Success ${success} · Skipped ${skipped} · Failed ${failed} · Unknown ${unknown}`;
 }
 
 function sanitizeDisplayValue(value: unknown): unknown {
@@ -885,7 +905,7 @@ const AdminLogsPage: React.FC = () => {
                     <div>{locale === 'zh' ? '简介' : 'Summary'}</div>
                     <div>{locale === 'zh' ? '状态' : 'Status'}</div>
                     <div>{locale === 'zh' ? '耗时' : 'Duration'}</div>
-                    <div>{locale === 'zh' ? '成功/跳过/失败' : 'Ok/skip/fail'}</div>
+                    <div>{locale === 'zh' ? '步骤统计' : 'Step stats'}</div>
                     <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
                   <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
@@ -900,7 +920,7 @@ const AdminLogsPage: React.FC = () => {
                           <p className="min-w-0 truncate text-xs text-secondary-text" title={text(item.summary)}>{text(item.summary)}</p>
                           <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
                           <p className="text-xs text-muted-text">{formatDuration(item.durationMs)}</p>
-                          <p className="text-xs text-muted-text">{item.successStepCount || 0}/{item.skippedStepCount || 0}/{item.failedStepCount || 0}</p>
+                          <p className="text-xs text-muted-text">{stepStatsLabel(item, locale)}</p>
                           <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
                             {t('adminLogs.viewDetails')}
                           </button>
@@ -1000,7 +1020,7 @@ const AdminLogsPage: React.FC = () => {
                   <span>scannerId: <span className="text-foreground">{text(businessDetail.scannerId)}</span></span>
                   <span>strategyId/backtestId: <span className="text-foreground">{text([businessDetail.strategyId, businessDetail.backtestId].filter(Boolean).join(' / '))}</span></span>
                   <span>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></span>
-                  <span>{locale === 'zh' ? '成功/跳过/失败' : 'Ok/skip/fail'}: <span className="text-foreground">{businessDetail.successStepCount || 0}/{businessDetail.skippedStepCount || 0}/{businessDetail.failedStepCount || 0}</span></span>
+                  <span>{locale === 'zh' ? '步骤统计' : 'Step stats'}: <span className="text-foreground">{stepStatsLabel(businessDetail, locale)}</span></span>
                 </div>
               </div>
               <div className="mt-4">

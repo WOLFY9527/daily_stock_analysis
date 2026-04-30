@@ -1,6 +1,8 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { useUiPreferences } from '../../contexts/UiPreferencesContext';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
+import { getToneColor } from '../../utils/marketColors';
 import { BentoCard } from './BentoCard';
 import { type SignalTone } from './theme';
 
@@ -31,6 +33,7 @@ export const TechCard: React.FC<TechCardProps> = ({
   detailLabel,
   onOpenDetails,
 }) => {
+  const { marketColorConvention } = useUiPreferences();
   const {
     ref: openDetailsButtonRef,
     onClick: handleOpenDetailsClick,
@@ -70,6 +73,7 @@ export const TechCard: React.FC<TechCardProps> = ({
     >
       <div className="divide-y divide-white/5 px-1">
         {normalizedSignals.map((signal) => {
+          const toneColor = getToneColor(signal.tone, marketColorConvention);
           return (
             <div
               key={signal.label}
@@ -82,8 +86,9 @@ export const TechCard: React.FC<TechCardProps> = ({
                 </span>
                 <span
                   className={`min-w-0 text-right text-xs font-medium ${
-                    isMutedValue(signal.value) ? 'text-white/20' : 'text-white'
+                    isMutedValue(signal.value) ? 'text-white/20' : toneColor.textClass
                   }`}
+                  style={{ textShadow: isMutedValue(signal.value) ? 'none' : toneColor.glowShadow }}
                 >
                   {signal.value}
                 </span>

@@ -298,7 +298,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('理想买入点')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40', 'truncate');
     expect(screen.getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed');
     expect(screen.getByText('133.50')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-emerald-400');
-    expect(screen.getByText('117.40')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-rose-500');
+    expect(screen.getByText('117.40')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-rose-400');
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-emerald-400');
     expect(macdSignalValue).not.toBeUndefined();
     expect(macdSignal).toHaveClass('flex', 'flex-col', 'gap-1', 'py-2', 'border-b', 'border-white/5');
@@ -309,7 +309,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('+9.4%').className).not.toContain('text-3xl');
     expect(techMetricTiles.length).toBe(0);
     expect(fundamentalsMetricTiles.length).toBe(0);
-    expect(macdSignalValue?.getAttribute('style') || '').toBe('');
+    expect(macdSignalValue).toHaveClass('text-emerald-400', 'drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]');
+    expect(macdSignalValue?.getAttribute('style') || '').toContain('text-shadow: 0 0 8px rgba(52, 211, 153, 0.4)');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('mt-1', 'block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-white/40');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveTextContent('零轴上方，动能再扩张。');
@@ -338,8 +339,8 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await screen.findByText('Oracle Corporation');
-    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-rose-500');
-    expect(screen.getByText('133.50')).toHaveClass('text-rose-500');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-rose-400');
+    expect(screen.getByText('133.50')).toHaveClass('text-rose-400');
     expect(screen.getByText('117.40')).toHaveClass('text-emerald-400');
   });
 

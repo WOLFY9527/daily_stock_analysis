@@ -27,11 +27,11 @@ export function getToneBorderClass(
     return 'border-white/12 bg-white/[0.06] text-white/78';
   }
   const textClass = getToneTextClass(tone, convention);
-  if (textClass === 'text-emerald-400') {
-    return 'border-emerald-400/22 bg-emerald-400/10 text-emerald-400';
+  if (textClass.includes('text-emerald-400')) {
+    return 'border-emerald-400/22 bg-emerald-400/10 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]';
   }
-  if (textClass === 'text-rose-500') {
-    return 'border-rose-500/22 bg-rose-500/10 text-rose-500';
+  if (textClass.includes('text-rose-400')) {
+    return 'border-rose-400/22 bg-rose-400/10 text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]';
   }
   return 'border-white/12 bg-white/[0.06] text-white/78';
 }
@@ -43,9 +43,9 @@ export function getCardGlowClass(
   if (tone === 'neutral') {
     return 'bg-transparent';
   }
-  return getToneTextClass(tone, convention) === 'text-emerald-400'
+  return getToneTextClass(tone, convention).includes('text-emerald-400')
     ? 'bg-emerald-400/14'
-    : 'bg-rose-500/14';
+    : 'bg-rose-400/14';
 }
 
 export function getToneTextStyle(

@@ -1,6 +1,8 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { useUiPreferences } from '../../contexts/UiPreferencesContext';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
+import { getToneColor } from '../../utils/marketColors';
 import { BentoCard } from './BentoCard';
 import { type SignalTone } from './theme';
 
@@ -49,6 +51,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
   detailLabel,
   onOpenDetails,
 }) => {
+  const { marketColorConvention } = useUiPreferences();
   const {
     ref: openDetailsButtonRef,
     onClick: handleOpenDetailsClick,
@@ -78,6 +81,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
         {metrics.map((metric) => {
           const surprise = splitMetricSurprise(metric.value);
           const muted = isMutedValue(surprise.main);
+          const surpriseColor = getToneColor(surprise.tone, marketColorConvention);
           return (
             <div
               key={metric.label}
@@ -91,13 +95,12 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
                 {surprise.main}
               </p>
               {surprise.surprise ? (
-                <p className={`mt-1 text-[10px] font-medium leading-tight ${
-                  surprise.tone === 'bullish'
-                    ? 'text-emerald-400'
-                    : surprise.tone === 'bearish'
-                      ? 'text-red-400'
-                      : 'text-white/35'
-                }`}>
+                <p
+                  className={`mt-1 text-[10px] font-medium leading-tight ${
+                    surprise.tone === 'neutral' ? 'text-white/35' : surpriseColor.textClass
+                  }`}
+                  style={{ textShadow: surprise.tone === 'neutral' ? 'none' : surpriseColor.glowShadow }}
+                >
                   {surprise.surprise}
                 </p>
               ) : null}

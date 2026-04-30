@@ -13,9 +13,9 @@ type TaskProgressCardProps = {
 function statusTone(status: TaskProgressModule['status']): string {
   switch (status) {
     case 'completed':
-      return 'border-emerald-400/25 bg-emerald-500/12 text-emerald-100';
+      return 'border-emerald-400/25 bg-emerald-400/12 text-emerald-100';
     case 'failed':
-      return 'border-rose-400/25 bg-rose-500/12 text-rose-100';
+      return 'border-rose-400/25 bg-rose-400/12 text-rose-100';
     case 'running':
       return 'border-sky-300/25 bg-sky-500/12 text-sky-100 shadow-[0_0_0_1px_rgba(125,211,252,0.08)]';
     default:

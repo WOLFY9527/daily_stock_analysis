@@ -119,10 +119,11 @@ const businessEvents = [
 
 const businessDetail = {
   ...businessEvents[0],
-  stepCount: 5,
-  successStepCount: 3,
-  skippedStepCount: 1,
+  stepCount: 6,
+  successStepCount: 2,
+  skippedStepCount: 2,
   failedStepCount: 1,
+  unknownStepCount: 1,
   steps: [
     {
       name: 'fetch_quote',
@@ -159,15 +160,29 @@ const businessDetail = {
     {
       name: 'ai_analysis',
       label: 'AI 分析',
-      provider: 'deepseek',
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
       status: 'success',
-      durationMs: 8600,
+      message: 'AI model gemini/gemini-2.5-flash succeeded',
+      durationMs: 4600,
+      metadata: {},
+    },
+    {
+      name: 'ai_analysis',
+      label: 'AI 分析',
+      provider: 'deepseek',
+      model: 'deepseek-v4-pro',
+      status: 'skipped',
+      reason: 'previous_model_succeeded',
+      message: '主模型已成功，无需调用备用模型',
+      durationMs: 0,
       metadata: {},
     },
     {
       name: 'save_record',
       label: '保存分析记录',
-      status: 'success',
+      status: 'unknown',
+      message: '旧数据未记录结束事件',
       recordId: 'record-tsla',
       metadata: {},
     },
@@ -280,18 +295,20 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText(/获取行情/)).toBeInTheDocument();
     expect(screen.getByText(/获取新闻/)).toBeInTheDocument();
     expect(screen.getByText(/获取财务数据/)).toBeInTheDocument();
-    expect(screen.getByText(/AI 分析/)).toBeInTheDocument();
+    expect(screen.getAllByText(/AI 分析/).length).toBeGreaterThan(0);
     expect(screen.getByText(/保存分析记录/)).toBeInTheDocument();
     expect(screen.getByText('News API timeout after 3000ms token=***')).toBeInTheDocument();
     expect(screen.queryByText(/FRONTENDSECRET/)).not.toBeInTheDocument();
     expect(screen.queryByText(/FRONTENDTOKEN/)).not.toBeInTheDocument();
     expect(screen.getAllByText('主数据源已成功，无需调用备用源').length).toBeGreaterThan(0);
-    expect(screen.getByText('成功/跳过/失败')).toBeInTheDocument();
-    expect(screen.getByText('3/1/1')).toBeInTheDocument();
+    expect(screen.getAllByText('主模型已成功，无需调用备用模型').length).toBeGreaterThan(0);
+    expect(screen.getByText('步骤统计')).toBeInTheDocument();
+    expect(screen.getByText('成功 2 · 跳过 2 · 失败 1 · 未确认 1')).toBeInTheDocument();
     expect(screen.getByText(/record-tsla/)).toBeInTheDocument();
     expect(document.querySelector('[data-status="success"]')).not.toBeNull();
     expect(document.querySelector('[data-status="skipped"]')).not.toBeNull();
     expect(document.querySelector('[data-status="failed"]')).not.toBeNull();
+    expect(document.querySelector('[data-status="unknown"]')).not.toBeNull();
   });
 
   it('shows a unified message when the business-event list fails to load', async () => {
@@ -333,12 +350,12 @@ describe('AdminLogsPage', () => {
     expect(alert).toHaveTextContent('请求的资源不存在。');
   });
 
-  it('renders running step status as 运行中 in the detail timeline', async () => {
+  it('renders unknown step status as 未确认 after execution has finished', async () => {
     getBusinessEventDetail.mockResolvedValueOnce({
       ...businessDetail,
       steps: businessDetail.steps.map((step) => (
         step.name === 'ai_analysis'
-          ? { ...step, status: 'running', message: '分析任务仍在执行' }
+          ? step
           : step
       )),
     });
@@ -350,7 +367,39 @@ describe('AdminLogsPage', () => {
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
-    expect(await screen.findByText('运行中')).toBeInTheDocument();
+    expect(await screen.findAllByText('未确认')).not.toHaveLength(0);
+    expect(document.querySelector('[data-status="running"]')).toBeNull();
+  });
+
+  it('renders missing_api_key skips as 已跳过 instead of success', async () => {
+    getBusinessEventDetail.mockResolvedValueOnce({
+      ...businessDetail,
+      steps: [
+        ...businessDetail.steps,
+        {
+          name: 'fetch_news',
+          label: '获取新闻',
+          provider: 'tushare',
+          status: 'skipped',
+          reason: 'missing_api_key',
+          message: '未配置 API Key，已跳过',
+          metadata: {},
+        },
+      ],
+      skippedStepCount: 3,
+      stepCount: 7,
+    });
+
+    render(<AdminLogsPage />);
+
+    const row = await screen.findByText('TSLA');
+    const rowContainer = row.closest('[data-testid="business-event-row"]');
+    expect(rowContainer).not.toBeNull();
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    expect(await screen.findAllByText('未配置 API Key，已跳过')).not.toHaveLength(0);
+    const skippedBadges = document.querySelectorAll('[data-status="skipped"]');
+    expect(skippedBadges.length).toBeGreaterThan(0);
   });
 
   it('filters scanner and backtest business tabs by category', async () => {

@@ -23,6 +23,8 @@ type SupportingIndicator = {
   value: string;
 };
 
+type SignalActionKey = 'buy' | 'sell' | 'hold';
+
 type DecisionCardProps = {
   badge: string;
   company: string;
@@ -43,7 +45,7 @@ type DecisionCardProps = {
   ticker: string;
 };
 
-function resolveSignalActionKey(signalLabel: string, tone: SignalTone): 'buy' | 'sell' | 'hold' {
+function resolveSignalActionKey(signalLabel: string, tone: SignalTone): SignalActionKey {
   const normalized = signalLabel.trim().toUpperCase();
 
   if (/SELL|SHORT|BEAR|卖|空|看空/.test(normalized)) {
@@ -58,24 +60,28 @@ function resolveSignalActionKey(signalLabel: string, tone: SignalTone): 'buy' | 
   return tone === 'bearish' ? 'sell' : tone === 'neutral' ? 'hold' : 'buy';
 }
 
-function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: SignalTone): { bias: string; command: string } {
+function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: SignalTone): { actionKey: SignalActionKey; bias: string; command: string } {
   const actionKey = resolveSignalActionKey(signalLabel, tone);
 
   if (actionKey === 'sell') {
     return locale === 'en'
-      ? { command: /STRONG|SHORT/i.test(signalLabel) ? 'STRONG SELL' : 'SELL', bias: 'BEARISH' }
-      : { command: /强|空/.test(signalLabel) ? '强力做空' : '卖出', bias: '看空' };
+      ? { actionKey, command: /STRONG|SHORT/i.test(signalLabel) ? 'STRONG SELL' : 'SELL', bias: 'BEARISH' }
+      : { actionKey, command: /强|空/.test(signalLabel) ? '强力做空' : '卖出', bias: '看空' };
   }
 
   if (actionKey === 'hold') {
     return locale === 'en'
-      ? { command: /HOLD/i.test(signalLabel) ? 'HOLD' : 'WAIT', bias: 'NEUTRAL' }
-      : { command: /持有/.test(signalLabel) ? '继续持有' : '观望', bias: '中性' };
+      ? { actionKey, command: /HOLD/i.test(signalLabel) ? 'HOLD' : 'WAIT', bias: 'NEUTRAL' }
+      : { actionKey, command: /持有/.test(signalLabel) ? '继续持有' : '观望', bias: '中性' };
   }
 
   return locale === 'en'
-    ? { command: /STRONG|LONG/i.test(signalLabel) ? 'STRONG BUY' : 'BUY', bias: 'BULLISH' }
-    : { command: /强|多/.test(signalLabel) ? '强力做多' : '买入', bias: '看多' };
+    ? { actionKey, command: /STRONG|LONG/i.test(signalLabel) ? 'STRONG BUY' : 'BUY', bias: 'BULLISH' }
+    : { actionKey, command: /强|多/.test(signalLabel) ? '强力做多' : '买入', bias: '看多' };
+}
+
+function getActionTone(actionKey: SignalActionKey): SignalTone {
+  return actionKey === 'buy' ? 'bullish' : actionKey === 'sell' ? 'bearish' : 'neutral';
 }
 
 function getActionToneClass(
@@ -196,6 +202,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const { marketColorConvention } = useUiPreferences();
   const signalCommand = getSignalCommand(locale, signalLabel, signalTone);
+  const actionTone = getActionTone(signalCommand.actionKey);
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
   const insightCopy = reason.body || summary || scoreValue || '-';
@@ -253,9 +260,9 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             <div className="col-span-1 min-w-0" data-testid="home-bento-decision-action">
               <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
               <span
-                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone, marketColorConvention)}`}
+                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(actionTone, marketColorConvention)}`}
                 data-testid="home-bento-decision-signal-hero"
-                style={getActionToneStyle(signalTone, marketColorConvention)}
+                style={getActionToneStyle(actionTone, marketColorConvention)}
               >
                 {signalCommand.command}
               </span>

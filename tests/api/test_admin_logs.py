@@ -251,6 +251,56 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(detail.steps[0].name, "fetch_news")
         self.assertEqual(detail.steps[0].errorMessage, "News API timeout after 3000ms")
 
+    def test_root_detail_returns_split_step_counts_and_skipped_reasons(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.start_step(execution_id, "ai_analysis", "AI 分析", category="ai_model", provider="gemini", model="gemini-2.5", critical=True)
+            service.finish_step_success(execution_id, "ai_analysis", provider="gemini", model="gemini-2.5")
+            service.skip_step(
+                execution_id,
+                "ai_analysis",
+                "AI 分析",
+                reason="previous_model_succeeded",
+                provider="deepseek",
+                model="deepseek-v4-pro",
+            )
+            service.start_step(execution_id, "fetch_quote", "获取行情", category="data_market", provider="fmp")
+            service.finish_step_failed(
+                execution_id,
+                "fetch_quote",
+                provider="fmp",
+                error_type="HTTPError",
+                error_message="GET https://api.example.test/v1/quote?apikey=SECRET returned 403",
+                reason="forbidden",
+                metadata={"httpStatus": 403, "authorization": "Bearer SECRET"},
+            )
+            service.start_step(execution_id, "save_record", "保存分析记录", category="database")
+            service.finish_execution(execution_id, status="partial")
+
+            detail = admin_logs.get_business_event_detail(execution_id, _=_admin_user())
+
+        self.assertEqual(detail.successStepCount, 1)
+        self.assertEqual(detail.skippedStepCount, 1)
+        self.assertEqual(detail.failedStepCount, 1)
+        self.assertEqual(detail.unknownStepCount, 1)
+        skipped = next(step for step in detail.steps if step.provider == "deepseek")
+        failed = next(step for step in detail.steps if step.provider == "fmp")
+        orphan = next(step for step in detail.steps if step.name == "save_record")
+        self.assertEqual(skipped.status, "skipped")
+        self.assertEqual(skipped.reason, "previous_model_succeeded")
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.reason, "forbidden")
+        self.assertIn("apikey=***", failed.message or "")
+        self.assertEqual(orphan.status, "unknown")
+
     def test_sessions_endpoint_still_exposes_raw_logs(self) -> None:
         self._record_event(
             session_id="warning-timeout",

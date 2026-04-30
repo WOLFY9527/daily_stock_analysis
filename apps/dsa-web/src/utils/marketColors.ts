@@ -59,14 +59,14 @@ export function getToneColor(
   if (useEmerald) {
     return {
       colorHex: '#34D399',
-      glowShadow: '0 0 30px rgba(52, 211, 153, 0.4)',
-      textClass: 'text-emerald-400',
+      glowShadow: '0 0 8px rgba(52, 211, 153, 0.4)',
+      textClass: 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]',
     };
   }
 
   return {
-    colorHex: '#F43F5E',
-    glowShadow: '0 0 30px rgba(244, 63, 94, 0.38)',
-    textClass: 'text-rose-500',
+    colorHex: '#FB7185',
+    glowShadow: '0 0 8px rgba(251, 113, 133, 0.4)',
+    textClass: 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]',
   };
 }

@@ -2037,7 +2037,7 @@ const HomeBentoDashboardPage: React.FC = () => {
         <div className="pointer-events-none fixed right-6 top-24 z-50" data-testid="home-bento-fallback-toast">
           <div className={statusToast.tone === 'warning'
             ? 'rounded-2xl border border-amber-300/35 bg-amber-950/82 px-4 py-3 text-sm font-semibold text-amber-50 shadow-[0_18px_50px_rgba(120,53,15,0.35)] backdrop-blur-xl'
-            : 'rounded-2xl border border-red-400/35 bg-red-950/82 px-4 py-3 text-sm font-semibold text-red-50 shadow-[0_18px_50px_rgba(127,29,29,0.35)] backdrop-blur-xl'}>
+            : 'rounded-2xl border border-rose-400/35 bg-rose-950/82 px-4 py-3 text-sm font-semibold text-rose-50 shadow-[0_18px_50px_rgba(251,113,133,0.22)] backdrop-blur-xl'}>
             {statusToast.message}
           </div>
         </div>
@@ -2222,7 +2222,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                   variant="ghost"
                   size="sm"
                   disabled={isDeletingHistory}
-                  className="shrink-0 border border-white/8 bg-white/[0.03] px-3 text-white/62 hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-100"
+                  className="shrink-0 border border-white/8 bg-white/[0.03] px-3 text-white/62 hover:border-rose-400/30 hover:bg-rose-400/10 hover:text-rose-100"
                   onClick={() => setPendingHistoryDelete({ mode: 'single', recordIds: [item.id] })}
                   data-testid={`home-bento-history-delete-${item.id}`}
                 >

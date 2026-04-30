@@ -240,6 +240,55 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertTrue(any("Fallback" in item["label"] for item in operation_detail["timeline"]))
         self.assertTrue(any("Timeout error" in item["message"] for item in operation_detail["diagnostics"]))
 
+    def test_runtime_trace_primary_success_backup_skipped_merges_to_final_provider_steps(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.start_session(
+                task_id="task-msft",
+                stock_code="MSFT",
+                stock_name="Microsoft",
+                configured_execution={},
+                actor={"user_id": "user-1", "role": "user"},
+                subsystem="analysis",
+            )
+            service.append_runtime_result(
+                session_id=session_id,
+                runtime_execution={
+                    "ai": {
+                        "gateway": "gemini",
+                        "model": "gemini-2.5-flash",
+                        "attempt_chain": [
+                            {"model": "gemini-2.5-flash", "status": "succeeded", "message": "ok"},
+                            {"model": "deepseek-v4-pro", "status": "skipped_because_previous_succeeded", "reason": "previous_model_succeeded"},
+                        ],
+                    },
+                    "data": {
+                        "market": {
+                            "source": "Yahoo",
+                            "status": "succeeded",
+                            "source_chain": [
+                                {"source": "Yahoo", "status": "succeeded", "message": "Quote fetched"},
+                                {"source": "FMP", "status": "skipped_because_previous_succeeded", "reason": "previous_provider_succeeded"},
+                            ],
+                        }
+                    },
+                },
+                notification_result={"status": "not_configured"},
+                query_id="query-msft",
+                overall_status="success",
+            )
+            detail = service.get_business_event_detail(session_id)
+
+        ai_steps = [step for step in detail["steps"] if step["name"] == "ai_analysis"]
+        quote_steps = [step for step in detail["steps"] if step["name"] == "fetch_quote"]
+        self.assertEqual(len(ai_steps), 2)
+        self.assertEqual(len(quote_steps), 2)
+        self.assertEqual(detail["successStepCount"], 2)
+        self.assertEqual(detail["skippedStepCount"], 2)
+        self.assertEqual({step["status"] for step in ai_steps}, {"success", "skipped"})
+        self.assertEqual({step["status"] for step in quote_steps}, {"success", "skipped"})
+        self.assertEqual(sum(1 for step in ai_steps if step["status"] == "success"), 1)
+
     def test_analysis_execution_groups_steps_and_finishes_partial(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -408,7 +457,7 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(event["failedStepCount"], 0)
         self.assertTrue(any(step["provider"] == "yahoo" and step["status"] == "skipped" for step in detail["steps"]))
 
-    def test_skipped_backup_model_missing_key_and_403_failed_are_classified(self) -> None:
+    def test_llm_primary_success_backup_skipped(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
             execution_id = service.start_execution(
@@ -422,7 +471,139 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
             service.start_step(execution_id, "ai_analysis", "AI 分析", category="ai_model", provider="gemini", model="gemini-2.5", critical=True)
             service.finish_step_success(execution_id, "ai_analysis", provider="gemini", model="gemini-2.5")
             service.skip_step(execution_id, "ai_analysis", "AI 分析", reason="previous_model_succeeded", provider="deepseek", model="deepseek-chat")
+            event = service.finish_execution(execution_id, status="success")
+            detail = service.get_business_event_detail(execution_id)
+
+        gemini = next(step for step in detail["steps"] if step["provider"] == "gemini")
+        deepseek = next(step for step in detail["steps"] if step["provider"] == "deepseek")
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(event["successStepCount"], 1)
+        self.assertEqual(event["skippedStepCount"], 1)
+        self.assertEqual(event["failedStepCount"], 0)
+        self.assertEqual(gemini["status"], "success")
+        self.assertEqual(deepseek["status"], "skipped")
+        self.assertEqual(deepseek["reason"], "previous_model_succeeded")
+
+    def test_provider_primary_success_backup_skipped(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.start_step(execution_id, "fetch_quote", "获取行情", category="data_market", provider="yahoo", endpoint="/quote", critical=True)
+            service.finish_step_success(execution_id, "fetch_quote", provider="yahoo", endpoint="/quote")
+            service.skip_step(
+                execution_id,
+                "fetch_quote",
+                "获取行情",
+                reason="previous_provider_succeeded",
+                provider="fmp",
+                endpoint="/quote",
+            )
+            event = service.finish_execution(execution_id, status="success")
+            detail = service.get_business_event_detail(execution_id)
+
+        yahoo = next(step for step in detail["steps"] if step["provider"] == "yahoo")
+        fmp = next(step for step in detail["steps"] if step["provider"] == "fmp")
+        self.assertEqual(event["successStepCount"], 1)
+        self.assertEqual(event["skippedStepCount"], 1)
+        self.assertEqual(event["failedStepCount"], 0)
+        self.assertEqual(yahoo["status"], "success")
+        self.assertEqual(fmp["status"], "skipped")
+        self.assertEqual(fmp["reason"], "previous_provider_succeeded")
+        self.assertNotEqual(fmp["status"], "success")
+
+    def test_primary_failed_backup_success(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.start_step(execution_id, "ai_analysis", "AI 分析", category="ai_model", provider="gemini", model="gemini-2.5", critical=False)
+            service.finish_step_failed(
+                execution_id,
+                "ai_analysis",
+                provider="gemini",
+                model="gemini-2.5",
+                error_type="HTTPError",
+                error_message="Gemini returned 429 rate limited",
+                reason="rate_limited",
+            )
+            service.start_step(execution_id, "ai_analysis", "AI 分析", category="ai_model", provider="deepseek", model="deepseek-v4-pro", critical=True)
+            service.finish_step_success(execution_id, "ai_analysis", provider="deepseek", model="deepseek-v4-pro")
+            event = service.finish_execution(execution_id, status="partial")
+            detail = service.get_business_event_detail(execution_id)
+
+        gemini = next(step for step in detail["steps"] if step["provider"] == "gemini")
+        deepseek = next(step for step in detail["steps"] if step["provider"] == "deepseek")
+        self.assertEqual(event["failedStepCount"], 1)
+        self.assertEqual(event["successStepCount"], 1)
+        self.assertEqual(gemini["status"], "failed")
+        self.assertEqual(deepseek["status"], "success")
+
+    def test_missing_key_maps_to_skipped(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
             service.skip_step(execution_id, "fetch_news", "获取新闻", reason="missing_api_key", provider="finnhub")
+            event = service.finish_execution(execution_id, status="success")
+            detail = service.get_business_event_detail(execution_id)
+
+        skipped = detail["steps"][0]
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertEqual(skipped["reason"], "missing_api_key")
+        self.assertEqual(event["successStepCount"], 0)
+        self.assertEqual(event["failedStepCount"], 0)
+        self.assertEqual(event["skippedStepCount"], 1)
+
+    def test_circuit_open_maps_to_skipped(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.skip_step(execution_id, "fetch_quote", "获取行情", reason="circuit_open", provider="fmp")
+            event = service.finish_execution(execution_id, status="success")
+            detail = service.get_business_event_detail(execution_id)
+
+        skipped = detail["steps"][0]
+        self.assertEqual(skipped["status"], "skipped")
+        self.assertEqual(skipped["reason"], "circuit_open")
+        self.assertEqual(event["skippedStepCount"], 1)
+
+    def test_forbidden_provider_call_maps_to_failed(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
             service.start_step(execution_id, "fetch_quote", "获取行情", category="data_market", provider="alpaca")
             service.finish_step_failed(
                 execution_id,
@@ -430,22 +611,73 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
                 provider="alpaca",
                 error_type="HTTPError",
                 error_message="GET https://api.example.test/v1/quote?apikey=secret-token returned 403",
-                reason="http_403",
+                reason="forbidden",
                 metadata={"httpStatus": 403, "authorization": "Bearer secret", "nested": {"api_key": "secret"}},
             )
-            event = service.finish_execution(execution_id, status="partial")
+            event = service.finish_execution(execution_id, status="failed")
             detail = service.get_business_event_detail(execution_id)
 
-        self.assertEqual(event["successStepCount"], 1)
-        self.assertEqual(event["skippedStepCount"], 2)
+        self.assertEqual(event["successStepCount"], 0)
+        self.assertEqual(event["skippedStepCount"], 0)
         self.assertEqual(event["failedStepCount"], 1)
         failed = next(step for step in detail["steps"] if step["status"] == "failed")
-        self.assertEqual(failed["reason"], "http_403")
+        self.assertEqual(failed["reason"], "forbidden")
         self.assertIn("apikey=***", failed["message"])
+        self.assertIn("403", failed["errorMessage"])
         self.assertEqual(failed["metadata"]["authorization"], "***")
         self.assertEqual(failed["metadata"]["nested"]["api_key"], "***")
 
-    def test_execution_finished_no_running_orphans(self) -> None:
+    def test_attempting_then_success_merges_single_step(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.start_step(execution_id, "ai_analysis", "AI 分析", category="ai_model", provider="gemini", model="gemini-2.5")
+            service.finish_step_success(execution_id, "ai_analysis", provider="gemini", model="gemini-2.5")
+            event = service.finish_execution(execution_id, status="success")
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertEqual(len(detail["steps"]), 1)
+        self.assertEqual(detail["steps"][0]["status"], "success")
+        self.assertFalse(any(step["status"] == "running" for step in detail["steps"]))
+        self.assertEqual(event["successStepCount"], 1)
+
+    def test_attempting_then_failed_merges_single_step(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.start_step(execution_id, "fetch_quote", "获取行情", category="data_market", provider="fmp", endpoint="/quote")
+            service.finish_step_failed(
+                execution_id,
+                "fetch_quote",
+                provider="fmp",
+                endpoint="/quote",
+                error_type="TimeoutError",
+                error_message="provider timeout",
+                reason="timeout",
+            )
+            event = service.finish_execution(execution_id, status="failed")
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertEqual(len(detail["steps"]), 1)
+        self.assertEqual(detail["steps"][0]["status"], "failed")
+        self.assertFalse(any(step["status"] == "running" for step in detail["steps"]))
+        self.assertEqual(event["failedStepCount"], 1)
+
+    def test_execution_finished_closes_orphan_running_steps(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
             execution_id = service.start_execution(
@@ -461,6 +693,24 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(event["unknownStepCount"], 1)
         self.assertFalse(any(step["status"] == "running" for step in detail["steps"]))
         self.assertEqual(detail["steps"][0]["status"], "unknown")
+
+    def test_skipped_steps_do_not_count_as_success(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.skip_step(execution_id, "fetch_news", "获取新闻", reason="previous_provider_succeeded", provider="gnews")
+            event = service.finish_execution(execution_id, status="success")
+
+        self.assertEqual(event["successStepCount"], 0)
+        self.assertEqual(event["failedStepCount"], 0)
+        self.assertEqual(event["skippedStepCount"], 1)
 
     def test_raw_system_logs_do_not_pollute_analysis_business_events(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
