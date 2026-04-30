@@ -1255,6 +1255,52 @@ describe('BacktestPage', () => {
     expect(screen.getByText('评估概览')).toBeInTheDocument();
   });
 
+  it('shows a unified message when the historical page fails to load', async () => {
+    getResults.mockRejectedValueOnce({
+      response: {
+        status: 500,
+        data: {
+          message: 'Internal Server Error',
+        },
+      },
+    });
+
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('tab', { name: '历史评估' }));
+
+    const alerts = await screen.findAllByRole('alert');
+    const alert = alerts.find((node) => node.textContent?.includes('服务器暂时不可用'));
+    expect(alert).toBeDefined();
+    expect(alert).toHaveTextContent('服务器暂时不可用');
+    expect(alert).toHaveTextContent('服务器暂时不可用，请稍后重试。');
+  });
+
+  it('shows a unified message when deterministic backtest submission fails', async () => {
+    runRuleBacktest.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: {
+          message: 'backend temporarily down',
+        },
+      },
+    });
+
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(within(screen.getByTestId('backtest-sticky-action-bar')).getByRole('button', { name: '执行回测任务' }));
+
+    const alerts = await screen.findAllByRole('alert');
+    const alert = alerts.find((node) => node.textContent?.includes('服务器暂时不可用'));
+    expect(alert).toBeDefined();
+    expect(alert).toHaveTextContent('服务器暂时不可用');
+    expect(alert).toHaveTextContent('服务器暂时不可用，请稍后重试。');
+  });
+
   it('opens deterministic history items in the dedicated result page route', async () => {
     const historySummary = makeRuleRunResponse({
       id: 123,

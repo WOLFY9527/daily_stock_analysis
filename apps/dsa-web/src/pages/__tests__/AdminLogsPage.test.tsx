@@ -32,7 +32,12 @@ vi.mock('../../components/common', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../components/common')>();
   return {
     ...actual,
-    ApiErrorAlert: () => <div>api-error</div>,
+    ApiErrorAlert: ({ error }: { error: { title: string; message: string } }) => (
+      <div role="alert" data-testid="api-error-alert">
+        <strong>{error.title}</strong>
+        <span>{error.message}</span>
+      </div>
+    ),
   };
 });
 
@@ -287,6 +292,45 @@ describe('AdminLogsPage', () => {
     expect(document.querySelector('[data-status="success"]')).not.toBeNull();
     expect(document.querySelector('[data-status="skipped"]')).not.toBeNull();
     expect(document.querySelector('[data-status="failed"]')).not.toBeNull();
+  });
+
+  it('shows a unified message when the business-event list fails to load', async () => {
+    listBusinessEvents.mockRejectedValueOnce({
+      response: {
+        status: 500,
+        data: {
+          message: 'Internal Server Error',
+        },
+      },
+    });
+
+    render(<AdminLogsPage />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('服务器暂时不可用');
+    expect(alert).toHaveTextContent('服务器暂时不可用，请稍后重试。');
+  });
+
+  it('shows a unified message when the detail drawer fails to load', async () => {
+    getBusinessEventDetail.mockRejectedValueOnce({
+      response: {
+        status: 404,
+        data: {
+          message: 'Not Found',
+        },
+      },
+    });
+
+    render(<AdminLogsPage />);
+
+    const row = await screen.findByText('TSLA');
+    const rowContainer = row.closest('[data-testid="business-event-row"]');
+    expect(rowContainer).not.toBeNull();
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('请求的资源不存在');
+    expect(alert).toHaveTextContent('请求的资源不存在。');
   });
 
   it('renders running step status as 运行中 in the detail timeline', async () => {

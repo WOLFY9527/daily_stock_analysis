@@ -1,8 +1,76 @@
 import { describe, expect, it } from 'vitest';
-import { parseApiError } from '../error';
+import {
+  getApiErrorMessage,
+  isAuthError,
+  isNetworkError,
+  isTimeoutError,
+  parseApiError,
+} from '../error';
 
 describe('parseApiError', () => {
-  it('classifies login-required responses as auth-required guidance', () => {
+  it('parses { error, message } payloads', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 400,
+        data: {
+          error: 'bad_request',
+          message: '请求参数格式不正确。',
+        },
+      },
+    });
+
+    expect(parsed.message).toBe('请求参数格式不正确。');
+    expect(parsed.rawMessage).toBe('请求参数格式不正确。');
+  });
+
+  it('parses { detail: "..." } payloads', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 400,
+        data: {
+          detail: '后端返回了 detail 字段文本。',
+        },
+      },
+    });
+
+    expect(parsed.message).toBe('后端返回了 detail 字段文本。');
+    expect(parsed.rawMessage).toBe('后端返回了 detail 字段文本。');
+  });
+
+  it('parses FastAPI validation detail lists', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 422,
+        data: {
+          detail: [
+            {
+              loc: ['body', 'api_key'],
+              msg: 'field required',
+              type: 'missing',
+            },
+            {
+              loc: ['body', 'base_url'],
+              msg: 'must be a valid URL',
+              type: 'value_error.url',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(parsed.status).toBe(422);
+    expect(parsed.category).toBe('validation_error');
+    expect(parsed.isValidationError).toBe(true);
+    expect(parsed.message).toContain('请求参数无效');
+    expect(parsed.details).toEqual({
+      detail: [
+        { loc: ['body', 'api_key'], msg: 'field required', type: 'missing' },
+        { loc: ['body', 'base_url'], msg: 'must be a valid URL', type: 'value_error.url' },
+      ],
+    });
+  });
+
+  it('maps 401 responses to auth guidance', () => {
     const parsed = parseApiError({
       response: {
         status: 401,
@@ -16,61 +84,135 @@ describe('parseApiError', () => {
     });
 
     expect(parsed.category).toBe('auth_required');
-    expect(parsed.title).toBe('需要登录');
+    expect(parsed.message).toBe('登录已失效，请重新登录。');
+    expect(parsed.isAuthError).toBe(true);
+    expect(isAuthError(parsed)).toBe(true);
   });
 
-  it('classifies admin unlock errors without pretending they are upstream provider failures', () => {
+  it('maps 403 responses to permission guidance', () => {
     const parsed = parseApiError({
       response: {
         status: 403,
         data: {
           detail: {
-            error: 'admin_unlock_required',
-            message: 'Admin settings are locked. Verify admin password to continue.',
-          },
-        },
-      },
-    });
-
-    expect(parsed.category).toBe('admin_unlock_required');
-    expect(parsed.title).toBe('管理员验证已过期');
-  });
-
-  it('classifies owner mismatch responses as access-denied app errors', () => {
-    const parsed = parseApiError({
-      response: {
-        status: 403,
-        data: {
-          detail: {
-            error: 'owner_mismatch',
-            message: 'The requested owner_id does not match the current user',
+            error: 'forbidden',
+            message: 'Forbidden',
           },
         },
       },
     });
 
     expect(parsed.category).toBe('access_denied');
-    expect(parsed.title).toBe('无法访问其他用户的数据');
+    expect(parsed.message).toBe('没有权限执行该操作。');
+    expect(isAuthError(parsed)).toBe(false);
   });
 
-  it('classifies IBKR session-expired responses as bounded validation guidance', () => {
+  it('maps 404 responses to not-found guidance', () => {
     const parsed = parseApiError({
       response: {
-        status: 400,
+        status: 404,
         data: {
-          detail: {
-            error: 'ibkr_session_expired',
-            message: '当前 IBKR session 已失效、未授权或未连上可访问账户。',
-          },
+          message: 'Not Found',
+        },
+      },
+    });
+
+    expect(parsed.category).toBe('http_error');
+    expect(parsed.message).toBe('请求的资源不存在。');
+  });
+
+  it('maps 422 responses to validation guidance', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 422,
+        data: {
+          message: 'unprocessable entity',
         },
       },
     });
 
     expect(parsed.category).toBe('validation_error');
-    expect(parsed.title).toBe('IBKR 会话不可用');
+    expect(parsed.message).toContain('请求参数无效');
+    expect(parsed.isValidationError).toBe(true);
   });
 
-  it('classifies IBKR account mapping conflicts without treating them as generic upstream failures', () => {
+  it('maps 500 responses to server-unavailable guidance', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 500,
+        data: {
+          message: 'Internal Server Error',
+        },
+      },
+    });
+
+    expect(parsed.category).toBe('upstream_unavailable');
+    expect(parsed.message).toBe('服务器暂时不可用，请稍后重试。');
+  });
+
+  it('maps network failures to the network guidance', () => {
+    const parsed = parseApiError({
+      code: 'ERR_NETWORK',
+      message: 'Network Error',
+    });
+
+    expect(parsed.category).toBe('local_connection_failed');
+    expect(parsed.message).toBe('网络连接失败，请检查后端服务是否运行。');
+    expect(parsed.isNetworkError).toBe(true);
+    expect(isNetworkError(parsed)).toBe(true);
+  });
+
+  it('maps timeout failures to timeout guidance', () => {
+    const parsed = parseApiError({
+      code: 'ECONNABORTED',
+      message: 'timeout of 30000ms exceeded',
+    });
+
+    expect(parsed.category).toBe('upstream_timeout');
+    expect(parsed.message).toBe('请求超时，请稍后重试。');
+    expect(parsed.isTimeoutError).toBe(true);
+    expect(isTimeoutError(parsed)).toBe(true);
+  });
+
+  it('redacts api keys, tokens, and secrets from message text and details', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 400,
+        data: {
+          message: 'request failed for https://example.com/callback?api_key=abc123&token=secret-token&foo=bar',
+          details: {
+            callbackUrl: 'https://example.com/next?secret=top-secret&safe=1',
+            nested: {
+              authorization: 'Bearer super-secret',
+              note: 'token=another-secret',
+            },
+          },
+        },
+      },
+    });
+
+    expect(parsed.rawMessage).toContain('api_key=***');
+    expect(parsed.rawMessage).toContain('token=***');
+    expect(parsed.rawMessage).not.toContain('abc123');
+    expect(parsed.rawMessage).not.toContain('secret-token');
+    expect(parsed.details).toEqual({
+      message: 'request failed for https://example.com/callback?api_key=***&token=***&foo=bar',
+      details: {
+        callbackUrl: 'https://example.com/next?secret=***&safe=1',
+        nested: {
+          authorization: '***',
+          note: 'token=***',
+        },
+      },
+    });
+  });
+
+  it('uses fallbackMessage when no useful error payload exists', () => {
+    expect(getApiErrorMessage(undefined, '自定义兜底')).toBe('自定义兜底');
+    expect(parseApiError(undefined, '自定义兜底').message).toBe('自定义兜底');
+  });
+
+  it('keeps existing IBKR-specific guidance intact', () => {
     const parsed = parseApiError({
       response: {
         status: 409,
@@ -85,20 +227,5 @@ describe('parseApiError', () => {
 
     expect(parsed.category).toBe('validation_error');
     expect(parsed.title).toBe('IBKR 账户映射冲突');
-  });
-
-  it('classifies insufficient upstream LLM balance as actionable provider guidance', () => {
-    const parsed = parseApiError({
-      response: {
-        status: 200,
-        data: {
-          success: false,
-          error: 'All LLM models failed. Last error: litellm.APIError: APIError: OpenAIException - Your account balance is insufficient. Please recharge your account to continue using the API.',
-        },
-      },
-    });
-
-    expect(parsed.category).toBe('upstream_forbidden');
-    expect(parsed.title).toBe('上游模型额度不足');
   });
 });

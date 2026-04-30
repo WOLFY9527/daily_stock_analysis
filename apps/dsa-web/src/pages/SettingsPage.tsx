@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { getParsedApiError } from '../api/error';
+import { getApiErrorMessage, getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
 import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, Input, Select } from '../components/common';
 import {
@@ -2633,9 +2633,22 @@ const SettingsPage: React.FC = () => {
         timeoutSeconds: 5,
       });
       const nextStatus: DataSourceValidationState = probe.success ? 'validated' : 'failed';
+      const parsedProbeError = getApiErrorMessage({
+        response: {
+          status: probe.statusCode ?? 400,
+          data: {
+            error: probe.error,
+            message: probe.message,
+            statusCode: probe.statusCode,
+            checkedUrl: probe.checkedUrl,
+            latencyMs: probe.latencyMs,
+          },
+          statusText: probe.error || probe.message || undefined,
+        },
+      }, t('settings.dataSourceValidationConnectivityFailed'));
       const message = probe.success
         ? probe.message || t('settings.dataSourceValidationConnectivitySuccess')
-        : probe.error || probe.message || t('settings.dataSourceValidationConnectivityFailed');
+        : parsedProbeError;
       const nextLibrary = customDataSourceLibraryDraft.map((record) => (
         record.id === sourceId
           ? {

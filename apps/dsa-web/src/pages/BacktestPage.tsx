@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
-import { getParsedApiError } from '../api/error';
+import { getApiErrorMessage, getParsedApiError } from '../api/error';
 import type { RuleWizardStep } from '../components/backtest/DeterministicBacktestFlow';
 import HistoricalEvaluationPanel from '../components/backtest/HistoricalEvaluationPanel';
 import NormalBacktestWorkspace from '../components/backtest/NormalBacktestWorkspace';
@@ -529,7 +529,7 @@ const BacktestPage: React.FC = () => {
     } catch (error) {
       setOverallPerf(null);
       hasDanger = true;
-      if (showNotice) notices.push(getParsedApiError(error).message);
+      if (showNotice) notices.push(getApiErrorMessage(error));
     }
 
     if (code) {
@@ -537,11 +537,11 @@ const BacktestPage: React.FC = () => {
         const stock = await backtestApi.getStockPerformance(code, windowBars);
         setStockPerf(stock);
         if (stock == null && showNotice) notices.push(bt(language, 'page.performanceNotice.noInstrumentSummary', { code }));
-      } catch (error) {
-        setStockPerf(null);
-        hasDanger = true;
-        if (showNotice) notices.push(getParsedApiError(error).message);
-      }
+    } catch (error) {
+      setStockPerf(null);
+      hasDanger = true;
+      if (showNotice) notices.push(getApiErrorMessage(error));
+    }
     } else {
       setStockPerf(null);
     }
@@ -564,10 +564,10 @@ const BacktestPage: React.FC = () => {
         if (defaultWindow) setEvaluationBars(String(defaultWindow));
         setPerformanceNotice(null);
       } catch (error) {
-        setPerformanceNotice({
-          tone: 'danger',
-          message: getParsedApiError(error).message,
-        });
+      setPerformanceNotice({
+        tone: 'danger',
+        message: getApiErrorMessage(error),
+      });
       } finally {
         void fetchResults(1, undefined, undefined, null);
         void fetchHistory(1, undefined);

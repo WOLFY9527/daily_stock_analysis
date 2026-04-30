@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminLogsApi, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
+import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
 import { StatusBadge, getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -582,7 +583,7 @@ const AdminLogsPage: React.FC = () => {
       setSessions(items.length ? items : (import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []));
       setSummary(response.summary || null);
     } catch (err) {
-      setError((err as { parsedError?: ParsedApiError }).parsedError || null);
+      setError(getParsedApiError(err));
       if (activeTab === 'raw') {
         setSessions(import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []);
       } else {
@@ -639,7 +640,7 @@ const AdminLogsPage: React.FC = () => {
       const detail = await adminLogsApi.getSessionDetail(summary.sessionId);
       setSelectedDetail(detail);
     } catch (err) {
-      setDetailError((err as { parsedError?: ParsedApiError }).parsedError || null);
+      setDetailError(getParsedApiError(err));
     } finally {
       setIsLoadingDetail(false);
     }
@@ -655,7 +656,7 @@ const AdminLogsPage: React.FC = () => {
       const detail = await adminLogsApi.getBusinessEventDetail(event.id);
       setSelectedBusinessDetail(detail);
     } catch (err) {
-      setDetailError((err as { parsedError?: ParsedApiError }).parsedError || null);
+      setDetailError(getParsedApiError(err));
     } finally {
       setIsLoadingDetail(false);
     }

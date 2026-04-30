@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useState } from 'react';
-import { getParsedApiError } from '../../api/error';
+import { getApiErrorMessage } from '../../api/error';
 import { stocksApi, type ExtractItem } from '../../api/stocks';
 import { SystemConfigConflictError } from '../../api/systemConfig';
 import { Badge, Button, SupportBanner, SupportPanel } from '../common';
@@ -132,12 +132,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         const res = await stocksApi.extractFromImage(file);
         addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
       } catch (e) {
-        const parsed = getParsedApiError(e);
-        const err = e && typeof e === 'object' ? (e as { response?: { status?: number }; code?: string }) : null;
-        let fallback = '识别失败，请重试';
-        if (err?.response?.status === 429) fallback = '请求过于频繁，请稍后再试';
-        else if (err?.code === 'ECONNABORTED') fallback = '请求超时，请检查网络后重试';
-        setError(parsed.message || fallback);
+        setError(getApiErrorMessage(e, '识别失败，请重试'));
       } finally {
         setIsLoading(false);
       }
@@ -157,8 +152,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         const res = await stocksApi.parseImport(file);
         addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
       } catch (e) {
-        const parsed = getParsedApiError(e);
-        setError(parsed.message || '解析失败');
+        setError(getApiErrorMessage(e, '解析失败'));
       } finally {
         setIsLoading(false);
       }
@@ -182,8 +176,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         setPasteText('');
       })
       .catch((e) => {
-        const parsed = getParsedApiError(e);
-        setError(parsed.message || '解析失败');
+        setError(getApiErrorMessage(e, '解析失败'));
       })
       .finally(() => setIsLoading(false));
   }, [pasteText, addItems]);
@@ -256,7 +249,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         await onMergeStockList(value);
         setError('配置已更新，请再次点击「合并到自选股」');
       } else {
-        setError(e instanceof Error ? e.message : '合并保存失败');
+        setError(getApiErrorMessage(e, '合并保存失败'));
       }
     } finally {
       setIsMerging(false);

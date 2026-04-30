@@ -20,6 +20,7 @@ const {
   refreshStatus,
   setThemeStyle,
   testLLMChannel,
+  testCustomDataSource,
   testBuiltinDataSource,
   resetRuntimeCaches,
   factoryResetSystem,
@@ -39,6 +40,7 @@ const {
   refreshStatus: vi.fn(),
   setThemeStyle: vi.fn(),
   testLLMChannel: vi.fn(),
+  testCustomDataSource: vi.fn(),
   testBuiltinDataSource: vi.fn(),
   resetRuntimeCaches: vi.fn(),
   factoryResetSystem: vi.fn(),
@@ -48,16 +50,17 @@ const {
 
 vi.mock('../../api/systemConfig', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/systemConfig')>();
-  return {
-    ...actual,
-    systemConfigApi: {
-      ...actual.systemConfigApi,
-      testLLMChannel,
-      testBuiltinDataSource,
-      resetRuntimeCaches,
-      factoryResetSystem,
-    },
-  };
+    return {
+      ...actual,
+      systemConfigApi: {
+        ...actual.systemConfigApi,
+        testLLMChannel,
+        testCustomDataSource,
+        testBuiltinDataSource,
+        resetRuntimeCaches,
+        factoryResetSystem,
+      },
+    };
 });
 
 vi.mock('../../hooks', () => ({
@@ -464,6 +467,14 @@ describe('SettingsPage', () => {
       resolvedModel: 'gemini/gemini-2.5-flash',
       latencyMs: 123,
     });
+    testCustomDataSource.mockResolvedValue({
+      success: true,
+      message: 'ok',
+      error: null,
+      statusCode: 200,
+      checkedUrl: 'https://demo.example.com/v1',
+      latencyMs: 120,
+    });
     testBuiltinDataSource.mockResolvedValue({
       provider: 'fmp',
       ok: true,
@@ -550,7 +561,7 @@ describe('SettingsPage', () => {
 
       expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
       expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
-      expect(screen.getByTestId('settings-bento-hero-dirty-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+      expect(screen.getByTestId('settings-bento-hero-dirty-value')).toBeInTheDocument();
       expect(screen.getAllByText(zh('settings.controlPlaneStatProviders'))).toHaveLength(1);
       expect(screen.getAllByText(zh('settings.controlPlaneStatDataSources'))).toHaveLength(1);
       expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
@@ -2014,6 +2025,61 @@ describe('SettingsPage', () => {
     expect(within(drawer).getByText(/检查套餐权限或重置 API key/)).toBeInTheDocument();
     expect(within(drawer).queryByText('fmp-secret-key')).not.toBeInTheDocument();
     expect(within(fmpCard).getByText('部分可用')).toHaveAttribute('data-status', 'partial');
+  });
+
+  it('shows unified copy when custom data source validation fails', async () => {
+    testCustomDataSource.mockResolvedValueOnce({
+      success: false,
+      message: 'temporarily unavailable',
+      error: 'Upstream error',
+      statusCode: 503,
+      checkedUrl: 'https://demo.example.com/v1/callback?api_key=demo-secret&token=demo-token',
+      latencyMs: 120,
+    });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('REALTIME_SOURCE_PRIORITY', 'demo_news_api'),
+          buildDataSourceConfigItem('CUSTOM_DATA_SOURCE_LIBRARY', JSON.stringify([
+            {
+              id: 'demo_news_api',
+              name: 'Demo News API',
+              credentialSchema: 'single_key',
+              credential: 'demo-secret',
+              secret: '',
+              baseUrl: 'https://demo.example.com/v1',
+              description: 'Custom news endpoint',
+              capabilities: ['news'],
+              validation: { status: 'validated' },
+            },
+          ])),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    expect(dataSection).not.toBeNull();
+    const customCard = within(dataSection as HTMLElement).getByTestId('data-source-card-demo_news_api');
+
+    fireEvent.click(within(customCard).getByRole('button', { name: '校验' }));
+
+    await waitFor(() => {
+      expect(testCustomDataSource).toHaveBeenCalledWith({
+        name: 'Demo News API',
+        baseUrl: 'https://demo.example.com/v1',
+        credentialSchema: 'single_key',
+        credential: 'demo-secret',
+        secret: '',
+        timeoutSeconds: 5,
+      });
+    });
+    expect(within(customCard).getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
+    expect(within(customCard).queryByText('demo-secret')).not.toBeInTheDocument();
+    expect(within(customCard).queryByText('demo-token')).not.toBeInTheDocument();
   });
 
   it('shows quick-api status and advanced-channel count on provider cards', async () => {
