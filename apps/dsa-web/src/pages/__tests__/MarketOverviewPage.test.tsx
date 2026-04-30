@@ -373,6 +373,13 @@ const cnShortSentimentPayload = () => ({
   },
 });
 
+function expandPendingDataSourceSection() {
+  const button = screen.getByRole('button', { name: /待接入真实数据源/i });
+  if (button.getAttribute('aria-expanded') !== 'true') {
+    fireEvent.click(button);
+  }
+}
+
 describe('MarketOverviewPage', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -488,14 +495,14 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-hero-DXY')).toBeInTheDocument();
 
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /商品与外汇/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /利率与债券市场/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /商品与外汇/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /期货与盘前风向/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /A股短线情绪/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-fallback-section')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /待接入真实数据源/i })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: /同步最新行情/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /刷新 情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /刷新 商品与外汇/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /刷新 利率与债券市场/i })).toBeInTheDocument();
     expect(screen.queryByText(/同步完成/i)).not.toBeInTheDocument();
 
     expect(await screen.findByTestId('market-overview-hero-SPX')).toBeInTheDocument();
@@ -513,7 +520,7 @@ describe('MarketOverviewPage', () => {
 
     expect(screen.getAllByTestId('market-overview-sparkline').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/备用示例数据，不代表当前行情/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/备用示例数据，不代表当前行情/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('market-data-quality')).toBeInTheDocument();
     expect(screen.getByText(/当前数据质量：部分备用/i)).toBeInTheDocument();
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
@@ -527,20 +534,79 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    expect(await screen.findByTestId('market-temperature-unreliable-warning')).toHaveTextContent('部分评分基于备用数据，暂不作为实时市场判断');
+    expect(await screen.findByTestId('market-temperature-unreliable-summary')).toHaveTextContent('市场温度：数据不足');
+    expect(screen.getByText(/当前真实数据源不足，暂不生成综合判断/i)).toBeInTheDocument();
     expect(screen.getByText(/可信度：数据不足/i)).toBeInTheDocument();
-    expect(screen.getAllByText('数据不足').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/综合市场温度/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /查看评分占位项/i }));
+    expect(screen.getByText(/综合市场温度/i)).toBeInTheDocument();
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
     expect(screen.getByText(/备用示例数据仅用于保持界面结构/i)).toBeInTheDocument();
   });
 
-  it('marks fallback-only cards as examples instead of real-time market data', async () => {
+  it('moves fallback-only cards into the pending data-source disclosure', async () => {
     render(<MarketOverviewPage />);
 
-    expect(await screen.findByTestId('market-overview-card-futures')).toBeInTheDocument();
-    expect(screen.getAllByText('暂未接入真实数据源').length).toBeGreaterThan(0);
+    expect(await screen.findByTestId('market-overview-card-indices')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-card-indices').closest('[data-testid="market-overview-main-grid"]')).toBeTruthy();
+    expect(screen.queryByTestId('market-overview-card-futures')).not.toBeInTheDocument();
+
+    const pendingSection = screen.getByTestId('market-overview-fallback-section');
+    expect(pendingSection).toHaveTextContent('以下模块当前使用备用示例数据，不参与市场温度评分。');
+    expect(screen.getByRole('button', { name: /待接入真实数据源/i })).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: /待接入真实数据源/i }));
+
+    expect(screen.getByRole('button', { name: /待接入真实数据源/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('market-overview-card-futures')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^资金流向$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
     expect(screen.getAllByText('当前为备用示例数据，不参与市场温度评分').length).toBeGreaterThan(0);
     expect(screen.queryByText('实时行情')).not.toBeInTheDocument();
+  });
+
+  it('keeps mixed data cards in the main grid', async () => {
+    vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce({
+      ...snapshotPanel('ChinaIndicesCard', 'CSI300', '沪深300'),
+      source: 'mixed',
+      sourceLabel: 'Sina + 备用数据',
+      freshness: 'delayed' as const,
+      isFallback: false,
+      items: [
+        {
+          ...snapshotPanel('ChinaIndicesCard', 'CSI300', '沪深300').items[0],
+          source: 'sina',
+          sourceLabel: 'Sina',
+          freshness: 'delayed' as const,
+          isFallback: false,
+        },
+        {
+          ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
+        },
+      ],
+    });
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-overview-card-cnIndices')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-card-cnIndices').closest('[data-testid="market-overview-main-grid"]')).toBeTruthy();
+  });
+
+  it('shows category data coverage and collapses fallback-heavy category cards', async () => {
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+
+    expect(await screen.findByTestId('market-overview-coverage-summary')).toHaveTextContent('A股/港股数据覆盖：真实 0 · 混合 0 · 备用 8');
+    expect(screen.queryByRole('heading', { name: /市场宽度与赚钱效应/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /待接入真实数据源/i })).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: /待接入真实数据源/i }));
+
+    expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /行业与主题强弱/i })).toBeInTheDocument();
   });
 
   it('renders all data freshness badge states', () => {
@@ -582,6 +648,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    expandPendingDataSourceSection();
     await waitFor(() => expect(screen.getAllByText('旧数据').length).toBeGreaterThan(0));
     expect(screen.getAllByText(/数据可能已过期/i).length).toBeGreaterThan(0);
   });
@@ -601,6 +668,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    expandPendingDataSourceSection();
     await waitFor(() => expect(screen.getByText(/正在刷新快照/)).toBeInTheDocument());
     expect(screen.getByText('上证指数')).toBeInTheDocument();
     expect(screen.getByText(/3,120.55|3120.55/)).toBeInTheDocument();
@@ -615,6 +683,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('button', { name: 'A股/港股' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /今日市场解读/i })).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent('A股/港股数据覆盖');
+    expect(screen.queryByRole('heading', { name: /A股短线情绪/i })).not.toBeInTheDocument();
+    expandPendingDataSourceSection();
     expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
@@ -626,20 +697,19 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-card-cnShortSentiment')).toHaveAttribute('data-market-card-rank', '2');
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
-    expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /期货与盘前风向/i })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ETF 资金流向/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /商品与外汇/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /利率与债券市场/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /商品与外汇/i })).not.toBeInTheDocument();
     expect(screen.queryByText('CSI 300')).not.toBeInTheDocument();
     expect(screen.queryByText('Shanghai Composite')).not.toBeInTheDocument();
     expect(screen.queryByText('Shenzhen Component')).not.toBeInTheDocument();
-    expect(screen.getByText('DXY')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-card-futures')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '1');
-    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '2');
+    expect(screen.queryByText('DXY')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '0');
+    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '1');
 
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
     expect(marketApi.getRates).toHaveBeenCalledTimes(1);
@@ -653,7 +723,7 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('heading', { name: /利率与债券市场/i })).not.toBeInTheDocument());
   });
 
   it('does not block settled cards when global indices request is still pending', async () => {
@@ -663,7 +733,7 @@ describe('MarketOverviewPage', () => {
 
     expect(await screen.findByText(/贪婪与恐慌指数/i)).toBeInTheDocument();
     expect(screen.getByText('26.00')).toBeInTheDocument();
-    expect(screen.getAllByText(/US10Y/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-overview-fallback-section')).toBeInTheDocument();
   });
 
   it('stops showing global indices loading when the request fails', async () => {
@@ -671,7 +741,9 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    expect(await screen.findByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
+    expect(await screen.findByTestId('market-overview-fallback-section')).toBeInTheDocument();
+    expandPendingDataSourceSection();
+    expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
     });
@@ -688,6 +760,7 @@ describe('MarketOverviewPage', () => {
       await vi.advanceTimersByTimeAsync(3100);
     });
 
+    expandPendingDataSourceSection();
     expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
     expect(screen.getByText('BTC')).toBeInTheDocument();
     expect(screen.getByText('ETH')).toBeInTheDocument();
@@ -701,6 +774,9 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
+    fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
+    await screen.findByTestId('market-overview-fallback-section');
+    expandPendingDataSourceSection();
     expect(await screen.findByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
     expect((await screen.findAllByText(/75,800/)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/3,120/).length).toBeGreaterThan(0);
@@ -717,6 +793,7 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
+    expandPendingDataSourceSection();
     expect(await screen.findByText('BTC')).toBeInTheDocument();
     expect(screen.getByText('ETH')).toBeInTheDocument();
     expect(screen.getByText('BNB')).toBeInTheDocument();
@@ -735,7 +812,9 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    expect(await screen.findByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
+    expect(await screen.findByTestId('market-overview-fallback-section')).toBeInTheDocument();
+    expandPendingDataSourceSection();
+    expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
     expect(await screen.findByText('BTC')).toBeInTheDocument();
@@ -772,8 +851,10 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /今日市场解读/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
+    expandPendingDataSourceSection();
     expect(screen.getByRole('heading', { name: /期货与盘前风向/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    expandPendingDataSourceSection();
     expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
   });
 
@@ -788,6 +869,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    expandPendingDataSourceSection();
     expect(await screen.findByText('上证指数')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /刷新 A股与港股指数/i }));
     expect(screen.getByText('上证指数')).toBeInTheDocument();
@@ -818,6 +900,7 @@ describe('MarketOverviewPage', () => {
 
     await waitFor(() => expect(marketApi.getCrypto).toHaveBeenCalledTimes(1));
 
+    expandPendingDataSourceSection();
     const fxCard = screen.getByTestId('market-overview-card-fxCommodities');
     const sentimentCard = screen.getByTestId('market-overview-card-sentiment');
 
@@ -828,6 +911,7 @@ describe('MarketOverviewPage', () => {
     expect(window.localStorage.getItem('market-overview-order-all')).toContain('fxCommodities');
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    expandPendingDataSourceSection();
     const sectorCard = screen.getByTestId('market-overview-card-sectorRotation');
     const cnIndicesCard = screen.getByTestId('market-overview-card-cnIndices');
 

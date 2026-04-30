@@ -51,6 +51,7 @@ type PanelState = {
 type PanelKey = keyof PanelState;
 type CardKey = Exclude<PanelKey, 'temperature' | 'briefing'>;
 type CategoryKey = 'all' | 'us' | 'cn' | 'macro' | 'crypto';
+type CardCoverageKind = 'real' | 'mixed' | 'fallback';
 
 const CATEGORY_CARDS: Record<CategoryKey, CardKey[]> = {
   all: ['futures', 'indices', 'cnIndices', 'cnBreadth', 'rates', 'fxCommodities', 'volatility', 'fundsFlow', 'sentiment', 'crypto', 'cnShortSentiment', 'cnFlows', 'sectorRotation', 'macro'],
@@ -317,13 +318,59 @@ function isFallbackOnlyMeta(meta: {
   source?: string;
   freshness?: string;
   isFallback?: boolean;
+  isReliable?: boolean;
+  metadata?: { isReliable?: boolean };
   items?: Array<{ source?: string; freshness?: string; isFallback?: boolean }>;
 }): boolean {
   const items = meta.items || [];
   return Boolean(
-    (meta.isFallback || meta.freshness === 'fallback' || meta.source === 'fallback')
-    && (!items.length || items.every((item) => item.isFallback || item.freshness === 'fallback' || item.source === 'fallback')),
+    meta.source === 'fallback'
+    || meta.freshness === 'fallback'
+    || meta.isFallback
+    || meta.isReliable === false
+    || meta.metadata?.isReliable === false
+    || (items.length > 0 && items.every((item) => item.isFallback || item.freshness === 'fallback' || item.source === 'fallback')),
   );
+}
+
+function isItemFallback(item: { source?: string; freshness?: string; isFallback?: boolean }): boolean {
+  return Boolean(item.isFallback || item.freshness === 'fallback' || item.source === 'fallback');
+}
+
+function getCardMeta(panels: PanelState, cardKey: CardKey): {
+  source?: string;
+  freshness?: string;
+  isFallback?: boolean;
+  isReliable?: boolean;
+  metadata?: { isReliable?: boolean };
+  items?: Array<{ source?: string; freshness?: string; isFallback?: boolean }>;
+} {
+  if (cardKey === 'futures') {
+    return panels.futures;
+  }
+  if (cardKey === 'cnShortSentiment') {
+    return panels.cnShortSentiment;
+  }
+  return panels[cardKey] || {};
+}
+
+function getCardCoverageKind(panels: PanelState, cardKey: CardKey): CardCoverageKind {
+  const meta = getCardMeta(panels, cardKey);
+  const items = meta.items || [];
+  if (isFallbackOnlyMeta(meta)) {
+    return 'fallback';
+  }
+  if (meta.source === 'mixed' || items.some(isItemFallback)) {
+    return 'mixed';
+  }
+  return 'real';
+}
+
+function summarizeCardCoverage(panels: PanelState, cards: CardKey[]): Record<CardCoverageKind, number> {
+  return cards.reduce<Record<CardCoverageKind, number>>((summary, cardKey) => {
+    summary[getCardCoverageKind(panels, cardKey)] += 1;
+    return summary;
+  }, { real: 0, mixed: 0, fallback: 0 });
 }
 
 type FreshnessCountKey = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
@@ -424,12 +471,54 @@ const DataQualityOverview: React.FC<{ summary: DataQualitySummary }> = ({ summar
   );
 };
 
+const CategoryCoverageSummary: React.FC<{
+  label: string;
+  summary: Record<CardCoverageKind, number>;
+}> = ({ label, summary }) => (
+  <div
+    data-testid="market-overview-coverage-summary"
+    className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-sm text-white/70"
+  >
+    <span className="font-semibold text-white/82">{label}数据覆盖：</span>
+    <span className="font-mono">真实 {summary.real} · 混合 {summary.mixed} · 备用 {summary.fallback}</span>
+  </div>
+);
+
+const PendingDataSourceSection: React.FC<{
+  expanded: boolean;
+  fallbackCount: number;
+  onToggle: () => void;
+  children: React.ReactNode;
+}> = ({ expanded, fallbackCount, onToggle, children }) => (
+  <section
+    data-testid="market-overview-fallback-section"
+    className="w-full rounded-xl border border-white/[0.055] bg-white/[0.018] p-3"
+  >
+    <button
+      type="button"
+      className="flex w-full items-center justify-between gap-4 text-left"
+      aria-expanded={expanded}
+      onClick={onToggle}
+    >
+      <div>
+        <h2 className="text-sm font-semibold text-white/78">待接入真实数据源</h2>
+        <p className="mt-1 text-xs leading-5 text-white/45">以下模块当前使用备用示例数据，不参与市场温度评分。</p>
+      </div>
+      <span className="shrink-0 rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-xs font-semibold text-white/55">
+        {expanded ? '收起' : `展开 ${fallbackCount}`}
+      </span>
+    </button>
+    {expanded ? <div className="mt-4">{children}</div> : null}
+  </section>
+);
+
 const MarketTemperatureStrip: React.FC<{
   data: MarketTemperatureResponse;
   refreshing: boolean;
   onRefresh: () => void;
 }> = ({ data, refreshing, onRefresh }) => {
   const { t } = useI18n();
+  const [showPlaceholderScores, setShowPlaceholderScores] = useState(false);
   const scores: Array<{ key: keyof MarketTemperatureResponse['scores']; label: string; pressure?: boolean }> = [
     { key: 'overall', label: t('marketOverviewPage.temperature.overall') },
     { key: 'usRiskAppetite', label: t('marketOverviewPage.temperature.usRiskAppetite') },
@@ -439,6 +528,7 @@ const MarketTemperatureStrip: React.FC<{
   ];
   const confidenceText = confidenceLabel(data.confidence, data.isReliable);
   const isReliable = data.isReliable !== false;
+  const shouldShowScores = isReliable || showPlaceholderScores;
   return (
     <GlassCard as="section" data-testid="market-temperature-strip" className="p-4">
       <div className="mb-3 flex items-center justify-between gap-4">
@@ -462,28 +552,49 @@ const MarketTemperatureStrip: React.FC<{
         <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title: t('marketOverviewPage.temperature.title') })} refreshing={refreshing} onRefresh={onRefresh} />
       </div>
       {!isReliable ? (
-        <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-temperature-unreliable-warning">
-          部分评分基于备用数据，暂不作为实时市场判断
+        <div className="mb-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3" data-testid="market-temperature-unreliable-summary">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white">市场温度：数据不足</p>
+              <p className="mt-1 text-xs leading-5 text-white/55">当前真实数据源不足，暂不生成综合判断。</p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px] text-white/55">
+              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">真实 {data.reliableInputCount ?? 0}</span>
+              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">备用 {data.fallbackInputCount ?? 0}</span>
+              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">排除 {data.excludedInputCount ?? 0}</span>
+              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">confidence {formatNumber(data.confidence, 2)}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="mt-3 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/65 transition hover:bg-white/[0.06] hover:text-white"
+            aria-expanded={showPlaceholderScores}
+            onClick={() => setShowPlaceholderScores((current) => !current)}
+          >
+            {showPlaceholderScores ? '收起评分占位项' : '查看评分占位项'}
+          </button>
         </div>
       ) : null}
-      <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {scores.map(({ key, label, pressure }) => {
-          const score = data.scores[key];
-          return (
-            <div key={key} className={cn('min-w-[188px] flex-1 rounded-lg border px-3 py-2.5', isReliable ? 'border-white/[0.06] bg-white/[0.025]' : 'border-white/[0.045] bg-white/[0.015]')} title={score.description}>
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-[11px] font-semibold text-white/60">{label}</p>
-                <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-white/55">{score.label}</span>
+      {shouldShowScores ? (
+        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {scores.map(({ key, label, pressure }) => {
+            const score = data.scores[key];
+            return (
+              <div key={key} className={cn('min-w-[188px] flex-1 rounded-lg border px-3 py-2.5', isReliable ? 'border-white/[0.06] bg-white/[0.025]' : 'border-white/[0.045] bg-white/[0.015]')} title={score.description}>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[11px] font-semibold text-white/60">{label}</p>
+                  <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-white/55">{score.label}</span>
+                </div>
+                <div className="mt-2 flex items-end gap-2">
+                  <span className={cn('font-mono text-3xl font-semibold leading-none', isReliable ? scoreTone(score, pressure) : 'text-white/55')}>{score.value}</span>
+                  <span className="pb-0.5 text-[10px] uppercase tracking-widest text-white/30">{score.trend}</span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{score.description}</p>
               </div>
-              <div className="mt-2 flex items-end gap-2">
-                <span className={cn('font-mono text-3xl font-semibold leading-none', isReliable ? scoreTone(score, pressure) : 'text-white/55')}>{score.value}</span>
-                <span className="pb-0.5 text-[10px] uppercase tracking-widest text-white/30">{score.trend}</span>
-              </div>
-              <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{score.description}</p>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : null}
       <MarketOverviewPanelFooter
         meta={data}
         sourceLabel={data.sourceLabel || data.source}
@@ -506,7 +617,8 @@ const MarketBriefingCard: React.FC<{
 }> = ({ data, refreshing, onRefresh }) => {
   const { t } = useI18n();
   const title = t('marketOverviewPage.briefing.title');
-  const isReliable = data.isReliable !== false && (data.confidence == null || data.confidence >= 0.45);
+  const hasWarning = Boolean(data.warning);
+  const isReliable = !hasWarning && data.isReliable !== false && (data.confidence == null || data.confidence >= 0.45);
   return (
     <GlassCard as="section" data-testid="market-briefing-card" className="p-4">
       <div className="mb-3 flex items-center justify-between gap-4">
@@ -521,8 +633,8 @@ const MarketBriefingCard: React.FC<{
           {data.warning}
         </div>
       ) : null}
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-        {data.items.slice(0, 5).map((item) => {
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {data.items.slice(0, hasWarning || !isReliable ? 3 : 5).map((item) => {
           const lowConfidence = !isReliable || (item.confidence != null && item.confidence < 0.45);
           return (
           <article key={`${item.category}-${item.title}`} className={cn('rounded-lg border px-3 py-2.5', lowConfidence ? severityClass.neutral : severityClass[item.severity] || severityClass.neutral)}>
@@ -831,6 +943,7 @@ const MarketOverviewPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshingPanel, setRefreshingPanel] = useState<PanelKey | null>(null);
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('all');
+  const [fallbackSectionExpanded, setFallbackSectionExpanded] = useState(false);
   const [cardOrders, setCardOrders] = useState<Record<CategoryKey, CardKey[]>>(() => ({
     all: readStoredCardOrder('all'),
     us: readStoredCardOrder('us'),
@@ -966,6 +1079,10 @@ const MarketOverviewPage: React.FC = () => {
       window.clearInterval(timer);
     };
   }, [loadPanels]);
+
+  useEffect(() => {
+    setFallbackSectionExpanded(false);
+  }, [activeCategory]);
 
   const categoryTabs = useMemo<Array<{ key: CategoryKey; label: string }>>(() => [
     { key: 'all', label: t('marketOverviewPage.categories.all') },
@@ -1148,9 +1265,47 @@ const MarketOverviewPage: React.FC = () => {
   }), [loading, panels, refreshPanel, refreshingPanel, t, usIndicesPanel]);
 
   const visibleOrder = cardOrders[activeCategory].filter((cardKey) => CATEGORY_CARDS[activeCategory].includes(cardKey));
-  const columns = [0, 1, 2].map((columnIndex) => visibleOrder.filter((_, index) => index % 3 === columnIndex));
+  const fallbackOnlyOrder = visibleOrder.filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
+  const primaryOrder = visibleOrder.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
+  const primaryColumns = [0, 1, 2].map((columnIndex) => primaryOrder.filter((_, index) => index % 3 === columnIndex));
+  const fallbackColumns = [0, 1, 2].map((columnIndex) => fallbackOnlyOrder.filter((_, index) => index % 3 === columnIndex));
   const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
+  const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
+  const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
+
+  const renderCard = (cardKey: CardKey, rank: number) => (
+    <div
+      key={cardKey}
+      data-testid={`market-overview-card-${cardKey}`}
+      data-market-card-rank={rank}
+      draggable
+      onDragStart={() => setDraggingCard(cardKey)}
+      onDragEnd={() => setDraggingCard(null)}
+      onDragOver={(event) => {
+        event.preventDefault();
+      }}
+      onDrop={() => {
+        if (draggingCard) {
+          moveCard(draggingCard, cardKey);
+        }
+        setDraggingCard(null);
+      }}
+      className={`transition-transform ${draggingCard === cardKey ? 'scale-[0.985] opacity-80' : ''}`}
+    >
+      {cardNodes[cardKey]}
+    </div>
+  );
+
+  const renderColumns = (columns: CardKey[][], rankOrder: CardKey[]) => (
+    <div className="flex w-full flex-col items-start gap-6 xl:flex-row">
+      {columns.map((columnCards, columnIndex) => (
+        <div key={columnIndex} className="flex w-full flex-col gap-6 xl:w-[calc((100%_-_3rem)/3)]">
+          {columnCards.map((cardKey) => renderCard(cardKey, rankOrder.indexOf(cardKey)))}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="w-full flex-1 flex flex-col min-w-0 min-h-0 bg-[#030303] text-white">
@@ -1184,6 +1339,9 @@ const MarketOverviewPage: React.FC = () => {
             }}
           />
           <DataQualityOverview summary={dataQuality} />
+          {activeCategory !== 'all' ? (
+            <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
+          ) : null}
           {activeCategory !== 'crypto' ? (
             <MarketBriefingCard
               data={panels.briefing}
@@ -1193,34 +1351,18 @@ const MarketOverviewPage: React.FC = () => {
               }}
             />
           ) : null}
-          <main className="flex flex-col items-start gap-6 xl:flex-row">
-            {columns.map((columnCards, columnIndex) => (
-              <div key={columnIndex} className="flex w-full flex-col gap-6 xl:w-[calc((100%_-_3rem)/3)]">
-                {columnCards.map((cardKey) => (
-                  <div
-                    key={cardKey}
-                    data-testid={`market-overview-card-${cardKey}`}
-                    data-market-card-rank={visibleOrder.indexOf(cardKey)}
-                    draggable
-                    onDragStart={() => setDraggingCard(cardKey)}
-                    onDragEnd={() => setDraggingCard(null)}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                    }}
-                    onDrop={() => {
-                      if (draggingCard) {
-                        moveCard(draggingCard, cardKey);
-                      }
-                      setDraggingCard(null);
-                    }}
-                    className={`transition-transform ${draggingCard === cardKey ? 'scale-[0.985] opacity-80' : ''}`}
-                  >
-                    {cardNodes[cardKey]}
-                  </div>
-                ))}
-              </div>
-            ))}
+          <main data-testid="market-overview-main-grid">
+            {renderColumns(primaryColumns, primaryOrder)}
           </main>
+          {fallbackOnlyOrder.length > 0 ? (
+            <PendingDataSourceSection
+              expanded={fallbackSectionExpanded}
+              fallbackCount={fallbackOnlyOrder.length}
+              onToggle={() => setFallbackSectionExpanded((current) => !current)}
+            >
+              {renderColumns(fallbackColumns, fallbackOnlyOrder)}
+            </PendingDataSourceSection>
+          ) : null}
         </div>
       </div>
     </div>
