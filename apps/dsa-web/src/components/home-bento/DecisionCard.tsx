@@ -2,6 +2,7 @@ import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
+import { useUiPreferences } from '../../contexts/UiPreferencesContext';
 import { BentoCard } from './BentoCard';
 import {
   CARD_BUTTON_CLASS,
@@ -77,13 +78,19 @@ function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: Signal
     : { command: /强|多/.test(signalLabel) ? '强力做多' : '买入', bias: '看多' };
 }
 
-function getActionToneClass(tone: SignalTone): string {
-  return tone === 'neutral' ? 'text-white' : getToneTextClass(tone);
+function getActionToneClass(
+  tone: SignalTone,
+  marketColorConvention: import('../../utils/marketColors').MarketColorConvention,
+): string {
+  return tone === 'neutral' ? 'text-white' : getToneTextClass(tone, marketColorConvention);
 }
 
-function getActionToneStyle(tone: SignalTone): React.CSSProperties {
+function getActionToneStyle(
+  tone: SignalTone,
+  marketColorConvention: import('../../utils/marketColors').MarketColorConvention,
+): React.CSSProperties {
   if (tone !== 'neutral') {
-    return getToneTextStyle(tone, true);
+    return getToneTextStyle(tone, marketColorConvention, true);
   }
   return {
     color: '#F8FAFC',
@@ -187,6 +194,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
     onClick: handleOpenDetailsClick,
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
+  const { marketColorConvention } = useUiPreferences();
   const signalCommand = getSignalCommand(locale, signalLabel, signalTone);
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
@@ -245,9 +253,9 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             <div className="col-span-1 min-w-0" data-testid="home-bento-decision-action">
               <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
               <span
-                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone)}`}
+                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(signalTone, marketColorConvention)}`}
                 data-testid="home-bento-decision-signal-hero"
-                style={getActionToneStyle(signalTone)}
+                style={getActionToneStyle(signalTone, marketColorConvention)}
               >
                 {signalCommand.command}
               </span>
@@ -321,7 +329,10 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                   <div className="min-w-0 flex-1">
                     <Label micro className="text-[10px] text-white/40">{indicator.label}</Label>
                   </div>
-                  <div className={`min-w-0 shrink-0 text-center text-xs font-medium uppercase tracking-[0.12em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
+                  <div
+                    className={`min-w-0 shrink-0 text-center text-xs font-medium uppercase tracking-[0.12em] ${getToneTextClass(signalTone, marketColorConvention)}`}
+                    style={getToneTextStyle(signalTone, marketColorConvention, true)}
+                  >
                     <span className="block truncate">{indicator.value}</span>
                   </div>
                   <div className="min-w-0 flex-1 text-right text-xs font-medium text-white/56">

@@ -1,4 +1,5 @@
 export type MarketColorConvention = 'redDownGreenUp' | 'redUpGreenDown';
+export type SemanticSignalTone = 'bullish' | 'bearish' | 'neutral';
 
 export const MARKET_COLOR_CONVENTION_STORAGE_KEY = 'dsa-market-color-convention';
 export const DEFAULT_MARKET_COLOR_CONVENTION: MarketColorConvention = 'redDownGreenUp';
@@ -34,4 +35,38 @@ export function getMarketDirectionColor(value?: number | null): string | undefin
     return undefined;
   }
   return value > 0 ? 'var(--market-up)' : 'var(--market-down)';
+}
+
+export function getToneColor(
+  tone: SemanticSignalTone,
+  convention: MarketColorConvention,
+): {
+  colorHex: string;
+  glowShadow: string;
+  textClass: string;
+} {
+  if (tone === 'neutral') {
+    return {
+      colorHex: '#F8FAFC',
+      glowShadow: 'none',
+      textClass: 'text-white',
+    };
+  }
+
+  const useEmerald = (tone === 'bullish' && convention === 'redDownGreenUp')
+    || (tone === 'bearish' && convention === 'redUpGreenDown');
+
+  if (useEmerald) {
+    return {
+      colorHex: '#34D399',
+      glowShadow: '0 0 30px rgba(52, 211, 153, 0.4)',
+      textClass: 'text-emerald-400',
+    };
+  }
+
+  return {
+    colorHex: '#F43F5E',
+    glowShadow: '0 0 30px rgba(244, 63, 94, 0.38)',
+    textClass: 'text-rose-500',
+  };
 }

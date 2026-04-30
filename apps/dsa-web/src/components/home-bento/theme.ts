@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { getToneColor, type MarketColorConvention } from '../../utils/marketColors';
 
 export type SignalTone = 'bullish' | 'bearish' | 'neutral';
 
@@ -11,51 +12,52 @@ export const SYSTEM_ACCENT_TEXT_CLASS = 'text-[#60A5FA]';
 export const SYSTEM_ACCENT_BORDER_CLASS = 'border-[#60A5FA]/24 bg-[#3B82F6]/10 text-[#60A5FA]';
 export const SYSTEM_ACCENT_GLOW_CLASS = 'bg-[#3B82F6]/16';
 
-const TONE_COLOR: Record<SignalTone, string> = {
-  bullish: '#34D399',
-  bearish: '#FB7185',
-  neutral: '#F5F5F5',
-};
-
-const TONE_GLOW: Record<SignalTone, string> = {
-  bullish: '0 0 30px rgba(52, 211, 153, 0.4)',
-  bearish: '0 0 30px rgba(251, 113, 133, 0.38)',
-  neutral: 'none',
-};
-
-export function getToneTextClass(tone: SignalTone): string {
-  if (tone === 'bullish') {
-    return 'text-[#34D399]';
-  }
-  if (tone === 'bearish') {
-    return 'text-[#FB7185]';
-  }
-  return 'text-white';
+export function getToneTextClass(
+  tone: SignalTone,
+  convention: MarketColorConvention = 'redDownGreenUp',
+): string {
+  return getToneColor(tone, convention).textClass;
 }
 
-export function getToneBorderClass(tone: SignalTone): string {
-  if (tone === 'bullish') {
-    return 'border-[#34D399]/22 bg-[#34D399]/10 text-[#34D399]';
+export function getToneBorderClass(
+  tone: SignalTone,
+  convention: MarketColorConvention = 'redDownGreenUp',
+): string {
+  if (tone === 'neutral') {
+    return 'border-white/12 bg-white/[0.06] text-white/78';
   }
-  if (tone === 'bearish') {
-    return 'border-[#FB7185]/22 bg-[#FB7185]/10 text-[#FB7185]';
+  const textClass = getToneTextClass(tone, convention);
+  if (textClass === 'text-emerald-400') {
+    return 'border-emerald-400/22 bg-emerald-400/10 text-emerald-400';
+  }
+  if (textClass === 'text-rose-500') {
+    return 'border-rose-500/22 bg-rose-500/10 text-rose-500';
   }
   return 'border-white/12 bg-white/[0.06] text-white/78';
 }
 
-export function getCardGlowClass(tone: SignalTone): string {
-  if (tone === 'bullish') {
-    return 'bg-[#34D399]/14';
+export function getCardGlowClass(
+  tone: SignalTone,
+  convention: MarketColorConvention = 'redDownGreenUp',
+): string {
+  if (tone === 'neutral') {
+    return 'bg-transparent';
   }
-  if (tone === 'bearish') {
-    return 'bg-[#FB7185]/14';
-  }
-  return 'bg-transparent';
+  return getToneTextClass(tone, convention) === 'text-emerald-400'
+    ? 'bg-emerald-400/14'
+    : 'bg-rose-500/14';
 }
 
-export function getToneTextStyle(tone: SignalTone, glow = false): CSSProperties {
+export function getToneTextStyle(
+  tone: SignalTone,
+  conventionOrGlow: MarketColorConvention | boolean = 'redDownGreenUp',
+  maybeGlow = false,
+): CSSProperties {
+  const convention = typeof conventionOrGlow === 'string' ? conventionOrGlow : 'redDownGreenUp';
+  const glow = typeof conventionOrGlow === 'boolean' ? conventionOrGlow : maybeGlow;
+  const color = getToneColor(tone, convention);
   return {
-    color: TONE_COLOR[tone],
-    textShadow: glow ? TONE_GLOW[tone] : 'none',
+    color: color.colorHex,
+    textShadow: glow ? color.glowShadow : 'none',
   };
 }

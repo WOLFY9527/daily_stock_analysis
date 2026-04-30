@@ -10,28 +10,36 @@ import {
 } from '../utils/marketColors';
 
 export type UiFontSize = 'xs' | 's' | 'm' | 'l' | 'xl';
+export type UiDataDensity = 'compact' | 'comfortable' | 'relaxed';
+export type UiNumberFormat = 'international' | 'zh' | 'full';
 
 const UI_FONT_SIZE_STORAGE_KEY = 'dsa-ui-font-size';
+const UI_DATA_DENSITY_STORAGE_KEY = 'dsa-ui-data-density';
+const UI_NUMBER_FORMAT_STORAGE_KEY = 'dsa-ui-number-format';
 
 const FONT_SCALE_DESKTOP_MAP: Record<UiFontSize, number> = {
-  xs: 0.9,
-  s: 0.95,
-  m: 1,
-  l: 1.06,
-  xl: 1.12,
+  xs: 0.625,
+  s: 0.75,
+  m: 0.875,
+  l: 1,
+  xl: 1.125,
 };
 
 const FONT_SCALE_MOBILE_MAP: Record<UiFontSize, number> = {
-  xs: 0.88,
-  s: 0.94,
-  m: 1,
-  l: 1.05,
-  xl: 1.1,
+  xs: 10 / 15,
+  s: 12 / 15,
+  m: 14 / 15,
+  l: 16 / 15,
+  xl: 18 / 15,
 };
 
 type UiPreferencesContextValue = {
   fontSize: UiFontSize;
   setFontSize: (size: UiFontSize) => void;
+  dataDensity: UiDataDensity;
+  setDataDensity: (value: UiDataDensity) => void;
+  numberFormat: UiNumberFormat;
+  setNumberFormat: (value: UiNumberFormat) => void;
   marketColorConvention: MarketColorConvention;
   setMarketColorConvention: (value: MarketColorConvention) => void;
 };
@@ -50,11 +58,45 @@ function normalizeFontSize(value?: string | null): UiFontSize {
   return 'm';
 }
 
+function normalizeDataDensity(value?: string | null): UiDataDensity {
+  if (value === 'compact' || value === 'comfortable' || value === 'relaxed') {
+    return value;
+  }
+  if (value === 'dense') {
+    return 'compact';
+  }
+  return 'comfortable';
+}
+
+function normalizeNumberFormat(value?: string | null): UiNumberFormat {
+  if (value === 'international' || value === 'zh' || value === 'full') {
+    return value;
+  }
+  if (value === 'cn') {
+    return 'zh';
+  }
+  return 'international';
+}
+
 function getStoredFontSize(): UiFontSize {
   if (typeof window === 'undefined') {
     return 'm';
   }
   return normalizeFontSize(window.localStorage.getItem(UI_FONT_SIZE_STORAGE_KEY));
+}
+
+function getStoredDataDensity(): UiDataDensity {
+  if (typeof window === 'undefined') {
+    return 'comfortable';
+  }
+  return normalizeDataDensity(window.localStorage.getItem(UI_DATA_DENSITY_STORAGE_KEY));
+}
+
+function getStoredNumberFormat(): UiNumberFormat {
+  if (typeof window === 'undefined') {
+    return 'international';
+  }
+  return normalizeNumberFormat(window.localStorage.getItem(UI_NUMBER_FORMAT_STORAGE_KEY));
 }
 
 function getStoredMarketColorConvention(): MarketColorConvention {
@@ -69,6 +111,10 @@ function getStoredMarketColorConvention(): MarketColorConvention {
 const defaultContext: UiPreferencesContextValue = {
   fontSize: getStoredFontSize(),
   setFontSize: () => undefined,
+  dataDensity: getStoredDataDensity(),
+  setDataDensity: () => undefined,
+  numberFormat: getStoredNumberFormat(),
+  setNumberFormat: () => undefined,
   marketColorConvention: getStoredMarketColorConvention(),
   setMarketColorConvention: () => undefined,
 };
@@ -77,6 +123,8 @@ const UiPreferencesContext = createContext<UiPreferencesContextValue>(defaultCon
 
 export const UiPreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [fontSize, setFontSizeState] = useState<UiFontSize>(() => getStoredFontSize());
+  const [dataDensity, setDataDensityState] = useState<UiDataDensity>(() => getStoredDataDensity());
+  const [numberFormat, setNumberFormatState] = useState<UiNumberFormat>(() => getStoredNumberFormat());
   const [marketColorConvention, setMarketColorConventionState] = useState<MarketColorConvention>(
     () => getStoredMarketColorConvention(),
   );
@@ -94,6 +142,22 @@ export const UiPreferencesProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [fontSize]);
 
   useEffect(() => {
+    const normalized = normalizeDataDensity(dataDensity);
+    document.documentElement.setAttribute('data-ui-density', normalized);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(UI_DATA_DENSITY_STORAGE_KEY, normalized);
+    }
+  }, [dataDensity]);
+
+  useEffect(() => {
+    const normalized = normalizeNumberFormat(numberFormat);
+    document.documentElement.setAttribute('data-ui-number-format', normalized);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(UI_NUMBER_FORMAT_STORAGE_KEY, normalized);
+    }
+  }, [numberFormat]);
+
+  useEffect(() => {
     const normalized = normalizeMarketColorConvention(marketColorConvention);
     const palette = getMarketColorPalette(normalized);
     document.documentElement.style.setProperty('--market-up-hsl', palette.upHsl);
@@ -107,11 +171,15 @@ export const UiPreferencesProvider: React.FC<{ children: React.ReactNode }> = ({
   const value = useMemo<UiPreferencesContextValue>(() => ({
     fontSize,
     setFontSize: (size) => setFontSizeState(normalizeFontSize(size)),
+    dataDensity,
+    setDataDensity: (value) => setDataDensityState(normalizeDataDensity(value)),
+    numberFormat,
+    setNumberFormat: (value) => setNumberFormatState(normalizeNumberFormat(value)),
     marketColorConvention,
     setMarketColorConvention: (value) => {
       setMarketColorConventionState(normalizeMarketColorConvention(value));
     },
-  }), [fontSize, marketColorConvention]);
+  }), [dataDensity, fontSize, marketColorConvention, numberFormat]);
 
   return (
     <UiPreferencesContext.Provider value={value}>

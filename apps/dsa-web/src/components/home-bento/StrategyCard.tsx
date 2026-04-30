@@ -1,8 +1,10 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
+import { useUiPreferences } from '../../contexts/UiPreferencesContext';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import { CARD_BUTTON_CLASS } from './theme';
+import { getToneColor } from '../../utils/marketColors';
 
 type StrategyMetric = {
   label: string;
@@ -29,6 +31,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   detailLabel,
   onOpenDetails,
 }) => {
+  const { marketColorConvention } = useUiPreferences();
   const {
     ref: openDetailsButtonRef,
     onClick: handleOpenDetailsClick,
@@ -44,14 +47,9 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     }
     return label;
   };
+  const getMetricTone = (tone: StrategyMetric['tone']) => getToneColor(tone || 'neutral', marketColorConvention);
   const getMetricValueClass = (tone: StrategyMetric['tone']) => {
-    if (tone === 'bullish') {
-      return 'text-emerald-400';
-    }
-    if (tone === 'bearish') {
-      return 'text-red-400';
-    }
-    return 'text-white';
+    return getMetricTone(tone).textClass;
   };
   const positionParagraphs = positionBody
     .split(/\n+/)
@@ -90,6 +88,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
             <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getMetricLabel(entryMetric.label)}</p>
             <p
               className={`break-words whitespace-normal text-sm font-medium leading-relaxed ${getMetricValueClass(entryMetric.tone || 'neutral')}`}
+              style={{ textShadow: getMetricTone(entryMetric.tone).glowShadow }}
             >
               {entryMetric.value}
             </p>
@@ -105,6 +104,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
               <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getMetricLabel(metric.label)}</p>
               <p
                 className={`break-words whitespace-normal text-sm font-medium leading-relaxed ${getMetricValueClass(metric.tone || 'neutral')}`}
+                style={{ textShadow: getMetricTone(metric.tone).glowShadow }}
               >
                 {metric.value}
               </p>

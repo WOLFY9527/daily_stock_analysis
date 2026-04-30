@@ -1,5 +1,9 @@
 ## 2026-04-30
 
+- 🏷️ **前端状态 Badge 语义收敛** — `apps/dsa-web` 新增统一 `StatusBadge` 与状态归一化工具，把 `success/succeeded/completed`、`failed/error`、`running/attempting`、`pending/queued`、`partial`、`skipped/not_needed`、`unknown` 等前端状态展示语义收口到一个复用入口。`/admin/logs` 已切到统一 badge，`Settings` 数据源校验状态与 `Backtest` 的一部分纯展示状态也改为复用同一组件；`Market Overview` 的 `DataFreshnessBadge` 保持 freshness 专用，不与普通业务状态混合。回归新增 `StatusBadge.test.tsx`，并补充 Admin Logs / Settings / Backtest 相关断言，确保 skipped 不再被误渲染为成功、unknown 不会被误渲染为运行中。
+
+- 🎛️ **Home 信号语义色与个人偏好底座重标定** — `apps/dsa-web` 为首页决策台补上了真正受 `marketColorConvention` 驱动的动态红绿语境：`DecisionCard` 的 AI 动作 Hero、`StrategyCard` 的目标价 / 止损价以及同源 tone/glow 渲染不再写死国际市场配色，`红涨绿跌` 下买入/看多会切到 `rose`，卖出/看空切到 `emerald`，彻底消除“买入显示成白色”的语义错误。与此同时，全局字号偏好基准改为更紧凑的专业终端档位（XS=10px、S=12px、M=14px、L=16px、XL=18px），默认“标准”不再按 16px 放大整站；个人设置页“界面偏好”也同步扩容为语言、市场色彩、数据展示密度、数值缩写格式与字号五组专业选项，并全部接入本地持久化状态，为后续全局 density / number-format 联动铺好底座。
+
 - 🔐 **Phase 0 安全止血：配置与日志脱敏** — 系统配置读取默认只返回 masked secret，Settings 前端只保存脱敏占位值，masked placeholder 提交不会覆盖真实密钥。Execution/Admin Logs 写入与读取路径统一脱敏 URL、error message、metadata、raw response 中的 API key、token、secret、password；`.env.example` 改为生产默认启用 `ADMIN_AUTH_ENABLED=true`，并补充 `CORS_ALLOW_ALL` 仅限本地开发的警告。
 
 - 🧾 **Admin Logs 抽象为通用 Business Execution Trace** — `/api/v1/admin/logs` 的默认业务事件模型扩展为 `category/type/subject/scannerId/strategyId/backtestId` 等通用字段，新增 `start_execution/start_step/finish_step_success/finish_step_failed/skip_step/finish_execution` helper，统一 success/partial/failed/skipped/running/unknown/cancelled 状态语义；fallback provider/model 未调用、missing key、熔断和不适用市场会显示为 skipped 且不计入成功，真实 403/timeout 等调用失败计入 failed，主任务结束后的 running step 收敛为 unknown。`/admin/logs` 前端同步增加扫描器、回测、数据源 tabs、通用 step timeline、成功/跳过/失败统计和 metadata 脱敏展示；原始 session/event 日志继续保留在 `/api/v1/admin/logs/sessions` 与原始日志 tab。

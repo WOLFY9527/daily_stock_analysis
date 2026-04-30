@@ -1229,6 +1229,7 @@ describe('BacktestPage', () => {
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByTestId('deterministic-result-page-hero')).toHaveTextContent('ORCL');
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
+    expect(screen.getByText('已完成')).toHaveAttribute('data-status', 'success');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
     expect(screen.getByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');

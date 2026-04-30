@@ -9,15 +9,19 @@ const zh = (key: string, vars?: Record<string, string | number | undefined>) => 
 const {
   getNotificationPreferences,
   updateNotificationPreferences,
+  setDataDensity,
   setLanguage,
   setMarketColorConvention,
+  setNumberFormat,
   useAuthMock,
   useProductSurfaceMock,
 } = vi.hoisted(() => ({
   getNotificationPreferences: vi.fn(),
   updateNotificationPreferences: vi.fn(),
+  setDataDensity: vi.fn(),
   setLanguage: vi.fn(),
   setMarketColorConvention: vi.fn(),
+  setNumberFormat: vi.fn(),
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
 }));
@@ -32,8 +36,12 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
 
 vi.mock('../../contexts/UiPreferencesContext', () => ({
   useUiPreferences: () => ({
+    dataDensity: 'comfortable',
     marketColorConvention: 'redDownGreenUp',
+    numberFormat: 'international',
+    setDataDensity,
     setMarketColorConvention,
+    setNumberFormat,
   }),
 }));
 
@@ -117,6 +125,8 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByText(zh('settings.personalGuestPreferencesBody'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: zh('language.zh') })).toHaveClass('bg-white', 'text-black');
     expect(screen.getByRole('button', { name: zh('language.zh') })).not.toHaveClass('bg-emerald-500');
+    expect(screen.getByText(zh('settings.dataDensityTitle'))).toBeInTheDocument();
+    expect(screen.getByText(zh('settings.numberFormatTitle'))).toBeInTheDocument();
     expect(screen.getByRole('link', { name: zh('settings.personalGuestSignInAction') })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
     expect(screen.getByRole('link', { name: zh('settings.personalGuestCreateAccountAction') })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
     expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
@@ -169,6 +179,10 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toHaveClass('bg-white', 'text-black');
     expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
     expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /紧凑 Compact/ }));
+    fireEvent.click(screen.getByRole('button', { name: /完整数字/ }));
+    expect(setDataDensity).toHaveBeenCalledWith('compact');
+    expect(setNumberFormat).toHaveBeenCalledWith('full');
   });
 
   it('saves email and Discord notification targets together for signed-in users', async () => {

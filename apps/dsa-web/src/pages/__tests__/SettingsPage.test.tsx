@@ -1953,6 +1953,7 @@ describe('SettingsPage', () => {
     expect(within(drawer).getByText(/quote: OK/)).toBeInTheDocument();
     expect(within(drawer).getByText(/historical: OK/)).toBeInTheDocument();
     expect(screen.queryByText('配置本地校验通过')).not.toBeInTheDocument();
+    expect(within(fmpCard).getByText('已验证')).toHaveAttribute('data-status', 'success');
   });
 
   it('shows built-in provider partial validation failures and suggestions', async () => {
@@ -2010,6 +2011,7 @@ describe('SettingsPage', () => {
     expect(within(drawer).getByText(/historical: HTTP 403/)).toBeInTheDocument();
     expect(within(drawer).getByText(/检查套餐权限或重置 API key/)).toBeInTheDocument();
     expect(within(drawer).queryByText('fmp-secret-key')).not.toBeInTheDocument();
+    expect(within(fmpCard).getByText('部分可用')).toHaveAttribute('data-status', 'partial');
   });
 
   it('shows quick-api status and advanced-channel count on provider cards', async () => {

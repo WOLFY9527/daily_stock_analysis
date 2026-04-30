@@ -13,7 +13,7 @@
 /* SpaceX live refactor: global tokens now favor Inter typography, spectral-white ghost controls, translucent panels, and a strict home workspace grid without changing application behavior. */
 
 html {
-  font-size: calc(16px * var(--ui-font-scale-desktop, 1));
+  font-size: calc(16px * var(--ui-font-scale-desktop, 0.875));
 }
 
 /* =========================================
@@ -2144,7 +2144,7 @@ html[data-theme] :where(
 
 @media (max-width: 767px) {
   html {
-    font-size: calc(15px * var(--ui-font-scale-mobile, 1));
+    font-size: calc(15px * var(--ui-font-scale-mobile, 0.9333333333));
   }
 
   .workspace-page {

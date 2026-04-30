@@ -19,7 +19,6 @@ import { useAgentChatStore } from './stores/agentChatStore';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
 const APP_BOOT_SPLASH_FADE_MS = 380;
-const STATIC_BOOT_SPLASH_ID = 'boot-splash';
 
 const AccessGatePage = lazy(() => import('./components/access/AccessGatePage').then((module) => ({
   default: module.AccessGatePage,
@@ -429,26 +428,10 @@ const AppBody: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
-  useEffect(() => {
-    const staticSplash = document.getElementById(STATIC_BOOT_SPLASH_ID);
-    if (!staticSplash) {
-      return;
-    }
-    staticSplash.classList.add('is-fading');
-    const timer = window.setTimeout(() => {
-      staticSplash.remove();
-    }, APP_BOOT_SPLASH_FADE_MS);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, []);
-
-  return (
-    <Router>
-      <AppBody />
-    </Router>
-  );
-};
+const App: React.FC = () => (
+  <Router>
+    <AppBody />
+  </Router>
+);
 
 export default App;

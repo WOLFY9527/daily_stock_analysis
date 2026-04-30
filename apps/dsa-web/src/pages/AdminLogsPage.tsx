@@ -3,26 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminLogsApi, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
+import { StatusBadge, getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';
 import { useI18n } from '../contexts/UiLanguageContext';
 
 type AdminLogsLanguage = 'zh' | 'en';
 type TranslateFn = (key: string, params?: Record<string, string | number | undefined>) => string;
 type OperationType = 'single_stock_analysis' | 'market_scan' | 'backtest' | 'system_operation' | 'other';
-type NormalizedStatus = 'success' | 'partial' | 'failed' | 'skipped' | 'running' | 'unknown' | 'cancelled';
 type LogLevel = 'DEBUG' | 'INFO' | 'NOTICE' | 'WARNING' | 'ERROR' | 'CRITICAL';
 type LevelFilter = 'all' | 'warning_plus' | 'error_plus' | LogLevel;
 type LogCategory = 'system' | 'auth' | 'market' | 'cache' | 'data_source' | 'analysis' | 'scanner' | 'backtest' | 'trading' | 'portfolio' | 'scheduler' | 'notification' | 'api' | 'security';
 type LogsTab = 'business' | 'analysis' | 'scanner' | 'backtest' | 'data_source' | 'security' | 'raw';
-
-const STATUS_CLASS: Record<NormalizedStatus, string> = {
-  success: 'theme-log-status theme-log-status--success',
-  partial: 'theme-log-status theme-log-status--warning',
-  failed: 'theme-log-status theme-log-status--danger',
-  skipped: 'theme-log-status',
-  running: 'theme-log-status theme-log-status--running',
-  unknown: 'theme-log-status',
-  cancelled: 'theme-log-status',
-};
 
 const LEVEL_FILTER_OPTIONS: LevelFilter[] = ['all', 'warning_plus', 'error_plus', 'DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
 const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'scanner', 'backtest', 'trading', 'portfolio', 'scheduler', 'notification', 'api', 'security'];
@@ -246,17 +236,6 @@ function text(value: unknown, fallback = '--'): string {
   return normalized || fallback;
 }
 
-function normalizeStatus(value?: string | null): NormalizedStatus {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (['success', 'succeeded', 'completed', 'ok', '成功', '已完成'].includes(normalized)) return 'success';
-  if (['partial', 'partial_success', 'partial fail', 'warning', 'fallback', 'switched_to_fallback', '部分失败', '部分成功'].includes(normalized)) return 'partial';
-  if (['fail', 'failed', 'error', 'failed_runtime', 'invalid_response', '失败'].includes(normalized)) return 'failed';
-  if (['skipped', 'not_configured', '跳过', '已跳过'].includes(normalized)) return 'skipped';
-  if (['running', 'queued', 'pending', '运行中'].includes(normalized)) return 'running';
-  if (['cancelled', 'canceled', '已取消'].includes(normalized)) return 'cancelled';
-  return 'unknown';
-}
-
 function normalizeOperationType(summary?: ExecutionLogSessionSummary['readableSummary']): OperationType {
   const raw = `${summary?.operationCategory || ''} ${summary?.operationType || ''} ${summary?.subsystem || ''}`.toLowerCase();
   if (raw.includes('backtest') || raw.includes('回测')) return 'backtest';
@@ -285,17 +264,23 @@ function operationLabel(type: OperationType, locale: AdminLogsLanguage): string 
   return labels[type][locale];
 }
 
-function statusLabel(status: NormalizedStatus, locale: AdminLogsLanguage): string {
-  const labels: Record<NormalizedStatus, { zh: string; en: string }> = {
-    success: { zh: '成功', en: 'Success' },
-    partial: { zh: '部分失败', en: 'Partial failure' },
-    failed: { zh: '失败', en: 'Failed' },
-    skipped: { zh: '跳过', en: 'Skipped' },
-    running: { zh: '运行中', en: 'Running' },
-    unknown: { zh: '未确认', en: 'Unknown' },
-    cancelled: { zh: '已取消', en: 'Cancelled' },
+function statusLabel(status: UnifiedStatus, locale: AdminLogsLanguage): string {
+  if (locale === 'zh') return getStatusLabel(status);
+  const labels: Record<UnifiedStatus, string> = {
+    success: 'Success',
+    failed: 'Failed',
+    error: 'Failed',
+    running: 'Running',
+    pending: 'Pending',
+    partial: 'Partial failure',
+    skipped: 'Skipped',
+    unknown: 'Unknown',
+    cancelled: 'Cancelled',
+    warning: 'Warning',
+    info: 'Info',
+    disabled: 'Disabled',
   };
-  return labels[status][locale];
+  return labels[status];
 }
 
 function normalizeLogLevel(value?: string | null): LogLevel {
@@ -500,7 +485,7 @@ function CallCard({
             <p className="text-[10px] uppercase tracking-[0.2em] text-white/36">{type === 'llm' ? 'LLM' : 'API'} #{index + 1}</p>
             <h4 className="mt-1 text-sm font-semibold text-foreground">{name}</h4>
           </div>
-          <span className={`${STATUS_CLASS[status]} shrink-0`}>{statusLabel(status, locale)}</span>
+          <StatusBadge status={status} label={statusLabel(status, locale)} className="shrink-0" variant="soft" size="sm" />
         </div>
       </summary>
       <div className="mt-4 grid gap-4 text-xs text-secondary-text lg:grid-cols-2">
@@ -706,9 +691,9 @@ const AdminLogsPage: React.FC = () => {
       return businessEvents.reduce(
         (acc, item) => {
           const status = normalizeStatus(item.status);
-          if (status === 'failed') acc.errorCount += 1;
+          if (status === 'failed' || status === 'error') acc.errorCount += 1;
           if (status === 'partial') acc.warningCount += 1;
-          if (item.category === 'data_source' && ['failed', 'partial'].includes(status)) acc.dataSourceFailureCount += 1;
+          if (item.category === 'data_source' && ['failed', 'error', 'partial'].includes(status)) acc.dataSourceFailureCount += 1;
           return acc;
         },
         { errorCount: 0, warningCount: 0, dataSourceFailureCount: 0, slowRequestCount: 0, latestCriticalAt: null as string | null },
@@ -917,7 +902,7 @@ const AdminLogsPage: React.FC = () => {
                           <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-secondary-text">{categoryLabel(item.category, locale)}</span>
                           <p className="min-w-0 truncate text-xs text-muted-text" title={text(item.type)}>{text(item.type)}</p>
                           <p className="min-w-0 truncate text-xs text-secondary-text" title={text(item.summary)}>{text(item.summary)}</p>
-                          <span className={`${STATUS_CLASS[status]} w-fit`}>{statusLabel(status, locale)}</span>
+                          <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
                           <p className="text-xs text-muted-text">{formatDuration(item.durationMs)}</p>
                           <p className="text-xs text-muted-text">{item.successStepCount || 0}/{item.skippedStepCount || 0}/{item.failedStepCount || 0}</p>
                           <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
@@ -1008,7 +993,7 @@ const AdminLogsPage: React.FC = () => {
                 <div>
                   <div className="mb-3 flex items-center gap-2">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
-                    <span className={`${STATUS_CLASS[drawerStatus]}`}>{statusLabel(drawerStatus, locale)}</span>
+                    <StatusBadge status={drawerStatus} label={statusLabel(drawerStatus, locale)} variant="soft" size="sm" />
                   </div>
                   <h2 className="break-words text-2xl font-semibold text-foreground">{text(businessDetail.event || businessDetail.symbol)}</h2>
                   <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {categoryLabel(businessDetail.category, locale)} · {text(businessDetail.type)} · {formatDateTime(businessDetail.startedAt, locale)}</p>
@@ -1034,14 +1019,14 @@ const AdminLogsPage: React.FC = () => {
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
                   return (
-                    <details key={`${step.name}-${index}`} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs" open={index === 0 || status === 'failed'}>
+                    <details key={`${step.name}-${index}`} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs" open={index === 0 || status === 'failed' || status === 'error'}>
                       <summary className="cursor-pointer list-none">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <p className="font-medium text-foreground">{text(step.label || step.name)} · {formatDuration(step.durationMs)}</p>
                             <p className="mt-1 text-muted-text">{[step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · ') || '--'}</p>
                           </div>
-                          <span className={STATUS_CLASS[status]}>{statusLabel(status, locale)}</span>
+                          <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
                         </div>
                       </summary>
                       <div className="mt-3 grid gap-2 text-secondary-text md:grid-cols-2">
@@ -1070,7 +1055,7 @@ const AdminLogsPage: React.FC = () => {
                 <div>
                   <div className="mb-3 flex items-center gap-2">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{operationIcon(drawerOperationType)}</span>
-                    <span className={`${STATUS_CLASS[drawerStatus]}`}>{statusLabel(drawerStatus, locale)}</span>
+                    <StatusBadge status={drawerStatus} label={statusLabel(drawerStatus, locale)} variant="soft" size="sm" />
                   </div>
                   <h2 className="break-words text-2xl font-semibold text-foreground">
                     {text(operationDetail.target || readable.operationTarget || drawerDetail.name || drawerDetail.code)}
@@ -1153,7 +1138,7 @@ const AdminLogsPage: React.FC = () => {
                     <div key={`${text(item.label)}-${index}`} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-medium text-foreground">{text(item.label)}</p>
-                        <span className={STATUS_CLASS[status]}>{statusLabel(status, locale)}</span>
+                        <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
                       </div>
                       <p className="mt-1 text-muted-text">{text(item.timestamp)} · {text(item.category)}</p>
                     </div>

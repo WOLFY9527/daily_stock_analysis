@@ -62,6 +62,7 @@ import type {
 } from '../types/backtest';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate, type UiLanguage } from '../i18n/core';
+import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;
 const RESULT_HISTORY_PAGE_SIZE = 10;
@@ -1025,11 +1026,6 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const renderCompletedHero = () => {
     if (!run || !normalized) return null;
 
-    const statusTone = run.status === 'completed'
-      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/25'
-      : run.status === 'failed' || run.status === 'cancelled'
-        ? 'bg-rose-500/10 text-rose-300 border-rose-400/25'
-        : 'bg-sky-500/10 text-sky-300 border-sky-400/25';
     const strategyLabel = getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language);
     const headline = `${run.code} ${strategyLabel}`;
     const statusAt = run.completedAt || run.runAt || null;
@@ -1043,9 +1039,12 @@ const DeterministicBacktestResultPage: React.FC = () => {
           <div className="backtest-result-bento__intro" data-testid="deterministic-result-page-hero">
             <div className="space-y-5">
               <div className="flex flex-wrap items-center gap-3">
-                <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.18em] uppercase ${statusTone}`}>
-                  {getRuleRunStatusLabel(run.status, language)}
-                </span>
+                <StatusBadge
+                  status={run.status}
+                  label={getRuleRunStatusLabel(run.status, language)}
+                  size="md"
+                  variant="soft"
+                />
                 <span className="text-sm text-white/40">{formatDateTime(statusAt)}</span>
               </div>
               <div className="space-y-2">

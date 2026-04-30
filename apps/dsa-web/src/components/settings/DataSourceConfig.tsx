@@ -1,5 +1,6 @@
 import type React from 'react';
 import { Button, GlassCard } from '../common';
+import { StatusBadge } from '../ui/StatusBadge';
 import { ApiSourceCard } from './ApiSourceCard';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
@@ -86,6 +87,17 @@ const groupedDataSources = (sources: DataSourceLibraryEntry[]) => {
     return { ...group, items };
   }).filter((group) => group.items.length > 0);
 };
+
+function getValidationBadgeStatus(state: DataSourceValidationState): string {
+  if (state === 'validated') return 'success';
+  if (state === 'failed') return 'failed';
+  if (state === 'partial') return 'partial';
+  if (state === 'missing_key' || state === 'unsupported') return 'warning';
+  if (state === 'loading') return 'running';
+  if (state === 'configured_pending') return 'pending';
+  if (state === 'builtin') return 'info';
+  return 'disabled';
+}
 
 const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (
   <span
@@ -208,30 +220,30 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
                     testId={`data-source-card-${source.key}`}
                     label={source.label}
                     kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
-                    validationLabel={source.validationState === 'builtin'
-                      ? t('settings.dataSourceValidationBuiltin')
-                      : source.validationState === 'loading'
-                        ? t('settings.dataSourceValidationChecking')
-                      : source.validationState === 'validated'
-                        ? t('settings.dataSourceValidated')
-                        : source.validationState === 'partial'
-                          ? t('settings.dataSourceValidationPartial')
-                        : source.validationState === 'missing_key'
-                          ? t('settings.dataSourceValidationMissingKey')
-                        : source.validationState === 'unsupported'
-                          ? t('settings.dataSourceValidationUnsupported')
-                        : source.validationState === 'failed'
-                          ? t('settings.dataSourceValidationFailed')
-                          : source.configured
-                            ? t('settings.dataSourceConfiguredPending')
-                            : t('settings.notConfigured')}
-                    validationTone={source.validationState === 'failed'
-                      ? 'warning'
-                      : source.validationState === 'partial' || source.validationState === 'missing_key' || source.validationState === 'unsupported'
-                        ? 'warning'
-                      : source.validationState === 'validated'
-                        ? 'success'
-                        : 'default'}
+                    validationBadge={(
+                      <StatusBadge
+                        status={getValidationBadgeStatus(source.validationState)}
+                        label={source.validationState === 'builtin'
+                          ? t('settings.dataSourceValidationBuiltin')
+                          : source.validationState === 'loading'
+                            ? t('settings.dataSourceValidationChecking')
+                          : source.validationState === 'validated'
+                            ? t('settings.dataSourceValidated')
+                            : source.validationState === 'partial'
+                              ? t('settings.dataSourceValidationPartial')
+                            : source.validationState === 'missing_key'
+                              ? t('settings.dataSourceValidationMissingKey')
+                            : source.validationState === 'unsupported'
+                              ? t('settings.dataSourceValidationUnsupported')
+                            : source.validationState === 'failed'
+                              ? t('settings.dataSourceValidationFailed')
+                              : source.configured
+                                ? t('settings.dataSourceConfiguredPending')
+                                : t('settings.notConfigured')}
+                        variant="soft"
+                        size="sm"
+                      />
+                    )}
                     isConfigured={source.usable || source.configured}
                     capabilities={source.capabilityLabels}
                     statusText={source.configured

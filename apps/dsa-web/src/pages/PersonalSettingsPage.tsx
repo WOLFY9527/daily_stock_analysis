@@ -17,6 +17,13 @@ import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRout
 const GLASS_INPUT_CLASS = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white outline-none transition-[border-color,box-shadow] focus:border-white/24 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]';
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'min-w-[4.5rem] rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
+const OPTION_GROUP_WRAPPER_CLASS = 'mt-3 grid gap-2 sm:grid-cols-3';
+
+const buildOptionButtonClass = (active: boolean) => (
+  active
+    ? 'w-full rounded-xl border border-white/14 bg-white/[0.08] px-3 py-3 text-left'
+    : 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left hover:border-white/20 hover:bg-white/[0.05]'
+);
 
 const MARKET_COLOR_OPTIONS: Array<{
   value: MarketColorConvention;
@@ -35,9 +42,28 @@ const MARKET_COLOR_OPTIONS: Array<{
   },
 ];
 
+const DATA_DENSITY_OPTIONS = [
+  { value: 'compact', labelKey: 'settings.dataDensityCompact', descriptionKey: 'settings.dataDensityCompactDesc' },
+  { value: 'comfortable', labelKey: 'settings.dataDensityComfortable', descriptionKey: 'settings.dataDensityComfortableDesc' },
+  { value: 'relaxed', labelKey: 'settings.dataDensityRelaxed', descriptionKey: 'settings.dataDensityRelaxedDesc' },
+] as const;
+
+const NUMBER_FORMAT_OPTIONS = [
+  { value: 'international', labelKey: 'settings.numberFormatInternational', descriptionKey: 'settings.numberFormatInternationalDesc' },
+  { value: 'zh', labelKey: 'settings.numberFormatZh', descriptionKey: 'settings.numberFormatZhDesc' },
+  { value: 'full', labelKey: 'settings.numberFormatFull', descriptionKey: 'settings.numberFormatFullDesc' },
+] as const;
+
 const PersonalSettingsPage: React.FC = () => {
   const { language, setLanguage, t } = useI18n();
-  const { marketColorConvention, setMarketColorConvention } = useUiPreferences();
+  const {
+    dataDensity,
+    marketColorConvention,
+    numberFormat,
+    setDataDensity,
+    setMarketColorConvention,
+    setNumberFormat,
+  } = useUiPreferences();
   const { authEnabled, passwordChangeable } = useAuth();
   const {
     isGuest,
@@ -193,9 +219,51 @@ const PersonalSettingsPage: React.FC = () => {
                       key={option.value}
                       type="button"
                       onClick={() => setMarketColorConvention(option.value)}
-                      className={active
-                        ? 'w-full rounded-xl border border-white/14 bg-white/[0.08] px-3 py-3 text-left'
-                        : 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left hover:border-white/20 hover:bg-white/[0.05]'}
+                      className={buildOptionButtonClass(active)}
+                      aria-pressed={active}
+                    >
+                      <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
+                      <p className="mt-1 text-xs text-muted-text">{t(option.descriptionKey)}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.dataDensityTitle')}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.dataDensityDesc')}</p>
+              <div className={OPTION_GROUP_WRAPPER_CLASS}>
+                {DATA_DENSITY_OPTIONS.map((option) => {
+                  const active = dataDensity === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setDataDensity(option.value)}
+                      className={buildOptionButtonClass(active)}
+                      aria-pressed={active}
+                    >
+                      <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
+                      <p className="mt-1 text-xs text-muted-text">{t(option.descriptionKey)}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.numberFormatTitle')}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.numberFormatDesc')}</p>
+              <div className={OPTION_GROUP_WRAPPER_CLASS}>
+                {NUMBER_FORMAT_OPTIONS.map((option) => {
+                  const active = numberFormat === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setNumberFormat(option.value)}
+                      className={buildOptionButtonClass(active)}
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>

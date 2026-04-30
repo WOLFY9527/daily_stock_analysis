@@ -5,8 +5,7 @@ type ApiSourceCardProps = {
   testId: string;
   label: string;
   kindLabel: string;
-  validationLabel: string;
-  validationTone: 'default' | 'success' | 'warning';
+  validationBadge: React.ReactNode;
   isConfigured: boolean;
   capabilities: string[];
   statusText: string;
@@ -28,8 +27,7 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   testId,
   label,
   kindLabel,
-  validationLabel,
-  validationTone,
+  validationBadge,
   isConfigured,
   capabilities,
   statusText,
@@ -63,9 +61,7 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
 
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap gap-2">
-        <span className={GHOST_TAG_CLASS} data-tone={validationTone}>
-          {validationLabel}
-        </span>
+        {validationBadge}
         {capabilities.map((capability) => (
           <span
             key={`${testId}-${capability}`}

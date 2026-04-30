@@ -1,8 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { Badge, Button, Checkbox, Disclosure } from '../../components/common';
+import { Button, Checkbox, Disclosure } from '../../components/common';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { translate } from '../../i18n/core';
+import { StatusBadge } from '../ui/StatusBadge';
 import type {
   AssumptionMap,
   BacktestResultItem,
@@ -333,21 +334,13 @@ export function getRuleRunStatusTone(status?: string): 'default' | 'success' | '
 export function getHistoricalStatusBadge(status?: string) {
   const normalized = status || 'completed';
   const label = getHistoricalStatusText(normalized);
-  if (normalized === 'completed') return <Badge variant="success">{label}</Badge>;
-  if (normalized === 'insufficient_data') return <Badge variant="warning">{label}</Badge>;
-  if (normalized === 'error') return <Badge variant="danger">{label}</Badge>;
-  return <Badge variant="default">{label}</Badge>;
+  return <StatusBadge status={normalized} label={label} variant="soft" size="sm" />;
 }
 
 export function getRuleStatusBadge(status?: string) {
   const normalized = status || 'queued';
   const label = getRuleStatusText(normalized);
-  if (normalized === 'completed') return <Badge variant="success">{label}</Badge>;
-  if (normalized === 'failed') return <Badge variant="danger">{label}</Badge>;
-  if (normalized === 'summarizing') return <Badge variant="info">{label}</Badge>;
-  if (normalized === 'cancelled') return <Badge variant="warning">{label}</Badge>;
-  if (normalized === 'running') return <Badge variant="warning">{label}</Badge>;
-  return <Badge variant="default">{label}</Badge>;
+  return <StatusBadge status={normalized} label={label} variant="soft" size="sm" />;
 }
 
 export function getRuleRunStatusLabel(status?: string, language: BacktestLanguage = 'zh'): string {
@@ -557,9 +550,7 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
       title={(
         <span className="flex flex-wrap items-center gap-2">
           {bt(language, 'runStatusBanner.title')}
-          <Badge variant={tone === 'success' ? 'success' : tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : tone === 'info' ? 'info' : 'default'}>
-            {getRuleStatusText(run.status, language)}
-          </Badge>
+          <StatusBadge status={run.status} label={getRuleStatusText(run.status, language)} variant="soft" size="sm" />
         </span>
       )}
       body={(
@@ -606,7 +597,7 @@ export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = 
               <td className="product-table__align-right">{pct(row.simulatedReturnPct)}</td>
               <td className="product-table__align-right">{pct(row.stockReturnPct)}</td>
               <td>{row.marketDataSources.length > 0 ? row.marketDataSources.join(', ') : '--'}</td>
-              <td><Badge variant={row.evalStatus === 'completed' ? 'success' : row.evalStatus === 'insufficient_data' ? 'warning' : row.evalStatus === 'error' ? 'danger' : 'default'}>{getHistoricalStatusText(row.evalStatus, language)}</Badge></td>
+              <td><StatusBadge status={row.evalStatus} label={getHistoricalStatusText(row.evalStatus, language)} variant="soft" size="sm" /></td>
             </tr>
           ))}
         </tbody>
@@ -649,7 +640,7 @@ export const HistoricalRunsTable: React.FC<{
               <td className="product-table__align-right">{row.candidateCount}</td>
               <td className="product-table__align-right">{pct(row.winRatePct)}</td>
               <td className="product-table__align-right">{pct(row.avgSimulatedReturnPct)}</td>
-              <td><Badge variant={row.status === 'completed' ? 'success' : row.status === 'insufficient_data' ? 'warning' : row.status === 'error' ? 'danger' : 'default'}>{getHistoricalStatusText(row.status, language)}</Badge></td>
+              <td><StatusBadge status={row.status} label={getHistoricalStatusText(row.status, language)} variant="soft" size="sm" /></td>
               <td className="product-table__align-right">
                 <Button size="sm" variant="ghost" onClick={() => onOpen(row)}>
                   {bt(language, 'common.open')}
@@ -787,9 +778,7 @@ export const RuleRunsTable: React.FC<{
               <td className="product-table__mono">{row.code}</td>
               <td>
                 <div className="product-table__stack">
-                  <Badge variant={row.status === 'completed' ? 'success' : row.status === 'failed' ? 'danger' : row.status === 'summarizing' ? 'info' : row.status === 'cancelled' || row.status === 'running' ? 'warning' : 'default'}>
-                    {getRuleStatusText(row.status, language)}
-                  </Badge>
+                  <StatusBadge status={row.status} label={getRuleStatusText(row.status, language)} variant="soft" size="sm" />
                   <span>{language === 'en' ? (getRuleRunStatusDescription(row.status, language) || '--') : (row.statusMessage || getRuleRunStatusDescription(row.status, language) || '--')}</span>
                 </div>
               </td>

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
+import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
@@ -158,9 +159,11 @@ describe('HomeSurfacePage', () => {
 
   const renderSurface = () => render(
     <MemoryRouter>
-      <UiLanguageProvider>
-        <HomeSurfacePage />
-      </UiLanguageProvider>
+      <UiPreferencesProvider>
+        <UiLanguageProvider>
+          <HomeSurfacePage />
+        </UiLanguageProvider>
+      </UiPreferencesProvider>
     </MemoryRouter>,
   );
 
@@ -295,7 +298,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('理想买入点')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40', 'truncate');
     expect(screen.getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed');
     expect(screen.getByText('133.50')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-emerald-400');
-    expect(screen.getByText('117.40')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-red-400');
+    expect(screen.getByText('117.40')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-rose-500');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-emerald-400');
     expect(macdSignalValue).not.toBeUndefined();
     expect(macdSignal).toHaveClass('flex', 'flex-col', 'gap-1', 'py-2', 'border-b', 'border-white/5');
     expect(macdSignalValue).toHaveClass('text-xs', 'font-medium', 'text-right');
@@ -325,6 +329,18 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
     expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
     expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
+  });
+
+  it('switches decision and strategy tones when the user prefers CN market colors', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    window.localStorage.setItem('dsa-market-color-convention', 'redUpGreenDown');
+
+    renderSurface();
+
+    await screen.findByText('Oracle Corporation');
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-rose-500');
+    expect(screen.getByText('133.50')).toHaveClass('text-rose-500');
+    expect(screen.getByText('117.40')).toHaveClass('text-emerald-400');
   });
 
   it('keeps the full bento card layout when there is no non-test history', async () => {

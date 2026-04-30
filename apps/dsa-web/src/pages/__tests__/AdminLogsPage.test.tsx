@@ -284,6 +284,30 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('成功/跳过/失败')).toBeInTheDocument();
     expect(screen.getByText('3/1/1')).toBeInTheDocument();
     expect(screen.getByText(/record-tsla/)).toBeInTheDocument();
+    expect(document.querySelector('[data-status="success"]')).not.toBeNull();
+    expect(document.querySelector('[data-status="skipped"]')).not.toBeNull();
+    expect(document.querySelector('[data-status="failed"]')).not.toBeNull();
+  });
+
+  it('renders running step status as 运行中 in the detail timeline', async () => {
+    getBusinessEventDetail.mockResolvedValueOnce({
+      ...businessDetail,
+      steps: businessDetail.steps.map((step) => (
+        step.name === 'ai_analysis'
+          ? { ...step, status: 'running', message: '分析任务仍在执行' }
+          : step
+      )),
+    });
+
+    render(<AdminLogsPage />);
+
+    const row = await screen.findByText('TSLA');
+    const rowContainer = row.closest('[data-testid="business-event-row"]');
+    expect(rowContainer).not.toBeNull();
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    await screen.findByText('运行中');
+    expect(document.querySelector('[data-status="running"]')).not.toBeNull();
   });
 
   it('filters scanner and backtest business tabs by category', async () => {
