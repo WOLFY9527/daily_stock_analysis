@@ -107,11 +107,18 @@ export interface ExecutionLogSessionListResponse {
 }
 
 export interface ExecutionStep {
+  id?: string | null;
+  executionId?: string | null;
   name: string;
   label: string;
+  category?: string | null;
   provider?: string | null;
+  model?: string | null;
+  endpoint?: string | null;
   apiPath?: string | null;
   status: string;
+  reason?: string | null;
+  message?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   durationMs?: number | null;
@@ -125,11 +132,16 @@ export interface BusinessEvent {
   id: string;
   event: string;
   category: string;
+  type?: string | null;
   status: string;
   summary: string;
+  subject?: string | null;
   symbol?: string | null;
   market?: string | null;
   analysisType?: string | null;
+  strategyId?: string | null;
+  scannerId?: string | null;
+  backtestId?: string | null;
   userId?: string | null;
   requestId?: string | null;
   recordId?: string | null;
@@ -139,6 +151,8 @@ export interface BusinessEvent {
   stepCount: number;
   successStepCount: number;
   failedStepCount: number;
+  skippedStepCount?: number;
+  unknownStepCount?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -182,7 +196,14 @@ export const adminLogsApi = {
   listBusinessEvents: async (
     params: {
       category?: string;
+      type?: string;
+      subject?: string;
       symbol?: string;
+      scannerId?: string;
+      strategyId?: string;
+      backtestId?: string;
+      requestId?: string;
+      userId?: string;
       status?: string;
       query?: string;
       since?: string;
@@ -192,7 +213,16 @@ export const adminLogsApi = {
   ): Promise<BusinessEventListResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(
       '/api/v1/admin/logs',
-      { params },
+      {
+        params: {
+          ...params,
+          scanner_id: params.scannerId,
+          strategy_id: params.strategyId,
+          backtest_id: params.backtestId,
+          request_id: params.requestId,
+          user_id: params.userId,
+        },
+      },
     );
     const normalized = toCamelCase<BusinessEventListResponse>(response.data);
     return {

@@ -41,6 +41,7 @@ const businessEvents = [
     id: 'analysis-tsla',
     event: 'TSLA',
     category: 'analysis',
+    type: 'stock_analysis',
     status: 'partial',
     summary: '用户分析 TSLA，部分数据源失败',
     symbol: 'TSLA',
@@ -50,12 +51,15 @@ const businessEvents = [
     stepCount: 4,
     successStepCount: 3,
     failedStepCount: 1,
+    skippedStepCount: 0,
+    unknownStepCount: 0,
     recordId: 'record-tsla',
   },
   {
     id: 'analysis-aapl',
     event: 'AAPL',
     category: 'analysis',
+    type: 'stock_analysis',
     status: 'success',
     summary: '用户分析 AAPL',
     symbol: 'AAPL',
@@ -65,12 +69,55 @@ const businessEvents = [
     stepCount: 4,
     successStepCount: 4,
     failedStepCount: 0,
+    skippedStepCount: 0,
+    unknownStepCount: 0,
     recordId: 'record-aapl',
+  },
+  {
+    id: 'scanner-mainland',
+    event: 'Scanner: 大盘单机游戏',
+    category: 'scanner',
+    type: 'scan_run',
+    status: 'success',
+    summary: '扫描器运行：大盘单机游戏',
+    subject: '大盘单机游戏',
+    scannerId: 'scanner-mainland',
+    startedAt: '2026-04-30T11:20:00Z',
+    durationMs: 2200,
+    stepCount: 3,
+    successStepCount: 2,
+    skippedStepCount: 1,
+    failedStepCount: 0,
+    unknownStepCount: 0,
+    metadata: { matchedCount: 18 },
+  },
+  {
+    id: 'backtest-ma20',
+    event: 'Backtest: MA20 Breakout',
+    category: 'backtest',
+    type: 'backtest_run',
+    status: 'success',
+    summary: '回测策略 MA20 Breakout',
+    subject: 'MA20 Breakout',
+    strategyId: 'strategy-ma20',
+    backtestId: 'bt-1',
+    startedAt: '2026-04-30T10:20:00Z',
+    durationMs: 5200,
+    stepCount: 3,
+    successStepCount: 3,
+    skippedStepCount: 0,
+    failedStepCount: 0,
+    unknownStepCount: 0,
+    metadata: { startDate: '2024-01-01', endDate: '2024-12-31' },
   },
 ];
 
 const businessDetail = {
   ...businessEvents[0],
+  stepCount: 5,
+  successStepCount: 3,
+  skippedStepCount: 1,
+  failedStepCount: 1,
   steps: [
     {
       name: 'fetch_quote',
@@ -93,6 +140,16 @@ const businessDetail = {
       errorType: 'TimeoutError',
       errorMessage: 'News API timeout after 3000ms',
       metadata: { source: 'newsapi' },
+    },
+    {
+      name: 'fetch_fundamentals',
+      label: '获取财务数据',
+      provider: 'fmp',
+      status: 'skipped',
+      reason: 'previous_provider_succeeded',
+      message: '主数据源已成功，无需调用备用源',
+      durationMs: 0,
+      metadata: { apiKey: '***' },
     },
     {
       name: 'ai_analysis',
@@ -161,7 +218,9 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'overflow-x-hidden');
     expect(screen.getByRole('tab', { name: '业务事件' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '股票分析' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '数据源问题' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '扫描器' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '回测' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '数据源' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '安全事件' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
@@ -171,6 +230,8 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('admin-logs-summary-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-5');
     expect(await screen.findByText('TSLA')).toBeInTheDocument();
     expect(screen.getByText('用户分析 TSLA，部分数据源失败')).toBeInTheDocument();
+    expect(screen.getByText('Scanner: 大盘单机游戏')).toBeInTheDocument();
+    expect(screen.getByText('Backtest: MA20 Breakout')).toBeInTheDocument();
     expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
     expect(screen.getByTestId('admin-logs-pagination')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上一页' })).toBeInTheDocument();
@@ -213,10 +274,24 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('调用链 timeline')).toBeInTheDocument();
     expect(screen.getByText(/获取行情/)).toBeInTheDocument();
     expect(screen.getByText(/获取新闻/)).toBeInTheDocument();
+    expect(screen.getByText(/获取财务数据/)).toBeInTheDocument();
     expect(screen.getByText(/AI 分析/)).toBeInTheDocument();
     expect(screen.getByText(/保存分析记录/)).toBeInTheDocument();
     expect(screen.getByText('News API timeout after 3000ms')).toBeInTheDocument();
+    expect(screen.getAllByText('主数据源已成功，无需调用备用源').length).toBeGreaterThan(0);
+    expect(screen.getByText('成功/跳过/失败')).toBeInTheDocument();
+    expect(screen.getByText('3/1/1')).toBeInTheDocument();
     expect(screen.getByText(/record-tsla/)).toBeInTheDocument();
+  });
+
+  it('filters scanner and backtest business tabs by category', async () => {
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '扫描器' }));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'scanner' })));
+
+    fireEvent.click(screen.getByRole('tab', { name: '回测' }));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'backtest' })));
   });
 
   it('keeps raw logs available in the advanced raw tab', async () => {

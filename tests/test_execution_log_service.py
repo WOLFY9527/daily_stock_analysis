@@ -282,6 +282,139 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(total, 1)
         self.assertEqual(items[0]["failedStepCount"], 1)
 
+    def test_generic_execution_lifecycle_supports_scanner(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="scanner",
+                type="scan_run",
+                event="Scanner: 大盘单机游戏",
+                summary="扫描器运行：大盘单机游戏",
+                subject="大盘单机游戏",
+                scanner_id="scanner-a",
+                metadata={"universeSize": 4200},
+            )
+            service.start_step(execution_id, "load_universe", "加载股票池", category="compute", critical=True)
+            service.finish_step_success(execution_id, "load_universe", metadata={"loaded": 4200})
+            service.finish_execution(execution_id, metadata={"matchedCount": 18})
+            items, total = service.list_business_events(category="scanner", type="scan_run", subject="大盘")
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["category"], "scanner")
+        self.assertEqual(items[0]["type"], "scan_run")
+        self.assertEqual(items[0]["scannerId"], "scanner-a")
+        self.assertEqual(items[0]["successStepCount"], 1)
+        self.assertEqual(items[0]["skippedStepCount"], 0)
+        self.assertEqual(detail["steps"][0]["status"], "success")
+
+    def test_backtest_execution_supported(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="backtest",
+                type="backtest_run",
+                event="Backtest: MA20 Breakout",
+                summary="回测策略 MA20 Breakout",
+                subject="MA20 Breakout",
+                strategy_id="strategy-ma20",
+                backtest_id="bt-1",
+            )
+            for name, label in [
+                ("load_price_data", "加载价格数据"),
+                ("generate_signals", "生成信号"),
+                ("calculate_metrics", "计算指标"),
+            ]:
+                service.start_step(execution_id, name, label, category="compute", critical=True)
+                service.finish_step_success(execution_id, name)
+            event = service.finish_execution(execution_id)
+            items, total = service.list_business_events(category="backtest", strategy_id="strategy-ma20")
+
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["backtestId"], "bt-1")
+        self.assertEqual(items[0]["stepCount"], 3)
+
+    def test_skipped_backup_provider_not_success(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="data_source",
+                type="provider_validation",
+                event="Provider validation",
+                summary="数据源校验",
+            )
+            service.start_step(execution_id, "test_quote_endpoint", "测试行情接口", provider="fmp", critical=True)
+            service.finish_step_success(execution_id, "test_quote_endpoint", provider="fmp")
+            service.skip_step(
+                execution_id,
+                "test_quote_endpoint",
+                "测试行情接口",
+                reason="previous_provider_succeeded",
+                provider="yahoo",
+            )
+            event = service.finish_execution(execution_id)
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertEqual(event["successStepCount"], 1)
+        self.assertEqual(event["skippedStepCount"], 1)
+        self.assertEqual(event["failedStepCount"], 0)
+        self.assertTrue(any(step["provider"] == "yahoo" and step["status"] == "skipped" for step in detail["steps"]))
+
+    def test_skipped_backup_model_missing_key_and_403_failed_are_classified(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="MSFT",
+                summary="用户分析 MSFT",
+                subject="MSFT",
+                symbol="MSFT",
+            )
+            service.start_step(execution_id, "ai_analysis", "AI 分析", category="ai_model", provider="gemini", model="gemini-2.5", critical=True)
+            service.finish_step_success(execution_id, "ai_analysis", provider="gemini", model="gemini-2.5")
+            service.skip_step(execution_id, "ai_analysis", "AI 分析", reason="previous_model_succeeded", provider="deepseek", model="deepseek-chat")
+            service.skip_step(execution_id, "fetch_news", "获取新闻", reason="missing_api_key", provider="finnhub")
+            service.start_step(execution_id, "fetch_quote", "获取行情", category="data_market", provider="alpaca")
+            service.finish_step_failed(
+                execution_id,
+                "fetch_quote",
+                provider="alpaca",
+                error_type="HTTPError",
+                error_message="GET https://api.example.test/v1/quote?apikey=secret-token returned 403",
+                reason="http_403",
+                metadata={"httpStatus": 403, "authorization": "Bearer secret", "nested": {"api_key": "secret"}},
+            )
+            event = service.finish_execution(execution_id, status="partial")
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertEqual(event["successStepCount"], 1)
+        self.assertEqual(event["skippedStepCount"], 2)
+        self.assertEqual(event["failedStepCount"], 1)
+        failed = next(step for step in detail["steps"] if step["status"] == "failed")
+        self.assertEqual(failed["reason"], "http_403")
+        self.assertIn("apikey=***", failed["message"])
+        self.assertEqual(failed["metadata"]["authorization"], "***")
+        self.assertEqual(failed["metadata"]["nested"]["api_key"], "***")
+
+    def test_execution_finished_no_running_orphans(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="scheduler",
+                type="scheduled_job",
+                event="Daily job",
+                summary="定时任务",
+            )
+            service.start_step(execution_id, "notify_user", "通知用户", category="notification")
+            event = service.finish_execution(execution_id, status="success")
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertEqual(event["unknownStepCount"], 1)
+        self.assertFalse(any(step["status"] == "running" for step in detail["steps"]))
+        self.assertEqual(detail["steps"][0]["status"], "unknown")
+
     def test_raw_system_logs_do_not_pollute_analysis_business_events(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

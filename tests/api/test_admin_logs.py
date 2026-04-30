@@ -270,6 +270,40 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.total, 1)
         self.assertEqual(payload.items[0].session_id, "warning-timeout")
 
+    def test_root_filters_generic_business_execution_fields(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="scanner",
+                type="scan_run",
+                event="Scanner: 大盘单机游戏",
+                summary="扫描器运行：大盘单机游戏",
+                subject="大盘单机游戏",
+                scanner_id="scanner-mainland",
+                request_id="req-scan",
+                user_id="user-1",
+            )
+            service.start_step(execution_id, "run_screen", "执行扫描", category="compute", critical=True)
+            service.finish_step_success(execution_id, "run_screen")
+            service.finish_execution(execution_id, metadata={"matchedCount": 18})
+
+            payload = admin_logs.list_execution_logs_root(
+                category="scanner",
+                type="scan_run",
+                subject="大盘",
+                scanner_id="scanner-mainland",
+                request_id="req-scan",
+                user_id="user-1",
+                limit=10,
+                _=_admin_user(),
+            )
+
+        self.assertEqual(payload.total, 1)
+        self.assertEqual(payload.items[0].id, execution_id)
+        self.assertEqual(payload.items[0].type, "scan_run")
+        self.assertEqual(payload.items[0].scannerId, "scanner-mainland")
+        self.assertEqual(payload.items[0].skippedStepCount, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

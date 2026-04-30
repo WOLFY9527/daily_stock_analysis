@@ -1,5 +1,7 @@
 ## 2026-04-30
 
+- 🧾 **Admin Logs 抽象为通用 Business Execution Trace** — `/api/v1/admin/logs` 的默认业务事件模型扩展为 `category/type/subject/scannerId/strategyId/backtestId` 等通用字段，新增 `start_execution/start_step/finish_step_success/finish_step_failed/skip_step/finish_execution` helper，统一 success/partial/failed/skipped/running/unknown/cancelled 状态语义；fallback provider/model 未调用、missing key、熔断和不适用市场会显示为 skipped 且不计入成功，真实 403/timeout 等调用失败计入 failed，主任务结束后的 running step 收敛为 unknown。`/admin/logs` 前端同步增加扫描器、回测、数据源 tabs、通用 step timeline、成功/跳过/失败统计和 metadata 脱敏展示；原始 session/event 日志继续保留在 `/api/v1/admin/logs/sessions` 与原始日志 tab。
+
 - ⚡ **Market Overview 加密行情升级为 SSE 准实时流** — `/api/v1/market/crypto/stream` 新增 `text/event-stream` 实时推送，后台 `CryptoRealtimeService` 通过 Binance WebSocket 聚合 BTC/ETH/BNB ticker，约 1 秒节流更新内存快照并同步写入既有 `MarketCache` 的 crypto key，保留 `/api/v1/market/crypto` REST/cache/cold-start fallback 行为。`/market-overview` 的 CryptoCard 首屏继续使用 REST 快照，挂载后订阅 SSE，断线时保留最近快照并显示轻量 `Reconnecting/Snapshot/Live` 状态；新增 `CRYPTO_REALTIME_ENABLED` 可关闭后台 WS 连接。回归覆盖 mock tick、MarketCache 写入、provider 异常隔离、SSE realtime/cache payload、stale freshness 与前端 EventSource 更新/错误/卸载/无支持 fallback。
 
 - 🧾 **Admin Logs 改为业务事件与调用链详情** — `/admin/logs` 默认从细碎运行日志切换为业务事件列表，股票分析只展示单条 `TSLA / analysis / 用户分析 TSLA` 级记录，并支持 symbol、状态、类别、时间范围与分页筛选。后端新增 analysis execution 聚合能力，在分析流程中记录获取行情、技术指标、新闻、AI 分析、保存记录等步骤的 provider、耗时、错误与 recordId；详情接口返回完整调用链，非关键数据源失败时整次分析可标记为 `partial`。原始 session/event 日志继续保留在高级调试视图。

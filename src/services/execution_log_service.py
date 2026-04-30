@@ -14,8 +14,8 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
 from src.storage import get_db
 
 _SECRET_PATTERNS = [
-    re.compile(r"(https?://)[^/\s]+/[^\s]+", re.IGNORECASE),
-    re.compile(r"(token|secret|password|webhook)[=:]\s*([^\s,;]+)", re.IGNORECASE),
+    re.compile(r"([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+", re.IGNORECASE),
+    re.compile(r"\b(token|secret|password|webhook|authorization|api[-_]?key)[=:]\s*([^\s,;]+)", re.IGNORECASE),
 ]
 
 _NOTIFICATION_STATES = {"success", "partial_success", "timeout_unknown", "failed", "not_configured"}
@@ -29,8 +29,11 @@ _DEFAULT_LOG_CATEGORIES = {
     "data_source",
     "analysis",
     "scanner",
+    "backtest",
     "trading",
+    "portfolio",
     "scheduler",
+    "notification",
     "api",
     "frontend",
     "security",
@@ -45,12 +48,34 @@ _NOISY_MARKET_EVENTS = {
 }
 _ANALYSIS_STEP_LABELS = {
     "fetch_quote": "获取行情",
+    "fetch_history": "获取历史行情",
     "fetch_technical": "获取技术指标",
+    "fetch_fundamentals": "获取基本面",
     "fetch_news": "获取新闻",
     "fetch_financials": "获取财务数据",
     "fetch_market_context": "获取市场环境",
     "ai_analysis": "AI 分析",
+    "validate_schema": "校验结构",
     "save_record": "保存分析记录",
+    "notify_user": "通知用户",
+    "load_universe": "加载股票池",
+    "load_market_data": "加载行情数据",
+    "load_factor_data": "加载因子/指标",
+    "run_screen": "执行扫描",
+    "rank_candidates": "候选排序",
+    "save_scan_result": "保存扫描结果",
+    "load_strategy": "加载策略",
+    "load_price_data": "加载价格数据",
+    "generate_signals": "生成信号",
+    "simulate_orders": "撮合交易",
+    "calculate_metrics": "计算指标",
+    "save_backtest_report": "保存回测报告",
+    "validate_key_format": "校验 Key 格式",
+    "test_quote_endpoint": "测试行情接口",
+    "test_history_endpoint": "测试历史接口",
+    "test_news_endpoint": "测试新闻接口",
+    "test_rate_limit": "测试限流",
+    "save_provider_status": "保存数据源状态",
 }
 _CRITICAL_ANALYSIS_STEPS = {"fetch_quote", "ai_analysis"}
 _STATUS_ALIASES = {
@@ -71,8 +96,8 @@ def _masked_message(text: Optional[str]) -> Optional[str]:
     if text is None:
         return None
     masked = str(text)
-    for pattern in _SECRET_PATTERNS:
-        masked = pattern.sub(r"\1***" if pattern.pattern.startswith("(https?://)") else r"\1=***", masked)
+    masked = _SECRET_PATTERNS[0].sub(r"\1***", masked)
+    masked = _SECRET_PATTERNS[1].sub(r"\1=***", masked)
     return masked[:400] if masked else None
 
 
@@ -182,7 +207,7 @@ def _normalize_log_category(value: Any, fallback: str = "system") -> str:
         "system_control": "system",
         "ai_model": "analysis",
         "ai_route": "analysis",
-        "notification": "system",
+        "market_overview_refresh": "market",
     }
     normalized = aliases.get(normalized, normalized)
     return normalized if normalized in _DEFAULT_LOG_CATEGORIES else fallback
@@ -190,9 +215,40 @@ def _normalize_log_category(value: Any, fallback: str = "system") -> str:
 
 def _normalize_business_status(value: Any) -> str:
     normalized = _as_str(value).lower()
-    if normalized in {"success", "failed", "partial", "running", "skipped"}:
+    if normalized in {"success", "failed", "partial", "running", "skipped", "unknown", "cancelled"}:
         return normalized
+    if normalized in {"succeeded", "completed", "ok"}:
+        return "success"
+    if normalized in {"not_configured", "skipped_because_previous_succeeded"}:
+        return "skipped"
     return _STATUS_ALIASES.get(normalized, normalized or "running")
+
+
+def _sanitize_url(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value)
+    text = re.sub(r"([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+", r"\1***", text, flags=re.IGNORECASE)
+    return text[:500] if text else None
+
+
+def _sanitize_metadata(value: Any) -> Any:
+    secret_keys = {"apikey", "api_key", "key", "token", "authorization", "secret", "password", "access_token", "refresh_token"}
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            normalized_key = key_text.lower().replace("-", "_")
+            if normalized_key in secret_keys or any(part in normalized_key for part in ("apikey", "api_key", "token", "authorization", "secret", "password")):
+                sanitized[key_text] = "***" if item not in (None, "") else item
+            else:
+                sanitized[key_text] = _sanitize_metadata(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_metadata(item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_url(_masked_message(value)) or ""
+    return value
 
 
 def _parse_iso_datetime(value: Any) -> Optional[datetime]:
@@ -290,6 +346,263 @@ class ExecutionLogService:
     def __init__(self):
         self.db = get_db()
 
+    def start_execution(
+        self,
+        *,
+        category: str,
+        type: str,
+        event: str,
+        summary: str,
+        subject: Optional[str] = None,
+        symbol: Optional[str] = None,
+        market: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+        scanner_id: Optional[str] = None,
+        backtest_id: Optional[str] = None,
+        record_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        execution_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        normalized_category = _normalize_log_category(category)
+        symbol_text = _as_str(symbol).upper() or None
+        subject_text = _as_str(subject) or symbol_text or _as_str(event) or None
+        business = {
+            "id": execution_id,
+            "event": _as_str(event) or subject_text or execution_id,
+            "category": normalized_category,
+            "type": _as_str(type) or normalized_category,
+            "status": "running",
+            "summary": _as_str(summary) or _as_str(event) or normalized_category,
+            "subject": subject_text,
+            "symbol": symbol_text,
+            "market": _as_str(market).upper() or None,
+            "strategyId": _as_str(strategy_id) or None,
+            "scannerId": _as_str(scanner_id) or None,
+            "backtestId": _as_str(backtest_id) or None,
+            "recordId": _as_str(record_id) or None,
+            "requestId": _as_str(request_id) or None,
+            "userId": _as_str(user_id) or None,
+            "startedAt": started_at.isoformat(),
+            "finishedAt": None,
+            "durationMs": None,
+            "stepCount": 0,
+            "successStepCount": 0,
+            "failedStepCount": 0,
+            "skippedStepCount": 0,
+            "unknownStepCount": 0,
+            "metadata": _sanitize_metadata(metadata or {}),
+        }
+        summary_payload = self._merge_summary(
+            {"business_event": business},
+            self._summary_meta(
+                owner_id=user_id,
+                actor={"user_id": user_id} if user_id else None,
+                session_kind="business_event",
+                subsystem=normalized_category,
+                action_name=business["type"],
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=execution_id,
+            task_id=request_id or f"{normalized_category}:{business['type']}",
+            code=symbol_text,
+            name=business["event"],
+            overall_status="running",
+            truth_level="actual",
+            summary=summary_payload,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=execution_id,
+            phase=normalized_category,
+            step="execution_started",
+            target=subject_text or business["event"],
+            status="running",
+            truth_level="actual",
+            message=business["summary"],
+            detail={
+                "category": normalized_category,
+                "event_name": "BusinessExecutionStarted",
+                "business_event": True,
+                "business_type": business["type"],
+                "subject": subject_text,
+                "symbol": symbol_text,
+                "request_id": business["requestId"],
+            },
+            event_at=started_at,
+        )
+        return execution_id
+
+    def start_step(
+        self,
+        execution_id: str,
+        name: str,
+        label: str,
+        *,
+        category: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        critical: bool = False,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        step_id = uuid.uuid4().hex
+        self._append_business_step(
+            execution_id=execution_id,
+            step_id=step_id,
+            name=name,
+            label=label,
+            category=category,
+            provider=provider,
+            model=model,
+            endpoint=endpoint,
+            status="running",
+            critical=critical,
+            metadata=metadata,
+        )
+        return step_id
+
+    def finish_step_success(
+        self,
+        execution_id: str,
+        step_key_or_id: str,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        message: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        endpoint: Optional[str] = None,
+    ) -> None:
+        self._append_business_step_result(
+            execution_id=execution_id,
+            step_key_or_id=step_key_or_id,
+            status="success",
+            metadata=metadata,
+            message=message,
+            provider=provider,
+            model=model,
+            endpoint=endpoint,
+        )
+
+    def finish_step_failed(
+        self,
+        execution_id: str,
+        step_key_or_id: str,
+        *,
+        error_type: Optional[str] = None,
+        error_message: Optional[str] = None,
+        reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        endpoint: Optional[str] = None,
+    ) -> None:
+        self._append_business_step_result(
+            execution_id=execution_id,
+            step_key_or_id=step_key_or_id,
+            status="failed",
+            metadata=metadata,
+            message=error_message,
+            error_type=error_type,
+            reason=reason,
+            provider=provider,
+            model=model,
+            endpoint=endpoint,
+        )
+
+    def skip_step(
+        self,
+        execution_id: str,
+        name: str,
+        label: str,
+        reason: str,
+        *,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self._append_business_step(
+            execution_id=execution_id,
+            step_id=uuid.uuid4().hex,
+            name=name,
+            label=label,
+            provider=provider,
+            model=model,
+            endpoint=endpoint,
+            status="skipped",
+            reason=reason,
+            message=reason,
+            critical=False,
+            metadata=metadata,
+        )
+
+    def finish_execution(
+        self,
+        execution_id: str,
+        *,
+        status: Optional[str] = None,
+        record_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        detail = self.db.get_execution_log_session_detail(execution_id) or {}
+        row_summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else {}
+        business = row_summary.get("business_event") if isinstance(row_summary.get("business_event"), dict) else {}
+        finished_at = datetime.now()
+        steps = self._build_business_steps_from_session({**detail, "ended_at": finished_at.isoformat()})
+        success_count = sum(1 for step in steps if step.get("status") == "success")
+        failed_count = sum(1 for step in steps if step.get("status") == "failed")
+        skipped_count = sum(1 for step in steps if step.get("status") == "skipped")
+        unknown_count = sum(1 for step in steps if step.get("status") == "unknown")
+        resolved_status = _normalize_business_status(status) if status else self._infer_business_status(steps)
+        started_at = business.get("startedAt") or detail.get("started_at")
+        next_business = {
+            **business,
+            "id": execution_id,
+            "status": resolved_status,
+            "recordId": _as_str(record_id) or business.get("recordId"),
+            "finishedAt": finished_at.isoformat(),
+            "durationMs": _duration_ms(started_at, finished_at.isoformat()),
+            "stepCount": len(steps),
+            "successStepCount": success_count,
+            "failedStepCount": failed_count,
+            "skippedStepCount": skipped_count,
+            "unknownStepCount": unknown_count,
+            "metadata": _sanitize_metadata({
+                **(business.get("metadata") if isinstance(business.get("metadata"), dict) else {}),
+                **(metadata or {}),
+            }),
+        }
+        next_summary = self._merge_summary(row_summary, {"business_event": next_business})
+        self.db.finalize_execution_log_session(
+            session_id=execution_id,
+            overall_status=resolved_status,
+            truth_level="actual",
+            summary=next_summary,
+            ended_at=finished_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=execution_id,
+            phase=next_business.get("category") or "system",
+            step="execution_finished",
+            target=next_business.get("subject") or next_business.get("event"),
+            status=resolved_status,
+            truth_level="actual",
+            message=next_business.get("summary"),
+            detail={
+                "category": next_business.get("category"),
+                "event_name": "BusinessExecutionFinished",
+                "business_event": True,
+                "business_type": next_business.get("type"),
+                "outcome": _outcome_from_status(resolved_status),
+            },
+            event_at=finished_at,
+        )
+        return next_business
+
     def start_analysis_execution(
         self,
         *,
@@ -309,8 +622,10 @@ class ExecutionLogService:
             "id": execution_id,
             "event": symbol_text,
             "category": "analysis",
+            "type": "stock_analysis",
             "status": "running",
             "summary": f"用户分析 {symbol_text}",
+            "subject": symbol_text,
             "symbol": symbol_text,
             "market": _as_str(market).upper() or None,
             "analysisType": _as_str(analysis_type) or None,
@@ -323,7 +638,9 @@ class ExecutionLogService:
             "stepCount": 0,
             "successStepCount": 0,
             "failedStepCount": 0,
-            "metadata": metadata or {},
+            "skippedStepCount": 0,
+            "unknownStepCount": 0,
+            "metadata": _sanitize_metadata(metadata or {}),
         }
         summary = self._merge_summary(
             {"business_event": business},
@@ -396,11 +713,18 @@ class ExecutionLogService:
             "category": "analysis",
             "event_name": "AnalysisExecutionStep",
             "business_step": True,
+            "id": uuid.uuid4().hex,
+            "executionId": execution_id,
             "name": step_name,
             "label": label or _ANALYSIS_STEP_LABELS.get(step_name, step_name),
+            "stepCategory": _data_phase(step_name.replace("fetch_", "")) if step_name.startswith("fetch_") else None,
             "provider": _as_str(provider) or None,
+            "model": None,
+            "endpoint": _as_str(api_path) or None,
             "apiPath": _as_str(api_path) or None,
             "status": normalized_status,
+            "reason": None,
+            "message": _masked_message(error_message) if error_message else None,
             "startedAt": step_started.isoformat(),
             "finishedAt": step_finished.isoformat(),
             "durationMs": computed_duration,
@@ -408,7 +732,7 @@ class ExecutionLogService:
             "errorMessage": _masked_message(error_message),
             "recordId": _as_str(record_id) or None,
             "critical": bool(critical) if critical is not None else step_name in _CRITICAL_ANALYSIS_STEPS,
-            "metadata": metadata or {},
+            "metadata": _sanitize_metadata(metadata or {}),
             "outcome": _outcome_from_status(normalized_status),
         }
         self.db.append_execution_log_event(
@@ -444,6 +768,8 @@ class ExecutionLogService:
         started_at = business.get("startedAt") or detail.get("started_at")
         failed_count = sum(1 for step in steps if step["status"] == "failed")
         success_count = sum(1 for step in steps if step["status"] == "success")
+        skipped_count = sum(1 for step in steps if step["status"] == "skipped")
+        unknown_count = sum(1 for step in steps if step["status"] == "unknown")
         summary_text = f"用户分析 {symbol}"
         if resolved_status == "partial":
             summary_text = f"用户分析 {symbol}，部分数据源失败"
@@ -463,9 +789,11 @@ class ExecutionLogService:
             "stepCount": len(steps),
             "successStepCount": success_count,
             "failedStepCount": failed_count,
+            "skippedStepCount": skipped_count,
+            "unknownStepCount": unknown_count,
             "metadata": {
                 **(business.get("metadata") if isinstance(business.get("metadata"), dict) else {}),
-                **(metadata or {}),
+                **_sanitize_metadata(metadata or {}),
             },
         }
         next_summary = self._merge_summary(summary, {"business_event": next_business})
@@ -710,12 +1038,47 @@ class ExecutionLogService:
             for item in (providers.get("providers_used") or [])
             if str(item).strip()
         ]
+        provider_failure_count = int(providers.get("provider_failure_count") or 0)
+        status_text = _normalize_business_status(run_detail.get("status") or "completed")
+        profile_label = _as_str(run_detail.get("profile_label") or run_detail.get("profile") or "scanner")
         coverage_summary = (
             f"Scanned {int(coverage.get('input_universe_size') or 0)} symbols, "
             f"shortlisted {int(coverage.get('shortlisted_count') or 0)}."
         )
+        business_event = {
+            "id": session_id,
+            "event": f"Scanner: {profile_label}",
+            "category": "scanner",
+            "type": "scan_run",
+            "status": "partial" if provider_failure_count else status_text,
+            "summary": f"扫描器运行：{profile_label}",
+            "subject": profile_label,
+            "symbol": None,
+            "market": _as_str(run_detail.get("market")) or None,
+            "scannerId": _as_str(run_detail.get("id")) or None,
+            "strategyId": None,
+            "backtestId": None,
+            "recordId": _as_str(run_detail.get("id")) or None,
+            "requestId": None,
+            "userId": None,
+            "startedAt": started_at.isoformat(),
+            "finishedAt": started_at.isoformat(),
+            "durationMs": 0,
+            "stepCount": 3,
+            "successStepCount": 3,
+            "failedStepCount": 0,
+            "skippedStepCount": 0,
+            "unknownStepCount": 0,
+            "metadata": _sanitize_metadata({
+                "universeSize": coverage.get("input_universe_size"),
+                "matchedCount": run_detail.get("shortlist_size"),
+                "providersUsed": provider_list,
+                "providerFailureCount": provider_failure_count,
+            }),
+        }
         summary = self._merge_summary(
             {
+                "business_event": business_event,
                 "scanner_run": {
                     "scanner_run_id": run_detail.get("id"),
                     "market": run_detail.get("market"),
@@ -729,7 +1092,7 @@ class ExecutionLogService:
                     "providers_used": provider_list,
                     "provider_diagnostics": providers,
                     "fallback_count": int(providers.get("fallback_count") or 0),
-                    "provider_failure_count": int(providers.get("provider_failure_count") or 0),
+                    "provider_failure_count": provider_failure_count,
                     "warning_summary": list(providers.get("provider_warnings") or []),
                 }
             },
@@ -745,8 +1108,8 @@ class ExecutionLogService:
             session_id=session_id,
             task_id="scanner_run",
             code=str(run_detail.get("market") or "").strip() or None,
-            name="Scanner run",
-            overall_status=str(run_detail.get("status") or "completed"),
+            name=business_event["event"],
+            overall_status=business_event["status"],
             truth_level="actual",
             summary=summary,
             started_at=started_at,
@@ -755,8 +1118,8 @@ class ExecutionLogService:
             session_id=session_id,
             phase="scanner",
             step="scanner_run",
-            target=str(run_detail.get("profile_label") or run_detail.get("profile") or "scanner"),
-            status=str(run_detail.get("status") or "completed"),
+            target=profile_label,
+            status=business_event["status"],
             truth_level="actual",
             message=coverage_summary,
             detail={
@@ -769,14 +1132,31 @@ class ExecutionLogService:
                 "coverage": coverage,
                 "providers_used": provider_list,
                 "fallback_count": int(providers.get("fallback_count") or 0),
-                "provider_failure_count": int(providers.get("provider_failure_count") or 0),
+                "provider_failure_count": provider_failure_count,
                 "warnings": list(providers.get("provider_warnings") or []),
             },
             event_at=started_at,
         )
+        for step_name, label, metadata in [
+            ("load_universe", "加载股票池", {"universeSize": coverage.get("input_universe_size")}),
+            ("run_screen", "执行扫描", {"matchedCount": run_detail.get("shortlist_size")}),
+            ("save_scan_result", "保存扫描结果", {"scannerRunId": run_detail.get("id")}),
+        ]:
+            self._append_business_step(
+                execution_id=session_id,
+                step_id=uuid.uuid4().hex,
+                name=step_name,
+                label=label,
+                category="compute" if step_name != "save_scan_result" else "database",
+                status="success",
+                critical=step_name != "save_scan_result",
+                metadata=metadata,
+                started_at=started_at,
+                finished_at=started_at,
+            )
         self.db.finalize_execution_log_session(
             session_id=session_id,
-            overall_status=str(run_detail.get("status") or "completed"),
+            overall_status=business_event["status"],
             truth_level="actual",
             summary=summary,
             ended_at=started_at,
@@ -950,6 +1330,151 @@ class ExecutionLogService:
             ended_at=started_at,
         )
         return session_id
+
+    def _business_summary_for_execution(self, execution_id: str) -> Dict[str, Any]:
+        detail = self.db.get_execution_log_session_detail(execution_id) or {}
+        summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else {}
+        business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
+        return business
+
+    def _append_business_step(
+        self,
+        *,
+        execution_id: str,
+        step_id: str,
+        name: str,
+        label: Optional[str] = None,
+        category: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        status: str,
+        reason: Optional[str] = None,
+        message: Optional[str] = None,
+        error_type: Optional[str] = None,
+        critical: bool = False,
+        metadata: Optional[Dict[str, Any]] = None,
+        record_id: Optional[str] = None,
+        started_at: Optional[datetime] = None,
+        finished_at: Optional[datetime] = None,
+        duration_ms: Optional[float] = None,
+    ) -> None:
+        now = datetime.now()
+        business = self._business_summary_for_execution(execution_id)
+        step_started = started_at or now
+        step_finished = finished_at if finished_at is not None else (now if status != "running" else None)
+        normalized_status = _normalize_business_status(status)
+        normalized_category = _as_str(category) or _data_phase(_as_str(name).replace("fetch_", "")) if _as_str(name).startswith("fetch_") else _as_str(category)
+        computed_duration = duration_ms
+        if computed_duration is None and step_finished is not None:
+            computed_duration = _duration_ms(step_started.isoformat(), step_finished.isoformat())
+        endpoint_text = _sanitize_url(_as_str(endpoint) or None)
+        detail = {
+            "category": business.get("category") or _normalize_log_category(category),
+            "event_name": "BusinessExecutionStep",
+            "business_step": True,
+            "id": step_id,
+            "executionId": execution_id,
+            "name": _as_str(name),
+            "label": _as_str(label) or _ANALYSIS_STEP_LABELS.get(_as_str(name), _as_str(name)),
+            "stepCategory": _as_str(normalized_category) or None,
+            "provider": _as_str(provider) or None,
+            "model": _as_str(model) or None,
+            "endpoint": endpoint_text,
+            "apiPath": endpoint_text,
+            "status": normalized_status,
+            "reason": _as_str(reason) or None,
+            "message": _masked_message(message) if message else None,
+            "startedAt": step_started.isoformat(),
+            "finishedAt": step_finished.isoformat() if step_finished else None,
+            "durationMs": computed_duration,
+            "errorType": _as_str(error_type) or None,
+            "errorMessage": _masked_message(message) if normalized_status == "failed" and message else None,
+            "recordId": _as_str(record_id) or None,
+            "critical": bool(critical),
+            "subject": business.get("subject"),
+            "symbol": business.get("symbol"),
+            "metadata": _sanitize_metadata(metadata or {}),
+            "outcome": _outcome_from_status(normalized_status),
+        }
+        self.db.append_execution_log_event(
+            session_id=execution_id,
+            phase=business.get("category") or detail["category"] or "system",
+            step=_as_str(name),
+            target=_as_str(provider) or _as_str(model) or _as_str(endpoint) or _as_str(name),
+            status=normalized_status,
+            truth_level="actual",
+            message=detail["message"] or detail["label"],
+            error_code=_as_str(error_type) or None,
+            detail=detail,
+            event_at=step_finished or step_started,
+        )
+
+    def _append_business_step_result(
+        self,
+        *,
+        execution_id: str,
+        step_key_or_id: str,
+        status: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        message: Optional[str] = None,
+        error_type: Optional[str] = None,
+        reason: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        endpoint: Optional[str] = None,
+    ) -> None:
+        detail = self.db.get_execution_log_session_detail(execution_id) or {}
+        steps = self._extract_business_steps(detail.get("events") if isinstance(detail.get("events"), list) else [])
+        step_name = _as_str(step_key_or_id)
+        prior = None
+        for step in reversed(steps):
+            if _as_str(step.get("id")) == step_name:
+                prior = step
+                break
+            if (
+                _as_str(step.get("name")) == step_name
+                and (not provider or _as_str(step.get("provider")) == _as_str(provider))
+                and (not model or _as_str(step.get("model")) == _as_str(model))
+                and (not endpoint or _as_str(step.get("endpoint") or step.get("apiPath")) == _as_str(endpoint))
+                and step.get("status") == "running"
+            ):
+                prior = step
+                break
+        if prior is None:
+            prior = {
+                "id": uuid.uuid4().hex,
+                "name": step_name,
+                "label": _ANALYSIS_STEP_LABELS.get(step_name, step_name),
+                "provider": provider,
+                "model": model,
+                "endpoint": endpoint,
+                "critical": False,
+                "metadata": {},
+            }
+        merged_metadata = {
+            **(prior.get("metadata") if isinstance(prior.get("metadata"), dict) else {}),
+            **(metadata or {}),
+        }
+        self._append_business_step(
+            execution_id=execution_id,
+            step_id=_as_str(prior.get("id")) or uuid.uuid4().hex,
+            name=_as_str(prior.get("name") or step_name),
+            label=_as_str(prior.get("label")) or None,
+            category=_as_str(prior.get("category") or prior.get("stepCategory")) or None,
+            provider=_as_str(provider or prior.get("provider")) or None,
+            model=_as_str(model or prior.get("model")) or None,
+            endpoint=_as_str(endpoint or prior.get("endpoint") or prior.get("apiPath")) or None,
+            status=status,
+            reason=reason,
+            message=message,
+            error_type=error_type,
+            critical=bool(prior.get("critical")),
+            metadata=merged_metadata,
+            record_id=_as_str(prior.get("recordId")) or None,
+            started_at=_parse_iso_datetime(prior.get("startedAt")) or None,
+            finished_at=datetime.now(),
+        )
 
     def _append_configured_events(self, session_id: str, configured: Dict[str, Any]) -> None:
         ai = configured.get("ai") if isinstance(configured, dict) else {}
@@ -1892,8 +2417,9 @@ class ExecutionLogService:
         }
 
     @staticmethod
-    def _extract_business_steps(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        steps: List[Dict[str, Any]] = []
+    def _extract_business_steps(events: List[Dict[str, Any]], *, execution_finished: bool = False) -> List[Dict[str, Any]]:
+        merged: Dict[Tuple[str, str, str, str, str, str], Dict[str, Any]] = {}
+        order: List[Tuple[str, str, str, str, str, str]] = []
         for event in events or []:
             if not isinstance(event, dict):
                 continue
@@ -1901,24 +2427,56 @@ class ExecutionLogService:
             if not bool(detail.get("business_step")):
                 continue
             status = _normalize_business_status(detail.get("status") or event.get("status"))
-            steps.append(
-                {
-                    "name": _as_str(detail.get("name") or event.get("step")),
-                    "label": _as_str(detail.get("label")) or _ANALYSIS_STEP_LABELS.get(_as_str(event.get("step")), _as_str(event.get("step"))),
-                    "provider": _as_str(detail.get("provider")) or None,
-                    "apiPath": _as_str(detail.get("apiPath")) or None,
-                    "status": status,
-                    "startedAt": detail.get("startedAt") or event.get("event_at"),
-                    "finishedAt": detail.get("finishedAt") or event.get("event_at"),
-                    "durationMs": detail.get("durationMs"),
-                    "errorType": _as_str(detail.get("errorType") or event.get("error_code")) or None,
-                    "errorMessage": _masked_message(detail.get("errorMessage") or event.get("message")) if status == "failed" else None,
-                    "recordId": _as_str(detail.get("recordId")) or None,
-                    "critical": bool(detail.get("critical")),
-                    "metadata": detail.get("metadata") if isinstance(detail.get("metadata"), dict) else {},
-                }
+            name = _as_str(detail.get("name") or event.get("step"))
+            key_status = "skipped" if status == "skipped" else "executed"
+            key = (
+                name,
+                _as_str(detail.get("provider")),
+                _as_str(detail.get("model")),
+                _as_str(detail.get("endpoint") or detail.get("apiPath")),
+                _as_str(detail.get("subject") or detail.get("symbol")),
+                key_status,
             )
-        return steps
+            current = {
+                "id": _as_str(detail.get("id")) or None,
+                "executionId": _as_str(detail.get("executionId")) or None,
+                "name": name,
+                "label": _as_str(detail.get("label")) or _ANALYSIS_STEP_LABELS.get(name, name),
+                "category": _as_str(detail.get("stepCategory") or detail.get("category")) or None,
+                "provider": _as_str(detail.get("provider")) or None,
+                "model": _as_str(detail.get("model")) or None,
+                "endpoint": _sanitize_url(_as_str(detail.get("endpoint") or detail.get("apiPath")) or None),
+                "apiPath": _sanitize_url(_as_str(detail.get("apiPath") or detail.get("endpoint")) or None),
+                "status": "unknown" if execution_finished and status == "running" else status,
+                "reason": _as_str(detail.get("reason")) or None,
+                "message": _masked_message(detail.get("message") or event.get("message")) if (detail.get("message") or event.get("message")) else None,
+                "startedAt": detail.get("startedAt") or event.get("event_at"),
+                "finishedAt": detail.get("finishedAt") or (event.get("event_at") if status != "running" else None),
+                "durationMs": detail.get("durationMs"),
+                "errorType": _as_str(detail.get("errorType") or event.get("error_code")) or None,
+                "errorMessage": _masked_message(detail.get("errorMessage") or event.get("message")) if status == "failed" else None,
+                "recordId": _as_str(detail.get("recordId")) or None,
+                "critical": bool(detail.get("critical")),
+                "metadata": _sanitize_metadata(detail.get("metadata") if isinstance(detail.get("metadata"), dict) else {}),
+            }
+            if key not in merged:
+                merged[key] = current
+                order.append(key)
+                continue
+            previous = merged[key]
+            attempts = int(previous.get("attempts") or 1) + 1
+            merged[key] = {
+                **previous,
+                **{k: v for k, v in current.items() if v not in (None, "")},
+                "status": current["status"],
+                "startedAt": previous.get("startedAt") or current.get("startedAt"),
+                "metadata": {
+                    **(previous.get("metadata") if isinstance(previous.get("metadata"), dict) else {}),
+                    **(current.get("metadata") if isinstance(current.get("metadata"), dict) else {}),
+                    "attempts": attempts,
+                },
+            }
+        return [merged[key] for key in order]
 
     @staticmethod
     def _infer_analysis_status(steps: List[Dict[str, Any]], *, record_id: Optional[str] = None) -> str:
@@ -1932,6 +2490,19 @@ class ExecutionLogService:
         has_record = bool(_as_str(record_id) or any(_as_str(step.get("recordId")) for step in steps))
         if critical_failed:
             return "partial" if has_record and not any(_as_str(step.get("name")) == "ai_analysis" for step in critical_failed) else "failed"
+        if failed_steps:
+            return "partial"
+        if any(step.get("status") == "running" for step in steps):
+            return "running"
+        return "success"
+
+    @staticmethod
+    def _infer_business_status(steps: List[Dict[str, Any]]) -> str:
+        if not steps:
+            return "success"
+        failed_steps = [step for step in steps if step.get("status") == "failed"]
+        if any(bool(step.get("critical")) for step in failed_steps):
+            return "failed"
         if failed_steps:
             return "partial"
         if any(step.get("status") == "running" for step in steps):
@@ -1986,7 +2557,7 @@ class ExecutionLogService:
 
     def _build_business_steps_from_session(self, detail: Dict[str, Any]) -> List[Dict[str, Any]]:
         events = detail.get("events") if isinstance(detail.get("events"), list) else []
-        explicit = self._extract_business_steps(events)
+        explicit = self._extract_business_steps(events, execution_finished=bool(detail.get("ended_at")))
         if explicit:
             return explicit
         derived: List[Dict[str, Any]] = []
@@ -2016,6 +2587,8 @@ class ExecutionLogService:
         steps = self._build_business_steps_from_session(detail)
         failed_count = sum(1 for step in steps if step.get("status") == "failed")
         success_count = sum(1 for step in steps if step.get("status") == "success")
+        skipped_count = sum(1 for step in steps if step.get("status") == "skipped")
+        unknown_count = sum(1 for step in steps if step.get("status") == "unknown")
         record_id = _as_str(business.get("recordId")) or _as_str(row.get("analysis_history_id")) or None
         raw_status = _normalize_business_status(business.get("status") or row.get("overall_status"))
         status = raw_status
@@ -2038,11 +2611,16 @@ class ExecutionLogService:
             "id": _as_str(business.get("id") or row.get("session_id")),
             "event": event_name,
             "category": category,
+            "type": _as_str(business.get("type")) or ("stock_analysis" if category == "analysis" else _as_str(row.get("task_id")) or category),
             "status": status,
             "summary": summary_text,
+            "subject": _as_str(business.get("subject") or symbol or event_name) or None,
             "symbol": symbol,
             "market": business.get("market"),
             "analysisType": business.get("analysisType"),
+            "strategyId": business.get("strategyId"),
+            "scannerId": business.get("scannerId"),
+            "backtestId": business.get("backtestId"),
             "userId": business.get("userId") or meta.get("actor_user_id"),
             "requestId": business.get("requestId") or row.get("query_id"),
             "recordId": record_id,
@@ -2052,7 +2630,9 @@ class ExecutionLogService:
             "stepCount": int(business.get("stepCount") or len(steps)),
             "successStepCount": int(business.get("successStepCount") or success_count),
             "failedStepCount": int(business.get("failedStepCount") or failed_count),
-            "metadata": business.get("metadata") if isinstance(business.get("metadata"), dict) else {},
+            "skippedStepCount": int(business.get("skippedStepCount") or skipped_count),
+            "unknownStepCount": int(business.get("unknownStepCount") or unknown_count),
+            "metadata": _sanitize_metadata(business.get("metadata") if isinstance(business.get("metadata"), dict) else {}),
         }
         if include_steps:
             payload["steps"] = [
@@ -2065,7 +2645,14 @@ class ExecutionLogService:
         self,
         *,
         category: Optional[str] = None,
+        type: Optional[str] = None,
+        subject: Optional[str] = None,
         symbol: Optional[str] = None,
+        scanner_id: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+        backtest_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         status: Optional[str] = None,
         query: Optional[str] = None,
         since: Optional[str] = None,
@@ -2082,6 +2669,13 @@ class ExecutionLogService:
             offset=0,
         )
         category_filter = _normalize_log_category(category, "") if category else None
+        type_filter = _as_str(type)
+        subject_filter = _as_str(subject).lower()
+        scanner_filter = _as_str(scanner_id)
+        strategy_filter = _as_str(strategy_id)
+        backtest_filter = _as_str(backtest_id)
+        request_filter = _as_str(request_id)
+        user_filter = _as_str(user_id)
         status_filter = _normalize_business_status(status) if status else None
         query_text = _as_str(query).lower()
         items: List[Dict[str, Any]] = []
@@ -2093,10 +2687,24 @@ class ExecutionLogService:
                 continue
             if status_filter and event.get("status") != status_filter:
                 continue
+            if type_filter and event.get("type") != type_filter:
+                continue
+            if subject_filter and subject_filter not in _as_str(event.get("subject")).lower():
+                continue
+            if scanner_filter and event.get("scannerId") != scanner_filter:
+                continue
+            if strategy_filter and event.get("strategyId") != strategy_filter:
+                continue
+            if backtest_filter and event.get("backtestId") != backtest_filter:
+                continue
+            if request_filter and event.get("requestId") != request_filter:
+                continue
+            if user_filter and event.get("userId") != user_filter:
+                continue
             if query_text:
                 haystack = " ".join(
                     _as_str(event.get(key))
-                    for key in ("event", "summary", "symbol", "market", "analysisType", "requestId", "recordId")
+                    for key in ("event", "summary", "subject", "symbol", "market", "analysisType", "type", "requestId", "recordId", "scannerId", "strategyId", "backtestId")
                 ).lower()
                 if query_text not in haystack:
                     continue

@@ -8,24 +8,26 @@ import { useI18n } from '../contexts/UiLanguageContext';
 type AdminLogsLanguage = 'zh' | 'en';
 type TranslateFn = (key: string, params?: Record<string, string | number | undefined>) => string;
 type OperationType = 'single_stock_analysis' | 'market_scan' | 'backtest' | 'system_operation' | 'other';
-type NormalizedStatus = 'success' | 'partial' | 'failed' | 'running' | 'unknown';
+type NormalizedStatus = 'success' | 'partial' | 'failed' | 'skipped' | 'running' | 'unknown' | 'cancelled';
 type LogLevel = 'DEBUG' | 'INFO' | 'NOTICE' | 'WARNING' | 'ERROR' | 'CRITICAL';
 type LevelFilter = 'all' | 'warning_plus' | 'error_plus' | LogLevel;
-type LogCategory = 'system' | 'auth' | 'market' | 'cache' | 'data_source' | 'analysis' | 'trading' | 'scheduler' | 'api' | 'security';
-type LogsTab = 'business' | 'analysis' | 'data_source' | 'security' | 'raw';
+type LogCategory = 'system' | 'auth' | 'market' | 'cache' | 'data_source' | 'analysis' | 'scanner' | 'backtest' | 'trading' | 'portfolio' | 'scheduler' | 'notification' | 'api' | 'security';
+type LogsTab = 'business' | 'analysis' | 'scanner' | 'backtest' | 'data_source' | 'security' | 'raw';
 
 const STATUS_CLASS: Record<NormalizedStatus, string> = {
   success: 'theme-log-status theme-log-status--success',
   partial: 'theme-log-status theme-log-status--warning',
   failed: 'theme-log-status theme-log-status--danger',
+  skipped: 'theme-log-status',
   running: 'theme-log-status theme-log-status--running',
   unknown: 'theme-log-status',
+  cancelled: 'theme-log-status',
 };
 
 const LEVEL_FILTER_OPTIONS: LevelFilter[] = ['all', 'warning_plus', 'error_plus', 'DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
-const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'trading', 'scheduler', 'api', 'security'];
+const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'scanner', 'backtest', 'trading', 'portfolio', 'scheduler', 'notification', 'api', 'security'];
 const SINCE_OPTIONS = ['15m', '1h', '24h', '7d'] as const;
-const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'failed', 'running'] as const;
+const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'failed', 'skipped', 'running', 'unknown', 'cancelled'] as const;
 const PAGE_SIZE = 20;
 
 const LEVEL_CLASS: Record<LogLevel, string> = {
@@ -249,7 +251,9 @@ function normalizeStatus(value?: string | null): NormalizedStatus {
   if (['success', 'succeeded', 'completed', 'ok', '成功', '已完成'].includes(normalized)) return 'success';
   if (['partial', 'partial_success', 'partial fail', 'warning', 'fallback', 'switched_to_fallback', '部分失败', '部分成功'].includes(normalized)) return 'partial';
   if (['fail', 'failed', 'error', 'failed_runtime', 'invalid_response', '失败'].includes(normalized)) return 'failed';
+  if (['skipped', 'not_configured', '跳过', '已跳过'].includes(normalized)) return 'skipped';
   if (['running', 'queued', 'pending', '运行中'].includes(normalized)) return 'running';
+  if (['cancelled', 'canceled', '已取消'].includes(normalized)) return 'cancelled';
   return 'unknown';
 }
 
@@ -286,8 +290,10 @@ function statusLabel(status: NormalizedStatus, locale: AdminLogsLanguage): strin
     success: { zh: '成功', en: 'Success' },
     partial: { zh: '部分失败', en: 'Partial failure' },
     failed: { zh: '失败', en: 'Failed' },
+    skipped: { zh: '跳过', en: 'Skipped' },
     running: { zh: '运行中', en: 'Running' },
-    unknown: { zh: '未知', en: 'Unknown' },
+    unknown: { zh: '未确认', en: 'Unknown' },
+    cancelled: { zh: '已取消', en: 'Cancelled' },
   };
   return labels[status][locale];
 }
@@ -322,8 +328,12 @@ function categoryLabel(value: string | null | undefined, locale: AdminLogsLangua
     cache: { zh: 'cache', en: 'cache' },
     data_source: { zh: 'data_source', en: 'data_source' },
     analysis: { zh: 'analysis', en: 'analysis' },
+    scanner: { zh: 'scanner', en: 'scanner' },
+    backtest: { zh: 'backtest', en: 'backtest' },
     trading: { zh: 'trading', en: 'trading' },
+    portfolio: { zh: 'portfolio', en: 'portfolio' },
     scheduler: { zh: 'scheduler', en: 'scheduler' },
+    notification: { zh: 'notification', en: 'notification' },
     api: { zh: 'api', en: 'api' },
     security: { zh: 'security', en: 'security' },
   };
@@ -396,7 +406,10 @@ function statusFilterLabel(value: (typeof STATUS_FILTER_OPTIONS)[number], locale
     success: { zh: '成功', en: 'Success' },
     partial: { zh: '部分失败', en: 'Partial failure' },
     failed: { zh: '失败', en: 'Failed' },
+    skipped: { zh: '跳过', en: 'Skipped' },
     running: { zh: '运行中', en: 'Running' },
+    unknown: { zh: '未确认', en: 'Unknown' },
+    cancelled: { zh: '已取消', en: 'Cancelled' },
   };
   return labels[value][locale];
 }
@@ -405,11 +418,41 @@ function tabLabel(value: LogsTab, locale: AdminLogsLanguage): string {
   const labels: Record<LogsTab, { zh: string; en: string }> = {
     business: { zh: '业务事件', en: 'Business events' },
     analysis: { zh: '股票分析', en: 'Stock analysis' },
-    data_source: { zh: '数据源问题', en: 'Data source issues' },
+    scanner: { zh: '扫描器', en: 'Scanner' },
+    backtest: { zh: '回测', en: 'Backtest' },
+    data_source: { zh: '数据源', en: 'Data sources' },
     security: { zh: '安全事件', en: 'Security events' },
     raw: { zh: '原始日志', en: 'Raw logs' },
   };
   return labels[value][locale];
+}
+
+function skippedReasonLabel(value: unknown, locale: AdminLogsLanguage): string {
+  const key = String(value || '').trim();
+  const labels: Record<string, { zh: string; en: string }> = {
+    previous_model_succeeded: { zh: '主模型已成功，无需调用备用模型', en: 'Primary model succeeded; backup model was not called' },
+    previous_provider_succeeded: { zh: '主数据源已成功，无需调用备用源', en: 'Primary provider succeeded; backup provider was not called' },
+    missing_api_key: { zh: '未配置 API Key，已跳过', en: 'API key not configured; skipped' },
+    circuit_open: { zh: '数据源暂时不可用，已跳过', en: 'Provider circuit is open; skipped' },
+    unsupported_market: { zh: '当前市场不适用，已跳过', en: 'Unsupported market; skipped' },
+    disabled_by_strategy: { zh: '策略未启用，已跳过', en: 'Disabled by strategy; skipped' },
+  };
+  return labels[key]?.[locale] || key;
+}
+
+function sanitizeDisplayValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => sanitizeDisplayValue(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+      const normalized = key.toLowerCase().replace(/[-\s]/g, '_');
+      if (/api_?key|token|authorization|secret|password/.test(normalized)) return [key, '***'];
+      return [key, sanitizeDisplayValue(item)];
+    }));
+  }
+  if (typeof value === 'string') {
+    return value.replace(/([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+/gi, '$1***');
+  }
+  return value;
 }
 
 function detailForBusinessEvent(event: BusinessEvent): BusinessEventDetail {
@@ -426,7 +469,7 @@ function JsonBlock({ value }: { value: unknown }) {
   }
   return (
     <pre className="mt-2 max-h-44 overflow-auto rounded-xl border border-white/5 bg-black/30 p-3 text-[11px] leading-5 text-white/68">
-      {JSON.stringify(value, null, 2)}
+      {JSON.stringify(sanitizeDisplayValue(value), null, 2)}
     </pre>
   );
 }
@@ -522,7 +565,7 @@ const AdminLogsPage: React.FC = () => {
     setError(null);
     try {
       if (activeTab !== 'raw') {
-        const category = activeTab === 'analysis' ? 'analysis' : activeTab === 'data_source' ? 'data_source' : activeTab === 'security' ? 'security' : undefined;
+        const category = activeTab === 'business' ? undefined : activeTab;
         const response: BusinessEventListResponse = await adminLogsApi.listBusinessEvents({
           category,
           symbol: activeTab === 'analysis' ? searchQuery.trim() || undefined : undefined,
@@ -699,7 +742,7 @@ const AdminLogsPage: React.FC = () => {
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
               <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-4 flex max-w-full gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
-                {(['business', 'analysis', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => (
+                {(['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -849,29 +892,31 @@ const AdminLogsPage: React.FC = () => {
           ) : (
             <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
               <div data-testid="business-events-table-shell" className="overflow-x-auto">
-                <div className="min-w-[900px]">
-                  <div className="grid grid-cols-[9rem_minmax(6rem,0.75fr)_7rem_minmax(13rem,1.4fr)_6.5rem_5.5rem_6.5rem_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+                <div className="min-w-[1120px]">
+                  <div className="grid grid-cols-[9rem_minmax(7rem,0.8fr)_6.5rem_7.5rem_minmax(13rem,1.4fr)_6.5rem_5.5rem_7rem_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
                     <div>{locale === 'zh' ? '事件' : 'Event'}</div>
                     <div>{locale === 'zh' ? '类别' : 'Category'}</div>
+                    <div>{locale === 'zh' ? '类型' : 'Type'}</div>
                     <div>{locale === 'zh' ? '简介' : 'Summary'}</div>
                     <div>{locale === 'zh' ? '状态' : 'Status'}</div>
                     <div>{locale === 'zh' ? '耗时' : 'Duration'}</div>
-                    <div>{locale === 'zh' ? '失败步骤' : 'Failed steps'}</div>
+                    <div>{locale === 'zh' ? '成功/跳过/失败' : 'Ok/skip/fail'}</div>
                     <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
                   <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
                     {businessEvents.map((item) => {
                       const status = normalizeStatus(item.status);
                       return (
-                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[9rem_minmax(6rem,0.75fr)_7rem_minmax(13rem,1.4fr)_6.5rem_5.5rem_6.5rem_6rem] items-center gap-3 px-3 py-2.5">
+                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[9rem_minmax(7rem,0.8fr)_6.5rem_7.5rem_minmax(13rem,1.4fr)_6.5rem_5.5rem_7rem_6rem] items-center gap-3 px-3 py-2.5">
                           <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
                           <p className="min-w-0 truncate text-sm font-semibold text-foreground">{text(item.event || item.symbol)}</p>
                           <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-secondary-text">{categoryLabel(item.category, locale)}</span>
+                          <p className="min-w-0 truncate text-xs text-muted-text" title={text(item.type)}>{text(item.type)}</p>
                           <p className="min-w-0 truncate text-xs text-secondary-text" title={text(item.summary)}>{text(item.summary)}</p>
                           <span className={`${STATUS_CLASS[status]} w-fit`}>{statusLabel(status, locale)}</span>
                           <p className="text-xs text-muted-text">{formatDuration(item.durationMs)}</p>
-                          <p className="text-xs text-muted-text">{item.failedStepCount || 0}/{item.stepCount || 0}</p>
+                          <p className="text-xs text-muted-text">{item.successStepCount || 0}/{item.skippedStepCount || 0}/{item.failedStepCount || 0}</p>
                           <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
                             {t('adminLogs.viewDetails')}
                           </button>
@@ -959,17 +1004,24 @@ const AdminLogsPage: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">A</span>
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
                     <span className={`${STATUS_CLASS[drawerStatus]}`}>{statusLabel(drawerStatus, locale)}</span>
                   </div>
                   <h2 className="break-words text-2xl font-semibold text-foreground">{text(businessDetail.event || businessDetail.symbol)}</h2>
-                  <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {formatDateTime(businessDetail.startedAt, locale)}</p>
+                  <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {categoryLabel(businessDetail.category, locale)} · {text(businessDetail.type)} · {formatDateTime(businessDetail.startedAt, locale)}</p>
                 </div>
                 <div className="grid gap-2 text-xs text-secondary-text">
+                  <span>{locale === 'zh' ? '主体' : 'Subject'}: <span className="text-foreground">{text(businessDetail.subject || businessDetail.symbol)}</span></span>
                   <span>recordId: <span className="text-foreground">{text(businessDetail.recordId)}</span></span>
+                  <span>scannerId: <span className="text-foreground">{text(businessDetail.scannerId)}</span></span>
+                  <span>strategyId/backtestId: <span className="text-foreground">{text([businessDetail.strategyId, businessDetail.backtestId].filter(Boolean).join(' / '))}</span></span>
                   <span>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></span>
-                  <span>{locale === 'zh' ? '步骤' : 'Steps'}: <span className="text-foreground">{businessDetail.successStepCount}/{businessDetail.stepCount} success</span></span>
+                  <span>{locale === 'zh' ? '成功/跳过/失败' : 'Ok/skip/fail'}: <span className="text-foreground">{businessDetail.successStepCount || 0}/{businessDetail.skippedStepCount || 0}/{businessDetail.failedStepCount || 0}</span></span>
                 </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">metadata</p>
+                <JsonBlock value={businessDetail.metadata || {}} />
               </div>
             </section>
 
@@ -984,7 +1036,7 @@ const AdminLogsPage: React.FC = () => {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <p className="font-medium text-foreground">{text(step.label || step.name)} · {formatDuration(step.durationMs)}</p>
-                            <p className="mt-1 text-muted-text">{text(step.provider)}{step.apiPath ? ` · ${step.apiPath}` : ''}</p>
+                            <p className="mt-1 text-muted-text">{[step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · ') || '--'}</p>
                           </div>
                           <span className={STATUS_CLASS[status]}>{statusLabel(status, locale)}</span>
                         </div>
@@ -992,8 +1044,9 @@ const AdminLogsPage: React.FC = () => {
                       <div className="mt-3 grid gap-2 text-secondary-text md:grid-cols-2">
                         <p>{locale === 'zh' ? '开始' : 'Started'}: <span className="text-foreground">{formatDateTime(step.startedAt, locale)}</span></p>
                         <p>{locale === 'zh' ? '结束' : 'Finished'}: <span className="text-foreground">{formatDateTime(step.finishedAt, locale)}</span></p>
+                        <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(status === 'skipped' ? skippedReasonLabel(step.reason, locale) : step.reason)}</span></p>
                         <p>{locale === 'zh' ? '错误类型' : 'Error type'}: <span className="text-foreground">{text(step.errorType)}</span></p>
-                        <p className="md:col-span-2">{locale === 'zh' ? '失败原因' : 'Failure reason'}: <span className="text-foreground">{text(step.errorMessage)}</span></p>
+                        <p className="md:col-span-2">{locale === 'zh' ? '消息' : 'Message'}: <span className="text-foreground">{text(status === 'skipped' ? (step.message || skippedReasonLabel(step.reason, locale)) : (step.errorMessage || step.message))}</span></p>
                         <div className="md:col-span-2">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">metadata</p>
                           <JsonBlock value={step.metadata || {}} />

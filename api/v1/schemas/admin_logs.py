@@ -62,11 +62,18 @@ class ExecutionLogSessionListResponse(BaseModel):
 
 
 class ExecutionStepModel(BaseModel):
+    id: Optional[str] = None
+    executionId: Optional[str] = None
     name: str
     label: str
+    category: Optional[str] = None
     provider: Optional[str] = None
+    model: Optional[str] = None
+    endpoint: Optional[str] = None
     apiPath: Optional[str] = None
     status: str
+    reason: Optional[str] = None
+    message: Optional[str] = None
     startedAt: Optional[str] = None
     finishedAt: Optional[str] = None
     durationMs: Optional[float] = None
@@ -80,11 +87,16 @@ class BusinessEventModel(BaseModel):
     id: str
     event: str
     category: str
+    type: Optional[str] = None
     status: str
     summary: str
+    subject: Optional[str] = None
     symbol: Optional[str] = None
     market: Optional[str] = None
     analysisType: Optional[str] = None
+    strategyId: Optional[str] = None
+    scannerId: Optional[str] = None
+    backtestId: Optional[str] = None
     userId: Optional[str] = None
     requestId: Optional[str] = None
     recordId: Optional[str] = None
@@ -94,6 +106,8 @@ class BusinessEventModel(BaseModel):
     stepCount: int = 0
     successStepCount: int = 0
     failedStepCount: int = 0
+    skippedStepCount: int = 0
+    unknownStepCount: int = 0
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
