@@ -59,3 +59,51 @@ class ExecutionLogSessionListResponse(BaseModel):
     total: int
     items: List[ExecutionLogSessionSummaryModel] = Field(default_factory=list)
     summary: ExecutionLogSummaryModel = Field(default_factory=ExecutionLogSummaryModel)
+
+
+class ExecutionStepModel(BaseModel):
+    name: str
+    label: str
+    provider: Optional[str] = None
+    apiPath: Optional[str] = None
+    status: str
+    startedAt: Optional[str] = None
+    finishedAt: Optional[str] = None
+    durationMs: Optional[float] = None
+    errorType: Optional[str] = None
+    errorMessage: Optional[str] = None
+    recordId: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class BusinessEventModel(BaseModel):
+    id: str
+    event: str
+    category: str
+    status: str
+    summary: str
+    symbol: Optional[str] = None
+    market: Optional[str] = None
+    analysisType: Optional[str] = None
+    userId: Optional[str] = None
+    requestId: Optional[str] = None
+    recordId: Optional[str] = None
+    startedAt: Optional[str] = None
+    finishedAt: Optional[str] = None
+    durationMs: Optional[float] = None
+    stepCount: int = 0
+    successStepCount: int = 0
+    failedStepCount: int = 0
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class BusinessEventDetailModel(BusinessEventModel):
+    steps: List[ExecutionStepModel] = Field(default_factory=list)
+
+
+class BusinessEventListResponse(BaseModel):
+    items: List[BusinessEventModel] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+    hasMore: bool = False

@@ -193,6 +193,111 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertTrue(any("Fallback" in item["label"] for item in operation_detail["timeline"]))
         self.assertTrue(any("Timeout error" in item["message"] for item in operation_detail["diagnostics"]))
 
+    def test_analysis_execution_groups_steps_and_finishes_partial(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_analysis_execution(
+                symbol="TSLA",
+                market="US",
+                analysis_type="recent",
+                user_id="user-1",
+                request_id="req-tsla",
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="fetch_quote",
+                label="获取行情",
+                provider="yahoo",
+                status="success",
+                duration_ms=320,
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="fetch_news",
+                label="获取新闻",
+                provider="newsapi",
+                status="failed",
+                duration_ms=3000,
+                error_type="TimeoutError",
+                error_message="News API timeout after 3000ms",
+                critical=False,
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="ai_analysis",
+                label="AI 分析",
+                provider="deepseek",
+                status="success",
+                duration_ms=8600,
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="save_record",
+                label="保存分析记录",
+                status="success",
+                record_id="history-1",
+            )
+            event = service.finish_analysis_execution(
+                execution_id=execution_id,
+                record_id="history-1",
+            )
+            items, total = service.list_business_events(category="analysis", symbol="TSLA", status="partial", query="TSLA")
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertEqual(event["status"], "partial")
+        self.assertEqual(event["event"], "TSLA")
+        self.assertEqual(event["category"], "analysis")
+        self.assertEqual(event["summary"], "用户分析 TSLA，部分数据源失败")
+        self.assertEqual(event["stepCount"], 4)
+        self.assertEqual(event["failedStepCount"], 1)
+        self.assertEqual(event["recordId"], "history-1")
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["id"], execution_id)
+        self.assertEqual(detail["steps"][1]["name"], "fetch_news")
+        self.assertEqual(detail["steps"][1]["errorMessage"], "News API timeout after 3000ms")
+
+    def test_analysis_execution_finishes_failed_when_ai_fails(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_analysis_execution(symbol="NVDA", market="US")
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="fetch_quote",
+                label="获取行情",
+                status="success",
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="ai_analysis",
+                label="AI 分析",
+                status="failed",
+                error_type="RuntimeError",
+                error_message="LLM unavailable",
+                critical=True,
+            )
+            event = service.finish_analysis_execution(execution_id=execution_id)
+            items, total = service.list_business_events(category="analysis", symbol="NVDA", status="failed")
+
+        self.assertEqual(event["status"], "failed")
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["failedStepCount"], 1)
+
+    def test_raw_system_logs_do_not_pollute_analysis_business_events(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            service.record_api_request(
+                route="/api/v1/market-overview/indices",
+                method="GET",
+                status_code=200,
+                duration_ms=2400,
+                request_id="req-slow",
+            )
+            service.start_analysis_execution(symbol="AAPL", market="US")
+            items, total = service.list_business_events(category="analysis", query="AAPL")
+
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["event"], "AAPL")
+
 
 if __name__ == "__main__":
     unittest.main()

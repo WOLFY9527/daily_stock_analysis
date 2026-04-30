@@ -448,6 +448,7 @@ def _handle_sync_analysis(
     """
     import uuid
     from src.services.analysis_service import AnalysisService
+    from src.services.execution_log_service import ExecutionLogService
     
     query_id = uuid.uuid4().hex
     owner_id = get_current_user_id(current_user)
@@ -459,12 +460,35 @@ def _handle_sync_analysis(
     }
     if owner_id:
         analyze_kwargs["owner_id"] = owner_id
+    execution_logs = ExecutionLogService()
+    execution_id = execution_logs.start_analysis_execution(
+        symbol=stock_code,
+        analysis_type=request.report_type,
+        user_id=owner_id,
+        request_id=query_id,
+        task_id=query_id,
+        stock_name=getattr(request, "stock_name", None),
+    )
     
     try:
         service = AnalysisService()
         result = service.analyze_stock(**analyze_kwargs)
 
         if result is None:
+            execution_logs.add_execution_step(
+                execution_id=execution_id,
+                name="ai_analysis",
+                label="AI 分析",
+                status="failed",
+                error_type="AnalysisFailed",
+                error_message=f"分析股票 {stock_code} 失败",
+                critical=True,
+            )
+            execution_logs.finish_analysis_execution(
+                execution_id=execution_id,
+                status="failed",
+                query_id=query_id,
+            )
             raise HTTPException(
                 status_code=500,
                 detail={
@@ -474,6 +498,28 @@ def _handle_sync_analysis(
             )
 
         resolved_query_id = str(result.get("query_id") or query_id)
+        execution_logs.append_runtime_result(
+            session_id=execution_id,
+            runtime_execution=result.get("runtime_execution"),
+            notification_result=result.get("notification_result"),
+            query_id=resolved_query_id,
+            overall_status="success",
+        )
+        execution_detail = execution_logs.get_business_event_detail(execution_id) or {}
+        record_id = str(execution_detail.get("recordId") or "").strip() or None
+        execution_logs.add_execution_step(
+            execution_id=execution_id,
+            name="save_record",
+            label="保存分析记录",
+            status="success" if record_id else "skipped",
+            record_id=record_id,
+            critical=False,
+        )
+        execution_logs.finish_analysis_execution(
+            execution_id=execution_id,
+            record_id=record_id,
+            query_id=resolved_query_id,
+        )
 
         # 构建报告结构
         report_data = result.get("report", {})
@@ -518,6 +564,20 @@ def _handle_sync_analysis(
         raise
     except Exception as e:
         logger.error(f"分析失败: {e}", exc_info=True)
+        execution_logs.add_execution_step(
+            execution_id=execution_id,
+            name="ai_analysis",
+            label="AI 分析",
+            status="failed",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            critical=True,
+        )
+        execution_logs.finish_analysis_execution(
+            execution_id=execution_id,
+            status="failed",
+            query_id=query_id,
+        )
         raise HTTPException(
             status_code=500,
             detail={

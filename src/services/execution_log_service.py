@@ -43,6 +43,28 @@ _NOISY_MARKET_EVENTS = {
     "MarketRefreshStarted",
     "MarketRefreshCompleted",
 }
+_ANALYSIS_STEP_LABELS = {
+    "fetch_quote": "获取行情",
+    "fetch_technical": "获取技术指标",
+    "fetch_news": "获取新闻",
+    "fetch_financials": "获取财务数据",
+    "fetch_market_context": "获取市场环境",
+    "ai_analysis": "AI 分析",
+    "save_record": "保存分析记录",
+}
+_CRITICAL_ANALYSIS_STEPS = {"fetch_quote", "ai_analysis"}
+_STATUS_ALIASES = {
+    "completed": "success",
+    "succeeded": "success",
+    "ok": "success",
+    "partial_success": "partial",
+    "partial fail": "partial",
+    "fail": "failed",
+    "error": "failed",
+    "failed_runtime": "failed",
+    "timed_out": "failed",
+    "timeout": "failed",
+}
 
 
 def _masked_message(text: Optional[str]) -> Optional[str]:
@@ -166,6 +188,31 @@ def _normalize_log_category(value: Any, fallback: str = "system") -> str:
     return normalized if normalized in _DEFAULT_LOG_CATEGORIES else fallback
 
 
+def _normalize_business_status(value: Any) -> str:
+    normalized = _as_str(value).lower()
+    if normalized in {"success", "failed", "partial", "running", "skipped"}:
+        return normalized
+    return _STATUS_ALIASES.get(normalized, normalized or "running")
+
+
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    text = _as_str(value)
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _duration_ms(started_at: Any, finished_at: Any) -> Optional[float]:
+    start = _parse_iso_datetime(started_at)
+    finish = _parse_iso_datetime(finished_at)
+    if start is None or finish is None:
+        return None
+    return max(0.0, (finish - start).total_seconds() * 1000)
+
+
 def _event_name_from_event(event: Dict[str, Any]) -> str:
     detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
     return _as_str(detail.get("event_name")) or _as_str(detail.get("action")) or _as_str(event.get("step")) or "Event"
@@ -242,6 +289,214 @@ class ExecutionLogService:
 
     def __init__(self):
         self.db = get_db()
+
+    def start_analysis_execution(
+        self,
+        *,
+        symbol: str,
+        market: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        user_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        stock_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        execution_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        symbol_text = _as_str(symbol).upper()
+        business = {
+            "id": execution_id,
+            "event": symbol_text,
+            "category": "analysis",
+            "status": "running",
+            "summary": f"用户分析 {symbol_text}",
+            "symbol": symbol_text,
+            "market": _as_str(market).upper() or None,
+            "analysisType": _as_str(analysis_type) or None,
+            "userId": _as_str(user_id) or None,
+            "requestId": _as_str(request_id) or None,
+            "recordId": None,
+            "startedAt": started_at.isoformat(),
+            "finishedAt": None,
+            "durationMs": None,
+            "stepCount": 0,
+            "successStepCount": 0,
+            "failedStepCount": 0,
+            "metadata": metadata or {},
+        }
+        summary = self._merge_summary(
+            {"business_event": business},
+            self._summary_meta(
+                owner_id=user_id,
+                actor={"user_id": user_id} if user_id else None,
+                session_kind="business_event",
+                subsystem="analysis",
+                action_name="analysis_execution",
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=execution_id,
+            task_id=task_id or request_id or f"analysis:{symbol_text}",
+            code=symbol_text,
+            name=stock_name or symbol_text,
+            overall_status="running",
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=execution_id,
+            phase="analysis",
+            step="analysis_started",
+            target=symbol_text,
+            status="running",
+            truth_level="actual",
+            message=f"用户分析 {symbol_text}",
+            detail={
+                "category": "analysis",
+                "event_name": "AnalysisExecutionStarted",
+                "symbol": symbol_text,
+                "market": business["market"],
+                "analysis_type": business["analysisType"],
+                "request_id": business["requestId"],
+                "business_event": True,
+            },
+            event_at=started_at,
+        )
+        return execution_id
+
+    def add_execution_step(
+        self,
+        *,
+        execution_id: str,
+        name: str,
+        label: Optional[str] = None,
+        provider: Optional[str] = None,
+        api_path: Optional[str] = None,
+        status: str,
+        started_at: Optional[datetime] = None,
+        finished_at: Optional[datetime] = None,
+        duration_ms: Optional[float] = None,
+        error_type: Optional[str] = None,
+        error_message: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        record_id: Optional[str] = None,
+        critical: Optional[bool] = None,
+    ) -> None:
+        now = datetime.now()
+        step_started = started_at or finished_at or now
+        step_finished = finished_at or now
+        step_name = _as_str(name)
+        normalized_status = _normalize_business_status(status)
+        computed_duration = duration_ms
+        if computed_duration is None:
+            computed_duration = _duration_ms(step_started.isoformat(), step_finished.isoformat())
+        detail = {
+            "category": "analysis",
+            "event_name": "AnalysisExecutionStep",
+            "business_step": True,
+            "name": step_name,
+            "label": label or _ANALYSIS_STEP_LABELS.get(step_name, step_name),
+            "provider": _as_str(provider) or None,
+            "apiPath": _as_str(api_path) or None,
+            "status": normalized_status,
+            "startedAt": step_started.isoformat(),
+            "finishedAt": step_finished.isoformat(),
+            "durationMs": computed_duration,
+            "errorType": _as_str(error_type) or None,
+            "errorMessage": _masked_message(error_message),
+            "recordId": _as_str(record_id) or None,
+            "critical": bool(critical) if critical is not None else step_name in _CRITICAL_ANALYSIS_STEPS,
+            "metadata": metadata or {},
+            "outcome": _outcome_from_status(normalized_status),
+        }
+        self.db.append_execution_log_event(
+            session_id=execution_id,
+            phase="analysis",
+            step=step_name,
+            target=_as_str(provider) or step_name,
+            status=normalized_status,
+            truth_level="actual",
+            message=_masked_message(error_message) if error_message else detail["label"],
+            error_code=_as_str(error_type) or None,
+            detail=detail,
+            event_at=step_finished,
+        )
+
+    def finish_analysis_execution(
+        self,
+        *,
+        execution_id: str,
+        status: Optional[str] = None,
+        record_id: Optional[str] = None,
+        query_id: Optional[str] = None,
+        analysis_history_id: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        detail = self.db.get_execution_log_session_detail(execution_id) or {}
+        summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else {}
+        business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
+        steps = self._extract_business_steps(detail.get("events") if isinstance(detail.get("events"), list) else [])
+        resolved_status = _normalize_business_status(status) if status else self._infer_analysis_status(steps, record_id=record_id)
+        symbol = _as_str(business.get("symbol") or detail.get("code") or detail.get("name") or "analysis").upper()
+        finished_at = datetime.now()
+        started_at = business.get("startedAt") or detail.get("started_at")
+        failed_count = sum(1 for step in steps if step["status"] == "failed")
+        success_count = sum(1 for step in steps if step["status"] == "success")
+        summary_text = f"用户分析 {symbol}"
+        if resolved_status == "partial":
+            summary_text = f"用户分析 {symbol}，部分数据源失败"
+        elif resolved_status == "failed":
+            summary_text = f"用户分析 {symbol}失败"
+        next_business = {
+            **business,
+            "id": execution_id,
+            "event": symbol,
+            "category": "analysis",
+            "status": resolved_status,
+            "summary": summary_text,
+            "symbol": symbol,
+            "recordId": _as_str(record_id) or business.get("recordId"),
+            "finishedAt": finished_at.isoformat(),
+            "durationMs": _duration_ms(started_at, finished_at.isoformat()),
+            "stepCount": len(steps),
+            "successStepCount": success_count,
+            "failedStepCount": failed_count,
+            "metadata": {
+                **(business.get("metadata") if isinstance(business.get("metadata"), dict) else {}),
+                **(metadata or {}),
+            },
+        }
+        next_summary = self._merge_summary(summary, {"business_event": next_business})
+        self.db.finalize_execution_log_session(
+            session_id=execution_id,
+            overall_status=resolved_status,
+            truth_level="actual",
+            query_id=query_id,
+            analysis_history_id=analysis_history_id,
+            summary=next_summary,
+            ended_at=finished_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=execution_id,
+            phase="analysis",
+            step="analysis_finished",
+            target=symbol,
+            status=resolved_status,
+            truth_level="actual",
+            message=summary_text,
+            detail={
+                "category": "analysis",
+                "event_name": "AnalysisExecutionFinished",
+                "business_event": True,
+                "symbol": symbol,
+                "record_id": next_business.get("recordId"),
+                "outcome": _outcome_from_status(resolved_status),
+            },
+            event_at=finished_at,
+        )
+        return next_business
 
     def start_session(
         self,
@@ -1635,6 +1890,228 @@ class ExecutionLogService:
                 summary=summary,
             ),
         }
+
+    @staticmethod
+    def _extract_business_steps(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        steps: List[Dict[str, Any]] = []
+        for event in events or []:
+            if not isinstance(event, dict):
+                continue
+            detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
+            if not bool(detail.get("business_step")):
+                continue
+            status = _normalize_business_status(detail.get("status") or event.get("status"))
+            steps.append(
+                {
+                    "name": _as_str(detail.get("name") or event.get("step")),
+                    "label": _as_str(detail.get("label")) or _ANALYSIS_STEP_LABELS.get(_as_str(event.get("step")), _as_str(event.get("step"))),
+                    "provider": _as_str(detail.get("provider")) or None,
+                    "apiPath": _as_str(detail.get("apiPath")) or None,
+                    "status": status,
+                    "startedAt": detail.get("startedAt") or event.get("event_at"),
+                    "finishedAt": detail.get("finishedAt") or event.get("event_at"),
+                    "durationMs": detail.get("durationMs"),
+                    "errorType": _as_str(detail.get("errorType") or event.get("error_code")) or None,
+                    "errorMessage": _masked_message(detail.get("errorMessage") or event.get("message")) if status == "failed" else None,
+                    "recordId": _as_str(detail.get("recordId")) or None,
+                    "critical": bool(detail.get("critical")),
+                    "metadata": detail.get("metadata") if isinstance(detail.get("metadata"), dict) else {},
+                }
+            )
+        return steps
+
+    @staticmethod
+    def _infer_analysis_status(steps: List[Dict[str, Any]], *, record_id: Optional[str] = None) -> str:
+        if not steps:
+            return "running"
+        failed_steps = [step for step in steps if step.get("status") == "failed"]
+        critical_failed = [
+            step for step in failed_steps
+            if bool(step.get("critical")) or _as_str(step.get("name")) in _CRITICAL_ANALYSIS_STEPS
+        ]
+        has_record = bool(_as_str(record_id) or any(_as_str(step.get("recordId")) for step in steps))
+        if critical_failed:
+            return "partial" if has_record and not any(_as_str(step.get("name")) == "ai_analysis" for step in critical_failed) else "failed"
+        if failed_steps:
+            return "partial"
+        if any(step.get("status") == "running" for step in steps):
+            return "running"
+        return "success"
+
+    @staticmethod
+    def _step_from_runtime_event(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        phase = _as_str(event.get("phase")).lower()
+        step = _as_str(event.get("step")).lower()
+        detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
+        if step in {"analysis_started", "analysis_finished", "task_started", "task_failed", "configured", "primary_selected", "backup_selected", "channel_selected"}:
+            return None
+        name = None
+        label = None
+        if phase == "data_market":
+            name, label = "fetch_quote", _ANALYSIS_STEP_LABELS["fetch_quote"]
+        elif phase == "data_fundamentals":
+            name, label = "fetch_financials", _ANALYSIS_STEP_LABELS["fetch_financials"]
+        elif phase == "data_news":
+            name, label = "fetch_news", _ANALYSIS_STEP_LABELS["fetch_news"]
+        elif phase == "data_sentiment":
+            name, label = "fetch_market_context", _ANALYSIS_STEP_LABELS["fetch_market_context"]
+        elif phase.startswith("ai_") or phase == "ai":
+            name, label = "ai_analysis", _ANALYSIS_STEP_LABELS["ai_analysis"]
+        elif phase == "report":
+            name, label = "save_record", _ANALYSIS_STEP_LABELS["save_record"]
+        if not name:
+            return None
+        status = _normalize_business_status(event.get("status"))
+        if status == "succeeded":
+            status = "success"
+        if status not in {"success", "failed", "partial", "running", "skipped"}:
+            outcome = _outcome_from_status(status)
+            status = "success" if outcome == "ok" else ("failed" if outcome in {"failed", "timeout"} else "partial" if outcome == "partial" else "running")
+        reason = detail.get("reason") or event.get("message")
+        return {
+            "name": name,
+            "label": label,
+            "provider": _as_str(event.get("target")) or _as_str(detail.get("provider")) or _as_str(detail.get("source")) or None,
+            "apiPath": _as_str(detail.get("apiPath") or detail.get("api_path") or detail.get("endpoint_url")) or None,
+            "status": status,
+            "startedAt": event.get("event_at"),
+            "finishedAt": event.get("event_at"),
+            "durationMs": detail.get("durationMs") or detail.get("duration_ms"),
+            "errorType": _as_str(event.get("error_code")) or None,
+            "errorMessage": _masked_message(reason) if status == "failed" else None,
+            "recordId": _as_str(detail.get("recordId") or detail.get("record_id")) or None,
+            "critical": name in _CRITICAL_ANALYSIS_STEPS,
+            "metadata": detail,
+        }
+
+    def _build_business_steps_from_session(self, detail: Dict[str, Any]) -> List[Dict[str, Any]]:
+        events = detail.get("events") if isinstance(detail.get("events"), list) else []
+        explicit = self._extract_business_steps(events)
+        if explicit:
+            return explicit
+        derived: List[Dict[str, Any]] = []
+        seen: set[Tuple[str, str, str]] = set()
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            step = self._step_from_runtime_event(event)
+            if step is None:
+                continue
+            key = (_as_str(step.get("name")), _as_str(step.get("provider")), _as_str(step.get("finishedAt")))
+            if key in seen:
+                continue
+            seen.add(key)
+            derived.append(step)
+        return derived
+
+    def _session_to_business_event(self, row: Dict[str, Any], *, include_steps: bool = False) -> Optional[Dict[str, Any]]:
+        detail = self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {}
+        summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else (row.get("summary") if isinstance(row.get("summary"), dict) else {})
+        business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
+        meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
+        category = _as_str(business.get("category")) or _normalize_log_category(meta.get("subsystem") or row.get("task_id"))
+        operation_category, _ = self._operation_kind(summary, row.get("code"), row.get("name"), row.get("task_id"))
+        if not business and category == "analysis" and operation_category != "single_stock_analysis":
+            return None
+        steps = self._build_business_steps_from_session(detail)
+        failed_count = sum(1 for step in steps if step.get("status") == "failed")
+        success_count = sum(1 for step in steps if step.get("status") == "success")
+        record_id = _as_str(business.get("recordId")) or _as_str(row.get("analysis_history_id")) or None
+        raw_status = _normalize_business_status(business.get("status") or row.get("overall_status"))
+        status = raw_status
+        if category == "analysis":
+            inferred = self._infer_analysis_status(steps, record_id=record_id)
+            status = inferred if inferred != "running" or raw_status == "running" else raw_status
+            if raw_status == "success" and failed_count:
+                status = "partial"
+        symbol = _as_str(business.get("symbol") or row.get("code")) or None
+        event_name = _as_str(business.get("event") or symbol or row.get("name") or row.get("task_id") or "系统事件")
+        started_at = business.get("startedAt") or row.get("started_at")
+        finished_at = business.get("finishedAt") or row.get("ended_at")
+        summary_text = _as_str(business.get("summary")) or (f"用户分析 {event_name}" if category == "analysis" else event_name)
+        if category == "analysis" and not business.get("summary"):
+            if status == "partial":
+                summary_text = f"用户分析 {event_name}，部分数据源失败"
+            elif status == "failed":
+                summary_text = f"用户分析 {event_name}失败"
+        payload = {
+            "id": _as_str(business.get("id") or row.get("session_id")),
+            "event": event_name,
+            "category": category,
+            "status": status,
+            "summary": summary_text,
+            "symbol": symbol,
+            "market": business.get("market"),
+            "analysisType": business.get("analysisType"),
+            "userId": business.get("userId") or meta.get("actor_user_id"),
+            "requestId": business.get("requestId") or row.get("query_id"),
+            "recordId": record_id,
+            "startedAt": started_at,
+            "finishedAt": finished_at,
+            "durationMs": business.get("durationMs") if business.get("durationMs") is not None else _duration_ms(started_at, finished_at),
+            "stepCount": int(business.get("stepCount") or len(steps)),
+            "successStepCount": int(business.get("successStepCount") or success_count),
+            "failedStepCount": int(business.get("failedStepCount") or failed_count),
+            "metadata": business.get("metadata") if isinstance(business.get("metadata"), dict) else {},
+        }
+        if include_steps:
+            payload["steps"] = [
+                {key: value for key, value in step.items() if key != "critical"}
+                for step in steps
+            ]
+        return payload
+
+    def list_business_events(
+        self,
+        *,
+        category: Optional[str] = None,
+        symbol: Optional[str] = None,
+        status: Optional[str] = None,
+        query: Optional[str] = None,
+        since: Optional[str] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        rows, _ = self.db.list_execution_log_sessions(
+            stock_code=_as_str(symbol).upper() or None,
+            date_from=date_from or _parse_since(since),
+            date_to=date_to,
+            limit=200,
+            offset=0,
+        )
+        category_filter = _normalize_log_category(category, "") if category else None
+        status_filter = _normalize_business_status(status) if status else None
+        query_text = _as_str(query).lower()
+        items: List[Dict[str, Any]] = []
+        for row in rows:
+            event = self._session_to_business_event(row)
+            if event is None:
+                continue
+            if category_filter and event.get("category") != category_filter:
+                continue
+            if status_filter and event.get("status") != status_filter:
+                continue
+            if query_text:
+                haystack = " ".join(
+                    _as_str(event.get(key))
+                    for key in ("event", "summary", "symbol", "market", "analysisType", "requestId", "recordId")
+                ).lower()
+                if query_text not in haystack:
+                    continue
+            items.append(event)
+        items.sort(key=lambda item: _as_str(item.get("startedAt")), reverse=True)
+        total = len(items)
+        requested_limit = max(1, min(int(limit), 200))
+        start = max(0, int(offset))
+        return items[start:start + requested_limit], total
+
+    def get_business_event_detail(self, event_id: str) -> Optional[Dict[str, Any]]:
+        row = self.db.get_execution_log_session_detail(event_id)
+        if not row:
+            return None
+        return self._session_to_business_event(row, include_steps=True)
 
     def list_sessions(
         self,

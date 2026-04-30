@@ -10,6 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.deps import CurrentUser, require_admin_user
 from api.v1.schemas.admin_logs import (
+    BusinessEventDetailModel,
+    BusinessEventListResponse,
     ExecutionLogSessionDetailModel,
     ExecutionLogSessionListResponse,
 )
@@ -151,8 +153,8 @@ def _list_execution_logs(
 
 @router.get(
     "",
-    response_model=ExecutionLogSessionListResponse,
-    summary="List admin execution logs",
+    response_model=BusinessEventListResponse,
+    summary="List admin business events",
 )
 def list_execution_logs_root(
     task_id: Optional[str] = Query(default=None, description="Filter by task ID"),
@@ -163,6 +165,7 @@ def list_execution_logs_root(
     min_level_alias: Optional[str] = Query(default=None, alias="minLevel", description="Camel-case alias for min_level"),
     level: Optional[str] = Query(default=None, description="Exact log level"),
     category: Optional[str] = Query(default=None, description="Filter by log category"),
+    symbol: Optional[str] = Query(default=None, description="Filter by stock symbol"),
     query: Optional[str] = Query(default=None, description="Search event/message/request/source/user fields"),
     provider: Optional[str] = Query(default=None, description="Filter by provider target"),
     model: Optional[str] = Query(default=None, description="Filter by AI model"),
@@ -176,24 +179,26 @@ def list_execution_logs_root(
     cursor: Optional[str] = Query(default=None),
     _: CurrentUser = Depends(require_admin_user),
 ):
-    return _list_execution_logs(
-        task_id=_coalesce_query_text(task_id, task_id_alias),
-        stock=stock,
-        status=status,
-        min_level=_coalesce_query_text(min_level_alias, min_level, default="WARNING"),
-        level=level,
-        category=category,
-        query=query,
-        provider=provider,
-        model=model,
-        channel=channel,
-        since=since,
-        date_from=date_from,
-        date_to=date_to,
-        limit=limit,
-        offset=offset,
-        page=page,
-        cursor=cursor,
+    del task_id, task_id_alias, min_level, min_level_alias, level, provider, model, channel
+    service = ExecutionLogService()
+    effective_limit = _query_int(limit, 50)
+    effective_offset = _effective_offset(offset=offset, page=page, cursor=cursor, limit=effective_limit)
+    items, total = service.list_business_events(
+        category=_query_text(category),
+        symbol=_coalesce_query_text(symbol, stock),
+        status=_query_text(status),
+        query=_query_text(query),
+        date_from=_parse_optional_datetime(date_from) or _since_to_date_from(since),
+        date_to=_parse_optional_datetime(date_to),
+        limit=effective_limit,
+        offset=effective_offset,
+    )
+    return BusinessEventListResponse(
+        items=items,
+        total=total,
+        limit=effective_limit,
+        offset=effective_offset,
+        hasMore=effective_offset + effective_limit < total,
     )
 
 
@@ -265,3 +270,25 @@ def get_execution_log_session_detail(
             },
         )
     return ExecutionLogSessionDetailModel(**detail)
+
+
+@router.get(
+    "/{event_id}",
+    response_model=BusinessEventDetailModel,
+    summary="Get one admin business event detail",
+)
+def get_business_event_detail(
+    event_id: str,
+    _: CurrentUser = Depends(require_admin_user),
+):
+    service = ExecutionLogService()
+    detail = service.get_business_event_detail(event_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "not_found",
+                "message": f"Business event not found: {event_id}",
+            },
+        )
+    return BusinessEventDetailModel(**detail)

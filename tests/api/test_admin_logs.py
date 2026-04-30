@@ -90,7 +90,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self._record_event(session_id="error-analysis", event_name="AnalysisFailed", level="ERROR", category="analysis", message="analysis failed", status="failed", event_at=now)
 
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
-            payload = admin_logs.list_execution_logs_root(_=_admin_user())
+            payload = admin_logs.list_execution_log_sessions(_=_admin_user())
 
         session_ids = [item.session_id for item in payload.items]
         self.assertEqual(session_ids, ["error-analysis", "warning-timeout"])
@@ -104,7 +104,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self._record_event(session_id="warning-auth", event_name="AdminLoginFailed", level="WARNING", category="security", message="admin login failed", status="failed", target="admin")
 
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
-            payload = admin_logs.list_execution_logs_root(
+            payload = admin_logs.list_execution_log_sessions(
                 min_level="INFO",
                 category="market",
                 query="spx",
@@ -138,7 +138,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self._record_event(session_id="warning-timeout", event_name="ExternalSourceTimeout", level="WARNING", category="data_source", message="source timeout", status="failed")
 
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
-            payload = admin_logs.list_execution_logs_root(
+            payload = admin_logs.list_execution_log_sessions(
                 level="INFO",
                 _=_admin_user(),
             )
@@ -166,9 +166,109 @@ class AdminLogsApiTestCase(unittest.TestCase):
         )
 
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
-            payload = admin_logs.list_execution_logs_root(_=_admin_user())
+            payload = admin_logs.list_execution_log_sessions(_=_admin_user())
 
         self.assertEqual([item.session_id for item in payload.items], ["recent-error"])
+
+    def test_root_lists_business_events_with_pagination_and_filters(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_analysis_execution(
+                symbol="TSLA",
+                market="US",
+                analysis_type="recent",
+                user_id="user-1",
+                request_id="req-tsla",
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="fetch_quote",
+                label="获取行情",
+                provider="yahoo",
+                status="success",
+                duration_ms=320,
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="fetch_news",
+                label="获取新闻",
+                provider="newsapi",
+                status="failed",
+                duration_ms=3000,
+                error_type="TimeoutError",
+                error_message="News API timeout after 3000ms",
+                critical=False,
+            )
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="ai_analysis",
+                label="AI 分析",
+                provider="deepseek",
+                status="success",
+                duration_ms=8600,
+            )
+            service.finish_analysis_execution(execution_id=execution_id, record_id="record-tsla")
+
+            payload = admin_logs.list_execution_logs_root(
+                category="analysis",
+                symbol="TSLA",
+                status="partial",
+                query="TSLA",
+                limit=1,
+                offset=0,
+                _=_admin_user(),
+            )
+
+        self.assertEqual(payload.total, 1)
+        self.assertFalse(payload.hasMore)
+        self.assertEqual(payload.items[0].id, execution_id)
+        self.assertEqual(payload.items[0].event, "TSLA")
+        self.assertEqual(payload.items[0].category, "analysis")
+        self.assertEqual(payload.items[0].status, "partial")
+        self.assertEqual(payload.items[0].failedStepCount, 1)
+        self.assertEqual(payload.items[0].recordId, "record-tsla")
+
+    def test_root_detail_returns_business_event_steps(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_analysis_execution(symbol="TSLA", market="US")
+            service.add_execution_step(
+                execution_id=execution_id,
+                name="fetch_news",
+                label="获取新闻",
+                provider="newsapi",
+                status="failed",
+                duration_ms=3000,
+                error_type="TimeoutError",
+                error_message="News API timeout after 3000ms",
+                critical=False,
+            )
+            service.finish_analysis_execution(execution_id=execution_id, record_id="record-tsla")
+            detail = admin_logs.get_business_event_detail(execution_id, _=_admin_user())
+
+        self.assertEqual(detail.id, execution_id)
+        self.assertEqual(detail.event, "TSLA")
+        self.assertEqual(detail.steps[0].name, "fetch_news")
+        self.assertEqual(detail.steps[0].errorMessage, "News API timeout after 3000ms")
+
+    def test_sessions_endpoint_still_exposes_raw_logs(self) -> None:
+        self._record_event(
+            session_id="warning-timeout",
+            event_name="ExternalSourceTimeout",
+            level="WARNING",
+            category="data_source",
+            message="source timeout",
+            status="timed_out",
+        )
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.list_execution_log_sessions(
+                min_level="WARNING",
+                _=_admin_user(),
+            )
+
+        self.assertEqual(payload.total, 1)
+        self.assertEqual(payload.items[0].session_id, "warning-timeout")
 
 
 if __name__ == "__main__":

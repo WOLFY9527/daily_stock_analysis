@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogsApi, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary } from '../api/adminLogs';
+import { adminLogsApi, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -12,6 +12,7 @@ type NormalizedStatus = 'success' | 'partial' | 'failed' | 'running' | 'unknown'
 type LogLevel = 'DEBUG' | 'INFO' | 'NOTICE' | 'WARNING' | 'ERROR' | 'CRITICAL';
 type LevelFilter = 'all' | 'warning_plus' | 'error_plus' | LogLevel;
 type LogCategory = 'system' | 'auth' | 'market' | 'cache' | 'data_source' | 'analysis' | 'trading' | 'scheduler' | 'api' | 'security';
+type LogsTab = 'business' | 'analysis' | 'data_source' | 'security' | 'raw';
 
 const STATUS_CLASS: Record<NormalizedStatus, string> = {
   success: 'theme-log-status theme-log-status--success',
@@ -24,6 +25,8 @@ const STATUS_CLASS: Record<NormalizedStatus, string> = {
 const LEVEL_FILTER_OPTIONS: LevelFilter[] = ['all', 'warning_plus', 'error_plus', 'DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
 const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'trading', 'scheduler', 'api', 'security'];
 const SINCE_OPTIONS = ['15m', '1h', '24h', '7d'] as const;
+const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'failed', 'running'] as const;
+const PAGE_SIZE = 20;
 
 const LEVEL_CLASS: Record<LogLevel, string> = {
   DEBUG: 'border-white/10 bg-white/[0.04] text-white/50',
@@ -380,6 +383,42 @@ function formatDateTime(value: unknown, locale: AdminLogsLanguage): string {
   return date.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US');
 }
 
+function formatDuration(value: unknown): string {
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms < 0) return '--';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s`;
+}
+
+function statusFilterLabel(value: (typeof STATUS_FILTER_OPTIONS)[number], locale: AdminLogsLanguage): string {
+  const labels: Record<(typeof STATUS_FILTER_OPTIONS)[number], { zh: string; en: string }> = {
+    all: { zh: '全部状态', en: 'All status' },
+    success: { zh: '成功', en: 'Success' },
+    partial: { zh: '部分失败', en: 'Partial failure' },
+    failed: { zh: '失败', en: 'Failed' },
+    running: { zh: '运行中', en: 'Running' },
+  };
+  return labels[value][locale];
+}
+
+function tabLabel(value: LogsTab, locale: AdminLogsLanguage): string {
+  const labels: Record<LogsTab, { zh: string; en: string }> = {
+    business: { zh: '业务事件', en: 'Business events' },
+    analysis: { zh: '股票分析', en: 'Stock analysis' },
+    data_source: { zh: '数据源问题', en: 'Data source issues' },
+    security: { zh: '安全事件', en: 'Security events' },
+    raw: { zh: '原始日志', en: 'Raw logs' },
+  };
+  return labels[value][locale];
+}
+
+function detailForBusinessEvent(event: BusinessEvent): BusinessEventDetail {
+  return {
+    ...event,
+    steps: [],
+  };
+}
+
 function JsonBlock({ value }: { value: unknown }) {
   if (value == null || value === '') return <span>--</span>;
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -456,14 +495,21 @@ async function copyLogJson(detail: ExecutionLogSessionDetail): Promise<void> {
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
   const locale = language as AdminLogsLanguage;
+  const [activeTab, setActiveTab] = useState<LogsTab>('business');
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('warning_plus');
   const [categoryFilter, setCategoryFilter] = useState<'all' | LogCategory>('all');
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTER_OPTIONS)[number]>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sinceFilter, setSinceFilter] = useState<(typeof SINCE_OPTIONS)[number]>('24h');
   const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [businessEvents, setBusinessEvents] = useState<BusinessEvent[]>([]);
+  const [businessTotal, setBusinessTotal] = useState(0);
+  const [businessHasMore, setBusinessHasMore] = useState(false);
+  const [pageOffset, setPageOffset] = useState(0);
   const [sessions, setSessions] = useState<ExecutionLogSessionSummary[]>([]);
   const [summary, setSummary] = useState<NonNullable<ExecutionLogSessionListResponse['summary']> | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<ExecutionLogSessionDetail | null>(null);
+  const [selectedBusinessDetail, setSelectedBusinessDetail] = useState<BusinessEventDetail | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
@@ -475,6 +521,24 @@ const AdminLogsPage: React.FC = () => {
     setIsLoadingList(true);
     setError(null);
     try {
+      if (activeTab !== 'raw') {
+        const category = activeTab === 'analysis' ? 'analysis' : activeTab === 'data_source' ? 'data_source' : activeTab === 'security' ? 'security' : undefined;
+        const response: BusinessEventListResponse = await adminLogsApi.listBusinessEvents({
+          category,
+          symbol: activeTab === 'analysis' ? searchQuery.trim() || undefined : undefined,
+          status: statusFilter === 'all' ? undefined : statusFilter,
+          query: activeTab === 'analysis' ? undefined : searchQuery.trim() || undefined,
+          since: sinceFilter,
+          limit: PAGE_SIZE,
+          offset: pageOffset,
+        });
+        setBusinessEvents(response.items || []);
+        setBusinessTotal(response.total || 0);
+        setBusinessHasMore(Boolean(response.hasMore));
+        setSessions([]);
+        setSummary(null);
+        return;
+      }
       const params: Parameters<typeof adminLogsApi.listSessions>[0] = {
         category: categoryFilter === 'all' ? undefined : categoryFilter,
         query: searchQuery.trim() || undefined,
@@ -493,16 +557,26 @@ const AdminLogsPage: React.FC = () => {
       setSummary(response.summary || null);
     } catch (err) {
       setError((err as { parsedError?: ParsedApiError }).parsedError || null);
-      setSessions(import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []);
+      if (activeTab === 'raw') {
+        setSessions(import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []);
+      } else {
+        setBusinessEvents([]);
+        setBusinessTotal(0);
+        setBusinessHasMore(false);
+      }
       setSummary(null);
     } finally {
       setIsLoadingList(false);
     }
-  }, [categoryFilter, levelFilter, searchQuery, showDebugLogs, sinceFilter]);
+  }, [activeTab, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
 
   useEffect(() => {
     document.title = t('adminLogs.documentTitle');
   }, [t]);
+
+  useEffect(() => {
+    setPageOffset(0);
+  }, [activeTab, searchQuery, sinceFilter, statusFilter]);
 
   useEffect(() => {
     void loadSessions();
@@ -530,6 +604,7 @@ const AdminLogsPage: React.FC = () => {
   }, [categoryFilter, levelFilter, searchQuery, sessions, showDebugLogs]);
 
   const openDetail = useCallback(async (summary: ExecutionLogSessionSummary) => {
+    setSelectedBusinessDetail(null);
     setSelectedDetail(detailForSummary(summary));
     setIsDrawerOpen(true);
     setIsLoadingDetail(true);
@@ -544,25 +619,55 @@ const AdminLogsPage: React.FC = () => {
     }
   }, []);
 
+  const openBusinessDetail = useCallback(async (event: BusinessEvent) => {
+    setSelectedDetail(null);
+    setSelectedBusinessDetail(detailForBusinessEvent(event));
+    setIsDrawerOpen(true);
+    setIsLoadingDetail(true);
+    setDetailError(null);
+    try {
+      const detail = await adminLogsApi.getBusinessEventDetail(event.id);
+      setSelectedBusinessDetail(detail);
+    } catch (err) {
+      setDetailError((err as { parsedError?: ParsedApiError }).parsedError || null);
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  }, []);
+
   const toggleDebugLogs = useCallback(() => {
     setShowDebugLogs((current) => !current);
   }, []);
 
   const drawerDetail = selectedDetail;
+  const businessDetail = selectedBusinessDetail;
   const readable = drawerDetail?.readableSummary || {};
   const operationDetail = drawerDetail?.operationDetail || {};
   const aiCalls = asRecordList(operationDetail.aiCalls);
   const dataSourceCalls = asRecordList(operationDetail.dataSourceCalls);
   const timeline = asRecordList(operationDetail.timeline);
+  const businessSteps = businessDetail?.steps || [];
   const diagnostics = asRecordList(operationDetail.diagnostics);
   const explicitFallbacks = Array.isArray(operationDetail.systemFallbacks) ? operationDetail.systemFallbacks : [];
   const systemFallbacks = explicitFallbacks.length
     ? explicitFallbacks.map((item) => (typeof item === 'string' ? { source: 'System', message: item } : item)).filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
     : diagnostics.filter((item) => /fallback|回退/i.test(`${item.message || ''} ${item.source || ''}`));
   const systemOperation = asRecord(operationDetail.systemOperation);
-  const drawerStatus = normalizeStatus(String(operationDetail.status || readable.operationStatus || drawerDetail?.overallStatus || ''));
+  const drawerStatus = normalizeStatus(String(businessDetail?.status || operationDetail.status || readable.operationStatus || drawerDetail?.overallStatus || ''));
   const drawerOperationType = normalizeOperationType(readable);
   const computedSummary = useMemo(() => {
+    if (activeTab !== 'raw') {
+      return businessEvents.reduce(
+        (acc, item) => {
+          const status = normalizeStatus(item.status);
+          if (status === 'failed') acc.errorCount += 1;
+          if (status === 'partial') acc.warningCount += 1;
+          if (item.category === 'data_source' && ['failed', 'partial'].includes(status)) acc.dataSourceFailureCount += 1;
+          return acc;
+        },
+        { errorCount: 0, warningCount: 0, dataSourceFailureCount: 0, slowRequestCount: 0, latestCriticalAt: null as string | null },
+      );
+    }
     if (summary) return summary;
     return filteredSessions.reduce(
       (acc, item) => {
@@ -581,7 +686,7 @@ const AdminLogsPage: React.FC = () => {
       },
       { errorCount: 0, warningCount: 0, dataSourceFailureCount: 0, slowRequestCount: 0, latestCriticalAt: null as string | null },
     );
-  }, [filteredSessions, summary]);
+  }, [activeTab, businessEvents, filteredSessions, summary]);
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
@@ -593,43 +698,73 @@ const AdminLogsPage: React.FC = () => {
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">WolfyStock Ops Trace</p>
               <h1 className="mt-3 text-[1.75rem] font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
-              <p className="mt-3 text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
+              <p className="mt-3 text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: activeTab === 'raw' ? filteredSessions.length : businessTotal })}</p>
+              <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-5 flex flex-wrap gap-2">
+                {(['business', 'analysis', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === tab}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${activeTab === tab ? 'border-emerald-300/45 bg-emerald-400/14 text-emerald-50' : 'border-white/8 bg-white/[0.035] text-secondary-text hover:border-white/15 hover:bg-white/[0.055]'}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tabLabel(tab, locale)}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[11rem_11rem_minmax(0,1fr)_11rem_11rem_auto]">
-              <label className="sr-only" htmlFor="admin-logs-level-filter">{locale === 'zh' ? '级别筛选' : 'Level filter'}</label>
-              <select
-                id="admin-logs-level-filter"
-                aria-label={locale === 'zh' ? '级别筛选' : 'Level filter'}
-                className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                value={levelFilter}
-                onChange={(event) => setLevelFilter(event.target.value as LevelFilter)}
-              >
-                {LEVEL_FILTER_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{levelFilterLabel(option, locale)}</option>
-                ))}
-              </select>
-              <label className="sr-only" htmlFor="admin-logs-category-filter">{locale === 'zh' ? '分类筛选' : 'Category filter'}</label>
-              <select
-                id="admin-logs-category-filter"
-                aria-label={locale === 'zh' ? '分类筛选' : 'Category filter'}
-                className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value as 'all' | LogCategory)}
-              >
-                <option value="all">{locale === 'zh' ? '全部分类' : 'All categories'}</option>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{categoryLabel(option, locale)}</option>
-                ))}
-              </select>
+            <div className={`grid gap-3 sm:grid-cols-2 ${activeTab === 'raw' ? 'xl:grid-cols-[11rem_11rem_minmax(0,1fr)_11rem_11rem_auto]' : 'xl:grid-cols-[minmax(0,1fr)_11rem_11rem_auto]'}`}>
+              {activeTab === 'raw' ? (
+                <>
+                  <label className="sr-only" htmlFor="admin-logs-level-filter">{locale === 'zh' ? '级别筛选' : 'Level filter'}</label>
+                  <select
+                    id="admin-logs-level-filter"
+                    aria-label={locale === 'zh' ? '级别筛选' : 'Level filter'}
+                    className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                    value={levelFilter}
+                    onChange={(event) => setLevelFilter(event.target.value as LevelFilter)}
+                  >
+                    {LEVEL_FILTER_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{levelFilterLabel(option, locale)}</option>
+                    ))}
+                  </select>
+                  <label className="sr-only" htmlFor="admin-logs-category-filter">{locale === 'zh' ? '分类筛选' : 'Category filter'}</label>
+                  <select
+                    id="admin-logs-category-filter"
+                    aria-label={locale === 'zh' ? '分类筛选' : 'Category filter'}
+                    className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                    value={categoryFilter}
+                    onChange={(event) => setCategoryFilter(event.target.value as 'all' | LogCategory)}
+                  >
+                    <option value="all">{locale === 'zh' ? '全部分类' : 'All categories'}</option>
+                    {CATEGORY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{categoryLabel(option, locale)}</option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
               <label className="sr-only" htmlFor="admin-logs-search">{locale === 'zh' ? '搜索日志' : 'Search logs'}</label>
               <input
                 id="admin-logs-search"
                 aria-label={locale === 'zh' ? '搜索日志' : 'Search logs'}
                 className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                placeholder={locale === 'zh' ? '事件 / message / request id / symbol / source / user' : 'Event / message / request id / symbol / source / user'}
+                placeholder={activeTab === 'analysis' ? 'TSLA / AAPL / NVDA' : (locale === 'zh' ? '事件 / request id / symbol / source / user' : 'Event / request id / symbol / source / user')}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
+              {activeTab !== 'raw' ? (
+                <select
+                  aria-label={locale === 'zh' ? '状态筛选' : 'Status filter'}
+                  className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTER_OPTIONS)[number])}
+                >
+                  {STATUS_FILTER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{statusFilterLabel(option, locale)}</option>
+                  ))}
+                </select>
+              ) : null}
               <label className="sr-only" htmlFor="admin-logs-since-filter">{locale === 'zh' ? '时间范围' : 'Time range'}</label>
               <select
                 id="admin-logs-since-filter"
@@ -642,7 +777,7 @@ const AdminLogsPage: React.FC = () => {
                   <option key={option} value={option}>{sinceLabel(option, locale)}</option>
                 ))}
               </select>
-              <button
+              {activeTab === 'raw' ? <button
                 type="button"
                 role="switch"
                 aria-checked={showDebugLogs}
@@ -668,7 +803,7 @@ const AdminLogsPage: React.FC = () => {
                   <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white transition ${showDebugLogs ? 'left-[1.05rem]' : 'left-0.5'}`} />
                 </span>
                 <span>{locale === 'zh' ? '显示调试日志' : 'Show debug logs'}</span>
-              </button>
+              </button> : null}
               <button type="button" className="btn-secondary h-10 rounded-xl px-4 text-sm sm:col-span-2 xl:col-span-1" onClick={() => void loadSessions()} disabled={isLoadingList}>
                 {isLoadingList ? t('adminLogs.loading') : t('adminLogs.refreshButton')}
               </button>
@@ -700,9 +835,59 @@ const AdminLogsPage: React.FC = () => {
             <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
             <p className="mt-1 text-xs text-muted-text">{locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}</p>
           </div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-white/36">{filteredSessions.length} records</p>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-white/36">{activeTab === 'raw' ? filteredSessions.length : businessTotal} records</p>
         </div>
-        {filteredSessions.length === 0 ? (
+        {activeTab !== 'raw' ? (
+          businessEvents.length === 0 ? (
+            <div className="rounded-2xl bg-white/[0.02] px-4 py-6">
+              <p className="text-sm font-medium text-foreground">{t('adminLogs.noSessionsTitle')}</p>
+              <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-white/6 bg-black/15">
+              <div className="hidden grid-cols-[10rem_minmax(7rem,0.8fr)_8rem_minmax(12rem,1.2fr)_7rem_6rem_8rem_7rem] gap-4 border-b border-white/6 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
+                <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+                <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                <div>{locale === 'zh' ? '类别' : 'Category'}</div>
+                <div>{locale === 'zh' ? '简介' : 'Summary'}</div>
+                <div>{locale === 'zh' ? '状态' : 'Status'}</div>
+                <div>{locale === 'zh' ? '耗时' : 'Duration'}</div>
+                <div>{locale === 'zh' ? '失败步骤' : 'Failed steps'}</div>
+                <div>{locale === 'zh' ? '操作' : 'Action'}</div>
+              </div>
+              <div className="divide-y divide-white/6">
+                {businessEvents.map((item) => {
+                  const status = normalizeStatus(item.status);
+                  return (
+                    <div key={item.id} data-testid="business-event-row" className="grid gap-3 px-4 py-4 md:grid-cols-[10rem_minmax(7rem,0.8fr)_8rem_minmax(12rem,1.2fr)_7rem_6rem_8rem_7rem] md:items-center">
+                      <p className="text-sm text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
+                      <p className="min-w-0 break-words text-sm font-semibold text-foreground">{text(item.event || item.symbol)}</p>
+                      <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[11px] text-secondary-text">{categoryLabel(item.category, locale)}</span>
+                      <p className="min-w-0 break-words text-sm text-secondary-text">{text(item.summary)}</p>
+                      <span className={`${STATUS_CLASS[status]} w-fit`}>{statusLabel(status, locale)}</span>
+                      <p className="text-xs text-muted-text">{formatDuration(item.durationMs)}</p>
+                      <p className="text-xs text-muted-text">{item.failedStepCount || 0}/{item.stepCount || 0}</p>
+                      <button type="button" className="btn-secondary w-fit rounded-xl px-3 py-1.5 text-xs" onClick={() => void openBusinessDetail(item)}>
+                        {t('adminLogs.viewDetails')}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-4 py-3">
+                <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
+                    {locale === 'zh' ? '上一页' : 'Previous'}
+                  </button>
+                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
+                    {locale === 'zh' ? '下一页' : 'Next'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        ) : filteredSessions.length === 0 ? (
           <div className="rounded-2xl bg-white/[0.02] px-4 py-6">
             <p className="text-sm font-medium text-foreground">{t('adminLogs.noSessionsTitle')}</p>
             <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
@@ -755,7 +940,61 @@ const AdminLogsPage: React.FC = () => {
         title={t('adminLogs.sessionDetailTitle')}
         width="max-w-5xl"
       >
-        {drawerDetail ? (
+        {businessDetail ? (
+          <div className="space-y-5">
+            {detailError ? <ApiErrorAlert error={detailError} /> : null}
+            {isLoadingDetail ? <p className="text-sm text-muted-text">{t('adminLogs.loading')}</p> : null}
+            <section className="rounded-3xl border border-white/8 bg-black/25 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">A</span>
+                    <span className={`${STATUS_CLASS[drawerStatus]}`}>{statusLabel(drawerStatus, locale)}</span>
+                  </div>
+                  <h2 className="break-words text-2xl font-semibold text-foreground">{text(businessDetail.event || businessDetail.symbol)}</h2>
+                  <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {formatDateTime(businessDetail.startedAt, locale)}</p>
+                </div>
+                <div className="grid gap-2 text-xs text-secondary-text">
+                  <span>recordId: <span className="text-foreground">{text(businessDetail.recordId)}</span></span>
+                  <span>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></span>
+                  <span>{locale === 'zh' ? '步骤' : 'Steps'}: <span className="text-foreground">{businessDetail.successStepCount}/{businessDetail.stepCount} success</span></span>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
+              <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '调用链 timeline' : 'Call-chain timeline'}</h3>
+              <div className="mt-4 space-y-3">
+                {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
+                  const status = normalizeStatus(step.status);
+                  return (
+                    <details key={`${step.name}-${index}`} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs" open={index === 0 || status === 'failed'}>
+                      <summary className="cursor-pointer list-none">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-foreground">{text(step.label || step.name)} · {formatDuration(step.durationMs)}</p>
+                            <p className="mt-1 text-muted-text">{text(step.provider)}{step.apiPath ? ` · ${step.apiPath}` : ''}</p>
+                          </div>
+                          <span className={STATUS_CLASS[status]}>{statusLabel(status, locale)}</span>
+                        </div>
+                      </summary>
+                      <div className="mt-3 grid gap-2 text-secondary-text md:grid-cols-2">
+                        <p>{locale === 'zh' ? '开始' : 'Started'}: <span className="text-foreground">{formatDateTime(step.startedAt, locale)}</span></p>
+                        <p>{locale === 'zh' ? '结束' : 'Finished'}: <span className="text-foreground">{formatDateTime(step.finishedAt, locale)}</span></p>
+                        <p>{locale === 'zh' ? '错误类型' : 'Error type'}: <span className="text-foreground">{text(step.errorType)}</span></p>
+                        <p className="md:col-span-2">{locale === 'zh' ? '失败原因' : 'Failure reason'}: <span className="text-foreground">{text(step.errorMessage)}</span></p>
+                        <div className="md:col-span-2">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">metadata</p>
+                          <JsonBlock value={step.metadata || {}} />
+                        </div>
+                      </div>
+                    </details>
+                  );
+                }) : <p className="text-sm text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>}
+              </div>
+            </section>
+          </div>
+        ) : drawerDetail ? (
           <div className="space-y-5">
             {detailError ? <ApiErrorAlert error={detailError} /> : null}
             {isLoadingDetail ? <p className="text-sm text-muted-text">{t('adminLogs.loading')}</p> : null}

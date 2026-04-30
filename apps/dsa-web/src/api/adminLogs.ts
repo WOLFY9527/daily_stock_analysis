@@ -106,6 +106,54 @@ export interface ExecutionLogSessionListResponse {
   };
 }
 
+export interface ExecutionStep {
+  name: string;
+  label: string;
+  provider?: string | null;
+  apiPath?: string | null;
+  status: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  durationMs?: number | null;
+  errorType?: string | null;
+  errorMessage?: string | null;
+  recordId?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BusinessEvent {
+  id: string;
+  event: string;
+  category: string;
+  status: string;
+  summary: string;
+  symbol?: string | null;
+  market?: string | null;
+  analysisType?: string | null;
+  userId?: string | null;
+  requestId?: string | null;
+  recordId?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  durationMs?: number | null;
+  stepCount: number;
+  successStepCount: number;
+  failedStepCount: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BusinessEventDetail extends BusinessEvent {
+  steps: ExecutionStep[];
+}
+
+export interface BusinessEventListResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  items: BusinessEvent[];
+}
+
 function normalizeSessionSummary(payload: Record<string, unknown>): ExecutionLogSessionSummary {
   const normalized = toCamelCase<ExecutionLogSessionSummary>(payload);
   return {
@@ -131,6 +179,44 @@ function normalizeSessionDetail(payload: Record<string, unknown>): ExecutionLogS
 }
 
 export const adminLogsApi = {
+  listBusinessEvents: async (
+    params: {
+      category?: string;
+      symbol?: string;
+      status?: string;
+      query?: string;
+      since?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<BusinessEventListResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      '/api/v1/admin/logs',
+      { params },
+    );
+    const normalized = toCamelCase<BusinessEventListResponse>(response.data);
+    return {
+      total: Number(normalized.total || 0),
+      limit: Number(normalized.limit || params.limit || 50),
+      offset: Number(normalized.offset || params.offset || 0),
+      hasMore: Boolean(normalized.hasMore),
+      items: Array.isArray(normalized.items)
+        ? normalized.items.map((item) => toCamelCase<BusinessEvent>(item as unknown as Record<string, unknown>))
+        : [],
+    };
+  },
+
+  getBusinessEventDetail: async (eventId: string): Promise<BusinessEventDetail> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/admin/logs/${encodeURIComponent(eventId)}`,
+    );
+    const normalized = toCamelCase<BusinessEventDetail>(response.data);
+    return {
+      ...normalized,
+      steps: Array.isArray(normalized.steps) ? normalized.steps : [],
+    };
+  },
+
   listSessions: async (
     params: {
       taskId?: string;
