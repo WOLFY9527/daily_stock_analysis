@@ -520,6 +520,28 @@ const PendingDataSourceSection: React.FC<{
   </section>
 );
 
+const CategoryEmptyState: React.FC<{
+  onShowPending: () => void;
+}> = ({ onShowPending }) => (
+  <section
+    data-testid="market-overview-category-empty-state"
+    className="rounded-xl border border-white/[0.06] bg-white/[0.018] px-4 py-4"
+  >
+    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <p className="text-sm leading-6 text-white/62">
+        当前分类暂无可用真实数据，备用模块已移入待接入真实数据源。
+      </p>
+      <button
+        type="button"
+        className="w-fit rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.06] hover:text-white"
+        onClick={onShowPending}
+      >
+        查看待接入模块
+      </button>
+    </div>
+  </section>
+);
+
 const MarketTemperatureStrip: React.FC<{
   data: MarketTemperatureResponse;
   refreshing: boolean;
@@ -1279,6 +1301,7 @@ const MarketOverviewPage: React.FC = () => {
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
   const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
   const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
+  const showCategoryEmptyState = activeCategory !== 'all' && primaryOrder.length === 0 && fallbackOnlyOrder.length > 0;
 
   const renderCard = (cardKey: CardKey, rank: number) => (
     <div
@@ -1352,6 +1375,9 @@ const MarketOverviewPage: React.FC = () => {
                 void refreshPanel('briefing', marketApi.getMarketBriefing);
               }}
             />
+          ) : null}
+          {showCategoryEmptyState ? (
+            <CategoryEmptyState onShowPending={() => setFallbackSectionExpanded(true)} />
           ) : null}
           <main data-testid="market-overview-main-grid" className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             {primaryOrder.map((cardKey) => renderCard(cardKey, primaryOrder.indexOf(cardKey)))}

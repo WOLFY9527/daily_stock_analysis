@@ -622,6 +622,37 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /行业与主题强弱/i })).toBeInTheDocument();
   });
 
+  it('shows an empty state when a category has no real or mixed cards', async () => {
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+
+    expect(await screen.findByTestId('market-overview-category-empty-state')).toHaveTextContent('当前分类暂无可用真实数据，备用模块已移入待接入真实数据源。');
+    expect(screen.getByRole('button', { name: /查看待接入模块/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /待接入真实数据源/i })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('expands fallback-only cards from the category empty state', async () => {
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    fireEvent.click(await screen.findByRole('button', { name: /查看待接入模块/i }));
+
+    expect(screen.getByRole('button', { name: /待接入真实数据源/i })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /行业与主题强弱/i })).toBeInTheDocument();
+  });
+
+  it('does not show the category empty state when real cards are visible', async () => {
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
+
+    expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-category-empty-state')).not.toBeInTheDocument();
+    expect(screen.queryByText(/当前分类暂无可用真实数据/i)).not.toBeInTheDocument();
+  });
+
   it('renders all data freshness badge states', () => {
     render(
       <div>
