@@ -129,6 +129,9 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   if (sourceLabel && !details.length) {
     details.push(sourceLabel);
   }
+  if (resolvedMeta?.isRefreshing) {
+    details.push(t('marketOverviewPage.footer.refreshingSnapshot'));
+  }
   const freshness = resolveFreshness(resolvedMeta);
 
   return (

@@ -11,6 +11,10 @@ from src.services.market_overview_service import MarketOverviewService
 
 
 class MarketFuturesApiTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
     def test_get_futures_returns_contract_payload(self) -> None:
         service = MagicMock()
         service.get_futures.return_value = {

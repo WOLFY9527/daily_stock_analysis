@@ -420,6 +420,26 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByText(/数据可能已过期/i).length).toBeGreaterThan(0);
   });
 
+  it('shows snapshot refresh status without clearing stale card data', async () => {
+    vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce({
+      ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数'),
+      isRefreshing: true,
+      items: [
+        {
+          ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
+          value: 3120.55,
+        },
+      ],
+    });
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
+    await waitFor(() => expect(screen.getByText(/正在刷新快照/)).toBeInTheDocument());
+    expect(screen.getByText('上证指数')).toBeInTheDocument();
+    expect(screen.getByText(/3,120.55|3120.55/)).toBeInTheDocument();
+  });
+
   it('switches market categories without refetching all cards', async () => {
     render(<MarketOverviewPage />);
 

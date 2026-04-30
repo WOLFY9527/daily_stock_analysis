@@ -1,3 +1,7 @@
+## 2026-04-30
+
+- 🧊 **Market Overview 接入后端 SWR 缓存** — `/api/v1/market/*` 新增统一轻量内存缓存层，按 crypto、futures、A股指数、商品外汇、资金流、情绪、利率等数据类型使用独立 TTL；缓存命中时不再重复访问外部源，过期时先返回最近快照并标记 `isRefreshing=true` 后台刷新，刷新失败保留旧快照并返回 warning。fallback/mock 数据继续保留 `freshness=fallback/mock` 与 item-level metadata，不会被缓存包装成 live。前端仅补齐 `isRefreshing` 类型和卡片 footer 的“正在刷新快照”提示，页面结构不变。
+
 ## 2026-04-29
 
 - 🧭 **Market Overview 补齐数据可信度治理与真实A股指数源** — `/market-overview` 现为 market overview 相关 API 响应统一补充 `sourceLabel / asOf / freshness / isFallback / isStale / delayMinutes / warning` 元数据，fallback/mock 不再被包装成实时或公共行情。A股/港股指数卡优先接入新浪财经指数报价并保留 item-level metadata，真实源失败时仍返回稳定 fallback 且明确标注“备用示例数据，不代表当前行情”。前端新增 `DataFreshnessBadge`、卡片底部数据状态/来源/行情时间/更新时间展示和顶部数据质量总览，同时按交易员查看习惯调整分类内排序；回归覆盖 freshness helper、cn-indices mixed/fallback、temperature warning、badge 全状态、数据质量统计和分类排序。

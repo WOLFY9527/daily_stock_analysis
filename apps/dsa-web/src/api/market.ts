@@ -21,6 +21,7 @@ type MarketSnapshotItem = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
   market?: string | null;
@@ -41,6 +42,7 @@ type MarketSnapshotPayload = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
   logSessionId?: string | null;
@@ -70,6 +72,7 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     freshness: item.freshness,
     isFallback: item.isFallback,
     isStale: item.isStale,
+    isRefreshing: item.isRefreshing,
     delayMinutes: item.delayMinutes,
     warning: item.warning,
     hoverDetails,
@@ -92,6 +95,7 @@ async function getPanel(path: string, panelName: string): Promise<MarketOverview
     freshness: payload.freshness,
     isFallback: payload.isFallback ?? payload.fallbackUsed,
     isStale: payload.isStale,
+    isRefreshing: payload.isRefreshing,
     delayMinutes: payload.delayMinutes,
     warning: payload.warning,
     items: Array.isArray(payload.items) ? payload.items.map(normalizeItem) : [],
@@ -142,6 +146,7 @@ export type MarketTemperatureResponse = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
   scores: {
@@ -168,6 +173,7 @@ export type MarketBriefingResponse = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
   items: MarketBriefingItem[];
@@ -189,6 +195,7 @@ export type MarketFutureItem = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
 };
@@ -201,6 +208,7 @@ export type MarketFuturesResponse = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
   items: MarketFutureItem[];
@@ -214,6 +222,7 @@ export type CnShortSentimentResponse = {
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
   sentimentScore: number;

@@ -183,6 +183,7 @@ const RESOURCES = {
       footer: {
         lastRefresh: '最近更新: {timestamp}',
         pending: '等待同步',
+        refreshingSnapshot: '正在刷新快照',
       },
       direction: {
         increasing: '升温',
@@ -3011,6 +3012,7 @@ const RESOURCES = {
       footer: {
         lastRefresh: 'Last refresh: {timestamp}',
         pending: 'Pending sync',
+        refreshingSnapshot: 'Refreshing snapshot',
       },
       direction: {
         increasing: 'Rising',

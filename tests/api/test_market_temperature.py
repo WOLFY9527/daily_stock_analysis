@@ -11,6 +11,10 @@ from src.services.market_overview_service import MarketOverviewService
 
 
 class MarketTemperatureApiTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
     def test_get_temperature_returns_stable_scores(self) -> None:
         service = MagicMock()
         service.get_market_temperature.return_value = {

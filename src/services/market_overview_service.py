@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional
 import requests
 
 from src.services.execution_log_service import ExecutionLogService
+from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
 
 PanelPayload = Dict[str, Any]
 CN_TZ = timezone(timedelta(hours=8))
@@ -135,6 +136,7 @@ class MarketOverviewService:
     CACHE_TTL_SECONDS = 300
     _cache: Dict[str, tuple[float, PanelPayload]] = {}
     _market_data_cache: Dict[str, Dict[str, Any]] = {}
+    _market_cache = market_cache
 
     INDEX_SYMBOLS = {
         "SPX": ("S&P 500", "^GSPC"),
@@ -192,6 +194,7 @@ class MarketOverviewService:
             panel_name="CryptoCard",
             endpoint_url="/api/v1/market/crypto",
             fetcher=self._fetch_crypto_market_snapshot,
+            fallback_factory=lambda: self._fallback_market_snapshot("crypto", "unavailable"),
             actor=actor,
         )
 
@@ -201,6 +204,7 @@ class MarketOverviewService:
             panel_name="MarketSentimentCard",
             endpoint_url="/api/v1/market/sentiment",
             fetcher=self._fetch_market_sentiment_snapshot,
+            fallback_factory=lambda: self._fallback_market_snapshot("sentiment", "unavailable"),
             actor=actor,
         )
 
@@ -265,48 +269,71 @@ class MarketOverviewService:
         )
 
     def get_market_temperature(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        try:
+        def fetcher() -> Dict[str, Any]:
             inputs = self._build_market_temperature_inputs()
             source = "computed" if not inputs.get("fallback_notice") else "mixed"
-        except Exception:
+            scores = self._compute_market_temperature_scores(inputs)
+            payload = {
+                "source": source,
+                "updatedAt": _now_iso(),
+                "scores": scores,
+            }
+            if inputs.get("fallback_notice"):
+                payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
+                payload["fallbackUsed"] = True
+            return payload
+
+        def fallback_factory() -> Dict[str, Any]:
             inputs = self._fallback_market_temperature_inputs()
-            source = "fallback"
-        scores = self._compute_market_temperature_scores(inputs)
-        payload = {
-            "source": source,
-            "updatedAt": _now_iso(),
-            "scores": scores,
-        }
-        if inputs.get("fallback_notice"):
-            payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
-            payload["fallbackUsed"] = True
-        return self._with_market_meta(payload, "sentiment")
+            return {
+                "source": "fallback",
+                "updatedAt": _now_iso(),
+                "scores": self._compute_market_temperature_scores(inputs),
+                "warning": "备用数据，不代表当前行情",
+                "fallbackUsed": True,
+                "isFallback": True,
+            }
+
+        payload = self._cached_payload("temperature", fetcher, fallback_factory)
+        return self._with_market_meta(payload, self._category_for_cache_key("temperature"))
 
     def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        try:
+        def fetcher() -> Dict[str, Any]:
             inputs = self._build_market_temperature_inputs()
             source = "computed" if not inputs.get("fallback_notice") else "mixed"
-        except Exception:
+            scores = self._compute_market_temperature_scores(inputs)
+            payload = {
+                "source": source,
+                "updatedAt": _now_iso(),
+                "items": self._build_market_briefing_items(inputs, scores, source),
+            }
+            if inputs.get("fallback_notice"):
+                payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
+                payload["fallbackUsed"] = True
+            return payload
+
+        def fallback_factory() -> Dict[str, Any]:
             inputs = self._fallback_market_temperature_inputs()
-            source = "fallback"
-        scores = self._compute_market_temperature_scores(inputs)
-        payload = {
-            "source": source,
-            "updatedAt": _now_iso(),
-            "items": self._build_market_briefing_items(inputs, scores, source),
-        }
-        if inputs.get("fallback_notice"):
-            payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
-            payload["fallbackUsed"] = True
-        return self._with_market_meta(payload, "sentiment")
+            scores = self._compute_market_temperature_scores(inputs)
+            return {
+                "source": "fallback",
+                "updatedAt": _now_iso(),
+                "items": self._build_market_briefing_items(inputs, scores, "fallback"),
+                "warning": FALLBACK_WARNING,
+                "fallbackUsed": True,
+                "isFallback": True,
+            }
+
+        payload = self._cached_payload("market_briefing", fetcher, fallback_factory)
+        return self._with_market_meta(payload, self._category_for_cache_key("market_briefing"))
 
     def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        try:
-            payload = self._fetch_futures_snapshot()
-            payload.setdefault("source", "public")
-        except Exception:
-            payload = self._fallback_futures_snapshot()
-            payload["source"] = "fallback"
+        payload = self._cached_payload(
+            "futures",
+            self._fetch_futures_snapshot,
+            self._fallback_futures_snapshot,
+        )
+        payload.setdefault("source", "public")
         payload.setdefault("updatedAt", _now_iso())
         payload.setdefault("items", [])
         if not payload["items"]:
@@ -316,14 +343,14 @@ class MarketOverviewService:
         return payload
 
     def get_cn_short_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        try:
-            payload = self._fetch_cn_short_sentiment_snapshot()
-            payload.setdefault("source", "public")
-        except Exception:
-            payload = self._fallback_cn_short_sentiment_snapshot()
-            payload["source"] = "fallback"
+        payload = self._cached_payload(
+            "cn_short_sentiment",
+            self._fetch_cn_short_sentiment_snapshot,
+            self._fallback_cn_short_sentiment_snapshot,
+        )
+        payload.setdefault("source", "public")
         payload.setdefault("updatedAt", _now_iso())
-        payload = self._with_market_meta(payload, "sentiment")
+        payload = self._with_market_meta(payload, self._category_for_cache_key("cn_short_sentiment"))
         return payload
 
     def _panel(
@@ -377,49 +404,29 @@ class MarketOverviewService:
         panel_name: str,
         endpoint_url: str,
         fetcher: Callable[[], Dict[str, Any]],
+        fallback_factory: Callable[[], Dict[str, Any]],
         actor: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         error_message = None
-        fallback_used = False
         status = "success"
-        raw_response: Dict[str, Any] = {"cache": "miss"}
-
-        try:
-            snapshot = fetcher()
-            self._market_data_cache[cache_key] = dict(snapshot)
-        except Exception as exc:
+        snapshot = self._cached_payload(cache_key, fetcher, fallback_factory)
+        if snapshot.get("lastError"):
             status = "failure"
-            fallback_used = True
-            error_message = f"更新失败：已回退到最近一次有效数据（{exc}）"
-            cached = self._market_data_cache.get(cache_key)
-            if cached:
-                snapshot = {
-                    **cached,
-                    "error": error_message,
-                    "fallback_used": True,
-                }
-                snapshot["items"] = [
-                    {
-                        **item,
-                        "error": error_message,
-                    }
-                    for item in cached.get("items", [])
-                ]
-                raw_response = {"cache": "fallback_hit", "error": str(exc)}
-            else:
-                snapshot = {
-                    "items": [],
-                    "last_update": _now_iso(),
-                    "error": error_message,
-                    "fallback_used": True,
-                    "source": "unavailable",
-                }
-                raw_response = {"cache": "fallback_miss", "error": str(exc)}
+            error_message = f"更新失败：已回退到最近一次有效数据（{snapshot.get('lastError')}）"
+            if not snapshot.get("error"):
+                snapshot["error"] = error_message
+            if str(snapshot.get("source") or "").lower() not in {"fallback", "mock", "unavailable"}:
+                snapshot["fallback_used"] = True
+            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": snapshot.get("lastError")}
+        elif snapshot.get("isRefreshing"):
+            raw_response = {"cache": "stale_refreshing"}
+        else:
+            raw_response = {"cache": "hit_or_refreshed"}
 
         snapshot.setdefault("last_update", _now_iso())
         snapshot.setdefault("updatedAt", snapshot["last_update"])
         snapshot.setdefault("error", error_message)
-        snapshot.setdefault("fallback_used", fallback_used)
+        snapshot.setdefault("fallback_used", bool(snapshot.get("fallbackUsed") or snapshot.get("isFallback")))
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         log_session_id = ExecutionLogService().record_market_overview_fetch(
@@ -443,27 +450,17 @@ class MarketOverviewService:
         fallback_factory: Callable[[], Dict[str, Any]],
         actor: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        error_message = None
         status = "success"
-        raw_response: Dict[str, Any] = {"cache": "miss"}
-        try:
-            snapshot = fetcher()
-            snapshot.setdefault("fallbackUsed", False)
-            self._market_data_cache[cache_key] = dict(snapshot)
-        except Exception as exc:
+        snapshot = self._cached_payload(cache_key, fetcher, fallback_factory)
+        error_message = snapshot.get("lastError")
+        if error_message:
             status = "failure"
-            error_message = f"更新失败：已回退到可用市场快照（{exc}）"
-            cached = self._market_data_cache.get(cache_key)
-            if cached and cached.get("items"):
-                snapshot = dict(cached)
-                snapshot["fallbackUsed"] = True
-                snapshot["error"] = error_message
-                raw_response = {"cache": "fallback_hit", "error": str(exc)}
-            else:
-                snapshot = fallback_factory()
-                snapshot["fallbackUsed"] = True
-                snapshot["error"] = error_message
-                raw_response = {"cache": "fallback_static", "error": str(exc)}
+            snapshot.setdefault("error", f"更新失败：已回退到可用市场快照（{error_message}）")
+            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": str(error_message)}
+        elif snapshot.get("isRefreshing"):
+            raw_response = {"cache": "stale_refreshing"}
+        else:
+            raw_response = {"cache": "hit_or_refreshed"}
 
         snapshot.setdefault("panelName", panel_name)
         snapshot.setdefault("updatedAt", _now_iso())
@@ -483,6 +480,61 @@ class MarketOverviewService:
         snapshot["logSessionId"] = log_session_id
         return snapshot
 
+    def _cached_payload(
+        self,
+        cache_key: str,
+        fetcher: Callable[[], Dict[str, Any]],
+        fallback_factory: Callable[[], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        ttl_seconds = self._ttl_for_cache_key(cache_key)
+
+        def store_success() -> Dict[str, Any]:
+            payload = fetcher()
+            self._market_data_cache[cache_key] = dict(payload)
+            return payload
+
+        def fallback() -> Dict[str, Any]:
+            cached = self._market_data_cache.get(cache_key)
+            if cached:
+                payload = dict(cached)
+                payload["fallbackUsed"] = True
+                return payload
+            return fallback_factory()
+
+        return self._market_cache.get_or_refresh(
+            cache_key,
+            ttl_seconds,
+            store_success,
+            fallback_factory=fallback,
+            allow_stale=True,
+            background_refresh=True,
+        )
+
+    def _fallback_market_snapshot(self, cache_key: str, source: str) -> Dict[str, Any]:
+        cached = self._market_data_cache.get(cache_key)
+        if cached:
+            payload = dict(cached)
+            payload["fallback_used"] = True
+            return payload
+        updated_at = _now_iso()
+        return {
+            "items": [],
+            "last_update": updated_at,
+            "updatedAt": updated_at,
+            "error": None,
+            "fallback_used": True,
+            "source": source,
+        }
+
+    def _ttl_for_cache_key(self, cache_key: str) -> int:
+        ttl_key = {
+            "cn_breadth": "breadth",
+            "cn_flows": "flows",
+            "fx_commodities": "fx_commodity",
+            "cn_short_sentiment": "sentiment",
+        }.get(cache_key, cache_key)
+        return MARKET_CACHE_TTLS.get(ttl_key, self.CACHE_TTL_SECONDS)
+
     def _category_for_cache_key(self, cache_key: str) -> str:
         mapping = {
             "indices": "equity_index",
@@ -497,6 +549,10 @@ class MarketOverviewService:
             "sector_rotation": "sentiment",
             "rates": "macro_rate",
             "fx_commodities": "fx_commodity",
+            "temperature": "sentiment",
+            "market_briefing": "sentiment",
+            "futures": "futures",
+            "cn_short_sentiment": "sentiment",
         }
         return mapping.get(cache_key, "equity_index")
 
@@ -517,10 +573,12 @@ class MarketOverviewService:
             "asOf": as_of,
             "freshness": freshness["freshness"],
             "isFallback": freshness["isFallback"],
-            "isStale": freshness["isStale"],
+            "isStale": bool(payload.get("isStale") or freshness["isStale"]),
             "delayMinutes": freshness["delayMinutes"],
-            "warning": payload.get("warning") or freshness["warning"],
+            "warning": payload.get("warning") or (REFRESH_WARNING if payload.get("lastError") else None) or freshness["warning"],
             "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
+            "isRefreshing": bool(payload.get("isRefreshing")),
+            "lastError": payload.get("lastError"),
         }
 
     def _with_item_meta(self, item: Dict[str, Any], category: str, panel: Dict[str, Any]) -> Dict[str, Any]:

@@ -15,6 +15,10 @@ CN_TZ = timezone(timedelta(hours=8))
 
 
 class MarketCnIndicesApiTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
     def test_cn_indices_endpoint_returns_stable_contract(self) -> None:
         payload = market.get_cn_indices()
 
@@ -96,6 +100,39 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertFalse(live_item["isFallback"])
         self.assertEqual(fallback_item["freshness"], "fallback")
         self.assertTrue(fallback_item["isFallback"])
+
+    def test_cn_indices_uses_cache_within_ttl(self) -> None:
+        calls = 0
+
+        def fetcher(self: MarketOverviewService) -> dict:
+            nonlocal calls
+            calls += 1
+            updated_at = datetime(2026, 4, 30, 10, calls, tzinfo=CN_TZ).isoformat(timespec="seconds")
+            return {
+                "source": "sina",
+                "updatedAt": updated_at,
+                "asOf": updated_at,
+                "items": [
+                    {
+                        "name": "上证指数",
+                        "symbol": "000001.SH",
+                        "value": 4100 + calls,
+                        "change": 1,
+                        "changePercent": 0.1,
+                        "sparkline": [4090, 4100 + calls],
+                        "source": "sina",
+                        "asOf": updated_at,
+                    }
+                ],
+            }
+
+        with patch.object(MarketOverviewService, "_fetch_cn_indices_snapshot", fetcher):
+            first = market.get_cn_indices()
+            second = market.get_cn_indices()
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(second["items"][0]["value"], first["items"][0]["value"])
+        self.assertIn("isRefreshing", second)
 
 
 if __name__ == "__main__":

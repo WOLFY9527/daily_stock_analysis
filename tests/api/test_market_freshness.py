@@ -1,0 +1,102 @@
+# -*- coding: utf-8 -*-
+"""Cache/freshness integration tests for market endpoints."""
+
+from __future__ import annotations
+
+import threading
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, patch
+
+from src.services.market_overview_service import MarketOverviewService
+
+
+CN_TZ = timezone(timedelta(hours=8))
+
+
+class MarketFreshnessCacheTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+    def test_expired_cache_returns_old_snapshot_and_refreshes_in_background(self) -> None:
+        service = MarketOverviewService()
+        first_time = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        service._market_cache.set(
+            "crypto",
+            {
+                "items": [{"symbol": "BTC", "price": 70000, "change": 1, "trend": [69000, 70000], "source": "binance", "last_update": first_time}],
+                "last_update": first_time,
+                "source": "binance",
+                "fallback_used": False,
+            },
+            ttl_seconds=1,
+        )
+        entry = service._market_cache.get("crypto")
+        entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+        refresh_started = threading.Event()
+        release_refresh = threading.Event()
+        refreshed_time = datetime(2026, 4, 30, 10, 1, tzinfo=CN_TZ).isoformat(timespec="seconds")
+
+        def fetcher() -> dict:
+            refresh_started.set()
+            release_refresh.wait(2)
+            return {
+                "items": [{"symbol": "BTC", "price": 71000, "change": 2, "trend": [70000, 71000], "source": "binance", "last_update": refreshed_time}],
+                "last_update": refreshed_time,
+                "source": "binance",
+                "fallback_used": False,
+            }
+
+        with patch.object(service, "_fetch_crypto_market_snapshot", side_effect=fetcher):
+            stale_payload = service.get_crypto()
+            self.assertEqual(stale_payload["items"][0]["price"], 70000)
+            self.assertTrue(stale_payload["isRefreshing"])
+            self.assertTrue(refresh_started.wait(1))
+            release_refresh.set()
+            self.assertTrue(service._market_cache.wait_for_refreshes(timeout=2))
+            refreshed_payload = service.get_crypto()
+
+        self.assertEqual(refreshed_payload["items"][0]["price"], 71000)
+        self.assertFalse(refreshed_payload["isRefreshing"])
+
+    def test_refresh_failure_preserves_old_snapshot_and_warning(self) -> None:
+        service = MarketOverviewService()
+        updated_at = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        service._market_cache.set(
+            "sentiment",
+            {
+                "items": [{"symbol": "FGI", "price": 52, "change": 0, "trend": [50, 52], "source": "cnn", "last_update": updated_at}],
+                "last_update": updated_at,
+                "source": "cnn",
+                "fallback_used": False,
+            },
+            ttl_seconds=1,
+        )
+        entry = service._market_cache.get("sentiment")
+        entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+
+        with patch.object(service, "_fetch_market_sentiment_snapshot", side_effect=RuntimeError("cnn down")):
+            stale_payload = service.get_market_sentiment()
+            self.assertTrue(stale_payload["isRefreshing"])
+            self.assertTrue(service._market_cache.wait_for_refreshes(timeout=2))
+            payload = service.get_market_sentiment()
+
+        self.assertEqual(payload["items"][0]["price"], 52)
+        self.assertEqual(payload["warning"], "数据源刷新失败，当前显示最近快照")
+        self.assertIn("cnn down", payload["lastError"])
+
+    def test_fallback_data_keeps_fallback_freshness(self) -> None:
+        service = MarketOverviewService()
+
+        with patch.object(service, "_fetch_cn_breadth_snapshot", Mock(side_effect=RuntimeError("provider down"))):
+            payload = service.get_cn_breadth()
+
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertTrue(payload["isFallback"])
+        self.assertNotEqual(payload["freshness"], "live")
+        self.assertEqual(payload["items"][0]["freshness"], "fallback")
+
+
+if __name__ == "__main__":
+    unittest.main()

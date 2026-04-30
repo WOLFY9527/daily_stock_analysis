@@ -13,6 +13,7 @@ export interface MarketDataMeta {
   freshness: MarketDataFreshness;
   isFallback?: boolean;
   isStale?: boolean;
+  isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
 }
@@ -54,6 +55,7 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     freshness: normalized.freshness,
     isFallback: normalized.isFallback,
     isStale: normalized.isStale,
+    isRefreshing: normalized.isRefreshing,
     delayMinutes: normalized.delayMinutes,
     warning: normalized.warning,
     items: Array.isArray(normalized.items) ? normalized.items : [],
