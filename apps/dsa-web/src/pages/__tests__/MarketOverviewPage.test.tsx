@@ -260,6 +260,11 @@ const temperaturePayload = () => ({
   freshness: 'cached' as const,
   isFallback: false,
   isStale: false,
+  confidence: 0.82,
+  reliableInputCount: 12,
+  fallbackInputCount: 2,
+  excludedInputCount: 2,
+  isReliable: true,
   scores: {
     overall: { value: 62, label: '偏暖', trend: 'improving' as const, description: '风险偏好改善，但宏观压力仍需关注。' },
     usRiskAppetite: { value: 68, label: '偏暖', trend: 'improving' as const, description: '美股指数与风险情绪同步改善。' },
@@ -277,10 +282,56 @@ const briefingPayload = () => ({
   freshness: 'cached' as const,
   isFallback: false,
   isStale: false,
+  confidence: 0.82,
+  reliableInputCount: 12,
+  fallbackInputCount: 2,
+  excludedInputCount: 2,
+  isReliable: true,
   items: [
-    { title: '美股风险偏好偏暖', message: '主要指数走强，VIX 回落。', severity: 'positive' as const, category: 'us' },
-    { title: 'A股赚钱效应中性', message: '指数上涨但上涨家数占比一般。', severity: 'neutral' as const, category: 'cn' },
-    { title: '宏观压力仍需关注', message: '美债收益率和美元指数同步走强。', severity: 'warning' as const, category: 'macro' },
+    { title: '美股风险偏好偏暖', message: '主要指数走强，VIX 回落。', severity: 'positive' as const, category: 'us', confidence: 0.82 },
+    { title: 'A股赚钱效应中性', message: '指数上涨但上涨家数占比一般。', severity: 'neutral' as const, category: 'cn', confidence: 0.82 },
+    { title: '宏观压力仍需关注', message: '美债收益率和美元指数同步走强。', severity: 'warning' as const, category: 'macro', confidence: 0.82 },
+  ],
+});
+
+const unreliableTemperaturePayload = () => ({
+  source: 'fallback',
+  sourceLabel: '备用数据',
+  updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'fallback' as const,
+  isFallback: true,
+  warning: '当前真实数据不足，市场温度仅供界面演示',
+  confidence: 0,
+  reliableInputCount: 0,
+  fallbackInputCount: 18,
+  excludedInputCount: 18,
+  isReliable: false,
+  scores: {
+    overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
+    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
+    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
+    macroPressure: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
+    liquidity: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
+  },
+});
+
+const unreliableBriefingPayload = () => ({
+  source: 'fallback',
+  sourceLabel: '备用数据',
+  updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'fallback' as const,
+  isFallback: true,
+  warning: '当前真实数据不足，暂不生成强市场判断。',
+  confidence: 0,
+  reliableInputCount: 0,
+  fallbackInputCount: 18,
+  excludedInputCount: 18,
+  isReliable: false,
+  items: [
+    { title: '当前真实数据不足', message: '当前真实数据不足，暂不生成强市场判断。', severity: 'warning' as const, category: 'risk', confidence: 0 },
+    { title: '备用数据已降级', message: '备用示例数据仅用于保持界面结构，不参与市场温度评分。', severity: 'neutral' as const, category: 'risk', confidence: 0 },
   ],
 });
 
@@ -420,6 +471,7 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
     expect(screen.getByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场温度总览/i })).toBeInTheDocument();
+    expect(screen.getByText(/可信度：高/i)).toBeInTheDocument();
     expect(screen.getByText(/综合市场温度/i)).toBeInTheDocument();
     expect(screen.getAllByText(/美股风险偏好/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/A股赚钱效应/i).length).toBeGreaterThan(0);
@@ -467,6 +519,28 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('data-freshness-badge-delayed').length).toBeGreaterThan(0);
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+  });
+
+  it('downgrades unreliable market temperature and briefing copy', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-temperature-unreliable-warning')).toHaveTextContent('部分评分基于备用数据，暂不作为实时市场判断');
+    expect(screen.getByText(/可信度：数据不足/i)).toBeInTheDocument();
+    expect(screen.getAllByText('数据不足').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
+    expect(screen.getByText(/备用示例数据仅用于保持界面结构/i)).toBeInTheDocument();
+  });
+
+  it('marks fallback-only cards as examples instead of real-time market data', async () => {
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-overview-card-futures')).toBeInTheDocument();
+    expect(screen.getAllByText('暂未接入真实数据源').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('当前为备用示例数据，不参与市场温度评分').length).toBeGreaterThan(0);
+    expect(screen.queryByText('实时行情')).not.toBeInTheDocument();
   });
 
   it('renders all data freshness badge states', () => {
@@ -664,7 +738,7 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
-    expect(screen.getByText('BTC')).toBeInTheDocument();
+    expect(await screen.findByText('BTC')).toBeInTheDocument();
     expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
   });
 

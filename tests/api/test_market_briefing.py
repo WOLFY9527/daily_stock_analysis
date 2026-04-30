@@ -46,8 +46,22 @@ class MarketBriefingApiTestCase(unittest.TestCase):
 
         self.assertTrue(payload["updatedAt"])
         self.assertGreaterEqual(len(payload["items"]), 3)
+        self.assertFalse(payload["isReliable"])
+        self.assertEqual(payload["confidence"], 0.0)
+        self.assertIn("真实数据不足", payload["warning"])
         for item in payload["items"]:
-            self.assertIn(item["severity"], {"positive", "neutral", "warning", "risk"})
+            self.assertIn(item["severity"], {"neutral", "warning", "risk"})
+            self.assertNotEqual(item["severity"], "positive")
+            self.assertIn("confidence", item)
+
+    def test_get_market_briefing_fallback_only_avoids_positive_strong_judgement(self) -> None:
+        service = MarketOverviewService()
+        payload = service.get_market_briefing()
+
+        self.assertFalse(payload["isReliable"])
+        self.assertIn("暂不生成强市场判断", payload["warning"])
+        self.assertTrue(any("暂不生成强市场判断" in item["message"] for item in payload["items"]))
+        self.assertFalse(any(item["severity"] == "positive" for item in payload["items"]))
 
 
 if __name__ == "__main__":

@@ -15,6 +15,17 @@ from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market
 PanelPayload = Dict[str, Any]
 CN_TZ = timezone(timedelta(hours=8))
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
+INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
+
+CONFIDENCE_BY_FRESHNESS = {
+    "live": 1.0,
+    "delayed": 0.8,
+    "cached": 0.6,
+    "stale": 0.3,
+    "fallback": 0.0,
+    "mock": 0.0,
+    "error": 0.0,
+}
 
 SOURCE_LABELS = {
     "eastmoney": "东方财富",
@@ -271,27 +282,43 @@ class MarketOverviewService:
     def get_market_temperature(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def fetcher() -> Dict[str, Any]:
             inputs = self._build_market_temperature_inputs()
-            source = "computed" if not inputs.get("fallback_notice") else "mixed"
-            scores = self._compute_market_temperature_scores(inputs)
+            trust = self._summarize_market_temperature_confidence(inputs)
+            source = "computed" if trust["isReliable"] and not trust["fallbackInputCount"] else "mixed"
+            if trust["reliableInputCount"] == 0:
+                source = "fallback"
+            scores = (
+                self._compute_market_temperature_scores(self._real_market_temperature_inputs(inputs))
+                if trust["isReliable"]
+                else self._insufficient_market_temperature_scores()
+            )
             payload = {
                 "source": source,
                 "updatedAt": _now_iso(),
                 "scores": scores,
+                **trust,
             }
-            if inputs.get("fallback_notice"):
-                payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
+            if not trust["isReliable"]:
+                payload["warning"] = INSUFFICIENT_MARKET_DATA_WARNING
+                payload["fallbackUsed"] = True
+                payload["isFallback"] = trust["reliableInputCount"] == 0
+                payload["freshness"] = "fallback" if trust["reliableInputCount"] == 0 else "stale"
+            elif trust["fallbackInputCount"]:
+                payload["warning"] = "部分指标来自备用数据，评分仅使用真实数据。"
                 payload["fallbackUsed"] = True
             return payload
 
         def fallback_factory() -> Dict[str, Any]:
             inputs = self._fallback_market_temperature_inputs()
+            trust = self._summarize_market_temperature_confidence(inputs)
             return {
                 "source": "fallback",
                 "updatedAt": _now_iso(),
-                "scores": self._compute_market_temperature_scores(inputs),
-                "warning": "备用数据，不代表当前行情",
+                "scores": self._insufficient_market_temperature_scores(),
+                "warning": INSUFFICIENT_MARKET_DATA_WARNING,
                 "fallbackUsed": True,
                 "isFallback": True,
+                "freshness": "fallback",
+                **trust,
             }
 
         payload = self._cached_payload("temperature", fetcher, fallback_factory)
@@ -300,28 +327,41 @@ class MarketOverviewService:
     def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def fetcher() -> Dict[str, Any]:
             inputs = self._build_market_temperature_inputs()
-            source = "computed" if not inputs.get("fallback_notice") else "mixed"
-            scores = self._compute_market_temperature_scores(inputs)
+            trust = self._summarize_market_temperature_confidence(inputs)
+            source = "computed" if trust["isReliable"] and not trust["fallbackInputCount"] else "mixed"
+            if trust["reliableInputCount"] == 0:
+                source = "fallback"
+            real_inputs = self._real_market_temperature_inputs(inputs)
+            scores = self._compute_market_temperature_scores(real_inputs) if trust["isReliable"] else self._insufficient_market_temperature_scores()
             payload = {
                 "source": source,
                 "updatedAt": _now_iso(),
-                "items": self._build_market_briefing_items(inputs, scores, source),
+                "items": self._build_market_briefing_items(real_inputs if trust["isReliable"] else inputs, scores, source, trust),
+                **trust,
             }
-            if inputs.get("fallback_notice"):
-                payload["warning"] = "部分指标来自备用数据，评分仅供结构演示。"
+            if not trust["isReliable"]:
+                payload["warning"] = "当前真实数据不足，暂不生成强市场判断。"
+                payload["fallbackUsed"] = True
+                payload["isFallback"] = trust["reliableInputCount"] == 0
+                payload["freshness"] = "fallback" if trust["reliableInputCount"] == 0 else "stale"
+            elif trust["fallbackInputCount"]:
+                payload["warning"] = "部分解读已排除备用数据。"
                 payload["fallbackUsed"] = True
             return payload
 
         def fallback_factory() -> Dict[str, Any]:
             inputs = self._fallback_market_temperature_inputs()
-            scores = self._compute_market_temperature_scores(inputs)
+            trust = self._summarize_market_temperature_confidence(inputs)
+            scores = self._insufficient_market_temperature_scores()
             return {
                 "source": "fallback",
                 "updatedAt": _now_iso(),
-                "items": self._build_market_briefing_items(inputs, scores, "fallback"),
-                "warning": FALLBACK_WARNING,
+                "items": self._build_market_briefing_items(inputs, scores, "fallback", trust),
+                "warning": "当前真实数据不足，暂不生成强市场判断。",
                 "fallbackUsed": True,
                 "isFallback": True,
+                "freshness": "fallback",
+                **trust,
             }
 
         payload = self._cached_payload("market_briefing", fetcher, fallback_factory)
@@ -1246,6 +1286,89 @@ class MarketOverviewService:
             "fallback_notice": True,
         }
 
+    def _summarize_market_temperature_confidence(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        confidences: List[float] = []
+        reliable_count = 0
+        fallback_count = 0
+        excluded_count = 0
+        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment"):
+            if key not in inputs:
+                continue
+            panel = inputs.get(key) or {}
+            panel_items = panel.get("items") if isinstance(panel, dict) else []
+            if not isinstance(panel_items, list):
+                panel_items = []
+            if panel_items:
+                for item in panel_items:
+                    confidence = self._market_data_confidence(item if isinstance(item, dict) else {})
+                    confidences.append(confidence)
+                    if confidence > 0:
+                        reliable_count += 1
+                    else:
+                        fallback_count += 1
+                        excluded_count += 1
+                continue
+            if isinstance(panel, dict):
+                confidence = self._market_data_confidence(panel)
+                confidences.append(confidence)
+                if confidence > 0:
+                    reliable_count += 1
+                else:
+                    fallback_count += 1
+                    excluded_count += 1
+
+        confidence = round(sum(confidences) / len(confidences), 2) if confidences else 0.0
+        is_reliable = reliable_count >= 4 and confidence >= 0.3
+        return {
+            "confidence": confidence,
+            "reliableInputCount": reliable_count,
+            "fallbackInputCount": fallback_count,
+            "excludedInputCount": excluded_count,
+            "isReliable": is_reliable,
+        }
+
+    def _real_market_temperature_inputs(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        filtered: Dict[str, Any] = {"fallback_notice": bool(inputs.get("fallback_notice"))}
+        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment"):
+            panel = inputs.get(key)
+            if not isinstance(panel, dict):
+                filtered[key] = {"items": []}
+                continue
+            next_panel = {**panel}
+            items = panel.get("items") if isinstance(panel.get("items"), list) else []
+            next_panel["items"] = [
+                item for item in items
+                if isinstance(item, dict) and self._market_data_confidence(item) > 0
+            ]
+            filtered[key] = next_panel
+        return filtered
+
+    @staticmethod
+    def _market_data_confidence(meta: Dict[str, Any]) -> float:
+        freshness = str(meta.get("freshness") or "").lower()
+        if freshness in CONFIDENCE_BY_FRESHNESS:
+            return CONFIDENCE_BY_FRESHNESS[freshness]
+        source = str(meta.get("source") or "").lower()
+        if meta.get("isFallback") or meta.get("fallbackUsed") or meta.get("fallback_used"):
+            return 0.0
+        if source in {"fallback", "mock", "error", "unavailable"}:
+            return 0.0
+        if source in {"live"}:
+            return 1.0
+        if source in {"cached", "computed", "mixed"}:
+            return 0.6
+        return 0.6 if source else 0.0
+
+    def _insufficient_market_temperature_scores(self) -> Dict[str, Any]:
+        description = "当前真实数据不足，市场温度仅供界面演示。"
+        return {
+            "overall": self._insufficient_temperature_score(description),
+            "usRiskAppetite": self._insufficient_temperature_score(description),
+            "cnMoneyEffect": self._insufficient_temperature_score(description),
+            "macroPressure": self._insufficient_temperature_score(description),
+            "liquidity": self._insufficient_temperature_score(description),
+        }
+
     def _compute_market_temperature_scores(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         us_index_change = self._avg_change(inputs.get("futures", {}).get("items", []), {"NQ", "ES", "YM", "RTY"})
         vix_change = self._item_change(inputs.get("rates", {}).get("items", []), "VIX")
@@ -1309,40 +1432,85 @@ class MarketOverviewService:
             "liquidity": self._temperature_score(liquidity_value, "资金环境结合 ETF、利率、美元和跨境资金判断。"),
         }
 
-    def _build_market_briefing_items(self, inputs: Dict[str, Any], scores: Dict[str, Any], source: str) -> List[Dict[str, str]]:
+    def _build_market_briefing_items(
+        self,
+        inputs: Dict[str, Any],
+        scores: Dict[str, Any],
+        source: str,
+        trust: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        confidence = float((trust or {}).get("confidence", 0.0 if source != "computed" else 1.0))
+        if trust and not trust.get("isReliable"):
+            return [
+                {
+                    "title": "当前真实数据不足",
+                    "message": "当前真实数据不足，暂不生成强市场判断。",
+                    "severity": "warning",
+                    "category": "risk",
+                    "confidence": confidence,
+                },
+                {
+                    "title": "备用数据已降级",
+                    "message": "备用示例数据仅用于保持界面结构，不参与市场温度评分。",
+                    "severity": "neutral",
+                    "category": "risk",
+                    "confidence": confidence,
+                },
+                {
+                    "title": "等待真实行情源",
+                    "message": "接入足够真实输入后，再恢复风险偏好、赚钱效应和流动性判断。",
+                    "severity": "neutral",
+                    "category": "risk",
+                    "confidence": confidence,
+                },
+            ]
         items = [
             {
                 "title": f"美股风险偏好{scores['usRiskAppetite']['label']}",
                 "message": "主要股指期货与 Fear & Greed 改善时，风险偏好更偏进攻；若 VIX 或美元反向走强，需要降低追涨假设。",
                 "severity": "positive" if scores["usRiskAppetite"]["value"] >= 60 else "neutral",
                 "category": "us",
+                "confidence": confidence,
             },
             {
                 "title": f"A股赚钱效应{scores['cnMoneyEffect']['label']}",
                 "message": "指数上涨、上涨家数占比和涨停跌停结构共同决定赚钱效应，结构性行情中需关注主题持续性。",
                 "severity": "positive" if scores["cnMoneyEffect"]["value"] >= 60 else "neutral",
                 "category": "cn",
+                "confidence": confidence,
             },
             {
                 "title": "宏观压力仍需关注" if scores["macroPressure"]["value"] >= 55 else "宏观压力相对平稳",
                 "message": "美债收益率、美元指数、原油和黄金同步上行时，成长股估值与风险资产可能承压。",
                 "severity": "warning" if scores["macroPressure"]["value"] >= 55 else "neutral",
                 "category": "macro",
+                "confidence": confidence,
             },
             {
                 "title": f"流动性环境{scores['liquidity']['label']}",
                 "message": "ETF 资金、DR007、SHIBOR、美债利率、DXY 与北向资金共同描述可交易流动性。",
                 "severity": "positive" if scores["liquidity"]["value"] >= 60 else "neutral",
                 "category": "liquidity",
+                "confidence": confidence,
             },
             {
                 "title": "风险提示",
                 "message": "当前部分数据为备用源，仅供趋势参考。" if source != "computed" or inputs.get("fallback_notice") else "若美元、利率和波动率同步升温，应下调风险偏好判断。",
                 "severity": "risk" if source != "computed" or inputs.get("fallback_notice") else "warning",
                 "category": "risk",
+                "confidence": confidence,
             },
         ]
         return items
+
+    @staticmethod
+    def _insufficient_temperature_score(description: str) -> Dict[str, Any]:
+        return {
+            "value": 50,
+            "label": "数据不足",
+            "trend": "stable",
+            "description": description,
+        }
 
     def _temperature_score(self, value: int, description: str) -> Dict[str, Any]:
         return {

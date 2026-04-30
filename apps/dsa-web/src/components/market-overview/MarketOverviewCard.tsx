@@ -10,6 +10,17 @@ import {
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
 
+function isFallbackOnlyPanel(panel?: MarketOverviewPanel): boolean {
+  if (!panel) {
+    return false;
+  }
+  const panelFallback = panel.isFallback || panel.freshness === 'fallback' || panel.source === 'fallback';
+  const items = panel.items || [];
+  return Boolean(panelFallback && items.length > 0 && items.every((item) => (
+    item.isFallback || item.freshness === 'fallback' || item.source === 'fallback'
+  )));
+}
+
 type MarketOverviewCardProps = {
   title: string;
   eyebrow: string;
@@ -35,12 +46,14 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
 }) => {
   const { t } = useI18n();
   const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
+  const fallbackOnly = isFallbackOnlyPanel(panel);
 
   return (
     <GlassCard
       as="section"
       className={cn(
         'flex h-full flex-col p-6',
+        fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '',
         className || '',
       )}
     >
@@ -61,6 +74,13 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
         {panel?.errorMessage ? (
           <div className="rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {panel.errorMessage}
+          </div>
+        ) : null}
+
+        {fallbackOnly ? (
+          <div className="rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
+            <p className="font-semibold">暂未接入真实数据源</p>
+            <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
           </div>
         ) : null}
 

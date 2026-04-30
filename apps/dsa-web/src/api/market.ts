@@ -149,6 +149,11 @@ export type MarketTemperatureResponse = {
   isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
+  confidence?: number;
+  reliableInputCount?: number;
+  fallbackInputCount?: number;
+  excludedInputCount?: number;
+  isReliable?: boolean;
   scores: {
     overall: MarketTemperatureScore;
     usRiskAppetite: MarketTemperatureScore;
@@ -163,6 +168,7 @@ export type MarketBriefingItem = {
   message: string;
   severity: 'positive' | 'neutral' | 'warning' | 'risk';
   category: 'us' | 'cn' | 'macro' | 'liquidity' | 'risk' | string;
+  confidence?: number;
 };
 
 export type MarketBriefingResponse = {
@@ -176,6 +182,11 @@ export type MarketBriefingResponse = {
   isRefreshing?: boolean;
   delayMinutes?: number;
   warning?: string | null;
+  confidence?: number;
+  reliableInputCount?: number;
+  fallbackInputCount?: number;
+  excludedInputCount?: number;
+  isReliable?: boolean;
   items: MarketBriefingItem[];
 };
 

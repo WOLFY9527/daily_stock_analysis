@@ -75,13 +75,18 @@ const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
   updatedAt: new Date(0).toISOString(),
   freshness: 'fallback',
   isFallback: true,
-  warning: '部分指标来自备用数据，评分仅供结构演示。',
+  warning: '当前真实数据不足，市场温度仅供界面演示',
+  confidence: 0,
+  reliableInputCount: 0,
+  fallbackInputCount: 0,
+  excludedInputCount: 0,
+  isReliable: false,
   scores: {
-    overall: { value: 50, label: '中性', trend: 'stable', description: '市场温度数据暂用备用源。' },
-    usRiskAppetite: { value: 50, label: '中性', trend: 'stable', description: '美股风险偏好暂用备用源。' },
-    cnMoneyEffect: { value: 50, label: '中性', trend: 'stable', description: 'A股赚钱效应暂用备用源。' },
-    macroPressure: { value: 50, label: '中性', trend: 'stable', description: '宏观压力暂用备用源。' },
-    liquidity: { value: 50, label: '中性', trend: 'stable', description: '流动性环境暂用备用源。' },
+    overall: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
+    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
+    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
+    macroPressure: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
+    liquidity: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
   },
 };
 
@@ -91,11 +96,16 @@ const FALLBACK_BRIEFING: MarketBriefingResponse = {
   updatedAt: new Date(0).toISOString(),
   freshness: 'fallback',
   isFallback: true,
-  warning: '部分指标来自备用数据，评分仅供结构演示。',
+  warning: '当前真实数据不足，暂不生成强市场判断。',
+  confidence: 0,
+  reliableInputCount: 0,
+  fallbackInputCount: 0,
+  excludedInputCount: 0,
+  isReliable: false,
   items: [
-    { title: '市场数据备用源', message: '当前部分数据为备用源，仅供趋势参考。', severity: 'risk', category: 'risk' },
-    { title: '美股风险偏好中性', message: '等待主要指数、VIX 与情绪指标同步更新。', severity: 'neutral', category: 'us' },
-    { title: 'A股赚钱效应中性', message: '等待市场宽度、涨跌停与资金流向确认。', severity: 'neutral', category: 'cn' },
+    { title: '当前真实数据不足', message: '当前真实数据不足，暂不生成强市场判断。', severity: 'warning', category: 'risk', confidence: 0 },
+    { title: '备用数据已降级', message: '备用示例数据仅用于保持界面结构，不参与市场温度评分。', severity: 'neutral', category: 'risk', confidence: 0 },
+    { title: '等待真实行情源', message: '接入足够真实输入后，再恢复风险偏好、赚钱效应和流动性判断。', severity: 'neutral', category: 'risk', confidence: 0 },
   ],
 };
 
@@ -142,8 +152,8 @@ const FALLBACK_CN_SHORT_SENTIMENT: CnShortSentimentResponse = {
   freshness: 'fallback',
   isFallback: true,
   warning: '备用示例数据，不代表当前行情',
-  sentimentScore: 64,
-  summary: '涨停家数占优，炸板率可控，短线情绪偏暖。',
+  sentimentScore: 50,
+  summary: '暂未接入真实数据源，当前为备用示例数据。',
   metrics: {
     limitUpCount: 68,
     limitDownCount: 18,
@@ -287,6 +297,35 @@ function scoreTone(score: MarketTemperatureScore, pressure = false): string {
   return score.value >= 76 ? 'text-amber-200' : score.value >= 61 ? 'text-emerald-300' : score.value <= 45 ? 'text-sky-300' : 'text-white';
 }
 
+function confidenceLabel(confidence?: number, isReliable?: boolean): string {
+  if (isReliable === false || confidence === 0) {
+    return '数据不足';
+  }
+  if (confidence == null) {
+    return '中';
+  }
+  if (confidence >= 0.75) {
+    return '高';
+  }
+  if (confidence >= 0.45) {
+    return '中';
+  }
+  return '低';
+}
+
+function isFallbackOnlyMeta(meta: {
+  source?: string;
+  freshness?: string;
+  isFallback?: boolean;
+  items?: Array<{ source?: string; freshness?: string; isFallback?: boolean }>;
+}): boolean {
+  const items = meta.items || [];
+  return Boolean(
+    (meta.isFallback || meta.freshness === 'fallback' || meta.source === 'fallback')
+    && (!items.length || items.every((item) => item.isFallback || item.freshness === 'fallback' || item.source === 'fallback')),
+  );
+}
+
 type FreshnessCountKey = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
 type DataQualitySummary = {
   status: string;
@@ -398,26 +437,46 @@ const MarketTemperatureStrip: React.FC<{
     { key: 'macroPressure', label: t('marketOverviewPage.temperature.macroPressure'), pressure: true },
     { key: 'liquidity', label: t('marketOverviewPage.temperature.liquidity') },
   ];
+  const confidenceText = confidenceLabel(data.confidence, data.isReliable);
+  const isReliable = data.isReliable !== false;
   return (
     <GlassCard as="section" data-testid="market-temperature-strip" className="p-4">
       <div className="mb-3 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.temperature.eyebrow')}</p>
           <h2 className="mt-1 text-lg font-semibold text-white">{t('marketOverviewPage.temperature.title')}</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className={cn(
+              'rounded-full border px-2 py-0.5 font-semibold',
+              isReliable ? 'border-emerald-300/20 bg-emerald-400/8 text-emerald-100' : 'border-orange-300/25 bg-orange-400/10 text-orange-100',
+            )}>
+              可信度：{confidenceText}
+            </span>
+            {data.reliableInputCount != null || data.excludedInputCount != null ? (
+              <span className="text-white/38">
+                真实输入 {data.reliableInputCount ?? 0} · 已排除备用 {data.excludedInputCount ?? 0}
+              </span>
+            ) : null}
+          </div>
         </div>
         <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title: t('marketOverviewPage.temperature.title') })} refreshing={refreshing} onRefresh={onRefresh} />
       </div>
+      {!isReliable ? (
+        <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-temperature-unreliable-warning">
+          部分评分基于备用数据，暂不作为实时市场判断
+        </div>
+      ) : null}
       <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {scores.map(({ key, label, pressure }) => {
           const score = data.scores[key];
           return (
-            <div key={key} className="min-w-[188px] flex-1 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5" title={score.description}>
+            <div key={key} className={cn('min-w-[188px] flex-1 rounded-lg border px-3 py-2.5', isReliable ? 'border-white/[0.06] bg-white/[0.025]' : 'border-white/[0.045] bg-white/[0.015]')} title={score.description}>
               <div className="flex items-start justify-between gap-3">
                 <p className="text-[11px] font-semibold text-white/60">{label}</p>
                 <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-white/55">{score.label}</span>
               </div>
               <div className="mt-2 flex items-end gap-2">
-                <span className={cn('font-mono text-3xl font-semibold leading-none', scoreTone(score, pressure))}>{score.value}</span>
+                <span className={cn('font-mono text-3xl font-semibold leading-none', isReliable ? scoreTone(score, pressure) : 'text-white/55')}>{score.value}</span>
                 <span className="pb-0.5 text-[10px] uppercase tracking-widest text-white/30">{score.trend}</span>
               </div>
               <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{score.description}</p>
@@ -447,6 +506,7 @@ const MarketBriefingCard: React.FC<{
 }> = ({ data, refreshing, onRefresh }) => {
   const { t } = useI18n();
   const title = t('marketOverviewPage.briefing.title');
+  const isReliable = data.isReliable !== false && (data.confidence == null || data.confidence >= 0.45);
   return (
     <GlassCard as="section" data-testid="market-briefing-card" className="p-4">
       <div className="mb-3 flex items-center justify-between gap-4">
@@ -456,13 +516,24 @@ const MarketBriefingCard: React.FC<{
         </div>
         <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
       </div>
+      {data.warning ? (
+        <div className="mb-3 rounded-lg border border-amber-300/25 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100/85" data-testid="market-briefing-warning">
+          {data.warning}
+        </div>
+      ) : null}
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-        {data.items.slice(0, 5).map((item) => (
-          <article key={`${item.category}-${item.title}`} className={cn('rounded-lg border px-3 py-2.5', severityClass[item.severity] || severityClass.neutral)}>
-            <p className="text-xs font-semibold">{item.title}</p>
+        {data.items.slice(0, 5).map((item) => {
+          const lowConfidence = !isReliable || (item.confidence != null && item.confidence < 0.45);
+          return (
+          <article key={`${item.category}-${item.title}`} className={cn('rounded-lg border px-3 py-2.5', lowConfidence ? severityClass.neutral : severityClass[item.severity] || severityClass.neutral)}>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-semibold">{item.title}</p>
+              {item.confidence != null ? <span className="shrink-0 text-[10px] text-white/35">{confidenceLabel(item.confidence, !lowConfidence)}</span> : null}
+            </div>
             <p className="mt-1 text-xs leading-5 opacity-75">{item.message}</p>
           </article>
-        ))}
+          );
+        })}
       </div>
       <MarketOverviewPanelFooter
         meta={data}
@@ -495,8 +566,9 @@ const FuturesPremarketCard: React.FC<{
     warning: data.warning,
     items: [],
   };
+  const fallbackOnly = isFallbackOnlyMeta({ ...data, items: data.items });
   return (
-    <GlassCard as="section" className="flex h-full flex-col p-6">
+    <GlassCard as="section" className={cn('flex h-full flex-col p-6', fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '')}>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.futures.eyebrow')}</p>
@@ -505,9 +577,16 @@ const FuturesPremarketCard: React.FC<{
         </div>
         <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
       </div>
+      {fallbackOnly ? (
+        <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
+          <p className="font-semibold">暂未接入真实数据源</p>
+          <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
+        </div>
+      ) : null}
       <div className="flex flex-col">
         {data.items.map((item: MarketFutureItem) => {
           const positive = (item.changePercent || 0) >= 0;
+          const mutedTone = item.isFallback || item.freshness === 'fallback' || item.source === 'fallback';
           return (
             <article key={item.symbol} className="flex min-h-12 items-center gap-3 border-b border-white/[0.045] py-2.5 last:border-b-0">
               <div className="w-32 shrink-0 min-w-0">
@@ -518,11 +597,11 @@ const FuturesPremarketCard: React.FC<{
                 </div>
               </div>
               <div className="w-24 shrink-0">
-                <MarketOverviewSparkline values={item.sparkline} tone={positive ? 'text-emerald-400' : 'text-red-400'} className="h-8" />
+                <MarketOverviewSparkline values={item.sparkline} tone={mutedTone ? 'text-white/30' : positive ? 'text-emerald-400' : 'text-red-400'} className="h-8" />
               </div>
               <div className="min-w-0 flex-1 text-right font-mono">
                 <p className="truncate text-lg font-semibold leading-none text-white">{formatNumber(item.value)}</p>
-                <p className={cn('mt-1 text-[11px] font-bold leading-none', positive ? 'text-emerald-400' : 'text-red-400')}>
+                <p className={cn('mt-1 text-[11px] font-bold leading-none', mutedTone ? 'text-white/45' : positive ? 'text-emerald-400' : 'text-red-400')}>
                   {item.changePercent == null ? 'N/A' : `${item.changePercent >= 0 ? '+' : ''}${item.changePercent.toFixed(2)}%`}
                 </p>
               </div>
@@ -562,8 +641,9 @@ const CnShortSentimentCard: React.FC<{
     ['highBoardCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.highBoardCount'), data.metrics.highBoardCount],
     ['twentyCmLimitUpCount', t('marketOverviewPage.cards.cnShortSentiment.metrics.twentyCmLimitUpCount'), data.metrics.twentyCmLimitUpCount],
   ] as const;
+  const fallbackOnly = isFallbackOnlyMeta(data);
   return (
-    <GlassCard as="section" className="flex h-full flex-col p-6">
+    <GlassCard as="section" className={cn('flex h-full flex-col p-6', fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '')}>
       <div className="mb-5 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.cnShortSentiment.eyebrow')}</p>
@@ -571,11 +651,17 @@ const CnShortSentimentCard: React.FC<{
         </div>
         <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
       </div>
+      {fallbackOnly ? (
+        <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
+          <p className="font-semibold">暂未接入真实数据源</p>
+          <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
+        </div>
+      ) : null}
       <div className="rounded-lg border border-white/[0.06] bg-white/[0.025] p-4">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-xs text-white/45">{t('marketOverviewPage.cards.cnShortSentiment.score')}</p>
-            <p className="mt-1 font-mono text-4xl font-semibold text-emerald-300">{data.sentimentScore}</p>
+            <p className={cn('mt-1 font-mono text-4xl font-semibold', fallbackOnly ? 'text-white/55' : 'text-emerald-300')}>{data.sentimentScore}</p>
           </div>
           <p className="max-w-[220px] text-right text-xs leading-5 text-white/55">{data.summary}</p>
         </div>

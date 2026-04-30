@@ -50,11 +50,68 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertTrue(payload["updatedAt"])
         self.assertEqual(payload["freshness"], "fallback")
         self.assertTrue(payload["isFallback"])
-        self.assertIn("备用数据", payload["warning"])
+        self.assertIn("真实数据不足", payload["warning"])
+        self.assertEqual(payload["confidence"], 0.0)
+        self.assertEqual(payload["reliableInputCount"], 0)
+        self.assertGreater(payload["fallbackInputCount"], 0)
+        self.assertGreater(payload["excludedInputCount"], 0)
+        self.assertFalse(payload["isReliable"])
         self.assertEqual(set(payload["scores"].keys()), {"overall", "usRiskAppetite", "cnMoneyEffect", "macroPressure", "liquidity"})
         for score in payload["scores"].values():
             self.assertGreaterEqual(score["value"], 0)
             self.assertLessEqual(score["value"], 100)
+            self.assertEqual(score["label"], "数据不足")
+
+    def test_fallback_inputs_do_not_drive_warm_temperature(self) -> None:
+        service = MarketOverviewService()
+        payload = service.get_market_temperature()
+
+        self.assertFalse(payload["isReliable"])
+        self.assertEqual(payload["scores"]["overall"]["label"], "数据不足")
+        self.assertNotIn(payload["scores"]["overall"]["label"], {"偏暖", "过热"})
+
+    def test_mixed_input_confidence_averages_item_level_sources(self) -> None:
+        service = MarketOverviewService()
+        inputs = {
+            "indices": {
+                "items": [
+                    {"symbol": "SPX", "freshness": "live", "value": 1},
+                    {"symbol": "CSI300", "freshness": "cached", "value": 1},
+                    {"symbol": "SSE", "source": "fallback", "value": 1},
+                ]
+            },
+            "rates": {"items": [{"symbol": "US10Y", "freshness": "stale", "value": 1}]},
+        }
+
+        trust = service._summarize_market_temperature_confidence(inputs)
+
+        self.assertEqual(trust["reliableInputCount"], 3)
+        self.assertEqual(trust["fallbackInputCount"], 1)
+        self.assertEqual(trust["excludedInputCount"], 1)
+        self.assertAlmostEqual(trust["confidence"], 0.48, places=2)
+
+    def test_reliable_mixed_temperature_excludes_fallback_items(self) -> None:
+        service = MarketOverviewService()
+        live_item = {"freshness": "live", "source": "sina"}
+        inputs = {
+            "futures": {"items": [
+                {"symbol": "NQ", "changePercent": 1.2, **live_item},
+                {"symbol": "ES", "changePercent": 1.0, **live_item},
+                {"symbol": "YM", "changePercent": 0.8, **live_item},
+                {"symbol": "RTY", "changePercent": 0.7, **live_item},
+                {"symbol": "NQ", "changePercent": -20, "source": "fallback"},
+            ]},
+            "sentiment": {"items": [{"symbol": "FGI", "value": 70, **live_item}]},
+            "rates": {"items": [{"symbol": "US10Y", "changePercent": -0.4, **live_item}, {"symbol": "DXY", "changePercent": -0.5, **live_item}]},
+            "fx": {"items": [{"symbol": "DXY", "changePercent": -0.5, **live_item}]},
+        }
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_temperature()
+
+        self.assertTrue(payload["isReliable"])
+        self.assertEqual(payload["excludedInputCount"], 1)
+        self.assertGreater(payload["scores"]["usRiskAppetite"]["value"], 40)
 
 
 if __name__ == "__main__":
