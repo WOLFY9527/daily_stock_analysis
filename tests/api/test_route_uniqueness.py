@@ -1,0 +1,36 @@
+# -*- coding: utf-8 -*-
+"""Regression tests for duplicate FastAPI route registration."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from collections import defaultdict
+from pathlib import Path
+
+from fastapi.routing import APIRoute
+
+from api.app import create_app
+
+
+class ApiRouteUniquenessTestCase(unittest.TestCase):
+    def test_registered_api_routes_have_unique_method_and_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app = create_app(static_dir=Path(temp_dir))
+
+        routes_by_method_path: dict[tuple[str, str], list[str]] = defaultdict(list)
+        for route in app.routes:
+            if not isinstance(route, APIRoute):
+                continue
+            for method in route.methods or set():
+                if method in {"HEAD", "OPTIONS"}:
+                    continue
+                routes_by_method_path[(method, route.path)].append(route.name)
+
+        duplicates = {
+            key: names
+            for key, names in sorted(routes_by_method_path.items())
+            if len(names) > 1
+        }
+
+        self.assertEqual(duplicates, {})

@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from fastapi import BackgroundTasks, HTTPException
+from fastapi.routing import APIRoute
 
 from tests.litellm_stub import ensure_litellm_stub
 
@@ -27,6 +28,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     get_rule_backtest_support_export_index,
     get_rule_backtest_support_bundle_manifest,
     get_rule_backtest_run_status,
+    router as backtest_router,
     run_rule_backtest,
 )
 from api.v1.schemas.backtest import (  # noqa: E402
@@ -85,6 +87,18 @@ EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
 
 
 class BacktestApiContractTestCase(unittest.TestCase):
+    def test_performance_routes_are_bound_to_canonical_contract_handlers(self) -> None:
+        route_handlers = {
+            (next(iter(route.methods)), route.path): route.endpoint
+            for route in backtest_router.routes
+            if isinstance(route, APIRoute)
+            and route.methods == {"GET"}
+            and route.path in {"/performance", "/performance/{code}"}
+        }
+
+        self.assertIs(route_handlers[("GET", "/performance")], get_backtest_performance)
+        self.assertIs(route_handlers[("GET", "/performance/{code}")], get_backtest_stock_performance)
+
     @staticmethod
     def _performance_payload(*, scope: str = "overall", code: str | None = None) -> dict:
         return {
