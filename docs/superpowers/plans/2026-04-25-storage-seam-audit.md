@@ -120,7 +120,7 @@ Expected: PASS
 ### Task 3: Targeted verification and audit note update
 
 **Files:**
-- Modify: `backend-audit-work-report.md`
+- Modify: the audit work report
 
 - [ ] **Step 1: Record the completed seam reductions**
 
