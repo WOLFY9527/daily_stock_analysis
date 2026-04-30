@@ -1123,56 +1123,54 @@ function buildTechSignalDetails(locale: DashboardLocale, ticker: string, label: 
   if (key === 'macd') {
     if (ticker === 'TSLA') {
       return isEnglish
-        ? 'Fast and slow lines are still below zero, the downside histogram is shrinking, and the next confirmation is whether a bullish cross can convert the rebound into a tradable trend leg.'
-        : '快慢线仍在零轴下方运行，绿柱缩短，说明空头动能在衰减；下一步要看能否形成金叉，把反弹转成可交易的趋势段。';
+        ? 'Below zero; downside momentum is fading.'
+        : '零轴下方，空头动能衰减。';
     }
     if (ticker === 'ORCL') {
       return isEnglish
-        ? 'The indicator is already above zero and re-accelerating, which usually means the post-earnings trend is being confirmed by a second impulse rather than a one-day squeeze.'
-        : '指标已经站上零轴并再次扩张，通常意味着财报后的趋势不是单日脉冲，而是在走二次确认。';
+        ? 'Above zero and re-accelerating.'
+        : '零轴上方，动能再扩张。';
     }
     return isEnglish
-      ? 'The crossover is still above zero, so momentum and trend direction remain aligned. The key watchpoint is whether the slope can stay positive during the next pullback.'
-      : '金叉保持在零轴上方，动能和趋势方向仍同向；关键观察点是下次回踩时快线斜率能否继续维持正向。';
+      ? 'Bullish cross above zero.'
+      : '零轴上方金叉延续。';
   }
 
   if (key === '均线结构' || key === 'movingaverages' || key === 'ma20ma60') {
     if (ticker === 'TSLA') {
       return isEnglish
-        ? 'MA20 is still acting as a downward lid, so this move is still a counter-trend bounce until price can reclaim and stabilize above the short-term average.'
-        : 'MA20 仍在压制价格，这一波更像逆势反抽；只有重新站稳短期均线，结构才会从修复转成趋势延续。';
+        ? 'MA20 still caps the rebound.'
+        : 'MA20 仍压制反弹。';
     }
     return isEnglish
-      ? 'The short-term average is leading the medium-term line higher, which keeps the trend stack constructive as long as pullbacks continue to hold the moving-average band.'
-      : '短期均线继续牵引中期均线上行，只要回踩仍能守住均线带，趋势结构就没有被破坏。';
+      ? 'Short-term MA leads higher.'
+      : '短期均线牵引上行。';
   }
 
   if (key === '量价配合' || key === 'volumeprofile') {
     if (ticker === 'TSLA') {
       return isEnglish
-        ? 'The first rebound printed volume, but follow-through is not clean yet. Without a second expansion on lower volatility, the move still carries headline-driven whipsaw risk.'
-        : '首轮反弹已经放量，但续航并不干净；如果没有第二次低波动放量确认，这个结构仍有事件驱动的来回扫损风险。';
+        ? 'Volume rebound needs follow-through.'
+        : '反弹放量，续航待确认。';
     }
     return isEnglish
-      ? 'Volume stayed orderly during the pullback and expanded into the breakout, which is the healthier sequence for trend continuation instead of distribution.'
-      : '回踩阶段量能收敛、突破阶段量能放大，这是更健康的趋势延续序列，而不是高位派发。';
+      ? 'Pullback volume contracted; breakout volume expanded.'
+      : '回踩缩量，突破放量。';
   }
 
   if (key === 'rsi') {
     return isEnglish
-      ? `RSI is at ${rawValue}, which is firm but not yet an exhaustion print. It supports continuation as long as price does not diverge against new highs.`
-      : `RSI 处在 ${rawValue}，强势但还没到典型透支区；只要价格创新高时不出现背离，趋势延续概率仍占优。`;
+      ? `RSI ${rawValue}, firm but not exhausted.`
+      : `RSI ${rawValue}，强势未透支。`;
   }
 
   if (key === '波动率' || key === 'volatility') {
     return isEnglish
-      ? `Realized volatility is ${rawValue}; position sizing should stay tied to wider risk bands instead of headline-driven chasing.`
-      : `实现波动率约为 ${rawValue}，仓位和止损都要按更宽的风险带来做，不能用追涨方式处理。`;
+      ? `Realized vol ${rawValue}; keep risk bands wide.`
+      : `波动率 ${rawValue}，风险带放宽。`;
   }
 
-  return isEnglish
-    ? `${label} is currently reading ${rawValue}, and the drill-down should stay anchored to that live signal instead of a separate narrative block.`
-    : `${label} 当前读数为 ${rawValue}，下钻说明应继续围绕这个实时信号展开，而不是脱离主卡片另写一套叙事。`;
+  return rawValue;
 }
 
 function buildFundamentalMetricDetails(locale: DashboardLocale, ticker: string, label: string, value: string): string {
@@ -1968,7 +1966,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   };
 
   const omnibarModule = (
-    <div className="w-full shrink-0" data-testid="home-bento-omnibar-shell">
+    <div className="order-first w-full shrink-0 xl:order-none" data-testid="home-bento-omnibar-shell">
       <form
         className="flex h-12 w-full min-w-0 gap-3"
         data-testid="home-bento-omnibar"
@@ -2051,10 +2049,10 @@ const HomeBentoDashboardPage: React.FC = () => {
             <div
               data-testid="home-bento-grid"
               data-bento-grid="true"
-              className="flex w-full min-h-0 min-w-0 flex-col items-stretch gap-6 xl:flex-row"
+              className="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12"
             >
               <div
-                className="flex h-auto min-h-0 w-full flex-col xl:h-full xl:min-w-0 xl:flex-[1.15]"
+                className="col-span-1 flex h-auto min-h-0 w-full flex-col xl:col-span-5 xl:h-full"
                 data-testid="home-bento-primary-stack"
               >
                 <div className="min-h-0 flex-1 xl:h-full">
@@ -2092,7 +2090,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                 </div>
               </div>
               <div
-                className="flex min-h-0 w-full flex-col gap-6 xl:min-w-0 xl:flex-[0.85]"
+                className="col-span-1 flex min-h-0 w-full min-w-0 flex-col gap-6 xl:col-span-7"
                 data-testid="home-bento-secondary-stack"
               >
                 {omnibarModule}
@@ -2100,7 +2098,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                   <>
                     <InPlaceStrategySkeleton locale={locale} />
                     <div
-                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                      className="grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
                       data-testid="home-bento-secondary-grid"
                     >
                       <InPlaceListSkeleton locale={locale} kind="tech" />
@@ -2119,7 +2117,7 @@ const HomeBentoDashboardPage: React.FC = () => {
                       onOpenDetails={() => setActiveDrawer('strategy')}
                     />
                     <div
-                      className="grid flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2"
+                      className="grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
                       data-testid="home-bento-secondary-grid"
                     >
                       <TechCard

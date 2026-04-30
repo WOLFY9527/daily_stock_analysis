@@ -1,6 +1,5 @@
 import type React from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { Label } from '../common';
 import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { BentoCard } from './BentoCard';
 import { CARD_BUTTON_CLASS } from './theme';
@@ -36,6 +35,15 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const isEntryMetric = (label: string) => label === '建仓区间' || label === 'Entry Zone';
+  const getMetricLabel = (label: string) => {
+    if (label === '建仓区间') {
+      return '理想买入点';
+    }
+    if (label === 'Entry Zone') {
+      return 'Ideal Buy Point';
+    }
+    return label;
+  };
   const getMetricValueClass = (tone: StrategyMetric['tone']) => {
     if (tone === 'bullish') {
       return 'text-emerald-400';
@@ -49,12 +57,15 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     .split(/\n+/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
+  const entryMetric = metrics.find((metric) => isEntryMetric(metric.label));
+  const targetMetrics = metrics.filter((metric) => !isEntryMetric(metric.label));
 
   return (
     <BentoCard
       eyebrow={title}
       subtitle={subtitle}
-      className="w-full rounded-[24px]"
+      className="w-full overflow-visible rounded-[24px]"
+      contentClassName="h-auto"
       testId="home-bento-card-strategy"
       action={(
         <button
@@ -70,15 +81,28 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
         </button>
       )}
     >
-      <div className="grid h-full gap-7 md:grid-cols-2">
-        <div className="mt-4 grid w-full grid-cols-2 gap-x-8 gap-y-6 self-start">
-          {metrics.map((metric) => (
+      <div className="mt-4 flex w-full min-w-0 flex-col">
+        {entryMetric ? (
+          <div
+            className="flex min-w-0 flex-col gap-1.5"
+            data-testid={`home-bento-strategy-metric-${entryMetric.label}`}
+          >
+            <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getMetricLabel(entryMetric.label)}</p>
+            <p
+              className={`break-words whitespace-normal text-sm font-medium leading-relaxed ${getMetricValueClass(entryMetric.tone || 'neutral')}`}
+            >
+              {entryMetric.value}
+            </p>
+          </div>
+        ) : null}
+        <div className="mt-6 grid w-full grid-cols-2 gap-4">
+          {targetMetrics.map((metric) => (
             <div
               key={metric.label}
-              className={`${isEntryMetric(metric.label) ? 'col-span-2' : ''} flex min-w-0 flex-col gap-1.5`}
+              className="flex min-w-0 flex-col gap-1.5"
               data-testid={`home-bento-strategy-metric-${metric.label}`}
             >
-              <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{metric.label}</p>
+              <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getMetricLabel(metric.label)}</p>
               <p
                 className={`break-words whitespace-normal text-sm font-medium leading-relaxed ${getMetricValueClass(metric.tone || 'neutral')}`}
               >
@@ -87,8 +111,8 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
             </div>
           ))}
         </div>
-        <div className="border-t border-white/[0.08] pt-5 md:border-l md:border-t-0 md:pl-7 md:pt-0">
-          <Label micro as="p" className="block truncate">{positionLabel}</Label>
+        <div className="mt-6 border-t border-white/5 pt-4">
+          <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{positionLabel}</p>
           <div className="mt-3 space-y-2 break-words text-[13px] leading-[1.7] text-white/70 whitespace-normal">
             {(positionParagraphs.length ? positionParagraphs : [positionBody]).map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>

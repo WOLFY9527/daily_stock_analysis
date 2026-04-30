@@ -8,6 +8,7 @@ type TechSignal = {
   label: string;
   value: string;
   tone: SignalTone;
+  description?: string | null;
   rawValue?: string;
   details?: string;
 };
@@ -37,17 +38,21 @@ export const TechCard: React.FC<TechCardProps> = ({
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
 
   const getSignalDescription = (signal: TechSignal): string | null => {
-    const description = String(signal.details || signal.rawValue || '').trim();
+    const description = String(signal.description || signal.details || signal.rawValue || '').trim();
     if (!description || description === signal.value || isMutedValue(description)) {
       return null;
     }
     return description;
   };
+  const normalizedSignals = signals.map((signal) => ({
+    ...signal,
+    description: getSignalDescription(signal),
+  }));
 
   return (
     <BentoCard
       eyebrow={title}
-      className="w-full h-full rounded-[24px]"
+      className="w-full rounded-[24px]"
       testId="home-bento-card-tech"
       action={(
         <button
@@ -64,8 +69,7 @@ export const TechCard: React.FC<TechCardProps> = ({
       )}
     >
       <div className="divide-y divide-white/5 px-1">
-        {signals.map((signal) => {
-          const description = getSignalDescription(signal);
+        {normalizedSignals.map((signal) => {
           return (
             <div
               key={signal.label}
@@ -84,12 +88,13 @@ export const TechCard: React.FC<TechCardProps> = ({
                   {signal.value}
                 </span>
               </div>
-              {description ? (
+              {signal.description ? (
                 <p
-                  className="w-full overflow-hidden text-xs leading-5 text-white/50 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                  className="mt-1 block w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs text-white/40"
                   data-testid={`home-bento-tech-signal-detail-${signal.label}`}
+                  title={signal.description}
                 >
-                  {description}
+                  {signal.description}
                 </p>
               ) : null}
             </div>

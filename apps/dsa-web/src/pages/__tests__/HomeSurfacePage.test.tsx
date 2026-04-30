@@ -189,7 +189,8 @@ describe('HomeSurfacePage', () => {
     const entryMetric = screen.getByTestId('home-bento-strategy-metric-建仓区间');
     const targetMetric = screen.getByTestId('home-bento-strategy-metric-目标位');
     const stopLossMetric = screen.getByTestId('home-bento-strategy-metric-止损位');
-    const strategyMetricsGrid = entryMetric.parentElement;
+    const strategyContent = entryMetric.parentElement;
+    const targetMetricsGrid = targetMetric.parentElement;
     const techMetricTiles = Array.from(techCard.querySelectorAll('div')).filter((node) => node.className.includes('rounded-[32px]'));
     const fundamentalsMetricTiles = Array.from(fundamentalsCard.querySelectorAll('div')).filter((node) => node.className.includes('rounded-[32px]'));
     expect(root).toHaveAttribute('data-bento-surface', 'true');
@@ -200,21 +201,21 @@ describe('HomeSurfacePage', () => {
     expect(root.className).not.toContain('max-w-[1920px]');
     expect(root.className).not.toContain('md:h-[calc(100dvh-var(--shell-masthead-height)-var(--shell-masthead-height)-4.9rem)]');
     expect(root.className).not.toContain('overflow-hidden');
-    expect(omnibarShell).toHaveClass('w-full', 'shrink-0');
-    expect(omnibarShell).not.toHaveClass('mb-8', 'max-w-4xl');
+    expect(omnibarShell).toHaveClass('order-first', 'w-full', 'shrink-0', 'xl:order-none');
+    expect(omnibarShell).not.toHaveClass('mb-8', 'max-w-4xl', 'absolute', 'fixed', 'z-10', '-mt-10');
     expect(omnibar).toHaveClass('flex', 'h-12', 'w-full', 'min-w-0', 'gap-3');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(main).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(main.className).not.toContain('overflow-hidden');
     expect(main.firstElementChild).toBe(grid);
-    expect(grid).toHaveClass('flex', 'flex-col', 'w-full', 'min-h-0', 'min-w-0', 'items-stretch', 'gap-6', 'xl:flex-row');
-    expect(grid).not.toHaveClass('xl:items-start');
-    expect(primaryStack).toHaveClass('flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:flex-[1.15]');
+    expect(grid).toHaveClass('grid', 'w-full', 'grid-cols-1', 'items-start', 'gap-6', 'xl:grid-cols-12');
+    expect(grid).not.toHaveClass('flex', 'xl:flex-row', 'items-stretch');
+    expect(primaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:col-span-5');
     expect(grid.firstElementChild).toBe(primaryStack);
-    expect(secondaryStack).toHaveClass('flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'xl:flex-[0.85]');
+    expect(secondaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'min-w-0', 'xl:col-span-7');
     expect(secondaryStack.firstElementChild).toBe(omnibarShell);
-    expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'flex-1', 'items-stretch');
+    expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'w-full', 'xl:flex-1', 'items-stretch');
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
     expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'shadow-lg');
@@ -269,9 +270,11 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('7.8');
     expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
-    expect(strategyCard).toHaveClass('w-full', 'rounded-[24px]');
+    expect(strategyCard).toHaveClass('w-full', 'overflow-visible', 'rounded-[24px]');
+    expect(strategyCard).not.toHaveClass('overflow-hidden', 'h-full');
     expect(strategyCard.className).not.toContain('xl:col-span-1');
-    expect(techCard).toHaveClass('w-full', 'h-full', 'rounded-[24px]');
+    expect(techCard).toHaveClass('w-full', 'rounded-[24px]');
+    expect(techCard).not.toHaveClass('h-full');
     expect(techCard.className).not.toContain('xl:col-span-1');
     expect(fundamentalsCard).toHaveClass('w-full', 'h-full', 'rounded-[24px]');
     expect(fundamentalsCard.className).not.toContain('xl:col-span-1');
@@ -280,14 +283,16 @@ describe('HomeSurfacePage', () => {
     expect(techCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(fundamentalsCard).toHaveClass('bg-white/[0.02]', 'backdrop-blur-2xl', 'border-white/5');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveClass('md:px-10', 'md:py-8');
-    expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6');
-    expect(strategyMetricsGrid).toHaveClass('mt-4', 'grid', 'grid-cols-2', 'gap-y-6', 'gap-x-8', 'w-full');
-    expect(entryMetric).toHaveClass('col-span-2', 'flex', 'flex-col', 'gap-1.5');
+    expect(entryMetric).not.toHaveClass('bg-white/[0.02]', 'border-white/[0.08]', 'p-6', 'col-span-2');
+    expect(strategyContent).toHaveClass('mt-4', 'flex', 'w-full', 'min-w-0', 'flex-col');
+    expect(strategyContent).not.toHaveClass('grid', 'md:grid-cols-2');
+    expect(targetMetricsGrid).toHaveClass('mt-6', 'grid', 'grid-cols-2', 'gap-4', 'w-full');
+    expect(entryMetric).toHaveClass('flex', 'flex-col', 'gap-1.5');
     expect(targetMetric).not.toHaveClass('col-span-2');
     expect(stopLossMetric).not.toHaveClass('col-span-2');
     const macdSignal = screen.getByTestId('home-bento-tech-signal-MACD');
     const macdSignalValue = macdSignal.querySelectorAll('span')[1];
-    expect(screen.getByText('建仓区间')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40', 'truncate');
+    expect(screen.getByText('理想买入点')).toHaveClass('text-[10px]', 'tracking-widest', 'text-white/40', 'truncate');
     expect(screen.getByText('121.80 - 124.60')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed');
     expect(screen.getByText('133.50')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-emerald-400');
     expect(screen.getByText('117.40')).toHaveClass('text-sm', 'font-medium', 'leading-relaxed', 'text-red-400');
@@ -301,8 +306,9 @@ describe('HomeSurfacePage', () => {
     expect(techMetricTiles.length).toBe(0);
     expect(fundamentalsMetricTiles.length).toBe(0);
     expect(macdSignalValue?.getAttribute('style') || '').toBe('');
-    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('text-xs', 'text-white/50', '[-webkit-line-clamp:2]');
-    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveTextContent('趋势不是单日脉冲');
+    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveClass('mt-1', 'block', 'w-full', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap', 'text-xs', 'text-white/40');
+    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
+    expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveTextContent('零轴上方，动能再扩张。');
     expect(screen.queryByText('Second expansion above zero')).not.toBeInTheDocument();
     expect(screen.getByText('MA20 > MA60')).toBeInTheDocument();
     expect(screen.getByText('+9.4%').getAttribute('style') || '').toBe('');
@@ -339,12 +345,12 @@ describe('HomeSurfacePage', () => {
     const omnibar = screen.getByTestId('home-bento-omnibar');
     expect(omnibar).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
-    expect(grid).toHaveClass('flex', 'flex-col', 'w-full', 'min-h-0', 'min-w-0', 'gap-6', 'xl:flex-row');
+    expect(grid).toHaveClass('grid', 'w-full', 'grid-cols-1', 'gap-6', 'xl:grid-cols-12');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
-    expect(primaryStack).toHaveClass('flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:flex-[1.15]');
-    expect(secondaryStack).toHaveClass('flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'xl:flex-[0.85]');
+    expect(primaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:col-span-5');
+    expect(secondaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'min-w-0', 'xl:col-span-7');
     expect(secondaryStack.firstElementChild).toBe(screen.getByTestId('home-bento-omnibar-shell'));
-    expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'flex-1');
+    expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'w-full', 'xl:flex-1');
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
@@ -356,7 +362,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('等待分析')).not.toBeInTheDocument();
     expect(screen.queryByText('输入股票代码后将在此原位刷新 AI 判断。')).not.toBeInTheDocument();
     expect(screen.queryByText('首页卡片会始终保留在这里，未分析字段先保持中性占位，等待你提交股票代码或打开完成历史。')).not.toBeInTheDocument();
-    expect(screen.getByText('建仓区间')).toBeInTheDocument();
+    expect(screen.getByText('理想买入点')).toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
 
@@ -592,7 +598,7 @@ describe('HomeSurfacePage', () => {
           dashboard: {
             dataPerspective: {
               trendStatus: {
-                maAlignment: '短期转弱，MA5 下穿 MA10，但 MA10 仍大于 MA20，均线初步缠绕。',
+                maAlignment: 'MA5 下穿 MA10，均线缠绕。',
               },
               volumeAnalysis: {
                 volumeMeaning: '缩量，追价意愿偏弱。',
@@ -658,7 +664,7 @@ describe('HomeSurfacePage', () => {
             coreReasons: ['综合建议为减仓，结合技术、基本面与情绪继续跟踪。'],
           },
           technicalFields: [
-            { label: '多头/空头排列', value: '短期转弱，MA5 下穿 MA10，但 MA10 仍大于 MA20，均线初步缠绕。' },
+            { label: '多头/空头排列', value: 'MA5 下穿 MA10，均线缠绕。' },
             { label: 'RSI14', value: '49.83' },
             { label: '量价判断', value: '缩量，追价意愿偏弱。' },
           ],
@@ -675,7 +681,7 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toContain('The saved report succeeded after a fallback model attempt.');
       expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('0.2934');
-      expect(screen.getByTestId('home-bento-tech-signal-MA ALIGNMENT')).toHaveTextContent('短期转弱');
+      expect(screen.getByTestId('home-bento-tech-signal-MA ALIGNMENT')).toHaveTextContent('MA5 下穿 MA10，均线缠绕。');
       expect(screen.getByTestId('home-bento-tech-signal-VOLUME DYNAMICS')).toHaveTextContent('缩量，追价意愿偏弱。');
       expect(screen.getByTestId('home-bento-strategy-metric-建仓区间')).toHaveTextContent('20.80');
     });
@@ -1144,7 +1150,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
     expect(await screen.findByText('TSLA 技术下钻')).toBeInTheDocument();
     expect(screen.getAllByText('零轴下收敛').length).toBeGreaterThan(1);
-    expect(screen.getAllByText('快慢线仍在零轴下方运行，绿柱缩短，说明空头动能在衰减；下一步要看能否形成金叉，把反弹转成可交易的趋势段。').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('零轴下方，空头动能衰减。').length).toBeGreaterThan(1);
     expect(screen.queryByText(/聚焦 MACD/)).not.toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     await new Promise((resolve) => window.setTimeout(resolve, 220));

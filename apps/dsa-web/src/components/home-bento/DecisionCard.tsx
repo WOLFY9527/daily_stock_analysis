@@ -312,19 +312,19 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                 {isEnglish ? 'SIMULATED FEED' : '模拟信号流'}
               </span>
             </div>
-            <div className="divide-y divide-white/6" data-testid="home-bento-decision-support-grid">
+            <div data-testid="home-bento-decision-support-grid">
               {supportingIndicators.map((indicator) => (
                 <div
                   key={indicator.label}
-                  className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 py-2 text-xs"
+                  className="flex items-center justify-between gap-3 border-b border-white/5 py-2.5 text-xs last:border-b-0"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <Label micro className="text-[10px] text-white/40">{indicator.label}</Label>
                   </div>
-                  <div className={`min-w-0 text-xs font-medium uppercase tracking-[0.12em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
+                  <div className={`min-w-0 shrink-0 text-center text-xs font-medium uppercase tracking-[0.12em] ${getToneTextClass(signalTone)}`} style={getToneTextStyle(signalTone, true)}>
                     <span className="block truncate">{indicator.value}</span>
                   </div>
-                  <div className="min-w-0 text-right text-xs font-medium text-white/56">
+                  <div className="min-w-0 flex-1 text-right text-xs font-medium text-white/56">
                     <span className="block truncate">{indicator.context}</span>
                   </div>
                 </div>
