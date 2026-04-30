@@ -67,6 +67,7 @@ const CATEGORY_STORAGE_KEYS: Record<CategoryKey, string> = {
   crypto: 'market-overview-order-crypto',
 };
 const AUTO_REFRESH_MS = 60_000;
+const PANEL_REQUEST_TIMEOUT_MS = 3_000;
 
 const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
   source: 'fallback',
@@ -605,6 +606,109 @@ function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: Pan
   }
 }
 
+function describePanelError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'market panel unavailable');
+}
+
+function fallbackPanel(panelName: string, error: unknown): MarketOverviewPanel {
+  const updatedAt = new Date().toISOString();
+  const message = describePanelError(error);
+  return {
+    panelName,
+    lastRefreshAt: updatedAt,
+    status: 'failure',
+    errorMessage: `更新失败：${message}`,
+    source: 'error',
+    sourceLabel: '数据源异常',
+    updatedAt,
+    asOf: updatedAt,
+    freshness: 'error',
+    isFallback: true,
+    isStale: true,
+    warning: '数据源暂不可用，请稍后自动刷新。',
+    items: [],
+  };
+}
+
+function fallbackPanelValue(panelKey: PanelKey, error: unknown): PanelState[PanelKey] {
+  switch (panelKey) {
+    case 'temperature':
+      return {
+        ...FALLBACK_TEMPERATURE,
+        updatedAt: new Date().toISOString(),
+        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+      } as PanelState[PanelKey];
+    case 'briefing':
+      return {
+        ...FALLBACK_BRIEFING,
+        updatedAt: new Date().toISOString(),
+        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+      } as PanelState[PanelKey];
+    case 'futures':
+      return {
+        ...FALLBACK_FUTURES,
+        updatedAt: new Date().toISOString(),
+        isRefreshing: true,
+        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+      } as PanelState[PanelKey];
+    case 'cnShortSentiment':
+      return {
+        ...FALLBACK_CN_SHORT_SENTIMENT,
+        updatedAt: new Date().toISOString(),
+        isRefreshing: true,
+        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+      } as PanelState[PanelKey];
+    case 'indices':
+      return fallbackPanel('IndexTrendsCard', error) as PanelState[PanelKey];
+    case 'volatility':
+      return fallbackPanel('VolatilityCard', error) as PanelState[PanelKey];
+    case 'crypto':
+      return fallbackPanel('CryptoCard', error) as PanelState[PanelKey];
+    case 'sentiment':
+      return fallbackPanel('MarketSentimentCard', error) as PanelState[PanelKey];
+    case 'fundsFlow':
+      return fallbackPanel('FundsFlowCard', error) as PanelState[PanelKey];
+    case 'macro':
+      return fallbackPanel('MacroIndicatorsCard', error) as PanelState[PanelKey];
+    case 'cnIndices':
+      return fallbackPanel('ChinaIndicesCard', error) as PanelState[PanelKey];
+    case 'cnBreadth':
+      return fallbackPanel('ChinaBreadthCard', error) as PanelState[PanelKey];
+    case 'cnFlows':
+      return fallbackPanel('ChinaFlowsCard', error) as PanelState[PanelKey];
+    case 'sectorRotation':
+      return fallbackPanel('SectorRotationCard', error) as PanelState[PanelKey];
+    case 'rates':
+      return fallbackPanel('RatesCard', error) as PanelState[PanelKey];
+    case 'fxCommodities':
+      return fallbackPanel('FxCommoditiesCard', error) as PanelState[PanelKey];
+  }
+}
+
+function withPanelTimeout<T>(promise: Promise<T>, panelKey: PanelKey): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${String(panelKey)} request timed out`));
+    }, PANEL_REQUEST_TIMEOUT_MS);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function debugMarketPanel(panelKey: PanelKey, status: 'loading' | 'success' | 'fallback' | 'error'): void {
+  if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+    console.debug(`[market-overview] ${String(panelKey)} ${status}`);
+  }
+}
+
 const MarketOverviewPage: React.FC = () => {
   const { t } = useI18n();
   const [panels, setPanels] = useState<PanelState>({
@@ -645,19 +749,41 @@ const MarketOverviewPage: React.FC = () => {
       ['futures', marketApi.getFutures],
       ['cnShortSentiment', marketApi.getCnShortSentiment],
     ];
-    const results = await Promise.allSettled(requests.map(([, loadPanel]) => loadPanel()));
-    if (!cancelledRef?.current) {
-      setPanels((currentPanels) => {
-        const nextPanels = { ...currentPanels };
-        results.forEach((result, index) => {
-          if (result.status === 'fulfilled') {
-            assignPanelValue(nextPanels, requests[index][0], result.value);
-          }
-        });
-        return nextPanels;
-      });
-      setLoading(false);
-    }
+    let remaining = requests.length;
+    const markSettled = () => {
+      remaining -= 1;
+      if (remaining <= 0 && !cancelledRef?.current) {
+        setLoading(false);
+      }
+    };
+
+    await Promise.allSettled(requests.map(async ([panelKey, loadPanel]) => {
+      debugMarketPanel(panelKey, 'loading');
+      try {
+        const panel = await withPanelTimeout(loadPanel(), panelKey);
+        if (!cancelledRef?.current) {
+          setPanels((currentPanels) => {
+            const nextPanels = { ...currentPanels };
+            assignPanelValue(nextPanels, panelKey, panel);
+            return nextPanels;
+          });
+        }
+        debugMarketPanel(panelKey, 'success');
+      } catch (error) {
+        if (!cancelledRef?.current) {
+          setPanels((currentPanels) => {
+            const nextPanels = { ...currentPanels };
+            if (!currentPanels[panelKey]) {
+              assignPanelValue(nextPanels, panelKey, fallbackPanelValue(panelKey, error));
+            }
+            return nextPanels;
+          });
+        }
+        debugMarketPanel(panelKey, 'fallback');
+      } finally {
+        markSettled();
+      }
+    }));
   }, []);
 
   const refreshPanel = useCallback(async (
@@ -665,13 +791,25 @@ const MarketOverviewPage: React.FC = () => {
     loadPanel: () => Promise<PanelState[PanelKey]>,
   ) => {
     setRefreshingPanel(panelKey);
+    debugMarketPanel(panelKey, 'loading');
     try {
-      const panel = await loadPanel();
+      const panel = await withPanelTimeout(loadPanel(), panelKey);
       setPanels((currentPanels) => {
         const nextPanels = { ...currentPanels };
         assignPanelValue(nextPanels, panelKey, panel);
         return nextPanels;
       });
+      debugMarketPanel(panelKey, 'success');
+    } catch (error) {
+      setPanels((currentPanels) => {
+        if (currentPanels[panelKey]) {
+          return currentPanels;
+        }
+        const nextPanels = { ...currentPanels };
+        assignPanelValue(nextPanels, panelKey, fallbackPanelValue(panelKey, error));
+        return nextPanels;
+      });
+      debugMarketPanel(panelKey, 'fallback');
     } finally {
       setRefreshingPanel((currentPanel) => (currentPanel === panelKey ? null : currentPanel));
     }

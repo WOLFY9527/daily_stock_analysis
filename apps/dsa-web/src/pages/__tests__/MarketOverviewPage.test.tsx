@@ -490,6 +490,28 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
   });
 
+  it('does not block settled cards when global indices request is still pending', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(new Promise(() => {}));
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByText(/贪婪与恐慌指数/i)).toBeInTheDocument();
+    expect(screen.getByText('26.00')).toBeInTheDocument();
+    expect(screen.getAllByText(/US10Y/i).length).toBeGreaterThan(0);
+  });
+
+  it('stops showing global indices loading when the request fails', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockRejectedValueOnce(new Error('indices down'));
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId('data-freshness-badge-error').length).toBeGreaterThan(0);
+  });
+
   it('refreshes only the requested panel when a card refresh icon is clicked', async () => {
     render(<MarketOverviewPage />);
 

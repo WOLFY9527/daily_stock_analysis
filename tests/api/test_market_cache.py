@@ -33,6 +33,37 @@ class MarketCacheTestCase(unittest.TestCase):
         self.assertEqual(cache.get("crypto").data["value"], 2)
         fetcher.assert_called_once()
 
+    def test_cold_cache_slow_fetcher_returns_fallback_and_refreshes_later(self) -> None:
+        cache = MarketCache(max_workers=1)
+        release_fetch = threading.Event()
+
+        def fetcher() -> dict:
+            release_fetch.wait(2)
+            return {"source": "binance", "value": 2}
+
+        start = time.monotonic()
+        payload = cache.get_or_refresh(
+            "crypto",
+            30,
+            fetcher,
+            fallback_factory=lambda: {"source": "fallback", "value": 1, "freshness": "fallback", "isFallback": True},
+            cold_start_timeout_seconds=0.05,
+        )
+        elapsed = time.monotonic() - start
+
+        self.assertLess(elapsed, 0.5)
+        self.assertEqual(payload["value"], 1)
+        self.assertTrue(payload["isRefreshing"])
+        release_fetch.set()
+        self.assertTrue(cache.wait_for_refreshes(timeout=2))
+        refreshed = cache.get_or_refresh(
+            "crypto",
+            30,
+            Mock(side_effect=AssertionError("fresh cache should not fetch")),
+        )
+        self.assertEqual(refreshed["value"], 2)
+        self.assertFalse(refreshed["isRefreshing"])
+
     def test_expired_cache_returns_stale_payload_and_marks_refreshing(self) -> None:
         cache = MarketCache(max_workers=1)
         cache.set("crypto", {"source": "binance", "value": 1}, ttl_seconds=1)

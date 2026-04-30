@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
@@ -96,6 +97,40 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertTrue(payload["isFallback"])
         self.assertNotEqual(payload["freshness"], "live")
         self.assertEqual(payload["items"][0]["freshness"], "fallback")
+
+    def test_overview_indices_slow_cold_fetch_returns_fallback_quickly(self) -> None:
+        service = MarketOverviewService()
+        service.MARKET_COLD_START_TIMEOUT_SECONDS = 0.05
+        release_fetch = threading.Event()
+
+        def fetcher() -> dict:
+            release_fetch.wait(2)
+            return {
+                "panel_name": "IndexTrendsCard",
+                "last_refresh_at": datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds"),
+                "status": "success",
+                "source": "yfinance",
+                "items": [
+                    {"symbol": "SPX", "label": "S&P 500", "value": 5100, "change_pct": 1, "trend": [5000, 5100], "source": "yfinance"}
+                ],
+            }
+
+        start = time.monotonic()
+        with patch.object(service, "_fetch_indices", side_effect=fetcher):
+            payload = service.get_indices()
+        elapsed = time.monotonic() - start
+
+        self.assertLess(elapsed, 0.5)
+        self.assertEqual(payload["panel_name"], "IndexTrendsCard")
+        self.assertTrue(payload["items"])
+        self.assertTrue(payload["isRefreshing"])
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertNotEqual(payload["freshness"], "live")
+        release_fetch.set()
+        self.assertTrue(service._market_cache.wait_for_refreshes(timeout=2))
+        refreshed = service.get_indices()
+        self.assertEqual(refreshed["items"][0]["value"], 5100)
+        self.assertFalse(refreshed["isRefreshing"])
 
 
 if __name__ == "__main__":

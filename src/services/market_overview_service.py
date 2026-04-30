@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import math
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -134,6 +133,7 @@ class MarketOverviewService:
     """Fetch market overview panels from public sources, with cached payloads."""
 
     CACHE_TTL_SECONDS = 300
+    MARKET_COLD_START_TIMEOUT_SECONDS = 2.0
     _cache: Dict[str, tuple[float, PanelPayload]] = {}
     _market_data_cache: Dict[str, Dict[str, Any]] = {}
     _market_cache = market_cache
@@ -361,42 +361,41 @@ class MarketOverviewService:
         fetcher: Callable[[], PanelPayload],
         actor: Optional[Dict[str, Any]],
     ) -> PanelPayload:
-        now = time.time()
-        cached = self._cache.get(cache_key)
-        raw_response: Dict[str, Any] = {"cache": "miss"}
         status = "success"
-        error_message = None
-
-        if cached and now - cached[0] < self.CACHE_TTL_SECONDS:
-            payload = dict(cached[1])
-            raw_response = {"cache": "hit", "cached_at": payload.get("last_refresh_at")}
+        snapshot = self._cached_payload(
+            cache_key,
+            fetcher,
+            lambda: self._fallback_overview_panel(cache_key, panel_name, "数据源刷新超时，当前显示备用快照"),
+        )
+        error_message = snapshot.get("lastError") or snapshot.get("error_message")
+        if error_message:
+            status = "failure"
+            snapshot.setdefault("error_message", str(error_message))
+            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": str(error_message)}
+        elif snapshot.get("isRefreshing"):
+            raw_response = {"cache": "stale_refreshing"}
         else:
-            try:
-                payload = fetcher()
-                self._cache[cache_key] = (now, dict(payload))
-            except Exception as exc:
-                status = "failure"
-                error_message = str(exc)
-                payload = self._fallback_panel(panel_name, error_message)
-                raw_response = {"cache": "miss", "error": error_message}
+            raw_response = {"cache": "hit_or_refreshed"}
 
-        payload["panel_name"] = panel_name
-        payload["status"] = status
-        payload.setdefault("last_refresh_at", _now_iso())
-        payload.setdefault("updatedAt", payload["last_refresh_at"])
-        payload = self._with_market_meta(payload, self._category_for_cache_key(cache_key))
-        payload["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), payload) for item in payload.get("items", [])]
+        snapshot["panel_name"] = panel_name
+        snapshot["status"] = status
+        snapshot.setdefault("last_refresh_at", snapshot.get("updatedAt") or _now_iso())
+        snapshot.setdefault("updatedAt", snapshot["last_refresh_at"])
+        snapshot.setdefault("source", "fallback" if snapshot.get("fallbackUsed") or snapshot.get("fallback_used") else "cached")
+        snapshot.setdefault("items", [])
+        snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
+        snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
             endpoint_url=endpoint_url,
             status=status,
-            fetch_timestamp=payload["last_refresh_at"],
+            fetch_timestamp=snapshot["last_refresh_at"],
             error_message=error_message,
-            raw_response=raw_response if status == "failure" else {"response": payload, **raw_response},
+            raw_response=raw_response if status == "failure" else {"response": snapshot, **raw_response},
             actor=actor,
         )
-        payload["log_session_id"] = log_session_id
-        return payload
+        snapshot["log_session_id"] = log_session_id
+        return snapshot
 
     def _market_snapshot(
         self,
@@ -508,6 +507,7 @@ class MarketOverviewService:
             fallback_factory=fallback,
             allow_stale=True,
             background_refresh=True,
+            cold_start_timeout_seconds=self.MARKET_COLD_START_TIMEOUT_SECONDS,
         )
 
     def _fallback_market_snapshot(self, cache_key: str, source: str) -> Dict[str, Any]:
@@ -1513,8 +1513,63 @@ class MarketOverviewService:
             "items": items,
         }
 
-    @staticmethod
-    def _fallback_panel(panel_name: str, error_message: str) -> PanelPayload:
+    def _fallback_overview_panel(self, cache_key: str, panel_name: str, error_message: str) -> PanelPayload:
+        updated_at = _now_iso()
+        return {
+            "panel_name": panel_name,
+            "last_refresh_at": updated_at,
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "status": "failure",
+            "error_message": error_message,
+            "warning": FALLBACK_WARNING,
+            "source": "fallback",
+            "fallbackUsed": True,
+            "isFallback": True,
+            "items": self._fallback_overview_items(cache_key, updated_at),
+        }
+
+    def _fallback_overview_items(self, cache_key: str, updated_at: str) -> List[Dict[str, Any]]:
+        fallback_items: Dict[str, List[Dict[str, Any]]] = {
+            "indices": [
+                {"symbol": "SPX", "label": "S&P 500", "value": 5100.0, "unit": "pts", "change_pct": 0.0, "trend": [5080.0, 5100.0]},
+                {"symbol": "NASDAQ", "label": "NASDAQ Composite", "value": 16100.0, "unit": "pts", "change_pct": 0.0, "trend": [16020.0, 16100.0]},
+                {"symbol": "DJIA", "label": "Dow Jones Industrial Average", "value": 38600.0, "unit": "pts", "change_pct": 0.0, "trend": [38480.0, 38600.0]},
+                {"symbol": "RUT", "label": "Russell 2000", "value": 2040.0, "unit": "pts", "change_pct": 0.0, "trend": [2030.0, 2040.0]},
+            ],
+            "volatility": [
+                {"symbol": "VIX", "label": "VIX", "value": 15.0, "unit": "pts", "change_pct": 0.0, "trend": [15.4, 15.0]},
+                {"symbol": "VVIX", "label": "VVIX", "value": 88.0, "unit": "pts", "change_pct": 0.0, "trend": [89.0, 88.0]},
+                {"symbol": "VXN", "label": "VXN", "value": 18.0, "unit": "pts", "change_pct": 0.0, "trend": [18.5, 18.0]},
+            ],
+            "funds_flow": [
+                {"symbol": "ETF", "label": "ETF flows", "value": 0.0, "unit": "B USD", "change_pct": 0.0, "trend": [0.0, 0.0]},
+                {"symbol": "INSTITUTIONAL", "label": "Institutional net flow", "value": 0.0, "unit": "B USD", "change_pct": 0.0, "trend": [0.0, 0.0]},
+                {"symbol": "INDUSTRY", "label": "Industry flow breadth", "value": 0.0, "unit": "score", "change_pct": 0.0, "trend": [0.0, 0.0]},
+            ],
+            "macro": [
+                {"symbol": "US10Y", "label": "10Y yield", "value": 4.5, "unit": "%", "change_pct": 0.0, "trend": [4.48, 4.5]},
+                {"symbol": "DXY", "label": "US Dollar Index", "value": 105.0, "unit": "idx", "change_pct": 0.0, "trend": [104.8, 105.0]},
+                {"symbol": "GOLD", "label": "Gold futures", "value": 2300.0, "unit": "USD", "change_pct": 0.0, "trend": [2290.0, 2300.0]},
+                {"symbol": "OIL", "label": "WTI crude", "value": 82.0, "unit": "USD", "change_pct": 0.0, "trend": [81.5, 82.0]},
+            ],
+        }
+        return [
+            {
+                **item,
+                "risk_direction": self._risk_direction(item.get("change_pct")),
+                "source": "fallback",
+                "sourceLabel": self._source_label("fallback"),
+                "updatedAt": updated_at,
+                "asOf": updated_at,
+                "freshness": "fallback",
+                "isFallback": True,
+                "warning": FALLBACK_WARNING,
+            }
+            for item in fallback_items.get(cache_key, [])
+        ]
+
+    def _fallback_panel(self, panel_name: str, error_message: str) -> PanelPayload:
         return {
             "panel_name": panel_name,
             "last_refresh_at": _now_iso(),

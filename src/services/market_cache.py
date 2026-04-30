@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import copy
+import logging
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Optional
@@ -14,6 +15,7 @@ from typing import Callable, Dict, Optional
 
 CN_TZ = timezone(timedelta(hours=8))
 REFRESH_WARNING = "数据源刷新失败，当前显示最近快照"
+logger = logging.getLogger(__name__)
 
 
 MARKET_CACHE_TTLS = {
@@ -82,16 +84,19 @@ class MarketCache:
         fallback_factory: Optional[Callable[[], dict]] = None,
         allow_stale: bool = True,
         background_refresh: bool = True,
+        cold_start_timeout_seconds: Optional[float] = None,
     ) -> dict:
         lock = self._lock_for(key)
         while True:
             with lock:
                 entry = self._entries.get(key)
                 if entry and entry.expires_at > self._now():
+                    logger.debug("[MarketCache] cache hit key=%s", key)
                     return self._payload(entry)
                 if entry and entry.data and allow_stale:
                     if background_refresh:
                         self._start_background_refresh(key, ttl_seconds, fetcher)
+                    logger.debug("[MarketCache] stale return key=%s refreshing=%s", key, bool(entry.is_refreshing))
                     return self._payload(entry, is_stale=True)
                 if entry and entry.is_refreshing:
                     pass
@@ -110,7 +115,54 @@ class MarketCache:
                     break
             time.sleep(0.01)
 
+        if background_refresh and fallback_factory is not None and cold_start_timeout_seconds is not None:
+            logger.debug("[MarketCache] cold fetch start key=%s timeout=%s", key, cold_start_timeout_seconds)
+            future = self._executor.submit(self._refresh, key, ttl_seconds, fetcher)
+            with self._global_lock:
+                self._futures.add(future)
+            future.add_done_callback(self._discard_future)
+            try:
+                future.result(timeout=cold_start_timeout_seconds)
+            except TimeoutError:
+                data = fallback_factory()
+                with lock:
+                    current = self._entries.get(key)
+                    if current and current.data and not current.is_refreshing:
+                        return self._payload(current)
+                    placeholder = current or MarketCacheEntry(
+                        key=key,
+                        data={},
+                        fetched_at=self._now(),
+                        expires_at=self._now() - timedelta(seconds=1),
+                        ttl_seconds=ttl_seconds,
+                        is_refreshing=True,
+                    )
+                    now = self._now()
+                    placeholder.data = copy.deepcopy(data)
+                    placeholder.fetched_at = now
+                    placeholder.expires_at = now + timedelta(seconds=ttl_seconds)
+                    placeholder.ttl_seconds = ttl_seconds
+                    placeholder.is_refreshing = True
+                    self._entries[key] = placeholder
+                    logger.debug("[MarketCache] cold fallback return key=%s", key)
+                    return self._payload(placeholder)
+
+            with lock:
+                current = self._entries.get(key)
+                if current and current.data:
+                    return self._payload(current)
+                last_error = current.last_error if current else None
+
+            data = fallback_factory()
+            with lock:
+                new_entry = self._entry_from_data(key, data, ttl_seconds)
+                new_entry.last_error = last_error
+                self._entries[key] = new_entry
+                logger.debug("[MarketCache] cold fallback return key=%s error=%s", key, bool(last_error))
+                return self._payload(new_entry)
+
         try:
+            logger.debug("[MarketCache] cold fetch start key=%s", key)
             data = fetcher()
         except Exception as exc:
             if fallback_factory is None:
@@ -125,6 +177,7 @@ class MarketCache:
                 new_entry = self._entry_from_data(key, data, ttl_seconds)
                 new_entry.last_error = str(exc)
                 self._entries[key] = new_entry
+                logger.debug("[MarketCache] fallback return key=%s error=%s", key, exc)
                 return self._payload(new_entry)
 
         with lock:
@@ -167,9 +220,11 @@ class MarketCache:
                 if entry:
                     entry.is_refreshing = False
                     entry.last_error = str(exc)
+            logger.debug("[MarketCache] refresh failed key=%s error=%s", key, exc)
             return
         with lock:
             self._entries[key] = self._entry_from_data(key, data, ttl_seconds)
+        logger.debug("[MarketCache] refresh success key=%s", key)
 
     def _payload(self, entry: MarketCacheEntry, is_stale: bool = False) -> dict:
         payload = copy.deepcopy(entry.data)
