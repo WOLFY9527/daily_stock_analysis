@@ -17,6 +17,7 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { useAuth, useSystemConfig } from '../hooks';
 import type { BuiltinDataSourceEndpointCheck, TestBuiltinDataSourceResponse, SystemConfigCategory } from '../types/systemConfig';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { formatDateTime, formatDurationMs } from '../utils/format';
 import {
   GATEWAY_READINESS_NOTES,
   getGatewayModelOptions,
@@ -591,8 +592,8 @@ const validateCustomDataSource = (record: CustomDataSourceRecord): { valid: bool
 };
 
 const formatDataSourceCheckLine = (check: BuiltinDataSourceEndpointCheck): string => {
-  const httpStatus = check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorType || 'N/A';
-  const duration = typeof check.durationMs === 'number' ? `${check.durationMs}ms` : 'N/A';
+  const httpStatus = check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorType || '--';
+  const duration = formatDurationMs(check.durationMs);
   return `${check.name}: ${check.ok ? 'OK' : httpStatus} · ${duration}`;
 };
 
@@ -4231,7 +4232,8 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
                   <p>{t('settings.dataSourceValidationKeyMasked')}: {dataSourceEditorValidationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
-                  <p>{t('settings.dataSourceValidationDuration')}: {dataSourceEditorValidationResult.durationMs}ms</p>
+                  <p>{language === 'zh' ? '校验时间' : 'Checked at'}: {formatDateTime(dataSourceEditorValidationResult.checkedAt)}</p>
+                  <p>{t('settings.dataSourceValidationDuration')}: {formatDurationMs(dataSourceEditorValidationResult.durationMs)}</p>
                   {dataSourceEditorValidationResult.checks.map((check) => (
                     <p key={`${dataSourceEditorValidationResult.provider}-${check.name}`}>
                       {formatDataSourceCheckLine(check)} · {check.message}
@@ -4362,7 +4364,8 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
                   <p>{t('settings.dataSourceValidationKeyMasked')}: {dataSourceEditorValidationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
-                  <p>{t('settings.dataSourceValidationDuration')}: {dataSourceEditorValidationResult.durationMs}ms</p>
+                  <p>{language === 'zh' ? '校验时间' : 'Checked at'}: {formatDateTime(dataSourceEditorValidationResult.checkedAt)}</p>
+                  <p>{t('settings.dataSourceValidationDuration')}: {formatDurationMs(dataSourceEditorValidationResult.durationMs)}</p>
                   {dataSourceEditorValidationResult.checks.map((check) => (
                     <p key={`${dataSourceEditorValidationResult.provider}-${check.name}`}>
                       {formatDataSourceCheckLine(check)} · {check.message}

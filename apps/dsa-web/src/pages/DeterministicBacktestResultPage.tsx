@@ -34,6 +34,7 @@ import {
   pct,
   type RuleBenchmarkMode,
 } from '../components/backtest/shared';
+import { formatPercent } from '../utils/format';
 import { type RuleComparisonItem } from '../components/backtest/RuleRunComparisonPanel';
 import {
   buildRuleStrategySummaryRows,
@@ -196,7 +197,7 @@ function getRiskControlVisualRows(
       key: item.key,
       label: item.label,
       value: Number(item.value),
-      valueLabel: `${Number(item.value).toFixed(2)}%`,
+      valueLabel: formatPercent(Number(item.value), { digits: 2 }),
     }));
 }
 

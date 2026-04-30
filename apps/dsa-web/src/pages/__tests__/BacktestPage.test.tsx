@@ -1311,6 +1311,7 @@ describe('BacktestPage', () => {
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
+    expect(within(screen.getByTestId('deterministic-result-page-hero')).getByText(/2026\/04\/08/)).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
   }, 10000);

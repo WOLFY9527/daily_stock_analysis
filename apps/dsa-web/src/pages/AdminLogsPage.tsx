@@ -5,6 +5,7 @@ import type { ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
 import { StatusBadge, getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { formatDateTime as formatDateTimeValue, formatDurationMs } from '../utils/format';
 
 type AdminLogsLanguage = 'zh' | 'en';
 type TranslateFn = (key: string, params?: Record<string, string | number | undefined>) => string;
@@ -371,18 +372,12 @@ function detailForSummary(summary: ExecutionLogSessionSummary): ExecutionLogSess
 }
 
 function formatDateTime(value: unknown, locale: AdminLogsLanguage): string {
-  const raw = String(value || '').trim();
-  if (!raw) return '--';
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US');
+  void locale;
+  return formatDateTimeValue(value);
 }
 
 function formatDuration(value: unknown): string {
-  const ms = Number(value);
-  if (!Number.isFinite(ms) || ms < 0) return '--';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s`;
+  return formatDurationMs(value);
 }
 
 function statusFilterLabel(value: (typeof STATUS_FILTER_OPTIONS)[number], locale: AdminLogsLanguage): string {

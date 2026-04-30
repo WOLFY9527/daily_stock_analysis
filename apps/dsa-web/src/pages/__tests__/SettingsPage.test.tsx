@@ -1950,6 +1950,7 @@ describe('SettingsPage', () => {
       });
     });
     expect(await within(drawer).findByTestId('builtin-data-source-validation-result')).toHaveTextContent('abcd...wxyz');
+    expect(within(drawer).getByText(/校验时间:/)).toHaveTextContent('2026/04/30');
     expect(within(drawer).getByText(/quote: OK/)).toBeInTheDocument();
     expect(within(drawer).getByText(/historical: OK/)).toBeInTheDocument();
     expect(screen.queryByText('配置本地校验通过')).not.toBeInTheDocument();
@@ -2008,6 +2009,7 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(within(drawer).getAllByText(/FMP 部分可用/).length).toBeGreaterThan(0);
     });
+    expect(within(drawer).getByText(/校验时间:/)).toHaveTextContent('2026/04/30');
     expect(within(drawer).getByText(/historical: HTTP 403/)).toBeInTheDocument();
     expect(within(drawer).getByText(/检查套餐权限或重置 API key/)).toBeInTheDocument();
     expect(within(drawer).queryByText('fmp-secret-key')).not.toBeInTheDocument();

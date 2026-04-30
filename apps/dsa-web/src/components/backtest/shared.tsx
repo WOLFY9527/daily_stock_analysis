@@ -3,6 +3,11 @@ import type React from 'react';
 import { Button, Checkbox, Disclosure } from '../../components/common';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { translate } from '../../i18n/core';
+import {
+  formatDateTime as formatDateTimeValue,
+  formatNumber as formatNumberValue,
+  formatPercent as formatPercentValue,
+} from '../../utils/format';
 import { StatusBadge } from '../ui/StatusBadge';
 import type {
   AssumptionMap,
@@ -44,18 +49,15 @@ function getHistoricalStatusText(status?: string, language: BacktestLanguage = '
 export { Disclosure };
 
 export function pct(value?: number | null): string {
-  if (value == null || Number.isNaN(value)) return '--';
-  return `${value.toFixed(2)}%`;
+  return formatPercentValue(value, { digits: 2 });
 }
 
 export function formatNumber(value?: number | null, digits = 2): string {
-  if (value == null || Number.isNaN(value)) return '--';
-  return value.toFixed(digits);
+  return formatNumberValue(value, digits);
 }
 
 export function formatDateTime(value?: string | null): string {
-  if (!value) return '--';
-  return value.replace('T', ' ').replace('Z', '');
+  return formatDateTimeValue(value);
 }
 
 export function toDateInputValue(value: Date): string {

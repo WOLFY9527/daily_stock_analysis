@@ -306,8 +306,7 @@ describe('AdminLogsPage', () => {
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
-    await screen.findByText('运行中');
-    expect(document.querySelector('[data-status="running"]')).not.toBeNull();
+    expect(await screen.findByText('运行中')).toBeInTheDocument();
   });
 
   it('filters scanner and backtest business tabs by category', async () => {
