@@ -3,15 +3,39 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
+try:
+    import litellm  # noqa: F401
+except ModuleNotFoundError:
+    sys.modules["litellm"] = MagicMock()
+
+import src.auth as auth
+from api.app import create_app
 from api.v1.endpoints import market
+from src.config import Config
 from src.services.market_overview_service import MarketOverviewService, get_freshness_status
+from src.storage import DatabaseManager
 
 
 CN_TZ = timezone(timedelta(hours=8))
+
+
+def _reset_auth_globals() -> None:
+    auth._auth_enabled = None
+    auth._session_secret = None
+    auth._password_hash_salt = None
+    auth._password_hash_stored = None
+    auth._rate_limit = {}
 
 
 class MarketCnIndicesApiTestCase(unittest.TestCase):
@@ -133,6 +157,117 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual(calls, 1)
         self.assertEqual(second["items"][0]["value"], first["items"][0]["value"])
         self.assertIn("isRefreshing", second)
+
+    def test_cn_indices_cache_is_shared_across_service_instances(self) -> None:
+        calls = 0
+
+        def fetcher(self: MarketOverviewService) -> dict:
+            nonlocal calls
+            calls += 1
+            updated_at = datetime(2026, 4, 30, 10, calls, tzinfo=CN_TZ).isoformat(timespec="seconds")
+            return {
+                "source": "sina",
+                "updatedAt": updated_at,
+                "asOf": updated_at,
+                "items": [
+                    {
+                        "name": "上证指数",
+                        "symbol": "000001.SH",
+                        "value": 4100 + calls,
+                        "change": 1,
+                        "changePercent": 0.1,
+                        "sparkline": [4090, 4100 + calls],
+                        "source": "sina",
+                        "asOf": updated_at,
+                    }
+                ],
+            }
+
+        with patch.object(MarketOverviewService, "_fetch_cn_indices_snapshot", fetcher):
+            first = MarketOverviewService().get_cn_indices()
+            second = MarketOverviewService().get_cn_indices()
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(second["items"][0]["value"], first["items"][0]["value"])
+
+    def test_authenticated_http_cn_indices_returns_cache_metadata(self) -> None:
+        _reset_auth_globals()
+        temp_dir = tempfile.TemporaryDirectory()
+        data_dir = Path(temp_dir.name)
+        env_path = data_dir / ".env"
+        db_path = data_dir / "market_http_test.db"
+        env_path.write_text(
+            "\n".join(
+                [
+                    "STOCK_LIST=600519",
+                    "GEMINI_API_KEY=test",
+                    "ADMIN_AUTH_ENABLED=true",
+                    f"DATABASE_PATH={db_path}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        os.environ["ENV_FILE"] = str(env_path)
+        os.environ["DATABASE_PATH"] = str(db_path)
+        Config.reset_instance()
+        DatabaseManager.reset_instance()
+
+        updated_at = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+
+        def fetcher(self: MarketOverviewService) -> dict:
+            return {
+                "source": "sina",
+                "sourceLabel": "新浪财经",
+                "updatedAt": updated_at,
+                "asOf": updated_at,
+                "items": [
+                    {
+                        "name": "上证指数",
+                        "symbol": "000001.SH",
+                        "value": 4107.51,
+                        "change": 28.88,
+                        "changePercent": 0.71,
+                        "sparkline": [4078.63, 4107.51],
+                        "source": "sina",
+                        "sourceLabel": "新浪财经",
+                        "asOf": updated_at,
+                    }
+                ],
+            }
+
+        try:
+            app = create_app(static_dir=data_dir / "empty-static")
+            client = TestClient(app)
+            login_response = client.post(
+                "/api/v1/auth/login",
+                json={"password": "marketpass", "passwordConfirm": "marketpass"},
+            )
+            self.assertEqual(login_response.status_code, 200)
+
+            with patch.object(MarketOverviewService, "_fetch_cn_indices_snapshot", fetcher):
+                response = client.get("/api/v1/market/cn-indices")
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            for field in (
+                "freshness",
+                "source",
+                "sourceLabel",
+                "asOf",
+                "updatedAt",
+                "isRefreshing",
+                "isFallback",
+                "warning",
+            ):
+                self.assertIn(field, payload)
+        finally:
+            DatabaseManager.reset_instance()
+            Config.reset_instance()
+            _reset_auth_globals()
+            os.environ.pop("ENV_FILE", None)
+            os.environ.pop("DATABASE_PATH", None)
+            temp_dir.cleanup()
 
 
 if __name__ == "__main__":
