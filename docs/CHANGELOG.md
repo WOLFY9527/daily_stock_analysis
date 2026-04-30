@@ -1,5 +1,7 @@
 ## 2026-04-30
 
+- 🧯 **Admin Logs 降噪与级别筛选** — `/admin/logs` 默认改为只展示 `WARNING / ERROR / CRITICAL`，新增级别、分类、搜索、时间范围与调试日志开关，并在顶部展示 ERROR、WARNING、数据源失败、慢请求和最近严重错误摘要。后端 `/api/v1/admin/logs` 与 `/sessions` 补齐 `min_level / level / category / query / since / limit / offset / page / cursor` 查询参数，兼容 `minLevel / taskId`，并对 Market cache/prewarm 成功、普通 cache hit、普通快请求等高频 INFO/DEBUG 事件降噪；Market 数据源 timeout、refresh failed、fallback/stale 与慢请求继续入库并默认可见。
+
 - 🧊 **Market Overview 接入后端 SWR 缓存** — `/api/v1/market/*` 新增统一轻量内存缓存层，按 crypto、futures、A股指数、商品外汇、资金流、情绪、利率等数据类型使用独立 TTL；缓存命中时不再重复访问外部源，过期时先返回最近快照并标记 `isRefreshing=true` 后台刷新，刷新失败保留旧快照并返回 warning。fallback/mock 数据继续保留 `freshness=fallback/mock` 与 item-level metadata，不会被缓存包装成 live。前端仅补齐 `isRefreshing` 类型和卡片 footer 的“正在刷新快照”提示，页面结构不变。
 
 ## 2026-04-29
