@@ -1,6 +1,6 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { adminLogsApi, type ExecutionLogSessionDetail, type ExecutionLogSessionSummary } from '../api/adminLogs';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { adminLogsApi, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -9,6 +9,9 @@ type AdminLogsLanguage = 'zh' | 'en';
 type TranslateFn = (key: string, params?: Record<string, string | number | undefined>) => string;
 type OperationType = 'single_stock_analysis' | 'market_scan' | 'backtest' | 'system_operation' | 'other';
 type NormalizedStatus = 'success' | 'partial' | 'failed' | 'running' | 'unknown';
+type LogLevel = 'DEBUG' | 'INFO' | 'NOTICE' | 'WARNING' | 'ERROR' | 'CRITICAL';
+type LevelFilter = 'all' | 'warning_plus' | 'error_plus' | LogLevel;
+type LogCategory = 'system' | 'auth' | 'market' | 'cache' | 'data_source' | 'analysis' | 'trading' | 'scheduler' | 'api' | 'security';
 
 const STATUS_CLASS: Record<NormalizedStatus, string> = {
   success: 'theme-log-status theme-log-status--success',
@@ -18,8 +21,18 @@ const STATUS_CLASS: Record<NormalizedStatus, string> = {
   unknown: 'theme-log-status',
 };
 
-const OPERATION_OPTIONS: OperationType[] = ['single_stock_analysis', 'market_scan', 'backtest', 'system_operation'];
-const STATUS_OPTIONS: NormalizedStatus[] = ['success', 'partial', 'failed'];
+const LEVEL_FILTER_OPTIONS: LevelFilter[] = ['all', 'warning_plus', 'error_plus', 'DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
+const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'trading', 'scheduler', 'api', 'security'];
+const SINCE_OPTIONS = ['15m', '1h', '24h', '7d'] as const;
+
+const LEVEL_CLASS: Record<LogLevel, string> = {
+  DEBUG: 'border-white/10 bg-white/[0.04] text-white/50',
+  INFO: 'border-white/10 bg-white/[0.05] text-white/62',
+  NOTICE: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100',
+  WARNING: 'border-amber-300/30 bg-amber-400/12 text-amber-100',
+  ERROR: 'border-rose-300/35 bg-rose-500/14 text-rose-100',
+  CRITICAL: 'border-red-300/45 bg-red-500/25 text-red-50 shadow-[0_0_24px_rgba(239,68,68,0.18)]',
+};
 
 const MOCK_WOLFY_LOG_DETAILS: ExecutionLogSessionDetail[] = [
   {
@@ -276,6 +289,54 @@ function statusLabel(status: NormalizedStatus, locale: AdminLogsLanguage): strin
   return labels[status][locale];
 }
 
+function normalizeLogLevel(value?: string | null): LogLevel {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (['DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'].includes(normalized)) return normalized as LogLevel;
+  return 'INFO';
+}
+
+function levelFilterLabel(value: LevelFilter, locale: AdminLogsLanguage): string {
+  const labels: Record<LevelFilter, { zh: string; en: string }> = {
+    all: { zh: '全部', en: 'All' },
+    warning_plus: { zh: 'WARNING+', en: 'WARNING+' },
+    error_plus: { zh: 'ERROR+', en: 'ERROR+' },
+    DEBUG: { zh: 'DEBUG', en: 'DEBUG' },
+    INFO: { zh: 'INFO', en: 'INFO' },
+    NOTICE: { zh: 'NOTICE', en: 'NOTICE' },
+    WARNING: { zh: 'WARNING', en: 'WARNING' },
+    ERROR: { zh: 'ERROR', en: 'ERROR' },
+    CRITICAL: { zh: 'CRITICAL', en: 'CRITICAL' },
+  };
+  return labels[value][locale];
+}
+
+function categoryLabel(value: string | null | undefined, locale: AdminLogsLanguage): string {
+  const key = String(value || 'system').trim();
+  const labels: Record<string, { zh: string; en: string }> = {
+    system: { zh: 'system', en: 'system' },
+    auth: { zh: 'auth', en: 'auth' },
+    market: { zh: 'market', en: 'market' },
+    cache: { zh: 'cache', en: 'cache' },
+    data_source: { zh: 'data_source', en: 'data_source' },
+    analysis: { zh: 'analysis', en: 'analysis' },
+    trading: { zh: 'trading', en: 'trading' },
+    scheduler: { zh: 'scheduler', en: 'scheduler' },
+    api: { zh: 'api', en: 'api' },
+    security: { zh: 'security', en: 'security' },
+  };
+  return (labels[key] || { zh: key, en: key })[locale];
+}
+
+function sinceLabel(value: string, locale: AdminLogsLanguage): string {
+  const labels: Record<string, { zh: string; en: string }> = {
+    '15m': { zh: '最近 15 分钟', en: 'Last 15 minutes' },
+    '1h': { zh: '最近 1 小时', en: 'Last 1 hour' },
+    '24h': { zh: '最近 24 小时', en: 'Last 24 hours' },
+    '7d': { zh: '最近 7 天', en: 'Last 7 days' },
+  };
+  return (labels[value] || labels['24h'])[locale];
+}
+
 function roleLabel(role: unknown, t: TranslateFn): string {
   const normalized = String(role || '').trim().toLowerCase();
   if (normalized === 'admin') return t('adminLogs.role.admin');
@@ -317,12 +378,6 @@ function formatDateTime(value: unknown, locale: AdminLogsLanguage): string {
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return raw;
   return date.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US');
-}
-
-function formatDateInput(value: string): number | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.getTime();
 }
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -401,38 +456,49 @@ async function copyLogJson(detail: ExecutionLogSessionDetail): Promise<void> {
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
   const locale = language as AdminLogsLanguage;
-  const [operationFilter, setOperationFilter] = useState<'all' | OperationType>('all');
-  const [targetFilter, setTargetFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | NormalizedStatus>('all');
-  const [fromTime, setFromTime] = useState('');
-  const [toTime, setToTime] = useState('');
+  const [levelFilter, setLevelFilter] = useState<LevelFilter>('warning_plus');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | LogCategory>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sinceFilter, setSinceFilter] = useState<(typeof SINCE_OPTIONS)[number]>('24h');
+  const [showDebugLogs, setShowDebugLogs] = useState(false);
   const [sessions, setSessions] = useState<ExecutionLogSessionSummary[]>([]);
+  const [summary, setSummary] = useState<NonNullable<ExecutionLogSessionListResponse['summary']> | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<ExecutionLogSessionDetail | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
+  const skipDebugClickRef = useRef(false);
 
   const loadSessions = useCallback(async () => {
     setIsLoadingList(true);
     setError(null);
     try {
-      const response = await adminLogsApi.listSessions({
-        stock: targetFilter.trim() || undefined,
-        status: statusFilter === 'all' ? undefined : statusFilter,
+      const params: Parameters<typeof adminLogsApi.listSessions>[0] = {
+        category: categoryFilter === 'all' ? undefined : categoryFilter,
+        query: searchQuery.trim() || undefined,
+        since: sinceFilter,
         limit: 100,
+      };
+      if (levelFilter === 'warning_plus') params.minLevel = 'WARNING';
+      else if (levelFilter === 'error_plus') params.minLevel = 'ERROR';
+      else if (levelFilter === 'all') params.minLevel = showDebugLogs ? 'DEBUG' : 'NOTICE';
+      else params.level = levelFilter;
+      const response = await adminLogsApi.listSessions({
+        ...params,
       });
       const items = response.items || [];
       setSessions(items.length ? items : (import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []));
+      setSummary(response.summary || null);
     } catch (err) {
       setError((err as { parsedError?: ParsedApiError }).parsedError || null);
       setSessions(import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []);
+      setSummary(null);
     } finally {
       setIsLoadingList(false);
     }
-  }, [statusFilter, targetFilter]);
+  }, [categoryFilter, levelFilter, searchQuery, showDebugLogs, sinceFilter]);
 
   useEffect(() => {
     document.title = t('adminLogs.documentTitle');
@@ -443,30 +509,25 @@ const AdminLogsPage: React.FC = () => {
   }, [loadSessions]);
 
   const filteredSessions = useMemo(() => {
-    const fromMs = formatDateInput(fromTime);
-    const toMs = formatDateInput(toTime);
-    const target = targetFilter.trim().toLowerCase();
-    const user = userFilter.trim().toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
     return sessions.filter((item) => {
       const summary = item.readableSummary || {};
-      const operationType = normalizeOperationType(summary);
-      const status = normalizeStatus(summary.operationStatus || item.overallStatus);
-      const startedMs = item.startedAt ? new Date(item.startedAt).getTime() : null;
-      const targetText = `${summary.operationTarget || ''} ${item.code || ''} ${item.name || ''}`.toLowerCase();
-      const userText = `${summary.actorDisplay || ''} ${summary.actorUsername || ''} ${summary.actorUserId || ''} ${summary.actorRole || ''}`.toLowerCase();
-      if (operationFilter !== 'all' && operationType !== operationFilter) return false;
-      if (statusFilter !== 'all' && status !== statusFilter) return false;
-      if (target && !targetText.includes(target)) return false;
-      if (user && !userText.includes(user)) return false;
-      if (fromMs != null && startedMs != null && startedMs < fromMs) return false;
-      if (toMs != null && startedMs != null && startedMs > toMs) return false;
+      const category = String(summary.logCategory || '').trim();
+      const level = normalizeLogLevel(summary.logLevel);
+      const haystack = `${summary.eventName || ''} ${summary.eventMessage || ''} ${summary.requestId || ''} ${summary.source || ''} ${summary.actorDisplay || ''} ${summary.actorUsername || ''} ${summary.operationTarget || ''} ${item.code || ''} ${item.name || ''}`.toLowerCase();
+      if (levelFilter === 'warning_plus' && !['WARNING', 'ERROR', 'CRITICAL'].includes(level)) return false;
+      if (levelFilter === 'error_plus' && !['ERROR', 'CRITICAL'].includes(level)) return false;
+      if (levelFilter === 'all' && !showDebugLogs && ['DEBUG', 'INFO'].includes(level)) return false;
+      if (!['all', 'warning_plus', 'error_plus'].includes(levelFilter) && level !== levelFilter) return false;
+      if (categoryFilter !== 'all' && category !== categoryFilter) return false;
+      if (query && !haystack.includes(query)) return false;
       return true;
     }).sort((a, b) => {
       const left = a.startedAt ? new Date(a.startedAt).getTime() : 0;
       const right = b.startedAt ? new Date(b.startedAt).getTime() : 0;
       return right - left;
     });
-  }, [fromTime, operationFilter, sessions, statusFilter, targetFilter, toTime, userFilter]);
+  }, [categoryFilter, levelFilter, searchQuery, sessions, showDebugLogs]);
 
   const openDetail = useCallback(async (summary: ExecutionLogSessionSummary) => {
     setSelectedDetail(detailForSummary(summary));
@@ -483,6 +544,10 @@ const AdminLogsPage: React.FC = () => {
     }
   }, []);
 
+  const toggleDebugLogs = useCallback(() => {
+    setShowDebugLogs((current) => !current);
+  }, []);
+
   const drawerDetail = selectedDetail;
   const readable = drawerDetail?.readableSummary || {};
   const operationDetail = drawerDetail?.operationDetail || {};
@@ -497,6 +562,26 @@ const AdminLogsPage: React.FC = () => {
   const systemOperation = asRecord(operationDetail.systemOperation);
   const drawerStatus = normalizeStatus(String(operationDetail.status || readable.operationStatus || drawerDetail?.overallStatus || ''));
   const drawerOperationType = normalizeOperationType(readable);
+  const computedSummary = useMemo(() => {
+    if (summary) return summary;
+    return filteredSessions.reduce(
+      (acc, item) => {
+        const readableSummary = item.readableSummary || {};
+        const level = normalizeLogLevel(readableSummary.logLevel);
+        const category = String(readableSummary.logCategory || '');
+        const eventName = String(readableSummary.eventName || '');
+        if (level === 'ERROR' || level === 'CRITICAL') acc.errorCount += 1;
+        if (level === 'WARNING') acc.warningCount += 1;
+        if (category === 'data_source' && ['WARNING', 'ERROR', 'CRITICAL'].includes(level)) acc.dataSourceFailureCount += 1;
+        if (eventName === 'SlowRequest' || eventName === 'MarketCacheColdStartSlow') acc.slowRequestCount += 1;
+        if (level === 'CRITICAL' && item.startedAt && (!acc.latestCriticalAt || item.startedAt > acc.latestCriticalAt)) {
+          acc.latestCriticalAt = item.startedAt;
+        }
+        return acc;
+      },
+      { errorCount: 0, warningCount: 0, dataSourceFailureCount: 0, slowRequestCount: 0, latestCriticalAt: null as string | null },
+    );
+  }, [filteredSessions, summary]);
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
@@ -510,65 +595,80 @@ const AdminLogsPage: React.FC = () => {
               <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
               <p className="mt-3 text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: filteredSessions.length })}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[12rem_minmax(0,1fr)_10rem_10rem_12rem_12rem_auto]">
-              <label className="sr-only" htmlFor="admin-logs-operation-filter">{t('adminLogs.operationType')}</label>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[11rem_11rem_minmax(0,1fr)_11rem_11rem_auto]">
+              <label className="sr-only" htmlFor="admin-logs-level-filter">{locale === 'zh' ? '级别筛选' : 'Level filter'}</label>
               <select
-                id="admin-logs-operation-filter"
-                aria-label={t('adminLogs.operationType')}
+                id="admin-logs-level-filter"
+                aria-label={locale === 'zh' ? '级别筛选' : 'Level filter'}
                 className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                value={operationFilter}
-                onChange={(event) => setOperationFilter(event.target.value as 'all' | OperationType)}
+                value={levelFilter}
+                onChange={(event) => setLevelFilter(event.target.value as LevelFilter)}
               >
-                <option value="all">{locale === 'zh' ? '全部操作类别' : 'All operation types'}</option>
-                {OPERATION_OPTIONS.map((type) => (
-                  <option key={type} value={type}>{operationLabel(type, locale)}</option>
+                {LEVEL_FILTER_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{levelFilterLabel(option, locale)}</option>
                 ))}
               </select>
-              <label className="sr-only" htmlFor="admin-logs-target-filter">{t('adminLogs.operationTarget')}</label>
-              <input
-                id="admin-logs-target-filter"
-                aria-label={t('adminLogs.operationTarget')}
-                className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                placeholder={locale === 'zh' ? '股票 / 策略名称' : 'Ticker / strategy'}
-                value={targetFilter}
-                onChange={(event) => setTargetFilter(event.target.value)}
-              />
-              <label className="sr-only" htmlFor="admin-logs-user-filter">{t('adminLogs.userFilterLabel')}</label>
-              <input
-                id="admin-logs-user-filter"
-                aria-label={t('adminLogs.userFilterLabel')}
-                className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                placeholder={locale === 'zh' ? '用户' : 'User'}
-                value={userFilter}
-                onChange={(event) => setUserFilter(event.target.value)}
-              />
-              <label className="sr-only" htmlFor="admin-logs-status-filter">{t('adminLogs.statusFilterLabel')}</label>
+              <label className="sr-only" htmlFor="admin-logs-category-filter">{locale === 'zh' ? '分类筛选' : 'Category filter'}</label>
               <select
-                id="admin-logs-status-filter"
-                aria-label={t('adminLogs.statusFilterLabel')}
+                id="admin-logs-category-filter"
+                aria-label={locale === 'zh' ? '分类筛选' : 'Category filter'}
                 className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as 'all' | NormalizedStatus)}
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value as 'all' | LogCategory)}
               >
-                <option value="all">{t('adminLogs.allStatus')}</option>
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>{statusLabel(status, locale)}</option>
+                <option value="all">{locale === 'zh' ? '全部分类' : 'All categories'}</option>
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{categoryLabel(option, locale)}</option>
                 ))}
               </select>
+              <label className="sr-only" htmlFor="admin-logs-search">{locale === 'zh' ? '搜索日志' : 'Search logs'}</label>
               <input
-                aria-label={locale === 'zh' ? '开始时间' : 'Start time'}
+                id="admin-logs-search"
+                aria-label={locale === 'zh' ? '搜索日志' : 'Search logs'}
                 className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                type="datetime-local"
-                value={fromTime}
-                onChange={(event) => setFromTime(event.target.value)}
+                placeholder={locale === 'zh' ? '事件 / message / request id / symbol / source / user' : 'Event / message / request id / symbol / source / user'}
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
               />
-              <input
-                aria-label={locale === 'zh' ? '结束时间' : 'End time'}
+              <label className="sr-only" htmlFor="admin-logs-since-filter">{locale === 'zh' ? '时间范围' : 'Time range'}</label>
+              <select
+                id="admin-logs-since-filter"
+                aria-label={locale === 'zh' ? '时间范围' : 'Time range'}
                 className="input-surface h-10 w-full rounded-xl px-3 text-sm"
-                type="datetime-local"
-                value={toTime}
-                onChange={(event) => setToTime(event.target.value)}
-              />
+                value={sinceFilter}
+                onChange={(event) => setSinceFilter(event.target.value as (typeof SINCE_OPTIONS)[number])}
+              >
+                {SINCE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{sinceLabel(option, locale)}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showDebugLogs}
+                aria-label={locale === 'zh' ? '显示调试日志' : 'Show debug logs'}
+                className="flex h-10 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.035] px-3 text-xs text-secondary-text transition hover:border-white/15 hover:bg-white/[0.055]"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  skipDebugClickRef.current = true;
+                  toggleDebugLogs();
+                }}
+                onClick={() => {
+                  if (skipDebugClickRef.current) {
+                    skipDebugClickRef.current = false;
+                    return;
+                  }
+                  toggleDebugLogs();
+                }}
+              >
+                <span
+                  className={`relative h-4 w-8 rounded-full border transition ${showDebugLogs ? 'border-cyan-300/60 bg-cyan-400/35' : 'border-white/15 bg-black/30'}`}
+                  aria-hidden="true"
+                >
+                  <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white transition ${showDebugLogs ? 'left-[1.05rem]' : 'left-0.5'}`} />
+                </span>
+                <span>{locale === 'zh' ? '显示调试日志' : 'Show debug logs'}</span>
+              </button>
               <button type="button" className="btn-secondary h-10 rounded-xl px-4 text-sm sm:col-span-2 xl:col-span-1" onClick={() => void loadSessions()} disabled={isLoadingList}>
                 {isLoadingList ? t('adminLogs.loading') : t('adminLogs.refreshButton')}
               </button>
@@ -578,6 +678,21 @@ const AdminLogsPage: React.FC = () => {
       </GlassCard>
 
       {error ? <ApiErrorAlert error={error} /> : null}
+
+      <div className="grid gap-3 md:grid-cols-5">
+        {[
+          { label: 'ERROR', value: computedSummary.errorCount || 0, tone: 'text-rose-100 border-rose-400/20 bg-rose-500/8' },
+          { label: 'WARNING', value: computedSummary.warningCount || 0, tone: 'text-amber-100 border-amber-300/20 bg-amber-400/8' },
+          { label: locale === 'zh' ? '数据源失败' : 'Data source failures', value: computedSummary.dataSourceFailureCount || 0, tone: 'text-cyan-100 border-cyan-300/20 bg-cyan-400/8' },
+          { label: locale === 'zh' ? '慢请求' : 'Slow requests', value: computedSummary.slowRequestCount || 0, tone: 'text-white/82 border-white/10 bg-white/[0.04]' },
+          { label: locale === 'zh' ? '最近严重错误' : 'Latest critical', value: computedSummary.latestCriticalAt ? formatDateTime(computedSummary.latestCriticalAt, locale) : '--', tone: 'text-red-100 border-red-300/20 bg-red-500/8' },
+        ].map((item) => (
+          <div key={item.label} className={`rounded-2xl border px-4 py-3 ${item.tone}`}>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{item.label}</p>
+            <p className="mt-2 text-xl font-semibold">{item.value}</p>
+          </div>
+        ))}
+      </div>
 
       <GlassCard as="section" className="p-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
@@ -594,36 +709,35 @@ const AdminLogsPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-white/6 bg-black/15">
-            <div className="hidden grid-cols-[11rem_minmax(9rem,1fr)_11rem_8rem_minmax(8rem,1fr)_8rem] gap-4 border-b border-white/6 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
+            <div className="hidden grid-cols-[10rem_6rem_8rem_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_7rem] gap-4 border-b border-white/6 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
               <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-              <div>{locale === 'zh' ? '股票 / 策略名称' : 'Ticker / strategy'}</div>
-              <div>{t('adminLogs.operationType')}</div>
-              <div>{t('adminLogs.operationStatus')}</div>
-              <div>{t('adminLogs.keyMetric')}</div>
+              <div>level</div>
+              <div>category</div>
+              <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+              <div>message</div>
+              <div>{locale === 'zh' ? '来源 / 请求' : 'Source / request'}</div>
               <div>{locale === 'zh' ? '操作' : 'Action'}</div>
             </div>
             <div className="divide-y divide-white/6">
               {filteredSessions.map((item) => {
                 const summary = item.readableSummary || {};
-                const operationType = normalizeOperationType(summary);
-                const status = normalizeStatus(summary.operationStatus || item.overallStatus);
-                const target = text(summary.operationTarget || item.code || item.name, t('adminLogs.unavailable'));
+                const level = normalizeLogLevel(summary.logLevel);
+                const category = text(summary.logCategory, 'system');
+                const eventName = text(summary.eventName || item.name || item.taskId, t('adminLogs.unavailable'));
+                const message = text(summary.eventMessage || summary.topFailureReason || summary.summaryParagraph || summary.keyMetric, t('adminLogs.unavailable'));
+                const source = [summary.source, summary.requestId, summary.operationTarget || item.code]
+                  .map((value) => String(value || '').trim())
+                  .filter(Boolean)
+                  .filter((value, index, values) => values.indexOf(value) === index)
+                  .join(' · ') || t('adminLogs.unavailable');
                 return (
-                  <div key={item.sessionId} data-testid="admin-log-row" className="grid gap-3 px-4 py-4 md:grid-cols-[11rem_minmax(9rem,1fr)_11rem_8rem_minmax(8rem,1fr)_8rem] md:items-center">
+                  <div key={item.sessionId} data-testid="admin-log-row" className="grid gap-3 px-4 py-4 md:grid-cols-[10rem_6rem_8rem_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_7rem] md:items-center">
                     <p className="text-sm text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-semibold text-foreground">{target}</p>
-                      <p className="mt-1 break-all text-[11px] text-muted-text">{item.sessionId}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-xs font-bold text-emerald-100">{operationIcon(operationType)}</span>
-                      <span className="text-sm text-secondary-text">{operationLabel(operationType, locale)}</span>
-                    </div>
-                    <span className={`${STATUS_CLASS[status]} w-fit`}>{statusLabel(status, locale)}</span>
-                    <div className="min-w-0">
-                      <p className="break-words text-sm text-secondary-text">{text(summary.keyMetric, t('adminLogs.unavailable'))}</p>
-                      <p className="mt-1 text-xs text-muted-text">{text(summary.actorDisplay, t('adminLogs.unavailable'))} · {roleLabel(summary.actorRole, t)}</p>
-                    </div>
+                    <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${LEVEL_CLASS[level]}`}>{level}</span>
+                    <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[11px] text-secondary-text">{categoryLabel(category, locale)}</span>
+                    <p className="min-w-0 break-words text-sm font-semibold text-foreground">{eventName}</p>
+                    <p className="min-w-0 break-words text-sm text-secondary-text">{message}</p>
+                    <p className="min-w-0 break-all text-xs text-muted-text">{source}</p>
                     <button type="button" className="btn-secondary w-fit rounded-xl px-3 py-1.5 text-xs" onClick={() => void openDetail(item)}>
                       {t('adminLogs.viewDetails')}
                     </button>
@@ -739,6 +853,22 @@ const AdminLogsPage: React.FC = () => {
                     </div>
                   );
                 }) : <p className="text-sm text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>}
+              </div>
+            </details>
+
+            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
+              <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? 'metadata 详情' : 'Metadata detail'}</summary>
+              <div className="mt-4 space-y-3">
+                {drawerDetail.events.length ? drawerDetail.events.map((event) => (
+                  <div key={event.id} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${LEVEL_CLASS[normalizeLogLevel(event.level)]}`}>{normalizeLogLevel(event.level)}</span>
+                      <span className="text-secondary-text">{categoryLabel(event.category || event.phase, locale)}</span>
+                      <span className="text-foreground">{text(event.eventName || event.step)}</span>
+                    </div>
+                    <JsonBlock value={event.detail || {}} />
+                  </div>
+                )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>}
               </div>
             </details>
 

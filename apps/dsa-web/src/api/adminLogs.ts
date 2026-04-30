@@ -4,8 +4,10 @@ import { toCamelCase } from './utils';
 export interface ExecutionLogEvent {
   id: number;
   eventAt?: string | null;
+  level?: string | null;
   phase: string;
   category?: string | null;
+  eventName?: string | null;
   step?: string | null;
   action?: string | null;
   outcome?: string | null;
@@ -65,6 +67,12 @@ export interface ExecutionLogSessionSummary {
     operationTarget?: string | null;
     operationStatus?: string | null;
     keyMetric?: string | null;
+    logLevel?: string | null;
+    logCategory?: string | null;
+    eventName?: string | null;
+    eventMessage?: string | null;
+    requestId?: string | null;
+    source?: string | null;
   };
 }
 
@@ -89,6 +97,13 @@ export interface ExecutionLogSessionDetail extends ExecutionLogSessionSummary {
 export interface ExecutionLogSessionListResponse {
   total: number;
   items: ExecutionLogSessionSummary[];
+  summary?: {
+    errorCount?: number;
+    warningCount?: number;
+    dataSourceFailureCount?: number;
+    slowRequestCount?: number;
+    latestCriticalAt?: string | null;
+  };
 }
 
 function normalizeSessionSummary(payload: Record<string, unknown>): ExecutionLogSessionSummary {
@@ -121,23 +136,35 @@ export const adminLogsApi = {
       taskId?: string;
       stock?: string;
       status?: string;
+      minLevel?: string;
+      level?: string;
       category?: string;
+      query?: string;
       provider?: string;
       model?: string;
       channel?: string;
+      since?: string;
       limit?: number;
       offset?: number;
     },
   ): Promise<ExecutionLogSessionListResponse> => {
+    const requestParams = {
+      ...params,
+      min_level: params.minLevel,
+      task_id: params.taskId,
+    };
+    delete requestParams.minLevel;
+    delete requestParams.taskId;
     const response = await apiClient.get<Record<string, unknown>>(
       '/api/v1/admin/logs/sessions',
       {
-        params,
+        params: requestParams,
       },
     );
     const normalized = toCamelCase<ExecutionLogSessionListResponse>(response.data);
     return {
       total: Number(normalized.total || 0),
+      summary: normalized.summary,
       items: Array.isArray(normalized.items)
         ? normalized.items.map((item) => normalizeSessionSummary(item as unknown as Record<string, unknown>))
         : [],

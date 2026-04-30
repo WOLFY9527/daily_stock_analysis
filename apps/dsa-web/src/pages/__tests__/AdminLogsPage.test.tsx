@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import AdminLogsPage from '../AdminLogsPage';
@@ -49,6 +49,12 @@ const sessionItems = [
       operationTarget: 'TSLA',
       operationStatus: '部分失败',
       keyMetric: 'Score 5.2',
+      logLevel: 'WARNING',
+      logCategory: 'data_source',
+      eventName: 'ExternalSourceTimeout',
+      eventMessage: 'Yahoo 超时',
+      source: 'Yahoo',
+      requestId: 'req-tsla',
     },
   },
   {
@@ -66,6 +72,11 @@ const sessionItems = [
       operationTarget: 'US pre-open',
       operationStatus: '成功',
       keyMetric: 'Shortlist 12',
+      logLevel: 'NOTICE',
+      logCategory: 'market',
+      eventName: 'MarketDataStaleServed',
+      eventMessage: 'served stale market snapshot',
+      source: 'market-overview',
     },
   },
   {
@@ -83,6 +94,11 @@ const sessionItems = [
       operationTarget: 'MA crossover',
       operationStatus: '失败',
       keyMetric: 'Data gap',
+      logLevel: 'ERROR',
+      logCategory: 'analysis',
+      eventName: 'AnalysisFailed',
+      eventMessage: 'Local parquet returned no rows',
+      source: 'Backtest Engine',
     },
   },
   {
@@ -100,6 +116,11 @@ const sessionItems = [
       operationTarget: '登录',
       operationStatus: '成功',
       keyMetric: 'IP 127.0.0.1',
+      logLevel: 'INFO',
+      logCategory: 'auth',
+      eventName: 'AuthSessionRefreshed',
+      eventMessage: 'Admin session refreshed',
+      source: 'auth',
     },
   },
 ];
@@ -154,7 +175,20 @@ const detailById = {
         { severity: 'error', message: 'Yahoo 超时', source: 'Yahoo' },
       ],
     },
-    events: [],
+    events: [
+      {
+        id: 1,
+        level: 'WARNING',
+        phase: 'data_source',
+        category: 'data_source',
+        eventName: 'ExternalSourceTimeout',
+        step: 'ExternalSourceTimeout',
+        status: 'timed_out',
+        truthLevel: 'actual',
+        message: 'Yahoo 超时',
+        detail: { request_id: 'req-tsla', source: 'Yahoo', symbol: 'TSLA' },
+      },
+    ],
   },
   'scanner-us': {
     ...sessionItems[1],
@@ -171,7 +205,20 @@ const detailById = {
       timeline: [],
       diagnostics: [],
     },
-    events: [],
+    events: [
+      {
+        id: 2,
+        level: 'NOTICE',
+        phase: 'market',
+        category: 'market',
+        eventName: 'MarketDataStaleServed',
+        step: 'MarketDataStaleServed',
+        status: 'completed',
+        truthLevel: 'actual',
+        message: 'served stale market snapshot',
+        detail: { source: 'market-overview' },
+      },
+    ],
   },
   'backtest-ma': {
     ...sessionItems[2],
@@ -190,7 +237,20 @@ const detailById = {
         { severity: 'error', message: 'Local parquet returned no rows', source: 'Backtest Engine' },
       ],
     },
-    events: [],
+    events: [
+      {
+        id: 3,
+        level: 'ERROR',
+        phase: 'analysis',
+        category: 'analysis',
+        eventName: 'AnalysisFailed',
+        step: 'AnalysisFailed',
+        status: 'failed',
+        truthLevel: 'actual',
+        message: 'Local parquet returned no rows',
+        detail: { source: 'Backtest Engine' },
+      },
+    ],
   },
   'system-login-admin': {
     ...sessionItems[3],
@@ -215,7 +275,20 @@ const detailById = {
       ],
       diagnostics: [],
     },
-    events: [],
+    events: [
+      {
+        id: 4,
+        level: 'INFO',
+        phase: 'auth',
+        category: 'auth',
+        eventName: 'AuthSessionRefreshed',
+        step: 'AuthSessionRefreshed',
+        status: 'completed',
+        truthLevel: 'actual',
+        message: 'Admin session refreshed',
+        detail: { user: 'admin' },
+      },
+    ],
   },
 };
 
@@ -226,87 +299,83 @@ describe('AdminLogsPage', () => {
     listSessions.mockResolvedValue({
       total: sessionItems.length,
       items: sessionItems,
+      summary: {
+        errorCount: 1,
+        warningCount: 1,
+        dataSourceFailureCount: 1,
+        slowRequestCount: 0,
+        latestCriticalAt: null,
+      },
     });
     getSessionDetail.mockImplementation(async (sessionId: keyof typeof detailById) => detailById[sessionId]);
   });
 
-  it('renders the WolfyStock log list with operation icons, statuses, and filters', async () => {
+  it('defaults to WARNING+ and shows severity summary', async () => {
     render(<AdminLogsPage />);
 
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0');
-    expect(await screen.findByText('TSLA')).toBeInTheDocument();
-    expect(screen.getByText('登录')).toBeInTheDocument();
-    expect(screen.getByText('US pre-open')).toBeInTheDocument();
-    expect(screen.getByText('MA crossover')).toBeInTheDocument();
-    expect(screen.getAllByText('系统操作').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('单股票分析').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('市场扫描').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('回测').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('部分失败').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('成功').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('失败').length).toBeGreaterThan(0);
+    expect(await screen.findByText(/TSLA/)).toBeInTheDocument();
+    expect(screen.getByText(/MA crossover/)).toBeInTheDocument();
+    expect(screen.queryByText('登录')).not.toBeInTheDocument();
+    expect(screen.queryByText('US pre-open')).not.toBeInTheDocument();
+    expect(screen.getByText('ExternalSourceTimeout')).toBeInTheDocument();
+    expect(screen.getByText('AnalysisFailed')).toBeInTheDocument();
+    expect(screen.getAllByText('ERROR').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('WARNING').length).toBeGreaterThan(0);
+    await waitFor(() => expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ minLevel: 'WARNING', since: '24h', limit: 100 })));
   });
 
-  it('filters by operation type, target, status, and time range', async () => {
+  it('filters by level, category, search, time range, and debug toggle', async () => {
     render(<AdminLogsPage />);
 
-    expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    expect(await screen.findByText(/TSLA/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationType')), {
-      target: { value: 'market_scan' },
-    });
-    expect(screen.getByText('US pre-open')).toBeInTheDocument();
-    expect(screen.queryByText('登录')).not.toBeInTheDocument();
-    expect(screen.queryByText('TSLA')).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationType')), {
+    fireEvent.change(screen.getByLabelText('级别筛选'), {
       target: { value: 'all' },
     });
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationTarget')), {
-      target: { value: 'MA' },
+    expect(screen.getByText(/US pre-open/)).toBeInTheDocument();
+    expect(screen.queryByText('登录')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('显示调试日志'));
+    expect(screen.getByText(/登录/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('分类筛选'), {
+      target: { value: 'data_source' },
     });
-    expect(screen.getByText('MA crossover')).toBeInTheDocument();
+    expect(screen.getByText(/TSLA/)).toBeInTheDocument();
+    expect(screen.queryByText(/MA crossover/)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('分类筛选'), {
+      target: { value: 'all' },
+    });
+    fireEvent.change(screen.getByLabelText('搜索日志'), {
+      target: { value: 'Yahoo' },
+    });
+    expect(screen.getByText(/TSLA/)).toBeInTheDocument();
     expect(screen.queryByText('US pre-open')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.operationTarget')), {
+    fireEvent.change(screen.getByLabelText('搜索日志'), {
       target: { value: '' },
     });
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.statusFilterLabel')), {
-      target: { value: 'partial' },
+    fireEvent.change(screen.getByLabelText('时间范围'), {
+      target: { value: '1h' },
     });
-    expect(screen.getByText('TSLA')).toBeInTheDocument();
-    expect(screen.queryByText('MA crossover')).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.statusFilterLabel')), {
-      target: { value: 'all' },
-    });
-    fireEvent.change(screen.getByLabelText(translate('zh', 'adminLogs.userFilterLabel')), {
-      target: { value: 'admin' },
-    });
-    expect(screen.getByText('登录')).toBeInTheDocument();
-    expect(screen.getByText('TSLA')).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('开始时间'), {
-      target: { value: '2026-04-29T00:00' },
-    });
-    expect(screen.getByText('TSLA')).toBeInTheDocument();
-    expect(screen.getByText('US pre-open')).toBeInTheDocument();
-    expect(screen.queryByText('MA crossover')).not.toBeInTheDocument();
+    await waitFor(() => expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ since: '1h' })));
   });
 
   it('orders log entries by newest operation time first', async () => {
     render(<AdminLogsPage />);
 
-    expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    expect(await screen.findByText(/TSLA/)).toBeInTheDocument();
     const rows = screen.getAllByTestId('admin-log-row');
-    expect(within(rows[0]).getByText('登录')).toBeInTheDocument();
-    expect(within(rows[1]).getByText('TSLA')).toBeInTheDocument();
+    expect(within(rows[0]).getByText(/TSLA/)).toBeInTheDocument();
+    expect(within(rows[1]).getByText(/MA crossover/)).toBeInTheDocument();
   });
 
   it('opens a drawer with complete LLM calls, data-source calls, fallback records, and final result', async () => {
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('TSLA');
+    const row = await screen.findByText(/TSLA/);
     const rowContainer = row.closest('.grid');
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
@@ -321,6 +390,8 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('系统回退记录')).toBeInTheDocument();
     expect(screen.getAllByText(/回退到备用模型/).length).toBeGreaterThan(0);
     expect(screen.getByText('最终执行结果')).toBeInTheDocument();
+    expect(screen.getByText('metadata 详情')).toBeInTheDocument();
+    expect(screen.getAllByText(/req-tsla/).length).toBeGreaterThan(0);
     expect(screen.getByText('复制完整日志')).toBeInTheDocument();
     expect(screen.getByText('导出 JSON')).toBeInTheDocument();
   });
@@ -328,7 +399,11 @@ describe('AdminLogsPage', () => {
   it('opens system operation details with operation user, time, result, and reason fields', async () => {
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('登录');
+    fireEvent.change(await screen.findByLabelText('级别筛选'), {
+      target: { value: 'all' },
+    });
+    fireEvent.click(screen.getByLabelText('显示调试日志'));
+    const row = await screen.findByText(/登录/);
     const rowContainer = row.closest('[data-testid="admin-log-row"]');
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
@@ -346,13 +421,13 @@ describe('AdminLogsPage', () => {
     getSessionDetail.mockRejectedValueOnce({ parsedError: { message: 'failed' } });
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('TSLA');
+    const row = await screen.findByText(/TSLA/);
     const rowContainer = row.closest('.grid');
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('api-error')).toBeInTheDocument();
-    expect(screen.getAllByText('TSLA').length).toBeGreaterThan(1);
+    expect(screen.getAllByText(/TSLA/).length).toBeGreaterThan(1);
   });
 
   it('renders English page-local copy on English routes', async () => {
@@ -361,13 +436,11 @@ describe('AdminLogsPage', () => {
     render(<AdminLogsPage />);
 
     expect(await screen.findByRole('heading', { name: translate('en', 'adminLogs.pageTitle') })).toBeInTheDocument();
-    expect(screen.getByLabelText(translate('en', 'adminLogs.operationType'))).toBeInTheDocument();
-    expect(screen.getByLabelText(translate('en', 'adminLogs.statusFilterLabel'))).toBeInTheDocument();
-    expect(screen.getByLabelText(translate('en', 'adminLogs.userFilterLabel'))).toBeInTheDocument();
-    expect(screen.getAllByText('Single stock analysis').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Market scan').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Backtest').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('System operation').length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Level filter')).toBeInTheDocument();
+    expect(screen.getByLabelText('Category filter')).toBeInTheDocument();
+    expect(screen.getByLabelText('Search logs')).toBeInTheDocument();
+    expect(screen.getByLabelText('Time range')).toBeInTheDocument();
+    expect(await screen.findByText('ExternalSourceTimeout')).toBeInTheDocument();
   });
 
   it('keeps long values readable in the list and drawer', async () => {
@@ -386,6 +459,11 @@ describe('AdminLogsPage', () => {
             actorRole: 'admin',
             operationTarget: longName,
             operationStatus: '成功',
+            logLevel: 'WARNING',
+            logCategory: 'system',
+            eventName: 'SlowRequest',
+            eventMessage: longName,
+            requestId: longSessionId,
           },
         },
       ],
@@ -399,6 +477,11 @@ describe('AdminLogsPage', () => {
         actorRole: 'admin',
         operationTarget: longName,
         operationStatus: '成功',
+        logLevel: 'WARNING',
+        logCategory: 'system',
+        eventName: 'SlowRequest',
+        eventMessage: longName,
+        requestId: longSessionId,
       },
       operationDetail: {
         target: longName,
@@ -408,7 +491,19 @@ describe('AdminLogsPage', () => {
         timeline: [],
         diagnostics: [],
       },
-      events: [],
+      events: [
+        {
+          id: 99,
+          level: 'WARNING',
+          phase: 'system',
+          category: 'system',
+          eventName: 'SlowRequest',
+          status: 'partial_success',
+          truthLevel: 'actual',
+          message: longName,
+          detail: {},
+        },
+      ],
     });
 
     render(<AdminLogsPage />);
@@ -416,6 +511,6 @@ describe('AdminLogsPage', () => {
     const listName = await screen.findByText(longName);
     expect(listName.className).toContain('break-words');
     expect(listName.className).not.toContain('truncate');
-    expect(screen.getByText(longSessionId).className).toContain('break-all');
+    expect(screen.getByText(new RegExp(longSessionId)).className).toContain('break-all');
   });
 });

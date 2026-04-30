@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
@@ -19,6 +19,30 @@ _SECRET_PATTERNS = [
 ]
 
 _NOTIFICATION_STATES = {"success", "partial_success", "timeout_unknown", "failed", "not_configured"}
+_LOG_LEVELS = ("DEBUG", "INFO", "NOTICE", "WARNING", "ERROR", "CRITICAL")
+_LOG_LEVEL_RANK = {level: index for index, level in enumerate(_LOG_LEVELS)}
+_DEFAULT_LOG_CATEGORIES = {
+    "system",
+    "auth",
+    "market",
+    "cache",
+    "data_source",
+    "analysis",
+    "scanner",
+    "trading",
+    "scheduler",
+    "api",
+    "frontend",
+    "security",
+}
+_NOISY_MARKET_EVENTS = {
+    "MarketCacheHit",
+    "MarketCacheMiss",
+    "MarketPrewarmStarted",
+    "MarketPrewarmCompleted",
+    "MarketRefreshStarted",
+    "MarketRefreshCompleted",
+}
 
 
 def _masked_message(text: Optional[str]) -> Optional[str]:
@@ -106,6 +130,77 @@ def _severity_from_status(status: Any) -> str:
     if outcome in {"partial", "timeout"}:
         return "warning"
     return "info"
+
+
+def _normalize_log_level(value: Any, default: str = "INFO") -> str:
+    normalized = _as_str(value).upper()
+    return normalized if normalized in _LOG_LEVEL_RANK else default
+
+
+def _level_from_status(status: Any) -> str:
+    normalized = _as_str(status).lower()
+    if normalized in {"critical", "fatal"}:
+        return "CRITICAL"
+    if normalized in {"failed", "failed_runtime", "error", "empty_result", "invalid_response", "insufficient_fields"}:
+        return "ERROR"
+    if normalized in {"partial", "partial_success", "timeout", "timed_out", "timeout_unknown", "switched_to_fallback"}:
+        return "WARNING"
+    return "INFO"
+
+
+def _normalize_log_category(value: Any, fallback: str = "system") -> str:
+    normalized = _as_str(value).lower().replace("-", "_").replace(".", "_")
+    aliases = {
+        "market_overview": "market",
+        "data": "data_source",
+        "data_market": "data_source",
+        "data_fundamentals": "data_source",
+        "data_news": "data_source",
+        "data_sentiment": "data_source",
+        "system_control": "system",
+        "ai_model": "analysis",
+        "ai_route": "analysis",
+        "notification": "system",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in _DEFAULT_LOG_CATEGORIES else fallback
+
+
+def _event_name_from_event(event: Dict[str, Any]) -> str:
+    detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
+    return _as_str(detail.get("event_name")) or _as_str(detail.get("action")) or _as_str(event.get("step")) or "Event"
+
+
+def _event_category(event: Dict[str, Any]) -> str:
+    detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
+    return _normalize_log_category(detail.get("category") or event.get("category") or event.get("phase"))
+
+
+def _event_level(event: Dict[str, Any]) -> str:
+    detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
+    explicit = _as_str(detail.get("level") or event.get("level")).upper()
+    if explicit in _LOG_LEVEL_RANK:
+        return explicit
+    event_name = _event_name_from_event(event)
+    if event_name in _NOISY_MARKET_EVENTS:
+        return "DEBUG" if event_name == "MarketCacheHit" else "INFO"
+    return _level_from_status(event.get("status"))
+
+
+def _parse_since(value: Optional[str]) -> Optional[datetime]:
+    text = _as_str(value).lower()
+    if not text:
+        return None
+    if text.endswith("m") and text[:-1].isdigit():
+        return datetime.now() - timedelta(minutes=int(text[:-1]))
+    if text.endswith("h") and text[:-1].isdigit():
+        return datetime.now() - timedelta(hours=int(text[:-1]))
+    if text.endswith("d") and text[:-1].isdigit():
+        return datetime.now() - timedelta(days=int(text[:-1]))
+    try:
+        return datetime.fromisoformat(text.replace("z", "+00:00"))
+    except Exception:
+        return None
 
 
 def _data_phase(key: str) -> str:
@@ -444,27 +539,63 @@ class ExecutionLogService:
         raw_response: Optional[Dict[str, Any]] = None,
         actor: Optional[Dict[str, Any]] = None,
     ) -> str:
+        raw = raw_response if isinstance(raw_response, dict) else {}
+        event_name = _as_str(raw.get("event_name")) or panel_name
+        normalized_status = "completed" if str(status).lower() == "success" else "failed"
+        cache_state = _as_str(raw.get("cache")).lower()
+        is_timeout = "timeout" in f"{event_name} {error_message or ''} {raw}".lower()
+        is_slow = float(raw.get("duration_ms") or 0) >= 2000 if isinstance(raw.get("duration_ms"), (int, float)) else False
+        fallback_used = bool(raw.get("fallback_used") or raw.get("fallbackUsed") or raw.get("isFallback"))
+        stale_served = cache_state in {"stale_refreshing", "stale_or_fallback"} or bool(raw.get("stale") or raw.get("isStale"))
+        if normalized_status == "completed" and event_name in _NOISY_MARKET_EVENTS and not fallback_used and not stale_served and not is_slow:
+            return ""
+        if normalized_status == "completed" and cache_state in {"hit", "hit_or_refreshed", "refreshed"} and not fallback_used and not stale_served and not is_slow:
+            return ""
+
+        if event_name in {"ExternalSourceTimeout", "ExternalDataSourceTimeout"} or is_timeout:
+            level = "WARNING"
+            category = "data_source"
+        elif normalized_status == "failed":
+            level = "ERROR" if "invalid" in event_name.lower() else "WARNING"
+            category = "data_source" if "source" in event_name.lower() or is_timeout else "cache"
+        elif is_slow:
+            level = "WARNING"
+            category = "api"
+            event_name = "MarketCacheColdStartSlow"
+        elif fallback_used:
+            level = "WARNING"
+            category = "data_source"
+            event_name = "MarketDataFallbackUsed"
+        elif stale_served:
+            level = "NOTICE"
+            category = "market"
+            event_name = "MarketDataStaleServed"
+        else:
+            level = "INFO"
+            category = "market"
+
         session_id = uuid.uuid4().hex
         started_at = datetime.now()
-        normalized_status = "completed" if str(status).lower() == "success" else "failed"
         detail = {
-            "category": "market_overview",
+            "level": level,
+            "category": category,
+            "event_name": event_name,
             "action": "panel_fetch",
             "panel_name": panel_name,
             "fetch_timestamp": fetch_timestamp,
             "endpoint_url": endpoint_url,
             "status": status,
             "error_message": _masked_message(error_message),
-            "raw_response": raw_response or {},
+            "raw_response": raw,
             "outcome": _outcome_from_status(normalized_status),
         }
         summary = self._merge_summary(
-            {"market_overview": detail},
+            {"market_overview": detail, "log": {"level": level, "category": category, "event_name": event_name}},
             self._summary_meta(
                 actor=actor,
                 session_kind="user_activity",
-                subsystem="market_overview",
-                action_name="panel_fetch",
+                subsystem=category,
+                action_name=event_name,
                 destructive=False,
             ),
         )
@@ -480,8 +611,8 @@ class ExecutionLogService:
         )
         self.db.append_execution_log_event(
             session_id=session_id,
-            phase="market_overview",
-            step="panel_fetch",
+            phase=category,
+            step=event_name,
             target=panel_name,
             status=normalized_status,
             truth_level="actual",
@@ -492,6 +623,73 @@ class ExecutionLogService:
         self.db.finalize_execution_log_session(
             session_id=session_id,
             overall_status=normalized_status,
+            truth_level="actual",
+            summary=summary,
+            ended_at=started_at,
+        )
+        return session_id
+
+    def record_api_request(
+        self,
+        *,
+        route: str,
+        method: str,
+        status_code: int,
+        duration_ms: float,
+        request_id: Optional[str] = None,
+        actor: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        if int(status_code) < 400 and float(duration_ms) < 2000:
+            return ""
+        level = "ERROR" if int(status_code) >= 500 else "WARNING"
+        event_name = "RequestFailed" if int(status_code) >= 400 else "SlowRequest"
+        session_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        detail = {
+            "level": level,
+            "category": "api",
+            "event_name": event_name,
+            "route": route,
+            "method": method,
+            "status_code": status_code,
+            "duration_ms": duration_ms,
+            "request_id": request_id,
+            "outcome": "failed" if int(status_code) >= 400 else "partial",
+        }
+        summary = self._merge_summary(
+            {"api_request": detail, "log": {"level": level, "category": "api", "event_name": event_name}},
+            self._summary_meta(
+                actor=actor,
+                session_kind="system_event",
+                subsystem="api",
+                action_name=event_name,
+                destructive=False,
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id=event_name,
+            code=None,
+            name=route,
+            overall_status="failed" if int(status_code) >= 400 else "partial_success",
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="api",
+            step=event_name,
+            target=route,
+            status="failed" if int(status_code) >= 400 else "partial_success",
+            truth_level="actual",
+            message=f"{method} {route} took {duration_ms:.0f} ms",
+            detail=detail,
+            event_at=started_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status="failed" if int(status_code) >= 400 else "partial_success",
             truth_level="actual",
             summary=summary,
             ended_at=started_at,
@@ -1444,7 +1642,11 @@ class ExecutionLogService:
         task_id: Optional[str] = None,
         stock_code: Optional[str] = None,
         status: Optional[str] = None,
+        min_level: Optional[str] = None,
+        level: Optional[str] = None,
         category: Optional[str] = None,
+        query: Optional[str] = None,
+        since: Optional[str] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
         channel: Optional[str] = None,
@@ -1453,26 +1655,48 @@ class ExecutionLogService:
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[List[Dict[str, Any]], int]:
+        effective_date_from = date_from or _parse_since(since)
+        requested_limit = max(1, min(int(limit), 200))
         rows, total = self.db.list_execution_log_sessions(
             task_id=task_id,
             stock_code=stock_code,
             status=status,
-            category=category,
+            category=None,
             provider=provider,
             model=model,
             channel=channel,
-            date_from=date_from,
+            date_from=effective_date_from,
             date_to=date_to,
-            limit=limit,
-            offset=offset,
+            limit=200,
+            offset=0,
         )
         items: List[Dict[str, Any]] = []
+        min_level_normalized = _normalize_log_level(min_level, "DEBUG") if min_level else None
+        exact_level = _normalize_log_level(level, "") if level else None
+        category_filter = _normalize_log_category(category, "") if category else None
+        query_text = _as_str(query).lower()
         for row in rows:
             summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+            detail = self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {}
+            events = detail.get("events") if isinstance(detail.get("events"), list) else []
+            enriched_events = [self._enrich_event(event) for event in events if isinstance(event, dict)]
+            top_event = self._top_event(enriched_events)
+            if min_level_normalized and not any(
+                _LOG_LEVEL_RANK.get(_event_level(event), 0) >= _LOG_LEVEL_RANK[min_level_normalized]
+                for event in enriched_events
+            ):
+                continue
+            if exact_level and not any(_event_level(event) == exact_level for event in enriched_events):
+                continue
+            if category_filter and not any(_event_category(event) == category_filter for event in enriched_events):
+                continue
+            if query_text and not self._matches_query(row=row, events=enriched_events, query=query_text):
+                continue
+
             row["readable_summary"] = self.build_readable_summary(
                 overall_status=str(row.get("overall_status") or "unknown"),
                 summary=summary,
-                events=None,
+                events=enriched_events,
             )
             row["readable_summary"].update(
                 self._operation_summary_fields(
@@ -1483,8 +1707,106 @@ class ExecutionLogService:
                     task_id=row.get("task_id"),
                 )
             )
+            if top_event:
+                row["readable_summary"].update(
+                    {
+                        "log_level": _event_level(top_event),
+                        "log_category": _event_category(top_event),
+                        "event_name": _event_name_from_event(top_event),
+                        "event_message": top_event.get("message"),
+                        "request_id": (top_event.get("detail") or {}).get("request_id") if isinstance(top_event.get("detail"), dict) else None,
+                        "source": top_event.get("target"),
+                    }
+                )
             items.append(row)
-        return items, total
+        items.sort(
+            key=lambda item: (
+                str(item.get("started_at") or ""),
+            ),
+            reverse=True,
+        )
+        filtered_total = len(items)
+        paged = items[max(0, int(offset)): max(0, int(offset)) + requested_limit]
+        return paged, filtered_total
+
+    @staticmethod
+    def _enrich_event(event: Dict[str, Any]) -> Dict[str, Any]:
+        next_event = dict(event)
+        next_event["level"] = _event_level(next_event)
+        next_event["category"] = _event_category(next_event)
+        next_event["event_name"] = _event_name_from_event(next_event)
+        return next_event
+
+    @staticmethod
+    def _top_event(events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not events:
+            return None
+        return sorted(
+            events,
+            key=lambda event: (
+                _LOG_LEVEL_RANK.get(_event_level(event), 0),
+                str(event.get("event_at") or ""),
+                int(event.get("id") or 0),
+            ),
+            reverse=True,
+        )[0]
+
+    @staticmethod
+    def _matches_query(*, row: Dict[str, Any], events: List[Dict[str, Any]], query: str) -> bool:
+        summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+        haystack: List[str] = [
+            _as_str(row.get("task_id")),
+            _as_str(row.get("code")),
+            _as_str(row.get("name")),
+            _as_str(row.get("session_id")),
+            _as_str(summary.get("meta", {}).get("actor_username") if isinstance(summary.get("meta"), dict) else ""),
+            _as_str(summary.get("meta", {}).get("actor_display") if isinstance(summary.get("meta"), dict) else ""),
+        ]
+        for event in events:
+            detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}
+            haystack.extend(
+                [
+                    _event_name_from_event(event),
+                    _as_str(event.get("message")),
+                    _as_str(event.get("target")),
+                    _as_str(detail.get("request_id")),
+                    _as_str(detail.get("symbol")),
+                    _as_str(detail.get("source")),
+                    _as_str(detail.get("user")),
+                ]
+            )
+        return query in " ".join(haystack).lower()
+
+    @staticmethod
+    def summarize_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        error_count = 0
+        warning_count = 0
+        data_source_failure_count = 0
+        slow_request_count = 0
+        latest_critical_at = None
+        for item in items:
+            level = _normalize_log_level((item.get("readable_summary") or {}).get("log_level"), "INFO")
+            category = _as_str((item.get("readable_summary") or {}).get("log_category"))
+            event_name = _as_str((item.get("readable_summary") or {}).get("event_name"))
+            if level in {"ERROR", "CRITICAL"}:
+                error_count += 1
+            if level == "WARNING":
+                warning_count += 1
+            if category == "data_source" and level in {"WARNING", "ERROR", "CRITICAL"}:
+                data_source_failure_count += 1
+            if event_name in {"SlowRequest", "MarketCacheColdStartSlow"}:
+                slow_request_count += 1
+            if level == "CRITICAL":
+                current = _as_str(item.get("started_at"))
+                if current and (latest_critical_at is None or current > latest_critical_at):
+                    latest_critical_at = current
+        return {
+            "error_count": error_count,
+            "warning_count": warning_count,
+            "data_source_failure_count": data_source_failure_count,
+            "slow_request_count": slow_request_count,
+            "latest_critical_at": latest_critical_at,
+        }
 
     def get_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
         detail = self.db.get_execution_log_session_detail(session_id)
@@ -1496,13 +1818,14 @@ class ExecutionLogService:
         for event in events:
             if not isinstance(event, dict):
                 continue
+            event = self._enrich_event(event)
             detail_block = event.get("detail") if isinstance(event.get("detail"), dict) else {}
             category = _as_str(detail_block.get("category")) or _as_str(event.get("phase")) or "system"
             action = _as_str(detail_block.get("action")) or _action_from_status(event.get("status"))
             outcome = _as_str(detail_block.get("outcome")) or _outcome_from_status(event.get("status"))
             reason = _masked_message(_as_str(detail_block.get("reason")))
             next_event = dict(event)
-            next_event["category"] = category
+            next_event["category"] = _normalize_log_category(category)
             next_event["action"] = action
             next_event["outcome"] = outcome
             next_event["reason"] = reason

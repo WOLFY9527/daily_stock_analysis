@@ -11,8 +11,10 @@ from pydantic import BaseModel, Field
 class ExecutionLogEventModel(BaseModel):
     id: int
     event_at: Optional[str] = None
+    level: Optional[str] = None
     phase: str
     category: Optional[str] = None
+    event_name: Optional[str] = None
     step: Optional[str] = None
     action: Optional[str] = None
     outcome: Optional[str] = None
@@ -45,6 +47,15 @@ class ExecutionLogSessionDetailModel(ExecutionLogSessionSummaryModel):
     operation_detail: Dict[str, Any] = Field(default_factory=dict)
 
 
+class ExecutionLogSummaryModel(BaseModel):
+    error_count: int = 0
+    warning_count: int = 0
+    data_source_failure_count: int = 0
+    slow_request_count: int = 0
+    latest_critical_at: Optional[str] = None
+
+
 class ExecutionLogSessionListResponse(BaseModel):
     total: int
     items: List[ExecutionLogSessionSummaryModel] = Field(default_factory=list)
+    summary: ExecutionLogSummaryModel = Field(default_factory=ExecutionLogSummaryModel)

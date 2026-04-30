@@ -75,19 +75,22 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
             session_id = service.record_market_overview_fetch(
                 panel_name="VolatilityCard",
                 endpoint_url="/api/v1/market-overview/volatility",
-                status="success",
+                status="failure",
                 fetch_timestamp="2026-04-29T10:00:00",
-                raw_response={"cache": "hit"},
+                error_message="provider timeout",
+                raw_response={"cache": "stale_or_fallback", "error": "provider timeout"},
                 actor={"user_id": "user-1", "username": "alice", "role": "user"},
             )
             detail = service.get_session_detail(session_id)
 
         self.assertIsNotNone(detail)
-        self.assertEqual(detail["readable_summary"]["subsystem"], "market_overview")
-        self.assertEqual(detail["events"][0]["phase"], "market_overview")
+        self.assertEqual(detail["readable_summary"]["subsystem"], "data_source")
+        self.assertEqual(detail["events"][0]["phase"], "data_source")
+        self.assertEqual(detail["events"][0]["level"], "WARNING")
+        self.assertEqual(detail["events"][0]["category"], "data_source")
         self.assertEqual(detail["events"][0]["detail"]["panel_name"], "VolatilityCard")
         self.assertEqual(detail["events"][0]["detail"]["endpoint_url"], "/api/v1/market-overview/volatility")
-        self.assertEqual(detail["events"][0]["detail"]["raw_response"], {"cache": "hit"})
+        self.assertEqual(detail["events"][0]["detail"]["raw_response"], {"cache": "stale_or_fallback", "error": "provider timeout"})
 
     def test_list_sessions_filters_by_task_id(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):

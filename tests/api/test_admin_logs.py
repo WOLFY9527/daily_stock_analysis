@@ -1,0 +1,175 @@
+# -*- coding: utf-8 -*-
+"""Admin log center filtering and noise-reduction tests."""
+
+from __future__ import annotations
+
+import unittest
+from datetime import datetime, timedelta
+from unittest.mock import patch
+
+from api.deps import CurrentUser
+from api.v1.endpoints import admin_logs
+from src.services.execution_log_service import ExecutionLogService
+from src.storage import DatabaseManager
+
+
+def _admin_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="bootstrap-admin",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+class AdminLogsApiTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager(db_url="sqlite:///:memory:")
+
+    def tearDown(self) -> None:
+        DatabaseManager.reset_instance()
+
+    def _record_event(
+        self,
+        *,
+        session_id: str,
+        event_name: str,
+        level: str,
+        category: str,
+        message: str,
+        status: str = "completed",
+        target: str | None = None,
+        detail: dict | None = None,
+        event_at: datetime | None = None,
+    ) -> None:
+        event_at = event_at or datetime.now()
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id=event_name,
+            code=target,
+            name=event_name,
+            overall_status=status,
+            truth_level="actual",
+            summary={"meta": {"subsystem": category}, "log": {"level": level, "category": category, "event_name": event_name}},
+            started_at=event_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase=category,
+            step=event_name,
+            target=target or category,
+            status=status,
+            truth_level="actual",
+            message=message,
+            detail={
+                "level": level,
+                "category": category,
+                "event_name": event_name,
+                **(detail or {}),
+            },
+            event_at=event_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status=status,
+            truth_level="actual",
+            summary={"meta": {"subsystem": category}, "log": {"level": level, "category": category, "event_name": event_name}},
+            ended_at=event_at,
+        )
+
+    def test_default_query_returns_warning_and_above_only(self) -> None:
+        now = datetime.now()
+        self._record_event(session_id="debug-cache", event_name="MarketCacheHit", level="DEBUG", category="cache", message="cache hit", event_at=now)
+        self._record_event(session_id="info-prewarm", event_name="MarketPrewarmCompleted", level="INFO", category="cache", message="prewarm done", event_at=now)
+        self._record_event(session_id="warning-timeout", event_name="ExternalSourceTimeout", level="WARNING", category="data_source", message="source timeout", status="timed_out", event_at=now)
+        self._record_event(session_id="error-analysis", event_name="AnalysisFailed", level="ERROR", category="analysis", message="analysis failed", status="failed", event_at=now)
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.list_execution_logs_root(_=_admin_user())
+
+        session_ids = [item.session_id for item in payload.items]
+        self.assertEqual(session_ids, ["error-analysis", "warning-timeout"])
+        self.assertEqual(payload.summary.error_count, 1)
+        self.assertEqual(payload.summary.warning_count, 1)
+        self.assertEqual(payload.summary.data_source_failure_count, 1)
+
+    def test_min_level_info_category_query_and_limit_are_honored(self) -> None:
+        self._record_event(session_id="notice-stale", event_name="MarketDataStaleServed", level="NOTICE", category="market", message="served stale SPX", target="SPX")
+        self._record_event(session_id="info-refresh", event_name="MarketRefreshCompleted", level="INFO", category="market", message="SPX refresh done", target="SPX")
+        self._record_event(session_id="warning-auth", event_name="AdminLoginFailed", level="WARNING", category="security", message="admin login failed", status="failed", target="admin")
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.list_execution_logs_root(
+                min_level="INFO",
+                category="market",
+                query="spx",
+                limit=1,
+                _=_admin_user(),
+            )
+
+        self.assertEqual(payload.total, 2)
+        self.assertEqual(len(payload.items), 1)
+        self.assertEqual(payload.items[0].readable_summary["log_category"], "market")
+        self.assertIn(payload.items[0].readable_summary["log_level"], {"NOTICE", "INFO"})
+
+    def test_camel_case_query_aliases_and_page_are_honored(self) -> None:
+        self._record_event(session_id="notice-stale", event_name="MarketDataStaleServed", level="NOTICE", category="market", message="served stale SPX", target="SPX")
+        self._record_event(session_id="warning-timeout", event_name="ExternalSourceTimeout", level="WARNING", category="data_source", message="source timeout", status="failed")
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.list_execution_log_sessions(
+                min_level_alias="NOTICE",
+                task_id_alias="MarketDataStaleServed",
+                limit=1,
+                page=1,
+                _=_admin_user(),
+            )
+
+        self.assertEqual(payload.total, 1)
+        self.assertEqual(payload.items[0].session_id, "notice-stale")
+
+    def test_exact_level_overrides_default_min_level(self) -> None:
+        self._record_event(session_id="info-routine", event_name="RoutineInfoEvent", level="INFO", category="system", message="routine info")
+        self._record_event(session_id="warning-timeout", event_name="ExternalSourceTimeout", level="WARNING", category="data_source", message="source timeout", status="failed")
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.list_execution_logs_root(
+                level="INFO",
+                _=_admin_user(),
+            )
+
+        self.assertEqual([item.session_id for item in payload.items], ["info-routine"])
+
+    def test_since_defaults_to_recent_window(self) -> None:
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=datetime.now() - timedelta(days=8),
+        )
+        self._record_event(
+            session_id="recent-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="recent failure",
+            status="failed",
+            event_at=datetime.now() - timedelta(hours=1),
+        )
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.list_execution_logs_root(_=_admin_user())
+
+        self.assertEqual([item.session_id for item in payload.items], ["recent-error"])
+
+
+if __name__ == "__main__":
+    unittest.main()
