@@ -538,10 +538,23 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText(/当前真实数据源不足，暂不生成综合判断/i)).toBeInTheDocument();
     expect(screen.getByText(/可信度：数据不足/i)).toBeInTheDocument();
     expect(screen.queryByText(/综合市场温度/i)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /查看评分占位项/i }));
+    expect(screen.getByText(/真实 0/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/备用 18/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/排除 18/i)).toBeInTheDocument();
+    expect(screen.getByText(/confidence 0/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /查看占位评分/i }));
     expect(screen.getByText(/综合市场温度/i)).toBeInTheDocument();
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
     expect(screen.getByText(/备用示例数据仅用于保持界面结构/i)).toBeInTheDocument();
+  });
+
+  it('uses a wide responsive market overview grid', async () => {
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-page-container')).toHaveClass('w-full', 'max-w-[1400px]');
+    expect(screen.getByTestId('market-overview-main-grid')).toHaveClass('grid', 'grid-cols-1', 'lg:grid-cols-2', '2xl:grid-cols-3');
+    expect(screen.getByTestId('market-overview-card-indices')).toHaveClass('min-w-0', 'w-full');
   });
 
   it('moves fallback-only cards into the pending data-source disclosure', async () => {

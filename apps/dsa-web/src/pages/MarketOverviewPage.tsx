@@ -314,6 +314,14 @@ function confidenceLabel(confidence?: number, isReliable?: boolean): string {
   return '低';
 }
 
+function isTemperatureReliable(data: MarketTemperatureResponse): boolean {
+  return Boolean(
+    data.isReliable !== false
+    && (data.confidence == null || data.confidence >= 0.45)
+    && (data.reliableInputCount == null || data.reliableInputCount >= 3),
+  );
+}
+
 function isFallbackOnlyMeta(meta: {
   source?: string;
   freshness?: string;
@@ -526,8 +534,8 @@ const MarketTemperatureStrip: React.FC<{
     { key: 'macroPressure', label: t('marketOverviewPage.temperature.macroPressure'), pressure: true },
     { key: 'liquidity', label: t('marketOverviewPage.temperature.liquidity') },
   ];
-  const confidenceText = confidenceLabel(data.confidence, data.isReliable);
-  const isReliable = data.isReliable !== false;
+  const isReliable = isTemperatureReliable(data);
+  const confidenceText = confidenceLabel(data.confidence, isReliable);
   const shouldShowScores = isReliable || showPlaceholderScores;
   return (
     <GlassCard as="section" data-testid="market-temperature-strip" className="p-4">
@@ -571,7 +579,7 @@ const MarketTemperatureStrip: React.FC<{
             aria-expanded={showPlaceholderScores}
             onClick={() => setShowPlaceholderScores((current) => !current)}
           >
-            {showPlaceholderScores ? '收起评分占位项' : '查看评分占位项'}
+            {showPlaceholderScores ? '收起占位评分' : '查看占位评分'}
           </button>
         </div>
       ) : null}
@@ -1267,8 +1275,6 @@ const MarketOverviewPage: React.FC = () => {
   const visibleOrder = cardOrders[activeCategory].filter((cardKey) => CATEGORY_CARDS[activeCategory].includes(cardKey));
   const fallbackOnlyOrder = visibleOrder.filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
   const primaryOrder = visibleOrder.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
-  const primaryColumns = [0, 1, 2].map((columnIndex) => primaryOrder.filter((_, index) => index % 3 === columnIndex));
-  const fallbackColumns = [0, 1, 2].map((columnIndex) => fallbackOnlyOrder.filter((_, index) => index % 3 === columnIndex));
   const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
   const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
@@ -1291,27 +1297,23 @@ const MarketOverviewPage: React.FC = () => {
         }
         setDraggingCard(null);
       }}
-      className={`transition-transform ${draggingCard === cardKey ? 'scale-[0.985] opacity-80' : ''}`}
+      className={`min-w-0 w-full transition-transform ${draggingCard === cardKey ? 'scale-[0.985] opacity-80' : ''}`}
     >
       {cardNodes[cardKey]}
     </div>
   );
 
-  const renderColumns = (columns: CardKey[][], rankOrder: CardKey[]) => (
-    <div className="flex w-full flex-col items-start gap-6 xl:flex-row">
-      {columns.map((columnCards, columnIndex) => (
-        <div key={columnIndex} className="flex w-full flex-col gap-6 xl:w-[calc((100%_-_3rem)/3)]">
-          {columnCards.map((cardKey) => renderCard(cardKey, rankOrder.indexOf(cardKey)))}
-        </div>
-      ))}
+  const renderCardGrid = (rankOrder: CardKey[]) => (
+    <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+      {rankOrder.map((cardKey) => renderCard(cardKey, rankOrder.indexOf(cardKey)))}
     </div>
   );
 
   return (
     <div className="w-full flex-1 flex flex-col min-w-0 min-h-0 bg-[#030303] text-white">
       <div className="flex-1 overflow-y-auto pb-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-6 px-3 sm:px-5">
-          <div className="sticky top-0 z-10 -mx-3 overflow-x-auto border-b border-white/5 bg-[#030303]/95 px-3 py-3 backdrop-blur sm:-mx-5 sm:px-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div data-testid="market-overview-page-container" className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-4 sm:px-6 lg:px-8">
+          <div className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-white/5 bg-[#030303]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max min-w-full gap-2 rounded-lg bg-white/[0.03] p-1">
               {categoryTabs.map((tab) => (
                 <button
@@ -1351,8 +1353,8 @@ const MarketOverviewPage: React.FC = () => {
               }}
             />
           ) : null}
-          <main data-testid="market-overview-main-grid">
-            {renderColumns(primaryColumns, primaryOrder)}
+          <main data-testid="market-overview-main-grid" className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+            {primaryOrder.map((cardKey) => renderCard(cardKey, primaryOrder.indexOf(cardKey)))}
           </main>
           {fallbackOnlyOrder.length > 0 ? (
             <PendingDataSourceSection
@@ -1360,7 +1362,7 @@ const MarketOverviewPage: React.FC = () => {
               fallbackCount={fallbackOnlyOrder.length}
               onToggle={() => setFallbackSectionExpanded((current) => !current)}
             >
-              {renderColumns(fallbackColumns, fallbackOnlyOrder)}
+              {renderCardGrid(fallbackOnlyOrder)}
             </PendingDataSourceSection>
           ) : null}
         </div>
