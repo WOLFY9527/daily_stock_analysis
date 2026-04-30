@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysisReport } from '../../types/analysis';
-import { normalizeAnalysisReport } from '../reportNormalizer';
+import { normalizeFrontendReportContract } from '../reportNormalizer';
 import { previewReport } from '../../dev/reportPreviewFixture';
 
-describe('normalizeAnalysisReport', () => {
+describe('normalizeFrontendReportContract', () => {
   it('fills required summary fields and defaults sentiment score when missing', () => {
     const report = {
       meta: {
@@ -21,7 +21,7 @@ describe('normalizeAnalysisReport', () => {
       },
     } as unknown as AnalysisReport;
 
-    const normalized = normalizeAnalysisReport(report);
+    const normalized = normalizeFrontendReportContract(report);
 
     expect(normalized.summary.analysisSummary).toBe('');
     expect(normalized.summary.operationAdvice).toBe('');
@@ -50,7 +50,7 @@ describe('normalizeAnalysisReport', () => {
       },
     } as unknown as AnalysisReport;
 
-    const normalized = normalizeAnalysisReport(report, {
+    const normalized = normalizeFrontendReportContract(report, {
       queryId: 'q-fallback',
       stockCode: 'MSFT',
       stockName: 'Microsoft',
@@ -94,7 +94,7 @@ describe('normalizeAnalysisReport', () => {
       },
     } as unknown as AnalysisReport;
 
-    const normalized = normalizeAnalysisReport(report);
+    const normalized = normalizeFrontendReportContract(report);
 
     expect(normalized.contractMeta).toEqual({
       payloadVariant: 'legacy_only',
@@ -126,7 +126,7 @@ describe('normalizeAnalysisReport', () => {
       },
     } as unknown as AnalysisReport;
 
-    const normalized = normalizeAnalysisReport(report);
+    const normalized = normalizeFrontendReportContract(report);
 
     expect(normalized.details?.standardReport).toEqual(standardReport);
     expect(normalized.contractMeta).toEqual({
@@ -171,7 +171,7 @@ describe('normalizeAnalysisReport', () => {
       },
     } as unknown as AnalysisReport;
 
-    const normalized = normalizeAnalysisReport(report);
+    const normalized = normalizeFrontendReportContract(report);
 
     expect(normalized.details?.standardReport?.summaryPanel?.ticker).toBe('NVDA');
     expect(normalized.details?.standardReport?.tableSections?.market?.title).toBe('行情表');
@@ -255,7 +255,7 @@ describe('normalizeAnalysisReport', () => {
       },
     } as unknown as AnalysisReport;
 
-    const normalized = normalizeAnalysisReport(report);
+    const normalized = normalizeFrontendReportContract(report);
 
     expect(normalized.details?.standardReport?.summaryPanel?.ticker).toBe('TSLA');
     expect(normalized.details?.standardReport?.summaryPanel?.currentPrice).toBe('362.19');
@@ -391,7 +391,7 @@ describe('normalizeAnalysisReport', () => {
     ];
 
     for (const variant of variants) {
-      const normalized = normalizeAnalysisReport(variant.report);
+      const normalized = normalizeFrontendReportContract(variant.report);
       expect(normalized.contractMeta?.payloadVariant, variant.source).toBe('standard_report');
       expect(normalized.contractMeta?.standardReportSource, variant.source).toBe(variant.expectedSource);
       expect(normalized.details?.standardReport?.summaryPanel?.ticker, variant.source).toBe('AAPL');
@@ -399,7 +399,7 @@ describe('normalizeAnalysisReport', () => {
   });
 
   it('keeps preview and production-like payloads aligned at normalized contract level', () => {
-    const previewNormalized = normalizeAnalysisReport(previewReport);
+    const previewNormalized = normalizeFrontendReportContract(previewReport);
     const productionLike = {
       ...previewReport,
       details: {
@@ -416,7 +416,7 @@ describe('normalizeAnalysisReport', () => {
       },
     } as unknown as AnalysisReport;
 
-    const productionLikeNormalized = normalizeAnalysisReport(productionLike);
+    const productionLikeNormalized = normalizeFrontendReportContract(productionLike);
 
     expect(previewNormalized.details?.standardReport?.summaryPanel?.ticker).toBe(
       productionLikeNormalized.details?.standardReport?.summaryPanel?.ticker,

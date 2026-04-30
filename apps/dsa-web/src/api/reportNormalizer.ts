@@ -54,7 +54,7 @@ const camelizeDeep = (value: unknown): unknown => {
   return value;
 };
 
-export const normalizeAnalysisReport = (
+const normalizeAnalysisReport = (
   report: AnalysisReport,
   fallbackMeta: ReportMetaFallback = {},
 ): AnalysisReport => {
@@ -119,6 +119,3 @@ export const normalizeAnalysisReport = (
 };
 
 export const normalizeFrontendReportContract = normalizeAnalysisReport;
-
-export const hasStandardReportContract = (report: AnalysisReport): boolean =>
-  Boolean(report.details?.standardReport);

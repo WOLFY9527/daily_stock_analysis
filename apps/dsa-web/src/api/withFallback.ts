@@ -22,7 +22,7 @@ const NON_FALLBACK_CATEGORIES = new Set([
 
 const FALLBACK_MESSAGE_RE = /(rate.?limit|429|all llm models failed|temporar(?:ily)? unavailable|timeout|overloaded)/i;
 
-export function shouldUseLlmFallback(error: ParsedApiError): boolean {
+function shouldUseLlmFallback(error: ParsedApiError): boolean {
   if (NON_FALLBACK_CATEGORIES.has(error.category)) {
     return false;
   }

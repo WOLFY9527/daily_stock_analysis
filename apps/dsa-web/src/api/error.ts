@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 export type ApiErrorCategory =
   | 'auth_required'
   | 'access_denied'
@@ -174,7 +172,7 @@ function extractErrorCode(data: unknown): string | null {
   return pickString(data.error, data.code);
 }
 
-export function extractErrorPayloadText(data: unknown): string | null {
+function extractErrorPayloadText(data: unknown): string | null {
   if (typeof data === 'string') {
     return data.trim() || null;
   }
@@ -237,7 +235,7 @@ export function isApiRequestError(
     && isParsedApiError((value as ErrorCarrier).parsedError);
 }
 
-export function formatParsedApiError(parsed: ParsedApiError): string {
+function formatParsedApiError(parsed: ParsedApiError): string {
   if (!parsed.title.trim()) {
     return parsed.message;
   }
@@ -290,10 +288,6 @@ export function attachParsedApiError(error: unknown): ParsedApiError {
     error.message = formatParsedApiError(parsed);
   }
   return parsed;
-}
-
-export function isLocalConnectionFailure(error: unknown): boolean {
-  return parseApiError(error).category === 'local_connection_failed';
 }
 
 export function parseApiError(error: unknown): ParsedApiError {
@@ -667,14 +661,4 @@ export function parseApiError(error: unknown): ParsedApiError {
     status,
     category: 'unknown',
   });
-}
-
-export function toApiErrorMessage(error: unknown, fallback = '请求未成功完成，请稍后重试。'): string {
-  const parsed = getParsedApiError(error);
-  const message = formatParsedApiError(parsed);
-  return message.trim() || fallback;
-}
-
-export function isAxiosApiError(error: unknown): boolean {
-  return axios.isAxiosError(error);
 }
