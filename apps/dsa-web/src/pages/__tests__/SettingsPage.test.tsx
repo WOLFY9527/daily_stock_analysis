@@ -20,6 +20,7 @@ const {
   refreshStatus,
   setThemeStyle,
   testLLMChannel,
+  testBuiltinDataSource,
   resetRuntimeCaches,
   factoryResetSystem,
   useAuthMock,
@@ -38,6 +39,7 @@ const {
   refreshStatus: vi.fn(),
   setThemeStyle: vi.fn(),
   testLLMChannel: vi.fn(),
+  testBuiltinDataSource: vi.fn(),
   resetRuntimeCaches: vi.fn(),
   factoryResetSystem: vi.fn(),
   useAuthMock: vi.fn(),
@@ -51,6 +53,7 @@ vi.mock('../../api/systemConfig', async (importOriginal) => {
     systemConfigApi: {
       ...actual.systemConfigApi,
       testLLMChannel,
+      testBuiltinDataSource,
       resetRuntimeCaches,
       factoryResetSystem,
     },
@@ -460,6 +463,27 @@ describe('SettingsPage', () => {
       message: 'ok',
       resolvedModel: 'gemini/gemini-2.5-flash',
       latencyMs: 123,
+    });
+    testBuiltinDataSource.mockResolvedValue({
+      provider: 'fmp',
+      ok: true,
+      status: 'success',
+      checkedAt: '2026-04-30T00:00:00Z',
+      durationMs: 128,
+      keyMasked: 'fmp-...-key',
+      checks: [
+        {
+          name: 'quote',
+          endpoint: '/api/v3/quote/MSFT',
+          ok: true,
+          httpStatus: 200,
+          durationMs: 60,
+          errorType: null,
+          message: 'quote endpoint 可用。',
+        },
+      ],
+      summary: 'FMP 连接成功：quote endpoint 可用。',
+      suggestion: '无需处理。',
     });
     resetRuntimeCaches.mockResolvedValue({
       success: true,
@@ -1865,6 +1889,127 @@ describe('SettingsPage', () => {
         { key: 'TWELVE_DATA_API_KEYS', value: 'key-one,key-two' },
       ], '数据源库已更新');
     });
+  });
+
+  it('shows built-in provider remote validation success details', async () => {
+    testBuiltinDataSource.mockResolvedValueOnce({
+      provider: 'fmp',
+      ok: true,
+      status: 'success',
+      checkedAt: '2026-04-30T00:00:00Z',
+      durationMs: 150,
+      keyMasked: 'abcd...wxyz',
+      checks: [
+        {
+          name: 'quote',
+          endpoint: '/api/v3/quote/MSFT',
+          ok: true,
+          httpStatus: 200,
+          durationMs: 70,
+          errorType: null,
+          message: 'quote endpoint 可用。',
+        },
+        {
+          name: 'historical',
+          endpoint: '/api/v3/historical-price-full/MSFT',
+          ok: true,
+          httpStatus: 200,
+          durationMs: 80,
+          errorType: null,
+          message: 'historical endpoint 可用。',
+        },
+      ],
+      summary: 'FMP 连接成功：quote 和 historical endpoint 均可用。',
+      suggestion: '无需处理。',
+    });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('FMP_API_KEY', 'fmp-secret-key'),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    const fmpCard = within(dataSection as HTMLElement).getByTestId('data-source-card-fmp');
+    fireEvent.click(within(fmpCard).getByRole('button', { name: '管理' }));
+    const drawer = await screen.findByRole('dialog');
+    fireEvent.click(within(drawer).getByRole('button', { name: '校验' }));
+
+    await waitFor(() => {
+      expect(testBuiltinDataSource).toHaveBeenCalledWith({
+        provider: 'fmp',
+        symbol: 'MSFT',
+        credential: 'fmp-secret-key',
+        secret: '',
+        timeoutSeconds: 5,
+      });
+    });
+    expect(await within(drawer).findByTestId('builtin-data-source-validation-result')).toHaveTextContent('abcd...wxyz');
+    expect(within(drawer).getByText(/quote: OK/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/historical: OK/)).toBeInTheDocument();
+    expect(screen.queryByText('配置本地校验通过')).not.toBeInTheDocument();
+  });
+
+  it('shows built-in provider partial validation failures and suggestions', async () => {
+    testBuiltinDataSource.mockResolvedValueOnce({
+      provider: 'fmp',
+      ok: false,
+      status: 'partial',
+      checkedAt: '2026-04-30T00:00:00Z',
+      durationMs: 155,
+      keyMasked: 'abcd...wxyz',
+      checks: [
+        {
+          name: 'quote',
+          endpoint: '/api/v3/quote/MSFT',
+          ok: true,
+          httpStatus: 200,
+          durationMs: 65,
+          errorType: null,
+          message: 'quote endpoint 可用。',
+        },
+        {
+          name: 'historical',
+          endpoint: '/api/v3/historical-price-full/MSFT',
+          ok: false,
+          httpStatus: 403,
+          durationMs: 90,
+          errorType: 'Forbidden',
+          message: 'historical endpoint 返回 403，可能是 API key 无效、额度不足或当前套餐不支持该 endpoint。',
+        },
+      ],
+      summary: 'FMP 部分可用：historical endpoint 失败。',
+      suggestion: '检查套餐权限或重置 API key。',
+    });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('FMP_API_KEY', 'fmp-secret-key'),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    const fmpCard = within(dataSection as HTMLElement).getByTestId('data-source-card-fmp');
+    fireEvent.click(within(fmpCard).getByRole('button', { name: '管理' }));
+    const drawer = await screen.findByRole('dialog');
+    fireEvent.click(within(drawer).getByRole('button', { name: '校验' }));
+
+    await waitFor(() => {
+      expect(within(drawer).getAllByText(/FMP 部分可用/).length).toBeGreaterThan(0);
+    });
+    expect(within(drawer).getByText(/historical: HTTP 403/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/检查套餐权限或重置 API key/)).toBeInTheDocument();
+    expect(within(drawer).queryByText('fmp-secret-key')).not.toBeInTheDocument();
   });
 
   it('shows quick-api status and advanced-channel count on provider cards', async () => {

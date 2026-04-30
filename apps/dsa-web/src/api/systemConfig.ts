@@ -7,6 +7,8 @@ import type {
   SystemAdminActionResponse,
   SystemConfigResponse,
   SystemConfigValidationErrorResponse,
+  TestBuiltinDataSourceRequest,
+  TestBuiltinDataSourceResponse,
   TestCustomDataSourceRequest,
   TestCustomDataSourceResponse,
   TestLLMChannelRequest,
@@ -113,6 +115,16 @@ function toSnakeTestCustomDataSourcePayload(payload: TestCustomDataSourceRequest
   };
 }
 
+function toSnakeTestBuiltinDataSourcePayload(payload: TestBuiltinDataSourceRequest): Record<string, unknown> {
+  return {
+    provider: payload.provider,
+    symbol: payload.symbol ?? 'MSFT',
+    credential: payload.credential ?? '',
+    secret: payload.secret ?? '',
+    timeout_seconds: payload.timeoutSeconds ?? 5,
+  };
+}
+
 function toSnakeFactoryResetPayload(payload: FactoryResetSystemRequest): Record<string, unknown> {
   return {
     confirmation_phrase: payload.confirmationPhrase,
@@ -161,6 +173,18 @@ export const systemConfigApi = {
       withAdminUnlockHeader(options?.adminUnlockToken),
     );
     return toCamelCase<TestCustomDataSourceResponse>(response.data);
+  },
+
+  async testBuiltinDataSource(
+    payload: TestBuiltinDataSourceRequest,
+    options?: SystemConfigRequestOptions,
+  ): Promise<TestBuiltinDataSourceResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/system/config/data-source/test-builtin',
+      toSnakeTestBuiltinDataSourcePayload(payload),
+      withAdminUnlockHeader(options?.adminUnlockToken),
+    );
+    return toCamelCase<TestBuiltinDataSourceResponse>(response.data);
   },
 
   async update(

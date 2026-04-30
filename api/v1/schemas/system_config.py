@@ -170,6 +170,46 @@ class TestCustomDataSourceResponse(BaseModel):
     latency_ms: Optional[int] = None
 
 
+class TestBuiltinDataSourceRequest(BaseModel):
+    """Request payload for testing one built-in data provider remotely."""
+
+    __test__: ClassVar[bool] = False
+
+    provider: str
+    symbol: str = "MSFT"
+    credential: str = ""
+    secret: str = ""
+    timeout_seconds: float = 5.0
+
+
+class DataSourceEndpointCheck(BaseModel):
+    """One remote endpoint validation result."""
+
+    name: str
+    endpoint: str
+    ok: bool
+    http_status: Optional[int] = None
+    duration_ms: Optional[int] = None
+    error_type: Optional[str] = None
+    message: str
+
+
+class TestBuiltinDataSourceResponse(BaseModel):
+    """Response payload for built-in provider remote validation."""
+
+    __test__: ClassVar[bool] = False
+
+    provider: str
+    ok: bool
+    status: Literal["success", "partial", "failed", "missing_key", "unsupported"]
+    checked_at: str
+    duration_ms: int
+    key_masked: Optional[str] = None
+    checks: List[DataSourceEndpointCheck] = Field(default_factory=list)
+    summary: str
+    suggestion: str
+
+
 class SystemAdminActionResponse(BaseModel):
     """Response payload for bounded admin maintenance actions."""
 

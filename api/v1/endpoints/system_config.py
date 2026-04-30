@@ -16,6 +16,8 @@ from api.v1.schemas.system_config import (
     SystemConfigResponse,
     SystemConfigSchemaResponse,
     SystemConfigValidationErrorResponse,
+    TestBuiltinDataSourceRequest,
+    TestBuiltinDataSourceResponse,
     TestCustomDataSourceRequest,
     TestCustomDataSourceResponse,
     TestLLMChannelRequest,
@@ -236,6 +238,43 @@ def test_custom_data_source(
             detail={
                 "error": "internal_error",
                 "message": "Failed to test custom data source",
+            },
+        )
+
+
+@router.post(
+    "/config/data-source/test-builtin",
+    response_model=TestBuiltinDataSourceResponse,
+    responses={
+        200: {"description": "Built-in provider remote validation completed"},
+        403: {"description": "Admin access required", "model": ErrorResponse},
+        500: {"description": "Internal server error", "model": ErrorResponse},
+    },
+    summary="Test one built-in data provider remotely",
+    description="Run bounded remote connectivity and entitlement checks for one built-in market data provider.",
+)
+def test_builtin_data_source(
+    request: TestBuiltinDataSourceRequest,
+    service: SystemConfigService = Depends(get_system_config_service),
+    _: CurrentUser = Depends(require_admin_user),
+) -> TestBuiltinDataSourceResponse:
+    """Validate one built-in provider with real remote endpoint checks."""
+    try:
+        payload = service.test_builtin_data_source(
+            provider=request.provider,
+            symbol=request.symbol,
+            credential=request.credential,
+            secret=request.secret,
+            timeout_seconds=request.timeout_seconds,
+        )
+        return TestBuiltinDataSourceResponse.model_validate(payload)
+    except Exception as exc:
+        logger.error("Failed to test built-in data source %s", request.provider, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "Failed to test built-in data source",
             },
         )
 

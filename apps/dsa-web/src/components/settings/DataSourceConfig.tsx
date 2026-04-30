@@ -6,7 +6,7 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
 type DataSourceCapability = DataRouteKey | 'local';
-type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin';
+type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin' | 'loading' | 'partial' | 'missing_key' | 'unsupported';
 
 type DataRoutingGroup = {
   key: DataRouteKey;
@@ -210,8 +210,16 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
                     kindLabel={source.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
                     validationLabel={source.validationState === 'builtin'
                       ? t('settings.dataSourceValidationBuiltin')
+                      : source.validationState === 'loading'
+                        ? t('settings.dataSourceValidationChecking')
                       : source.validationState === 'validated'
                         ? t('settings.dataSourceValidated')
+                        : source.validationState === 'partial'
+                          ? t('settings.dataSourceValidationPartial')
+                        : source.validationState === 'missing_key'
+                          ? t('settings.dataSourceValidationMissingKey')
+                        : source.validationState === 'unsupported'
+                          ? t('settings.dataSourceValidationUnsupported')
                         : source.validationState === 'failed'
                           ? t('settings.dataSourceValidationFailed')
                           : source.configured
@@ -219,6 +227,8 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
                             : t('settings.notConfigured')}
                     validationTone={source.validationState === 'failed'
                       ? 'warning'
+                      : source.validationState === 'partial' || source.validationState === 'missing_key' || source.validationState === 'unsupported'
+                        ? 'warning'
                       : source.validationState === 'validated'
                         ? 'success'
                         : 'default'}
@@ -237,7 +247,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
                       : t('settings.dataSourceInternalFlagExternal')}`}
                     manageLabel={source.builtin ? t('settings.dataSourceManageAction') : t('settings.dataSourceEditAction')}
                     validateLabel={t('settings.dataSourceValidateAction')}
-                    validateDisabled={!source.usable}
+                    validateDisabled={source.validationState === 'loading'}
                     onManage={() => onOpenEditDataSourceDrawer(source.key)}
                     onValidate={() => onValidateDataSource(source.key)}
                   />

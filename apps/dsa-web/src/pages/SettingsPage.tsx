@@ -15,7 +15,7 @@ import SystemControlPlane from '../components/settings/SystemControlPlane';
 import SystemLogsConfig from '../components/settings/SystemLogsConfig';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useAuth, useSystemConfig } from '../hooks';
-import type { SystemConfigCategory } from '../types/systemConfig';
+import type { BuiltinDataSourceEndpointCheck, TestBuiltinDataSourceResponse, SystemConfigCategory } from '../types/systemConfig';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import {
   GATEWAY_READINESS_NOTES,
@@ -59,7 +59,7 @@ type AdvancedNavigationContext = {
 type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
 type DataSourceCapability = DataRouteKey | 'local';
 type DataSourceCredentialSchema = 'none' | 'single_key' | 'key_secret';
-type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin';
+type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin' | 'loading' | 'partial' | 'missing_key' | 'unsupported';
 type DataSourceKind = 'builtin' | 'custom';
 type CustomDataSourceValidation = {
   status: 'pending' | 'validated' | 'failed';
@@ -133,6 +133,8 @@ type DataSourceLibraryEntry = {
   management?: DataSourceBuiltinManagementDefinition;
   customRecord?: CustomDataSourceRecord;
 };
+
+type BuiltinDataSourceValidationResult = TestBuiltinDataSourceResponse;
 
 type RoutingDraftState = {
   ai: {
@@ -586,6 +588,12 @@ const validateCustomDataSource = (record: CustomDataSourceRecord): { valid: bool
     return { valid: false, issue: 'baseUrl' };
   }
   return { valid: true };
+};
+
+const formatDataSourceCheckLine = (check: BuiltinDataSourceEndpointCheck): string => {
+  const httpStatus = check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorType || 'N/A';
+  const duration = typeof check.durationMs === 'number' ? `${check.durationMs}ms` : 'N/A';
+  return `${check.name}: ${check.ok ? 'OK' : httpStatus} · ${duration}`;
 };
 
 const makeUniqueDataSourceId = (baseId: string, existingIds: string[]): string => {
@@ -1120,6 +1128,7 @@ const SettingsPage: React.FC = () => {
   }, [allItemMap, dataPriorityKeys.notification, notificationSummary.configuredChannels, notificationSummary.enabledChannels]);
 
   const [dataSourceValidationStatus, setDataSourceValidationStatus] = useState<Record<string, DataSourceValidationState>>({});
+  const [builtinDataSourceValidationResults, setBuiltinDataSourceValidationResults] = useState<Record<string, BuiltinDataSourceValidationResult>>({});
   const customDataSourceLibrary = useMemo(
     () => parseCustomDataSourceLibrary(allItemMap.get(CUSTOM_DATA_SOURCE_LIBRARY_KEY) || ''),
     [allItemMap],
@@ -1207,6 +1216,7 @@ const SettingsPage: React.FC = () => {
       const credentialValue = hasCredential(source.credentialPatterns) ? 'configured' : '';
       const configured = source.requireCredential ? Boolean(credentialValue) : true;
       const runtimeValidation = dataSourceValidationStatus[source.key];
+      const remoteValidation = builtinDataSourceValidationResults[source.key];
       const validationState = runtimeValidation || (
       source.builtin && !source.requireCredential
         ? 'builtin'
@@ -1230,10 +1240,18 @@ const SettingsPage: React.FC = () => {
         validationState,
         validationMessage: validationState === 'builtin'
           ? t('settings.dataSourceValidationBuiltin')
+          : validationState === 'loading'
+            ? t('settings.dataSourceValidationChecking')
+          : validationState === 'partial'
+            ? (remoteValidation?.summary || t('settings.dataSourceValidationPartial'))
+          : validationState === 'missing_key'
+            ? (remoteValidation?.summary || t('settings.dataSourceValidationMissing'))
+          : validationState === 'unsupported'
+            ? (remoteValidation?.summary || t('settings.dataSourceValidationUnsupported'))
           : validationState === 'validated'
-            ? t('settings.dataSourceValidationLocalSuccess')
+            ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteSuccess'))
             : validationState === 'failed'
-              ? t('settings.dataSourceValidationLocalFailed')
+              ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteFailed'))
               : validationState === 'configured_pending'
             ? t('settings.dataSourceValidationConfiguredOnly')
             : t('settings.dataSourceValidationMissing'),
@@ -1298,7 +1316,7 @@ const SettingsPage: React.FC = () => {
     });
 
     return [...builtInEntries, ...customEntries];
-  }, [allItemMap, customDataSourceLibraryDraft, dataSourceValidationStatus, dataSummary, t]);
+  }, [allItemMap, builtinDataSourceValidationResults, customDataSourceLibraryDraft, dataSourceValidationStatus, dataSummary, t]);
   const dataSourceRouteOptions = useMemo(() => {
     const grouped: Record<DataRouteKey, string[]> = {
       market: [],
@@ -2641,20 +2659,85 @@ const SettingsPage: React.FC = () => {
         : source.management.credentialEnvKey
           ? String(allItemMap.get(source.management.credentialEnvKey) || '')
           : '';
-      const hasCredential = Boolean(sourceState.trim());
-      const hasSecret = source.management.secretEnvKey
-        ? Boolean(String(allItemMap.get(source.management.secretEnvKey) || '').trim())
-        : true;
-      const nextStatus: DataSourceValidationState = hasCredential && hasSecret ? 'validated' : 'failed';
-      setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
+      const draftAppliesToSource = dataSourceEditorEntry?.key === sourceId;
+      const credential = draftAppliesToSource && managedBuiltinDataSourceDraft.credential.trim()
+        ? managedBuiltinDataSourceDraft.credential.trim()
+        : sourceState.trim();
+      const secret = draftAppliesToSource && managedBuiltinDataSourceDraft.secret.trim()
+        ? managedBuiltinDataSourceDraft.secret.trim()
+        : source.management.secretEnvKey
+          ? String(allItemMap.get(source.management.secretEnvKey) || '').trim()
+          : '';
+      setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'loading' }));
+      try {
+        const result = await systemConfigApi.testBuiltinDataSource({
+          provider: sourceId,
+          symbol: 'MSFT',
+          credential,
+          secret,
+          timeoutSeconds: 5,
+        });
+        const nextStatus: DataSourceValidationState = result.status === 'success'
+          ? 'validated'
+          : result.status;
+        setBuiltinDataSourceValidationResults((prev) => ({ ...prev, [sourceId]: result }));
+        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
+      } catch (error: unknown) {
+        const parsed = getParsedApiError(error);
+        const failedResult: BuiltinDataSourceValidationResult = {
+          provider: sourceId,
+          ok: false,
+          status: 'failed',
+          checkedAt: new Date().toISOString(),
+          durationMs: 0,
+          keyMasked: null,
+          checks: [],
+          summary: parsed.message || t('settings.dataSourceValidationRemoteFailed'),
+          suggestion: t('settings.dataSourceValidationRetrySuggestion'),
+        };
+        setBuiltinDataSourceValidationResults((prev) => ({ ...prev, [sourceId]: failedResult }));
+        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'failed' }));
+      }
       return;
     }
 
-    const nextStatus: DataSourceValidationState = source.usable
-      ? (source.builtin ? 'builtin' : 'validated')
-      : 'failed';
+    if (source.kind === 'builtin') {
+      setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'loading' }));
+      try {
+        const result = await systemConfigApi.testBuiltinDataSource({
+          provider: sourceId,
+          symbol: 'MSFT',
+          timeoutSeconds: 5,
+        });
+        const nextStatus: DataSourceValidationState = result.status === 'success'
+          ? 'validated'
+          : result.status;
+        setBuiltinDataSourceValidationResults((prev) => ({ ...prev, [sourceId]: result }));
+        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
+      } catch (error: unknown) {
+        const parsed = getParsedApiError(error);
+        setBuiltinDataSourceValidationResults((prev) => ({
+          ...prev,
+          [sourceId]: {
+            provider: sourceId,
+            ok: false,
+            status: 'failed',
+            checkedAt: new Date().toISOString(),
+            durationMs: 0,
+            keyMasked: null,
+            checks: [],
+            summary: parsed.message || t('settings.dataSourceValidationRemoteFailed'),
+            suggestion: t('settings.dataSourceValidationRetrySuggestion'),
+          },
+        }));
+        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'failed' }));
+      }
+      return;
+    }
+
+    const nextStatus: DataSourceValidationState = source.usable ? 'validated' : 'failed';
     setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
-  }, [allItemMap, customDataSourceLibraryDraft, dataSourceLibraryMap, saveExternalItems, t]);
+  }, [allItemMap, customDataSourceLibraryDraft, dataSourceEditorEntry?.key, dataSourceLibraryMap, managedBuiltinDataSourceDraft.credential, managedBuiltinDataSourceDraft.secret, saveExternalItems, t]);
   const runResetRuntimeCaches = useCallback(async () => {
     setIsRunningAdminAction(true);
     setAdminActionMessage(null);
@@ -2727,6 +2810,9 @@ const SettingsPage: React.FC = () => {
       : dataSourceEditorEntry?.builtin
         ? 'manage_builtin'
       : 'edit';
+  const dataSourceEditorValidationResult = dataSourceEditorEntry
+    ? builtinDataSourceValidationResults[dataSourceEditorEntry.key]
+    : undefined;
 
   useEffect(() => {
     if (!dataSourceLibraryDrawerOpen) {
@@ -4137,6 +4223,24 @@ const SettingsPage: React.FC = () => {
               </p>
               <p className="mt-1 text-xs text-muted-text">{dataSourceEditorEntry.description}</p>
             </div>
+            {dataSourceEditorValidationResult ? (
+              <div className={DRAWER_PANEL_CLASS} data-testid="builtin-data-source-validation-result">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-foreground">{dataSourceEditorValidationResult.summary}</p>
+                  <span className={GHOST_TAG_CLASS}>{dataSourceEditorValidationResult.status}</span>
+                </div>
+                <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
+                  <p>{t('settings.dataSourceValidationKeyMasked')}: {dataSourceEditorValidationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
+                  <p>{t('settings.dataSourceValidationDuration')}: {dataSourceEditorValidationResult.durationMs}ms</p>
+                  {dataSourceEditorValidationResult.checks.map((check) => (
+                    <p key={`${dataSourceEditorValidationResult.provider}-${check.name}`}>
+                      {formatDataSourceCheckLine(check)} · {check.message}
+                    </p>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted-text">{dataSourceEditorValidationResult.suggestion}</p>
+              </div>
+            ) : null}
             <div className="flex justify-end">
               <Button
                 type="button"
@@ -4250,6 +4354,24 @@ const SettingsPage: React.FC = () => {
                 </Button>
               </div>
             </div>
+            {dataSourceEditorValidationResult ? (
+              <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3" data-testid="builtin-data-source-validation-result">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-foreground">{dataSourceEditorValidationResult.summary}</p>
+                  <span className={GHOST_TAG_CLASS}>{dataSourceEditorValidationResult.status}</span>
+                </div>
+                <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
+                  <p>{t('settings.dataSourceValidationKeyMasked')}: {dataSourceEditorValidationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
+                  <p>{t('settings.dataSourceValidationDuration')}: {dataSourceEditorValidationResult.durationMs}ms</p>
+                  {dataSourceEditorValidationResult.checks.map((check) => (
+                    <p key={`${dataSourceEditorValidationResult.provider}-${check.name}`}>
+                      {formatDataSourceCheckLine(check)} · {check.message}
+                    </p>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-muted-text">{dataSourceEditorValidationResult.suggestion}</p>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3">

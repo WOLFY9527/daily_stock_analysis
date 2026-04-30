@@ -152,6 +152,38 @@ export interface TestCustomDataSourceResponse {
   latencyMs?: number | null;
 }
 
+export type BuiltinDataSourceValidationStatus = 'success' | 'partial' | 'failed' | 'missing_key' | 'unsupported';
+
+export interface BuiltinDataSourceEndpointCheck {
+  name: string;
+  endpoint: string;
+  ok: boolean;
+  httpStatus?: number | null;
+  durationMs?: number | null;
+  errorType?: string | null;
+  message: string;
+}
+
+export interface TestBuiltinDataSourceRequest {
+  provider: string;
+  symbol?: string;
+  credential?: string;
+  secret?: string;
+  timeoutSeconds?: number;
+}
+
+export interface TestBuiltinDataSourceResponse {
+  provider: string;
+  ok: boolean;
+  status: BuiltinDataSourceValidationStatus;
+  checkedAt: string;
+  durationMs: number;
+  keyMasked?: string | null;
+  checks: BuiltinDataSourceEndpointCheck[];
+  summary: string;
+  suggestion: string;
+}
+
 export interface SystemAdminActionResponse {
   success: boolean;
   action: string;
