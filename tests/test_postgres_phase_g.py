@@ -114,7 +114,8 @@ class PostgresPhaseGStorageTestCase(unittest.TestCase):
         self.assertEqual(schedule_time.value_json, "18:00")
 
         items = {item["key"]: item["value"] for item in payload["items"]}
-        self.assertEqual(items["GEMINI_API_KEY"], "secret-key-value")
+        self.assertEqual(items["GEMINI_API_KEY"], "secr...alue")
+        self.assertNotIn("secret-key-value", str(payload))
         self.assertEqual(items["SCHEDULE_TIME"], "18:00")
 
     def test_phase_g_update_refreshes_shadow_rows_and_preserves_actor_attribution(self) -> None:

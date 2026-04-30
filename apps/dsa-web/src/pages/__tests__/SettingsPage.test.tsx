@@ -2141,6 +2141,30 @@ describe('SettingsPage', () => {
     expect(within(providerDrawer).getByText(/86 ms/)).toBeInTheDocument();
   });
 
+  it('does not use masked provider placeholders as real API keys', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          { ...buildAiConfigItem('GEMINI_API_KEY', 'sk-...1234'), isMasked: true },
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', 'gemini'),
+          buildAiConfigItem('AI_PRIMARY_MODEL', 'gemini/gemini-2.5-flash'),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    await openQuickProviderDrawer('Gemini');
+    const providerDrawer = screen.getByRole('dialog', { name: 'Gemini 快速配置' });
+    expect(within(providerDrawer).getByDisplayValue('sk-...1234')).toBeInTheDocument();
+    fireEvent.click(within(providerDrawer).getByRole('button', { name: '测试连接' }));
+
+    expect(testLLMChannel).not.toHaveBeenCalled();
+    expect(screen.queryByText(/valid-gemini-key/)).not.toBeInTheDocument();
+  });
+
   it('shows provider quick test failure message when test fails', async () => {
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({
       activeCategory: 'ai_model',

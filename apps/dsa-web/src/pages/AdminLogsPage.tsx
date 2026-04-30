@@ -450,7 +450,10 @@ function sanitizeDisplayValue(value: unknown): unknown {
     }));
   }
   if (typeof value === 'string') {
-    return value.replace(/([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+/gi, '$1***');
+    return value
+      .replace(/([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+/gi, '$1***')
+      .replace(/\b(api[-_]?key|apikey|access[-_]?token|token|authorization|secret|password)\b\s*[:=]\s*([^\s,;&]+)/gi, '$1=***')
+      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***');
   }
   return value;
 }
@@ -520,7 +523,7 @@ function CallCard({
 }
 
 function downloadLogJson(detail: ExecutionLogSessionDetail): void {
-  const blob = new Blob([JSON.stringify(detail, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(sanitizeDisplayValue(detail), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -531,7 +534,7 @@ function downloadLogJson(detail: ExecutionLogSessionDetail): void {
 
 async function copyLogJson(detail: ExecutionLogSessionDetail): Promise<void> {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(JSON.stringify(detail, null, 2));
+    await navigator.clipboard.writeText(JSON.stringify(sanitizeDisplayValue(detail), null, 2));
   }
 }
 
@@ -1046,7 +1049,7 @@ const AdminLogsPage: React.FC = () => {
                         <p>{locale === 'zh' ? '结束' : 'Finished'}: <span className="text-foreground">{formatDateTime(step.finishedAt, locale)}</span></p>
                         <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(status === 'skipped' ? skippedReasonLabel(step.reason, locale) : step.reason)}</span></p>
                         <p>{locale === 'zh' ? '错误类型' : 'Error type'}: <span className="text-foreground">{text(step.errorType)}</span></p>
-                        <p className="md:col-span-2">{locale === 'zh' ? '消息' : 'Message'}: <span className="text-foreground">{text(status === 'skipped' ? (step.message || skippedReasonLabel(step.reason, locale)) : (step.errorMessage || step.message))}</span></p>
+                        <p className="md:col-span-2">{locale === 'zh' ? '消息' : 'Message'}: <span className="text-foreground">{text(sanitizeDisplayValue(status === 'skipped' ? (step.message || skippedReasonLabel(step.reason, locale)) : (step.errorMessage || step.message)))}</span></p>
                         <div className="md:col-span-2">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">metadata</p>
                           <JsonBlock value={step.metadata || {}} />

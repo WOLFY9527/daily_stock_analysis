@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Literal, Optional, Set, Tuple
 
 from src.utils.dotenv_loader import read_dotenv_values
+from src.utils.security import is_masked_secret
 
 _ASSIGNMENT_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
 _FALLBACK_REWRITE_ERRNOS = {errno.EBUSY, errno.EXDEV}
@@ -125,7 +126,7 @@ class ConfigManager:
                 key_upper = key.upper()
                 current_value = current_values.get(key_upper)
 
-                if key_upper in sensitive_keys and value == mask_token:
+                if key_upper in sensitive_keys and is_masked_secret(value, current_value or "", mask_token):
                     if current_value not in (None, ""):
                         skipped_masked.append(key_upper)
                     continue

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from src.storage import DatabaseManager
 from src.services.execution_log_service import ExecutionLogService
+from src.utils.security import sanitize_metadata, sanitize_url
 
 
 class ExecutionLogServiceTestCase(unittest.TestCase):
@@ -17,6 +18,52 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
+
+    def test_sanitize_url_masks_query_secrets(self) -> None:
+        sanitized = sanitize_url("https://x.com?a=1&apikey=SECRET&token=ABC")
+
+        self.assertNotIn("SECRET", sanitized)
+        self.assertNotIn("ABC", sanitized)
+        self.assertIn("apikey=***", sanitized)
+        self.assertIn("token=***", sanitized)
+
+    def test_sanitize_metadata_masks_nested_secrets(self) -> None:
+        payload = sanitize_metadata(
+            {
+                "safe": "value",
+                "api_key": "SECRET",
+                "nested": [{"token": "ABC", "note": "keep"}],
+                "message": "Authorization: Bearer raw-token",
+            }
+        )
+
+        self.assertEqual(payload["safe"], "value")
+        self.assertEqual(payload["api_key"], "***")
+        self.assertEqual(payload["nested"][0]["token"], "***")
+        self.assertEqual(payload["nested"][0]["note"], "keep")
+        self.assertNotIn("raw-token", str(payload))
+
+    def test_execution_log_write_sanitizes_metadata(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="TSLA",
+                summary="analyze TSLA",
+                metadata={
+                    "apikey": "SECRET-KEY",
+                    "nested": {"token": "TOKEN-ABC"},
+                    "url": "https://x.com?api_key=SECRET-KEY&token=TOKEN-ABC",
+                },
+            )
+            detail = service.get_business_event_detail(execution_id)
+
+        self.assertIsNotNone(detail)
+        self.assertNotIn("SECRET-KEY", str(detail))
+        self.assertNotIn("TOKEN-ABC", str(detail))
+        self.assertEqual(detail["metadata"]["apikey"], "***")
+        self.assertEqual(detail["metadata"]["nested"]["token"], "***")
 
     def test_start_session_persists_actor_scope_metadata_for_user_activity(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):

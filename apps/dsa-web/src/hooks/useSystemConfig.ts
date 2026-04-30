@@ -41,6 +41,31 @@ const CATEGORY_DISPLAY_ORDER: Record<string, number> = {
   uncategorized: 99,
 };
 
+const SENSITIVE_KEY_PATTERN = /(api_?key|apikey|access_?token|refresh_?token|token|authorization|bearer|credential|private_?key|secret|password)/i;
+
+function maskSecretForDisplay(value: string): string {
+  const secret = String(value || '').trim();
+  if (!secret) return '';
+  if (/^sk-/i.test(secret) && secret.length > 7) return `sk-...${secret.slice(-4)}`;
+  if (secret.includes('...') || secret === '***' || secret === '已配置') return secret;
+  if (secret.length <= 8) return '已配置';
+  return `${secret.slice(0, 4)}...${secret.slice(-4)}`;
+}
+
+function sanitizeConfigItems(items: SystemConfigItem[]): SystemConfigItem[] {
+  return items.map((item) => {
+    const isSensitive = Boolean(item.schema?.isSensitive) || SENSITIVE_KEY_PATTERN.test(item.key);
+    if (!isSensitive || !item.value) {
+      return item;
+    }
+    return {
+      ...item,
+      value: maskSecretForDisplay(item.value),
+      isMasked: true,
+    };
+  });
+}
+
 function sortItemsByOrder(items: SystemConfigItem[]): SystemConfigItem[] {
   return [...items].sort((a, b) => {
     const left = a.schema?.displayOrder ?? 9999;
@@ -186,7 +211,7 @@ export function useSystemConfig() {
       token: string,
       options?: { preserveDirty?: boolean; committedKeys?: string[] },
     ) => {
-      const sorted = sortItemsByOrder(items);
+      const sorted = sortItemsByOrder(sanitizeConfigItems(items));
       const previousServerMap = serverItemByKeyRef.current;
       const committedKeys = new Set(options?.committedKeys ?? []);
       const preserveDirty = options?.preserveDirty ?? false;

@@ -38,6 +38,7 @@ from src.core.config_registry import (
 )
 from src.services.execution_log_service import ExecutionLogService
 from src.storage import get_db
+from src.utils.security import is_masked_secret, is_sensitive_key, mask_secret
 
 logger = logging.getLogger(__name__)
 
@@ -360,7 +361,7 @@ class SystemConfigService:
         )
 
     def get_config(self, include_schema: bool = True, mask_token: str = "******") -> Dict[str, Any]:
-        """Return current config values without server-side secret masking."""
+        """Return current config values with server-side secret masking."""
         raw_config_map = self._manager.read_config_map()
         self._sync_phase_g_config_shadow(raw_config_map=raw_config_map)
         config_map = self._build_display_config_map(raw_config_map)
@@ -381,11 +382,13 @@ class SystemConfigService:
         for key in all_keys:
             raw_value = config_map.get(key, "")
             field_schema = schema_by_key[key]
+            is_sensitive = bool(field_schema.get("is_sensitive", False)) or is_sensitive_key(key)
+            display_value = mask_secret(raw_value) if is_sensitive and raw_value else raw_value
             item: Dict[str, Any] = {
                 "key": key,
-                "value": raw_value,
+                "value": display_value,
                 "raw_value_exists": bool(raw_value),
-                "is_masked": False,
+                "is_masked": bool(is_sensitive and raw_value),
             }
             if include_schema:
                 item["schema"] = field_schema
@@ -1369,7 +1372,7 @@ class SystemConfigService:
             submitted_keys.add(key)
             updates.append((key, value))
             field_schema = get_field_definition(key)
-            if bool(field_schema.get("is_sensitive", False)):
+            if bool(field_schema.get("is_sensitive", False)) or is_sensitive_key(key):
                 sensitive_keys.add(key)
 
         updated_keys, skipped_masked_keys, new_version = self._manager.apply_updates(
@@ -1495,9 +1498,9 @@ class SystemConfigService:
             key = item["key"].upper()
             value = item["value"]
             field_schema = get_field_definition(key, value)
-            is_sensitive = bool(field_schema.get("is_sensitive", False))
+            is_sensitive = bool(field_schema.get("is_sensitive", False)) or is_sensitive_key(key)
 
-            if is_sensitive and value == mask_token and current_map.get(key):
+            if is_sensitive and is_masked_secret(value, current_map.get(key, ""), mask_token):
                 continue
 
             updated_map[key] = value

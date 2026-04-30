@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
 from src.storage import get_db
+from src.utils.security import sanitize_message, sanitize_metadata, sanitize_url
 
 _SECRET_PATTERNS = [
     re.compile(r"([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+", re.IGNORECASE),
@@ -95,9 +96,7 @@ _STATUS_ALIASES = {
 def _masked_message(text: Optional[str]) -> Optional[str]:
     if text is None:
         return None
-    masked = str(text)
-    masked = _SECRET_PATTERNS[0].sub(r"\1***", masked)
-    masked = _SECRET_PATTERNS[1].sub(r"\1=***", masked)
+    masked = sanitize_message(str(text))
     return masked[:400] if masked else None
 
 
@@ -227,28 +226,12 @@ def _normalize_business_status(value: Any) -> str:
 def _sanitize_url(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
-    text = str(value)
-    text = re.sub(r"([?&](?:api[-_]?key|token|access_token|secret|password|authorization)=)[^&#\s]+", r"\1***", text, flags=re.IGNORECASE)
+    text = sanitize_url(str(value))
     return text[:500] if text else None
 
 
 def _sanitize_metadata(value: Any) -> Any:
-    secret_keys = {"apikey", "api_key", "key", "token", "authorization", "secret", "password", "access_token", "refresh_token"}
-    if isinstance(value, dict):
-        sanitized: Dict[str, Any] = {}
-        for key, item in value.items():
-            key_text = str(key)
-            normalized_key = key_text.lower().replace("-", "_")
-            if normalized_key in secret_keys or any(part in normalized_key for part in ("apikey", "api_key", "token", "authorization", "secret", "password")):
-                sanitized[key_text] = "***" if item not in (None, "") else item
-            else:
-                sanitized[key_text] = _sanitize_metadata(item)
-        return sanitized
-    if isinstance(value, list):
-        return [_sanitize_metadata(item) for item in value]
-    if isinstance(value, str):
-        return _sanitize_url(_masked_message(value)) or ""
-    return value
+    return sanitize_metadata(value)
 
 
 def _parse_iso_datetime(value: Any) -> Optional[datetime]:
@@ -839,9 +822,10 @@ class ExecutionLogService:
     ) -> str:
         session_id = uuid.uuid4().hex
         started_at = datetime.now()
+        safe_configured_execution = _sanitize_metadata(configured_execution or {})
         summary = self._merge_summary(
             {
-                "configured_execution": configured_execution or {},
+                "configured_execution": safe_configured_execution,
             },
             self._summary_meta(
                 owner_id=owner_id,
@@ -868,10 +852,10 @@ class ExecutionLogService:
             status="started",
             truth_level="actual",
             message=f"Task {task_id} started",
-            detail={"configured_execution": configured_execution or {}},
+            detail={"configured_execution": safe_configured_execution},
             event_at=started_at,
         )
-        self._append_configured_events(session_id, configured_execution or {})
+        self._append_configured_events(session_id, safe_configured_execution)
         return session_id
 
     def _resolve_actor(self, owner_id: Optional[str], actor: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -952,8 +936,11 @@ class ExecutionLogService:
         session_id = uuid.uuid4().hex
         started_at = datetime.now()
         actor_payload = self._resolve_actor(None, actor)
+        safe_detail = _sanitize_metadata(detail or {})
+        safe_request = _sanitize_metadata(request or {})
+        safe_result = _sanitize_metadata(result if result is not None else safe_detail)
         summary = self._merge_summary(
-            {"admin_action": detail or {}},
+            {"admin_action": safe_detail},
             self._summary_meta(
                 actor=actor_payload,
                 session_kind="admin_action",
@@ -979,13 +966,13 @@ class ExecutionLogService:
             target=subsystem,
             status=overall_status,
             truth_level="actual",
-            message=message,
+            message=_masked_message(message) or "",
             detail={
                 "category": "system",
                 "action": action,
                 "outcome": _outcome_from_status(overall_status),
                 "destructive": destructive,
-                **(detail or {}),
+                **safe_detail,
             },
             event_at=started_at,
         )
@@ -1002,21 +989,21 @@ class ExecutionLogService:
             actor_role=actor_payload.get("role"),
             subsystem=subsystem,
             category="system",
-            message=message,
+            message=_masked_message(message) or "",
             detail_json={
                 "category": "system",
                 "action": action,
                 "outcome": _outcome_from_status(overall_status),
                 "destructive": destructive,
-                **(detail or {}),
+                **safe_detail,
             },
             related_session_key=session_id,
             destructive=destructive,
             status=overall_status,
             severity=_severity_from_status(overall_status),
             outcome=_outcome_from_status(overall_status),
-            request_json=request or {},
-            result_json=result if result is not None else (detail or {}),
+            request_json=safe_request,
+            result_json=safe_result,
             created_at=started_at,
         )
         return session_id
@@ -1174,7 +1161,7 @@ class ExecutionLogService:
         raw_response: Optional[Dict[str, Any]] = None,
         actor: Optional[Dict[str, Any]] = None,
     ) -> str:
-        raw = raw_response if isinstance(raw_response, dict) else {}
+        raw = _sanitize_metadata(raw_response if isinstance(raw_response, dict) else {})
         event_name = _as_str(raw.get("event_name")) or panel_name
         normalized_status = "completed" if str(status).lower() == "success" else "failed"
         cache_state = _as_str(raw.get("cache")).lower()
@@ -1218,7 +1205,7 @@ class ExecutionLogService:
             "action": "panel_fetch",
             "panel_name": panel_name,
             "fetch_timestamp": fetch_timestamp,
-            "endpoint_url": endpoint_url,
+            "endpoint_url": _sanitize_url(endpoint_url),
             "status": status,
             "error_message": _masked_message(error_message),
             "raw_response": raw,
@@ -1251,7 +1238,7 @@ class ExecutionLogService:
             target=panel_name,
             status=normalized_status,
             truth_level="actual",
-            message=_masked_message(error_message) if error_message else f"{panel_name} refreshed via {endpoint_url}",
+            message=_masked_message(error_message) if error_message else f"{panel_name} refreshed via {_sanitize_url(endpoint_url)}",
             detail=detail,
             event_at=started_at,
         )
@@ -1280,11 +1267,12 @@ class ExecutionLogService:
         event_name = "RequestFailed" if int(status_code) >= 400 else "SlowRequest"
         session_id = uuid.uuid4().hex
         started_at = datetime.now()
+        safe_route = _sanitize_url(route)
         detail = {
             "level": level,
             "category": "api",
             "event_name": event_name,
-            "route": route,
+            "route": safe_route,
             "method": method,
             "status_code": status_code,
             "duration_ms": duration_ms,
@@ -1305,7 +1293,7 @@ class ExecutionLogService:
             session_id=session_id,
             task_id=event_name,
             code=None,
-            name=route,
+            name=safe_route,
             overall_status="failed" if int(status_code) >= 400 else "partial_success",
             truth_level="actual",
             summary=summary,
@@ -1315,10 +1303,10 @@ class ExecutionLogService:
             session_id=session_id,
             phase="api",
             step=event_name,
-            target=route,
+            target=safe_route,
             status="failed" if int(status_code) >= 400 else "partial_success",
             truth_level="actual",
-            message=f"{method} {route} took {duration_ms:.0f} ms",
+            message=f"{method} {safe_route} took {duration_ms:.0f} ms",
             detail=detail,
             event_at=started_at,
         )
@@ -2476,6 +2464,7 @@ class ExecutionLogService:
                     "attempts": attempts,
                 },
             }
+            merged[key]["metadata"] = _sanitize_metadata(merged[key]["metadata"])
         return [merged[key] for key in order]
 
     @staticmethod
@@ -2552,7 +2541,7 @@ class ExecutionLogService:
             "errorMessage": _masked_message(reason) if status == "failed" else None,
             "recordId": _as_str(detail.get("recordId") or detail.get("record_id")) or None,
             "critical": name in _CRITICAL_ANALYSIS_STEPS,
-            "metadata": detail,
+            "metadata": _sanitize_metadata(detail),
         }
 
     def _build_business_steps_from_session(self, detail: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -2761,10 +2750,11 @@ class ExecutionLogService:
         category_filter = _normalize_log_category(category, "") if category else None
         query_text = _as_str(query).lower()
         for row in rows:
-            summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
-            detail = self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {}
+            row = _sanitize_metadata(row)
+            summary = _sanitize_metadata(row.get("summary") if isinstance(row.get("summary"), dict) else {})
+            detail = _sanitize_metadata(self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {})
             events = detail.get("events") if isinstance(detail.get("events"), list) else []
-            enriched_events = [self._enrich_event(event) for event in events if isinstance(event, dict)]
+            enriched_events = [_sanitize_metadata(self._enrich_event(event)) for event in events if isinstance(event, dict)]
             top_event = self._top_event(enriched_events)
             if min_level_normalized and not any(
                 _LOG_LEVEL_RANK.get(_event_level(event), 0) >= _LOG_LEVEL_RANK[min_level_normalized]
@@ -2803,7 +2793,7 @@ class ExecutionLogService:
                         "source": top_event.get("target"),
                     }
                 )
-            items.append(row)
+            items.append(_sanitize_metadata(row))
         items.sort(
             key=lambda item: (
                 str(item.get("started_at") or ""),
@@ -2897,19 +2887,19 @@ class ExecutionLogService:
         detail = self.db.get_execution_log_session_detail(session_id)
         if not detail:
             return None
-        summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else {}
+        summary = _sanitize_metadata(detail.get("summary") if isinstance(detail.get("summary"), dict) else {})
         events = detail.get("events") if isinstance(detail.get("events"), list) else []
         enriched_events: List[Dict[str, Any]] = []
         for event in events:
             if not isinstance(event, dict):
                 continue
-            event = self._enrich_event(event)
+            event = self._enrich_event(_sanitize_metadata(event))
             detail_block = event.get("detail") if isinstance(event.get("detail"), dict) else {}
             category = _as_str(detail_block.get("category")) or _as_str(event.get("phase")) or "system"
             action = _as_str(detail_block.get("action")) or _action_from_status(event.get("status"))
             outcome = _as_str(detail_block.get("outcome")) or _outcome_from_status(event.get("status"))
             reason = _masked_message(_as_str(detail_block.get("reason")))
-            next_event = dict(event)
+            next_event = _sanitize_metadata(dict(event))
             next_event["category"] = _normalize_log_category(category)
             next_event["action"] = action
             next_event["outcome"] = outcome
@@ -2930,12 +2920,14 @@ class ExecutionLogService:
                 task_id=detail.get("task_id"),
             )
         )
-        detail["readable_summary"] = readable
+        detail = _sanitize_metadata(detail)
+        detail["summary"] = summary
+        detail["readable_summary"] = _sanitize_metadata(readable)
         detail["events"] = enriched_events
-        detail["operation_detail"] = self._build_operation_detail(
+        detail["operation_detail"] = _sanitize_metadata(self._build_operation_detail(
             session=detail,
             summary=summary,
             events=enriched_events,
             readable=readable,
-        )
+        ))
         return detail

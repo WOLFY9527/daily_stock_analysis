@@ -55,11 +55,34 @@ class SystemConfigApiTestCase(unittest.TestCase):
         os.environ.pop("ENV_FILE", None)
         self.temp_dir.cleanup()
 
-    def test_get_config_returns_raw_secret_value(self) -> None:
+    def test_get_config_masks_secret_value(self) -> None:
         payload = system_config.get_system_config(include_schema=True, service=self.service).model_dump(by_alias=True)
         item_map = {item["key"]: item for item in payload["items"]}
-        self.assertEqual(item_map["GEMINI_API_KEY"]["value"], "secret-key-value")
-        self.assertFalse(item_map["GEMINI_API_KEY"]["is_masked"])
+        self.assertNotEqual(item_map["GEMINI_API_KEY"]["value"], "secret-key-value")
+        self.assertNotIn("secret-key-value", str(payload))
+        self.assertTrue(item_map["GEMINI_API_KEY"]["is_masked"])
+        self.assertTrue(item_map["GEMINI_API_KEY"]["raw_value_exists"])
+
+    def test_put_config_skips_masked_secret_placeholder(self) -> None:
+        current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()
+        item_map = {item["key"]: item for item in current["items"]}
+        masked_value = item_map["GEMINI_API_KEY"]["value"]
+
+        payload = system_config.update_system_config(
+            request=UpdateSystemConfigRequest(
+                config_version=current["config_version"],
+                mask_token=current["mask_token"],
+                reload_now=False,
+                items=[{"key": "GEMINI_API_KEY", "value": masked_value}],
+            ),
+            service=self.service,
+        ).model_dump()
+
+        self.assertEqual(payload["applied_count"], 0)
+        self.assertEqual(payload["skipped_masked_count"], 1)
+        env_content = self.env_path.read_text(encoding="utf-8")
+        self.assertIn("GEMINI_API_KEY=secret-key-value", env_content)
+        self.assertNotIn(f"GEMINI_API_KEY={masked_value}", env_content)
 
     def test_put_config_updates_secret_and_plain_field(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()

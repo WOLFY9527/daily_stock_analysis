@@ -270,6 +270,33 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.total, 1)
         self.assertEqual(payload.items[0].session_id, "warning-timeout")
 
+    def test_session_detail_read_time_sanitizes_legacy_raw_secrets(self) -> None:
+        self._record_event(
+            session_id="legacy-secret",
+            event_name="ExternalSourceTimeout",
+            level="WARNING",
+            category="data_source",
+            message="failed url https://x.com?apikey=LEGACYSECRET&token=OLDTOKEN",
+            status="failed",
+            detail={
+                "reason": "Authorization: Bearer OLDBEARER",
+                "metadata": {"api_key": "LEGACYSECRET", "nested": {"token": "OLDTOKEN"}},
+                "raw_response": {"password": "OLDPASSWORD"},
+            },
+        )
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.get_execution_log_session_detail("legacy-secret", _=_admin_user())
+
+        dumped = payload.model_dump()
+        self.assertNotIn("LEGACYSECRET", str(dumped))
+        self.assertNotIn("OLDTOKEN", str(dumped))
+        self.assertNotIn("OLDBEARER", str(dumped))
+        self.assertNotIn("OLDPASSWORD", str(dumped))
+        event_detail = dumped["events"][0]["detail"]
+        self.assertEqual(event_detail["metadata"]["api_key"], "***")
+        self.assertEqual(event_detail["raw_response"]["password"], "***")
+
     def test_root_filters_generic_business_execution_fields(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

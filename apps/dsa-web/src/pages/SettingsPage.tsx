@@ -2108,7 +2108,7 @@ const SettingsPage: React.FC = () => {
   }, [directProviderKeyValues]);
   const normalizeProviderCredential = useCallback((value: string): string => {
     const normalized = String(value || '').trim();
-    if (!normalized || /^\*+$/.test(normalized)) {
+    if (!normalized || /^\*+$/.test(normalized) || normalized === '已配置' || normalized.includes('...')) {
       return '';
     }
     return normalized;

@@ -138,8 +138,8 @@ const businessDetail = {
       finishedAt: '2026-04-30T13:20:04Z',
       durationMs: 3000,
       errorType: 'TimeoutError',
-      errorMessage: 'News API timeout after 3000ms',
-      metadata: { source: 'newsapi' },
+      errorMessage: 'News API timeout after 3000ms token=FRONTENDTOKEN',
+      metadata: { source: 'newsapi', apiKey: 'FRONTENDSECRET', nested: { token: 'FRONTENDTOKEN' } },
     },
     {
       name: 'fetch_fundamentals',
@@ -277,7 +277,9 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText(/获取财务数据/)).toBeInTheDocument();
     expect(screen.getByText(/AI 分析/)).toBeInTheDocument();
     expect(screen.getByText(/保存分析记录/)).toBeInTheDocument();
-    expect(screen.getByText('News API timeout after 3000ms')).toBeInTheDocument();
+    expect(screen.getByText('News API timeout after 3000ms token=***')).toBeInTheDocument();
+    expect(screen.queryByText(/FRONTENDSECRET/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/FRONTENDTOKEN/)).not.toBeInTheDocument();
     expect(screen.getAllByText('主数据源已成功，无需调用备用源').length).toBeGreaterThan(0);
     expect(screen.getByText('成功/跳过/失败')).toBeInTheDocument();
     expect(screen.getByText('3/1/1')).toBeInTheDocument();

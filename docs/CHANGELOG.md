@@ -1,5 +1,7 @@
 ## 2026-04-30
 
+- 🔐 **Phase 0 安全止血：配置与日志脱敏** — 系统配置读取默认只返回 masked secret，Settings 前端只保存脱敏占位值，masked placeholder 提交不会覆盖真实密钥。Execution/Admin Logs 写入与读取路径统一脱敏 URL、error message、metadata、raw response 中的 API key、token、secret、password；`.env.example` 改为生产默认启用 `ADMIN_AUTH_ENABLED=true`，并补充 `CORS_ALLOW_ALL` 仅限本地开发的警告。
+
 - 🧾 **Admin Logs 抽象为通用 Business Execution Trace** — `/api/v1/admin/logs` 的默认业务事件模型扩展为 `category/type/subject/scannerId/strategyId/backtestId` 等通用字段，新增 `start_execution/start_step/finish_step_success/finish_step_failed/skip_step/finish_execution` helper，统一 success/partial/failed/skipped/running/unknown/cancelled 状态语义；fallback provider/model 未调用、missing key、熔断和不适用市场会显示为 skipped 且不计入成功，真实 403/timeout 等调用失败计入 failed，主任务结束后的 running step 收敛为 unknown。`/admin/logs` 前端同步增加扫描器、回测、数据源 tabs、通用 step timeline、成功/跳过/失败统计和 metadata 脱敏展示；原始 session/event 日志继续保留在 `/api/v1/admin/logs/sessions` 与原始日志 tab。
 
 - ⚡ **Market Overview 加密行情升级为 SSE 准实时流** — `/api/v1/market/crypto/stream` 新增 `text/event-stream` 实时推送，后台 `CryptoRealtimeService` 通过 Binance WebSocket 聚合 BTC/ETH/BNB ticker，约 1 秒节流更新内存快照并同步写入既有 `MarketCache` 的 crypto key，保留 `/api/v1/market/crypto` REST/cache/cold-start fallback 行为。`/market-overview` 的 CryptoCard 首屏继续使用 REST 快照，挂载后订阅 SSE，断线时保留最近快照并显示轻量 `Reconnecting/Snapshot/Live` 状态；新增 `CRYPTO_REALTIME_ENABLED` 可关闭后台 WS 连接。回归覆盖 mock tick、MarketCache 写入、provider 异常隔离、SSE realtime/cache payload、stale freshness 与前端 EventSource 更新/错误/卸载/无支持 fallback。

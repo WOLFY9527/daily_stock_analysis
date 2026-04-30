@@ -54,6 +54,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.config import get_config
 from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
+from src.utils.security import sanitize_message, sanitize_metadata
 from src.multi_user import (
     BOOTSTRAP_ADMIN_DISPLAY_NAME,
     BOOTSTRAP_ADMIN_USER_ID,
@@ -5530,6 +5531,7 @@ class DatabaseManager:
         if not session_id:
             return
         now = datetime.now()
+        safe_summary = sanitize_metadata(summary or {})
         with self.session_scope() as session:
             row = session.execute(
                 select(ExecutionLogSession).where(ExecutionLogSession.session_id == session_id)
@@ -5543,7 +5545,7 @@ class DatabaseManager:
                     name=name,
                     overall_status=overall_status,
                     truth_level=truth_level,
-                    summary_json=self._safe_json_dumps(summary or {}),
+                    summary_json=self._safe_json_dumps(safe_summary),
                     started_at=started_at or now,
                     created_at=now,
                     updated_at=now,
@@ -5557,7 +5559,7 @@ class DatabaseManager:
                 row.overall_status = overall_status or row.overall_status
                 row.truth_level = truth_level or row.truth_level
                 if summary is not None:
-                    row.summary_json = self._safe_json_dumps(summary)
+                    row.summary_json = self._safe_json_dumps(safe_summary)
                 if started_at is not None:
                     row.started_at = started_at
                 row.updated_at = now
@@ -5572,7 +5574,7 @@ class DatabaseManager:
                     display_name=name,
                     overall_status=overall_status,
                     truth_level=truth_level,
-                    summary_json=summary or {},
+                    summary_json=safe_summary,
                     started_at=started_at or now,
                 )
             except Exception as exc:
@@ -5595,6 +5597,8 @@ class DatabaseManager:
         """Append a structured event into execution logs."""
         if not session_id or not phase:
             return
+        safe_message = sanitize_message(str(message)) if message is not None else None
+        safe_detail = sanitize_metadata(detail or {})
         row = ExecutionLogEvent(
             session_id=session_id,
             event_at=event_at or datetime.now(),
@@ -5603,9 +5607,9 @@ class DatabaseManager:
             target=str(target).strip() if target else None,
             status=str(status or "unknown").strip(),
             truth_level=str(truth_level or "inferred").strip(),
-            message=(str(message).strip() or None) if message is not None else None,
+            message=(str(safe_message).strip() or None) if safe_message is not None else None,
             error_code=(str(error_code).strip() or None) if error_code is not None else None,
-            detail_json=self._safe_json_dumps(detail or {}),
+            detail_json=self._safe_json_dumps(safe_detail),
         )
         with self.session_scope() as session:
             session.add(row)
@@ -5619,9 +5623,9 @@ class DatabaseManager:
                     target=target,
                     status=status,
                     truth_level=truth_level,
-                    message=message,
+                    message=safe_message,
                     error_code=error_code,
-                    detail_json=detail or {},
+                    detail_json=safe_detail,
                     occurred_at=event_at,
                 )
             except Exception as exc:
@@ -5642,6 +5646,7 @@ class DatabaseManager:
         if not session_id:
             return
         now = datetime.now()
+        safe_summary = sanitize_metadata(summary or {}) if summary is not None else None
         with self.session_scope() as session:
             row = session.execute(
                 select(ExecutionLogSession).where(ExecutionLogSession.session_id == session_id)
@@ -5655,7 +5660,7 @@ class DatabaseManager:
             if analysis_history_id is not None:
                 row.analysis_history_id = int(analysis_history_id)
             if summary is not None:
-                row.summary_json = self._safe_json_dumps(summary)
+                row.summary_json = self._safe_json_dumps(safe_summary)
             row.ended_at = ended_at or now
             row.updated_at = now
 
@@ -5666,7 +5671,7 @@ class DatabaseManager:
                     query_id=query_id,
                     overall_status=overall_status,
                     truth_level=truth_level,
-                    summary_json=summary if isinstance(summary, dict) else None,
+                    summary_json=safe_summary if isinstance(safe_summary, dict) else None,
                     ended_at=ended_at or now,
                 )
             except Exception as exc:

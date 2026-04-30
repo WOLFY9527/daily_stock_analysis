@@ -47,7 +47,7 @@ router = APIRouter()
         500: {"description": "Internal server error", "model": ErrorResponse},
     },
     summary="Get system configuration",
-    description="Read current configuration from .env and return raw values.",
+    description="Read current configuration from .env and return masked values for sensitive fields.",
 )
 def get_system_config(
     include_schema: bool = Query(True, description="Whether to include schema metadata"),
