@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import unittest
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -106,6 +108,114 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertEqual(calls, 1)
         self.assertEqual(second["items"][0]["price"], first["items"][0]["price"])
         self.assertIn("isRefreshing", second)
+
+    def test_crypto_cold_cache_fast_fallback_when_binance_slow(self) -> None:
+        service = MarketOverviewService()
+        service.MARKET_COLD_START_TIMEOUT_SECONDS = 0.05
+        release_fetch = threading.Event()
+
+        def fetcher() -> dict:
+            release_fetch.wait(2)
+            return {
+                "items": [{"symbol": "BTC", "price": 71000, "change": 1, "trend": [70000, 71000], "source": "binance"}],
+                "last_update": datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds"),
+                "source": "binance",
+                "fallback_used": False,
+            }
+
+        start = time.monotonic()
+        with patch.object(service, "_fetch_crypto_market_snapshot", side_effect=fetcher):
+            payload = service.get_crypto()
+        elapsed = time.monotonic() - start
+
+        self.assertLess(elapsed, 0.5)
+        self.assertTrue(payload["items"])
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertTrue(payload["isFallback"])
+        self.assertTrue(payload["isRefreshing"])
+        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["sourceLabel"], "备用数据")
+        self.assertIn("正在获取实时加密货币行情", payload["warning"])
+        release_fetch.set()
+        self.assertTrue(service._market_cache.wait_for_refreshes(timeout=2))
+
+    def test_crypto_cache_hit_does_not_refetch(self) -> None:
+        service = MarketOverviewService()
+        calls = 0
+
+        def fetcher() -> dict:
+            nonlocal calls
+            calls += 1
+            return {
+                "items": [{"symbol": "BTC", "price": 70000 + calls, "change": 1, "trend": [69000, 70000 + calls], "source": "binance"}],
+                "last_update": datetime(2026, 4, 30, 10, calls, tzinfo=CN_TZ).isoformat(timespec="seconds"),
+                "source": "binance",
+                "fallback_used": False,
+            }
+
+        with patch.object(service, "_fetch_crypto_market_snapshot", side_effect=fetcher):
+            first = service.get_crypto()
+            second = service.get_crypto()
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(second["items"][0]["price"], first["items"][0]["price"])
+        self.assertFalse(second["isRefreshing"])
+
+    def test_crypto_stale_returns_old_snapshot_and_refreshes(self) -> None:
+        service = MarketOverviewService()
+        old_time = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        new_time = datetime(2026, 4, 30, 10, 1, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        service._market_cache.set(
+            "crypto",
+            {
+                "items": [{"symbol": "BTC", "price": 70000, "change": 1, "trend": [69000, 70000], "source": "binance", "last_update": old_time}],
+                "last_update": old_time,
+                "source": "binance",
+                "fallback_used": False,
+            },
+            ttl_seconds=1,
+        )
+        entry = service._market_cache.get("crypto")
+        entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+        release_refresh = threading.Event()
+
+        def fetcher() -> dict:
+            release_refresh.wait(2)
+            return {
+                "items": [{"symbol": "BTC", "price": 72000, "change": 2, "trend": [70000, 72000], "source": "binance", "last_update": new_time}],
+                "last_update": new_time,
+                "source": "binance",
+                "fallback_used": False,
+            }
+
+        with patch.object(service, "_fetch_crypto_market_snapshot", side_effect=fetcher):
+            stale = service.get_crypto()
+            self.assertEqual(stale["items"][0]["price"], 70000)
+            self.assertTrue(stale["isRefreshing"])
+            release_refresh.set()
+            self.assertTrue(service._market_cache.wait_for_refreshes(timeout=2))
+            refreshed = service.get_crypto()
+
+        self.assertEqual(refreshed["items"][0]["price"], 72000)
+        self.assertFalse(refreshed["isRefreshing"])
+
+    def test_crypto_fallback_shape_matches_frontend(self) -> None:
+        service = MarketOverviewService()
+
+        with patch.object(service, "_fetch_crypto_market_snapshot", side_effect=RuntimeError("binance down")):
+            payload = service.get_crypto()
+
+        symbols = {item["symbol"] for item in payload["items"]}
+        self.assertTrue({"BTC", "ETH", "BNB"}.issubset(symbols))
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertTrue(payload["isFallback"])
+        self.assertNotEqual(payload["freshness"], "live")
+        for item in payload["items"]:
+            self.assertIn("symbol", item)
+            self.assertIn("name", item)
+            self.assertIn("value", item)
+            self.assertIn("changePercent", item)
+            self.assertIn("sparkline", item)
 
 
 if __name__ == "__main__":

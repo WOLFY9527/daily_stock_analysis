@@ -87,6 +87,7 @@ class MarketCache:
         cold_start_timeout_seconds: Optional[float] = None,
     ) -> dict:
         lock = self._lock_for(key)
+        wait_started_at: Optional[float] = None
         while True:
             with lock:
                 entry = self._entries.get(key)
@@ -99,7 +100,22 @@ class MarketCache:
                     logger.debug("[MarketCache] stale return key=%s refreshing=%s", key, bool(entry.is_refreshing))
                     return self._payload(entry, is_stale=True)
                 if entry and entry.is_refreshing:
-                    pass
+                    if wait_started_at is None:
+                        wait_started_at = time.monotonic()
+                    if (
+                        fallback_factory is not None
+                        and cold_start_timeout_seconds is not None
+                        and time.monotonic() - wait_started_at >= cold_start_timeout_seconds
+                    ):
+                        data = fallback_factory()
+                        now = self._now()
+                        entry.data = copy.deepcopy(data)
+                        entry.fetched_at = now
+                        entry.expires_at = now + timedelta(seconds=ttl_seconds)
+                        entry.ttl_seconds = ttl_seconds
+                        entry.is_refreshing = True
+                        logger.debug("[MarketCache] cold wait fallback return key=%s", key)
+                        return self._payload(entry)
                 else:
                     placeholder = entry or MarketCacheEntry(
                         key=key,

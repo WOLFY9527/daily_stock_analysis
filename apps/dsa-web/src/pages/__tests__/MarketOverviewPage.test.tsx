@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketOverviewPage from '../MarketOverviewPage';
 import { marketOverviewApi } from '../../api/marketOverview';
@@ -94,6 +94,98 @@ const cryptoPanel = () => ({
       riskDirection: 'decreasing' as const,
       trend: [74211, 75120, 76003, 76837.04],
       hoverDetails: ['24H +1.47%', '7D +3.22%'],
+    },
+  ],
+});
+
+const cryptoFullPanel = () => ({
+  ...cryptoPanel(),
+  source: 'binance',
+  sourceLabel: 'Binance',
+  updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'delayed' as const,
+  isFallback: false,
+  isRefreshing: false,
+  items: [
+    ...cryptoPanel().items,
+    {
+      symbol: 'ETH',
+      label: 'Ethereum',
+      value: 3120,
+      unit: 'USD',
+      changePct: -0.4,
+      riskDirection: 'increasing' as const,
+      trend: [3090, 3148, 3120],
+      hoverDetails: ['24H -0.40%'],
+    },
+    {
+      symbol: 'BNB',
+      label: 'BNB',
+      value: 590,
+      unit: 'USD',
+      changePct: 0.3,
+      riskDirection: 'decreasing' as const,
+      trend: [584, 588, 590],
+      hoverDetails: ['24H +0.30%'],
+    },
+  ],
+});
+
+const cryptoFallbackPanel = () => ({
+  panelName: 'CryptoCard',
+  lastRefreshAt: '2026-04-29T10:00:00',
+  status: 'failure' as const,
+  source: 'fallback',
+  sourceLabel: '备用数据',
+  updatedAt: '2026-04-29T10:00:00',
+  asOf: '2026-04-29T10:00:00',
+  freshness: 'fallback' as const,
+  isFallback: true,
+  isRefreshing: true,
+  warning: '正在获取实时加密货币行情，当前显示备用快照',
+  items: [
+    {
+      symbol: 'BTC',
+      label: 'Bitcoin',
+      value: 75800,
+      unit: 'USD',
+      changePct: -0.2,
+      riskDirection: 'increasing' as const,
+      trend: [75220, 75640, 75800],
+      source: 'fallback',
+      sourceLabel: '备用数据',
+      freshness: 'fallback' as const,
+      isFallback: true,
+      warning: '正在获取实时加密货币行情，当前显示备用快照',
+    },
+    {
+      symbol: 'ETH',
+      label: 'Ethereum',
+      value: 3120,
+      unit: 'USD',
+      changePct: -0.4,
+      riskDirection: 'increasing' as const,
+      trend: [3090, 3148, 3120],
+      source: 'fallback',
+      sourceLabel: '备用数据',
+      freshness: 'fallback' as const,
+      isFallback: true,
+      warning: '正在获取实时加密货币行情，当前显示备用快照',
+    },
+    {
+      symbol: 'BNB',
+      label: 'BNB',
+      value: 590,
+      unit: 'USD',
+      changePct: 0.3,
+      riskDirection: 'decreasing' as const,
+      trend: [584, 588, 590],
+      source: 'fallback',
+      sourceLabel: '备用数据',
+      freshness: 'fallback' as const,
+      isFallback: true,
+      warning: '正在获取实时加密货币行情，当前显示备用快照',
     },
   ],
 });
@@ -510,6 +602,70 @@ describe('MarketOverviewPage', () => {
       expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
     });
     expect(screen.getAllByTestId('data-freshness-badge-error').length).toBeGreaterThan(0);
+  });
+
+  it('does not leave crypto loading forever when the initial request is pending', async () => {
+    vi.useFakeTimers();
+    vi.mocked(marketApi.getCrypto).mockReturnValueOnce(new Promise(() => {}));
+
+    render(<MarketOverviewPage />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3100);
+    });
+
+    expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
+    expect(screen.getByText('BTC')).toBeInTheDocument();
+    expect(screen.getByText('ETH')).toBeInTheDocument();
+    expect(screen.getByText('BNB')).toBeInTheDocument();
+    expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the crypto fallback response as a card with freshness metadata', async () => {
+    vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFallbackPanel());
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
+    expect((await screen.findAllByText(/75,800/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/3,120/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/590/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/正在刷新快照/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('data-freshness-badge-live')).not.toBeInTheDocument();
+  });
+
+  it('uses the same crypto write path for initial load and manual refresh', async () => {
+    vi.mocked(marketApi.getCrypto)
+      .mockResolvedValueOnce(cryptoFallbackPanel())
+      .mockResolvedValueOnce(cryptoFullPanel());
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByText('BTC')).toBeInTheDocument();
+    expect(screen.getByText('ETH')).toBeInTheDocument();
+    expect(screen.getByText('BNB')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /刷新 加密货币行情/i }));
+
+    await waitFor(() => expect(marketApi.getCrypto).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('BTC')).toBeInTheDocument();
+    expect(screen.getByText('ETH')).toBeInTheDocument();
+    expect(screen.getByText('BNB')).toBeInTheDocument();
+    expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0);
+  });
+
+  it('keeps other market cards visible when crypto initial API fails', async () => {
+    vi.mocked(marketApi.getCrypto).mockRejectedValueOnce(new Error('crypto down'));
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /利率与债券市场/i })).toBeInTheDocument();
+    expect(screen.getByText('BTC')).toBeInTheDocument();
+    expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
   });
 
   it('refreshes only the requested panel when a card refresh icon is clicked', async () => {

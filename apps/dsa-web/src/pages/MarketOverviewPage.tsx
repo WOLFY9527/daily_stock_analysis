@@ -116,6 +116,25 @@ const FALLBACK_FUTURES: MarketFuturesResponse = {
   ],
 };
 
+const FALLBACK_CRYPTO_PANEL: MarketOverviewPanel = {
+  panelName: 'CryptoCard',
+  lastRefreshAt: new Date(0).toISOString(),
+  status: 'failure',
+  source: 'fallback',
+  sourceLabel: '备用数据',
+  updatedAt: new Date(0).toISOString(),
+  asOf: new Date(0).toISOString(),
+  freshness: 'fallback',
+  isFallback: true,
+  isRefreshing: true,
+  warning: '正在刷新，稍后自动更新',
+  items: [
+    { symbol: 'BTC', label: 'Bitcoin', value: 75800, unit: 'USD', changePct: -0.2, riskDirection: 'increasing', trend: [75220, 75640, 76110, 75800], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
+    { symbol: 'ETH', label: 'Ethereum', value: 3120, unit: 'USD', changePct: -0.4, riskDirection: 'increasing', trend: [3090, 3148, 3162, 3120], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
+    { symbol: 'BNB', label: 'BNB', value: 590, unit: 'USD', changePct: 0.3, riskDirection: 'decreasing', trend: [584, 588, 586, 590], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
+  ],
+};
+
 const FALLBACK_CN_SHORT_SENTIMENT: CnShortSentimentResponse = {
   source: 'fallback',
   sourceLabel: '备用数据',
@@ -663,7 +682,13 @@ function fallbackPanelValue(panelKey: PanelKey, error: unknown): PanelState[Pane
     case 'volatility':
       return fallbackPanel('VolatilityCard', error) as PanelState[PanelKey];
     case 'crypto':
-      return fallbackPanel('CryptoCard', error) as PanelState[PanelKey];
+      return {
+        ...FALLBACK_CRYPTO_PANEL,
+        lastRefreshAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        asOf: new Date().toISOString(),
+        warning: `正在刷新，稍后自动更新。${describePanelError(error)}`,
+      } as PanelState[PanelKey];
     case 'sentiment':
       return fallbackPanel('MarketSentimentCard', error) as PanelState[PanelKey];
     case 'fundsFlow':

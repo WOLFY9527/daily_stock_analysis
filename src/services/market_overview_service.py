@@ -194,7 +194,7 @@ class MarketOverviewService:
             panel_name="CryptoCard",
             endpoint_url="/api/v1/market/crypto",
             fetcher=self._fetch_crypto_market_snapshot,
-            fallback_factory=lambda: self._fallback_market_snapshot("crypto", "unavailable"),
+            fallback_factory=self._fallback_crypto_market_snapshot,
             actor=actor,
         )
 
@@ -526,6 +526,59 @@ class MarketOverviewService:
             "source": source,
         }
 
+    def _fallback_crypto_market_snapshot(self) -> Dict[str, Any]:
+        cached = self._market_data_cache.get("crypto")
+        if cached:
+            payload = dict(cached)
+            payload["fallback_used"] = True
+            payload["fallbackUsed"] = True
+            return payload
+
+        updated_at = _now_iso()
+        fallback_items = [
+            ("BTC", "Bitcoin", 75800.0, -0.2, [75220.0, 75640.0, 76110.0, 75800.0]),
+            ("ETH", "Ethereum", 3120.0, -0.4, [3090.0, 3148.0, 3162.0, 3120.0]),
+            ("BNB", "BNB", 590.0, 0.3, [584.0, 588.0, 586.0, 590.0]),
+        ]
+        return {
+            "items": [
+                {
+                    "symbol": symbol,
+                    "name": name,
+                    "label": name,
+                    "value": value,
+                    "price": value,
+                    "changePercent": change_percent,
+                    "change": change_percent,
+                    "sparkline": sparkline,
+                    "trend": sparkline,
+                    "unit": "USD",
+                    "risk_direction": self._risk_direction(change_percent),
+                    "source": "fallback",
+                    "sourceLabel": "备用数据",
+                    "updatedAt": updated_at,
+                    "asOf": updated_at,
+                    "last_update": updated_at,
+                    "freshness": "fallback",
+                    "isFallback": True,
+                    "warning": "正在获取实时加密货币行情，当前显示备用快照",
+                }
+                for symbol, name, value, change_percent, sparkline in fallback_items
+            ],
+            "last_update": updated_at,
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "error": None,
+            "fallback_used": True,
+            "fallbackUsed": True,
+            "isFallback": True,
+            "isRefreshing": True,
+            "freshness": "fallback",
+            "source": "fallback",
+            "sourceLabel": "备用数据",
+            "warning": "正在获取实时加密货币行情，当前显示备用快照",
+        }
+
     def _ttl_for_cache_key(self, cache_key: str) -> int:
         ttl_key = {
             "cn_breadth": "breadth",
@@ -644,7 +697,7 @@ class MarketOverviewService:
         ticker_response = requests.get(
             "https://api.binance.com/api/v3/ticker/24hr",
             params={"symbols": '["BTCUSDT","ETHUSDT","BNBUSDT"]'},
-            timeout=8,
+            timeout=2,
         )
         ticker_response.raise_for_status()
         ticker_rows = ticker_response.json()
@@ -799,7 +852,7 @@ class MarketOverviewService:
         response = requests.get(
             "https://api.binance.com/api/v3/klines",
             params={"symbol": symbol, "interval": "1d", "limit": 8},
-            timeout=8,
+            timeout=2,
         )
         response.raise_for_status()
         rows = response.json()
