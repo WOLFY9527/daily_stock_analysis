@@ -689,24 +689,23 @@ const AdminLogsPage: React.FC = () => {
   }, [activeTab, businessEvents, filteredSessions, summary]);
 
   return (
-    <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
+    <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
       <GlassCard as="section" className="overflow-hidden p-0">
-        <div className="relative p-6">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_30%),radial-gradient(circle_at_top_right,rgba(239,68,68,0.14),transparent_28%)]" />
-          <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,60rem)] xl:items-end">
-            <div>
+        <div className="relative px-4 py-4 sm:px-5">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(239,68,68,0.1),transparent_26%)]" />
+          <div className="relative flex min-w-0 flex-col gap-4">
+            <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">WolfyStock Ops Trace</p>
-              <h1 className="mt-3 text-[1.75rem] font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
-              <p className="mt-3 text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: activeTab === 'raw' ? filteredSessions.length : businessTotal })}</p>
-              <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-5 flex flex-wrap gap-2">
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
+              <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
+              <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-4 flex max-w-full gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
                 {(['business', 'analysis', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => (
                   <button
                     key={tab}
                     type="button"
                     role="tab"
                     aria-selected={activeTab === tab}
-                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${activeTab === tab ? 'border-emerald-300/45 bg-emerald-400/14 text-emerald-50' : 'border-white/8 bg-white/[0.035] text-secondary-text hover:border-white/15 hover:bg-white/[0.055]'}`}
+                    className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${activeTab === tab ? 'border-emerald-300/45 bg-emerald-400/14 text-emerald-50' : 'border-white/8 bg-white/[0.035] text-secondary-text hover:border-white/15 hover:bg-white/[0.055]'}`}
                     onClick={() => setActiveTab(tab)}
                   >
                     {tabLabel(tab, locale)}
@@ -714,14 +713,17 @@ const AdminLogsPage: React.FC = () => {
                 ))}
               </div>
             </div>
-            <div className={`grid gap-3 sm:grid-cols-2 ${activeTab === 'raw' ? 'xl:grid-cols-[11rem_11rem_minmax(0,1fr)_11rem_11rem_auto]' : 'xl:grid-cols-[minmax(0,1fr)_11rem_11rem_auto]'}`}>
+            <div
+              data-testid="admin-logs-filter-bar"
+              className={`grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 ${activeTab === 'raw' ? 'xl:grid-cols-[9.5rem_9.5rem_minmax(12rem,1fr)_9.5rem_auto_auto]' : 'xl:grid-cols-[minmax(14rem,1fr)_9.5rem_9.5rem_auto]'}`}
+            >
               {activeTab === 'raw' ? (
                 <>
                   <label className="sr-only" htmlFor="admin-logs-level-filter">{locale === 'zh' ? '级别筛选' : 'Level filter'}</label>
                   <select
                     id="admin-logs-level-filter"
                     aria-label={locale === 'zh' ? '级别筛选' : 'Level filter'}
-                    className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                    className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
                     value={levelFilter}
                     onChange={(event) => setLevelFilter(event.target.value as LevelFilter)}
                   >
@@ -733,7 +735,7 @@ const AdminLogsPage: React.FC = () => {
                   <select
                     id="admin-logs-category-filter"
                     aria-label={locale === 'zh' ? '分类筛选' : 'Category filter'}
-                    className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                    className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
                     value={categoryFilter}
                     onChange={(event) => setCategoryFilter(event.target.value as 'all' | LogCategory)}
                   >
@@ -748,7 +750,7 @@ const AdminLogsPage: React.FC = () => {
               <input
                 id="admin-logs-search"
                 aria-label={locale === 'zh' ? '搜索日志' : 'Search logs'}
-                className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
                 placeholder={activeTab === 'analysis' ? 'TSLA / AAPL / NVDA' : (locale === 'zh' ? '事件 / request id / symbol / source / user' : 'Event / request id / symbol / source / user')}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
@@ -756,7 +758,7 @@ const AdminLogsPage: React.FC = () => {
               {activeTab !== 'raw' ? (
                 <select
                   aria-label={locale === 'zh' ? '状态筛选' : 'Status filter'}
-                  className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                  className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTER_OPTIONS)[number])}
                 >
@@ -769,7 +771,7 @@ const AdminLogsPage: React.FC = () => {
               <select
                 id="admin-logs-since-filter"
                 aria-label={locale === 'zh' ? '时间范围' : 'Time range'}
-                className="input-surface h-10 w-full rounded-xl px-3 text-sm"
+                className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
                 value={sinceFilter}
                 onChange={(event) => setSinceFilter(event.target.value as (typeof SINCE_OPTIONS)[number])}
               >
@@ -782,7 +784,7 @@ const AdminLogsPage: React.FC = () => {
                 role="switch"
                 aria-checked={showDebugLogs}
                 aria-label={locale === 'zh' ? '显示调试日志' : 'Show debug logs'}
-                className="flex h-10 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.035] px-3 text-xs text-secondary-text transition hover:border-white/15 hover:bg-white/[0.055]"
+                className="flex h-9 min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-white/[0.035] px-3 text-xs text-secondary-text transition hover:border-white/15 hover:bg-white/[0.055]"
                 onMouseDown={(event) => {
                   event.preventDefault();
                   skipDebugClickRef.current = true;
@@ -804,17 +806,18 @@ const AdminLogsPage: React.FC = () => {
                 </span>
                 <span>{locale === 'zh' ? '显示调试日志' : 'Show debug logs'}</span>
               </button> : null}
-              <button type="button" className="btn-secondary h-10 rounded-xl px-4 text-sm sm:col-span-2 xl:col-span-1" onClick={() => void loadSessions()} disabled={isLoadingList}>
+              <button type="button" className="btn-secondary h-9 rounded-lg px-4 text-sm sm:col-span-2 xl:col-span-1" onClick={() => void loadSessions()} disabled={isLoadingList}>
                 {isLoadingList ? t('adminLogs.loading') : t('adminLogs.refreshButton')}
               </button>
             </div>
+            <p className="text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: activeTab === 'raw' ? filteredSessions.length : businessTotal })}</p>
           </div>
         </div>
       </GlassCard>
 
       {error ? <ApiErrorAlert error={error} /> : null}
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div data-testid="admin-logs-summary-grid" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {[
           { label: 'ERROR', value: computedSummary.errorCount || 0, tone: 'text-rose-100 border-rose-400/20 bg-rose-500/8' },
           { label: 'WARNING', value: computedSummary.warningCount || 0, tone: 'text-amber-100 border-amber-300/20 bg-amber-400/8' },
@@ -822,15 +825,15 @@ const AdminLogsPage: React.FC = () => {
           { label: locale === 'zh' ? '慢请求' : 'Slow requests', value: computedSummary.slowRequestCount || 0, tone: 'text-white/82 border-white/10 bg-white/[0.04]' },
           { label: locale === 'zh' ? '最近严重错误' : 'Latest critical', value: computedSummary.latestCriticalAt ? formatDateTime(computedSummary.latestCriticalAt, locale) : '--', tone: 'text-red-100 border-red-300/20 bg-red-500/8' },
         ].map((item) => (
-          <div key={item.label} className={`rounded-2xl border px-4 py-3 ${item.tone}`}>
+          <div key={item.label} className={`rounded-xl border px-3 py-2 ${item.tone}`}>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{item.label}</p>
-            <p className="mt-2 text-xl font-semibold">{item.value}</p>
+            <p className="mt-1 truncate text-lg font-semibold">{item.value}</p>
           </div>
         ))}
       </div>
 
-      <GlassCard as="section" className="p-6">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <GlassCard as="section" className="min-h-0 p-4">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
             <p className="mt-1 text-xs text-muted-text">{locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}</p>
@@ -844,43 +847,47 @@ const AdminLogsPage: React.FC = () => {
               <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-white/6 bg-black/15">
-              <div className="hidden grid-cols-[10rem_minmax(7rem,0.8fr)_8rem_minmax(12rem,1.2fr)_7rem_6rem_8rem_7rem] gap-4 border-b border-white/6 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
-                <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-                <div>{locale === 'zh' ? '事件' : 'Event'}</div>
-                <div>{locale === 'zh' ? '类别' : 'Category'}</div>
-                <div>{locale === 'zh' ? '简介' : 'Summary'}</div>
-                <div>{locale === 'zh' ? '状态' : 'Status'}</div>
-                <div>{locale === 'zh' ? '耗时' : 'Duration'}</div>
-                <div>{locale === 'zh' ? '失败步骤' : 'Failed steps'}</div>
-                <div>{locale === 'zh' ? '操作' : 'Action'}</div>
+            <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
+              <div data-testid="business-events-table-shell" className="overflow-x-auto">
+                <div className="min-w-[900px]">
+                  <div className="grid grid-cols-[9rem_minmax(6rem,0.75fr)_7rem_minmax(13rem,1.4fr)_6.5rem_5.5rem_6.5rem_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+                    <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+                    <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                    <div>{locale === 'zh' ? '类别' : 'Category'}</div>
+                    <div>{locale === 'zh' ? '简介' : 'Summary'}</div>
+                    <div>{locale === 'zh' ? '状态' : 'Status'}</div>
+                    <div>{locale === 'zh' ? '耗时' : 'Duration'}</div>
+                    <div>{locale === 'zh' ? '失败步骤' : 'Failed steps'}</div>
+                    <div>{locale === 'zh' ? '操作' : 'Action'}</div>
+                  </div>
+                  <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
+                    {businessEvents.map((item) => {
+                      const status = normalizeStatus(item.status);
+                      return (
+                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[9rem_minmax(6rem,0.75fr)_7rem_minmax(13rem,1.4fr)_6.5rem_5.5rem_6.5rem_6rem] items-center gap-3 px-3 py-2.5">
+                          <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
+                          <p className="min-w-0 truncate text-sm font-semibold text-foreground">{text(item.event || item.symbol)}</p>
+                          <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-secondary-text">{categoryLabel(item.category, locale)}</span>
+                          <p className="min-w-0 truncate text-xs text-secondary-text" title={text(item.summary)}>{text(item.summary)}</p>
+                          <span className={`${STATUS_CLASS[status]} w-fit`}>{statusLabel(status, locale)}</span>
+                          <p className="text-xs text-muted-text">{formatDuration(item.durationMs)}</p>
+                          <p className="text-xs text-muted-text">{item.failedStepCount || 0}/{item.stepCount || 0}</p>
+                          <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
+                            {t('adminLogs.viewDetails')}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-              <div className="divide-y divide-white/6">
-                {businessEvents.map((item) => {
-                  const status = normalizeStatus(item.status);
-                  return (
-                    <div key={item.id} data-testid="business-event-row" className="grid gap-3 px-4 py-4 md:grid-cols-[10rem_minmax(7rem,0.8fr)_8rem_minmax(12rem,1.2fr)_7rem_6rem_8rem_7rem] md:items-center">
-                      <p className="text-sm text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
-                      <p className="min-w-0 break-words text-sm font-semibold text-foreground">{text(item.event || item.symbol)}</p>
-                      <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[11px] text-secondary-text">{categoryLabel(item.category, locale)}</span>
-                      <p className="min-w-0 break-words text-sm text-secondary-text">{text(item.summary)}</p>
-                      <span className={`${STATUS_CLASS[status]} w-fit`}>{statusLabel(status, locale)}</span>
-                      <p className="text-xs text-muted-text">{formatDuration(item.durationMs)}</p>
-                      <p className="text-xs text-muted-text">{item.failedStepCount || 0}/{item.stepCount || 0}</p>
-                      <button type="button" className="btn-secondary w-fit rounded-xl px-3 py-1.5 text-xs" onClick={() => void openBusinessDetail(item)}>
-                        {t('adminLogs.viewDetails')}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-4 py-3">
+              <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-3 py-2.5">
                 <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
                 <div className="flex gap-2">
-                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
+                  <button type="button" className="btn-secondary rounded-lg px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
                     {locale === 'zh' ? '上一页' : 'Previous'}
                   </button>
-                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
+                  <button type="button" className="btn-secondary rounded-lg px-3 py-1 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
                     {locale === 'zh' ? '下一页' : 'Next'}
                   </button>
                 </div>
@@ -893,42 +900,46 @@ const AdminLogsPage: React.FC = () => {
             <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-white/6 bg-black/15">
-            <div className="hidden grid-cols-[10rem_6rem_8rem_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_7rem] gap-4 border-b border-white/6 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/38 md:grid">
-              <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-              <div>level</div>
-              <div>category</div>
-              <div>{locale === 'zh' ? '事件' : 'Event'}</div>
-              <div>message</div>
-              <div>{locale === 'zh' ? '来源 / 请求' : 'Source / request'}</div>
-              <div>{locale === 'zh' ? '操作' : 'Action'}</div>
-            </div>
-            <div className="divide-y divide-white/6">
-              {filteredSessions.map((item) => {
-                const summary = item.readableSummary || {};
-                const level = normalizeLogLevel(summary.logLevel);
-                const category = text(summary.logCategory, 'system');
-                const eventName = text(summary.eventName || item.name || item.taskId, t('adminLogs.unavailable'));
-                const message = text(summary.eventMessage || summary.topFailureReason || summary.summaryParagraph || summary.keyMetric, t('adminLogs.unavailable'));
-                const source = [summary.source, summary.requestId, summary.operationTarget || item.code]
-                  .map((value) => String(value || '').trim())
-                  .filter(Boolean)
-                  .filter((value, index, values) => values.indexOf(value) === index)
-                  .join(' · ') || t('adminLogs.unavailable');
-                return (
-                  <div key={item.sessionId} data-testid="admin-log-row" className="grid gap-3 px-4 py-4 md:grid-cols-[10rem_6rem_8rem_minmax(10rem,1.1fr)_minmax(12rem,1.4fr)_minmax(9rem,1fr)_7rem] md:items-center">
-                    <p className="text-sm text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
-                    <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${LEVEL_CLASS[level]}`}>{level}</span>
-                    <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[11px] text-secondary-text">{categoryLabel(category, locale)}</span>
-                    <p className="min-w-0 break-words text-sm font-semibold text-foreground">{eventName}</p>
-                    <p className="min-w-0 break-words text-sm text-secondary-text">{message}</p>
-                    <p className="min-w-0 break-all text-xs text-muted-text">{source}</p>
-                    <button type="button" className="btn-secondary w-fit rounded-xl px-3 py-1.5 text-xs" onClick={() => void openDetail(item)}>
-                      {t('adminLogs.viewDetails')}
-                    </button>
-                  </div>
-                );
-              })}
+          <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
+            <div data-testid="raw-logs-table-shell" className="overflow-x-auto">
+              <div className="min-w-[880px]">
+                <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+                  <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+                  <div>level</div>
+                  <div>category</div>
+                  <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                  <div>message</div>
+                  <div>{locale === 'zh' ? '来源 / 请求' : 'Source / request'}</div>
+                  <div>{locale === 'zh' ? '操作' : 'Action'}</div>
+                </div>
+                <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
+                  {filteredSessions.map((item) => {
+                    const summary = item.readableSummary || {};
+                    const level = normalizeLogLevel(summary.logLevel);
+                    const category = text(summary.logCategory, 'system');
+                    const eventName = text(summary.eventName || item.name || item.taskId, t('adminLogs.unavailable'));
+                    const message = text(summary.eventMessage || summary.topFailureReason || summary.summaryParagraph || summary.keyMetric, t('adminLogs.unavailable'));
+                    const source = [summary.source, summary.requestId, summary.operationTarget || item.code]
+                      .map((value) => String(value || '').trim())
+                      .filter(Boolean)
+                      .filter((value, index, values) => values.indexOf(value) === index)
+                      .join(' · ') || t('adminLogs.unavailable');
+                    return (
+                      <div key={item.sessionId} data-testid="admin-log-row" className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
+                        <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
+                        <span className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold ${LEVEL_CLASS[level]}`}>{level}</span>
+                        <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-secondary-text">{categoryLabel(category, locale)}</span>
+                        <p className="min-w-0 truncate text-sm font-semibold text-foreground">{eventName}</p>
+                        <p className="min-w-0 truncate text-xs text-secondary-text" title={message}>{message}</p>
+                        <p className="min-w-0 truncate text-xs text-muted-text" title={source}>{source}</p>
+                        <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openDetail(item)}>
+                          {t('adminLogs.viewDetails')}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -938,7 +949,7 @@ const AdminLogsPage: React.FC = () => {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         title={t('adminLogs.sessionDetailTitle')}
-        width="max-w-5xl"
+        width="max-w-[min(100vw,48rem)]"
       >
         {businessDetail ? (
           <div className="space-y-5">

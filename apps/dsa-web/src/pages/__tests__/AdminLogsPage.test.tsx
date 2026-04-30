@@ -158,9 +158,23 @@ describe('AdminLogsPage', () => {
   it('defaults to business events and does not show raw step names as the main list', async () => {
     render(<AdminLogsPage />);
 
-    expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0');
+    expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'overflow-x-hidden');
+    expect(screen.getByRole('tab', { name: '业务事件' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '股票分析' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '数据源问题' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '安全事件' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
+    expect(screen.getByLabelText('搜索日志')).toBeInTheDocument();
+    expect(screen.getByLabelText('状态筛选')).toBeInTheDocument();
+    expect(screen.getByLabelText('时间范围')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-summary-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-5');
     expect(await screen.findByText('TSLA')).toBeInTheDocument();
     expect(screen.getByText('用户分析 TSLA，部分数据源失败')).toBeInTheDocument();
+    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('admin-logs-pagination')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上一页' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
     expect(screen.queryByText('fetch_news')).not.toBeInTheDocument();
     expect(screen.queryByText('ExternalSourceTimeout')).not.toBeInTheDocument();
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
@@ -194,6 +208,8 @@ describe('AdminLogsPage', () => {
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('overflow-x-hidden');
+    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
     expect(screen.getByText('调用链 timeline')).toBeInTheDocument();
     expect(screen.getByText(/获取行情/)).toBeInTheDocument();
     expect(screen.getByText(/获取新闻/)).toBeInTheDocument();
@@ -210,6 +226,7 @@ describe('AdminLogsPage', () => {
 
     expect(await screen.findByText('ExternalSourceTimeout')).toBeInTheDocument();
     expect(screen.getByLabelText('级别筛选')).toBeInTheDocument();
+    expect(screen.getByTestId('raw-logs-table-shell')).toHaveClass('overflow-x-auto');
     await waitFor(() => expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ minLevel: 'WARNING' })));
   });
 
