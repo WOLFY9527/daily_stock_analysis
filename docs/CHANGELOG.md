@@ -1,5 +1,7 @@
 ## 2026-04-30
 
+- ⚡ **Market Overview 加密行情升级为 SSE 准实时流** — `/api/v1/market/crypto/stream` 新增 `text/event-stream` 实时推送，后台 `CryptoRealtimeService` 通过 Binance WebSocket 聚合 BTC/ETH/BNB ticker，约 1 秒节流更新内存快照并同步写入既有 `MarketCache` 的 crypto key，保留 `/api/v1/market/crypto` REST/cache/cold-start fallback 行为。`/market-overview` 的 CryptoCard 首屏继续使用 REST 快照，挂载后订阅 SSE，断线时保留最近快照并显示轻量 `Reconnecting/Snapshot/Live` 状态；新增 `CRYPTO_REALTIME_ENABLED` 可关闭后台 WS 连接。回归覆盖 mock tick、MarketCache 写入、provider 异常隔离、SSE realtime/cache payload、stale freshness 与前端 EventSource 更新/错误/卸载/无支持 fallback。
+
 - 🧾 **Admin Logs 改为业务事件与调用链详情** — `/admin/logs` 默认从细碎运行日志切换为业务事件列表，股票分析只展示单条 `TSLA / analysis / 用户分析 TSLA` 级记录，并支持 symbol、状态、类别、时间范围与分页筛选。后端新增 analysis execution 聚合能力，在分析流程中记录获取行情、技术指标、新闻、AI 分析、保存记录等步骤的 provider、耗时、错误与 recordId；详情接口返回完整调用链，非关键数据源失败时整次分析可标记为 `partial`。原始 session/event 日志继续保留在高级调试视图。
 
 - 🧯 **Admin Logs 降噪与级别筛选** — `/admin/logs` 默认改为只展示 `WARNING / ERROR / CRITICAL`，新增级别、分类、搜索、时间范围与调试日志开关，并在顶部展示 ERROR、WARNING、数据源失败、慢请求和最近严重错误摘要。后端 `/api/v1/admin/logs` 与 `/sessions` 补齐 `min_level / level / category / query / since / limit / offset / page / cursor` 查询参数，兼容 `minLevel / taskId`，并对 Market cache/prewarm 成功、普通 cache hit、普通快请求等高频 INFO/DEBUG 事件降噪；Market 数据源 timeout、refresh failed、fallback/stale 与慢请求继续入库并默认可见。

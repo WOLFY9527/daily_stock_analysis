@@ -28,6 +28,8 @@ vi.mock('../../api/market', () => ({
     getMarketBriefing: vi.fn(),
     getFutures: vi.fn(),
     getCnShortSentiment: vi.fn(),
+    cryptoStreamUrl: vi.fn(() => '/api/v1/market/crypto/stream'),
+    normalizeCryptoStreamPayload: vi.fn((payload) => payload),
   },
 }));
 
@@ -128,6 +130,56 @@ const cryptoFullPanel = () => ({
       riskDirection: 'decreasing' as const,
       trend: [584, 588, 590],
       hoverDetails: ['24H +0.30%'],
+    },
+  ],
+});
+
+const cryptoLivePanel = () => ({
+  ...cryptoFullPanel(),
+  source: 'binance_ws',
+  sourceLabel: 'Binance WS',
+  updatedAt: '2026-04-29T10:00:01',
+  asOf: '2026-04-29T10:00:01',
+  freshness: 'live' as const,
+  items: [
+    {
+      symbol: 'BTC',
+      label: 'Bitcoin',
+      value: 77001.25,
+      unit: 'USD',
+      changePct: 0.42,
+      riskDirection: 'decreasing' as const,
+      trend: [76837.04, 77001.25],
+      source: 'binance_ws',
+      sourceLabel: 'Binance WS',
+      freshness: 'live' as const,
+      isFallback: false,
+    },
+    {
+      symbol: 'ETH',
+      label: 'Ethereum',
+      value: 3201,
+      unit: 'USD',
+      changePct: 0.8,
+      riskDirection: 'decreasing' as const,
+      trend: [3120, 3201],
+      source: 'binance_ws',
+      sourceLabel: 'Binance WS',
+      freshness: 'live' as const,
+      isFallback: false,
+    },
+    {
+      symbol: 'BNB',
+      label: 'BNB',
+      value: 600,
+      unit: 'USD',
+      changePct: 0.5,
+      riskDirection: 'decreasing' as const,
+      trend: [590, 600],
+      source: 'binance_ws',
+      sourceLabel: 'Binance WS',
+      freshness: 'live' as const,
+      isFallback: false,
     },
   ],
 });
@@ -381,8 +433,35 @@ function expandPendingDataSourceSection() {
 }
 
 describe('MarketOverviewPage', () => {
+  class MockEventSource {
+    static instances: MockEventSource[] = [];
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    onerror: (() => void) | null = null;
+    closed = false;
+    url: string;
+
+    constructor(url: string) {
+      this.url = url;
+      MockEventSource.instances.push(this);
+    }
+
+    close() {
+      this.closed = true;
+    }
+
+    emit(payload: unknown) {
+      this.onmessage?.({ data: JSON.stringify(payload) } as MessageEvent);
+    }
+
+    error() {
+      this.onerror?.();
+    }
+  }
+
   beforeEach(() => {
     window.localStorage.clear();
+    MockEventSource.instances = [];
+    vi.stubGlobal('EventSource', MockEventSource);
     vi.mocked(marketOverviewApi.getIndices).mockResolvedValue(panel('IndexTrendsCard', 'SPX'));
     vi.mocked(marketOverviewApi.getVolatility).mockResolvedValue(panel('VolatilityCard', 'VIX'));
     vi.mocked(marketOverviewApi.getFundsFlow).mockResolvedValue(panel('FundsFlowCard', 'ETF'));
@@ -462,6 +541,7 @@ describe('MarketOverviewPage', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -651,6 +731,59 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-category-empty-state')).not.toBeInTheDocument();
     expect(screen.queryByText(/当前分类暂无可用真实数据/i)).not.toBeInTheDocument();
+  });
+
+  it('uses REST crypto snapshot first and updates from the realtime stream', async () => {
+    vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
+
+    render(<MarketOverviewPage />);
+
+    await waitFor(() => expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0));
+    expect(MockEventSource.instances[0].url).toContain('/api/v1/market/crypto/stream');
+
+    act(() => {
+      MockEventSource.instances[0].emit(cryptoLivePanel());
+    });
+
+    await waitFor(() => expect(screen.getAllByText('77,001.25').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('Live').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Binance WS/i).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the latest crypto snapshot when the realtime stream errors', async () => {
+    vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
+
+    render(<MarketOverviewPage />);
+
+    await waitFor(() => expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0));
+    act(() => {
+      MockEventSource.instances[0].error();
+    });
+
+    expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0);
+    expect(screen.getByText(/实时连接断开，显示最近快照/i)).toBeInTheDocument();
+    expect(screen.getByText('Reconnecting')).toBeInTheDocument();
+  });
+
+  it('closes the crypto realtime stream on unmount', async () => {
+    const view = render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
+    const source = MockEventSource.instances[0];
+    view.unmount();
+
+    expect(source.closed).toBe(true);
+  });
+
+  it('keeps REST mode when EventSource is unavailable', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
+
+    render(<MarketOverviewPage />);
+
+    await waitFor(() => expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0));
+    expect(screen.getByText('Snapshot')).toBeInTheDocument();
+    expect(MockEventSource.instances).toHaveLength(0);
   });
 
   it('renders all data freshness badge states', () => {

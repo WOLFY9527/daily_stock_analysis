@@ -34,6 +34,7 @@ SOURCE_LABELS = {
     "yfinance": "Yahoo Finance",
     "yfinance_proxy": "Yahoo Finance",
     "binance": "Binance",
+    "binance_ws": "Binance WS",
     "alternative": "Alternative.me",
     "alternative_me": "Alternative.me",
     "cnn": "CNN",

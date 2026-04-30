@@ -1,6 +1,7 @@
 import apiClient from './index';
 import type { MarketDataMeta, MarketOverviewPanel, MarketOverviewItem } from './marketOverview';
 import { toCamelCase } from './utils';
+import { API_BASE_URL } from '../utils/constants';
 
 type MarketSnapshotItem = {
   symbol?: string;
@@ -79,9 +80,8 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
   };
 }
 
-async function getPanel(path: string, panelName: string): Promise<MarketOverviewPanel> {
-  const response = await apiClient.get<Record<string, unknown>>(path);
-  const payload = toCamelCase<MarketSnapshotPayload>(response.data);
+function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, panelName: string): MarketOverviewPanel {
+  const payload = toCamelCase<MarketSnapshotPayload>(rawPayload);
   return {
     panelName,
     lastRefreshAt: payload.lastUpdate || payload.updatedAt || new Date().toISOString(),
@@ -102,8 +102,22 @@ async function getPanel(path: string, panelName: string): Promise<MarketOverview
   };
 }
 
+async function getPanel(path: string, panelName: string): Promise<MarketOverviewPanel> {
+  const response = await apiClient.get<Record<string, unknown>>(path);
+  return normalizeMarketSnapshotPayload(response.data, panelName);
+}
+
+function buildEventSourceUrl(path: string): string {
+  if (!API_BASE_URL) {
+    return path;
+  }
+  return `${API_BASE_URL.replace(/\/$/, '')}${path}`;
+}
+
 export const marketApi = {
   getCrypto: () => getPanel('/api/v1/market/crypto', 'CryptoCard'),
+  cryptoStreamUrl: () => buildEventSourceUrl('/api/v1/market/crypto/stream'),
+  normalizeCryptoStreamPayload: (payload: Record<string, unknown>) => normalizeMarketSnapshotPayload(payload, 'CryptoCard'),
   getSentiment: () => getPanel('/api/v1/market/sentiment', 'MarketSentimentCard'),
   getCnIndices: () => getPanel('/api/v1/market/cn-indices', 'ChinaIndicesCard'),
   getCnBreadth: () => getPanel('/api/v1/market/cn-breadth', 'ChinaBreadthCard'),

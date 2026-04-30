@@ -35,6 +35,7 @@ from api.middlewares.error_handler import add_error_handlers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
 from src.services.system_config_service import SystemConfigService
+from src.services.crypto_realtime_service import get_crypto_realtime_service, should_auto_start_crypto_realtime
 from src.services.task_queue import get_task_queue
 
 logger = logging.getLogger(__name__)
@@ -134,6 +135,8 @@ async def app_lifespan(app: FastAPI):
     """Initialize and release shared services for the app lifecycle."""
     app.state.system_config_service = SystemConfigService()
     app.state.task_queue = get_task_queue()
+    if should_auto_start_crypto_realtime():
+        app.state.crypto_realtime_service = get_crypto_realtime_service(auto_start=True)
     runtime = app.state.task_queue.get_runtime_status()
     if not runtime.get("topology_ok", True):
         logger.warning("[App] Task queue topology warning: %s", runtime.get("warning"))
@@ -143,6 +146,9 @@ async def app_lifespan(app: FastAPI):
         if hasattr(app.state, "task_queue"):
             app.state.task_queue.shutdown(wait=False, cancel_futures=True)
             delattr(app.state, "task_queue")
+        if hasattr(app.state, "crypto_realtime_service"):
+            app.state.crypto_realtime_service.stop()
+            delattr(app.state, "crypto_realtime_service")
         if hasattr(app.state, "system_config_service"):
             delattr(app.state, "system_config_service")
 

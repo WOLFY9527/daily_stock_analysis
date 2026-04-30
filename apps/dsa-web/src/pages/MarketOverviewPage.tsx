@@ -52,6 +52,7 @@ type PanelKey = keyof PanelState;
 type CardKey = Exclude<PanelKey, 'temperature' | 'briefing'>;
 type CategoryKey = 'all' | 'us' | 'cn' | 'macro' | 'crypto';
 type CardCoverageKind = 'real' | 'mixed' | 'fallback';
+type CryptoRealtimeStatus = 'live' | 'reconnecting' | 'snapshot';
 
 const CATEGORY_CARDS: Record<CategoryKey, CardKey[]> = {
   all: ['futures', 'indices', 'cnIndices', 'cnBreadth', 'rates', 'fxCommodities', 'volatility', 'fundsFlow', 'sentiment', 'crypto', 'cnShortSentiment', 'cnFlows', 'sectorRotation', 'macro'],
@@ -974,6 +975,7 @@ const MarketOverviewPage: React.FC = () => {
   const [refreshingPanel, setRefreshingPanel] = useState<PanelKey | null>(null);
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('all');
   const [fallbackSectionExpanded, setFallbackSectionExpanded] = useState(false);
+  const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
   const [cardOrders, setCardOrders] = useState<Record<CategoryKey, CardKey[]>>(() => ({
     all: readStoredCardOrder('all'),
     us: readStoredCardOrder('us'),
@@ -1111,6 +1113,36 @@ const MarketOverviewPage: React.FC = () => {
   }, [loadPanels]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') {
+      setCryptoRealtimeStatus('snapshot');
+      return undefined;
+    }
+    const eventSource = new window.EventSource(marketApi.cryptoStreamUrl(), { withCredentials: true });
+    eventSource.onopen = () => {
+      setCryptoRealtimeStatus('live');
+    };
+    eventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as Record<string, unknown>;
+        const panel = marketApi.normalizeCryptoStreamPayload(payload);
+        setPanels((currentPanels) => ({
+          ...currentPanels,
+          crypto: panel,
+        }));
+        setCryptoRealtimeStatus(panel.freshness === 'live' ? 'live' : 'snapshot');
+      } catch {
+        setCryptoRealtimeStatus('snapshot');
+      }
+    };
+    eventSource.onerror = () => {
+      setCryptoRealtimeStatus('reconnecting');
+    };
+    return () => {
+      eventSource.close();
+    };
+  }, []);
+
+  useEffect(() => {
     setFallbackSectionExpanded(false);
   }, [activeCategory]);
 
@@ -1173,6 +1205,7 @@ const MarketOverviewPage: React.FC = () => {
         panel={panels.crypto}
         loading={loading && !panels.crypto}
         refreshing={refreshingPanel === 'crypto'}
+        realtimeStatus={cryptoRealtimeStatus}
         onRefresh={() => {
           void refreshPanel('crypto', marketApi.getCrypto);
         }}
@@ -1292,7 +1325,7 @@ const MarketOverviewPage: React.FC = () => {
         }}
       />
     ),
-  }), [loading, panels, refreshPanel, refreshingPanel, t, usIndicesPanel]);
+  }), [cryptoRealtimeStatus, loading, panels, refreshPanel, refreshingPanel, t, usIndicesPanel]);
 
   const visibleOrder = cardOrders[activeCategory].filter((cardKey) => CATEGORY_CARDS[activeCategory].includes(cardKey));
   const fallbackOnlyOrder = visibleOrder.filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
