@@ -36,7 +36,7 @@ from src.services.portfolio_service import (
     PortfolioOversellError,
     PortfolioService,
 )
-from src.utils.symbol_normalization import canonical_stock_code
+from src.utils.symbol_normalization import canonical_stock_code, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -1794,11 +1794,13 @@ class PortfolioImportService:
         asset_category = (self._pick_attr(element, "assetCategory", "assetClass") or "STK").upper()
         if asset_category not in {"STK"}:
             return None
-        symbol = canonical_stock_code(
-            self._pick_attr(element, "symbol", "underlyingSymbol", "displaySymbol") or ""
+        identity = self._canonicalize_ibkr_symbol(
+            raw_symbol=self._pick_attr(element, "symbol", "underlyingSymbol", "displaySymbol"),
+            exchange=self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
         )
-        if not symbol:
+        if identity is None:
             return None
+        symbol, market = identity
         trade_date_obj = self._parse_date(
             self._pick_attr(element, "tradeDate", "dateTime", "tradeDateTime", "reportDate")
         )
@@ -1816,10 +1818,6 @@ class PortfolioImportService:
         )
         if side is None:
             return None
-        market = self._normalize_ibkr_market(
-            self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
-            symbol=symbol,
-        )
         currency = self._pick_attr(element, "currency", "currencyPrimary", "fxCurrency")
         fee = abs(self._parse_float(self._pick_attr(element, "ibCommission", "commission")) or 0.0)
         tax = abs(self._parse_float(self._pick_attr(element, "taxes", "tax", "salesTax")) or 0.0)
@@ -1886,13 +1884,13 @@ class PortfolioImportService:
         )
         if split_ratio is None or split_ratio <= 0:
             return None
-        symbol = canonical_stock_code(self._pick_attr(element, "symbol", "underlyingSymbol", "displaySymbol") or "")
-        if not symbol:
-            return None
-        market = self._normalize_ibkr_market(
-            self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
-            symbol=symbol,
+        identity = self._canonicalize_ibkr_symbol(
+            raw_symbol=self._pick_attr(element, "symbol", "underlyingSymbol", "displaySymbol"),
+            exchange=self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
         )
+        if identity is None:
+            return None
+        symbol, market = identity
         currency = self._pick_attr(element, "currency", "currencyPrimary")
         return {
             "effective_date": effective_date_obj,
@@ -1915,11 +1913,13 @@ class PortfolioImportService:
         asset_category = (self._pick_attr(element, "assetCategory", "assetClass") or "STK").upper()
         if asset_category not in {"STK"}:
             return None
-        symbol = canonical_stock_code(
-            self._pick_attr(element, "symbol", "underlyingSymbol", "displaySymbol") or ""
+        identity = self._canonicalize_ibkr_symbol(
+            raw_symbol=self._pick_attr(element, "symbol", "underlyingSymbol", "displaySymbol"),
+            exchange=self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
         )
-        if not symbol:
+        if identity is None:
             return None
+        symbol, market = identity
         quantity = self._parse_float(self._pick_attr(element, "position", "quantity"))
         if quantity is None or abs(quantity) <= 0:
             return None
@@ -1934,10 +1934,6 @@ class PortfolioImportService:
         )
         if trade_date_obj is None:
             return None
-        market = self._normalize_ibkr_market(
-            self._pick_attr(element, "exchange", "listingExchange", "primaryExchange"),
-            symbol=symbol,
-        )
         currency = self._pick_attr(element, "currency", "currencyPrimary")
         trade_uid = f"ibkr-open:{broker_account_ref or 'unknown'}:{symbol}:{trade_date_obj.isoformat()}"
         record = {
@@ -1970,17 +1966,32 @@ class PortfolioImportService:
         return None
 
     @staticmethod
-    def _normalize_ibkr_market(exchange: Optional[str], *, symbol: str) -> str:
+    def _canonicalize_ibkr_symbol(
+        *,
+        raw_symbol: Any,
+        exchange: Optional[str],
+    ) -> Optional[Tuple[str, str]]:
+        raw = str(raw_symbol or "").strip()
+        if not raw:
+            return None
+        exchange_market = PortfolioImportService._ibkr_exchange_market(exchange)
+        identity = parse_canonical_symbol(raw, market=exchange_market)
+        if identity is None or identity.ambiguous or identity.market is None:
+            return None
+        if exchange_market is not None and identity.market != exchange_market:
+            return None
+        return identity.symbol, identity.market
+
+    @staticmethod
+    def _ibkr_exchange_market(exchange: Optional[str]) -> Optional[str]:
         text = str(exchange or "").strip().upper()
         if any(token in text for token in ("HK", "SEHK")):
             return "hk"
         if any(token in text for token in ("NYSE", "NASDAQ", "ARCA", "AMEX", "BATS", "ISLAND", "IEX")):
             return "us"
-        if symbol.startswith("HK") or re.fullmatch(r"\d{1,5}\.HK", symbol) or re.fullmatch(r"HK\d{5}", symbol):
-            return "hk"
-        if re.fullmatch(r"[A-Z][A-Z0-9.\-]*", symbol):
-            return "us"
-        return "cn"
+        if any(token in text for token in ("SSE", "SZSE", "SHSE", "XSHE", "BSE")):
+            return "cn"
+        return None
 
     @staticmethod
     def _parse_split_ratio(value: Any) -> Optional[float]:

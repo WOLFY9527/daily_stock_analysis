@@ -378,11 +378,7 @@ class WatchlistApiTestCase(unittest.TestCase):
             json={"symbol": "600519", "market": "us", "source": "scanner"},
         )
 
-        self.assertEqual(resp.status_code, 400)
-        body = resp.json()
-        self.assertEqual(body["error"], "validation_error")
-        self.assertIn("unsupported", body["message"].lower())
-        self.assertIn("market", body["message"].lower())
+        self.assertEqual(resp.status_code, 422)
 
     def test_watchlist_duplicate_add_reports_existing_identity_without_creating_ambiguous_rows(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
@@ -409,6 +405,34 @@ class WatchlistApiTestCase(unittest.TestCase):
         list_resp = self.client.get("/api/v1/watchlist/items")
         self.assertEqual(list_resp.status_code, 200)
         self.assertEqual([item["id"] for item in list_resp.json()["items"]], [first_payload["id"]])
+
+        with self.db.get_session() as session:
+            legacy_item = UserWatchlistItem(
+                owner_id="user-1",
+                symbol="00700",
+                market="hk",
+                source="scanner",
+                scanner_score=65,
+            )
+            session.add(legacy_item)
+            session.commit()
+            legacy_item_id = legacy_item.id
+
+        hk_response = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "0700.HK", "market": "hk", "source": "scanner"},
+        )
+        self.assertEqual(hk_response.status_code, 200, hk_response.text)
+        self.assertEqual(hk_response.json()["id"], legacy_item_id)
+        self.assertEqual(hk_response.json()["symbol"], "HK00700")
+        self.assertFalse(hk_response.json()["created_new"])
+
+        hk_items = [
+            item
+            for item in self.client.get("/api/v1/watchlist/items").json()["items"]
+            if item["market"] == "hk"
+        ]
+        self.assertEqual([(item["id"], item["symbol"]) for item in hk_items], [(legacy_item_id, "HK00700")])
 
     def test_watchlist_create_from_scanner_candidate_preserves_research_queue_evidence(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
@@ -772,6 +796,28 @@ class WatchlistApiTestCase(unittest.TestCase):
         )
         self.assertEqual(bad_market.status_code, 422)
 
+        explicit_hk = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "0700.HK", "market": "hk", "source": "scanner"},
+        )
+        self.assertEqual(explicit_hk.status_code, 200)
+        self.assertEqual(explicit_hk.json()["symbol"], "HK00700")
+        self.assertEqual(explicit_hk.json()["market"], "hk")
+
+        market_hinted_hk = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "00700", "market": "hk", "source": "scanner"},
+        )
+        self.assertEqual(market_hinted_hk.status_code, 200)
+        self.assertEqual(market_hinted_hk.json()["symbol"], "HK00700")
+        self.assertEqual(market_hinted_hk.json()["market"], "hk")
+
+        ambiguous_market = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "00700", "market": "cn", "source": "scanner"},
+        )
+        self.assertEqual(ambiguous_market.status_code, 422)
+
     def test_watchlist_item_exposes_row_research_packet_for_saved_symbol_without_name_or_price(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
 
@@ -880,8 +926,8 @@ class WatchlistApiTestCase(unittest.TestCase):
         add_resp = self.client.post(
             "/api/v1/watchlist/items",
             json={
-                "symbol": "WULF",
-                "market": "us",
+                "symbol": "0700.HK",
+                "market": "hk",
                 "source": "scanner",
                 "scanner_run_id": 5,
                 "scanner_rank": 8,
@@ -894,17 +940,19 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
-            market="us",
-            profile="us_preopen_v1",
-            universe_name="us_preopen_watchlist_v1",
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
+            market="hk",
+            profile="hk_preopen_v1",
+            universe_name="hk_preopen_watchlist_v1",
             status="completed",
             run_at=now,
             completed_at=now,
             shortlist_size=1,
         )
         candidate = MarketScannerCandidate(
-            symbol="WULF",
-            name="WULF",
+            symbol="00700",
+            name="Tencent",
             rank=2,
             score=71.5,
             reason_summary="Scanner score refreshed.",
@@ -919,7 +967,7 @@ class WatchlistApiTestCase(unittest.TestCase):
             session.add(candidate)
             session.commit()
 
-        refresh_resp = self.client.post("/api/v1/watchlist/refresh-scores", json={"market": "us"})
+        refresh_resp = self.client.post("/api/v1/watchlist/refresh-scores", json={"market": "hk"})
         self.assertEqual(refresh_resp.status_code, 200)
         payload = refresh_resp.json()
         self.assertTrue(payload["ok"])
@@ -929,11 +977,12 @@ class WatchlistApiTestCase(unittest.TestCase):
         list_resp = self.client.get("/api/v1/watchlist/items")
         self.assertEqual(list_resp.status_code, 200)
         item = list_resp.json()["items"][0]
+        self.assertEqual(item["symbol"], "HK00700")
         self.assertEqual(item["scanner_run_id"], run_id)
         self.assertEqual(item["scanner_score"], 71.5)
         self.assertEqual(item["scanner_rank"], 2)
         self.assertEqual(item["score_source"], "scanner_run")
-        self.assertEqual(item["score_profile"], "us_preopen_v1")
+        self.assertEqual(item["score_profile"], "hk_preopen_v1")
         self.assertEqual(item["score_reason"], "Scanner score refreshed.")
         self.assertEqual(item["score_status"], "fresh")
         self.assertEqual(
@@ -1018,6 +1067,8 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",
@@ -1688,6 +1739,35 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(intelligence["backtest"]["max_drawdown_pct"], -8.2)
         self.assertEqual(intelligence["backtest"]["sharpe"], 1.34)
         self.assertEqual(intelligence["backtest"]["trade_count"], 6)
+
+        hk_add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "0700.HK", "market": "hk", "source": "scanner"},
+        )
+        self.assertEqual(hk_add_resp.status_code, 200)
+        legacy_hk_backtest = RuleBacktestRun(
+            owner_id="user-1",
+            code="00700",
+            strategy_text="观察列表港股回测",
+            parsed_strategy_json="{}",
+            strategy_hash="legacy-hk",
+            status="completed",
+            run_at=datetime(2026, 5, 4, 8, 0, 0),
+            completed_at=datetime(2026, 5, 4, 8, 1, 0),
+            trade_count=3,
+            total_return_pct=12.5,
+            max_drawdown_pct=-3.0,
+        )
+        with self.db.get_session() as session:
+            session.add(legacy_hk_backtest)
+            session.commit()
+            legacy_hk_backtest_id = legacy_hk_backtest.id
+
+        refreshed_items = self.client.get("/api/v1/watchlist/items").json()["items"]
+        hk_item = next(item for item in refreshed_items if item["symbol"] == "HK00700")
+        self.assertEqual(hk_item["intelligence"]["backtest"]["last_result_id"], legacy_hk_backtest_id)
+        self.assertEqual(hk_item["intelligence"]["backtest"]["total_return_pct"], 12.5)
+        self.assertEqual(hk_item["intelligence"]["backtest"]["trade_count"], 3)
 
     def test_watchlist_items_remain_compatible_with_legacy_scalar_only_rows(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")

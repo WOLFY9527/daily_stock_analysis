@@ -29,6 +29,7 @@ from src.services.stock_evidence_quote_adapter import (
     build_quote_diagnostic_source_metadata,
 )
 from src.services.symbol_evidence_readiness import build_symbol_evidence_readiness
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 
 EvidencePayload = Dict[str, Any]
@@ -70,20 +71,15 @@ def _text(value: Any, default: str = "") -> str:
 
 
 def _normalize_symbol(symbol: str) -> str:
-    return str(symbol or "").strip().upper().replace(".HK", "").removeprefix("HK")
+    identity = parse_canonical_symbol(symbol)
+    if identity is None or identity.ambiguous:
+        return ""
+    return identity.symbol
 
 
 def _infer_market(symbol: str) -> str:
-    normalized = str(symbol or "").strip().upper()
-    if normalized.endswith(".HK") or (normalized.startswith("HK") and normalized[2:].isdigit()):
-        return "HK"
-    if normalized.isdigit() and len(normalized) in {4, 5}:
-        return "HK"
-    if normalized.isdigit() and len(normalized) == 6:
-        return "CN"
-    if normalized:
-        return "US"
-    return "unknown"
+    identity = parse_canonical_symbol(symbol)
+    return identity.market.upper() if identity and identity.market else "unknown"
 
 
 def _moving_average(values: List[float], window: int) -> Optional[float]:

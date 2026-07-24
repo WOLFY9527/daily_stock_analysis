@@ -170,13 +170,14 @@ class DataSourceValidationTestCase(unittest.TestCase):
     def test_twelve_data_non_hk_symbol_returns_configured_unverified_without_remote_probe(self, mock_request) -> None:
         self._write_twelve_data_key()
 
-        payload = self.service.test_builtin_data_source(provider="twelve_data", symbol="MSFT")
+        for symbol in ("MSFT", "HKEX:00700"):
+            payload = self.service.test_builtin_data_source(provider="twelve_data", symbol=symbol)
 
-        self.assertFalse(payload["ok"])
-        self.assertEqual(payload["status"], "partial")
-        self.assertEqual(payload["checks"], [self._hk_state_check(payload)])
-        self.assertEqual(self._hk_state_check(payload)["error_type"], "configured_unverified")
-        self.assertIn("未使用港股代码", payload["summary"])
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["status"], "partial")
+            self.assertEqual(payload["checks"], [self._hk_state_check(payload)])
+            self.assertEqual(self._hk_state_check(payload)["error_type"], "configured_unverified")
+            self.assertIn("未使用港股代码", payload["summary"])
         mock_request.assert_not_called()
 
     @patch("src.services.system_config_service.requests.request")

@@ -248,7 +248,7 @@ function candidateNextAction(item: ResearchRadarItem, locale: 'zh' | 'en') {
 }
 
 function candidateSymbol(item: ResearchRadarItem): string {
-  return String(item.ticker || item.symbol || '').trim().toUpperCase();
+  return String(item.ticker || item.symbol || '').trim();
 }
 
 function candidateLimitationSource(item: ResearchRadarItem): string[] {

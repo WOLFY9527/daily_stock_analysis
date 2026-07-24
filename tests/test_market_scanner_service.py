@@ -3630,6 +3630,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.db,
             data_manager=FakeHkScannerDataManager(),
         )
+        self.assertEqual(service._normalize_scanner_symbol("00700", market="hk"), "HK00700")
 
         with patch.object(service, "_load_local_hk_universe_from_db", return_value=["HK00700", "HK01810"]):
             result = service._resolve_hk_stock_universe(profile=profile, target_symbol_count=30)

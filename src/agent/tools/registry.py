@@ -127,6 +127,13 @@ class ToolRegistry:
     def __contains__(self, name: str) -> bool:
         return name in self._tools
 
+    def get_definition(self, name: str) -> Optional[ToolDefinition]:
+        """Return a registered definition, including Gemini's namespaced form."""
+        tool_def = self._tools.get(name)
+        if tool_def is None and ":" in name:
+            tool_def = self._tools.get(name.split(":", 1)[-1])
+        return tool_def
+
     # ----- Schema generation -----
 
     def to_openai_tools(self) -> List[dict]:
@@ -144,10 +151,7 @@ class ToolRegistry:
 
         Supports Gemini namespaced tool names (e.g. default_api:get_realtime_quote -> get_realtime_quote).
         """
-        tool_def = self._tools.get(name)
-        if tool_def is None and ":" in name:
-            # Gemini may return namespaced names like default_api:get_realtime_quote
-            tool_def = self._tools.get(name.split(":", 1)[-1])
+        tool_def = self.get_definition(name)
         if tool_def is None:
             raise KeyError(f"Tool '{name}' not found in registry. Available: {self.list_names()}")
 

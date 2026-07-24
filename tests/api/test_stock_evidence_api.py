@@ -92,7 +92,7 @@ def _assert_no_forbidden_keys(value: Any, forbidden_keys: tuple[str, ...]) -> No
 def test_stock_evidence_endpoint_serializes_fundamentals_summary(
     monkeypatch,
 ) -> None:
-    payload = _base_payload()
+    payload = _base_payload("HK00700")
     payload["items"][0]["stockEvidencePacket"]["fundamentalsSummary"] = {
         "status": "available",
         "marketCap": 2800000000000,
@@ -123,11 +123,11 @@ def test_stock_evidence_endpoint_serializes_fundamentals_summary(
         raising=False,
     )
 
-    response = _client().get("/api/v1/stocks/AAPL/evidence")
+    response = _client().get("/api/v1/stocks/0700.HK/evidence")
 
     assert response.status_code == 200
     data = response.json()
-    assert fake_service.calls == [["AAPL"]]
+    assert fake_service.calls == [["HK00700"]]
     summary = data["items"][0]["stockEvidencePacket"]["fundamentalsSummary"]
     assert summary["marketCap"] == 2800000000000
     assert summary["peTtm"] == 28.5
@@ -597,7 +597,7 @@ def test_stock_evidence_endpoint_returns_not_found_for_invalid_symbol_payload(
 def test_stock_evidence_endpoint_preserves_unknown_symbol_degraded_payload(
     monkeypatch,
 ) -> None:
-    payload = _base_payload(symbol="UNKNOWN1")
+    payload = _base_payload(symbol="ZZZZZ")
     fake_service = _FakeStockEvidenceService(payload)
     monkeypatch.setattr(
         stocks_endpoint,
@@ -606,12 +606,12 @@ def test_stock_evidence_endpoint_preserves_unknown_symbol_degraded_payload(
         raising=False,
     )
 
-    response = _client().get("/api/v1/stocks/UNKNOWN1/evidence")
+    response = _client().get("/api/v1/stocks/ZZZZZ/evidence")
 
     assert response.status_code == 200
     data = response.json()
-    assert data["symbols"] == ["UNKNOWN1"]
-    assert data["items"][0]["symbol"] == "UNKNOWN1"
+    assert data["symbols"] == ["ZZZZZ"]
+    assert data["items"][0]["symbol"] == "ZZZZZ"
     assert data["items"][0]["quote"]["status"] == "unknown"
     assert data["items"][0]["fundamental"]["status"] == "missing"
 

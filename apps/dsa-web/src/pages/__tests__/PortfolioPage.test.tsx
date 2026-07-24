@@ -80,6 +80,10 @@ const {
   deleteAccount: vi.fn(),
 }));
 
+const { verifyTickerExists } = vi.hoisted(() => ({
+  verifyTickerExists: vi.fn(),
+}));
+
 vi.mock('../../api/portfolio', () => ({
   portfolioApi: {
     getAccounts,
@@ -107,6 +111,17 @@ vi.mock('../../api/portfolio', () => ({
     deleteAccount,
   },
 }));
+
+vi.mock('../../api/stocks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/stocks')>();
+  return {
+    ...actual,
+    stocksApi: {
+      ...actual.stocksApi,
+      verifyTickerExists,
+    },
+  };
+});
 
 vi.mock('../../hooks/useProductSurface', () => ({
   useProductSurface: () => useProductSurfaceMock(),
@@ -839,7 +854,7 @@ function getLeftTabButton(name: string) {
 
 describe('PortfolioPage FX refresh', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     window.localStorage.clear();
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
     setAdminPortfolioSurface();
@@ -1017,6 +1032,15 @@ describe('PortfolioPage FX refresh', () => {
       deletedAccountId: 1,
       deleteMode: 'soft',
       nextAccountId: 2,
+    });
+    verifyTickerExists.mockResolvedValue({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stockName: 'Apple',
     });
   });
 
@@ -1428,7 +1452,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(researchStatePreview).getByTestId('portfolio-productization-order')).toHaveTextContent('个股研究交接');
     expect(within(researchStatePreview).getByTestId('portfolio-stock-research-handoff')).toHaveAttribute(
       'href',
-      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=portfolio',
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=us&source=portfolio',
     );
     expect(researchStatePreview.textContent || '').not.toMatch(/provider|runtime|credential|sourceAuthority|unavailable|missing|unknown|fallback|debug/i);
     expect(researchStatePreview.textContent || '').not.toMatch(/buy|sell|hold|target|stop|position[- ]?size|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
@@ -2891,11 +2915,40 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByLabelText(p('stockCode'))).toHaveValue('');
   });
 
-  it('infers settlement currency from US, HK, A-share, and crypto symbols with manual override', async () => {
+  it('submits a canonical HK identity and HKD settlement from authenticated validation', async () => {
+    getAccounts.mockResolvedValue(makeAccounts([
+      { id: 1, name: 'CN Account', market: 'cn', baseCurrency: 'CNY' },
+    ]));
+    verifyTickerExists.mockResolvedValueOnce({
+      stockCode: 'HK00700',
+      normalizedSymbol: 'HK00700',
+      market: 'hk',
+      status: 'unknown',
+      valid: false,
+      exists: false,
+      stockName: null,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getByLabelText(p('stockCode')), { target: { value: '0700.HK' } });
+    fireEvent.change(screen.getByLabelText(p('quantity')), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText(p('price')), { target: { value: '400' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') }));
+
+    await waitFor(() => expect(verifyTickerExists).toHaveBeenCalledWith('0700.HK'));
+    await waitFor(() => expect(createTrade).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'HK00700',
+      market: 'hk',
+      currency: 'HKD',
+    })));
+  });
+
+  it('does not infer settlement currency from raw symbol input and preserves a manual override', async () => {
     getAccounts.mockResolvedValueOnce(makeAccounts([
       { id: 1, name: 'US Account', market: 'us', baseCurrency: 'USD' },
-      { id: 2, name: 'HK Account', market: 'hk', baseCurrency: 'HKD' },
-      { id: 3, name: 'CN Account', market: 'cn', baseCurrency: 'CNY' },
     ]));
 
     render(<PortfolioPage />);
@@ -2905,27 +2958,89 @@ describe('PortfolioPage FX refresh', () => {
     const symbolInput = screen.getByLabelText(p('stockCode'));
     const settlementSelect = screen.getByLabelText(p('currency')) as HTMLSelectElement;
 
-    for (const symbol of ['AAPL', 'NVDA', 'ORCL', 'WULF']) {
-      fireEvent.change(symbolInput, { target: { value: symbol } });
-      await waitFor(() => expect(settlementSelect).toHaveValue('USD'));
-    }
-
-    for (const symbol of ['00700.HK', '9988.HK', 'HK:00700']) {
-      fireEvent.change(symbolInput, { target: { value: symbol } });
-      await waitFor(() => expect(settlementSelect).toHaveValue('HKD'));
-    }
-
-    for (const symbol of ['600519', '000001.SZ', '600000.SH', 'SH:600519', 'SZ:000001']) {
-      fireEvent.change(symbolInput, { target: { value: symbol } });
-      await waitFor(() => expect(settlementSelect).toHaveValue('CNY'));
-    }
-
-    fireEvent.change(symbolInput, { target: { value: 'BTCUSDT' } });
-    await waitFor(() => expect(settlementSelect).toHaveValue('USD'));
+    fireEvent.change(symbolInput, { target: { value: '0700.HK' } });
+    expect(settlementSelect).toHaveValue('CNY');
+    expect(verifyTickerExists).not.toHaveBeenCalled();
 
     fireEvent.change(settlementSelect, { target: { value: 'JPY' } });
     expect(settlementSelect).toHaveValue('JPY');
     expect(screen.getByText('标的结算货币与账户基准币种不同，将依赖汇率折算。')).toBeInTheDocument();
+  });
+
+  it('resets a manual settlement override after a canonical trade submission', async () => {
+    verifyTickerExists
+      .mockResolvedValueOnce({
+        stockCode: 'HK00700',
+        normalizedSymbol: 'HK00700',
+        market: 'hk',
+        status: 'unknown',
+        valid: false,
+        exists: false,
+        stockName: null,
+      })
+      .mockResolvedValueOnce({
+        stockCode: 'AAPL',
+        normalizedSymbol: 'AAPL',
+        market: 'us',
+        status: 'valid',
+        valid: true,
+        exists: true,
+        stockName: 'Apple',
+      });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const symbolInput = screen.getByLabelText(p('stockCode'));
+    const settlementSelect = screen.getByLabelText(p('currency')) as HTMLSelectElement;
+    fireEvent.change(symbolInput, { target: { value: '0700.HK' } });
+    fireEvent.change(screen.getByLabelText(p('quantity')), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText(p('price')), { target: { value: '400' } });
+    fireEvent.change(settlementSelect, { target: { value: 'JPY' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') }));
+
+    await waitFor(() => expect(createTrade).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'HK00700',
+      market: 'hk',
+      currency: 'JPY',
+    })));
+    expect(settlementSelect).toHaveValue('CNY');
+
+    fireEvent.change(symbolInput, { target: { value: 'AAPL' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') }));
+
+    await waitFor(() => expect(createTrade).toHaveBeenLastCalledWith(expect.objectContaining({
+      symbol: 'AAPL',
+      market: 'us',
+      currency: 'USD',
+    })));
+  });
+
+  it('does not create a trade when authenticated validation rejects the entered symbol', async () => {
+    verifyTickerExists.mockResolvedValueOnce({
+      stockCode: 'BAD$',
+      normalizedSymbol: 'BAD$',
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: '股票代码格式不正确',
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getByLabelText(p('stockCode')), { target: { value: 'BAD$' } });
+    fireEvent.change(screen.getByLabelText(p('quantity')), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText(p('price')), { target: { value: '160' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') }));
+
+    await waitFor(() => expect(verifyTickerExists).toHaveBeenCalledWith('BAD$'));
+    expect(createTrade).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('股票代码格式不正确');
   });
 
   it('shows compact trade errors and preserves the form when submit fails', async () => {
@@ -4106,7 +4221,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(historyPanel).queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
   });
 
-  it('opens the edit drawer with prefilled trade values and updates the trade successfully', async () => {
+  it('opens the edit drawer with prefilled trade values and updates through canonical validation', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
     listTrades.mockResolvedValue({
       items: [
@@ -4154,11 +4269,24 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(dialog).getByLabelText(p('taxOptional'))).toBeInTheDocument();
     expect(within(dialog).getByLabelText(p('note'))).toBeInTheDocument();
 
+    verifyTickerExists.mockResolvedValueOnce({
+      stockCode: 'HK00700',
+      normalizedSymbol: 'HK00700',
+      market: 'hk',
+      status: 'unknown',
+      valid: false,
+      exists: false,
+      stockName: null,
+    });
+    fireEvent.change(within(dialog).getByLabelText(p('stockCode')), { target: { value: '0700.HK' } });
     fireEvent.change(within(dialog).getByLabelText(p('quantity')), { target: { value: '2' } });
     fireEvent.change(within(dialog).getByLabelText(p('price')), { target: { value: '101' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '保存修改' }));
 
+    await waitFor(() => expect(verifyTickerExists).toHaveBeenCalledWith('0700.HK'));
     await waitFor(() => expect(updateTrade).toHaveBeenCalledWith(7, expect.objectContaining({
+      symbol: 'HK00700',
+      market: 'hk',
       quantity: 2,
       price: 101,
     })));
@@ -4166,7 +4294,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(await screen.findByText('持仓流水已更新 · 持仓已刷新')).toBeInTheDocument();
   });
 
-  it('re-derives edit currency from the current symbol scope until the user overrides it', async () => {
+  it('uses the stored trade market for edit settlement currency until the user overrides it', async () => {
     getAccounts.mockResolvedValue(makeAccounts([
       { id: 1, name: 'Main', baseCurrency: 'CNY', market: 'cn' },
       { id: 2, name: 'HK Account', baseCurrency: 'HKD', market: 'hk' },
@@ -4177,15 +4305,15 @@ describe('PortfolioPage FX refresh', () => {
         {
           id: 7,
           accountId: 1,
-          symbol: '',
-          market: 'cn',
+          symbol: 'HK00700',
+          market: 'hk',
           tradeDate: '2026-03-18',
           side: 'buy',
           quantity: 1,
           price: 100,
           fee: 0,
           tax: 0,
-          currency: 'CNY',
+          currency: 'HKD',
           note: 'seed',
           isActive: true,
           voidedAt: null,
@@ -4208,7 +4336,7 @@ describe('PortfolioPage FX refresh', () => {
     const accountSelect = within(dialog).getByLabelText('账户') as HTMLSelectElement;
     const currencySelect = within(dialog).getByLabelText(p('currency')) as HTMLSelectElement;
 
-    expect(currencySelect).toHaveValue('CNY');
+    expect(currencySelect).toHaveValue('HKD');
 
     fireEvent.change(accountSelect, { target: { value: '2' } });
     expect(currencySelect).toHaveValue('HKD');

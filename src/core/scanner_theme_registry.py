@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 import re
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from src.utils.symbol_normalization import parse_canonical_symbol
+
 
 @dataclass(frozen=True)
 class ScannerTheme:
@@ -276,17 +278,11 @@ def _now_iso() -> str:
 
 
 def _normalize_symbol_for_theme(symbol: str, *, market: str) -> Optional[str]:
-    normalized = str(symbol or "").strip().upper()
-    if not normalized:
+    normalized_market = str(market or "").strip().lower()
+    identity = parse_canonical_symbol(str(symbol or ""), market=normalized_market)
+    if identity is None or identity.ambiguous or identity.market != normalized_market:
         return None
-    if market == "us":
-        return normalized if re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,9}", normalized) else None
-    if market in {"cn", "hk"}:
-        digits = re.sub(r"\D", "", normalized)
-        if market == "hk":
-            return digits.zfill(5) if 1 <= len(digits) <= 5 else None
-        return digits if len(digits) == 6 else None
-    return None
+    return identity.symbol
 
 
 def _select_catalog_key(prompt: str, *, market: str) -> str:

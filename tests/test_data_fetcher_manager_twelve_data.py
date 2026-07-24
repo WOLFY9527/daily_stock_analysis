@@ -7,7 +7,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from data_provider.base import DataFetcherManager
+from data_provider.base import DataFetcherManager, _is_hk_market
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from src.config import Config
 
@@ -40,6 +40,9 @@ class DataFetcherManagerTwelveDataTestCase(unittest.TestCase):
         Config.reset_instance()
 
     def test_hk_quote_prefers_twelve_data_when_available(self) -> None:
+        self.assertTrue(_is_hk_market("0700.HK"))
+        self.assertFalse(_is_hk_market("1234"))
+        self.assertFalse(_is_hk_market("00700"))
         akshare = _AkshareHkStub(
             UnifiedRealtimeQuote(code="HK00700", source=RealtimeSource.AKSHARE_EM, price=500.0)
         )
@@ -55,7 +58,7 @@ class DataFetcherManagerTwelveDataTestCase(unittest.TestCase):
             "data_provider.base.get_provider_credentials",
             side_effect=AssertionError("injected Twelve Data transport must not read credentials"),
         ):
-            quote = manager.get_realtime_quote("HK00700")
+            quote = manager.get_realtime_quote("0700.HK")
 
         self.assertIsNotNone(quote)
         assert quote is not None

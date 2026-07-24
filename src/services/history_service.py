@@ -33,6 +33,12 @@ from src.report_language import (
 from src.storage import DatabaseManager
 from src.utils.data_processing import normalize_model_used, parse_json_field
 from src.utils.symbol_classification import is_us_stock_code
+from src.utils.symbol_normalization import (
+    canonical_symbol_storage_values,
+    normalize_symbol_market,
+    parse_canonical_symbol,
+)
+from src.utils.symbol_validation import ConsumerSymbolValidationError, require_consumer_symbol_identity
 from src.utils.time_utils import to_beijing_iso8601
 
 if TYPE_CHECKING:
@@ -43,15 +49,21 @@ logger = logging.getLogger(__name__)
 
 def _is_placeholder_stock_label(name: Optional[str], stock_code: Optional[str]) -> bool:
     text = str(name or "").strip()
-    normalized_code = str(stock_code or "").strip().upper()
+    normalized_code = _normalize_history_stock_code(stock_code)
     if not text:
         return True
     if text.lower() in {"unknown", "unnamed stock"}:
         return True
     if text == "待确认股票":
         return True
-    if normalized_code and text.upper() == normalized_code:
-        return True
+    if normalized_code:
+        identity = parse_canonical_symbol(normalized_code)
+        normalized_label = _normalize_history_stock_code(
+            text,
+            market=identity.market if identity is not None and not identity.ambiguous else None,
+        )
+        if normalized_label == normalized_code:
+            return True
     if text.startswith("股票"):
         return True
     return False
@@ -63,7 +75,7 @@ def _resolve_history_display_names(
     stock_code: str,
     record_name: Optional[str],
 ) -> Tuple[str, str]:
-    normalized_code = str(stock_code or "").strip().upper()
+    normalized_code = _normalize_history_stock_code(stock_code)
     fallback_name = str(record_name or "").strip()
     persisted_stock_name = str(persisted_meta.get("stock_name") or "").strip()
     persisted_company_name = str(persisted_meta.get("company_name") or "").strip()
@@ -79,8 +91,13 @@ def _resolve_history_display_names(
     return stock_name, company_name
 
 
-def _normalize_history_stock_code(value: Any) -> str:
-    return str(value or "").strip().upper()
+def _normalize_history_stock_code(value: Any, *, market: str | None = None) -> str:
+    """Canonicalize known stored aliases without making an ambiguous market guess."""
+    raw = str(value or "").strip()
+    identity = parse_canonical_symbol(raw, market=normalize_symbol_market(market))
+    if identity is not None and not identity.ambiguous:
+        return identity.symbol
+    return raw.upper()
 
 
 def _first_nested_mapping(value: Any, path: tuple[str, ...]) -> Dict[str, Any]:
@@ -92,7 +109,13 @@ def _first_nested_mapping(value: Any, path: tuple[str, ...]) -> Dict[str, Any]:
     return current if isinstance(current, dict) else {}
 
 
-def _collect_payload_stock_codes(raw_result: Any, persisted_report: Any, persisted_meta: Dict[str, Any]) -> List[str]:
+def _collect_payload_stock_codes(
+    raw_result: Any,
+    persisted_report: Any,
+    persisted_meta: Dict[str, Any],
+    *,
+    market: str | None = None,
+) -> List[str]:
     candidates: List[Any] = [
         persisted_meta.get("stock_code"),
         persisted_meta.get("symbol"),
@@ -116,19 +139,76 @@ def _collect_payload_stock_codes(raw_result: Any, persisted_report: Any, persist
 
     result: List[str] = []
     for candidate in candidates:
-        normalized = _normalize_history_stock_code(candidate)
+        normalized = _normalize_history_stock_code(candidate, market=market)
         if normalized and normalized not in result:
             result.append(normalized)
     return result
 
 
-def _payload_symbol_mismatches_record(raw_result: Any, persisted_report: Any, persisted_meta: Dict[str, Any], record_code: Any) -> bool:
-    normalized_record_code = _normalize_history_stock_code(record_code)
+def _resolve_history_record_identity(
+    raw_result: Any,
+    persisted_report: Any,
+    persisted_meta: Dict[str, Any],
+    record_code: Any,
+):
+    """Resolve a row identity without guessing an ambiguous stored market."""
+    direct_identity = parse_canonical_symbol(str(record_code or "").strip())
+    if direct_identity is not None and not direct_identity.ambiguous:
+        return direct_identity
+
+    legacy_code = str(record_code or "").strip().upper()
+    if not legacy_code:
+        return None
+
+    proven_hk_identities = {}
+    for payload_code in _collect_payload_stock_codes(raw_result, persisted_report, persisted_meta):
+        payload_identity = parse_canonical_symbol(payload_code)
+        if (
+            payload_identity is None
+            or payload_identity.ambiguous
+            or payload_identity.market != "hk"
+        ):
+            continue
+        storage_values = canonical_symbol_storage_values(
+            payload_identity.symbol,
+            market=payload_identity.market,
+        )
+        if legacy_code in storage_values:
+            proven_hk_identities[payload_identity.symbol] = payload_identity
+
+    if len(proven_hk_identities) == 1:
+        return next(iter(proven_hk_identities.values()))
+    return None
+
+
+def _payload_symbol_mismatches_record(
+    raw_result: Any,
+    persisted_report: Any,
+    persisted_meta: Dict[str, Any],
+    record_code: Any,
+) -> bool:
+    record_identity = _resolve_history_record_identity(
+        raw_result,
+        persisted_report,
+        persisted_meta,
+        record_code,
+    )
+    record_market = record_identity.market if record_identity is not None else None
+    normalized_record_code = (
+        record_identity.symbol
+        if record_identity is not None
+        else _normalize_history_stock_code(record_code)
+    )
     if not normalized_record_code:
         return False
     return any(
         candidate != normalized_record_code
-        for candidate in _collect_payload_stock_codes(raw_result, persisted_report, persisted_meta)
+        for candidate in _collect_payload_stock_codes(
+            raw_result,
+            persisted_report,
+            persisted_meta,
+            market=record_market,
+        )
     )
 
 
@@ -413,18 +493,30 @@ class HistoryService:
                 except ValueError:
                     logger.warning(f"无效的 end_date 格式: {end_date}")
             
+            canonical_filter = None
+            storage_codes: tuple[str, ...] = ()
+            if stock_code:
+                canonical_filter = require_consumer_symbol_identity(stock_code)
+                storage_codes = canonical_symbol_storage_values(
+                    canonical_filter.normalized_symbol,
+                    market=canonical_filter.market,
+                )
+
             # Calculate offset
             offset = (page - 1) * limit
             
             # Use new paginated query method
-            records, total = self.repo.get_paginated(
-                code=stock_code,
-                start_date=start_dt,
-                end_date=end_dt,
-                offset=offset,
-                limit=limit,
-                include_test=include_test,
-            )
+            query_kwargs = {
+                "code": canonical_filter.normalized_symbol if canonical_filter else None,
+                "start_date": start_dt,
+                "end_date": end_dt,
+                "offset": offset,
+                "limit": limit,
+                "include_test": include_test,
+            }
+            if storage_codes:
+                query_kwargs["codes"] = storage_codes
+            records, total = self.repo.get_paginated(**query_kwargs)
             
             # Convert to response format
             items = []
@@ -467,15 +559,20 @@ class HistoryService:
                     analysis_result=analysis_result,
                     decision_trace=decision_trace,
                 )
+                display_stock_code = (
+                    canonical_filter.normalized_symbol
+                    if canonical_filter is not None
+                    else _normalize_history_stock_code(record.code)
+                )
                 stock_name, company_name = _resolve_history_display_names(
                     persisted_meta,
-                    stock_code=record.code,
+                    stock_code=display_stock_code,
                     record_name=record.name,
                 )
                 items.append({
                     "id": record.id,
                     "query_id": record.query_id,
-                    "stock_code": record.code,
+                    "stock_code": display_stock_code,
                     "stock_name": stock_name,
                     "company_name": company_name,
                     "report_type": record.report_type,
@@ -500,6 +597,8 @@ class HistoryService:
                 "items": items,
             }
             
+        except ConsumerSymbolValidationError:
+            raise
         except Exception as e:
             logger.error(f"查询历史列表失败: {e}", exc_info=True)
             return {"total": 0, "items": []}
@@ -1096,6 +1195,12 @@ class HistoryService:
         context_snapshot = self._parse_context_snapshot(record.context_snapshot)
         persisted_report = raw_result.get("persisted_report") if isinstance(raw_result, dict) else None
         persisted_meta = persisted_report.get("meta") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("meta"), dict) else {}
+        record_identity = _resolve_history_record_identity(
+            raw_result,
+            persisted_report,
+            persisted_meta,
+            record.code,
+        )
         if _payload_symbol_mismatches_record(raw_result, persisted_report, persisted_meta, record.code):
             logger.warning(
                 "Ignoring mismatched history report payload for record_id=%s record_code=%s payload_codes=%s",
@@ -1106,6 +1211,12 @@ class HistoryService:
             raw_result = {}
             persisted_report = None
             persisted_meta = {}
+            direct_identity = parse_canonical_symbol(str(record.code or "").strip())
+            record_identity = (
+                direct_identity
+                if direct_identity is not None and not direct_identity.ambiguous
+                else None
+            )
         persisted_summary = persisted_report.get("summary") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("summary"), dict) else {}
         persisted_strategy = persisted_report.get("strategy") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("strategy"), dict) else {}
         persisted_details = persisted_report.get("details") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("details"), dict) else {}
@@ -1241,16 +1352,21 @@ class HistoryService:
             )
         sniper_points = self._get_display_sniper_points(record, raw_result)
         time_contract = self._extract_time_contract(context_snapshot)
+        display_stock_code = (
+            record_identity.symbol
+            if record_identity is not None
+            else _normalize_history_stock_code(record.code or persisted_meta.get("stock_code"))
+        )
         stock_name, company_name = _resolve_history_display_names(
             persisted_meta,
-            stock_code=record.code,
+            stock_code=display_stock_code,
             record_name=record.name,
         )
 
         return {
             "id": record.id,
             "query_id": record.query_id,
-            "stock_code": record.code or persisted_meta.get("stock_code"),
+            "stock_code": display_stock_code,
             "stock_name": stock_name,
             "company_name": company_name,
             "report_type": persisted_meta.get("report_type") or record.report_type,

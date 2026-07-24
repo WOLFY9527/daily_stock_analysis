@@ -194,12 +194,12 @@ class PostgresPhaseCStorageTestCase(unittest.TestCase):
     def test_phase_c_can_seed_symbol_master_from_static_stock_mapping(self) -> None:
         db = self._db()
 
-        seeded = db.seed_symbol_master_from_stock_mapping(symbols=["600519", "AAPL", "00700"])
+        seeded = db.seed_symbol_master_from_stock_mapping(symbols=["600519", "AAPL", "HK00700"])
 
         self.assertEqual(seeded, 3)
         cn_row = db.get_symbol_master_entry("600519")
         us_row = db.get_symbol_master_entry("AAPL")
-        hk_row = db.get_symbol_master_entry("00700")
+        hk_row = db.get_symbol_master_entry("HK00700")
 
         self.assertEqual(cn_row.display_name, STOCK_NAME_MAP["600519"])
         self.assertEqual(cn_row.market, "cn")
@@ -210,7 +210,7 @@ class PostgresPhaseCStorageTestCase(unittest.TestCase):
         self.assertEqual(us_row.market, "us")
         self.assertEqual(us_row.currency, "USD")
 
-        self.assertEqual(hk_row.display_name, STOCK_NAME_MAP["00700"])
+        self.assertEqual(hk_row.display_name, STOCK_NAME_MAP["HK00700"])
         self.assertEqual(hk_row.market, "hk")
         self.assertEqual(hk_row.currency, "HKD")
         self.assertEqual(hk_row.source, "stock_mapping")

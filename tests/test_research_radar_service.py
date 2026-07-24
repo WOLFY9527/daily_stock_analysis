@@ -229,7 +229,7 @@ def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
     payload = ResearchRadarService(now=_fixed_now).build_radar(
         candidates=[
             {
-                "ticker": "ALFA",
+                "ticker": "0700.HK",
                 "relativeStrength": 88,
                 "volumeExpansion": 1.8,
                 "trendStructure": "confirmed_uptrend",
@@ -281,8 +281,8 @@ def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
         "observationOnly",
         "decisionGrade",
     }.issubset(item)
-    assert item["symbol"] == "ALFA"
-    assert item["ticker"] == "ALFA"
+    assert item["symbol"] == "HK00700"
+    assert item["ticker"] == "HK00700"
     assert item["priority"] == "high"
     assert item["researchBiasRaw"] == "eventDriven"
     assert item["researchBias"] == item["researchBiasLabel"]
@@ -298,7 +298,7 @@ def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
     assert item["drilldownTargets"] == [
         {
             "label": "Structure detail",
-            "route": "/stocks/ALFA/structure-decision",
+            "route": "/stocks/HK00700/structure-decision",
             "reason": "Open the structure workspace for this ticker.",
         }
     ]
@@ -325,6 +325,22 @@ def test_empty_or_missing_candidates_fail_closed_with_degraded_queue() -> None:
     assert payload["aggregateSummary"]["queueQuality"] == "degraded"
     assert payload["consumerIssues"]
     assert payload["dataQuality"]["consumerIssues"]
+
+    ambiguous_payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[
+            {
+                "ticker": "00700",
+                "relativeStrength": 88,
+                "volumeExpansion": 1.8,
+                "trendStructure": "confirmed_uptrend",
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.88},
+            }
+        ]
+    )
+
+    assert ambiguous_payload["researchQueue"] == []
+    assert ambiguous_payload["drilldownTargets"] == []
 
 
 def test_empty_candidates_include_product_ready_market_level_fallback_without_fake_candidates() -> None:
@@ -756,6 +772,42 @@ def test_latest_scanner_reader_is_read_only_and_uses_user_scope() -> None:
     assert item["nextCheck"] == "Verify volume persistence."
     assert item["dataFreshness"]["historyLatestTradeDate"] == "2026-06-14"
     assert item["dataFreshness"]["quoteState"] == "unavailable_or_stale"
+
+
+def test_latest_scanner_reader_uses_run_market_for_legacy_hk_symbol() -> None:
+    repo = _FakeScannerRepository()
+    repo.runs = [
+        SimpleNamespace(
+            id=8,
+            status="completed",
+            market="hk",
+            profile="hk_preopen_v1",
+            diagnostics_json=json.dumps(
+                {
+                    "scannerLineage": {
+                        "source": "legacy_hk_fixture",
+                        "universeMode": "bounded_starter_local",
+                        "universeSymbols": ["00700"],
+                        "symbolsEvaluated": ["00700"],
+                        "symbolsSkipped": [{"symbol": "00700", "reason": "fixture"}],
+                    }
+                }
+            ),
+        )
+    ]
+    repo.candidates[0].symbol = "00700"
+
+    payload = ResearchRadarService(scanner_repository=repo, now=_fixed_now).build_from_latest_scanner_run(
+        market="hk",
+        profile="hk_preopen_v1",
+        owner_id="user-1",
+        limit=5,
+    )
+
+    assert [item["symbol"] for item in payload["researchQueue"]] == ["HK00700"]
+    assert payload["aggregateSummary"]["source"]["market"] == "hk"
+    assert payload["aggregateSummary"]["source"]["scannerLineage"]["universeSymbols"] == ["HK00700"]
+    assert payload["researchQueue"][0]["scannerLineage"]["symbolsEvaluated"] == ["HK00700"]
 
 
 class _BoundedScannerRepository:

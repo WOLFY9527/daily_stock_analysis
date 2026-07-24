@@ -16,11 +16,15 @@ from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
 class _FailingStockService:
     def __init__(self, message: str) -> None:
         self.message = message
+        self.intraday_calls: list[dict[str, object]] = []
+        self.history_calls: list[dict[str, object]] = []
 
     def get_intraday_data(self, **kwargs):
+        self.intraday_calls.append(kwargs)
         raise RuntimeError(self.message)
 
     def get_history_data(self, **kwargs):
+        self.history_calls.append(kwargs)
         raise RuntimeError(self.message)
 
 
@@ -195,11 +199,15 @@ def test_stock_intraday_internal_error_does_not_echo_provider_exception() -> Non
     client = TestClient(app)
     marker = "Traceback provider token secret raw failure"
 
-    with patch("api.v1.endpoints.stocks.StockService", return_value=_FailingStockService(marker)):
-        response = client.get("/api/v1/stocks/AAPL/intraday")
+    service = _FailingStockService(marker)
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
+        response = client.get("/api/v1/stocks/0700.HK/intraday")
 
     payload = response.json()
     assert response.status_code == 500
+    assert service.intraday_calls == [
+        {"stock_code": "HK00700", "interval": "5m", "range_period": "1d"}
+    ]
     assert payload["detail"]["error"] == "internal_error"
     assert payload["detail"]["code"] == "internal_error"
     assert payload["detail"]["message"] == "获取日内行情失败"
@@ -212,11 +220,15 @@ def test_stock_history_internal_error_does_not_echo_provider_exception() -> None
     client = TestClient(app)
     marker = "Traceback provider token secret raw failure"
 
-    with patch("api.v1.endpoints.stocks.StockService", return_value=_FailingStockService(marker)):
-        response = client.get("/api/v1/stocks/AAPL/history")
+    service = _FailingStockService(marker)
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
+        response = client.get("/api/v1/stocks/0700.HK/history")
 
     payload = response.json()
     assert response.status_code == 500
+    assert service.history_calls == [
+        {"stock_code": "HK00700", "period": "daily", "days": 90}
+    ]
     assert payload["detail"]["error"] == "internal_error"
     assert payload["detail"]["code"] == "internal_error"
     assert payload["detail"]["message"] == "获取历史行情失败"

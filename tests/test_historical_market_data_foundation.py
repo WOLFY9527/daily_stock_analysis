@@ -9,6 +9,7 @@ from src.services.historical_market_data_foundation import (
     HistoricalBarQualityOutcome,
     HistoricalMarketDataFoundation,
     normalize_provider_historical_bars,
+    resolve_historical_symbol_identity,
 )
 
 
@@ -134,6 +135,13 @@ def test_symbol_and_time_normalization_use_repository_market_identity() -> None:
     assert bar.session_date == date(2026, 1, 8)
     assert bar.timestamp is None
     assert bar.observed_at == datetime(2026, 1, 8, 8, 0, tzinfo=timezone.utc)
+
+    hk_identity = resolve_historical_symbol_identity(symbol="00700", market="HK")
+    assert hk_identity["canonical_symbol"] == "HK00700"
+    assert hk_identity["market"] == "HK"
+
+    with pytest.raises(ValueError, match="unsupported or ambiguous"):
+        resolve_historical_symbol_identity(symbol="00700")
 
 
 @pytest.mark.parametrize(

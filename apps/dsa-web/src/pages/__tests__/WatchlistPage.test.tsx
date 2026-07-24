@@ -6,7 +6,7 @@ import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { WatchlistItem, WatchlistScannerLineageV1 } from '../../types/watchlist';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 
-const { listWatchlistItems, addWatchlistItem, removeWatchlistItem, refreshScores, getRefreshStatus, getResearchOverlay, runRuleBacktest, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
+const { listWatchlistItems, addWatchlistItem, removeWatchlistItem, refreshScores, getRefreshStatus, getResearchOverlay, runRuleBacktest, analyzeAsync, verifyTickerExists, useProductSurfaceMock } = vi.hoisted(() => ({
   listWatchlistItems: vi.fn(),
   addWatchlistItem: vi.fn(),
   removeWatchlistItem: vi.fn(),
@@ -15,6 +15,7 @@ const { listWatchlistItems, addWatchlistItem, removeWatchlistItem, refreshScores
   getResearchOverlay: vi.fn(),
   runRuleBacktest: vi.fn(),
   analyzeAsync: vi.fn(),
+  verifyTickerExists: vi.fn(),
   useProductSurfaceMock: vi.fn(),
 }));
 
@@ -41,6 +42,17 @@ vi.mock('../../api/analysis', () => ({
   },
   DuplicateTaskError: class DuplicateTaskError extends Error {},
 }));
+
+vi.mock('../../api/stocks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/stocks')>();
+  return {
+    ...actual,
+    stocksApi: {
+      ...actual.stocksApi,
+      verifyTickerExists,
+    },
+  };
+});
 
 vi.mock('../../api/backtest', () => ({
   backtestApi: {
@@ -70,10 +82,17 @@ const writeTextMock = vi.fn();
 let resolvePendingListRules: Array<(value: ReturnType<typeof makeUserAlertRulesResponse>) => void> = [];
 
 function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
+  const symbol = overrides.symbol ?? 'NVDA';
+  const market = overrides.market ?? 'us';
   return {
     id: 1,
-    symbol: 'NVDA',
-    market: 'us',
+    symbol,
+    market,
+    identity: {
+      canonicalSymbol: symbol,
+      displaySymbol: symbol,
+      market,
+    },
     name: 'NVIDIA',
     source: 'scanner',
     scannerRunId: 42,
@@ -338,6 +357,14 @@ describe('WatchlistPage', () => {
     });
     runRuleBacktest.mockResolvedValue(makeRuleBacktestRun());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
+    verifyTickerExists.mockResolvedValue({
+      stockCode: 'TSLA',
+      normalizedSymbol: 'TSLA',
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+    });
     listRules.mockImplementation(() => new Promise((resolve) => {
       resolvePendingListRules.push(resolve);
     }));
@@ -2413,6 +2440,37 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/701');
   });
 
+  it('submits and reconciles batch backtests by the saved canonical identity', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 72,
+        symbol: '0700.HK',
+        market: 'hk',
+        identity: {
+          canonicalSymbol: 'HK00700',
+          displaySymbol: 'HK00700',
+          market: 'hk',
+        },
+      })],
+    });
+    runRuleBacktest.mockResolvedValue(makeRuleBacktestRun({
+      id: 722,
+      code: 'HK00700',
+      totalReturnPct: 12.4,
+      maxDrawdownPct: -4.1,
+      sharpeRatio: 1.2,
+      tradeCount: 4,
+    }));
+
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-0700.HK');
+
+    fireEvent.click(screen.getByRole('button', { name: /回测当前筛选/ }));
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledWith(expect.objectContaining({ code: 'HK00700' })));
+    await waitFor(() => expect(screen.getByTestId('watchlist-row-0700.HK')).toHaveTextContent(/回测 \+12.4%/));
+  });
+
   it('shows compact Chinese failure reasons during failed batch actions', async () => {
     runRuleBacktest.mockRejectedValue(new Error('provider_error timeout critical stack'));
     renderWatchlist();
@@ -2763,6 +2821,46 @@ describe('WatchlistPage', () => {
     expect(analyzeAsync).not.toHaveBeenCalled();
   });
 
+  it('uses the saved canonical identity for watchlist display and stock-structure handoff', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 52,
+        symbol: '0700.HK',
+        market: 'hk',
+        name: null,
+        identity: {
+          canonicalSymbol: 'HK00700',
+          displaySymbol: 'HK00700',
+          market: 'hk',
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-0700.HK');
+    expect(row).toHaveTextContent('HK00700');
+    fireEvent.click(within(row).getByRole('button', { name: '查看个股结构 HK00700' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh/stocks/HK00700/structure-decision?symbol=HK00700&market=HK&source=watchlist');
+  });
+
+  it('does not fall back to a saved alias when canonical watchlist identity is unavailable', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 53,
+        symbol: '0700.HK',
+        market: 'hk',
+        identity: null,
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-0700.HK');
+    expect(row).not.toHaveTextContent('0700.HK');
+    expect(within(row).getByRole('button', { name: '查看个股结构 --' })).toBeDisabled();
+  });
+
   it('removes a candidate through the delete API and drops the row', async () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
@@ -2847,7 +2945,7 @@ describe('WatchlistPage', () => {
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
     expect(within(emptyState).getByTestId('watchlist-empty-manual-research')).toHaveTextContent('首选研究路径');
     fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: 'tsla' } });
-    fireEvent.click(within(emptyState).getByRole('button', { name: /研究 TSLA/ }));
+    fireEvent.click(within(emptyState).getByTestId('watchlist-empty-manual-research-button'));
 
     await waitFor(() => {
       expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
@@ -2864,6 +2962,56 @@ describe('WatchlistPage', () => {
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
     expect(addWatchlistItem).not.toHaveBeenCalled();
     expect(refreshScores).not.toHaveBeenCalled();
+  });
+
+  it('validates a manual HK alias before starting research with the API canonical symbol', async () => {
+    listWatchlistItems.mockResolvedValue({ items: [] });
+    verifyTickerExists.mockResolvedValue({
+      stockCode: '0700.HK',
+      normalizedSymbol: 'HK00700',
+      market: 'hk',
+      status: 'unknown',
+      valid: false,
+      exists: false,
+    });
+
+    renderWatchlist();
+
+    const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: '0700.HK' } });
+    fireEvent.click(within(emptyState).getByTestId('watchlist-empty-manual-research-button'));
+
+    await waitFor(() => expect(verifyTickerExists).toHaveBeenCalledWith('0700.HK'));
+    await waitFor(() => expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
+      stockCode: 'HK00700',
+      stockName: 'HK00700',
+      originalQuery: 'HK00700',
+      selectionSource: 'manual',
+    })));
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh?symbol=HK00700');
+  });
+
+  it('does not submit manual research when the validation API rejects the symbol', async () => {
+    listWatchlistItems.mockResolvedValue({ items: [] });
+    verifyTickerExists.mockResolvedValue({
+      stockCode: 'BAD INPUT',
+      normalizedSymbol: null,
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+      message: 'Unsupported symbol format.',
+    });
+
+    renderWatchlist();
+
+    const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: 'BAD INPUT' } });
+    fireEvent.click(within(emptyState).getByTestId('watchlist-empty-manual-research-button'));
+
+    await waitFor(() => expect(verifyTickerExists).toHaveBeenCalledWith('BAD INPUT'));
+    expect(analyzeAsync).not.toHaveBeenCalled();
+    expect(await screen.findByText('Unsupported symbol format.')).toBeInTheDocument();
   });
 
   it('keeps batch actions and auto refresh in compact product-labeled rows', async () => {

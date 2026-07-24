@@ -39,13 +39,18 @@ vi.mock('../../api/history', () => ({
   },
 }));
 
-vi.mock('../../api/stocks', () => ({
-  stocksApi: {
-    verifyTickerExists: vi.fn(),
-    getHistory: vi.fn(),
-    getStructureDecision: vi.fn(),
-  },
-}));
+vi.mock('../../api/stocks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/stocks')>();
+  return {
+    ...actual,
+    stocksApi: {
+      ...actual.stocksApi,
+      verifyTickerExists: vi.fn(),
+      getHistory: vi.fn(),
+      getStructureDecision: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../../api/stockEvidence', () => ({
   stockEvidenceApi: {
@@ -141,6 +146,35 @@ async function waitForHistoryDrawerToClose() {
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="home-location-path">{`${location.pathname}${location.search}`}</output>;
+}
+
+function createGuestPreviewResponse(stockCode: string) {
+  return {
+    queryId: `guest-preview-${stockCode}`,
+    stockCode,
+    stockName: stockCode,
+    previewScope: 'guest',
+    report: {
+      meta: {
+        queryId: `guest-preview-${stockCode}`,
+        stockCode,
+        stockName: stockCode,
+        reportType: 'brief' as const,
+        createdAt: '2026-06-08T08:00:00Z',
+      },
+      summary: {
+        analysisSummary: '公开预览仅用于观察，不构成投资建议。',
+        operationAdvice: '等待确认',
+        trendPrediction: '观察中',
+        sentimentScore: 62,
+      },
+      strategy: {
+        idealBuy: '121.80 - 124.60',
+        stopLoss: '117.40',
+        takeProfit: '133.50',
+      },
+    },
+  };
 }
 
 function persistSelectedHistoryIdForTest(recordId: number | string) {
@@ -576,10 +610,17 @@ describe('HomeSurfacePage', () => {
       ],
     });
     vi.mocked(historyApi.getDetail).mockResolvedValue(defaultHistoryReport);
-    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValue({
-      stockCode: 'TSLA',
-      exists: true,
-      stockName: 'Tesla',
+    vi.mocked(stocksApi.verifyTickerExists).mockImplementation(async (rawSymbol) => {
+      const canonicalSymbol = String(rawSymbol).trim().toUpperCase();
+      return {
+        stockCode: canonicalSymbol,
+        normalizedSymbol: canonicalSymbol,
+        market: 'us',
+        status: 'valid',
+        valid: true,
+        exists: true,
+        stockName: canonicalSymbol,
+      };
     });
     vi.mocked(stocksApi.getHistory).mockImplementation(pendingPromise);
     vi.mocked(stocksApi.getStructureDecision).mockImplementation(pendingPromise);
@@ -3966,14 +4007,15 @@ describe('HomeSurfacePage', () => {
     await closeOpenDrawer();
   });
 
-  it('enters loading state immediately when the analyze button is pressed and clears the local search query', async () => {
+  it('enters loading state after canonical validation and clears the local search query', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
     vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
     renderSurface();
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
-    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    await flushPendingUiWork();
+    expect(await screen.findByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
     expect(screen.queryByText('WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
@@ -3985,12 +4027,13 @@ describe('HomeSurfacePage', () => {
       message: 'submitted',
     });
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('tsla');
     expect(analysisApi.analyzeAsync).toHaveBeenCalled();
   });
 
   it('hands a valid home search submission to the canonical stock structure route', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse('AAPL'));
     renderSurfaceWithLocation('/');
 
     const input = screen.getByTestId('home-bento-omnibar-input');
@@ -4000,13 +4043,31 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
       '/stocks/AAPL/structure-decision?symbol=AAPL&source=manual',
     ));
+    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'AAPL' }));
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+  });
+
+  it('uses the public preview canonical HK identity for guest navigation without authenticated validation', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse('HK00700'));
+    renderSurfaceWithLocation('/');
+
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: '0700.HK' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
+      '/stocks/HK00700/structure-decision?symbol=HK00700&source=manual',
+    ));
+    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: '0700.HK' }));
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
   });
 
   it.each([
     ['A-share', '600519', '600519'],
-    ['Hong Kong', '0700.HK', '0700.HK'],
-  ])('normalizes a supported %s search before routing', async (_market, query, normalized) => {
+    ['Hong Kong', '0700.HK', 'HK00700'],
+  ])('uses the public preview canonical %s identity before routing', async (_market, query, normalized) => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce(createGuestPreviewResponse(normalized));
     renderSurfaceWithLocation('/');
 
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: query } });
@@ -4015,9 +4076,11 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.getByTestId('home-location-path')).toHaveTextContent(
       `/stocks/${normalized}/structure-decision?symbol=${normalized}&source=manual`,
     ));
+    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: query }));
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
   });
 
-  it('keeps invalid and empty home search values on the current route with explicit feedback', async () => {
+  it('keeps empty and public-preview-rejected guest searches on the current route', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     renderSurfaceWithLocation('/market-overview');
 
@@ -4027,21 +4090,32 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByText('请输入股票代码后再开始分析')).toBeInTheDocument();
     expect(screen.getByTestId('home-location-path')).toHaveTextContent('/market-overview');
 
+    vi.mocked(publicAnalysisApi.preview).mockRejectedValueOnce(new Error('preview unavailable'));
     fireEvent.change(input, { target: { value: 'not-a-symbol!' } });
     fireEvent.submit(form);
-    expect(await screen.findByText('请输入格式正确的股票代码')).toBeInTheDocument();
+    expect(await screen.findByTestId('guest-preview-unavailable-state')).toBeInTheDocument();
     expect(screen.getByTestId('home-location-path')).toHaveTextContent('/market-overview');
+    expect(publicAnalysisApi.preview).toHaveBeenCalledWith(expect.objectContaining({ stockCode: 'not-a-symbol!' }));
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
   });
 
-  it('rejects malformed ticker input before calling ticker validation or analysis', async () => {
+  it('stops malformed ticker input after server validation without analysis', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.verifyTickerExists).mockResolvedValueOnce({
+      stockCode: 'tsla!!!',
+      normalizedSymbol: null,
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+    });
     renderSurface();
 
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla!!!' } });
     fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
 
     expect(await screen.findByText('请输入格式正确的股票代码')).toBeInTheDocument();
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('tsla!!!');
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
@@ -4063,13 +4137,13 @@ describe('HomeSurfacePage', () => {
       stockCode: 'MSFT',
       reportType: 'detailed',
       stockName: undefined,
-      originalQuery: 'MSFT',
+      originalQuery: 'msft',
       selectionSource: 'manual',
     }));
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('msft');
     expect(screen.queryByText('未找到股票代码 MSFT，请检查是否退市或输入有误')).not.toBeInTheDocument();
   });
 
@@ -4091,11 +4165,11 @@ describe('HomeSurfacePage', () => {
       stockCode: 'BRK.B',
       reportType: 'detailed',
       stockName: undefined,
-      originalQuery: 'BRK.B',
+      originalQuery: 'brk.b',
       selectionSource: 'manual',
     }));
     expect(screen.queryByText('请输入格式正确的股票代码')).not.toBeInTheDocument();
-    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+    expect(stocksApi.verifyTickerExists).toHaveBeenCalledWith('brk.b');
   });
 
   it('renders sparse completed reports with neutral values instead of local demo presets', async () => {

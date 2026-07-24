@@ -31,7 +31,7 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.execution_log_service import ExecutionLogService
 from src.services.research_budget_profiles import normalize_research_mode
 from src.utils.analysis_metadata import SELECTION_SOURCES
-from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
+from src.utils.symbol_validation import require_consumer_symbol_identity
 
 logger = logging.getLogger(__name__)
 _WORKER_HINT_ENV_VARS = ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_WORKERS")
@@ -251,6 +251,13 @@ def _build_configured_execution_summary(owner_id: Optional[str] = None) -> Dict[
     }
 
 
+def _canonical_task_stock_code(stock_code: str) -> str:
+    """Validate one executable task symbol and return its canonical identity."""
+    if not str(stock_code or "").strip():
+        raise ValueError("股票代码不能为空或仅包含空白字符")
+    return require_consumer_symbol_identity(stock_code).normalized_symbol
+
+
 def _dedupe_stock_code_key(stock_code: str, owner_id: Optional[str] = None) -> str:
     """
     Build the internal duplicate-detection key for a stock code.
@@ -258,7 +265,7 @@ def _dedupe_stock_code_key(stock_code: str, owner_id: Optional[str] = None) -> s
     The task queue should treat equivalent market code shapes as the same
     underlying stock, e.g. ``600519`` and ``600519.SH``.
     """
-    normalized_stock_code = canonical_stock_code(normalize_stock_code(stock_code))
+    normalized_stock_code = _canonical_task_stock_code(stock_code)
     normalized_owner_id = str(owner_id or "").strip() or "__global__"
     return f"{normalized_owner_id}:{normalized_stock_code}"
 
@@ -692,9 +699,7 @@ class AnalysisTaskQueue:
         Raises:
             DuplicateTaskError: Raised when the stock is already being analyzed
         """
-        stock_code = canonical_stock_code(stock_code)
-        if not stock_code:
-            raise ValueError("股票代码不能为空或仅包含空白字符")
+        stock_code = _canonical_task_stock_code(stock_code)
 
         accepted, duplicates = self.submit_tasks_batch(
             [stock_code],
@@ -728,6 +733,16 @@ class AnalysisTaskQueue:
         - If executor submission fails, the current batch is rolled back.
         """
         self.validate_selection_source(selection_source)
+        canonical_codes = [
+            _canonical_task_stock_code(code)
+            for code in stock_codes
+            if str(code or "").strip()
+        ]
+        normalized_research_mode = (
+            normalize_research_mode(research_mode, strict=True).value
+            if research_mode is not None
+            else None
+        )
         with self._data_lock:
             if self._shutdown:
                 raise RuntimeError("任务队列正在关闭，暂不接受新的分析任务")
@@ -735,16 +750,6 @@ class AnalysisTaskQueue:
         accepted: List[TaskInfo] = []
         duplicates: List[DuplicateTaskError] = []
         created_task_ids: List[str] = []
-
-        canonical_codes = [
-            normalized for normalized in (canonical_stock_code(code) for code in stock_codes)
-            if normalized
-        ]
-        normalized_research_mode = (
-            normalize_research_mode(research_mode, strict=True).value
-            if research_mode is not None
-            else None
-        )
 
         with self._data_lock:
             for stock_code in canonical_codes:

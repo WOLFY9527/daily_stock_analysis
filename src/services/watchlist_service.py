@@ -9,7 +9,7 @@ import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, desc, select
+from sqlalchemy import and_, desc, or_, select
 
 from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.repositories.scanner_repo import ScannerRepository
@@ -21,8 +21,8 @@ from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
 from src.services.symbol_research_packet_service import build_symbol_research_packet_from_parts as build_symbol_research_packet
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
-from src.utils.symbol_normalization import canonical_stock_code
-from src.utils.symbol_validation import validate_consumer_symbol_precheck
+from src.utils.symbol_normalization import canonical_symbol_storage_values
+from src.utils.symbol_validation import require_consumer_symbol_identity, validate_consumer_symbol_precheck
 
 
 _LOCAL_OHLCV_HISTORY_SOURCES = {"local_us_parquet", "local_us_parquet_dir"}
@@ -80,7 +80,6 @@ _SCANNER_CANDIDATE_DEFAULT_REASON = "Scanner candidate moved to research queue."
 class WatchlistService:
     """Business logic for user-owned candidate tracking."""
 
-    _symbol_pattern = re.compile(r"[A-Z0-9][A-Z0-9.\-]*")
     _refresh_lock = threading.Lock()
     _refresh_running = False
 
@@ -95,16 +94,25 @@ class WatchlistService:
             raise ValueError("market must be one of: cn, hk, us")
         return normalized
 
+    @staticmethod
+    def _normalize_symbol(symbol: str, *, market: str | None = None) -> str:
+        return require_consumer_symbol_identity(symbol, market=market).normalized_symbol
+
+    @staticmethod
+    def _canonical_symbol_for_market(symbol: Any, market: Any) -> Optional[str]:
+        """Project stored symbol text to the canonical key only when its market proves identity."""
+        precheck = validate_consumer_symbol_precheck(
+            str(symbol or ""),
+            market=str(market or ""),
+        )
+        return precheck.normalized_symbol if precheck.status == "unknown" else None
+
     @classmethod
-    def _normalize_symbol(cls, symbol: str) -> str:
-        normalized = canonical_stock_code(symbol).strip().upper()
-        if not normalized:
-            raise ValueError("symbol is required")
-        if len(normalized) > 16:
-            raise ValueError("symbol must be at most 16 characters")
-        if not cls._symbol_pattern.fullmatch(normalized):
-            raise ValueError("symbol contains invalid characters")
-        return normalized
+    def _storage_symbols_for_market(cls, symbol: Any, market: Any) -> tuple[str, ...]:
+        canonical_symbol = cls._canonical_symbol_for_market(symbol, market)
+        if canonical_symbol is None:
+            return ()
+        return canonical_symbol_storage_values(canonical_symbol, market=str(market or ""))
 
     @staticmethod
     def _normalize_optional_text(value: Optional[str]) -> Optional[str]:
@@ -113,9 +121,10 @@ class WatchlistService:
 
     @staticmethod
     def _row_to_dict(row: UserWatchlistItem) -> Dict[str, Any]:
+        canonical_symbol = WatchlistService._canonical_symbol_for_market(row.symbol, row.market)
         payload = {
             "id": int(row.id),
-            "symbol": str(row.symbol),
+            "symbol": canonical_symbol or str(row.symbol).strip().upper(),
             "market": str(row.market),
             "name": str(row.name) if row.name else None,
             "source": str(row.source),
@@ -1110,7 +1119,10 @@ class WatchlistService:
             "contract_version": _LINEAGE_CONTRACT_VERSION,
             "source": "scanner",
             "scanner_run_id": cls._safe_int(getattr(run, "id", None) or item.get("scanner_run_id")),
-            "symbol": str(getattr(candidate, "symbol", None) or item.get("symbol") or "").strip().upper(),
+            "symbol": cls._canonical_symbol_for_market(
+                getattr(candidate, "symbol", None),
+                getattr(run, "market", None),
+            ) or str(item.get("symbol") or "").strip().upper(),
             "market": str(getattr(run, "market", None) or item.get("market") or "").strip().lower(),
             "rank_at_scan": cls._safe_int(getattr(candidate, "rank", None) or item.get("scanner_rank")),
             "score_at_scan": cls._safe_float(getattr(candidate, "score", None) if getattr(candidate, "score", None) is not None else item.get("scanner_score")),
@@ -1138,7 +1150,19 @@ class WatchlistService:
             if (key := self._scanner_candidate_key(item)) is not None
         }
         run_ids = sorted({run_id for run_id, _symbol in keys})
-        symbols = sorted({symbol for _run_id, symbol in keys})
+        storage_symbols = sorted(
+            {
+                stored_symbol
+                for item in items
+                if self._scanner_candidate_key(item) is not None
+                for stored_symbol in self._storage_symbols_for_market(
+                    item.get("symbol"),
+                    item.get("market"),
+                )
+            }
+        )
+        if not storage_symbols:
+            return {}
         with self.db.get_session() as session:
             candidates = session.execute(
                 select(MarketScannerCandidate, MarketScannerRun)
@@ -1146,16 +1170,37 @@ class WatchlistService:
                 .where(
                     and_(
                         MarketScannerCandidate.run_id.in_(run_ids),
-                        MarketScannerCandidate.symbol.in_(symbols),
+                        MarketScannerCandidate.symbol.in_(storage_symbols),
                     )
                 )
             ).all()
 
         context_by_key: Dict[tuple[int, str], Dict[str, Any]] = {}
+        candidate_by_key: Dict[tuple[int, str], tuple[MarketScannerCandidate, MarketScannerRun]] = {}
+        conflicting_keys: set[tuple[int, str]] = set()
         for candidate, run in candidates:
-            key = (int(candidate.run_id), str(candidate.symbol or "").upper())
-            if key not in keys or key in context_by_key:
+            canonical_symbol = self._canonical_symbol_for_market(candidate.symbol, run.market)
+            if canonical_symbol is None:
                 continue
+            key = (int(candidate.run_id), canonical_symbol)
+            if key not in keys:
+                continue
+            if key in candidate_by_key:
+                conflicting_keys.add(key)
+                candidate_by_key.pop(key, None)
+                continue
+            if key not in conflicting_keys:
+                candidate_by_key[key] = (candidate, run)
+
+        for key in conflicting_keys:
+            context_by_key[key] = {
+                "storage_integrity": {
+                    "state": "identity_conflict",
+                    "availability": "unavailable",
+                }
+            }
+
+        for key, (candidate, run) in candidate_by_key.items():
             diagnostics, storage_integrity = self._load_candidate_diagnostics(
                 getattr(candidate, "diagnostics_json", None)
             )
@@ -1289,10 +1334,16 @@ class WatchlistService:
         self,
         *,
         owner_id: str,
-        symbols: List[str],
+        symbols: List[Tuple[str, str]],
     ) -> Dict[str, RuleBacktestRun]:
-        normalized_symbols = sorted({self._normalize_symbol(symbol) for symbol in symbols if symbol})
-        if not normalized_symbols:
+        storage_to_canonical: Dict[str, str] = {}
+        for symbol, market in symbols:
+            canonical_symbol = self._canonical_symbol_for_market(symbol, market)
+            if canonical_symbol is None:
+                continue
+            for storage_symbol in self._storage_symbols_for_market(symbol, market):
+                storage_to_canonical.setdefault(storage_symbol.upper(), canonical_symbol)
+        if not storage_to_canonical:
             return {}
         with self.db.get_session() as session:
             rows = session.execute(
@@ -1300,22 +1351,22 @@ class WatchlistService:
                 .where(
                     and_(
                         RuleBacktestRun.owner_id == owner_id,
-                        RuleBacktestRun.code.in_(normalized_symbols),
+                        RuleBacktestRun.code.in_(sorted(storage_to_canonical)),
                         RuleBacktestRun.status == "completed",
                     )
                 )
                 .order_by(
-                    RuleBacktestRun.code.asc(),
                     desc(RuleBacktestRun.completed_at),
                     desc(RuleBacktestRun.run_at),
                     desc(RuleBacktestRun.id),
+                    RuleBacktestRun.code.asc(),
                 )
             ).scalars().all()
         latest: Dict[str, RuleBacktestRun] = {}
         for row in rows:
-            symbol = str(row.code).upper()
-            if symbol not in latest:
-                latest[symbol] = row
+            canonical_symbol = storage_to_canonical.get(str(row.code or "").strip().upper())
+            if canonical_symbol is not None and canonical_symbol not in latest:
+                latest[canonical_symbol] = row
         return latest
 
     def _attach_intelligence(
@@ -1326,15 +1377,22 @@ class WatchlistService:
     ) -> List[Dict[str, Any]]:
         backtests = self._latest_backtests_by_symbol(
             owner_id=owner_id,
-            symbols=[str(item.get("symbol") or "") for item in items],
+            symbols=[
+                (str(item.get("symbol") or ""), str(item.get("market") or ""))
+                for item in items
+            ],
         )
         scanner_context = self._scanner_intelligence_context_by_item(items)
         for item in items:
             item_key = self._scanner_candidate_key(item)
             intelligence_context = scanner_context.get(item_key or (-1, "")) or {}
+            canonical_symbol = self._canonical_symbol_for_market(
+                item.get("symbol"),
+                item.get("market"),
+            )
             item["intelligence"] = self._build_intelligence_payload(
                 item,
-                backtest=backtests.get(str(item.get("symbol") or "").upper()),
+                backtest=backtests.get(canonical_symbol) if canonical_symbol else None,
                 scanner_ohlcv_provenance=intelligence_context.get("ohlcv_provenance"),
                 scanner_score_disclosure=intelligence_context.get("score_disclosure"),
                 scanner_investor_signal=intelligence_context.get("investor_signal"),
@@ -1379,18 +1437,22 @@ class WatchlistService:
         market: str,
     ) -> Optional[Dict[str, Any]]:
         resolved_owner_id = self.db.require_user_id(owner_id)
-        normalized_symbol = self._normalize_symbol(symbol)
         normalized_market = self._normalize_market(market)
+        normalized_symbol = self._normalize_symbol(symbol, market=normalized_market)
+        storage_symbols = self._storage_symbols_for_market(normalized_symbol, normalized_market)
         with self.db.get_session() as session:
-            row = session.execute(
+            rows = session.execute(
                 select(UserWatchlistItem).where(
                     and_(
                         UserWatchlistItem.owner_id == resolved_owner_id,
-                        UserWatchlistItem.symbol == normalized_symbol,
+                        UserWatchlistItem.symbol.in_(storage_symbols),
                         UserWatchlistItem.market == normalized_market,
                     )
-                ).limit(1)
-            ).scalar_one_or_none()
+                ).order_by(UserWatchlistItem.id.asc())
+            ).scalars().all()
+            if len(rows) > 1:
+                raise ValueError("Watchlist storage contains conflicting symbol identities.")
+            row = rows[0] if rows else None
             return self._row_to_dict(row) if row is not None else None
 
     def add_item(
@@ -1414,13 +1476,9 @@ class WatchlistService:
         notes: Optional[str] = None,
     ) -> Dict[str, Any]:
         resolved_owner_id = self.db.require_user_id(owner_id)
-        normalized_symbol = self._normalize_symbol(symbol)
         normalized_market = self._normalize_market(market)
-        precheck = validate_consumer_symbol_precheck(normalized_symbol, market=normalized_market)
-        if precheck.status == "unsupported_market":
-            raise ValueError(f"unsupported market identity: {precheck.message}")
-        if precheck.status == "invalid_format":
-            raise ValueError(precheck.message)
+        normalized_symbol = self._normalize_symbol(symbol, market=normalized_market)
+        storage_symbols = self._storage_symbols_for_market(normalized_symbol, normalized_market)
         normalized_source = str(source or "").strip().lower() or "scanner"
         if normalized_source != "scanner":
             raise ValueError("source must be scanner")
@@ -1434,15 +1492,18 @@ class WatchlistService:
         normalized_score_status = self._normalize_optional_text(score_status)
 
         with self.db.get_session() as session:
-            row = session.execute(
+            rows = session.execute(
                 select(UserWatchlistItem).where(
                     and_(
                         UserWatchlistItem.owner_id == resolved_owner_id,
-                        UserWatchlistItem.symbol == normalized_symbol,
+                        UserWatchlistItem.symbol.in_(storage_symbols),
                         UserWatchlistItem.market == normalized_market,
                     )
-                ).limit(1)
-            ).scalar_one_or_none()
+                ).order_by(UserWatchlistItem.id.asc())
+            ).scalars().all()
+            if len(rows) > 1:
+                raise ValueError("Watchlist storage contains conflicting symbol identities.")
+            row = rows[0] if rows else None
 
             if row is None:
                 created_new = True
@@ -1456,6 +1517,7 @@ class WatchlistService:
             else:
                 created_new = False
                 row.source = normalized_source
+                row.symbol = normalized_symbol
 
             if normalized_name is not None:
                 row.name = normalized_name
@@ -1512,26 +1574,37 @@ class WatchlistService:
         symbol: str,
     ) -> Optional[Dict[str, Any]]:
         resolved_owner_id = self.db.require_user_id(owner_id)
-        normalized_symbol = self._normalize_symbol(symbol)
         with self.db.get_session() as session:
-            row = session.execute(
-                select(MarketScannerCandidate, MarketScannerRun)
-                .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
+            run = session.execute(
+                select(MarketScannerRun)
                 .where(
                     and_(
                         MarketScannerRun.id == int(scanner_run_id),
                         MarketScannerRun.scope == OWNERSHIP_SCOPE_USER,
                         MarketScannerRun.owner_id == resolved_owner_id,
-                        MarketScannerCandidate.symbol == normalized_symbol,
                     )
                 )
                 .limit(1)
-            ).first()
+            ).scalar_one_or_none()
+            if run is None:
+                return None
+            normalized_symbol = self._normalize_symbol(symbol, market=str(run.market))
+            storage_symbols = self._storage_symbols_for_market(normalized_symbol, run.market)
+            candidates = session.execute(
+                select(MarketScannerCandidate)
+                .where(
+                    and_(
+                        MarketScannerCandidate.run_id == int(run.id),
+                        MarketScannerCandidate.symbol.in_(storage_symbols),
+                    )
+                )
+                .order_by(MarketScannerCandidate.id.asc())
+            ).scalars().all()
 
-        if row is None:
+        if len(candidates) != 1:
             return None
 
-        candidate, run = row
+        candidate = candidates[0]
         diagnostics, storage_integrity = self._load_candidate_diagnostics(
             getattr(candidate, "diagnostics_json", None)
         )
@@ -1580,10 +1653,13 @@ class WatchlistService:
         resolved_owner_id = self.db.require_user_id(owner_id)
         normalized_market = self._normalize_market(market) if market else None
         normalized_theme = self._normalize_optional_text(theme)
-        normalized_symbols = {
-            self._normalize_symbol(symbol)
+        normalized_symbol_pairs = {
+            (precheck.market, precheck.normalized_symbol)
             for symbol in (symbols or [])
             if str(symbol or "").strip()
+            for precheck in (
+                require_consumer_symbol_identity(symbol, market=normalized_market),
+            )
         }
         started_at = datetime.now()
         results: List[Dict[str, Any]] = []
@@ -1614,28 +1690,75 @@ class WatchlistService:
                     conditions.append(UserWatchlistItem.source == normalized_source)
                 if normalized_theme:
                     conditions.append(UserWatchlistItem.theme_id == normalized_theme)
-                if normalized_symbols:
-                    conditions.append(UserWatchlistItem.symbol.in_(sorted(normalized_symbols)))
+                if normalized_symbol_pairs:
+                    symbol_clauses = [
+                        and_(
+                            UserWatchlistItem.market == symbol_market,
+                            UserWatchlistItem.symbol.in_(
+                                self._storage_symbols_for_market(symbol, symbol_market)
+                            ),
+                        )
+                        for symbol_market, symbol in sorted(normalized_symbol_pairs)
+                    ]
+                    conditions.append(or_(*symbol_clauses))
 
                 rows = session.execute(
                     select(UserWatchlistItem)
                     .where(and_(*conditions))
                     .order_by(UserWatchlistItem.market.asc(), UserWatchlistItem.symbol.asc())
                 ).scalars().all()
-                latest_by_pair = self.scanner_repo.get_latest_completed_candidates_by_market_symbol(
-                    [(str(row.market), str(row.symbol)) for row in rows]
+                canonical_pair_by_item_id = {
+                    int(row.id): (str(row.market).strip().lower(), canonical_symbol)
+                    for row in rows
+                    if (
+                        canonical_symbol := self._canonical_symbol_for_market(
+                            row.symbol,
+                            row.market,
+                        )
+                    ) is not None
+                }
+                latest_by_pair, conflicting_pairs = self.scanner_repo.get_latest_completed_candidates_by_market_symbol(
+                    pairs=list(canonical_pair_by_item_id.values()),
+                    owner_id=resolved_owner_id,
                 )
 
                 for row in rows:
                     markets.add(str(row.market))
-                    latest = latest_by_pair.get((str(row.market), str(row.symbol)))
+                    pair = canonical_pair_by_item_id.get(int(row.id))
+                    display_symbol = pair[1] if pair is not None else str(row.symbol or "").strip().upper()
+
+                    if pair is None:
+                        row.score_status = "unavailable"
+                        row.score_error = "Watchlist symbol identity is invalid."
+                        skipped_count += 1
+                        results.append({
+                            "symbol": display_symbol,
+                            "market": row.market,
+                            "status": "unavailable",
+                            "message": row.score_error,
+                        })
+                        continue
+
+                    if pair in conflicting_pairs:
+                        row.score_status = "unavailable"
+                        row.score_error = "Scanner candidate storage identity is conflicting."
+                        skipped_count += 1
+                        results.append({
+                            "symbol": display_symbol,
+                            "market": row.market,
+                            "status": "unavailable",
+                            "message": row.score_error,
+                        })
+                        continue
+
+                    latest = latest_by_pair.get(pair)
 
                     if latest is None:
                         row.score_status = "unavailable"
                         row.score_error = "No scanner candidate score is available for this symbol."
                         skipped_count += 1
                         results.append({
-                            "symbol": row.symbol,
+                            "symbol": display_symbol,
                             "market": row.market,
                             "status": "unavailable",
                             "message": row.score_error,
@@ -1653,7 +1776,7 @@ class WatchlistService:
                         row.score_error = "Scanner candidate factor evidence is incomplete."
                         skipped_count += 1
                         results.append({
-                            "symbol": row.symbol,
+                            "symbol": display_symbol,
                             "market": row.market,
                             "status": "unavailable",
                             "message": row.score_error,
@@ -1672,7 +1795,7 @@ class WatchlistService:
                     row.updated_at = started_at
                     updated_count += 1
                     results.append({
-                        "symbol": row.symbol,
+                        "symbol": display_symbol,
                         "market": row.market,
                         "status": "fresh",
                         "score": row.scanner_score,

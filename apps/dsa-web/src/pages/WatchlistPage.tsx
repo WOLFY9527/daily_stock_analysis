@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { canonicalStockSymbolFromValidation, stocksApi } from '../api/stocks';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
@@ -178,9 +179,28 @@ function normalizeText(value?: string | null): string {
   return String(value || '').trim();
 }
 
-function parseManualResearchSymbol(value: string): string {
-  const token = normalizeText(value).split(/[\s,，;；]+/u)[0] || '';
-  return token.toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 24);
+type WatchlistCanonicalIdentity = {
+  symbol: string;
+  market: string;
+};
+
+function getWatchlistCanonicalIdentity(item: WatchlistItem): WatchlistCanonicalIdentity | null {
+  const symbol = normalizeText(item.identity?.canonicalSymbol);
+  const market = normalizeMarket(item.identity?.market);
+  return symbol && market ? { symbol, market } : null;
+}
+
+function getWatchlistDisplaySymbol(item: WatchlistItem): string {
+  return getWatchlistCanonicalIdentity(item)?.symbol || '--';
+}
+
+function getWatchlistDisplayMarket(item: WatchlistItem): string {
+  const identity = getWatchlistCanonicalIdentity(item);
+  return identity ? formatMarket(identity.market) : '--';
+}
+
+function getManualResearchInput(value: string): string {
+  return normalizeText(value);
 }
 
 function terminalChipVariant(tone: DisplayStatusTone): React.ComponentProps<typeof TerminalChip>['variant'] {
@@ -206,10 +226,10 @@ function formatMarket(value?: string | null): string {
 function buildWatchlistIdentityLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
   const name = normalizeText(item.rowResearchPacket?.identity?.name || item.name);
   if (name) return name;
-  const symbol = normalizeText(item.symbol).toUpperCase();
-  const market = formatMarket(item.market);
+  const symbol = getWatchlistDisplaySymbol(item);
+  const market = getWatchlistDisplayMarket(item);
   if (symbol && market !== '--') return `${market} ${symbol}`;
-  if (symbol) return language === 'en' ? `Saved symbol ${symbol}` : `观察标的 ${symbol}`;
+  if (symbol !== '--') return language === 'en' ? `Saved symbol ${symbol}` : `观察标的 ${symbol}`;
   return language === 'en' ? 'Saved symbol' : '观察标的';
 }
 
@@ -993,7 +1013,7 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
     };
   }
 
-  const symbol = normalizeText(topItem.symbol).toUpperCase() || topItem.symbol || '--';
+  const symbol = getWatchlistDisplaySymbol(topItem);
   const detail = limitedConfidenceCount > 0
     ? (language === 'en'
       ? 'Current data confidence is limited; rows remain historical observations, not live signals.'
@@ -1378,7 +1398,8 @@ function WatchlistConsumerObservationBoard({
   const selectedPrice = selected ? getWatchlistConsumerPrice(selected, language) : '--';
   const selectedGaps = selected ? getWatchlistConsumerGapLabels(selected, language) : [];
   const selectedName = selected ? buildWatchlistIdentityLabel(selected, language) : '';
-  const selectedMarket = selected ? formatMarket(selected.market) : '--';
+  const selectedMarket = selected ? getWatchlistDisplayMarket(selected) : '--';
+  const selectedSymbol = selected ? getWatchlistDisplaySymbol(selected) : '--';
   const selectedNext = selected?.rowResearchPacket
     ? (language === 'en' ? 'Review stock structure' : '查看个股结构')
     : selected
@@ -1414,6 +1435,10 @@ function WatchlistConsumerObservationBoard({
         </div>
         <div className="mt-3 divide-y divide-[color:var(--wolfy-divider)]">
           {visibleItems.map((item) => {
+            const canonicalIdentity = getWatchlistCanonicalIdentity(item);
+            const displaySymbol = canonicalIdentity?.symbol || '--';
+            const displayMarket = canonicalIdentity ? formatMarket(canonicalIdentity.market) : '--';
+            const stockStructurePath = buildStockStructurePath(item, language);
             const price = getWatchlistConsumerPrice(item, language);
             const change = getWatchlistConsumerChange(item);
             const gaps = getWatchlistConsumerGapLabels(item, language);
@@ -1431,8 +1456,8 @@ function WatchlistConsumerObservationBoard({
               >
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</span>
-                    <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
+                    <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{displaySymbol}</span>
+                    <TerminalChip variant="neutral">{displayMarket}</TerminalChip>
                     {isActive ? (
                       <TerminalChip variant="info">{language === 'en' ? 'Inspecting' : '查看中'}</TerminalChip>
                     ) : null}
@@ -1462,15 +1487,16 @@ function WatchlistConsumerObservationBoard({
                     }`}
                     onClick={() => onSelect(item)}
                   >
-                    {language === 'en' ? `View ${item.symbol} details` : `查看 ${item.symbol} 详情`}
+                    {language === 'en' ? `View ${displaySymbol} details` : `查看 ${displaySymbol} 详情`}
                   </button>
                   <button
                     type="button"
                     data-watchlist-action="primary-research"
                     className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                    disabled={!stockStructurePath}
                     onClick={(event) => {
                       event.stopPropagation();
-                      navigate(buildStockStructurePath(item, language));
+                      if (stockStructurePath) navigate(stockStructurePath);
                     }}
                   >
                     {language === 'en' ? 'View stock structure' : '查看个股结构'}
@@ -1487,7 +1513,7 @@ function WatchlistConsumerObservationBoard({
           className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 max-lg:hidden"
         >
           <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Selected symbol' : '当前标的'}</p>
-          <h2 className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{selected.symbol}</h2>
+          <h2 className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{selectedSymbol}</h2>
           <p className="mt-1 break-words text-sm text-[color:var(--wolfy-text-secondary)] md:truncate">{selectedName} · {selectedMarket}</p>
           <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             <p>{language === 'en' ? 'Latest quote' : '最新报价'} {selectedPrice}</p>
@@ -1551,7 +1577,7 @@ function buildWatchlistRowDecisionContext(
       ? `${language === 'en' ? 'Needed' : '待补'}：${evidenceGapLabels.join(language === 'en' ? ', ' : '、')}`
       : null,
     evidenceStackLabel: language === 'en' ? 'View evidence stack' : '查看证据栈',
-    evidenceStackAriaLabel: `${language === 'en' ? 'View evidence stack' : '查看证据栈'} ${item.symbol}`,
+    evidenceStackAriaLabel: `${language === 'en' ? 'View evidence stack' : '查看证据栈'} ${getWatchlistDisplaySymbol(item)}`,
   };
 }
 
@@ -1601,28 +1627,32 @@ function buildBacktestIntelligence(run: RuleBacktestRunResponse): NonNullable<Wa
   };
 }
 
-function buildBacktestPath(item: WatchlistItem, language: 'zh' | 'en'): string {
-  const market = normalizeMarket(item.market);
+function buildBacktestPath(item: WatchlistItem, language: 'zh' | 'en'): string | null {
+  const identity = getWatchlistCanonicalIdentity(item);
+  if (!identity) return null;
   return buildResearchWorkspacePath('backtest', language, {
-    symbol: item.symbol,
-    market,
+    symbol: identity.symbol,
+    market: identity.market,
     source: normalizeResearchWorkspaceSource(item.source) || 'watchlist',
   });
 }
 
-function buildScannerPath(item: WatchlistItem, language: 'zh' | 'en'): string {
-  const market = normalizeMarket(item.market);
+function buildScannerPath(item: WatchlistItem, language: 'zh' | 'en'): string | null {
+  const identity = getWatchlistCanonicalIdentity(item);
+  if (!identity) return null;
   return buildResearchWorkspacePath('scanner', language, {
-    symbol: item.symbol,
-    market,
+    symbol: identity.symbol,
+    market: identity.market,
     source: 'watchlist',
   });
 }
 
-function buildStockStructurePath(item: WatchlistItem, language: 'zh' | 'en'): string {
+function buildStockStructurePath(item: WatchlistItem, language: 'zh' | 'en'): string | null {
+  const identity = getWatchlistCanonicalIdentity(item);
+  if (!identity) return null;
   return buildResearchWorkspacePath('stock-structure', language, {
-    symbol: item.symbol,
-    market: normalizeMarket(item.market),
+    symbol: identity.symbol,
+    market: identity.market,
     source: 'watchlist',
   });
 }
@@ -1634,14 +1664,15 @@ function extractAcceptedTaskId(response: Awaited<ReturnType<typeof analysisApi.a
   return response.accepted?.[0]?.taskId || response.duplicates?.[0]?.existingTaskId || null;
 }
 
-function buildWatchlistAnalysisPath(item: WatchlistItem, taskId: string, language: 'zh' | 'en'): string {
+function buildWatchlistAnalysisPath(item: WatchlistItem, taskId: string, language: 'zh' | 'en'): string | null {
+  const identity = getWatchlistCanonicalIdentity(item);
+  if (!identity) return null;
   const params = new URLSearchParams({
-    symbol: item.symbol,
+    symbol: identity.symbol,
     task_id: taskId,
     source: 'watchlist',
   });
-  const market = normalizeMarket(item.market);
-  if (market) params.set('market', market);
+  params.set('market', identity.market);
   return buildLocalizedPath(`/?${params.toString()}`, language);
 }
 
@@ -1760,6 +1791,8 @@ function getCopy(language: 'zh' | 'en') {
       manualResearchHelp: 'Primary path: start one stock research task here without adding anything to Watchlist.',
       manualResearchButton: 'Research',
       enterManualSymbol: 'Enter one symbol before starting research.',
+      manualSymbolUnavailable: 'This symbol cannot be used for research.',
+      canonicalIdentityUnavailable: 'The saved canonical symbol is unavailable. Refresh this row before continuing.',
       tableTitle: 'Monitoring list',
       tableDescription: 'Rows keep state, observation, and actions aligned.',
       loading: 'Loading watchlist...',
@@ -1879,6 +1912,8 @@ function getCopy(language: 'zh' | 'en') {
     manualResearchHelp: '首选路径：先启动一个个股研究任务，不会把代码加入观察名单。',
     manualResearchButton: '研究',
     enterManualSymbol: '请先输入一个研究代码。',
+    manualSymbolUnavailable: '该代码暂不能用于研究。',
+    canonicalIdentityUnavailable: '已保存的规范代码暂不可用，请刷新此行后再继续。',
     tableTitle: '监控列表',
     tableDescription: '按行查看状态、观察与操作。',
     loading: '正在加载观察列表...',
@@ -2292,8 +2327,8 @@ const WatchlistPage: React.FC = () => {
     ? copy.emptyFilteredSet
     : `${useSelectedScope && selectedItems.length > 0 ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
   const isActionDisabled = actionItems.length === 0 || isBatchBacktesting || isBatchScanning;
-  const emptyResearchParsedSymbol = useMemo(
-    () => parseManualResearchSymbol(emptyResearchSymbol),
+  const emptyResearchInput = useMemo(
+    () => getManualResearchInput(emptyResearchSymbol),
     [emptyResearchSymbol],
   );
   const watchlistConclusion = useMemo(
@@ -2312,59 +2347,74 @@ const WatchlistPage: React.FC = () => {
   }, []);
 
   const handleAnalyze = useCallback(async (item: WatchlistItem) => {
+    const identity = getWatchlistCanonicalIdentity(item);
+    if (!identity) {
+      setNotice({ tone: 'warning', message: copy.canonicalIdentityUnavailable });
+      return;
+    }
     setPendingAnalyzeId(item.id);
     setNotice(null);
     try {
       const response = await analysisApi.analyzeAsync({
-        stockCode: item.symbol,
+        stockCode: identity.symbol,
         reportType: 'detailed',
         stockName: item.name || undefined,
-        originalQuery: item.symbol,
+        originalQuery: identity.symbol,
         selectionSource: 'manual',
       });
       const taskId = extractAcceptedTaskId(response);
       setNotice({ tone: 'success', message: copy.analyzeStarted });
-      navigate(taskId ? buildWatchlistAnalysisPath(item, taskId, language) : buildLocalizedPath('/', language));
+      const path = taskId ? buildWatchlistAnalysisPath(item, taskId, language) : null;
+      navigate(path || buildLocalizedPath('/', language));
     } catch (err) {
       if (err instanceof DuplicateTaskError) {
-        navigate(buildWatchlistAnalysisPath(item, err.existingTaskId, language));
+        const path = buildWatchlistAnalysisPath(item, err.existingTaskId, language);
+        if (path) navigate(path);
         return;
       }
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
     } finally {
       setPendingAnalyzeId((current) => (current === item.id ? null : current));
     }
-  }, [copy.analyzeStarted, language, navigate]);
+  }, [copy.analyzeStarted, copy.canonicalIdentityUnavailable, language, navigate]);
 
   const handleEmptyManualResearch = useCallback(async () => {
-    const symbol = emptyResearchParsedSymbol;
-    if (!symbol) {
+    const input = emptyResearchInput;
+    if (!input) {
       setNotice({ tone: 'warning', message: copy.enterManualSymbol });
       return;
     }
 
     setIsEmptyResearchPending(true);
     setNotice(null);
+    let canonicalSymbol: string | null = null;
     try {
+      const validation = await stocksApi.verifyTickerExists(input);
+      const identity = canonicalStockSymbolFromValidation(validation);
+      if (!identity) {
+        setNotice({ tone: 'warning', message: validation.message || copy.manualSymbolUnavailable });
+        return;
+      }
+      canonicalSymbol = identity.symbol;
       const response = await analysisApi.analyzeAsync({
-        stockCode: symbol,
+        stockCode: canonicalSymbol,
         reportType: 'detailed',
-        stockName: symbol,
-        originalQuery: symbol,
+        stockName: canonicalSymbol,
+        originalQuery: canonicalSymbol,
         selectionSource: 'manual',
       });
       const taskId = extractAcceptedTaskId(response);
-      navigate(buildWatchlistManualResearchPath(symbol, language, taskId));
+      navigate(buildWatchlistManualResearchPath(canonicalSymbol, language, taskId));
     } catch (err) {
-      if (err instanceof DuplicateTaskError) {
-        navigate(buildWatchlistManualResearchPath(symbol, language, err.existingTaskId));
+      if (err instanceof DuplicateTaskError && canonicalSymbol) {
+        navigate(buildWatchlistManualResearchPath(canonicalSymbol, language, err.existingTaskId));
         return;
       }
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
     } finally {
       setIsEmptyResearchPending(false);
     }
-  }, [copy.enterManualSymbol, emptyResearchParsedSymbol, language, navigate]);
+  }, [copy.enterManualSymbol, copy.manualSymbolUnavailable, emptyResearchInput, language, navigate]);
 
   const handleRemove = useCallback(async (item: WatchlistItem) => {
     setPendingRemoveId(item.id);
@@ -2382,17 +2432,22 @@ const WatchlistPage: React.FC = () => {
   }, [copy.removed]);
 
   const handleCopy = useCallback(async (item: WatchlistItem) => {
+    const identity = getWatchlistCanonicalIdentity(item);
+    if (!identity) {
+      setNotice({ tone: 'warning', message: copy.canonicalIdentityUnavailable });
+      return;
+    }
     try {
       if (!navigator.clipboard?.writeText) {
         throw new Error(copy.clipboardUnavailable);
       }
-      await navigator.clipboard.writeText(item.symbol);
+      await navigator.clipboard.writeText(identity.symbol);
       setCopiedId(item.id);
-      setNotice({ tone: 'success', message: `${item.symbol} ${copy.copied}` });
+      setNotice({ tone: 'success', message: `${identity.symbol} ${copy.copied}` });
     } catch (err) {
       setNotice({ tone: 'danger', message: err instanceof Error ? err.message : copy.copyFailed });
     }
-  }, [copy.clipboardUnavailable, copy.copied, copy.copyFailed]);
+  }, [copy.canonicalIdentityUnavailable, copy.clipboardUnavailable, copy.copied, copy.copyFailed]);
 
   const handleRefreshIntelligence = useCallback(async () => {
     setNotice(null);
@@ -2440,6 +2495,14 @@ const WatchlistPage: React.FC = () => {
   const handleRefreshScores = useCallback(async (targetItems?: WatchlistItem[]) => {
     const targets = targetItems || items;
     if (targets.length === 0 || isBatchScanning) return;
+    const canonicalTargets = targets.map((item) => ({ item, identity: getWatchlistCanonicalIdentity(item) }));
+    if (canonicalTargets.some(({ identity }) => !identity)) {
+      setNotice({ tone: 'warning', message: copy.canonicalIdentityUnavailable });
+      return;
+    }
+    const canonicalSymbolToItemSymbol = new Map(
+      canonicalTargets.map(({ item, identity }) => [identity!.symbol, item.symbol]),
+    );
     setRefreshingScores(true);
     setIsBatchScanning(true);
     setBatchFailures({});
@@ -2449,14 +2512,14 @@ const WatchlistPage: React.FC = () => {
       completed: 0,
       succeeded: 0,
       failed: 0,
-      currentSymbol: targets[0]?.symbol || null,
+      currentSymbol: canonicalTargets[0]?.identity?.symbol || null,
       failures: {},
     });
     setNotice(null);
     try {
       const response = await watchlistApi.refreshScores(targetItems ? {
         force: true,
-        symbols: targets.flatMap((item) => (item.symbol ? [item.symbol] : [])),
+        symbols: canonicalTargets.map(({ identity }) => identity!.symbol),
       } : { force: true });
       const [listResponse, overlayResult] = await Promise.all([
         watchlistApi.listWatchlistItems(),
@@ -2468,7 +2531,7 @@ const WatchlistPage: React.FC = () => {
         (response.results || [])
           .flatMap((result) => (
             normalizeText(result.status).toLowerCase() === 'failed'
-              ? [[result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]]
+              ? [[canonicalSymbolToItemSymbol.get(result.symbol) || result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]]
               : []
           )),
       );
@@ -2510,25 +2573,30 @@ const WatchlistPage: React.FC = () => {
       setRefreshingScores(false);
       setIsBatchScanning(false);
     }
-  }, [applyResearchOverlayFailure, applyResearchOverlayResponse, copy.scanComplete, copy.scoreRefreshComplete, isBatchScanning, items]);
+  }, [applyResearchOverlayFailure, applyResearchOverlayResponse, copy.canonicalIdentityUnavailable, copy.scanComplete, copy.scoreRefreshComplete, isBatchScanning, items]);
 
   const handleBatchBacktestCurrentFilter = useCallback(async () => {
     if (isBatchBacktesting) return;
+    const canonicalItems = actionItems.map((item) => ({ item, identity: getWatchlistCanonicalIdentity(item) }));
+    if (canonicalItems.some(({ identity }) => !identity)) {
+      setNotice({ tone: 'warning', message: copy.canonicalIdentityUnavailable });
+      return;
+    }
     const uniqueItems = Array.from(
-      new Map(actionItems.map((item) => [normalizeText(item.symbol).toUpperCase(), item])).values(),
-    ).filter((item) => normalizeText(item.symbol));
+      new Map(canonicalItems.map((entry) => [entry.identity!.symbol, entry])).values(),
+    );
     if (uniqueItems.length === 0) return;
 
     const { startDate, endDate } = buildDefaultBacktestWindow();
-    const pendingItems = uniqueItems.filter((item) => {
-      const key = `${normalizeText(item.symbol).toUpperCase()}:${startDate}:${endDate}:watchlist-default`;
+    const pendingItems = uniqueItems.filter(({ identity }) => {
+      const key = `${identity!.symbol}:${startDate}:${endDate}:watchlist-default`;
       return !backtestSessionKeys.has(key);
     });
     const skippedItems = uniqueItems.filter((item) => !pendingItems.includes(item));
     if (skippedItems.length > 0) {
       setBatchStatuses((current) => ({
         ...current,
-        ...Object.fromEntries(skippedItems.map((item) => [item.symbol, 'skipped' as BatchStatus])),
+        ...Object.fromEntries(skippedItems.map(({ item }) => [item.symbol, 'skipped' as BatchStatus])),
       }));
     }
     if (pendingItems.length === 0) return;
@@ -2542,26 +2610,26 @@ const WatchlistPage: React.FC = () => {
       completed: 0,
       succeeded: 0,
       failed: 0,
-      currentSymbol: pendingItems[0]?.symbol || null,
+      currentSymbol: pendingItems[0]?.identity?.symbol || null,
       failures: {},
     });
     setBatchStatuses((current) => ({
       ...current,
-      ...Object.fromEntries(pendingItems.map((item) => [item.symbol, 'requested' as BatchStatus])),
+      ...Object.fromEntries(pendingItems.map(({ item }) => [item.symbol, 'requested' as BatchStatus])),
     }));
 
     let cursor = 0;
     let completed = 0;
     let failed = 0;
-    const runOne = async (item: WatchlistItem) => {
-      const symbol = normalizeText(item.symbol).toUpperCase();
+    const runOne = async ({ item, identity }: typeof pendingItems[number]) => {
+      const symbol = identity!.symbol;
       const key = `${symbol}:${startDate}:${endDate}:watchlist-default`;
       setBacktestSessionKeys((current) => new Set(current).add(key));
       setBatchStatuses((current) => ({ ...current, [item.symbol]: 'running' }));
-      setBatchProgress((current) => current ? { ...current, currentSymbol: item.symbol } : current);
+      setBatchProgress((current) => current ? { ...current, currentSymbol: symbol } : current);
       try {
         const run = await backtestApi.runRuleBacktest({
-          code: item.symbol,
+          code: symbol,
           strategyText: copy.batchBacktestLabel,
           startDate,
           endDate,
@@ -2574,7 +2642,7 @@ const WatchlistPage: React.FC = () => {
         });
         completed += 1;
         setItems((current) => current.map((row) => (
-          normalizeText(row.symbol).toUpperCase() === symbol
+          getWatchlistCanonicalIdentity(row)?.symbol === symbol
             ? {
                 ...row,
                 intelligence: {
@@ -2623,7 +2691,7 @@ const WatchlistPage: React.FC = () => {
     } finally {
       setIsBatchBacktesting(false);
     }
-  }, [actionItems, backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, isBatchBacktesting]);
+  }, [actionItems, backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, copy.canonicalIdentityUnavailable, isBatchBacktesting]);
 
   if (isGuest || authRequired) {
     return <ConsumerProtectedFrame moduleName={copy.signInModule} />;
@@ -2669,6 +2737,11 @@ const WatchlistPage: React.FC = () => {
   const activeRiskNote = activeItem ? buildWatchRiskNote(activeItem, language) : null;
   const activeNextActionLabel = activeItem ? buildNextActionLabel(activeItem, language) : '--';
   const activeIdentityLabel = activeItem ? buildWatchlistIdentityLabel(activeItem, language) : '';
+  const activeCanonicalIdentity = activeItem ? getWatchlistCanonicalIdentity(activeItem) : null;
+  const activeDisplaySymbol = activeItem ? getWatchlistDisplaySymbol(activeItem) : '--';
+  const activeStockStructurePath = activeItem ? buildStockStructurePath(activeItem, language) : null;
+  const activeScannerPath = activeItem ? buildScannerPath(activeItem, language) : null;
+  const activeBacktestPath = activeItem ? buildBacktestPath(activeItem, language) : null;
   const activeSavedNote = activeItem ? normalizeText(activeItem.notes) : '';
   const activeContextTags = activeItem
     ? [
@@ -2679,11 +2752,11 @@ const WatchlistPage: React.FC = () => {
   const activeHasEvidence = activeItem
     ? hasScannerEvidence(activeItem) || activeSimulation?.status === 'ready' || hasBacktestEvidence(activeItem)
     : false;
-  const watchlistWorkflowSymbol = activeItem?.symbol || routeContext.symbol || null;
-  const watchlistWorkflowMarket = activeItem?.market || routeContext.market || null;
+  const watchlistWorkflowSymbol = activeCanonicalIdentity?.symbol || routeContext.symbol || null;
+  const watchlistWorkflowMarket = activeCanonicalIdentity?.market || routeContext.market || null;
   const watchlistWorkflowKnownEvidence = [
     activeItem
-      ? (language === 'zh' ? `观察项已存在：${activeItem.symbol}` : `Observed item exists: ${activeItem.symbol}`)
+      ? (language === 'zh' ? `观察项已存在：${activeDisplaySymbol}` : `Observed item exists: ${activeDisplaySymbol}`)
       : watchlistWorkflowSymbol
         ? (language === 'zh' ? `当前筛选代码：${watchlistWorkflowSymbol}` : `Current filtered symbol: ${watchlistWorkflowSymbol}`)
         : null,
@@ -2933,7 +3006,7 @@ const WatchlistPage: React.FC = () => {
                   <div className="min-w-0">
                     <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Selected context' : '当前查看'}</p>
                     <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-                      {activeItem.symbol}
+                      {activeDisplaySymbol}
                       <span className="ml-2 font-normal text-[color:var(--wolfy-text-secondary)]">{activeIdentityLabel}</span>
                     </p>
                   </div>
@@ -2990,6 +3063,12 @@ const WatchlistPage: React.FC = () => {
                     const rowRiskNote = buildWatchRiskNote(item, language);
                     const scannerLineageCue = buildScannerLineageCue(item, language);
                     const originLabel = formatWatchlistOrigin(item.source, language);
+                    const canonicalIdentity = getWatchlistCanonicalIdentity(item);
+                    const displaySymbol = canonicalIdentity?.symbol || '--';
+                    const displayMarket = canonicalIdentity ? formatMarket(canonicalIdentity.market) : '--';
+                    const stockStructurePath = buildStockStructurePath(item, language);
+                    const scannerPath = buildScannerPath(item, language);
+                    const backtestPath = buildBacktestPath(item, language);
                     const backtestStatusVariant = backtestStatusLabel === '已回测'
                       ? 'success'
                       : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
@@ -3045,7 +3124,7 @@ const WatchlistPage: React.FC = () => {
                         ].filter(Boolean).join(' ');
                     const priceLabel = rowPacketView
                       ? rowPacketView.quotePrice !== null
-                        ? formatPriceValue(rowPacketView.quotePrice, item.market)
+                        ? formatPriceValue(rowPacketView.quotePrice, canonicalIdentity?.market)
                         : rowPacketView.quoteStateLabel
                       : rowStatus.priceLabel;
                     const updateLabel = rowPacketView
@@ -3074,7 +3153,7 @@ const WatchlistPage: React.FC = () => {
                               }`}
                               role="checkbox"
                               aria-checked={selectedIds.has(item.id)}
-                              aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
+                              aria-label={`${language === 'zh' ? '选择' : 'Select'} ${displaySymbol}`}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 toggleSelected(item);
@@ -3092,7 +3171,7 @@ const WatchlistPage: React.FC = () => {
                             <button
                               type="button"
                               aria-pressed={isActive}
-                              aria-label={`${language === 'zh' ? '查看详情' : 'View details'} ${item.symbol}`}
+                              aria-label={`${language === 'zh' ? '查看详情' : 'View details'} ${displaySymbol}`}
                               className={`flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition ${
                                 isActive
                                   ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
@@ -3101,8 +3180,8 @@ const WatchlistPage: React.FC = () => {
                               onClick={() => setActiveItemId(item.id)}
                             >
                               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</span>
-                                <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
+                                <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{displaySymbol}</span>
+                                <TerminalChip variant="neutral">{displayMarket}</TerminalChip>
                                 {isRecentlyAdded(item) ? <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip> : null}
                               </div>
                               <p
@@ -3130,7 +3209,7 @@ const WatchlistPage: React.FC = () => {
                               <div
                                 data-testid={`watchlist-row-workflow-${item.symbol}`}
                                 className="flex min-w-0 flex-wrap items-center gap-1.5"
-                                aria-label={language === 'zh' ? `${item.symbol} 报价状态` : `${item.symbol} quote state`}
+                                aria-label={language === 'zh' ? `${displaySymbol} 报价状态` : `${displaySymbol} quote state`}
                               >
                                 <TerminalChip variant={rowPacketView.quoteStateVariant}>{rowPacketView.quoteStateLabel}</TerminalChip>
                                 {rowPacketView.freshnessStateLabel ? (
@@ -3141,7 +3220,7 @@ const WatchlistPage: React.FC = () => {
                               <div
                                 data-testid={`watchlist-row-workflow-${item.symbol}`}
                                 className="flex min-w-0 flex-wrap items-center gap-1.5"
-                                aria-label={language === 'zh' ? `${item.symbol} 研究流程` : `${item.symbol} research workflow`}
+                                aria-label={language === 'zh' ? `${displaySymbol} 研究流程` : `${displaySymbol} research workflow`}
                               >
                                 <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
                                 {workflowSteps.slice(0, 3).map((step) => (
@@ -3209,9 +3288,10 @@ const WatchlistPage: React.FC = () => {
                                     type="button"
                                     aria-label={rowDecisionContext.evidenceStackAriaLabel}
                                     className="inline-flex min-h-[28px] items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-2 text-[color:var(--wolfy-text-secondary)] transition hover:border-[color:var(--wolfy-accent)] hover:bg-[var(--wolfy-surface-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                                    disabled={!stockStructurePath}
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      navigate(buildStockStructurePath(item, language));
+                                      if (stockStructurePath) navigate(stockStructurePath);
                                     }}
                                   >
                                     {rowDecisionContext.evidenceStackLabel}
@@ -3243,10 +3323,11 @@ const WatchlistPage: React.FC = () => {
                               type="button"
                               variant="compact"
                               data-watchlist-action="primary-research"
-                              aria-label={`${language === 'zh' ? '查看个股结构' : 'Open stock structure'} ${item.symbol}`}
+                              aria-label={`${language === 'zh' ? '查看个股结构' : 'Open stock structure'} ${displaySymbol}`}
+                              disabled={!stockStructurePath}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                navigate(buildStockStructurePath(item, language));
+                                if (stockStructurePath) navigate(stockStructurePath);
                               }}
                             >
                               <Search className="h-3.5 w-3.5" />
@@ -3267,7 +3348,7 @@ const WatchlistPage: React.FC = () => {
                                 aria-expanded={openRowActionsId === item.id}
                                 aria-haspopup="menu"
                                 aria-controls={openRowActionsId === item.id ? `watchlist-row-secondary-menu-${item.symbol}` : undefined}
-                                aria-label={`${copy.moreActionsAria} ${item.symbol}`}
+                                aria-label={`${copy.moreActionsAria} ${displaySymbol}`}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   setOpenRowActionsId((current) => (current === item.id ? null : item.id));
@@ -3287,7 +3368,7 @@ const WatchlistPage: React.FC = () => {
                                   id={`watchlist-row-secondary-menu-${item.symbol}`}
                                   data-testid={`watchlist-row-secondary-menu-${item.symbol}`}
                                   role="menu"
-                                  aria-label={`${copy.moreActionsAria} ${item.symbol}`}
+                                  aria-label={`${copy.moreActionsAria} ${displaySymbol}`}
                                   ref={(node) => {
                                     if (node) rowActionMenuRefs.current.set(item.id, node);
                                     else rowActionMenuRefs.current.delete(item.id);
@@ -3300,11 +3381,12 @@ const WatchlistPage: React.FC = () => {
                                     variant="compact"
                                     role="menuitem"
                                     className="w-full justify-start"
-                                    aria-label={`${language === 'zh' ? '打开扫描器' : 'Open scanner'} ${item.symbol}`}
+                                    aria-label={`${language === 'zh' ? '打开扫描器' : 'Open scanner'} ${displaySymbol}`}
+                                    disabled={!scannerPath}
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       setOpenRowActionsId(null);
-                                      navigate(buildScannerPath(item, language));
+                                      if (scannerPath) navigate(scannerPath);
                                     }}
                                   >
                                     <RefreshCw className="h-3.5 w-3.5" />
@@ -3320,7 +3402,7 @@ const WatchlistPage: React.FC = () => {
                                       setOpenRowActionsId(null);
                                       void handleAnalyze(item);
                                     }}
-                                    disabled={pendingAnalyzeId === item.id}
+                                    disabled={pendingAnalyzeId === item.id || !canonicalIdentity}
                                   >
                                     <Play className="h-3.5 w-3.5" />
                                     {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
@@ -3330,10 +3412,11 @@ const WatchlistPage: React.FC = () => {
                                     variant="compact"
                                     role="menuitem"
                                     className="w-full justify-start"
+                                    disabled={!backtestPath}
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       setOpenRowActionsId(null);
-                                      navigate(buildBacktestPath(item, language));
+                                      if (backtestPath) navigate(backtestPath);
                                     }}
                                   >
                                     <BarChart3 className="h-3.5 w-3.5" />
@@ -3357,7 +3440,7 @@ const WatchlistPage: React.FC = () => {
                                   <TerminalButton
                                     type="button"
                                     role="menuitem"
-                                    aria-label={`${copy.copySymbol} ${item.symbol}`}
+                                    aria-label={`${copy.copySymbol} ${displaySymbol}`}
                                     title={copiedId === item.id ? copy.copied : copy.copySymbol}
                                     variant="compact"
                                     className="w-full justify-start text-[color:var(--wolfy-text-muted)]"
@@ -3533,15 +3616,13 @@ const WatchlistPage: React.FC = () => {
                             variant="primary"
                             data-testid="watchlist-empty-manual-research-button"
                             className="h-9 px-3 text-xs"
-                            disabled={!emptyResearchParsedSymbol || isEmptyResearchPending}
+                            disabled={!emptyResearchInput || isEmptyResearchPending}
                             onClick={() => void handleEmptyManualResearch()}
                           >
                             <Play className="h-3.5 w-3.5" aria-hidden="true" />
                             {isEmptyResearchPending
                               ? copy.analyzing
-                              : emptyResearchParsedSymbol
-                                ? `${copy.manualResearchButton} ${emptyResearchParsedSymbol}`
-                                : copy.manualResearchButton}
+                              : copy.manualResearchButton}
                           </TerminalButton>
                         </div>
                         <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.savedObservationHelp}</p>
@@ -3565,7 +3646,7 @@ const WatchlistPage: React.FC = () => {
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '已选项目' : 'Selected item'}</p>
-                      <h2 className="truncate text-base font-semibold text-[color:var(--wolfy-text-primary)]">{activeItem.symbol}</h2>
+                      <h2 className="truncate text-base font-semibold text-[color:var(--wolfy-text-primary)]">{activeDisplaySymbol}</h2>
                       <p className="truncate text-xs text-[color:var(--wolfy-text-muted)]">{activeIdentityLabel}</p>
                     </div>
                     <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
@@ -3675,10 +3756,12 @@ const WatchlistPage: React.FC = () => {
                   </div>
                 </section>
 
-                <UserAlertsRailPanel
-                  symbol={activeItem.symbol}
-                  language={language}
-                />
+                {activeCanonicalIdentity ? (
+                  <UserAlertsRailPanel
+                    symbol={activeCanonicalIdentity.symbol}
+                    language={language}
+                  />
+                ) : null}
 
                 {activeCatalystExposures ? (
                   <DenseSecondaryDisclosure
@@ -3785,11 +3868,13 @@ const WatchlistPage: React.FC = () => {
                   </DenseSecondaryDisclosure>
                 ) : null}
 
-                <LeveragedEtfMapper
-                  defaultUnderlyingSymbol={activeItem.symbol}
-                  language={language}
-                  className="pt-4"
-                />
+                {activeCanonicalIdentity ? (
+                  <LeveragedEtfMapper
+                    defaultUnderlyingSymbol={activeCanonicalIdentity.symbol}
+                    language={language}
+                    className="pt-4"
+                  />
+                ) : null}
 
                 <DenseSecondaryDisclosure
                   data-testid="watchlist-data-notes"
@@ -3829,7 +3914,10 @@ const WatchlistPage: React.FC = () => {
                     <TerminalButton
                       type="button"
                       variant="compact"
-                      onClick={() => navigate(buildStockStructurePath(activeItem, language))}
+                      disabled={!activeStockStructurePath}
+                      onClick={() => {
+                        if (activeStockStructurePath) navigate(activeStockStructurePath);
+                      }}
                     >
                       <Search className="h-3.5 w-3.5" />
                       {language === 'zh' ? '结构' : 'Structure'}
@@ -3837,7 +3925,10 @@ const WatchlistPage: React.FC = () => {
                     <TerminalButton
                       type="button"
                       variant="compact"
-                      onClick={() => navigate(buildScannerPath(activeItem, language))}
+                      disabled={!activeScannerPath}
+                      onClick={() => {
+                        if (activeScannerPath) navigate(activeScannerPath);
+                      }}
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       {language === 'zh' ? '扫描器' : 'Scanner'}
@@ -3846,7 +3937,7 @@ const WatchlistPage: React.FC = () => {
                       type="button"
                       variant="secondary"
                       onClick={() => void handleAnalyze(activeItem)}
-                      disabled={pendingAnalyzeId === activeItem.id}
+                      disabled={pendingAnalyzeId === activeItem.id || !activeCanonicalIdentity}
                     >
                       <Play className="h-3.5 w-3.5" />
                       {pendingAnalyzeId === activeItem.id ? copy.analyzing : copy.analyze}
@@ -3854,7 +3945,10 @@ const WatchlistPage: React.FC = () => {
                     <TerminalButton
                       type="button"
                       variant="compact"
-                      onClick={() => navigate(buildBacktestPath(activeItem, language))}
+                      disabled={!activeBacktestPath}
+                      onClick={() => {
+                        if (activeBacktestPath) navigate(activeBacktestPath);
+                      }}
                     >
                       <BarChart3 className="h-3.5 w-3.5" />
                       {copy.backtest}
@@ -3870,7 +3964,7 @@ const WatchlistPage: React.FC = () => {
                     ) : null}
                     <TerminalButton
                       type="button"
-                      aria-label={`${copy.copySymbol} ${activeItem.symbol}`}
+                      aria-label={`${copy.copySymbol} ${activeDisplaySymbol}`}
                       variant="compact"
                       onClick={() => void handleCopy(activeItem)}
                     >

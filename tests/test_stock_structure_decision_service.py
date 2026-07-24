@@ -12,6 +12,7 @@ from typing import Any
 from src.services.stock_structure_decision_service import (
     STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
     StockStructureDecisionService,
+    _normalize_unique_tickers,
 )
 
 
@@ -730,6 +731,7 @@ def test_service_output_avoids_recommendation_or_trading_instruction_language() 
 
 
 def test_batch_structure_decisions_are_bounded_and_stably_ordered() -> None:
+    assert _normalize_unique_tickers(["0700.HK", "HK00700", "AAPL"]) == ["HK00700", "AAPL"]
     fake_history = _FakeMultiHistoryService(
         {
             "AAPL": {

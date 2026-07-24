@@ -208,15 +208,16 @@ describe('stockPoolStore', () => {
     expect(state.isAnalyzing).toBe(false);
   });
 
-  it('rejects obviously invalid mixed alphanumeric input before calling the API', async () => {
+  it('defers unresolved input to the analysis endpoint canonical authority', async () => {
+    vi.mocked(analysisApi.analyzeAsync).mockRejectedValueOnce(new Error('invalid stock symbol'));
     useStockPoolStore.getState().setQuery('00aaaaa');
 
     await useStockPoolStore.getState().submitAnalysis();
 
     const state = useStockPoolStore.getState();
-    expect(state.inputError).toBe('请输入有效的股票代码或股票名称');
+    expect(state.inputError).toBeUndefined();
     expect(state.isAnalyzing).toBe(false);
-    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
+    expect(analysisApi.analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({ stockCode: '00aaaaa' }));
   });
 
   it('merges newly discovered history items during silent refresh', async () => {

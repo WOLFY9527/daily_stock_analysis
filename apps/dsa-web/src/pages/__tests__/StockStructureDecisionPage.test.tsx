@@ -1,6 +1,6 @@
 import type React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
@@ -46,17 +46,22 @@ vi.mock('../../hooks/useProductSurface', () => ({
   }),
 }));
 
-vi.mock('../../api/stocks', () => ({
-  stocksApi: {
-    verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
-    getQuote: (...args: unknown[]) => getQuoteMock(...args),
-    getHistory: (...args: unknown[]) => getHistoryMock(...args),
-    getTechnicalIndicators: (...args: unknown[]) => getTechnicalIndicatorsMock(...args),
-    getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
-    getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
-    getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
-  },
-}));
+vi.mock('../../api/stocks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/stocks')>();
+  return {
+    ...actual,
+    stocksApi: {
+      ...actual.stocksApi,
+      verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
+      getQuote: (...args: unknown[]) => getQuoteMock(...args),
+      getHistory: (...args: unknown[]) => getHistoryMock(...args),
+      getTechnicalIndicators: (...args: unknown[]) => getTechnicalIndicatorsMock(...args),
+      getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
+      getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
+      getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
+    },
+  };
+});
 
 vi.mock('../../api/optionsLab', () => ({
   optionsLabApi: {
@@ -81,6 +86,21 @@ const renderRoutePattern = (ui: React.ReactElement, path: string, pattern: strin
 function StockStructureDetailRouteProbe() {
   const { stockCode = '' } = useParams();
   return <div data-testid="stock-structure-detail-route">{stockCode}</div>;
+}
+
+function StockStructureRouteTransitionHarness() {
+  const navigate = useNavigate();
+
+  return (
+    <>
+      <button type="button" onClick={() => navigate('/zh/stocks/UNAVAILABLE/structure-decision')}>
+        Navigate to unavailable stock
+      </button>
+      <Routes>
+        <Route path="/zh/stocks/:stockCode/structure-decision" element={<StockStructureDecisionPage />} />
+      </Routes>
+    </>
+  );
 }
 
 const renderStockStructureEntryRoute = (path = '/zh/stock-structure') => render(
@@ -706,16 +726,16 @@ describe('StockStructureDecisionPage', () => {
     });
     languageState.value = 'zh';
     productSurfaceState.isAdmin = false;
-    verifyTickerExistsMock.mockResolvedValue({
-      stockCode: 'ORCL',
-      normalizedSymbol: 'ORCL',
+    verifyTickerExistsMock.mockImplementation((stockCode: string) => Promise.resolve({
+      stockCode,
+      normalizedSymbol: stockCode,
       market: 'us',
       status: 'valid',
       valid: true,
       exists: true,
-      stockName: 'Oracle',
+      stockName: null,
       message: 'Symbol verified.',
-    });
+    }));
     getResearchPacketMock.mockImplementation((symbol: string) => Promise.resolve({
       ...partialResearchPacket(),
       symbol,
@@ -727,6 +747,139 @@ describe('StockStructureDecisionPage', () => {
     getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
     getStockEvidenceMock.mockResolvedValue(stockEvidenceResponse());
     getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
+  });
+
+  it('uses the API canonical HK symbol for the route, display, and every single-symbol request', async () => {
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'HK00700',
+      normalizedSymbol: 'HK00700',
+      market: 'hk',
+      status: 'unknown',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'Symbol format is supported, but verification is not confirmed yet.',
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/0700.HK/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    await waitFor(() => expect(getStructureDecisionMock).toHaveBeenCalledWith('HK00700'));
+    expect(verifyTickerExistsMock).toHaveBeenNthCalledWith(1, '0700.HK');
+    expect(verifyTickerExistsMock).toHaveBeenNthCalledWith(2, 'HK00700');
+    expect(getQuoteMock).toHaveBeenCalledWith('HK00700');
+    expect(getResearchPacketMock).toHaveBeenCalledWith('HK00700');
+    expect(getHistoryMock).toHaveBeenCalledWith('HK00700', { period: 'daily', days: 180 });
+    expect(getTechnicalIndicatorsMock).toHaveBeenCalledWith('HK00700');
+    expect(getStockEvidenceMock).toHaveBeenCalledWith('HK00700');
+    expect(getOptionsStructureMock).toHaveBeenCalledWith('HK00700');
+    expect(screen.getByTestId('stock-structure-decision-page')).toHaveTextContent('HK00700 结构工作区');
+  });
+
+  it('resolves comparison aliases before canonical deduplication and batch loading', async () => {
+    verifyTickerExistsMock.mockImplementation((stockCode: string) => Promise.resolve({
+      stockCode,
+      normalizedSymbol: stockCode === '0700.HK' || stockCode === 'HK00700' ? 'HK00700' : 'AAPL',
+      market: stockCode === '0700.HK' || stockCode === 'HK00700' ? 'hk' : 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stockName: null,
+      message: 'Symbol verified.',
+    }));
+    getStructureDecisionsBatchMock.mockResolvedValue({
+      items: [baseStructureDecision()],
+      symbolCompareEvidencePacket: null,
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/0700.HK,HK00700,AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    await waitFor(() => expect(getStructureDecisionsBatchMock).toHaveBeenCalledWith({
+      stockCodes: ['HK00700', 'AAPL'],
+      benchmark: undefined,
+      maxItems: undefined,
+    }));
+    expect(getResearchPacketMock).toHaveBeenCalledWith('HK00700');
+    expect(getQuoteMock).not.toHaveBeenCalled();
+    expect(getStructureDecisionMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('stock-structure-decision-page')).toHaveTextContent('HK00700 / AAPL 结构工作区');
+  });
+
+  it('stops unresolved symbols before any downstream research request', async () => {
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'BAD',
+      normalizedSymbol: null,
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'invalid',
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/BAD/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    await screen.findByTestId('stock-structure-symbol-not-found-state');
+    expect(getQuoteMock).not.toHaveBeenCalled();
+    expect(getResearchPacketMock).not.toHaveBeenCalled();
+    expect(getStructureDecisionMock).not.toHaveBeenCalled();
+    expect(getHistoryMock).not.toHaveBeenCalled();
+    expect(getTechnicalIndicatorsMock).not.toHaveBeenCalled();
+    expect(getStockEvidenceMock).not.toHaveBeenCalled();
+    expect(getOptionsStructureMock).not.toHaveBeenCalled();
+  });
+
+  it('clears the prior canonical identity when a new route cannot be verified', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    verifyTickerExistsMock.mockImplementation((stockCode: string) => Promise.resolve(
+      stockCode === 'AAPL'
+        ? {
+          stockCode,
+          normalizedSymbol: 'AAPL',
+          market: 'us',
+          status: 'valid',
+          valid: true,
+          exists: true,
+          stockName: null,
+          message: 'Symbol verified.',
+        }
+        : {
+          stockCode,
+          normalizedSymbol: null,
+          market: null,
+          status: 'unavailable',
+          valid: false,
+          exists: false,
+          stockName: null,
+          message: 'Symbol verification is unavailable.',
+        },
+    ));
+
+    render(
+      <MemoryRouter initialEntries={['/zh/stocks/AAPL/structure-decision']}>
+        <StockStructureRouteTransitionHarness />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: 'AAPL 研究工作区' });
+    fireEvent.click(screen.getByRole('button', { name: 'Navigate to unavailable stock' }));
+
+    await screen.findByText('标的身份暂不可用');
+    const page = screen.getByTestId('stock-structure-decision-page');
+    expect(page).not.toHaveTextContent('AAPL 研究工作区');
+    expect(page).not.toHaveTextContent('AAPL 结构工作区');
+    expect(getStructureDecisionMock).toHaveBeenCalledTimes(1);
   });
 
   it('renders direct symbol input on the stock-structure entry empty state while preserving queue links', () => {
@@ -754,34 +907,68 @@ describe('StockStructureDecisionPage', () => {
     expect(screen.queryByTestId('stock-structure-detail-route')).not.toBeInTheDocument();
   });
 
-  it('shows a consumer-safe validation error for malformed direct symbols', () => {
+  it('shows a consumer-safe validation error for malformed direct symbols', async () => {
+    verifyTickerExistsMock.mockResolvedValueOnce({
+      stockCode: 'AAPL<script>',
+      normalizedSymbol: null,
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'invalid',
+    });
     renderStockStructureEntryRoute();
 
     fireEvent.change(screen.getByLabelText('股票代码'), { target: { value: 'AAPL<script>' } });
     fireEvent.click(screen.getByRole('button', { name: '打开研究' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('股票代码格式不正确');
-    expect(screen.getByRole('alert').textContent || '').not.toMatch(/provider|requestId|traceId|cache|raw|debug|apiKey|token/i);
+    const alert = await screen.findByRole('alert');
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('AAPL<script>');
+    expect(alert).toHaveTextContent('股票代码格式不正确');
+    expect(alert.textContent || '').not.toMatch(/provider|requestId|traceId|cache|raw|debug|apiKey|token/i);
     expect(screen.queryByTestId('stock-structure-detail-route')).not.toBeInTheDocument();
   });
 
-  it('navigates a valid direct symbol into the existing structure detail route', () => {
+  it('navigates a valid direct symbol into the existing structure detail route', async () => {
+    verifyTickerExistsMock.mockResolvedValueOnce({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stockName: 'Apple',
+      message: 'Symbol verified.',
+    });
     renderStockStructureEntryRoute();
 
     fireEvent.change(screen.getByLabelText('股票代码'), { target: { value: ' aapl ' } });
     fireEvent.click(screen.getByRole('button', { name: '打开研究' }));
 
-    expect(screen.getByTestId('stock-structure-detail-route')).toHaveTextContent('AAPL');
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('aapl');
+    expect(await screen.findByTestId('stock-structure-detail-route')).toHaveTextContent('AAPL');
   });
 
-  it('keeps carried symbol state visible and deep-links common market formats', () => {
+  it('keeps carried symbol state visible and deep-links common market formats', async () => {
+    verifyTickerExistsMock.mockResolvedValueOnce({
+      stockCode: 'HK00700',
+      normalizedSymbol: 'HK00700',
+      market: 'hk',
+      status: 'unknown',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'Symbol format is supported, but verification is not confirmed yet.',
+    });
     renderStockStructureEntryRoute('/zh/stock-structure?symbols=0700.HK');
 
     expect(screen.getByLabelText('股票代码')).toHaveValue('0700.HK');
 
     fireEvent.click(screen.getByRole('button', { name: '打开研究' }));
 
-    expect(screen.getByTestId('stock-structure-detail-route')).toHaveTextContent('0700.HK');
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('0700.HK');
+    expect(await screen.findByTestId('stock-structure-detail-route')).toHaveTextContent('HK00700');
   });
 
   it('requests and renders the symbol research packet as a professional evidence stack', async () => {
@@ -2171,7 +2358,7 @@ describe('StockStructureDecisionPage', () => {
       stockCode: 'AAPL',
       normalizedSymbol: 'AAPL',
       market: 'us',
-      status: 'verified',
+      status: 'valid',
       valid: true,
       exists: true,
       stockName: 'Apple',

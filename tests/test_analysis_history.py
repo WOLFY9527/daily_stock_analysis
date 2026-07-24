@@ -386,6 +386,99 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             self.assertEqual(payload["meta"]["stock_code"], "ORCL")
             self.assertNotIn("AAPL", json.dumps(payload, ensure_ascii=False))
 
+        alias_result = AnalysisResult(
+            code="HK00700",
+            name="腾讯控股",
+            sentiment_score=66,
+            trend_prediction="Neutral",
+            operation_advice="Observe",
+            analysis_summary="HK row summary",
+        )
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=alias_result,
+                query_id="query_hk_alias_persisted_report_001",
+                report_type="detailed",
+                news_content="news",
+                context_snapshot=None,
+                save_snapshot=False,
+            ),
+            1,
+        )
+        with self.db.get_session() as session:
+            alias_row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_hk_alias_persisted_report_001"
+            ).first()
+            if alias_row is None:
+                self.fail("未找到港股历史记录")
+            alias_row.raw_result = json.dumps({
+                "code": "0700.HK",
+                "persisted_report": {
+                    "meta": {
+                        "query_id": "query_hk_alias_persisted_report_001",
+                        "stock_code": "0700.HK",
+                        "stock_name": "腾讯控股",
+                        "report_type": "detailed",
+                    },
+                    "summary": {"analysis_summary": "HK alias persisted summary"},
+                },
+            })
+            alias_record_id = alias_row.id
+            session.commit()
+
+        alias_detail = HistoryService(self.db).get_history_detail_by_id(alias_record_id)
+        self.assertIsNotNone(alias_detail)
+        self.assertEqual(alias_detail.get("stock_code"), "HK00700")
+        self.assertEqual(alias_detail.get("analysis_summary"), "HK alias persisted summary")
+
+    def test_history_detail_accepts_explicit_hk_payload_for_legacy_hk_row_symbol(self) -> None:
+        """An explicit persisted HK identity proves the legacy stored alias."""
+        result = AnalysisResult(
+            code="HK00700",
+            name="Tencent",
+            sentiment_score=66,
+            trend_prediction="Neutral",
+            operation_advice="Observe",
+            analysis_summary="legacy HK row summary",
+        )
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=result,
+                query_id="query_legacy_hk_persisted_report_001",
+                report_type="detailed",
+                news_content="news",
+                context_snapshot=None,
+                save_snapshot=False,
+            ),
+            1,
+        )
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_legacy_hk_persisted_report_001"
+            ).first()
+            if row is None:
+                self.fail("未找到旧港股历史记录")
+            row.code = "00700"
+            row.raw_result = json.dumps({
+                "code": "0700.HK",
+                "persisted_report": {
+                    "meta": {
+                        "query_id": "query_legacy_hk_persisted_report_001",
+                        "stock_code": "0700.HK",
+                        "stock_name": "Tencent",
+                        "report_type": "detailed",
+                    },
+                    "summary": {"analysis_summary": "legacy HK persisted summary"},
+                },
+            })
+            record_id = row.id
+            session.commit()
+
+        detail = HistoryService(self.db).get_history_detail_by_id(record_id)
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.get("stock_code"), "HK00700")
+        self.assertEqual(detail.get("analysis_summary"), "legacy HK persisted summary")
+
     def test_attach_persisted_report_enriches_canonical_payload_and_exposes_generated_at(self) -> None:
         result = self._build_result()
         saved = self.db.save_analysis_history(
@@ -1134,6 +1227,48 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         diagnostic_payload = diagnostic_response.json()
         self.assertEqual(diagnostic_payload["total"], 2)
         self.assertIn("ORCL", [item["stock_code"] for item in diagnostic_payload["items"]])
+
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=AnalysisResult(
+                    code="HK00700",
+                    name="Tencent",
+                    sentiment_score=58,
+                    trend_prediction="Observation",
+                    operation_advice="Observe",
+                    analysis_summary="Legacy HK history row.",
+                ),
+                query_id="query_history_legacy_hk_alias_001",
+                report_type="detailed",
+                news_content="news",
+                context_snapshot=None,
+                save_snapshot=False,
+                is_test=False,
+            ),
+            1,
+        )
+        with self.db.get_session() as session:
+            legacy_row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_history_legacy_hk_alias_001"
+            ).first()
+            if legacy_row is None:
+                self.fail("missing legacy HK history row")
+            legacy_row.code = "00700"
+            session.commit()
+
+        alias_response = client.get(
+            "/api/v1/history",
+            params={"stock_code": "0700.HK", "include_test": "true"},
+        )
+        self.assertEqual(alias_response.status_code, 200)
+        self.assertEqual(
+            [item["stock_code"] for item in alias_response.json()["items"]],
+            ["HK00700"],
+        )
+
+        invalid_response = client.get("/api/v1/history", params={"stock_code": "BAD!"})
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertEqual(invalid_response.json()["error"], "validation_error")
 
     @patch("src.auth.is_auth_enabled", return_value=False)
     def test_history_detail_api_omits_raw_debug_containers(self, mock_auth) -> None:

@@ -11,7 +11,7 @@
 
 import logging
 from datetime import date, datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterable
 
 from src.storage import DatabaseManager, AnalysisHistory
 
@@ -132,6 +132,7 @@ class AnalysisRepository:
         self,
         *,
         code: Optional[str] = None,
+        codes: Optional[Iterable[str]] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         offset: int = 0,
@@ -142,6 +143,7 @@ class AnalysisRepository:
         try:
             return self.db.get_analysis_history_paginated(
                 code=code,
+                codes=codes,
                 start_date=start_date,
                 end_date=end_date,
                 offset=offset,

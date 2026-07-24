@@ -17,7 +17,11 @@ class _NoQuoteAdapter:
 
 
 class _QuoteWithoutPriceService:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
     def get_realtime_quote(self, stock_code: str):
+        self.calls.append(stock_code)
         return {
             "stock_code": stock_code,
             "stock_name": f"{stock_code} Inc.",
@@ -68,12 +72,14 @@ def test_starter_quote_endpoint_returns_structured_unavailable_instead_of_raw_40
 
 
 def test_quote_endpoint_preserves_missing_price_as_null_not_false_zero() -> None:
-    with patch("api.v1.endpoints.stocks.StockService", return_value=_QuoteWithoutPriceService()):
-        response = _client().get("/api/v1/stocks/AAPL/quote")
+    service = _QuoteWithoutPriceService()
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
+        response = _client().get("/api/v1/stocks/0700.HK/quote")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["stock_code"] == "AAPL"
+    assert service.calls == ["HK00700"]
+    assert payload["stock_code"] == "HK00700"
     assert payload.get("current_price") is None
     assert payload["isUnavailable"] is True
     assert payload["availabilityState"] == "missing"

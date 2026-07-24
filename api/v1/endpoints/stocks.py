@@ -113,6 +113,20 @@ def _stock_validation_response(
     )
 
 
+def _require_canonical_stock_symbol(stock_code: str, *, market: str | None = None) -> str:
+    """Return one route-safe identity or reject before reaching a data service."""
+    precheck = validate_consumer_symbol_precheck(stock_code, market=market)
+    if precheck.can_lookup:
+        return precheck.normalized_symbol
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "error": "invalid_stock_symbol",
+            "message": precheck.message,
+        },
+    )
+
+
 @router.post(
     "/extract-from-image",
     dependencies=[Depends(get_current_user)],
@@ -388,8 +402,9 @@ def get_symbol_research_packet(
     stock_code: str,
     market: Optional[str] = Query(None, description="可选市场约束：cn / hk / us"),
 ) -> SymbolResearchPacketResponse:
+    canonical_symbol = _require_canonical_stock_symbol(stock_code, market=market)
     try:
-        payload = build_symbol_research_packet(stock_code, market=market)
+        payload = build_symbol_research_packet(canonical_symbol, market=market)
         return consumer_safe_json_response(
             SymbolResearchPacketResponse.model_validate(payload),
             surface="symbol-research-packet",
@@ -423,10 +438,12 @@ def get_stock_structure_decisions_batch(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StockStructureDecisionBatchResponse:
     _ = current_user
+    canonical_stock_codes = [_require_canonical_stock_symbol(value) for value in request.stock_codes]
+    canonical_benchmark = _require_canonical_stock_symbol(request.benchmark) if request.benchmark else None
     try:
         payload = StockStructureDecisionService().get_structure_decisions_batch(
-            request.stock_codes,
-            benchmark=request.benchmark,
+            canonical_stock_codes,
+            benchmark=canonical_benchmark,
             max_items=request.max_items,
         )
         return consumer_safe_json_response(
@@ -459,13 +476,14 @@ def get_stock_structure_decisions_batch(
     description="返回现有 StockEvidenceService 的单股票只读证据投影，并保留 stockEvidencePacket。",
 )
 def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
+    canonical_symbol = _require_canonical_stock_symbol(stock_code)
     try:
         service = StockEvidenceService()
         if hasattr(service, "quote_adapter") and hasattr(service.quote_adapter, "fetcher_manager"):
             service.quote_adapter.fetcher_manager = _ReadOnlyEvidenceFetcherManager()
         if hasattr(service, "fetcher_manager"):
             service.fetcher_manager = _ReadOnlyEvidenceFetcherManager()
-        payload = service.get_stock_evidence([stock_code])
+        payload = service.get_stock_evidence([canonical_symbol])
 
         items = payload.get("items")
         if not isinstance(items, list) or not items:
@@ -473,7 +491,7 @@ def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"未找到股票 {stock_code} 的证据数据",
+                    "message": f"未找到股票 {canonical_symbol} 的证据数据",
                 },
             )
 
@@ -517,9 +535,10 @@ def get_stock_structure_decision(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StockStructureDecisionResponse:
     _ = current_user
+    canonical_symbol = _require_canonical_stock_symbol(stock_code)
     try:
         payload = StockStructureDecisionService().get_structure_decision(
-            stock_code,
+            canonical_symbol,
             context_source=context_source,
             context_section=context_section,
             context_reason=context_reason,
@@ -561,7 +580,7 @@ def get_stock_quote(
     获取指定股票的最新行情数据
 
     Args:
-        stock_code: 股票代码（如 600519、00700、AAPL）
+        stock_code: 股票代码（如 600519、HK00700、AAPL）
 
     Returns:
         StockQuote: 实时行情数据
@@ -569,23 +588,24 @@ def get_stock_quote(
     Raises:
         HTTPException: 404 - 股票不存在
     """
+    canonical_symbol = _require_canonical_stock_symbol(stock_code)
     try:
         service = StockService()
 
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
-        result = service.get_realtime_quote(stock_code)
+        result = service.get_realtime_quote(canonical_symbol)
 
         if result is None:
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"未找到股票 {stock_code} 的行情数据"
+                    "message": f"未找到股票 {canonical_symbol} 的行情数据"
                 }
             )
 
         return StockQuote(
-            stock_code=result.get("stock_code", stock_code),
+            stock_code=canonical_symbol,
             stock_name=result.get("stock_name"),
             current_price=result.get("current_price"),
             change=result.get("change"),
@@ -641,8 +661,10 @@ def get_stock_quote(
     description="返回基于已校验调整后历史 K 线的技术指标证据状态；不构成交易建议。",
 )
 def get_stock_technical_indicators(stock_code: str) -> StockTechnicalIndicatorsResponse:
+    canonical_symbol = _require_canonical_stock_symbol(stock_code)
     try:
-        payload = StockService().get_technical_indicators(stock_code)
+        payload = dict(StockService().get_technical_indicators(canonical_symbol))
+        payload["symbol"] = canonical_symbol
         return StockTechnicalIndicatorsResponse.model_validate(payload)
     except Exception as e:
         logger.error("获取股票技术指标失败: %s", e, exc_info=True)
@@ -672,10 +694,11 @@ def get_stock_intraday(
     interval: str = Query("5m", description="分钟间隔", pattern="^(1m|2m|5m|15m|30m|60m|90m)$"),
     range_period: str = Query("1d", alias="range", description="时间范围", pattern="^(1d|5d|1mo)$"),
 ) -> StockIntradayResponse:
+    canonical_symbol = _require_canonical_stock_symbol(stock_code)
     try:
         service = StockService()
         result = service.get_intraday_data(
-            stock_code=stock_code,
+            stock_code=canonical_symbol,
             interval=interval,
             range_period=range_period,
         )
@@ -691,7 +714,7 @@ def get_stock_intraday(
             for item in result.get("data", [])
         ]
         return StockIntradayResponse(
-            stock_code=stock_code,
+            stock_code=canonical_symbol,
             stock_name=result.get("stock_name"),
             interval=interval,
             range=range_period,
@@ -755,12 +778,13 @@ def get_stock_history(
     Returns:
         StockHistoryResponse: 历史行情数据
     """
+    canonical_symbol = _require_canonical_stock_symbol(stock_code)
     try:
         service = StockService()
 
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_data(
-            stock_code=stock_code,
+            stock_code=canonical_symbol,
             period=period,
             days=days
         )
@@ -781,7 +805,7 @@ def get_stock_history(
         ]
 
         return StockHistoryResponse(
-            stock_code=stock_code,
+            stock_code=canonical_symbol,
             stock_name=result.get("stock_name"),
             period=period,
             data=data,

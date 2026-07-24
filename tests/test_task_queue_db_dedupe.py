@@ -55,7 +55,7 @@ class DbBackedAnalysisTaskDedupeTestCase(unittest.TestCase):
 
         self.assertEqual(accepted_again, [])
         self.assertEqual(len(duplicates_again), 1)
-        self.assertEqual(duplicates_again[0].stock_code, "600519.SH")
+        self.assertEqual(duplicates_again[0].stock_code, "600519")
         self.assertEqual(duplicates_again[0].existing_task_id, accepted[0].task_id)
 
     def test_stale_active_durable_row_blocks_retry_until_terminalized(self) -> None:

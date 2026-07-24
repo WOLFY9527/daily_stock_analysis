@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from src.utils.symbol_classification import is_bse_code, is_us_stock_code
-from src.utils.symbol_normalization import normalize_stock_code
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 
 SCANNER_UNIVERSE_LIFECYCLE_CONTRACT_VERSION = "scanner_universe_lifecycle_v1"
@@ -89,12 +89,14 @@ def normalize_scanner_universe_symbol(value: Any, *, market: str) -> str | None:
     if not raw:
         return None
     normalized_market = _normalize_market(market)
+    identity = parse_canonical_symbol(raw, market=normalized_market.lower())
+    if identity is None or identity.ambiguous or identity.market != normalized_market.lower():
+        return None
+    symbol = identity.symbol
     if normalized_market == "US":
-        symbol = raw.upper()
         return symbol if is_us_stock_code(symbol) else None
-    symbol = normalize_stock_code(raw).upper()
     if normalized_market == "HK":
-        return symbol if _is_hk_symbol(symbol) else None
+        return symbol
     if normalized_market == "CN":
         return symbol if _is_cn_common_symbol(symbol) else None
     return None
@@ -2271,17 +2273,11 @@ def _coverage_threshold(market: str, value: int | None) -> int:
 
 
 def _is_cn_common_symbol(value: str) -> bool:
-    normalized = normalize_stock_code(value)
-    if not normalized.isdigit() or len(normalized) != 6:
+    if not value.isdigit() or len(value) != 6:
         return False
-    if is_bse_code(normalized):
+    if is_bse_code(value):
         return False
-    return normalized.startswith(("000", "001", "002", "003", "300", "301", "600", "601", "603", "605", "688", "689"))
-
-
-def _is_hk_symbol(value: str) -> bool:
-    normalized = normalize_stock_code(value).upper()
-    return normalized.startswith("HK") and normalized[2:].isdigit() and len(normalized) == 7
+    return value.startswith(("000", "001", "002", "003", "300", "301", "600", "601", "603", "605", "688", "689"))
 
 
 def _safe_source_class(value: Any) -> str:

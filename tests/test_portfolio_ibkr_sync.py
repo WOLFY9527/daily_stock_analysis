@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -24,6 +25,7 @@ from src.services.portfolio_ibkr_sync_service import (
 from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_service import PortfolioService
 from src.storage import DatabaseManager
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 
 class FakeIbkrTransport:
@@ -498,6 +500,42 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
         trades = self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)
         self.assertEqual(trades["total"], 0)
 
+    def test_read_only_sync_does_not_infer_hk_for_bare_five_digit_position_without_context(self) -> None:
+        account = self.service.create_account(name="IBKR Ambiguous Position", broker="IBKR", market="us", base_currency="USD")
+        self.service.repo.save_fx_rate(
+            from_currency="HKD",
+            to_currency="USD",
+            rate_date=date.today(),
+            rate=0.128,
+            source="unit-test",
+            is_stale=False,
+        )
+        transport = self._build_transport(multi_market=True)
+        positions = transport.responses["/v1/api/portfolio/U1234567/positions/0"]
+        self.assertIsInstance(positions, list)
+        hk_position = positions[1]
+        self.assertIsInstance(hk_position, dict)
+        hk_position["symbol"] = "00700"
+        hk_position.pop("countryCode")
+        hk_position.pop("listingExchange")
+
+        result = PortfolioIbkrSyncService(
+            portfolio_service=self.service,
+            transport=transport,
+        ).sync_read_only_account_state(
+            account_id=account["id"],
+            session_token="unit-test-session",
+        )
+
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=account["id"],
+            as_of=date.fromisoformat(result["snapshot_date"]),
+            cost_method="fifo",
+        )
+        self.assertEqual(result["position_count"], 1)
+        self.assertEqual([item["symbol"] for item in snapshot["accounts"][0]["positions"]], ["AAPL"])
+        self.assertIn("ambiguous", " ".join(result["warnings"]))
+
     def test_read_only_sync_requires_transient_session_token(self) -> None:
         account = self.service.create_account(name="IBKR Main", broker="IBKR", market="us", base_currency="USD")
         sync_service = PortfolioIbkrSyncService(portfolio_service=self.service, transport=self._build_transport())
@@ -636,6 +674,97 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
 
         account_after_sync = self.service.get_account(account["id"], include_inactive=True)
         self.assertEqual(account_after_sync["market"], "global")
+
+    @patch(
+        "src.services.portfolio_ibkr_sync_service.parse_canonical_symbol",
+        wraps=parse_canonical_symbol,
+    )
+    def test_read_only_sync_uses_canonical_parser_for_sehk_position(self, parser) -> None:
+        account = self.service.create_account(name="IBKR HK Position", broker="IBKR", market="hk", base_currency="USD")
+        self.service.repo.save_fx_rate(
+            from_currency="HKD",
+            to_currency="USD",
+            rate_date=date.today(),
+            rate=0.128,
+            source="unit-test",
+            is_stale=False,
+        )
+        transport = self._build_transport(multi_market=True)
+        positions = transport.responses["/v1/api/portfolio/U1234567/positions/0"]
+        self.assertIsInstance(positions, list)
+        hk_position = positions[1]
+        self.assertIsInstance(hk_position, dict)
+        hk_position["symbol"] = "00700"
+
+        result = PortfolioIbkrSyncService(
+            portfolio_service=self.service,
+            transport=transport,
+        ).sync_read_only_account_state(
+            account_id=account["id"],
+            session_token="unit-test-session",
+        )
+
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=account["id"],
+            as_of=date.fromisoformat(result["snapshot_date"]),
+            cost_method="fifo",
+        )
+        hk_positions = [item for item in snapshot["accounts"][0]["positions"] if item["market"] == "hk"]
+        self.assertEqual(len(hk_positions), 1)
+        self.assertEqual(hk_positions[0]["symbol"], "HK00700")
+        parser.assert_any_call("00700", market="hk")
+
+    def test_ibkr_hk_trade_preview_uses_canonical_symbol_identity(self) -> None:
+        content = b'''<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U7654321" fromDate="2026-02-01" toDate="2026-02-28" currency="USD">
+    <Trades>
+      <Trade assetCategory="STK" symbol="00700" exchange="SEHK" currency="HKD" tradeDate="2026-02-03" buySell="BUY" quantity="10" tradePrice="400" ibCommission="1" taxes="0" ibExecID="HK-700-1" description="Tencent BUY"/>
+    </Trades>
+  </FlexStatement>
+</FlexStatements>
+'''
+
+        parsed = self.import_service.parse_import_file(broker="ibkr", content=content)
+
+        self.assertEqual(parsed["record_count"], 1)
+        self.assertEqual(parsed["records"][0]["market"], "hk")
+        self.assertEqual(parsed["records"][0]["symbol"], "HK00700")
+
+    def test_ibkr_hk_corporate_action_preview_uses_canonical_symbol_identity(self) -> None:
+        content = b'''<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U7654321" fromDate="2026-02-01" toDate="2026-02-28" currency="USD">
+    <CorporateActions>
+      <CorporateAction symbol="00700" exchange="SEHK" currency="HKD" reportDate="2026-02-05" ratio="2" description="Tencent stock split 2 for 1"/>
+    </CorporateActions>
+  </FlexStatement>
+</FlexStatements>
+'''
+
+        parsed = self.import_service.parse_import_file(broker="ibkr", content=content)
+
+        self.assertEqual(parsed["corporate_action_count"], 1)
+        self.assertEqual(parsed["corporate_actions"][0]["market"], "hk")
+        self.assertEqual(parsed["corporate_actions"][0]["symbol"], "HK00700")
+
+    def test_ibkr_hk_open_position_preview_uses_canonical_symbol_identity(self) -> None:
+        content = b'''<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U7654321" fromDate="2026-02-01" toDate="2026-02-28" currency="USD">
+    <OpenPositions>
+      <OpenPosition assetCategory="STK" symbol="00700" exchange="SEHK" currency="HKD" reportDate="2026-02-28" position="10" costBasisPrice="400"/>
+    </OpenPositions>
+  </FlexStatement>
+</FlexStatements>
+'''
+
+        parsed = self.import_service.parse_import_file(broker="ibkr", content=content)
+
+        self.assertTrue(parsed["metadata"]["open_position_seeded"])
+        self.assertEqual(parsed["record_count"], 1)
+        self.assertEqual(parsed["records"][0]["market"], "hk")
+        self.assertEqual(parsed["records"][0]["symbol"], "HK00700")
 
     def test_read_only_sync_rejects_duplicate_remote_account_link_on_another_portfolio_account(self) -> None:
         account_a = self.service.create_account(name="A", broker="IBKR", market="us", base_currency="USD")

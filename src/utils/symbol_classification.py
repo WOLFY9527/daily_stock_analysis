@@ -5,40 +5,7 @@ from __future__ import annotations
 
 import re
 
-
-_US_STOCK_PATTERN = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
-_US_INDEX_CODES = frozenset(
-    {
-        "SPX",
-        "^GSPC",
-        "GSPC",
-        "DJI",
-        "^DJI",
-        "DJIA",
-        "IXIC",
-        "^IXIC",
-        "NASDAQ",
-        "NDX",
-        "^NDX",
-        "VIX",
-        "^VIX",
-        "RUT",
-        "^RUT",
-    }
-)
-
-
-def is_us_index_code(code: str | None) -> bool:
-    """Return True when a symbol matches the provider-runtime US index rules."""
-    return (code or "").strip().upper() in _US_INDEX_CODES
-
-
-def is_us_stock_code(code: str | None) -> bool:
-    """Return True when a symbol matches the provider-runtime US stock rules."""
-    normalized = (code or "").strip().upper()
-    if is_us_index_code(normalized):
-        return False
-    return bool(_US_STOCK_PATTERN.match(normalized))
+from src.utils.symbol_normalization import is_us_index_code, is_us_stock_code
 
 
 def is_bse_code(code: str | None) -> bool:

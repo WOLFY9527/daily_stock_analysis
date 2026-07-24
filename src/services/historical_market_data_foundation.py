@@ -8,8 +8,8 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 
 from src.core.trading_calendar import MARKET_EXCHANGE, MARKET_TIMEZONE
-from src.utils.symbol_classification import is_bse_code, is_us_index_code, is_us_stock_code
-from src.utils.symbol_normalization import normalize_stock_code
+from src.utils.symbol_classification import is_bse_code
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 
 HISTORICAL_MARKET_DATA_NORMALIZATION_VERSION = "historical_market_data_foundation_v1"
@@ -414,24 +414,23 @@ def normalize_provider_historical_bars(
 
 def resolve_historical_symbol_identity(*, symbol: str, market: str | None = None) -> dict[str, str]:
     provider_symbol = _safe_text(symbol).upper()
-    normalized = normalize_stock_code(provider_symbol).upper()
     requested_market = _normalize_market(market)
-    if requested_market == "UNKNOWN":
-        if is_us_index_code(normalized) or is_us_stock_code(normalized):
-            requested_market = "US"
-        elif normalized.startswith("HK") and normalized[2:].isdigit():
-            requested_market = "HK"
-        elif normalized.isdigit() and len(normalized) == 6:
-            requested_market = "CN"
-    if requested_market == "HK" and not normalized.startswith("HK") and normalized.isdigit():
-        normalized = f"HK{normalized.zfill(5)}"
-    venue = _venue_for_market_symbol(requested_market, normalized)
+    market_hint = {"CN": "cn", "HK": "hk", "US": "us"}.get(requested_market)
+    identity = parse_canonical_symbol(provider_symbol, market=market_hint)
+    if identity is None or identity.ambiguous or identity.market is None:
+        raise ValueError("historical symbol is unsupported or ambiguous")
+    if market_hint is not None and identity.market != market_hint:
+        raise ValueError("historical symbol does not match the requested market")
+
+    normalized = identity.symbol
+    canonical_market = identity.market.upper()
+    venue = _venue_for_market_symbol(canonical_market, normalized)
     return {
-        "market": requested_market,
+        "market": canonical_market,
         "venue": venue,
         "canonical_symbol": normalized,
         "provider_symbol": provider_symbol,
-        "timezone": _timezone_for_market(requested_market),
+        "timezone": _timezone_for_market(canonical_market),
     }
 
 

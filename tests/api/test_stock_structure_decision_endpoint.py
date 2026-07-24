@@ -918,7 +918,7 @@ def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(
 
 
 def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> None:
-    fake_service = _FakeStructureDecisionService(_payload())
+    fake_service = _FakeStructureDecisionService(_payload(ticker="HK00700"))
     monkeypatch.setattr(
         stocks_endpoint,
         "StockStructureDecisionService",
@@ -926,13 +926,13 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
         raising=False,
     )
 
-    response = _client().get("/api/v1/stocks/AAPL/structure-decision")
+    response = _client().get("/api/v1/stocks/0700.HK/structure-decision")
 
     assert response.status_code == 200
     payload = response.json()
     assert fake_service.calls == [
         {
-            "ticker": "AAPL",
+            "ticker": "HK00700",
             "context_source": None,
             "context_section": None,
             "context_reason": None,
@@ -944,8 +944,8 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
     assert payload["freshnessState"] == "limited"
     assert payload["observationBoundary"]
     assert payload["researchNextSteps"]
-    assert payload["ticker"] == "AAPL"
-    assert payload["symbol"] == "AAPL"
+    assert payload["ticker"] == "HK00700"
+    assert payload["symbol"] == "HK00700"
     for key in (
         "structureState",
         "confidence",
@@ -1329,13 +1329,13 @@ def test_structure_decision_batch_endpoint_returns_comparative_contract(monkeypa
 
     response = _client().post(
         "/api/v1/stocks/structure-decisions/batch",
-        json={"stockCodes": ["msft", "aapl", "msft"], "benchmark": "spy", "maxItems": 2},
+        json={"stockCodes": ["0700.HK", "aapl", "0700.HK"], "benchmark": "spy", "maxItems": 2},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert fake_service.batch_calls == [
-        {"tickers": ["msft", "aapl", "msft"], "benchmark": "spy", "max_items": 2}
+        {"tickers": ["HK00700", "AAPL", "HK00700"], "benchmark": "SPY", "max_items": 2}
     ]
     assert "schemaVersion" not in payload
     assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
@@ -1382,7 +1382,7 @@ def test_structure_decision_batch_post_is_pure_read_projection(monkeypatch) -> N
     assert response.status_code == 200
     payload = response.json()
     assert fake_service.batch_calls == [
-        {"tickers": ["msft", "aapl"], "benchmark": "spy", "max_items": 2}
+        {"tickers": ["MSFT", "AAPL"], "benchmark": "SPY", "max_items": 2}
     ]
     assert payload["symbolCompareEvidencePacket"]["observationBoundary"] == {
         "observationOnly": True,

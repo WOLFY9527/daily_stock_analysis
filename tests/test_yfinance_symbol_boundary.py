@@ -37,6 +37,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 )
 def test_to_yfinance_symbol_preserves_existing_market_parity(raw: str, expected: str) -> None:
     assert to_yfinance_symbol(raw) == expected
+    with pytest.raises(ValueError, match="unsupported or ambiguous"):
+        to_yfinance_symbol("00700")
 
 
 @pytest.mark.parametrize(

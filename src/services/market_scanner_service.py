@@ -91,7 +91,7 @@ from src.utils.symbol_classification import (
     is_st_stock,
     is_us_stock_code,
 )
-from src.utils.symbol_normalization import normalize_stock_code
+from src.utils.symbol_normalization import normalize_stock_code, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -895,16 +895,15 @@ class MarketScannerService:
     @staticmethod
     def _normalize_scanner_symbol(symbol: str, *, market: str) -> Optional[str]:
         normalized_market = (market or "").strip().lower()
-        raw = str(symbol or "").strip().upper()
-        if not raw:
+        identity = parse_canonical_symbol(str(symbol or ""), market=normalized_market)
+        if identity is None or identity.ambiguous or identity.market != normalized_market:
             return None
         if normalized_market == "us":
-            return raw if is_us_stock_code(raw) else None
-        normalized = normalize_stock_code(raw).upper()
+            return identity.symbol if is_us_stock_code(identity.symbol) else None
         if normalized_market == "hk":
-            return normalized if _is_hk_scanner_symbol(normalized) else None
+            return identity.symbol if _is_hk_scanner_symbol(identity.symbol) else None
         if normalized_market == "cn":
-            return normalized if _is_cn_common_stock_code(normalized) else None
+            return identity.symbol if _is_cn_common_stock_code(identity.symbol) else None
         return None
 
     def _normalize_scanner_symbols(

@@ -23,6 +23,10 @@ from src.config import Config, get_config
 from src.providers import classify_provider_retry_disposition
 from src.services.llm_instrumentation import emit_llm_event, provider_from_model
 from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
+from src.utils.symbol_normalization import (
+    extract_canonical_symbols_from_text,
+    parse_canonical_symbol,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,23 +96,9 @@ def _verify_image_magic_bytes(image_bytes: bytes, mime_type: str) -> None:
 
 
 def _normalize_code(raw: str) -> Optional[str]:
-    """Normalize and validate a single stock code. A-shares & HK: 5-6 digits; US: 1-5 letters."""
-    s = raw.strip().upper()
-    if not s:
-        return None
-    # A-shares & HK: 5-6 digit codes (600519, 00700, 09988)
-    if s.isdigit() and len(s) in (5, 6):
-        return s
-    # US stocks: 1-5 letters, optionally with . (e.g. BRK.B)
-    if re.match(r"^[A-Z]{1,5}(\.[A-Z])?$", s):
-        return s
-    # 尝试去除 SH/SZ 后缀
-    for suffix in (".SH", ".SZ", ".SS"):
-        if s.endswith(suffix):
-            base = s[: -len(suffix)].strip()
-            if base.isdigit() and len(base) in (5, 6):
-                return base
-    return None
+    """Delegate image-extracted code identity to the canonical parser."""
+    identity = parse_canonical_symbol(raw)
+    return identity.symbol if identity and not identity.ambiguous else None
 
 
 def _parse_codes_from_text(text: str) -> List[str]:
@@ -139,9 +129,8 @@ def _parse_codes_from_text(text: str) -> List[str]:
     except json.JSONDecodeError:
         pass
 
-    # 兜底：查找 5-6 位数字及美股代码
-    for m in re.finditer(r"\b([0-9]{5,6}|[A-Z]{1,5}(\.[A-Z])?)\b", text, re.IGNORECASE):
-        c = _normalize_code(m.group(1))
+    # Fallback tokenization delegates full identity recognition to the shared parser.
+    for c in extract_canonical_symbols_from_text(text):
         if c and c not in seen and c not in _FAKE_CODES:
             seen.add(c)
             result.append(c)

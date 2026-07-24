@@ -45,6 +45,7 @@ from src.services.uat_provider_isolation import (
 from src.services.news_catalyst_producer_lineage import (
     build_news_catalyst_producer_lineage_bundle_v1,
 )
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -2264,19 +2265,9 @@ class SearchService:
     
     @staticmethod
     def _is_foreign_stock(stock_code: str) -> bool:
-        """判断是否为港股或美股"""
-        import re
-        code = stock_code.strip()
-        # 美股：1-5个大写字母，可能包含点（如 BRK.B）
-        if re.match(r'^[A-Za-z]{1,5}(\.[A-Za-z])?$', code):
-            return True
-        # 港股：带 hk 前缀或 5位纯数字
-        lower = code.lower()
-        if lower.startswith('hk'):
-            return True
-        if code.isdigit() and len(code) == 5:
-            return True
-        return False
+        """Return whether an unambiguous symbol belongs to the HK or US market."""
+        identity = parse_canonical_symbol(stock_code)
+        return bool(identity and not identity.ambiguous and identity.market in {"hk", "us"})
 
     # A-share ETF code prefixes (Shanghai 51/52/56/58, Shenzhen 15/16/18)
     _A_ETF_PREFIXES = ('51', '52', '56', '58', '15', '16', '18')

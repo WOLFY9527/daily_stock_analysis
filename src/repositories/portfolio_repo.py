@@ -33,6 +33,7 @@ from src.storage import (
     PortfolioTrade,
     StockDaily,
 )
+from src.utils.symbol_normalization import canonical_symbol_storage_values, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 PORTFOLIO_PERFORMANCE_CONTRACT_VERSION = "portfolio_performance_v1"
@@ -69,6 +70,31 @@ class PortfolioRepository:
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db = db_manager or DatabaseManager.get_instance()
+
+    @staticmethod
+    def _market_data_storage_lookup(symbol: str) -> Optional[Tuple[str, Tuple[str, ...]]]:
+        """Return one explicit identity and its bounded legacy storage spellings."""
+        identity = parse_canonical_symbol(str(symbol or "").strip())
+        if identity is None or identity.ambiguous or identity.market is None:
+            return None
+        storage_symbols = canonical_symbol_storage_values(
+            identity.symbol,
+            market=identity.market,
+        )
+        if not storage_symbols:
+            return None
+        return identity.symbol, storage_symbols
+
+    @classmethod
+    def _market_data_storage_lookups(cls, symbols: Iterable[str]) -> Dict[str, Tuple[str, ...]]:
+        lookups: Dict[str, Tuple[str, ...]] = {}
+        for symbol in symbols:
+            lookup = cls._market_data_storage_lookup(symbol)
+            if lookup is None:
+                continue
+            canonical_symbol, storage_symbols = lookup
+            lookups.setdefault(canonical_symbol, storage_symbols)
+        return lookups
 
     @staticmethod
     def _mark_phase_f_account_sync_in_session(*, session: Any, account_id: Optional[int]) -> None:
@@ -1324,6 +1350,7 @@ class PortfolioRepository:
         page: int,
         page_size: int,
         include_voided: bool = False,
+        symbols: Optional[Iterable[str]] = None,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
     ) -> Tuple[List[PortfolioTrade], int]:
@@ -1337,7 +1364,12 @@ class PortfolioRepository:
                 conditions.append(PortfolioTrade.trade_date >= date_from)
             if date_to is not None:
                 conditions.append(PortfolioTrade.trade_date <= date_to)
-            if symbol:
+            symbol_values = tuple(
+                dict.fromkeys(str(item or "").strip().upper() for item in symbols or [] if str(item or "").strip())
+            )
+            if symbol_values:
+                conditions.append(PortfolioTrade.symbol.in_(symbol_values))
+            elif symbol:
                 conditions.append(PortfolioTrade.symbol == symbol)
             if side:
                 conditions.append(PortfolioTrade.side == side)
@@ -1417,6 +1449,7 @@ class PortfolioRepository:
         action_type: Optional[str],
         page: int,
         page_size: int,
+        symbols: Optional[Iterable[str]] = None,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
     ) -> Tuple[List[PortfolioCorporateAction], int]:
@@ -1428,7 +1461,12 @@ class PortfolioRepository:
                 conditions.append(PortfolioCorporateAction.effective_date >= date_from)
             if date_to is not None:
                 conditions.append(PortfolioCorporateAction.effective_date <= date_to)
-            if symbol:
+            symbol_values = tuple(
+                dict.fromkeys(str(item or "").strip().upper() for item in symbols or [] if str(item or "").strip())
+            )
+            if symbol_values:
+                conditions.append(PortfolioCorporateAction.symbol.in_(symbol_values))
+            elif symbol:
                 conditions.append(PortfolioCorporateAction.symbol == symbol)
             if action_type:
                 conditions.append(PortfolioCorporateAction.action_type == action_type)
@@ -1458,21 +1496,12 @@ class PortfolioRepository:
     # Price / FX
     # ------------------------------------------------------------------
     def get_latest_close(self, symbol: str, as_of: date) -> Optional[float]:
-        with self.db.get_session() as session:
-            row = session.execute(
-                select(StockDaily)
-                .where(
-                    and_(
-                        StockDaily.code == symbol,
-                        StockDaily.date <= as_of,
-                    )
-                )
-                .order_by(desc(StockDaily.date))
-                .limit(1)
-            ).scalar_one_or_none()
-            if row is None or row.close is None:
-                return None
-            return float(row.close)
+        lookup = self._market_data_storage_lookup(symbol)
+        if lookup is None:
+            return None
+        canonical_symbol, _storage_symbols = lookup
+        latest_close = self.get_latest_closes_with_dates(symbols=[symbol], as_of=as_of).get(canonical_symbol)
+        return latest_close[0] if latest_close is not None else None
 
     def get_latest_closes(self, *, symbols: Iterable[str], as_of: date) -> Dict[str, float]:
         return {
@@ -1489,8 +1518,15 @@ class PortfolioRepository:
         symbols: Iterable[str],
         as_of: date,
     ) -> Dict[str, Tuple[float, Optional[date]]]:
-        normalized = sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
-        if not normalized:
+        lookups = self._market_data_storage_lookups(symbols)
+        storage_symbols = sorted(
+            {
+                storage_symbol
+                for values in lookups.values()
+                for storage_symbol in values
+            }
+        )
+        if not storage_symbols:
             return {}
 
         latest_dates = (
@@ -1500,7 +1536,7 @@ class PortfolioRepository:
             )
             .where(
                 and_(
-                    StockDaily.code.in_(normalized),
+                    StockDaily.code.in_(storage_symbols),
                     StockDaily.date <= as_of,
                 )
             )
@@ -1518,7 +1554,7 @@ class PortfolioRepository:
                     ),
                 )
             ).all()
-        latest_closes: Dict[str, Tuple[float, Optional[date]]] = {}
+        closes_by_storage_symbol: Dict[str, Tuple[float, Optional[date]]] = {}
         for code, close, latest_date in rows:
             if code is None or close is None:
                 continue
@@ -1534,7 +1570,22 @@ class PortfolioRepository:
                     close_date = None
             else:
                 close_date = None
-            latest_closes[str(code).upper()] = (float(close), close_date)
+            closes_by_storage_symbol[str(code).upper()] = (float(close), close_date)
+
+        latest_closes: Dict[str, Tuple[float, Optional[date]]] = {}
+        for canonical_symbol, values in lookups.items():
+            selected_close: Tuple[float, Optional[date]] | None = None
+            selected_date = date.min
+            for storage_symbol in values:
+                latest_close = closes_by_storage_symbol.get(storage_symbol)
+                if latest_close is None:
+                    continue
+                latest_date = latest_close[1] or date.min
+                if selected_close is None or latest_date > selected_date:
+                    selected_close = latest_close
+                    selected_date = latest_date
+            if selected_close is not None:
+                latest_closes[canonical_symbol] = selected_close
         return latest_closes
 
     def get_latest_market_data_update(
@@ -1543,14 +1594,21 @@ class PortfolioRepository:
         symbols: Iterable[str],
         as_of: date,
     ) -> Optional[datetime]:
-        normalized = sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
-        if not normalized:
+        lookups = self._market_data_storage_lookups(symbols)
+        storage_symbols = sorted(
+            {
+                storage_symbol
+                for values in lookups.values()
+                for storage_symbol in values
+            }
+        )
+        if not storage_symbols:
             return None
         with self.db.get_session() as session:
             return session.execute(
                 select(func.max(StockDaily.updated_at)).where(
                     and_(
-                        StockDaily.code.in_(normalized),
+                        StockDaily.code.in_(storage_symbols),
                         StockDaily.date <= as_of,
                     )
                 )

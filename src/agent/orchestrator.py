@@ -43,6 +43,8 @@ from src.agent.protocols import (
 from src.agent.runner import parse_dashboard_json
 from src.agent.tools.registry import ToolRegistry
 from src.report_language import normalize_report_language
+from src.utils.symbol_normalization import extract_canonical_symbol_identities_from_text
+from src.utils.symbol_validation import require_consumer_symbol_identity
 
 if TYPE_CHECKING:
     from src.agent.executor import AgentResult
@@ -597,7 +599,11 @@ class AgentOrchestrator:
         selection_explicit = self.skill_selection_explicit
 
         if context:
-            ctx.stock_code = context.get("stock_code", "")
+            raw_stock_code = context.get("stock_code")
+            if str(raw_stock_code or "").strip():
+                ctx.stock_code = require_consumer_symbol_identity(
+                    str(raw_stock_code),
+                ).normalized_symbol
             ctx.stock_name = context.get("stock_name", "")
             owner_id = str(context.get("owner_id") or "").strip()
             if owner_id:
@@ -1297,38 +1303,30 @@ _LOWERCASE_TICKER_HINTS = re.compile(
 
 def _extract_stock_code(text: str) -> str:
     """Best-effort stock code extraction from free text."""
-    # A-share 6-digit — use lookarounds instead of \b because Python's \b
-    # does not fire at Chinese-character / digit boundaries.
-    m = re.search(r'(?<!\d)((?:[03648]\d{5}|92\d{4}))(?!\d)', text)
-    if m:
-        return m.group(1)
-    # HK — same lookaround approach
-    m = re.search(r'(?<![a-zA-Z])(hk\d{5})(?!\d)', text, re.IGNORECASE)
-    if m:
-        return m.group(1).upper()
-    # US ticker — require 2+ uppercase letters bounded by non-alpha chars.
-    m = re.search(r'(?<![a-zA-Z])([A-Z]{2,5}(?:\.[A-Z]{1,2})?)(?![a-zA-Z])', text)
-    if m:
-        candidate = m.group(1)
-        if candidate not in _COMMON_WORDS:
-            return candidate
-
     stripped = (text or "").strip()
-    bare_match = re.fullmatch(r'([A-Za-z]{2,5}(?:\.[A-Za-z]{1,2})?)', stripped)
-    if bare_match:
-        candidate = bare_match.group(1).upper()
-        if candidate not in _COMMON_WORDS:
-            return candidate
-
-    if not _LOWERCASE_TICKER_HINTS.search(stripped):
+    if not stripped:
         return ""
 
-    for match in re.finditer(r'(?<![a-zA-Z])([A-Za-z]{2,5}(?:\.[A-Za-z]{1,2})?)(?![a-zA-Z])', text):
-        raw_candidate = match.group(1)
-        candidate = raw_candidate.upper()
-        if candidate in _COMMON_WORDS:
+    candidates_by_market: Dict[str, List[str]] = {"cn": [], "hk": [], "us": []}
+    lowercase_ticker_hint = bool(_LOWERCASE_TICKER_HINTS.search(stripped))
+    for identity in extract_canonical_symbol_identities_from_text(text):
+        if identity.market is None:
             continue
-        return candidate
+        if identity.market == "us":
+            raw_candidate = identity.raw_symbol
+            if len(identity.symbol.replace(".", "")) < 2 or identity.symbol in _COMMON_WORDS:
+                continue
+            if (
+                raw_candidate != stripped
+                and raw_candidate != raw_candidate.upper()
+                and not lowercase_ticker_hint
+            ):
+                continue
+        candidates_by_market[identity.market].append(identity.symbol)
+
+    for market in ("cn", "hk", "us"):
+        if candidates_by_market[market]:
+            return candidates_by_market[market][0]
     return ""
 
 

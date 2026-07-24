@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -11,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, delete, desc, func, select
 
 from src.storage import DatabaseManager, UserAlertEvent, UserAlertRule
-from src.utils.symbol_normalization import canonical_stock_code
+from src.utils.symbol_validation import require_consumer_symbol_identity
 
 
 CONTRACT_VERSION = "user_alert_contract_v1"
@@ -28,7 +27,6 @@ _UNSET = object()
 class UserAlertService:
     """Business logic for current-user in-app alert rules and events."""
 
-    _symbol_pattern = re.compile(r"[A-Z0-9][A-Z0-9.\-]*")
     _directions = {"above", "below"}
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
@@ -36,14 +34,7 @@ class UserAlertService:
 
     @classmethod
     def _normalize_symbol(cls, symbol: str) -> str:
-        normalized = canonical_stock_code(symbol).strip().upper()
-        if not normalized:
-            raise ValueError("symbol is required")
-        if len(normalized) > 16:
-            raise ValueError("symbol must be at most 16 characters")
-        if not cls._symbol_pattern.fullmatch(normalized):
-            raise ValueError("symbol contains invalid characters")
-        return normalized
+        return require_consumer_symbol_identity(symbol).normalized_symbol
 
     @classmethod
     def _normalize_direction(cls, direction: str) -> str:

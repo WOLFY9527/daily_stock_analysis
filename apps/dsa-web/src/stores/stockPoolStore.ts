@@ -8,7 +8,6 @@ import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import type { AnalysisReport, HistoryItem, HistoryListResponse, TaskInfo } from '../types/analysis';
 import { translateForCurrentLanguage } from '../i18n/core';
 import { MAX_RECENT_TASKS, sortTasksByPriority } from '../utils/taskQueue';
-import { isObviouslyInvalidStockQuery, looksLikeStockCode, validateStockCode } from '../utils/validation';
 
 const PAGE_SIZE = 20;
 const SELECTED_HISTORY_ID_STORAGE_KEY = 'dsa-selected-history-id';
@@ -645,21 +644,6 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       return { ok: false };
     }
 
-    if (selectionSource !== 'autocomplete' && isObviouslyInvalidStockQuery(stockCodeInput)) {
-      set({ inputError: translateForCurrentLanguage('home.invalidInput'), duplicateError: null });
-      return { ok: false };
-    }
-
-    let normalizedStockCode = stockCodeInput;
-    if (selectionSource === 'autocomplete' || looksLikeStockCode(stockCodeInput)) {
-      const { valid, message, normalized } = validateStockCode(stockCodeInput);
-      if (!valid) {
-        set({ inputError: message, duplicateError: null });
-        return { ok: false };
-      }
-      normalizedStockCode = normalized;
-    }
-
     set({
       inputError: undefined,
       duplicateError: null,
@@ -670,7 +654,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     const requestId = ++analyzeRequestSeq;
     try {
       const response = await analysisApi.analyzeAsync({
-        stockCode: normalizedStockCode,
+        stockCode: stockCodeInput,
         reportType: 'detailed',
         stockName,
         originalQuery: originalQuery || stockCodeInput,
@@ -682,7 +666,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
         if ('taskId' in response) {
           get().syncTaskCreated({
             taskId: response.taskId,
-            stockCode: normalizedStockCode,
+            stockCode: stockCodeInput,
             stockName,
             status: response.status,
             progress: 0,
@@ -700,7 +684,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
           selectionSource: 'manual',
         });
       }
-      return isLatestRequest ? { ok: true, stockCode: normalizedStockCode } : { ok: false };
+      return isLatestRequest ? { ok: true, stockCode: stockCodeInput } : { ok: false };
     } catch (error) {
       if (requestId !== analyzeRequestSeq) {
         return { ok: false };

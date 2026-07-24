@@ -177,6 +177,9 @@ def test_market_specific_symbol_normalization() -> None:
     assert normalize_scanner_universe_symbol("brk.b", market="us") == "BRK.B"
     assert normalize_scanner_universe_symbol("700.HK", market="hk") == "HK00700"
     assert normalize_scanner_universe_symbol("hk5", market="hk") == "HK00005"
+    assert normalize_scanner_universe_symbol("00700", market="hk") == "HK00700"
+    assert normalize_scanner_universe_symbol("00700", market="cn") is None
+    assert normalize_scanner_universe_symbol("BAD!", market="hk") is None
     assert normalize_scanner_universe_symbol("SPY", market="cn") is None
     assert normalize_scanner_universe_symbol("HK00700", market="us") is None
 

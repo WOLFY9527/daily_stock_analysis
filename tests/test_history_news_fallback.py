@@ -18,12 +18,13 @@ class HistoryNewsFallbackTestCase(unittest.TestCase):
                 SimpleNamespace(
                     id=1,
                     query_id="q-1",
-                    code="600519",
-                    name="贵州茅台",
+                    code="00700",
+                    name="腾讯控股",
                     report_type="standard",
                     sentiment_score=80,
                     operation_advice="hold",
                     created_at=datetime(2026, 4, 17, 8, 0, 0),
+                    raw_result='{"persisted_report":{"meta":{"stock_name":"0700.HK"}}}',
                 )
             ],
             1,
@@ -32,11 +33,12 @@ class HistoryNewsFallbackTestCase(unittest.TestCase):
         with patch("src.services.history_service.AnalysisRepository", create=True) as repo_cls:
             repo_cls.return_value = repo
             service = HistoryService(db_manager=db_manager, owner_id="user-1")
-            result = service.get_history_list(page=1, limit=20)
+            result = service.get_history_list(stock_code="0700.HK", page=1, limit=20)
 
         repo_cls.assert_called_once_with(db_manager, owner_id="user-1", include_all_owners=False)
         repo.get_paginated.assert_called_once_with(
-            code=None,
+            code="HK00700",
+            codes=("HK00700", "HK700", "HK0700", "700", "00700", "700.HK", "0700.HK", "00700.HK"),
             start_date=None,
             end_date=None,
             offset=0,
@@ -45,6 +47,13 @@ class HistoryNewsFallbackTestCase(unittest.TestCase):
         )
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["query_id"], "q-1")
+        self.assertEqual(result["items"][0]["stock_code"], "HK00700")
+        self.assertEqual(result["items"][0]["stock_name"], "腾讯控股")
+
+        with self.assertRaises(ValueError):
+            HistoryService(db_manager=MagicMock(), owner_id="user-1").get_history_list(
+                stock_code="BAD!"
+            )
 
     def test_fallback_filters_by_published_date_window(self) -> None:
         now = datetime.now()

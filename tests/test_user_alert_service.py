@@ -102,6 +102,16 @@ class UserAlertServiceTestCase(unittest.TestCase):
                 threshold_price=0,
             )
 
+        with self.assertRaisesRegex(ValueError, "market"):
+            self.service.create_rule(
+                owner_id="user-1",
+                symbol="00700",
+                direction="above",
+                threshold_price=150,
+            )
+
+        self.assertEqual(self.service._normalize_symbol("0700.HK"), "HK00700")
+
     def test_contract_does_not_call_provider_quotes_or_notification_delivery(self) -> None:
         with (
             patch("data_provider.base.DataFetcherManager.get_realtime_quote") as get_quote,

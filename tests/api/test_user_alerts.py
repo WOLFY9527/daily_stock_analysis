@@ -454,6 +454,19 @@ class UserAlertsApiTestCase(unittest.TestCase):
         )
         self.assertEqual(bad_threshold.status_code, 422)
 
+        ambiguous_symbol = self.client.post(
+            "/api/v1/user-alerts/rules",
+            json={"symbol": "00700", "direction": "above", "thresholdPrice": 150},
+        )
+        self.assertEqual(ambiguous_symbol.status_code, 422)
+
+        canonical_hk_symbol = self.client.post(
+            "/api/v1/user-alerts/rules",
+            json={"symbol": "0700.HK", "direction": "above", "thresholdPrice": 150},
+        )
+        self.assertEqual(canonical_hk_symbol.status_code, 200)
+        self.assertEqual(canonical_hk_symbol.json()["symbol"], "HK00700")
+
     def test_no_provider_quote_or_notification_delivery_is_invoked(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
 

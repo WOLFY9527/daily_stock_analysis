@@ -39,7 +39,7 @@ import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface
 import { cn } from '../../utils/cn';
 import { isAdminMissionControlPrototypeEnabled } from '../../utils/adminCapabilities';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
-import { validateStockCode } from '../../utils/validation';
+import { canonicalStockSymbolFromValidation, stocksApi } from '../../api/stocks';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { Button } from '../common/Button';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -223,17 +223,6 @@ function groupAdminNavItems(items: AdminNavItem[], language: 'zh' | 'en'): Admin
     .filter((group) => group.items.length > 0);
 }
 
-function inferSymbolMarketContext(symbol: string, language: 'zh' | 'en'): string {
-  const normalized = symbol.trim().toUpperCase();
-  if (/^(SH|SZ|BJ)\d{6}$/.test(normalized) || /^\d{6}\.(SH|SZ|SS|BJ)$/.test(normalized) || /^\d{6}$/.test(normalized)) {
-    return language === 'en' ? 'CN market context' : 'A 股语境';
-  }
-  if (/^HK\d{1,5}$/.test(normalized) || /^\d{1,5}\.HK$/.test(normalized) || /^\d{5}$/.test(normalized)) {
-    return language === 'en' ? 'HK market context' : '港股语境';
-  }
-  return language === 'en' ? 'US ticker context' : '美股 ticker 语境';
-}
-
 function NavLabel({ label }: { label: string }) {
   return (
     <span className="relative inline-flex min-w-0 items-center gap-2">
@@ -283,6 +272,7 @@ function useSidebarNavView({
   const [stockSearchQuery, setStockSearchQuery] = useState('');
   const [stockSearchError, setStockSearchError] = useState('');
   const [stockSearchFocused, setStockSearchFocused] = useState(false);
+  const [isStockSearchResolving, setIsStockSearchResolving] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
   const navGroupMenuRefs = useRef<Partial<Record<ConsumerNavGroupKey, HTMLDivElement | null>>>({});
   const navGroupButtonRefs = useRef<Partial<Record<ConsumerNavGroupKey, HTMLButtonElement | null>>>({});
@@ -431,21 +421,38 @@ function useSidebarNavView({
     }
   };
 
-  const submitStockSearch = () => {
-    const validation = validateStockCode(stockSearchQuery);
-    if (!validation.valid) {
+  const submitStockSearch = async () => {
+    const rawSymbol = stockSearchQuery.trim();
+    if (!rawSymbol) {
       setStockSearchError(language === 'en' ? 'No matching stock route for that symbol format.' : '未找到可打开的标的路由，请检查代码格式。');
       setStockSearchFocused(true);
       return;
     }
-    const target = routeLocale
-      ? buildLocalizedPath(`/stocks/${encodeURIComponent(validation.normalized)}/structure-decision`, routeLocale)
-      : `/stocks/${encodeURIComponent(validation.normalized)}/structure-decision`;
-    setStockSearchError('');
-    setStockSearchQuery('');
-    setStockSearchFocused(false);
-    navigate(target);
-    onNavigate?.();
+
+    setIsStockSearchResolving(true);
+    try {
+      const validation = await stocksApi.verifyTickerExists(rawSymbol);
+      const canonicalSymbol = canonicalStockSymbolFromValidation(validation);
+      if (!canonicalSymbol) {
+        setStockSearchError(language === 'en' ? 'No matching stock route for that symbol format.' : '未找到可打开的标的路由，请检查代码格式。');
+        setStockSearchFocused(true);
+        return;
+      }
+
+      const target = routeLocale
+        ? buildLocalizedPath(`/stocks/${encodeURIComponent(canonicalSymbol.symbol)}/structure-decision`, routeLocale)
+        : `/stocks/${encodeURIComponent(canonicalSymbol.symbol)}/structure-decision`;
+      setStockSearchError('');
+      setStockSearchQuery('');
+      setStockSearchFocused(false);
+      navigate(target);
+      onNavigate?.();
+    } catch {
+      setStockSearchError(language === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。');
+      setStockSearchFocused(true);
+    } finally {
+      setIsStockSearchResolving(false);
+    }
   };
 
   useEffect(() => {
@@ -761,24 +768,20 @@ function useSidebarNavView({
   const primaryNavTestId = showAdminPrimaryNav ? 'shell-admin-primary-nav' : 'shell-consumer-primary-nav';
 
   const trimmedStockSearchQuery = stockSearchQuery.trim();
-  const stockSearchValidation = trimmedStockSearchQuery ? validateStockCode(trimmedStockSearchQuery) : null;
-  const stockSearchHasResult = Boolean(stockSearchValidation?.valid);
   const stockSearchStatusText = !trimmedStockSearchQuery
     ? (language === 'en' ? 'Type a known symbol.' : '输入已知股票代码。')
-    : stockSearchHasResult
-      ? (language === 'en'
-        ? `Open ${stockSearchValidation?.normalized} in Stock Research.`
-        : `打开 ${stockSearchValidation?.normalized} 的个股研究。`)
-      : stockSearchError || (language === 'en' ? 'No route-ready result for this symbol.' : '没有可打开的标的结果。');
+    : isStockSearchResolving
+      ? (language === 'en' ? 'Verifying stock identity.' : '正在验证股票代码。')
+      : stockSearchError || (language === 'en' ? 'Press Enter to verify and open Stock Research.' : '按 Enter 验证并打开个股研究。');
   const stockSearchControl = (
     <form
       role="search"
       aria-label={language === 'en' ? 'Open stock research by symbol' : '按股票代码打开个股研究'}
       className={cn('shell-stock-search', isDrawer ? 'shell-stock-search--drawer' : 'shell-stock-search--header')}
-      data-search-state={!trimmedStockSearchQuery ? 'idle' : stockSearchHasResult ? 'ready' : 'no-results'}
+      data-search-state={!trimmedStockSearchQuery ? 'idle' : isStockSearchResolving ? 'loading' : stockSearchError ? 'no-results' : 'pending'}
       onSubmit={(event) => {
         event.preventDefault();
-        submitStockSearch();
+        void submitStockSearch();
       }}
       noValidate
     >
@@ -801,7 +804,7 @@ function useSidebarNavView({
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              submitStockSearch();
+              void submitStockSearch();
               return;
             }
             if (event.key === 'Escape') {
@@ -813,7 +816,7 @@ function useSidebarNavView({
           }}
           placeholder={language === 'en' ? 'AAPL / 600519 / 0700.HK' : 'AAPL / 600519 / 0700.HK'}
           aria-describedby={`${stockSearchId}-status`}
-          aria-invalid={Boolean(trimmedStockSearchQuery && !stockSearchHasResult)}
+          aria-invalid={Boolean(stockSearchError)}
         />
       </div>
       <div id={`${stockSearchId}-status`} className="sr-only" aria-live="polite">
@@ -821,27 +824,30 @@ function useSidebarNavView({
       </div>
       {stockSearchFocused && trimmedStockSearchQuery ? (
         <div className="shell-stock-search__popover" data-testid="shell-stock-search-popover">
-          {stockSearchHasResult && stockSearchValidation ? (
+          {stockSearchError ? (
+            <p className="shell-stock-search__empty" role="status">
+              {stockSearchStatusText}
+            </p>
+          ) : (
             <button
               type="button"
               className="shell-stock-search__result"
               onMouseDown={(event) => event.preventDefault()}
-              onClick={submitStockSearch}
+              onClick={() => { void submitStockSearch(); }}
+              disabled={isStockSearchResolving}
             >
               <span className="min-w-0">
                 <span className="block truncate font-semibold">
-                  {language === 'en' ? `Open ${stockSearchValidation.normalized}` : `打开 ${stockSearchValidation.normalized}`}
+                  {isStockSearchResolving
+                    ? (language === 'en' ? 'Verifying stock identity' : '正在验证股票代码')
+                    : (language === 'en' ? 'Verify and open Stock Research' : '验证后打开个股研究')}
                 </span>
                 <span className="block truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
-                  {inferSymbolMarketContext(stockSearchValidation.normalized, language)}
+                  {language === 'en' ? 'Uses the verified symbol identity.' : '使用已验证的标的身份。'}
                 </span>
               </span>
               <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
             </button>
-          ) : (
-            <p className="shell-stock-search__empty" role="status">
-              {stockSearchStatusText}
-            </p>
           )}
         </div>
       ) : null}

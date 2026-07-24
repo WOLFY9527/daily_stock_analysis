@@ -24,7 +24,12 @@ from src.repositories.portfolio_repo import (
 from src.services.fx_rate_service import default_fx_rate_service
 from src.services._persisted_json import PersistedJsonState, decode_persisted_json
 from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnostics
-from src.utils.symbol_normalization import canonical_stock_code
+from src.utils.symbol_normalization import (
+    canonical_stock_code,
+    canonical_symbol_storage_values,
+    normalize_symbol_market,
+    parse_canonical_symbol,
+)
 from src.utils.security import sanitize_metadata
 
 logger = logging.getLogger(__name__)
@@ -702,9 +707,6 @@ class PortfolioService:
             raise ValueError("quantity and price must be > 0")
         if fee < 0 or tax < 0:
             raise ValueError("fee and tax must be >= 0")
-        symbol_norm = canonical_stock_code(symbol)
-        if not symbol_norm:
-            raise ValueError("symbol is required")
         trade_uid_norm = (trade_uid or "").strip() or None
         dedup_hash_norm = (dedup_hash or "").strip() or None
         account = self._require_active_account_in_session(
@@ -712,10 +714,11 @@ class PortfolioService:
             account_id=account_id,
             owner_kwargs=owner_kwargs,
         )
-        market_hint = market
-        if market_hint is None and str(account.market or "").strip().lower() == "global":
-            market_hint = self._infer_market_from_symbol(symbol_norm)
-        market_norm = self._normalize_event_market(market_hint or account.market)
+        market_hint = market if market is not None else account.market
+        symbol_norm, market_norm = self._canonical_event_symbol(
+            symbol,
+            market_hint=market_hint,
+        )
         currency_norm = self._normalize_currency(
             currency or self._default_currency_for_market(market_norm)
         )
@@ -869,17 +872,14 @@ class PortfolioService:
             account_id=account_id,
             owner_kwargs=owner_kwargs,
         )
-        market_hint = market
-        if market_hint is None and str(account.market or "").strip().lower() == "global":
-            symbol_norm = canonical_stock_code(symbol)
-            market_hint = self._infer_market_from_symbol(symbol_norm)
-        market_norm = self._normalize_event_market(market_hint or account.market)
+        market_hint = market if market is not None else account.market
+        symbol_norm, market_norm = self._canonical_event_symbol(
+            symbol,
+            market_hint=market_hint,
+        )
         currency_norm = self._normalize_currency(
             currency or self._default_currency_for_market(market_norm)
         )
-        symbol_norm = canonical_stock_code(symbol)
-        if not symbol_norm:
-            raise ValueError("symbol is required")
         row = self.repo.add_corporate_action_in_session(
             session=session,
             account_id=account_id,
@@ -960,15 +960,12 @@ class PortfolioService:
             if fee_value < 0 or tax_value < 0:
                 raise ValueError("fee and tax must be >= 0")
 
-            symbol_norm = canonical_stock_code(symbol if symbol is not None else row.symbol)
-            if not symbol_norm:
-                raise ValueError("symbol is required")
-
             trade_date_value = trade_date or row.trade_date
-            market_hint = market if market is not None else row.market
-            if str(account.market or "").strip().lower() == "global" and market is None and symbol is not None:
-                market_hint = self._infer_market_from_symbol(symbol_norm)
-            market_norm = self._normalize_event_market(market_hint or account.market)
+            market_hint = market if market is not None else (row.market or account.market)
+            symbol_norm, market_norm = self._canonical_event_symbol(
+                symbol if symbol is not None else row.symbol,
+                market_hint=market_hint,
+            )
             currency_norm = self._normalize_currency(currency or row.currency or self._default_currency_for_market(market_norm))
 
             original_trade_date = row.trade_date
@@ -1046,10 +1043,9 @@ class PortfolioService:
             raise ValueError("date_from must be <= date_to")
 
         symbol_norm: Optional[str] = None
+        symbol_storage_values: Optional[tuple[str, ...]] = None
         if symbol is not None and symbol.strip():
-            symbol_norm = canonical_stock_code(symbol)
-            if not symbol_norm:
-                raise ValueError("symbol is invalid")
+            symbol_norm, symbol_storage_values = self._event_symbol_filter(symbol)
 
         side_norm: Optional[str] = None
         if side is not None and side.strip():
@@ -1062,6 +1058,7 @@ class PortfolioService:
             date_from=date_from,
             date_to=date_to,
             symbol=symbol_norm,
+            symbols=symbol_storage_values,
             side=side_norm,
             page=page,
             page_size=page_size,
@@ -2239,10 +2236,9 @@ class PortfolioService:
             raise ValueError("date_from must be <= date_to")
 
         symbol_norm: Optional[str] = None
+        symbol_storage_values: Optional[tuple[str, ...]] = None
         if symbol is not None and symbol.strip():
-            symbol_norm = canonical_stock_code(symbol)
-            if not symbol_norm:
-                raise ValueError("symbol is invalid")
+            symbol_norm, symbol_storage_values = self._event_symbol_filter(symbol)
 
         action_norm: Optional[str] = None
         if action_type is not None and action_type.strip():
@@ -2255,6 +2251,7 @@ class PortfolioService:
             date_from=date_from,
             date_to=date_to,
             symbol=symbol_norm,
+            symbols=symbol_storage_values,
             action_type=action_norm,
             page=page,
             page_size=page_size,
@@ -3870,11 +3867,7 @@ class PortfolioService:
         quantity: float,
         session: Optional[Any] = None,
     ) -> None:
-        key = (
-            canonical_stock_code(symbol),
-            self._normalize_event_market(market),
-            self._normalize_currency(currency),
-        )
+        key = self._event_position_key(symbol=symbol, market=market, currency=currency)
         available_quantity = self._calculate_available_quantity(
             account_id=account_id,
             key=key,
@@ -3910,18 +3903,18 @@ class PortfolioService:
 
         events = []
         for row in corporate_actions:
-            event_key = (
-                canonical_stock_code(row.symbol),
-                self._normalize_event_market(row.market),
-                self._normalize_currency(row.currency),
+            event_key = self._event_position_key(
+                symbol=row.symbol,
+                market=row.market,
+                currency=row.currency,
             )
             if event_key == key:
                 events.append(("corp", row.effective_date, row.id, row))
         for row in trades:
-            event_key = (
-                canonical_stock_code(row.symbol),
-                self._normalize_event_market(row.market),
-                self._normalize_currency(row.currency),
+            event_key = self._event_position_key(
+                symbol=row.symbol,
+                market=row.market,
+                currency=row.currency,
             )
             if event_key == key:
                 events.append(("trade", row.trade_date, row.id, row))
@@ -4000,18 +3993,18 @@ class PortfolioService:
                     raise ValueError(f"Invalid split_ratio for {event.symbol}")
                 if abs(split_ratio - 1.0) <= EPS:
                     continue
-                key = (
-                    canonical_stock_code(event.symbol),
-                    self._normalize_event_market(event.market),
-                    self._normalize_currency(event.currency),
+                key = self._event_position_key(
+                    symbol=event.symbol,
+                    market=event.market,
+                    currency=event.currency,
                 )
                 quantity_held[key] *= split_ratio
                 continue
 
-            key = (
-                canonical_stock_code(event.symbol),
-                self._normalize_event_market(event.market),
-                self._normalize_currency(event.currency),
+            key = self._event_position_key(
+                symbol=event.symbol,
+                market=event.market,
+                currency=event.currency,
             )
             qty = float(event.quantity or 0.0)
             if qty <= 0:
@@ -4101,10 +4094,10 @@ class PortfolioService:
                 continue
 
             if event_type == "trade":
-                key = (
-                    canonical_stock_code(event.symbol),
-                    self._normalize_event_market(event.market),
-                    self._normalize_currency(event.currency),
+                key = self._event_position_key(
+                    symbol=event.symbol,
+                    market=event.market,
+                    currency=event.currency,
                 )
                 qty = float(event.quantity or 0.0)
                 price = float(event.price or 0.0)
@@ -4261,10 +4254,10 @@ class PortfolioService:
                 continue
 
             if event_type == "corp":
-                key = (
-                    canonical_stock_code(event.symbol),
-                    self._normalize_event_market(event.market),
-                    self._normalize_currency(event.currency),
+                key = self._event_position_key(
+                    symbol=event.symbol,
+                    market=event.market,
+                    currency=event.currency,
                 )
                 action_type = (event.action_type or "").strip().lower()
                 if action_type == "cash_dividend":
@@ -5830,7 +5823,7 @@ class PortfolioService:
             "id": int(row.id),
             "account_id": int(row.account_id),
             "trade_uid": row.trade_uid,
-            "symbol": row.symbol,
+            "symbol": PortfolioService._stored_event_symbol(row.symbol, market=row.market),
             "market": row.market,
             "currency": row.currency,
             "trade_date": row.trade_date.isoformat() if row.trade_date else "",
@@ -5872,7 +5865,7 @@ class PortfolioService:
         return {
             "id": int(row.id),
             "account_id": int(row.account_id),
-            "symbol": row.symbol,
+            "symbol": PortfolioService._stored_event_symbol(row.symbol, market=row.market),
             "market": row.market,
             "currency": row.currency,
             "effective_date": row.effective_date.isoformat() if row.effective_date else "",
@@ -5908,15 +5901,56 @@ class PortfolioService:
         return market
 
     @staticmethod
-    def _infer_market_from_symbol(symbol: str) -> str:
-        normalized = canonical_stock_code(symbol)
-        if normalized.startswith("HK"):
-            return "hk"
-        if normalized.isdigit():
-            if len(normalized) <= 5:
-                return "hk"
-            return "cn"
-        return "us"
+    def _canonical_event_symbol(symbol: str, *, market_hint: Optional[str]) -> tuple[str, str]:
+        normalized_hint = normalize_symbol_market(market_hint)
+        raw_hint = str(market_hint or "").strip()
+        if raw_hint and raw_hint != "global" and normalized_hint is None:
+            raise ValueError("market must be one of: cn, hk, us")
+
+        identity = parse_canonical_symbol(symbol, market=normalized_hint)
+        if identity is None:
+            raise ValueError("symbol is unsupported")
+        if identity.ambiguous or identity.market is None:
+            raise ValueError("symbol market is ambiguous")
+        if normalized_hint is not None and identity.market != normalized_hint:
+            raise ValueError("symbol market does not match the supplied market")
+        return identity.symbol, identity.market
+
+    @staticmethod
+    def _stored_event_symbol(symbol: str, *, market: str) -> str:
+        """Canonicalize a legacy row only when its persisted market proves identity."""
+        raw = str(symbol or "").strip()
+        normalized_market = normalize_symbol_market(market)
+        identity = parse_canonical_symbol(raw, market=normalized_market)
+        if (
+            normalized_market is not None
+            and identity is not None
+            and not identity.ambiguous
+            and identity.market == normalized_market
+        ):
+            return identity.symbol
+        return raw.upper()
+
+    def _event_position_key(self, *, symbol: str, market: str, currency: str) -> Tuple[str, str, str]:
+        market_norm = self._normalize_event_market(market)
+        return (
+            self._stored_event_symbol(symbol, market=market_norm),
+            market_norm,
+            self._normalize_currency(currency),
+        )
+
+    @staticmethod
+    def _event_symbol_filter(symbol: str) -> tuple[str, tuple[str, ...]]:
+        identity = parse_canonical_symbol(str(symbol or "").strip())
+        if identity is None or identity.ambiguous or identity.market is None:
+            raise ValueError("symbol must be a supported unambiguous market identity")
+        storage_symbols = canonical_symbol_storage_values(
+            identity.symbol,
+            market=identity.market,
+        )
+        if not storage_symbols:
+            raise ValueError("symbol is invalid")
+        return identity.symbol, storage_symbols
 
     def _resolve_snapshot_currency(
         self,

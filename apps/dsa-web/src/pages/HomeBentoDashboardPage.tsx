@@ -32,7 +32,11 @@ import {
 } from '../api/researchReadiness';
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { stockEvidenceApi } from '../api/stockEvidence';
-import { stocksApi, type StockPeerCorrelationSnapshot } from '../api/stocks';
+import {
+  canonicalStockSymbolFromValidation,
+  stocksApi,
+  type StockPeerCorrelationSnapshot,
+} from '../api/stocks';
 import { DeepReportDrawer } from '../components/home-bento/DeepReportDrawer';
 import type { SignalTone } from '../components/home-bento/theme';
 import type { HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
@@ -91,7 +95,6 @@ import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityVie
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../utils/localeRouting';
 import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
-import { validateStockCode } from '../utils/validation';
 import { resolveHomeDashboardSelection } from './homeDashboardSelection';
 import {
   MetaLabel,
@@ -3577,7 +3580,6 @@ type DesiredFieldSpec = {
 };
 
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
-const TICKER_FORMAT_RE = /^(?:[A-Z]{1,5}(?:\.(?:US|[A-Z]))?|\d{6})$/;
 const stockSearchRouteAuthority = buildResearchWorkspacePath;
 const EMPTY_FIELD_VALUE = '-';
 const UNTRUSTED_SCAN_SKIP_KEYS = new Set([
@@ -4614,22 +4616,8 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
   },
 };
 
-const TICKER_ALIASES: Record<string, string> = {
-  NVIDIA: 'NVDA',
-  '英伟达': 'NVDA',
-  ORACLE: 'ORCL',
-  '甲骨文': 'ORCL',
-  TESLA: 'TSLA',
-  '特斯拉': 'TSLA',
-};
-
 function normalizeTickerQuery(rawValue?: string): string {
-  const trimmed = String(rawValue || '').trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  return TICKER_ALIASES[trimmed.toUpperCase()] || TICKER_ALIASES[trimmed] || trimmed.toUpperCase();
+  return String(rawValue || '').trim();
 }
 
 function parseHomeChartPrice(value: unknown): number | null {
@@ -4643,10 +4631,9 @@ function parseHomeChartPrice(value: unknown): number | null {
   return null;
 }
 
-function readHomePriceContextHint(report: HomePriceContextReport, stockCode: string): string {
+function readHomePriceContextHint(report: HomePriceContextReport): string {
   const standardReport = report.details?.standardReport;
   const values = [
-    stockCode,
     report.decisionTrace?.market,
     readObjectField(report, ['meta', 'market']),
     readObjectField(report, ['meta', 'currency']),
@@ -4666,21 +4653,20 @@ function readHomePriceContextHint(report: HomePriceContextReport, stockCode: str
   return labels.join(' ');
 }
 
-function resolveHomePriceDisplayContext(report: HomePriceContextReport, stockCode: string): HomePriceDisplayContext {
-  const hint = readHomePriceContextHint(report, stockCode).toLowerCase();
-  const code = stockCode.trim().toUpperCase();
+function resolveHomePriceDisplayContext(report: HomePriceContextReport): HomePriceDisplayContext {
+  const hint = readHomePriceContextHint(report).toLowerCase();
   const cryptoUnit = hint.match(/\b(USDT|USDC|BTC|ETH|USD)\b/i)?.[1]?.toUpperCase();
 
   if (/crypto|bitcoin|ethereum|数字货币|加密|usdt|usdc|btc|eth/.test(hint)) {
     return { currency: 'crypto', cryptoUnit };
   }
-  if (/\b(hk|hkd|hong kong)\b|港股|港元|^hk\d+/i.test(hint) || /^HK\d{4,5}$/i.test(code) || /^\d{4,5}\.HK$/i.test(code)) {
+  if (/\b(hk|hkd|hong kong)\b|港股|港元/i.test(hint)) {
     return { currency: 'hkd' };
   }
-  if (/\b(cn|cny|rmb|sh|sz)\b|人民币|a股|沪|深/i.test(hint) || /^\d{6}(?:\.(?:SH|SZ))?$/.test(code)) {
+  if (/\b(cn|cny|rmb|sh|sz)\b|人民币|a股|沪|深/i.test(hint)) {
     return { currency: 'cny' };
   }
-  if (/\b(us|usa|usd|nyse|nasdaq|amex)\b|美元|美股/.test(hint) || /^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(code)) {
+  if (/\b(us|usa|usd|nyse|nasdaq|amex)\b|美元|美股/.test(hint)) {
     return { currency: 'usd' };
   }
   return { currency: 'unknown' };
@@ -5077,52 +5063,24 @@ function homeDailyLedgerSectionLabel(sectionKey: string, locale: DashboardLocale
     || (locale === 'en' ? 'Data coverage' : '数据覆盖');
 }
 
-/**
- * Extract a real symbol token from returned queue copy when present.
- * Does not invent candidates — only links when a parseable ticker/code appears.
- */
-function extractHomeQueueSymbolCandidate(title: string, summary: string): string {
-  const leading = title.trim().match(/^([A-Za-z]{1,5}|\d{6}|hk\d{5})\b/i);
-  if (leading?.[1]) {
-    const normalized = normalizeTickerQuery(leading[1]);
-    if (TICKER_FORMAT_RE.test(normalized) || /^HK\d{5}$/i.test(normalized) || /^\d{6}$/.test(normalized)) {
-      return normalized;
-    }
-  }
-  const paren = `${title} ${summary}`.match(/\(([A-Za-z]{1,5}|\d{6}|hk\d{5})\)/i);
-  if (paren?.[1]) {
-    const normalized = normalizeTickerQuery(paren[1]);
-    if (TICKER_FORMAT_RE.test(normalized) || /^HK\d{5}$/i.test(normalized) || /^\d{6}$/.test(normalized)) {
-      return normalized;
-    }
-  }
-  return '';
-}
-
 function buildHomeDailyResearchView(
   locale: DashboardLocale,
   brief: MemberMarketBriefView,
   overview: DashboardMarketIntelligenceOverview | null,
-  routeLocale: 'zh' | 'en' | null = null,
 ): HomeDailyResearchView {
   const isEnglish = locale === 'en';
-  const buildHref = (path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path);
   const marketPulse = overview?.marketPulse;
   const queue = (overview?.researchQueue.items || [])
     .map((item) => {
       const title = normalizeHomeDailyText(item.title);
       const summary = normalizeHomeDailyText(item.summary);
-      const symbol = extractHomeQueueSymbolCandidate(title, summary);
-      const href = symbol
-        ? buildHref(`/stocks/${encodeURIComponent(symbol)}/structure-decision`)
-        : undefined;
       return {
         title,
         summary,
         action: normalizeHomeDailyText(item.action),
         priority: normalizeHomeDailyText(item.priority),
-        symbol: symbol || undefined,
-        href,
+        symbol: undefined,
+        href: undefined,
       };
     })
     .filter((item) => item.title || item.summary || item.action)
@@ -6019,7 +5977,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   const targetValue = normalized.target || EMPTY_FIELD_VALUE;
   const stopValue = normalized.stop || EMPTY_FIELD_VALUE;
   const positionBody = normalized.positionBody || EMPTY_FIELD_VALUE;
-  const priceDisplayContext = resolveHomePriceDisplayContext(report, stockCode);
+  const priceDisplayContext = resolveHomePriceDisplayContext(report);
   const localizedEntryValue = localizeMetricValue(
     locale,
     formatHomePriceLevelValue(locale, entryValue, priceDisplayContext, EMPTY_FIELD_VALUE),
@@ -6137,7 +6095,7 @@ function buildGuestDashboardFromPreview(
   const scoreText = (score / 10).toFixed(1);
   const rawCompany = getCompanyDisplayName(preview.report) || preview.stockName || stockCode;
   const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
-  const priceDisplayContext = resolveHomePriceDisplayContext(preview.report, stockCode);
+  const priceDisplayContext = resolveHomePriceDisplayContext(preview.report);
   const actionText = polishHomeNarrativeCopy(
     locale,
     localizeNarrativeText(locale, summary.operationAdvice, seed.decision.scoreValue),
@@ -6813,7 +6771,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       || selectedTicker
       || recentHistoryItems[0]?.stockCode,
     );
-    return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
+    return candidate;
   }, [activeTicker, activeTraceReport?.meta.stockCode, dashboardSelection.activeEvidenceTicker, isGuest, recentHistoryItems, routeSymbol, selectedTicker, traceFixtureReport]);
   const reanalysisTicker = (() => {
     if (!traceFixtureReport) {
@@ -6821,7 +6779,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
     const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
     const candidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
-    return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
+    return candidate;
   })();
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay locale={locale} registrationPath={registrationPath} /> : null;
@@ -7203,7 +7161,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
   }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId]);
 
-  const handleStockSearchSubmit = () => {
+  const resolveCanonicalHomeSymbol = async (rawSymbol: string) => {
+    const validation = await stocksApi.verifyTickerExists(rawSymbol);
+    return canonicalStockSymbolFromValidation(validation);
+  };
+
+  const handleStockSearchSubmit = async () => {
     const rawQuery = searchQuery.trim();
     if (!rawQuery) {
       setStatusToast({
@@ -7213,8 +7176,32 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return;
     }
 
-    const validation = validateStockCode(normalizeTickerQuery(rawQuery));
-    if (!validation.valid) {
+    if (isGuest) {
+      const canonicalSymbol = await handleAnalyze(rawQuery);
+      if (!canonicalSymbol) {
+        return;
+      }
+
+      const builtPath = stockSearchRouteAuthority('stock-structure', language, {
+        symbol: canonicalSymbol,
+        source: 'manual',
+      });
+      const target = routeLocale ? builtPath : stripLocalePrefix(builtPath);
+      navigate(target);
+      return;
+    }
+
+    let canonicalSymbol;
+    try {
+      canonicalSymbol = await resolveCanonicalHomeSymbol(rawQuery);
+    } catch {
+      setStatusToast({
+        message: locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。',
+        tone: 'error',
+      });
+      return;
+    }
+    if (!canonicalSymbol) {
       setStatusToast({
         message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
         tone: 'error',
@@ -7223,82 +7210,106 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     const builtPath = stockSearchRouteAuthority('stock-structure', language, {
-      symbol: validation.normalized,
+      symbol: canonicalSymbol.symbol,
       source: 'manual',
     });
     const target = routeLocale ? builtPath : stripLocalePrefix(builtPath);
     setStatusToast(null);
     setSearchQuery('');
     navigate(target);
-    void handleAnalyze(validation.normalized);
+    void handleAnalyze(rawQuery, canonicalSymbol.symbol);
   };
 
-  const handleAnalyze = async (tickerOverride?: string) => {
+  const handleAnalyze = async (tickerOverride?: string, verifiedSymbol?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
     if (!rawQuery) {
       setStatusToast({
         message: locale === 'en' ? 'Enter a ticker before starting analysis.' : '请输入股票代码后再开始分析',
         tone: 'error',
       });
-      return;
+      return null;
     }
 
-    const normalizedTicker = rawQuery.toUpperCase();
-    if (!TICKER_FORMAT_RE.test(normalizedTicker)) {
-      setStatusToast({
-        message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
-        tone: 'error',
-      });
-      return;
+    if (isGuest) {
+      setStatusToast(null);
+      setSoftTimedOutTaskId(null);
+      setDashboardLoading(true);
+      setHasHydratedInitialTicker(true);
+      setSearchQuery('');
+      setGuestPreviewUnavailable(false);
+      setGuestPreview(null);
+
+      try {
+        const response = await withGuestPreviewTimeout(publicAnalysisApi.preview({
+          stockCode: rawQuery,
+          stockName: undefined,
+          reportType: 'brief',
+        }));
+        const canonicalSymbol = response.stockCode.trim();
+        if (!canonicalSymbol) {
+          setGuestPreviewUnavailable(true);
+          return null;
+        }
+
+        setActiveTicker(canonicalSymbol);
+        setGuestPreview(response);
+        setGuestPreviewUnavailable(false);
+        return canonicalSymbol;
+      } catch {
+        setGuestPreview(null);
+        setGuestPreviewUnavailable(true);
+        return null;
+      } finally {
+        setPendingAnalysisTicker(null);
+        setDashboardLoading(false);
+      }
+    }
+
+    let canonicalSymbol = verifiedSymbol;
+    if (!canonicalSymbol) {
+      try {
+        canonicalSymbol = (await resolveCanonicalHomeSymbol(rawQuery))?.symbol;
+      } catch {
+        setStatusToast({
+          message: locale === 'en' ? 'Stock identity could not be verified.' : '暂时无法验证股票代码。',
+          tone: 'error',
+        });
+        return null;
+      }
+      if (!canonicalSymbol) {
+        setStatusToast({
+          message: locale === 'en' ? 'Please enter a correctly formatted ticker.' : '请输入格式正确的股票代码',
+          tone: 'error',
+        });
+        return null;
+      }
     }
 
     setStatusToast(null);
     setSoftTimedOutTaskId(null);
     setDashboardLoading(true);
-    setActiveTicker(normalizedTicker);
-    setPendingAnalysisTicker(normalizedTicker);
+    setActiveTicker(canonicalSymbol);
+    setPendingAnalysisTicker(canonicalSymbol);
     setHasHydratedInitialTicker(true);
     setSearchQuery('');
-
-    if (isGuest) {
-      setGuestPreviewUnavailable(false);
-      setGuestPreview(null);
-      try {
-        const response = await withGuestPreviewTimeout(publicAnalysisApi.preview({
-          stockCode: normalizedTicker,
-          stockName: undefined,
-          reportType: 'brief',
-        }));
-        setGuestPreview(response);
-        setGuestPreviewUnavailable(false);
-        setPendingAnalysisTicker(null);
-      } catch {
-        setGuestPreview(null);
-        setGuestPreviewUnavailable(true);
-        setPendingAnalysisTicker(null);
-      } finally {
-        setDashboardLoading(false);
-      }
-      return;
-    }
 
     clearError();
 
     try {
       const result = await submitAnalysis({
-        stockCode: normalizedTicker,
-        originalQuery: normalizedTicker,
+        stockCode: canonicalSymbol,
+        originalQuery: rawQuery,
         selectionSource: 'manual',
       });
 
       if (result.ok) {
         setActiveTicker(result.stockCode);
         void refreshHistory(true);
-        return;
+        return result.stockCode;
       }
 
       if (result.duplicate) {
-        return;
+        return null;
       }
 
       setPendingAnalysisTicker(null);
@@ -7306,6 +7317,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         message: result.error?.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
+      return null;
     } catch (error) {
       const parsedError = getParsedApiError(error);
       setPendingAnalysisTicker(null);
@@ -7313,6 +7325,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         message: parsedError.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
+      return null;
     } finally {
       setDashboardLoading(false);
     }
@@ -7458,7 +7471,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       )
     : null;
   const homeDailyResearch = memberMarketBrief
-    ? buildHomeDailyResearchView(locale, memberMarketBrief, dashboardOverview, routeLocale)
+    ? buildHomeDailyResearchView(locale, memberMarketBrief, dashboardOverview)
     : null;
   const guestCommandConsoleCopy = locale === 'en'
     ? {

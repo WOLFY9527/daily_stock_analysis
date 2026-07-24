@@ -104,17 +104,22 @@ vi.mock('../../api/optionsLab', () => ({
   },
 }));
 
-vi.mock('../../api/stocks', () => ({
-  stocksApi: {
-    getQuote: (...args: unknown[]) => getQuoteMock(...args),
-    getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
-    verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
-    getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
-    getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
-    getHistory: (...args: unknown[]) => getHistoryMock(...args),
-    getTechnicalIndicators: (...args: unknown[]) => getTechnicalIndicatorsMock(...args),
-  },
-}));
+vi.mock('../../api/stocks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/stocks')>();
+  return {
+    ...actual,
+    stocksApi: {
+      ...actual.stocksApi,
+      getQuote: (...args: unknown[]) => getQuoteMock(...args),
+      getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
+      verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
+      getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
+      getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
+      getHistory: (...args: unknown[]) => getHistoryMock(...args),
+      getTechnicalIndicators: (...args: unknown[]) => getTechnicalIndicatorsMock(...args),
+    },
+  };
+});
 
 const renderRoute = (ui: React.ReactElement, path: string) => render(
   <MemoryRouter initialEntries={[path]}>
@@ -166,16 +171,16 @@ describe('research IA pages', () => {
     getHistoryMock.mockRejectedValue(new Error('history optional in page test'));
     getTechnicalIndicatorsMock.mockRejectedValue(new Error('technicals optional in page test'));
     getOptionsStructureMock.mockRejectedValue(new Error('options structure optional in page test'));
-    verifyTickerExistsMock.mockResolvedValue({
-      stockCode: 'AAPL',
-      normalizedSymbol: 'AAPL',
+    verifyTickerExistsMock.mockImplementation(async (stockCode: string) => ({
+      stockCode,
+      normalizedSymbol: stockCode,
       market: 'us',
       status: 'valid',
       valid: true,
       exists: true,
-      stockName: 'Apple',
+      stockName: 'Test stock',
       message: 'Symbol verified.',
-    });
+    }));
   });
 
   it('renders the market decision cockpit with a daily intelligence briefing and calm degraded notes', async () => {
@@ -725,6 +730,7 @@ describe('research IA pages', () => {
     renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
 
     const page = await screen.findByTestId('market-decision-cockpit-page');
+    await waitFor(() => expect(page).toHaveTextContent('证据仍待补'));
     expect(page).toHaveTextContent('证据仍待补');
     expect(page).not.toHaveTextContent('evidence limited');
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
@@ -1189,7 +1195,7 @@ describe('research IA pages', () => {
     expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute('href', expect.stringContaining('source=scanner'));
     expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('/zh/watchlist?'));
     expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('symbol=ALFA'));
-    expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('market=US'));
+    expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('market=us'));
     expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('source=scanner'));
     const diagnostics = within(page).getByTestId('research-radar-diagnostics-disclosure');
     expect(diagnostics).not.toHaveAttribute('open');
@@ -1672,6 +1678,77 @@ describe('research IA pages', () => {
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
   });
 
+  it('uses the server canonical HK identity for Radar display and research routes', async () => {
+    getResearchRadarMock.mockResolvedValue({
+      schemaVersion: 'research_radar_api_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      researchQueue: [
+        {
+          ticker: 'HK00700',
+          symbol: 'HK00700',
+          priority: 'medium',
+          researchBias: 'strengthContinuation',
+          driverScores: { relativeStrength: 70 },
+          whyOnRadar: ['Relative strength is above the research threshold'],
+          whatToVerify: ['Verify the observed evidence.'],
+          invalidationObservations: [],
+          riskFlags: [],
+        },
+      ],
+      aggregateSummary: {
+        queueQuality: 'mixed',
+        priorityCounts: { medium: 1 },
+      },
+      evidenceGaps: [],
+      marketContextFit: 'neutral',
+      onboardingGuidance: null,
+      emptyStateActions: [],
+      starterResearchWorkflow: [],
+      firstRunChecklist: [],
+      suggestedResearchEntrypoints: [],
+      noAdviceDisclosure: 'Research-only queue.',
+      dataQuality: { status: 'partial' },
+      evidenceHub: {
+        scannerCandidates: {
+          key: 'scanner', label: 'Scanner candidates', status: 'available', summary: 'Scanner candidate evidence is available.',
+          nextDataAction: 'Refresh scanner.', evidenceCount: 1, totalCount: 1, symbols: ['HK00700'], details: [], observationOnly: true, decisionGrade: false,
+        },
+        backtestSamples: {
+          key: 'backtest', label: 'Backtest samples', status: 'blocked', summary: 'Backtest samples are unavailable.',
+          nextDataAction: 'Prepare samples.', evidenceCount: 0, totalCount: 1, symbols: ['HK00700'], details: [], observationOnly: true, decisionGrade: false,
+        },
+        stockReadiness: {
+          key: 'stock', label: 'Stock readiness', status: 'available', summary: 'Stock readiness is available.',
+          nextDataAction: 'Refresh evidence.', evidenceCount: 1, totalCount: 1, symbols: ['HK00700'], details: [], observationOnly: true, decisionGrade: false,
+        },
+        dataActivation: {
+          key: 'data', label: 'Data activation', status: 'partial', summary: 'Data activation is partial.',
+          nextDataAction: 'Resolve evidence.', evidenceCount: 2, totalCount: 3, symbols: [], details: [], observationOnly: true, decisionGrade: false,
+        },
+        missingEvidenceStates: [],
+      },
+    });
+
+    renderRoute(<ResearchRadarPage />, '/zh/research/radar?market=hk');
+
+    const page = await screen.findByTestId('research-radar-page');
+    const overview = await within(page).findByTestId('research-radar-consumer-overview');
+    const candidate = within(overview).getByTestId('research-radar-candidate-HK00700');
+    const selectedCandidate = within(overview).getByTestId('research-radar-selected-candidate-detail');
+
+    expect(candidate).toHaveTextContent('HK00700');
+    expect(selectedCandidate).toHaveTextContent('HK00700');
+    expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/zh/stocks/HK00700/structure-decision'),
+    );
+    expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('symbol=HK00700'),
+    );
+    expect(page).not.toHaveTextContent('0700.HK');
+  });
+
   it('keeps Research Radar visible when the unified research queue endpoint is unavailable', async () => {
     getResearchRadarMock.mockResolvedValue({
       schemaVersion: 'research_radar_api_v1',
@@ -1864,88 +1941,41 @@ describe('research IA pages', () => {
     expect(within(page).queryByTestId('stock-structure-symbol-not-found-state')).not.toBeInTheDocument();
   });
 
-  it('shows a per-symbol safe missing explanation in multi-symbol structure routes', async () => {
-    getStructureDecisionsBatchMock.mockResolvedValue({
-      schemaVersion: 'stock_structure_decision_batch_api_v1',
-      items: [
-        {
-          schemaVersion: 'stock_structure_decision_api_v1',
-          ticker: 'AAPL',
-          structureState: 'range',
-          confidence: 'medium',
-          componentScores: { trend: 58 },
-          explanation: {
-            whyThisStructure: 'AAPL remains range-bound.',
-            whatConfirmsIt: [],
-            whatInvalidatesIt: [],
-            keyLevels: [],
-          },
-          researchNotes: {
-            watchNext: [],
-            needsMoreEvidence: [],
-            riskFlags: [],
-          },
-          dataQuality: {
-            status: 'available',
-            period: 'daily',
-            usableBars: 60,
-          },
-          missingEvidence: [],
-          noAdviceDisclosure: 'Observation-only research context.',
-        },
-      ],
-      aggregateSummary: {
-        requestedCount: 2,
-        evaluatedCount: 1,
-        truncated: false,
-      },
-      missingEvidence: [],
-      dataQuality: { status: 'partial' },
-      symbolCompareEvidencePacket: {
-        comparedSymbols: ['AAPL'],
-        sharedEvidence: [],
-        divergentEvidence: [],
-        missingEvidenceBySymbol: {
-          AAPL: [],
-          INVALID_SYMBOL_XXXX: [
-            {
-              kind: 'symbol_validation',
-              message: 'Enter a supported stock symbol format. provider_runtime_trace raw payload reasonCodes buy now target price',
-            },
-          ],
-        },
-        freshnessBySymbol: {
-          AAPL: { status: 'available', period: 'daily', usableBars: 60 },
-        },
-        confidenceCap: { value: 25 },
-        observationBoundary: {
-          observationOnly: true,
-          decisionGrade: false,
-          rankingAllowed: false,
-          adviceAllowed: false,
-        },
-        researchNextSteps: [],
-      },
-      noAdviceDisclosure: 'Observation-only research context.',
+  it('rejects malformed symbols before a multi-symbol structure request', async () => {
+    verifyTickerExistsMock.mockImplementation(async (stockCode: string) => {
+      if (stockCode === 'INVALID_SYMBOL_XXXX') {
+        return {
+          stockCode,
+          normalizedSymbol: stockCode,
+          market: null,
+          status: 'invalid_format',
+          valid: false,
+          exists: false,
+          stockName: null,
+          message: 'Enter a supported stock symbol format.',
+        };
+      }
+      return {
+        stockCode,
+        normalizedSymbol: stockCode,
+        market: 'us',
+        status: 'valid',
+        valid: true,
+        exists: true,
+        stockName: 'Test stock',
+        message: 'Symbol verified.',
+      };
     });
 
     renderRoute(<StockStructureDecisionPage />, '/zh/stocks/INVALID_SYMBOL_XXXX,AAPL/structure-decision');
 
     const page = await screen.findByTestId('stock-structure-decision-page');
-    const packet = await within(page).findByTestId('symbol-compare-evidence-packet');
-    expect(getStructureDecisionsBatchMock).toHaveBeenCalledWith({
-      stockCodes: ['INVALID_SYMBOL_XXXX', 'AAPL'],
-      benchmark: undefined,
-      maxItems: undefined,
-    });
-    expect(packet).toHaveTextContent('AAPL');
-    expect(packet).toHaveTextContent('INVALID_SYMBOL_XXXX');
-    expect(packet).toHaveTextContent('标的未找到');
-    expect(packet).toHaveTextContent('未找到该标的，请检查代码是否正确，或返回搜索重新选择。');
-    expect(packet).toHaveTextContent('证据暂不可用');
-    expect(packet).toHaveTextContent('部分证据暂不可用，因此当前结论只适合作为观察线索。');
-    expect(packet.textContent || '').not.toMatch(/provider|runtime|trace|raw|reasonCodes|target price|buy now|schemaVersion|local_db|fallback_source|fixture|adapter/i);
-    expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓|buy|sell|hold|recommend|target|stop|position size/i);
+    const emptyState = await within(page).findByTestId('stock-structure-symbol-not-found-state');
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('INVALID_SYMBOL_XXXX');
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('AAPL');
+    expect(getStructureDecisionsBatchMock).not.toHaveBeenCalled();
+    expect(emptyState).toHaveTextContent('标的未找到');
+    expect(emptyState).toHaveTextContent('当前无法确认该标的，不等同于数据暂时不可用。');
   });
 
   it('renders Stock Structure peer-correlation context without raw diagnostics', async () => {

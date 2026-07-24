@@ -26,6 +26,8 @@ from typing import Any, Callable, Dict, List, Optional
 from src.agent.llm_adapter import LLMToolAdapter
 from src.agent.tools.registry import ToolRegistry
 from src.storage import persist_llm_usage as _persist_usage
+from src.utils.symbol_normalization import parse_canonical_symbol
+from src.utils.symbol_validation import require_consumer_symbol_identity
 
 logger = logging.getLogger(__name__)
 
@@ -107,26 +109,8 @@ def _normalize_tool_stock_code(value: Any) -> Any:
     text = value.strip().upper()
     if not text:
         return text
-
-    if text.endswith(".HK"):
-        base = text[:-3]
-        if base.isdigit() and 1 <= len(base) <= 5:
-            return f"HK{base.zfill(5)}"
-
-    if text.startswith("HK"):
-        base = text[2:]
-        if base.isdigit() and 1 <= len(base) <= 5:
-            return f"HK{base.zfill(5)}"
-
-    if text.isdigit() and len(text) == 5:
-        return f"HK{text}"
-
-    try:
-        from data_provider.base import canonical_stock_code, normalize_stock_code
-
-        return canonical_stock_code(normalize_stock_code(text))
-    except Exception:
-        return text
+    identity = parse_canonical_symbol(text)
+    return identity.symbol if identity is not None and not identity.ambiguous else text
 
 
 def _build_tool_cache_key(tool_name: str, arguments: Dict[str, Any]) -> Optional[str]:
@@ -146,6 +130,37 @@ def _build_tool_cache_key(tool_name: str, arguments: Dict[str, Any]) -> Optional
     except (TypeError, ValueError):
         return None
     return f"{tool_name}:{payload}"
+
+
+def _canonicalize_tool_arguments(
+    tool_registry: ToolRegistry,
+    tool_name: str,
+    arguments: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Normalize declared stock-code tool arguments at the execution boundary."""
+    normalized = dict(arguments)
+    tool_definition = tool_registry.get_definition(tool_name)
+    has_stock_code_parameter = bool(
+        tool_definition
+        and any(parameter.name == "stock_code" for parameter in tool_definition.parameters)
+    )
+    if not has_stock_code_parameter or "stock_code" not in normalized:
+        return normalized
+    normalized["stock_code"] = require_consumer_symbol_identity(
+        normalized["stock_code"],
+    ).normalized_symbol
+    return normalized
+
+
+def _invalid_stock_symbol_tool_result() -> str:
+    """Return the non-retriable response for invalid tool stock identities."""
+    return json.dumps(
+        {
+            "error": "Stock symbol is invalid or requires an explicit market.",
+            "error_code": "invalid_or_ambiguous_stock_symbol",
+            "retriable": False,
+        }
+    )
 
 
 def _is_non_retriable_tool_result(result: Any) -> bool:
@@ -568,19 +583,34 @@ def _execute_tools(
 
     def _exec_single(tc_item):
         t0 = time.time()
-        cache_key = _build_tool_cache_key(tc_item.name, tc_item.arguments)
+        raw_arguments = dict(tc_item.arguments)
+        try:
+            arguments = _canonicalize_tool_arguments(
+                tool_registry,
+                tc_item.name,
+                raw_arguments,
+            )
+        except ValueError:
+            dur = round(time.time() - t0, 2)
+            safe_arguments = {
+                key: value
+                for key, value in raw_arguments.items()
+                if key != "stock_code"
+            }
+            return tc_item, _invalid_stock_symbol_tool_result(), False, dur, False, safe_arguments
+
+        cache_key = _build_tool_cache_key(tc_item.name, arguments)
 
         if cache_key and non_retriable_tool_results is not None and cache_key in non_retriable_tool_results:
             dur = round(time.time() - t0, 2)
             logger.info(
                 "Tool '%s' skipped via non-retriable cache for arguments=%s",
                 tc_item.name,
-                tc_item.arguments,
+                arguments,
             )
-            return tc_item, non_retriable_tool_results[cache_key], False, dur, True
+            return tc_item, non_retriable_tool_results[cache_key], False, dur, True, arguments
 
         try:
-            arguments = dict(tc_item.arguments)
             if tc_item.name == "get_portfolio_snapshot" and owner_user_id:
                 arguments["owner_user_id"] = owner_user_id
             res = tool_registry.execute(tc_item.name, **arguments)
@@ -593,7 +623,12 @@ def _execute_tools(
             ok = False
             logger.warning("Tool '%s' failed: %s", tc_item.name, e)
         dur = round(time.time() - t0, 2)
-        return tc_item, res_str, ok, dur, False
+        logged_arguments = {
+            key: value
+            for key, value in arguments.items()
+            if key != "owner_user_id"
+        }
+        return tc_item, res_str, ok, dur, False, logged_arguments
 
     results: List[Dict[str, Any]] = []
 
@@ -607,7 +642,7 @@ def _execute_tools(
             try:
                 future = pool.submit(_exec_single, tc)
                 try:
-                    _, result_str, success, dur, cached = future.result(timeout=tool_wait_timeout_seconds)
+                    _, result_str, success, dur, cached, logged_arguments = future.result(timeout=tool_wait_timeout_seconds)
                 except FuturesTimeoutError:
                     timeout_triggered = True
                     future.cancel()
@@ -620,14 +655,15 @@ def _execute_tools(
                     success = False
                     dur = round(tool_wait_timeout_seconds, 2)
                     cached = False
+                    logged_arguments = dict(tc.arguments)
             finally:
                 pool.shutdown(wait=not timeout_triggered, cancel_futures=timeout_triggered)
         else:
-            _, result_str, success, dur, cached = _exec_single(tc)
+            _, result_str, success, dur, cached, logged_arguments = _exec_single(tc)
         if progress_callback:
             progress_callback({"type": "tool_done", "step": step, "tool": tc.name, "success": success, "duration": dur})
         log_entry = {
-            "step": step, "tool": tc.name, "arguments": tc.arguments,
+            "step": step, "tool": tc.name, "arguments": logged_arguments,
             "success": success, "duration": dur, "result_length": len(result_str),
             "cached": cached,
         }
@@ -654,11 +690,11 @@ def _execute_tools(
                 timeout=tool_wait_timeout_seconds if tool_wait_timeout_seconds and tool_wait_timeout_seconds > 0 else None,
             ):
                 pending.discard(future)
-                tc_item, result_str, success, dur, cached = future.result()
+                tc_item, result_str, success, dur, cached, logged_arguments = future.result()
                 if progress_callback:
                     progress_callback({"type": "tool_done", "step": step, "tool": tc_item.name, "success": success, "duration": dur})
                 tool_calls_log.append({
-                    "step": step, "tool": tc_item.name, "arguments": tc_item.arguments,
+                    "step": step, "tool": tc_item.name, "arguments": logged_arguments,
                     "success": success, "duration": dur, "result_length": len(result_str),
                     "cached": cached,
                 })

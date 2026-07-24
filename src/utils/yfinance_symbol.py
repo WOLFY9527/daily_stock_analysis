@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from src.utils.symbol_classification import is_bse_code, is_us_stock_code
+from src.utils.symbol_classification import is_bse_code
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 
 _US_INDEX_YF_MAPPING: dict[str, tuple[str, str]] = {
@@ -39,30 +40,32 @@ def to_yfinance_symbol(stock_code: str) -> str:
     if yf_symbol:
         return yf_symbol
 
-    if is_us_stock_code(code):
-        return code
+    identity = parse_canonical_symbol(code)
+    if identity is None or identity.ambiguous or identity.market is None:
+        raise ValueError("unsupported or ambiguous stock symbol")
 
-    if code.startswith("HK"):
-        hk_code = code[2:].lstrip("0") or "0"
+    if identity.market == "us":
+        return identity.symbol
+
+    if identity.market == "hk":
+        hk_code = identity.symbol[2:].lstrip("0") or "0"
         return f"{hk_code.zfill(4)}.HK"
 
-    if any(suffix in code for suffix in (".SS", ".SZ", ".HK", ".BJ")):
-        return code
+    if code.endswith((".SS", ".SH")):
+        return f"{identity.symbol}.SS"
+    if code.endswith(".SZ"):
+        return f"{identity.symbol}.SZ"
+    if code.endswith(".BJ"):
+        return f"{identity.symbol}.BJ"
 
-    code = code.replace(".SH", "")
+    if identity.symbol.startswith(("51", "52", "56", "58")):
+        return f"{identity.symbol}.SS"
+    if identity.symbol.startswith(("15", "16", "18")):
+        return f"{identity.symbol}.SZ"
 
-    if len(code) == 6:
-        if code.startswith(("51", "52", "56", "58")):
-            return f"{code}.SS"
-        if code.startswith(("15", "16", "18")):
-            return f"{code}.SZ"
+    if is_bse_code(identity.symbol):
+        return f"{identity.symbol}.BJ"
 
-    if is_bse_code(code):
-        base = code.split(".")[0] if "." in code else code
-        return f"{base}.BJ"
-
-    if code.startswith(("600", "601", "603", "688")):
-        return f"{code}.SS"
-    if code.startswith(("000", "002", "300")):
-        return f"{code}.SZ"
-    return f"{code}.SZ"
+    if identity.symbol.startswith(("600", "601", "603", "688")):
+        return f"{identity.symbol}.SS"
+    return f"{identity.symbol}.SZ"

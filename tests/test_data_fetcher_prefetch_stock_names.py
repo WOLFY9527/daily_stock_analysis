@@ -81,6 +81,16 @@ class TestPrefetchStockNames(unittest.TestCase):
         remote_fetcher.get_stock_name.assert_not_called()
         self.assertEqual(manager._stock_name_cache["600519"], "贵州茅台")
 
+        self.assertEqual(
+            DataFetcherManager.get_stock_name(manager, "00700", allow_realtime=False),
+            "腾讯控股",
+        )
+        self.assertEqual(
+            DataFetcherManager.get_stock_name(manager, "HK00700", allow_realtime=False),
+            "腾讯控股",
+        )
+        remote_fetcher.get_stock_name.assert_not_called()
+
     def test_pytdx_get_stock_name_reads_all_security_list_pages(self):
         fetcher = PytdxFetcher(hosts=[])
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Copy, Download } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
@@ -15,6 +15,7 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
+  canonicalStockSymbolFromValidation,
   stocksApi,
   type StockHistoryPoint,
   type StockHistoryResponse,
@@ -23,7 +24,6 @@ import {
   type SymbolResearchPacket,
   type StockPeerCorrelationSnapshot,
   type StockStructureDecisionResponse,
-  type StockValidationResponse,
   type StockSymbolCompareEvidenceEntry,
   type StockSymbolCompareEvidencePacket,
   type StockSymbolCompareFreshness,
@@ -195,10 +195,10 @@ function symbolSegmentFromPathname(pathname: string): string {
 }
 
 function parseStockStructureSymbols(value: string | null | undefined): string[] {
-  return [...new Set(String(value || '')
+  return String(value || '')
     .split(/[,\s;|+]+/)
-    .map((item) => item.trim().toUpperCase())
-    .filter(Boolean))];
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function parsePositiveInteger(value: string | null): number | undefined {
@@ -940,14 +940,31 @@ function firstComparablePeerSymbol(
   primarySymbol: string,
 ): string | null {
   if (!snapshot) return null;
-  const primary = primarySymbol.toUpperCase();
+  const primary = primarySymbol.trim();
   return snapshot.peerGroup.symbols
-    .map((symbol) => symbol.trim().toUpperCase())
+    .map((symbol) => symbol.trim())
     .find((symbol) => symbol && symbol !== primary) ?? null;
 }
 
 function buildComparePath(symbols: string[]): string {
   return `/stocks/${symbols.map((symbol) => encodeURIComponent(symbol)).join(',')}/structure-decision`;
+}
+
+function buildCanonicalStockStructurePath(
+  symbols: string[],
+  search: string,
+  benchmark: string | undefined,
+): string {
+  const params = new URLSearchParams(search);
+  params.delete('symbols');
+  if (benchmark) {
+    params.set('benchmark', benchmark);
+  } else {
+    params.delete('benchmark');
+  }
+  const query = params.toString();
+  const pathname = buildComparePath(symbols);
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 type SymbolNotFoundState = {
@@ -1447,8 +1464,8 @@ function stockEvidenceItemForSymbol(
   response: StockEvidenceResponse | null,
   symbol: string,
 ): StockEvidenceItem | null {
-  const normalized = symbol.trim().toUpperCase();
-  return response?.items.find((item) => item.symbol.trim().toUpperCase() === normalized)
+  const canonicalSymbol = symbol.trim();
+  return response?.items.find((item) => item.symbol.trim() === canonicalSymbol)
     || response?.items[0]
     || null;
 }
@@ -1995,12 +2012,8 @@ function SingleStockEvidencePackControls({
   );
 }
 
-function isSymbolNotFoundValidation(
-  validation: StockValidationResponse | null | undefined,
-): validation is StockValidationResponse {
-  if (!validation) return false;
-  if (validation.exists || validation.valid) return false;
-  return ['invalid_format', 'unsupported_market', 'ambiguous', 'not_found'].includes(String(validation.status || ''));
+function isVerificationUnavailable(status: string | null | undefined): boolean {
+  return status === 'unavailable' || status === 'unknown';
 }
 
 function numericValue(value: unknown): number | null {
@@ -3810,14 +3823,14 @@ function SymbolCompareEvidencePacketPanel({
   requestedSymbols: string[];
 }) {
   const comparedSymbols = (packet?.comparedSymbols ?? [])
-    .map((symbol) => symbol.trim().toUpperCase())
+    .map((symbol) => symbol.trim())
     .filter(Boolean);
   const displaySymbols = [...new Set([
     ...requestedSymbols,
     ...comparedSymbols,
     ...Object.keys(packet?.missingEvidenceBySymbol ?? {}),
     ...Object.keys(packet?.freshnessBySymbol ?? {}),
-  ].map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))];
+  ].map((symbol) => symbol.trim()).filter(Boolean))];
 
   if (!packet || displaySymbols.length <= 1) {
     const symbolLabel = displaySymbols[0] ?? (language === 'en' ? 'one symbol' : '一个标的');
@@ -3978,6 +3991,7 @@ export default function StockStructureDecisionPage() {
   const locale = language === 'en' ? 'en' : 'zh';
   const { stockCode = '' } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const localize = useCallback((path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path), [routeLocale]);
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -3986,11 +4000,12 @@ export default function StockStructureDecisionPage() {
     () => parseStockStructureSymbols(searchParams.get('symbols') || symbolSegment),
     [searchParams, symbolSegment],
   );
-  const benchmark = searchParams.get('benchmark')?.trim().toUpperCase() || undefined;
+  const benchmark = searchParams.get('benchmark')?.trim() || undefined;
   const maxItems = parsePositiveInteger(searchParams.get('maxItems'));
-  const isCompareRequest = requestedSymbols.length > 1;
-  const primarySymbol = requestedSymbols[0] || symbolSegment.toUpperCase();
-  const titleSymbol = isCompareRequest ? requestedSymbols.join(' / ') : primarySymbol;
+  const [canonicalSymbols, setCanonicalSymbols] = useState<string[]>([]);
+  const isCompareRequest = canonicalSymbols.length > 1;
+  const primarySymbol = canonicalSymbols[0] || '';
+  const titleSymbol = canonicalSymbols.join(' / ');
   const [data, setData] = useState<StockStructureDecisionResponse | null>(null);
   const [researchPacket, setResearchPacket] = useState<SymbolResearchPacket | null>(null);
   const [researchPacketFailed, setResearchPacketFailed] = useState(false);
@@ -4013,6 +4028,7 @@ export default function StockStructureDecisionPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setCanonicalSymbols([]);
     setSymbolNotFound(null);
     setResearchPacket(null);
     setResearchPacketFailed(false);
@@ -4027,12 +4043,88 @@ export default function StockStructureDecisionPage() {
     setOptionsStructure(null);
     setOptionsStructureFailed(false);
     try {
-      if (isCompareRequest) {
+      if (!requestedSymbols.length) {
+        setData(null);
+        setSymbolNotFound({ symbol: '' });
+        return;
+      }
+
+      const resolutionInputs = benchmark ? [...requestedSymbols, benchmark] : requestedSymbols;
+      const resolutionResults = await Promise.allSettled(
+        resolutionInputs.map((symbol) => stocksApi.verifyTickerExists(symbol)),
+      );
+      const canonicalInputs: Array<{ symbol: string; market: string }> = [];
+      for (const result of resolutionResults) {
+        if (result.status === 'rejected') {
+          setData(null);
+          setError(createParsedApiError({
+            title: locale === 'en' ? 'Stock identity unavailable' : '标的身份暂不可用',
+            message: locale === 'en'
+              ? 'The symbol could not be verified. No research request was sent.'
+              : '当前无法确认标的身份，未发送研究请求。',
+          }));
+          return;
+        }
+
+        const canonical = canonicalStockSymbolFromValidation(result.value);
+        if (!canonical) {
+          setData(null);
+          if (isVerificationUnavailable(result.value.status)) {
+            setError(createParsedApiError({
+              title: locale === 'en' ? 'Stock identity unavailable' : '标的身份暂不可用',
+              message: locale === 'en'
+                ? 'The symbol cannot be confirmed yet. No research request was sent.'
+              : '当前无法确认标的身份，未发送研究请求。',
+            }));
+          } else {
+            const serverSymbol = typeof result.value.normalizedSymbol === 'string'
+              ? result.value.normalizedSymbol.trim()
+              : typeof result.value.stockCode === 'string'
+                ? result.value.stockCode.trim()
+                : '';
+            setSymbolNotFound({ symbol: serverSymbol });
+          }
+          return;
+        }
+        canonicalInputs.push(canonical);
+      }
+
+      const seenCanonicalSymbols = new Set<string>();
+      const resolvedSymbols = canonicalInputs
+        .slice(0, requestedSymbols.length)
+        .filter((identity) => {
+          const key = `${identity.market}\u0000${identity.symbol}`;
+          if (seenCanonicalSymbols.has(key)) return false;
+          seenCanonicalSymbols.add(key);
+          return true;
+        })
+        .map((identity) => identity.symbol);
+      const resolvedBenchmark = benchmark ? canonicalInputs.at(-1)?.symbol : undefined;
+      if (!resolvedSymbols.length) {
+        setData(null);
+        setSymbolNotFound({ symbol: '' });
+        return;
+      }
+
+      setCanonicalSymbols(resolvedSymbols);
+      const canonicalPath = localize(buildCanonicalStockStructurePath(
+        resolvedSymbols,
+        location.search,
+        resolvedBenchmark,
+      ));
+      if (canonicalPath !== `${location.pathname}${location.search}`) {
+        navigate(canonicalPath, { replace: true });
+        return;
+      }
+
+      const canonicalPrimarySymbol = resolvedSymbols[0];
+      const canonicalIsCompareRequest = resolvedSymbols.length > 1;
+      if (canonicalIsCompareRequest) {
         const [packetResult, responseResult] = await Promise.allSettled([
-          stocksApi.getResearchPacket(primarySymbol),
+          stocksApi.getResearchPacket(canonicalPrimarySymbol),
           stocksApi.getStructureDecisionsBatch({
-            stockCodes: requestedSymbols,
-            benchmark,
+            stockCodes: resolvedSymbols,
+            benchmark: resolvedBenchmark,
             maxItems,
           }),
         ]);
@@ -4050,36 +4142,14 @@ export default function StockStructureDecisionPage() {
         setOptionsStructure(null);
         setOptionsStructureFailed(false);
       } else {
-        let validation: StockValidationResponse | null = null;
-        try {
-          validation = await stocksApi.verifyTickerExists(primarySymbol);
-        } catch {
-          validation = null;
-        }
-        if (isSymbolNotFoundValidation(validation)) {
-          setData(null);
-          setResearchPacket(null);
-          setResearchPacketFailed(false);
-          setHistory(null);
-          setHistoryFailed(false);
-          setTechnicalIndicators(null);
-          setTechnicalIndicatorsFailed(false);
-          setStockEvidence(null);
-          setStockEvidenceFailed(false);
-          setComparePacket(null);
-          setSymbolNotFound({
-            symbol: validation.normalizedSymbol || validation.stockCode || primarySymbol,
-          });
-          return;
-        }
         const [quoteResult, packetResult, responseResult, optionsResult, historyResult, technicalResult, stockEvidenceResult] = await Promise.allSettled([
-          stocksApi.getQuote(primarySymbol),
-          stocksApi.getResearchPacket(primarySymbol),
-          stocksApi.getStructureDecision(primarySymbol),
-          optionsLabApi.getOptionsStructure(primarySymbol),
-          stocksApi.getHistory(primarySymbol, { period: 'daily', days: 180 }),
-          stocksApi.getTechnicalIndicators(primarySymbol),
-          stockEvidenceApi.getStockEvidence(primarySymbol),
+          stocksApi.getQuote(canonicalPrimarySymbol),
+          stocksApi.getResearchPacket(canonicalPrimarySymbol),
+          stocksApi.getStructureDecision(canonicalPrimarySymbol),
+          optionsLabApi.getOptionsStructure(canonicalPrimarySymbol),
+          stocksApi.getHistory(canonicalPrimarySymbol, { period: 'daily', days: 180 }),
+          stocksApi.getTechnicalIndicators(canonicalPrimarySymbol),
+          stockEvidenceApi.getStockEvidence(canonicalPrimarySymbol),
         ]);
         if (quoteResult.status === 'fulfilled') {
           setQuote(quoteResult.value);
@@ -4133,7 +4203,7 @@ export default function StockStructureDecisionPage() {
     } finally {
       setLoading(false);
     }
-  }, [benchmark, isCompareRequest, locale, maxItems, primarySymbol, requestedSymbols]);
+  }, [benchmark, locale, localize, location.pathname, location.search, maxItems, navigate, requestedSymbols]);
 
   useEffect(() => {
     void load();

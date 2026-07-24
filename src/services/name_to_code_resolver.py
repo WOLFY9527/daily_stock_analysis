@@ -16,6 +16,7 @@ from typing import Dict, Optional, Set
 
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.services.stock_code_utils import is_code_like, normalize_code
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +76,10 @@ def _get_akshare_name_to_code() -> Optional[Dict[str, str]]:
             name = row.get("name")
             if code is None or name is None:
                 continue
-            code_str = str(code).strip()
-            # Strip .SH/.SZ suffix
-            if "." in code_str:
-                base, suffix = code_str.rsplit(".", 1)
-                if suffix.upper() in ("SH", "SZ", "SS") and base.isdigit():
-                    code_str = base
-            code_to_name[code_str] = str(name).strip()
+            identity = parse_canonical_symbol(str(code).strip())
+            if identity is None or identity.ambiguous or identity.market != "cn":
+                continue
+            code_to_name[identity.symbol] = str(name).strip()
         result = _build_reverse_map_no_duplicates(code_to_name)
         _akshare_cache = (now, result)
         logger.info(f"[NameResolver] AkShare cache loaded: {len(result)} name->code mappings")

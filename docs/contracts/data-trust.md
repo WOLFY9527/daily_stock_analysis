@@ -52,6 +52,23 @@ parser-only, request-supplied, and observation-only data remain visibly
 non-live and non-authoritative. Raw provider payloads do not cross into public
 API or consumer presentation contracts.
 
+### Canonical Symbol Identity
+
+`src.utils.symbol_normalization.parse_canonical_symbol` is the single authority
+for supported CN, HK, and US symbol identity. It returns one canonical symbol
+and market pair before a symbol crosses provider, analysis, import, resolver,
+API, route, or consumer boundaries. Provider adapters may translate that
+canonical identity into a provider-specific spelling only at their own
+boundary; they do not redefine user-facing identity.
+
+Explicit CN exchange forms, `0700.HK`, `HK00700`, and supported US symbols
+must retain their canonical market identity and display spelling through every
+consumer. Ambiguous or malformed input remains rejected. Consumers must not
+introduce local aliases, regex parsers, inferred-market defaults, or a raw
+symbol fallback after canonical resolution fails. Web consumers use the server
+validation response's canonical symbol and market rather than deriving one
+locally.
+
 ### Provenance vocabulary guard
 
 The following fields are not interchangeable and must not be used as aliases

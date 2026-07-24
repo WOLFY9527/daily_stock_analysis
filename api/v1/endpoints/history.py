@@ -43,6 +43,7 @@ from src.report_language import (
 )
 from src.services.history_service import HistoryService, MarkdownReportGenerationError
 from src.utils.data_processing import normalize_model_used, extract_fundamental_detail_fields
+from src.utils.symbol_validation import ConsumerSymbolValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,7 @@ def _extract_number(value: Optional[object]) -> Optional[float]:
     response_model=HistoryListResponse,
     responses={
         200: {"description": "历史记录列表"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史分析列表",
@@ -267,6 +269,13 @@ def get_history_list(
             items=items
         )
         
+    except ConsumerSymbolValidationError as exc:
+        raise safe_api_error(
+            status_code=400,
+            error="validation_error",
+            message="Enter a supported stock symbol format.",
+            retryable=False,
+        ) from exc
     except Exception as e:
         raise _history_internal_error("查询历史列表失败", e)
 

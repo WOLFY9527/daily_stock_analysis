@@ -48,6 +48,7 @@ from src.config import get_config
 from src.contracts.source_confidence import evaluate_market_intelligence_trust
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+from src.utils.symbol_normalization import parse_canonical_symbol
 from .base import BaseFetcher, DataFetchError, RateLimitError, STANDARD_COLUMNS, is_bse_code
 from .market_stats import calculate_market_stats
 from .realtime_types import (
@@ -116,31 +117,16 @@ def _is_etf_code(stock_code: str) -> bool:
     return code.startswith(etf_prefixes) and len(code) == 6
 
 
+def _canonical_hk_symbol(stock_code: str) -> str | None:
+    """Return an explicit canonical HK identity without inferring a bare code."""
+    identity = parse_canonical_symbol(stock_code)
+    if identity is None or identity.ambiguous or identity.market != "hk":
+        return None
+    return identity.symbol
+
+
 def _is_hk_code(stock_code: str) -> bool:
-    """
-    判断代码是否为港股
-
-    港股代码规则：
-    - 5位数字代码，如 '00700' (腾讯控股)
-    - 部分港股代码可能带有前缀，如 'hk00700', 'hk1810'
-
-    Args:
-        stock_code: 股票代码
-
-    Returns:
-        True 表示是港股代码，False 表示不是港股代码
-    """
-    # 去除可能的 'hk' 前缀并检查是否为纯数字
-    code = stock_code.strip().lower()
-    if code.endswith('.hk'):
-        numeric_part = code[:-3]
-        return numeric_part.isdigit() and 1 <= len(numeric_part) <= 5
-    if code.startswith('hk'):
-        # 带 hk 前缀的一定是港股，去掉前缀后应为纯数字（1-5位）
-        numeric_part = code[2:]
-        return numeric_part.isdigit() and 1 <= len(numeric_part) <= 5
-    # 无前缀时，5位纯数字才视为港股（避免误判 A 股代码）
-    return code.isdigit() and len(code) == 5
+    return _canonical_hk_symbol(stock_code) is not None
 
 
 def is_hk_stock_code(stock_code: str) -> bool:
@@ -870,8 +856,10 @@ class AkshareFetcher(BaseFetcher):
         # 防封禁策略 2: 强制休眠
         self._enforce_rate_limit()
         
-        # 确保代码格式正确（5位数字）
-        code = stock_code.lower().replace('hk', '').zfill(5)
+        canonical_symbol = _canonical_hk_symbol(stock_code)
+        if canonical_symbol is None:
+            raise DataFetchError(f"AkshareFetcher 暂不支持该港股代码: {stock_code}")
+        code = canonical_symbol[2:]
         
         logger.info(f"[API调用] ak.stock_hk_hist(symbol={code}, period=daily, "
                    f"start_date={start_date.replace('-', '')}, end_date={end_date.replace('-', '')}, adjust=qfq)")
@@ -1624,13 +1612,11 @@ class AkshareFetcher(BaseFetcher):
             self._set_random_user_agent()
             self._enforce_rate_limit()
             
-            # 确保代码格式正确（5位数字）
-            raw_code = stock_code.strip().lower()
-            if raw_code.endswith('.hk'):
-                raw_code = raw_code[:-3]
-            if raw_code.startswith('hk'):
-                raw_code = raw_code[2:]
-            code = raw_code.zfill(5)
+            canonical_symbol = _canonical_hk_symbol(stock_code)
+            if canonical_symbol is None:
+                logger.warning("[API跳过] 无法确认港股代码: %s", stock_code)
+                return None
+            code = canonical_symbol[2:]
             
             logger.info(f"[API调用] ak.stock_hk_spot_em() 获取港股实时行情...")
             import time as _time

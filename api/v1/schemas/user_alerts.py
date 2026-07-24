@@ -5,12 +5,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-import re
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.utils.symbol_normalization import canonical_stock_code
+from src.utils.symbol_validation import require_consumer_symbol_identity
 
 
 UserAlertRuleType = Literal["watchlist_price_threshold"]
@@ -48,14 +47,7 @@ class UserAlertRuleCreateRequest(_UserAlertSchema):
     @field_validator("symbol")
     @classmethod
     def _normalize_symbol(cls, value: str) -> str:
-        normalized = canonical_stock_code(value).strip().upper()
-        if not normalized:
-            raise ValueError("symbol is required")
-        if len(normalized) > 16:
-            raise ValueError("symbol must be at most 16 characters")
-        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]*", normalized):
-            raise ValueError("symbol contains invalid characters")
-        return normalized
+        return require_consumer_symbol_identity(value).normalized_symbol
 
     @field_validator("note")
     @classmethod
@@ -76,14 +68,7 @@ class UserAlertRuleUpdateRequest(_UserAlertSchema):
     def _normalize_symbol(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
-        normalized = canonical_stock_code(value).strip().upper()
-        if not normalized:
-            raise ValueError("symbol is required")
-        if len(normalized) > 16:
-            raise ValueError("symbol must be at most 16 characters")
-        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]*", normalized):
-            raise ValueError("symbol contains invalid characters")
-        return normalized
+        return require_consumer_symbol_identity(value).normalized_symbol
 
     @field_validator("note")
     @classmethod

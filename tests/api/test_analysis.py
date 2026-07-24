@@ -14,6 +14,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from api.app import create_app
+from api.v1.endpoints import analysis as analysis_endpoint
 from api.v1.schemas.report_evidence_export import ReportEvidenceExport
 from src.analyzer import AnalysisResult
 from src.services.report_evidence_export import build_report_evidence_export
@@ -59,6 +60,10 @@ def _assert_no_forbidden_keys(value: object, forbidden_keys: tuple[str, ...]) ->
 
     walk(value)
     assert found == []
+
+
+def test_analysis_input_canonicalizes_explicit_hk_symbol() -> None:
+    assert analysis_endpoint._resolve_and_normalize_input("0700.HK") == "HK00700"
 
 
 def _service_response_for_api_contract() -> dict:

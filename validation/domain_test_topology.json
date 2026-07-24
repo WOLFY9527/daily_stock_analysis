@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "manifestVersion": "1.0.0",
   "shadowOnly": true,
-  "capturedOn": "2026-07-20",
+  "capturedOn": "2026-07-23",
   "authoritativeGates": [
     "bash scripts/ci_gate.sh",
     "cd apps/dsa-web && npm test",
@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7969,
-      "sha256": "9d0468d39ade5e86867aeefc2d14e207820ae0421e9c8ecaa82d8d50f10419e0"
+      "count": 7985,
+      "sha256": "21d2ad2af196a24f1a6091dc1f0f42375b92218077cd6dfd5861d7772d949eb7"
     },
     "tests": [
       {
@@ -1334,6 +1334,11 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_analysis.py::test_analysis_input_canonicalizes_explicit_hk_symbol",
+        "domain": "api_schema_contracts",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_analysis.py::test_progress_status_updates_include_meaningful_data_stages",
         "domain": "api_schema_contracts",
         "baseline": true
@@ -1912,6 +1917,11 @@
         "id": "tests/api/test_consumer_safe_error_envelope.py::test_history_internal_error_response_is_consumer_safe_and_logged",
         "domain": "api_schema_contracts",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_consumer_safe_error_envelope.py::test_history_service_value_error_is_not_reclassified_as_client_validation",
+        "domain": "api_schema_contracts",
+        "baseline": false
       },
       {
         "id": "tests/api/test_consumer_safe_error_envelope.py::test_portfolio_internal_error_response_is_consumer_safe",
@@ -10934,6 +10944,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_analysis_history.py::AnalysisHistoryTestCase::test_history_detail_accepts_explicit_hk_payload_for_legacy_hk_row_symbol",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_analysis_history.py::AnalysisHistoryTestCase::test_history_detail_api_omits_raw_debug_containers",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -14702,6 +14717,11 @@
         "id": "tests/test_data_fetcher_prefetch_stock_names.py::TestPrefetchStockNames::test_try_get_cn_stock_list_reuses_manager_cache",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_data_pipeline_r1.py::test_analysis_provider_plan_uses_canonical_symbol_identity",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_data_pipeline_r1.py::test_fast_decision_plan_uses_bounded_hot_path_timeouts",
@@ -19142,6 +19162,11 @@
         "id": "tests/test_import_parser.py::TestParseImportFromBytesCsv::test_parses_csv_with_header",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_import_parser.py::TestParseImportFromBytesCsv::test_parses_explicit_hk_symbol_to_the_canonical_identity",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_import_parser.py::TestParseImportFromBytesCsv::test_resolves_name_when_code_empty",
@@ -24884,19 +24909,19 @@
         "baseline": true
       },
       {
-        "id": "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_a_share_5_digits",
-        "domain": "residual_repository_integration",
-        "baseline": true
-      },
-      {
         "id": "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_a_share_6_digits",
         "domain": "residual_repository_integration",
         "baseline": true
       },
       {
-        "id": "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_hk_5_digits",
+        "id": "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_bare_five_digits_require_an_explicit_market",
         "domain": "residual_repository_integration",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_bare_hk_digits_require_an_explicit_market",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_rejects_non_code",
@@ -28949,6 +28974,21 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_ibkr_hk_corporate_action_preview_uses_canonical_symbol_identity",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_ibkr_hk_open_position_preview_uses_canonical_symbol_identity",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_ibkr_hk_trade_preview_uses_canonical_symbol_identity",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_accepts_explicit_summary_currency_evidence",
         "domain": "portfolio_broker",
         "baseline": false
@@ -28962,6 +29002,11 @@
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_creates_user_owned_connection_and_snapshot_overlay",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_does_not_infer_hk_for_bare_five_digit_position_without_context",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_is_owner_scoped",
@@ -29002,6 +29047,11 @@
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_treats_empty_positions_as_valid_current_state",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_uses_canonical_parser_for_sehk_position",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_uses_direct_fx_for_material_position_values",
@@ -29374,6 +29424,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_global_account_canonicalizes_hk_symbol_and_rejects_ambiguous_market",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_historical_cached_snapshot_does_not_reuse_newer_position_cache",
         "domain": "portfolio_broker",
         "baseline": true
@@ -29497,6 +29552,11 @@
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_snapshot_uses_batched_latest_close_lookup",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_snapshot_uses_legacy_hk_trade_symbol_for_daily_close_lookup",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_ths_pnl_cost_uses_net_cashflows_and_resets_after_flat",
@@ -33679,6 +33739,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_research_radar_service.py::test_latest_scanner_reader_uses_run_market_for_legacy_hk_symbol",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_research_radar_service.py::test_low_evidence_queue_keeps_raw_codes_separate_from_consumer_issues",
         "domain": "provider_external_network",
         "baseline": true
@@ -34187,6 +34252,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_classic_template_registry_retains_every_match_alias",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_market_identity_does_not_guess_hk_for_bare_five_digits",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_compare_runs_adds_different_market_market_code_comparison",
@@ -37059,9 +37129,9 @@
         "baseline": true
       },
       {
-        "id": "tests/test_stock_code_utils.py::TestIsCodeLike::test_plain_5_digit",
+        "id": "tests/test_stock_code_utils.py::TestIsCodeLike::test_plain_5_digit_requires_an_explicit_market",
         "domain": "market",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/test_stock_code_utils.py::TestIsCodeLike::test_plain_6_digit",
@@ -37129,14 +37199,19 @@
         "baseline": true
       },
       {
+        "id": "tests/test_stock_code_utils.py::TestNormalizeCode::test_hk_suffix_preserves_canonical_market_identity",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_stock_code_utils.py::TestNormalizeCode::test_partial_prefix_no_digits_returns_none",
         "domain": "market",
         "baseline": true
       },
       {
-        "id": "tests/test_stock_code_utils.py::TestNormalizeCode::test_plain_5_digit",
+        "id": "tests/test_stock_code_utils.py::TestNormalizeCode::test_plain_5_digit_requires_an_explicit_market",
         "domain": "market",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/test_stock_code_utils.py::TestNormalizeCode::test_plain_6_digit",
@@ -37767,6 +37842,11 @@
         "id": "tests/test_symbol_normalization_boundary.py::test_canonical_stock_code_matches_provider_runtime_semantics[-]",
         "domain": "market",
         "baseline": true
+      },
+      {
+        "id": "tests/test_symbol_normalization_boundary.py::test_canonical_stock_code_matches_provider_runtime_semantics[0700.HK-HK00700]",
+        "domain": "market",
+        "baseline": false
       },
       {
         "id": "tests/test_symbol_normalization_boundary.py::test_canonical_stock_code_matches_provider_runtime_semantics[None-]",
@@ -40167,6 +40247,8 @@
       "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_failure_returns_hold",
       "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_markdown_json",
       "tests/test_multi_agent.py::TestPortfolioAgentPostProcess::test_parse_plain_json",
+      "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_a_share_5_digits",
+      "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_hk_5_digits",
       "tests/test_options_event_calendar_authority.py::test_event_intelligence_timeline_payload_stays_non_authoritative_observation_only",
       "tests/test_pure_helper_import_boundaries.py::test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains[tests/test_user_alert_dry_run_summary.py]",
       "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_builder]",
@@ -40187,6 +40269,8 @@
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_fails_on_secret_or_debug_payload_without_leaking_value",
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_live_mode_checks_health_admin_and_redaction",
       "tests/test_staging_ingress_smoke.py::test_staging_ingress_smoke_timeout_output_is_actionable_and_sanitized",
+      "tests/test_stock_code_utils.py::TestIsCodeLike::test_plain_5_digit",
+      "tests/test_stock_code_utils.py::TestNormalizeCode::test_plain_5_digit",
       "tests/test_user_alert_dry_run_summary.py::test_helper_has_no_protected_runtime_imports",
       "tests/test_user_alert_dry_run_summary.py::test_history_like_local_preview_rollup_stays_no_send_review_only",
       "tests/test_user_alert_dry_run_summary.py::test_live_outbound_flags_fail_closed_without_relabeling_as_observed",
@@ -41199,8 +41283,8 @@
       {
         "path": "apps/dsa-web/src/components/layout/__tests__/Shell.test.tsx",
         "owner": "frontend_shared",
-        "bytes": 93780,
-        "lines": 2001
+        "bytes": 96259,
+        "lines": 2078
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/AdminLogsPage.test.tsx",
@@ -41223,8 +41307,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 246750,
-        "lines": 5213
+        "bytes": 252413,
+        "lines": 5347
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/LiquidityMonitorPage.test.tsx",
@@ -41235,8 +41319,8 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx",
         "owner": "market",
-        "bytes": 266772,
-        "lines": 6026
+        "bytes": 267836,
+        "lines": 6037
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/MarketProviderOperationsPage.test.tsx",
@@ -41259,14 +41343,14 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/PortfolioPage.test.tsx",
         "owner": "portfolio_broker",
-        "bytes": 195493,
-        "lines": 4496
+        "bytes": 203295,
+        "lines": 4733
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx",
         "owner": "milestone_t448_consumer_product",
-        "bytes": 115871,
-        "lines": 2515
+        "bytes": 117556,
+        "lines": 2544
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/SettingsPage.test.tsx",
@@ -41277,20 +41361,20 @@
       {
         "path": "apps/dsa-web/src/pages/__tests__/StockStructureDecisionPage.test.tsx",
         "owner": "market",
-        "bytes": 95709,
-        "lines": 2253
+        "bytes": 102874,
+        "lines": 2449
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/UserScannerPage.test.tsx",
         "owner": "scanner",
-        "bytes": 212065,
-        "lines": 4694
+        "bytes": 211983,
+        "lines": 4693
       },
       {
         "path": "apps/dsa-web/src/pages/__tests__/WatchlistPage.test.tsx",
         "owner": "scanner",
-        "bytes": 133047,
-        "lines": 2966
+        "bytes": 138046,
+        "lines": 3114
       }
     ]
   },

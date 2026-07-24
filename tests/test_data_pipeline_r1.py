@@ -3,12 +3,15 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
+import pytest
+
 from src.core.pipeline import _resolve_optional_enrichment
 from src.services.analysis_provider_planner import (
     AnalysisProviderExecutor,
     CategoryProviderPlan,
     DataCategory,
     ProviderTimeout,
+    build_analysis_provider_plan,
     build_fast_decision_provider_plan,
 )
 from src.services.data_criticality import build_data_quality_report, sanitize_reason_codes
@@ -316,3 +319,26 @@ def test_fast_decision_plan_uses_bounded_hot_path_timeouts():
     assert plan.categories[DataCategory.QUOTE].timeout_seconds == 1.2
     assert plan.categories[DataCategory.FUNDAMENTALS].timeout_seconds == 2.5
     assert plan.categories[DataCategory.NEWS].timeout_seconds == 1.5
+
+
+def test_analysis_provider_plan_uses_canonical_symbol_identity():
+    expected = {
+        "600519": ("600519", "cn"),
+        "600519.SH": ("600519", "cn"),
+        "0700.HK": ("HK00700", "hk"),
+        "HK00700": ("HK00700", "hk"),
+        "AAPL": ("AAPL", "us"),
+    }
+
+    for raw_symbol, (symbol, market) in expected.items():
+        plan = build_analysis_provider_plan(raw_symbol, categories=[])
+        assert (plan.symbol, plan.market) == (symbol, market)
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        build_analysis_provider_plan("00700", categories=[])
+
+    constrained_hk = build_analysis_provider_plan("00700", market="hk", categories=[])
+    assert (constrained_hk.symbol, constrained_hk.market) == ("HK00700", "hk")
+
+    with pytest.raises(ValueError, match="unsupported"):
+        build_analysis_provider_plan("BAD$", categories=[])

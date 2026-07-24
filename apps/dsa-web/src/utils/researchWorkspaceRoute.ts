@@ -38,16 +38,18 @@ export function getResearchWorkspaceRoute(surface: ResearchWorkspaceSurface): Co
   return getCoreProductRouteByKey(SURFACE_ROUTE_KEYS[surface]);
 }
 
+function routeTransportValue(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed && trimmed.length <= maxLength ? trimmed : null;
+}
+
 export function normalizeResearchWorkspaceSymbol(value: unknown): string | null {
-  const symbol = String(value || '').trim().toUpperCase();
-  if (!symbol || symbol.length > 32) return null;
-  return /^[A-Z0-9._-]+$/.test(symbol) ? symbol : null;
+  return routeTransportValue(value, 32);
 }
 
 export function normalizeResearchWorkspaceMarket(value: unknown): string | null {
-  const market = String(value || '').trim().toUpperCase();
-  if (!market || market.length > 16) return null;
-  return /^[A-Z0-9_-]+$/.test(market) ? market : null;
+  return routeTransportValue(value, 16);
 }
 
 export function normalizeResearchWorkspaceSource(value: unknown): ResearchWorkspaceSource | null {

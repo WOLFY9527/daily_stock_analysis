@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from data_provider.realtime_types import RealtimeSource
-from data_provider.twelve_data_fetcher import TwelveDataFetcher
+from data_provider.twelve_data_fetcher import TwelveDataFetcher, _provider_symbol_to_hk_code
 from src.services.uat_provider_isolation import UatProviderIsolationError
 
 
@@ -39,6 +39,8 @@ class TwelveDataFetcherTestCase(unittest.TestCase):
         self.assertEqual(fetcher.transport_identity, "default_live_transport")
 
     def test_get_realtime_quote_builds_hk_quote(self) -> None:
+        self.assertEqual(_provider_symbol_to_hk_code("0700"), "HK00700")
+        self.assertEqual(_provider_symbol_to_hk_code("HKEX:00700"), "")
         session = Mock()
         session.get.return_value = _MockResponse(
             {

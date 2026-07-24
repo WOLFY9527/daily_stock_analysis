@@ -27,7 +27,7 @@ from src.services.research_budget_profiles import (
     get_research_budget_profile,
 )
 from src.services.provider_usage_ledger import record_provider_usage_event
-from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
+from src.utils.symbol_normalization import normalize_symbol_market, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -143,19 +143,24 @@ FAST_DECISION_TIMEOUT_SECONDS = {
 FAST_DECISION_PLAN_DEADLINE_SECONDS = 3.0
 
 
+def _canonical_plan_identity(symbol: str, market: Optional[str]) -> tuple[str, str]:
+    market_hint = normalize_symbol_market(market)
+    if market is not None and str(market).strip() and market_hint is None:
+        raise ValueError("unsupported market")
+
+    identity = parse_canonical_symbol(symbol, market=market_hint)
+    if identity is None:
+        raise ValueError("unsupported symbol")
+    if identity.ambiguous or identity.market is None:
+        raise ValueError("ambiguous symbol market")
+    if market_hint is not None and identity.market != market_hint:
+        raise ValueError("symbol market does not match the supplied market")
+    return identity.symbol, identity.market
+
+
 def _normalize_market(symbol: str, market: Optional[str]) -> str:
-    if market:
-        normalized = str(market).strip().lower()
-        if normalized in {"us", "cn", "hk"}:
-            return normalized
-    code = str(symbol or "").strip().upper()
-    if is_us_stock_code(code) or is_us_index_code(code):
-        return "us"
-    if code.startswith("HK") or code.endswith(".HK") or (code.isdigit() and len(code) == 5):
-        return "hk"
-    if code.isdigit() and len(code) == 6:
-        return "cn"
-    return "us" if code.isalpha() else "cn"
+    """Return the canonical market identity for provider plan metadata."""
+    return _canonical_plan_identity(symbol, market)[1]
 
 
 def _category_defaults(market: str) -> dict[DataCategory, CategoryProviderPlan]:
@@ -226,11 +231,11 @@ def build_analysis_provider_plan(
     market: Optional[str] = None,
     categories: Optional[Iterable[DataCategory | str]] = None,
 ) -> AnalysisProviderPlan:
-    resolved_market = _normalize_market(symbol, market)
+    canonical_symbol, resolved_market = _canonical_plan_identity(symbol, market)
     defaults = _category_defaults(resolved_market)
     selected = [DataCategory(item) for item in (categories or defaults.keys())]
     return AnalysisProviderPlan(
-        symbol=str(symbol or "").strip().upper(),
+        symbol=canonical_symbol,
         market=resolved_market,
         categories={category: defaults[category] for category in selected if category in defaults},
     )

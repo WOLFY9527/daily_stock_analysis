@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
-from src.utils.symbol_normalization import canonical_stock_code
+from pydantic import BaseModel, Field, field_validator, model_validator
+from src.utils.symbol_validation import require_consumer_symbol_identity
 
 WatchlistResearchState = Literal[
     "ready",
@@ -115,14 +114,17 @@ class WatchlistItemCreateRequest(BaseModel):
     @field_validator("symbol")
     @classmethod
     def _normalize_symbol(cls, value: str) -> str:
-        normalized = canonical_stock_code(value).strip().upper()
+        normalized = str(value or "").strip()
         if not normalized:
             raise ValueError("symbol is required")
-        if len(normalized) > 16:
-            raise ValueError("symbol must be at most 16 characters")
-        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]*", normalized):
-            raise ValueError("symbol contains invalid characters")
         return normalized
+
+    @model_validator(mode="after")
+    def _canonicalize_symbol_identity(self) -> "WatchlistItemCreateRequest":
+        identity = require_consumer_symbol_identity(self.symbol, market=self.market)
+        self.symbol = identity.normalized_symbol
+        self.market = identity.market or self.market
+        return self
 
     @field_validator("name", "theme_id", "universe_type", "notes")
     @classmethod
@@ -146,14 +148,7 @@ class WatchlistItemFromScannerCandidateRequest(BaseModel):
     @field_validator("symbol")
     @classmethod
     def _normalize_symbol(cls, value: str) -> str:
-        normalized = canonical_stock_code(value).strip().upper()
-        if not normalized:
-            raise ValueError("symbol is required")
-        if len(normalized) > 16:
-            raise ValueError("symbol must be at most 16 characters")
-        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]*", normalized):
-            raise ValueError("symbol contains invalid characters")
-        return normalized
+        return require_consumer_symbol_identity(value).normalized_symbol
 
 
 class WatchlistItemResponse(BaseModel):
@@ -314,25 +309,19 @@ class WatchlistScoreRefreshRequest(BaseModel):
     symbols: Optional[List[str]] = None
     force: bool = False
 
-    @field_validator("symbols")
-    @classmethod
-    def _normalize_symbols(cls, value: Optional[List[str]]) -> Optional[List[str]]:
-        if value is None:
-            return None
+    @model_validator(mode="after")
+    def _canonicalize_symbols(self) -> "WatchlistScoreRefreshRequest":
+        if self.symbols is None:
+            return self
         normalized: List[str] = []
         seen = set()
-        for item in value:
-            symbol = canonical_stock_code(item).strip().upper()
-            if not symbol:
-                continue
-            if len(symbol) > 16:
-                raise ValueError("symbol must be at most 16 characters")
-            if not re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]*", symbol):
-                raise ValueError("symbol contains invalid characters")
+        for item in self.symbols:
+            symbol = require_consumer_symbol_identity(item, market=self.market).normalized_symbol
             if symbol not in seen:
                 seen.add(symbol)
                 normalized.append(symbol)
-        return normalized
+        self.symbols = normalized
+        return self
 
     @field_validator("theme")
     @classmethod

@@ -64,7 +64,6 @@ from src.repositories.analysis_repo import AnalysisRepository
 from src.report_language import get_localized_stock_name, normalize_report_language
 from src.services.quota_policy_service import QuotaPolicyService
 from src.services.name_to_code_resolver import resolve_name_to_code
-from src.services.stock_code_utils import is_code_like
 from src.services.task_queue import (
     get_task_queue,
     DuplicateTaskError,
@@ -77,7 +76,7 @@ from src.utils.data_processing import (
     extract_fundamental_detail_fields,
 )
 from src.utils.security import sanitize_message
-from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
+from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +202,7 @@ def _analysis_error_detail(
 
 def _is_obviously_invalid_analysis_input(text: str) -> bool:
     """Reject mixed alphanumeric noise and unsupported symbols early."""
-    if not text or is_code_like(text):
+    if not text or parse_canonical_symbol(text) is not None:
         return False
 
     if not _SUPPORTED_FREE_TEXT_RE.fullmatch(text):
@@ -226,15 +225,20 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
     if not text:
         return ""
 
-    if is_code_like(text):
-        return canonical_stock_code(text)
+    identity = parse_canonical_symbol(text)
+    if identity:
+        if identity.ambiguous:
+            raise _invalid_analysis_input_error()
+        return identity.symbol
 
     if _is_obviously_invalid_analysis_input(text):
         raise _invalid_analysis_input_error()
 
     resolved = resolve_name_to_code(text)
     if resolved:
-        return canonical_stock_code(resolved)
+        resolved_identity = parse_canonical_symbol(resolved)
+        if resolved_identity and not resolved_identity.ambiguous:
+            return resolved_identity.symbol
 
     raise _invalid_analysis_input_error()
 

@@ -14,6 +14,11 @@ from src.storage import (
     MarketScannerCandidate,
     MarketScannerRun,
 )
+from src.utils.symbol_normalization import (
+    canonical_symbol_storage_values,
+    normalize_symbol_market,
+    parse_canonical_symbol,
+)
 
 
 class ScannerRepository:
@@ -199,48 +204,124 @@ class ScannerRepository:
 
     def get_latest_completed_candidates_by_market_symbol(
         self,
+        *,
         pairs: List[Tuple[str, str]],
-    ) -> Dict[Tuple[str, str], Tuple[MarketScannerCandidate, MarketScannerRun]]:
-        """Return the latest completed scanner candidate for exact market/symbol pairs."""
-        requested_pairs = {
-            (str(market), str(symbol))
-            for market, symbol in pairs
-            if str(market) and str(symbol)
-        }
-        if not requested_pairs:
-            return {}
+        owner_id: str,
+    ) -> tuple[
+        Dict[Tuple[str, str], Tuple[MarketScannerCandidate, MarketScannerRun]],
+        set[Tuple[str, str]],
+    ]:
+        """Return owner-visible latest candidates and fail-closed storage identity conflicts."""
+        requested_pairs: set[Tuple[str, str]] = set()
+        storage_symbols_by_pair: Dict[Tuple[str, str], tuple[str, ...]] = {}
+        for market, symbol in pairs:
+            market_text = str(market or "").strip().lower()
+            symbol_text = str(symbol or "").strip()
+            market_hint = normalize_symbol_market(market_text)
+            if market_hint is None or not symbol_text:
+                continue
 
-        symbols_by_market: Dict[str, List[str]] = {}
-        for market, symbol in sorted(requested_pairs):
-            symbols_by_market.setdefault(market, []).append(symbol)
+            identity = parse_canonical_symbol(symbol_text, market=market_hint)
+            if (
+                identity is None
+                or identity.ambiguous
+                or identity.market != market_hint
+            ):
+                continue
+
+            key = (market_hint, identity.symbol)
+            storage_symbols = canonical_symbol_storage_values(
+                identity.symbol,
+                market=market_hint,
+            )
+            requested_pairs.add(key)
+            storage_symbols_by_pair[key] = storage_symbols
+        if not requested_pairs:
+            return {}, set()
+
+        symbols_by_market: Dict[str, set[str]] = {}
+        for key in sorted(requested_pairs):
+            market, _ = key
+            symbols_by_market.setdefault(market, set()).update(storage_symbols_by_pair[key])
 
         market_symbol_clauses = [
             and_(
                 MarketScannerRun.market == market,
-                MarketScannerCandidate.symbol.in_(symbols),
+                MarketScannerCandidate.symbol.in_(sorted(symbols)),
             )
             for market, symbols in symbols_by_market.items()
         ]
 
         with self.db.get_session() as session:
-            rows = session.execute(
-                select(MarketScannerCandidate, MarketScannerRun)
+            storage_rank = func.row_number().over(
+                partition_by=(MarketScannerRun.market, MarketScannerCandidate.symbol),
+                order_by=(
+                    MarketScannerRun.completed_at.desc().nulls_last(),
+                    MarketScannerRun.run_at.desc().nulls_last(),
+                    desc(MarketScannerRun.id),
+                    desc(MarketScannerCandidate.id),
+                ),
+            ).label("storage_rank")
+            ranked_candidates = (
+                select(
+                    MarketScannerCandidate.id.label("candidate_id"),
+                    storage_rank,
+                )
                 .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
                 .where(
                     and_(
+                        *self._build_run_visibility_conditions(
+                            scope=None,
+                            owner_id=owner_id,
+                            include_all_owners=False,
+                        ),
                         MarketScannerRun.status == "completed",
                         or_(*market_symbol_clauses),
                     )
                 )
-                .order_by(desc(MarketScannerRun.completed_at), desc(MarketScannerRun.run_at), desc(MarketScannerRun.id))
+                .subquery()
+            )
+            rows = session.execute(
+                select(MarketScannerCandidate, MarketScannerRun)
+                .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
+                .join(
+                    ranked_candidates,
+                    ranked_candidates.c.candidate_id == MarketScannerCandidate.id,
+                )
+                .where(ranked_candidates.c.storage_rank == 1)
+                .order_by(
+                    MarketScannerRun.completed_at.desc().nulls_last(),
+                    MarketScannerRun.run_at.desc().nulls_last(),
+                    desc(MarketScannerRun.id),
+                    desc(MarketScannerCandidate.id),
+                )
             ).all()
 
         latest_by_pair: Dict[Tuple[str, str], Tuple[MarketScannerCandidate, MarketScannerRun]] = {}
+        conflicting_pairs: set[Tuple[str, str]] = set()
         for candidate, run in rows:
-            key = (str(run.market), str(candidate.symbol))
-            if key in requested_pairs and key not in latest_by_pair:
+            market_text = str(run.market or "").strip().lower()
+            symbol_text = str(candidate.symbol or "").strip()
+            market_hint = normalize_symbol_market(market_text)
+            identity = parse_canonical_symbol(symbol_text, market=market_hint)
+            if (
+                market_hint is None
+                or identity is None
+                or identity.ambiguous
+                or identity.market != market_hint
+            ):
+                continue
+            key = (market_hint, identity.symbol)
+            if key not in requested_pairs or key in conflicting_pairs:
+                continue
+            existing = latest_by_pair.get(key)
+            if existing is not None and int(existing[1].id) == int(run.id):
+                conflicting_pairs.add(key)
+                latest_by_pair.pop(key, None)
+                continue
+            if existing is None:
                 latest_by_pair[key] = (candidate, run)
-        return latest_by_pair
+        return latest_by_pair, conflicting_pairs
 
     def list_recent_analysis_symbols(
         self,

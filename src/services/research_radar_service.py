@@ -15,6 +15,7 @@ from src.services.market_scanner_candidate_evidence import (
 )
 from src.services.market_scanner_candidate_summary import build_scanner_candidate_research_summary_frame
 from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
+from src.utils.symbol_normalization import normalize_symbol_market, parse_canonical_symbol
 
 
 RESEARCH_RADAR_API_SCHEMA_VERSION = "research_radar_api_v1"
@@ -306,18 +307,26 @@ class ResearchRadarService:
                 candidates = list(self.scanner_repository.get_candidates_for_run(int(getattr(run, "id"))))
                 if not candidates:
                     continue
+                run_market = _optional_token(getattr(run, "market", None))
                 source.update(
                     {
                         "scannerRunId": int(getattr(run, "id")),
-                        "market": _optional_token(getattr(run, "market", None)),
+                        "market": run_market,
                         "profile": _optional_token(getattr(run, "profile", None)),
                     }
                 )
-                scanner_lineage = _scanner_lineage_from_run(run)
+                scanner_lineage = _scanner_lineage_from_run(run, market=run_market)
                 if scanner_lineage:
                     source["scannerLineage"] = scanner_lineage
-                engine_candidates = [_scanner_candidate_to_engine_input(candidate) for candidate in candidates]
-                engine_candidates = _filter_candidates_by_scanner_lineage(engine_candidates, scanner_lineage)
+                engine_candidates = [
+                    _scanner_candidate_to_engine_input(candidate, market=run_market)
+                    for candidate in candidates
+                ]
+                engine_candidates = _filter_candidates_by_scanner_lineage(
+                    engine_candidates,
+                    scanner_lineage,
+                    market=run_market,
+                )
                 return self.build_radar(
                     candidates=engine_candidates,
                     source=source,
@@ -350,8 +359,11 @@ class ResearchRadarService:
     ) -> dict[str, Any]:
         """Project candidate-engine output into the backend API contract."""
 
-        candidate_payloads = [_mapping(candidate) for candidate in candidates or []]
-        candidate_payloads = [candidate for candidate in candidate_payloads if _symbol_from(candidate)]
+        candidate_payloads = [
+            normalized
+            for candidate in candidates or []
+            if (normalized := _canonicalize_candidate_payload(_mapping(candidate)))
+        ]
         by_symbol = {_symbol_from(candidate): candidate for candidate in candidate_payloads}
 
         engine_payload = build_research_radar_candidate_queue(
@@ -705,7 +717,7 @@ def _evidence_item(
         "nextDataAction": next_data_action,
         "evidenceCount": max(0, int(evidence_count or 0)),
         "totalCount": max(0, int(total_count or 0)),
-        "symbols": _dedupe(_text(symbol).upper() for symbol in symbols or []),
+        "symbols": _dedupe(_canonical_symbol(symbol) for symbol in symbols or []),
         "details": _dedupe(_text(detail) for detail in details or []),
         "observationOnly": _OBSERVATION_ONLY,
         "decisionGrade": _DECISION_GRADE,
@@ -1240,12 +1252,16 @@ def _empty_consumer_onboarding_contract(
     }
 
 
-def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
+def _scanner_candidate_to_engine_input(
+    candidate: Any,
+    *,
+    market: str | None = None,
+) -> dict[str, Any]:
     diagnostics = _json_load(getattr(candidate, "diagnostics_json", None), {})
     component_scores = _mapping(diagnostics.get("component_scores"))
     scanner_lineage = _mapping(diagnostics.get("scannerLineage"))
     payload = {
-        "symbol": _text(getattr(candidate, "symbol", "")).upper(),
+        "symbol": _canonical_symbol(getattr(candidate, "symbol", ""), market=market),
         "name": _text(getattr(candidate, "name", "")),
         "rank": _safe_int(getattr(candidate, "rank", 0)) or 0,
         "score": _safe_float(getattr(candidate, "score", None)) or 0.0,
@@ -1318,7 +1334,11 @@ def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
     }
 
 
-def _scanner_lineage_from_run(run: Any) -> dict[str, Any]:
+def _scanner_lineage_from_run(
+    run: Any,
+    *,
+    market: str | None = None,
+) -> dict[str, Any]:
     diagnostics = _json_load(getattr(run, "diagnostics_json", None), {})
     readiness = _mapping(diagnostics.get("dataReadiness"))
     lineage = _mapping(diagnostics.get("scannerLineage") or readiness.get("scannerLineage"))
@@ -1327,17 +1347,17 @@ def _scanner_lineage_from_run(run: Any) -> dict[str, Any]:
     return {
         "source": _text(lineage.get("source") or lineage.get("universeSource")),
         "universeMode": _text(lineage.get("universeMode")),
-        "universeSymbols": _safe_text_list(lineage.get("universeSymbols")),
+        "universeSymbols": _canonical_symbol_list(lineage.get("universeSymbols"), market=market),
         "generatedAt": _text(lineage.get("generatedAt")) or None,
         "runId": lineage.get("runId") or getattr(run, "id", None),
-        "symbolsEvaluated": _safe_text_list(lineage.get("symbolsEvaluated")),
+        "symbolsEvaluated": _canonical_symbol_list(lineage.get("symbolsEvaluated"), market=market),
         "symbolsSkipped": [
             {
-                "symbol": _text(_mapping(item).get("symbol")).upper(),
+                "symbol": _canonical_symbol(_mapping(item).get("symbol"), market=market),
                 "reason": _text(_mapping(item).get("reason")) or "limited",
             }
             for item in list(lineage.get("symbolsSkipped") or [])
-            if isinstance(item, Mapping) and _text(item.get("symbol"))
+            if isinstance(item, Mapping) and _canonical_symbol(_mapping(item).get("symbol"), market=market)
         ],
     }
 
@@ -1345,16 +1365,22 @@ def _scanner_lineage_from_run(run: Any) -> dict[str, Any]:
 def _filter_candidates_by_scanner_lineage(
     candidates: Sequence[Mapping[str, Any]],
     scanner_lineage: Mapping[str, Any],
+    *,
+    market: str | None = None,
 ) -> list[dict[str, Any]]:
     lineage = _mapping(scanner_lineage)
     if _text(lineage.get("universeMode")) != "bounded_starter_local":
         return [dict(candidate) for candidate in candidates]
-    allowed_symbols = {_text(symbol).upper() for symbol in lineage.get("universeSymbols") or [] if _text(symbol)}
+    allowed_symbols = {
+        canonical
+        for symbol in lineage.get("universeSymbols") or []
+        if (canonical := _canonical_symbol(symbol, market=market))
+    }
     if not allowed_symbols:
         return [dict(candidate) for candidate in candidates]
     filtered: list[dict[str, Any]] = []
     for candidate in candidates:
-        symbol = _symbol_from(candidate)
+        symbol = _symbol_from(candidate, market=market)
         if symbol not in allowed_symbols:
             continue
         payload = dict(candidate)
@@ -1441,8 +1467,35 @@ def _json_load(value: Any, default: Any) -> Any:
         return default
 
 
-def _symbol_from(value: Mapping[str, Any]) -> str:
-    return _text(value.get("ticker") or value.get("symbol") or value.get("code")).upper()
+def _canonicalize_candidate_payload(value: Mapping[str, Any]) -> dict[str, Any] | None:
+    symbol = _symbol_from(value)
+    if not symbol:
+        return None
+    payload = dict(value)
+    payload["symbol"] = symbol
+    payload["ticker"] = symbol
+    return payload
+
+
+def _canonical_symbol(value: Any, *, market: str | None = None) -> str:
+    identity = parse_canonical_symbol(
+        _text(value),
+        market=normalize_symbol_market(market),
+    )
+    if identity is None or identity.ambiguous or identity.market is None:
+        return ""
+    return identity.symbol
+
+
+def _canonical_symbol_list(value: Any, *, market: str | None = None) -> list[str]:
+    return _dedupe(_canonical_symbol(symbol, market=market) for symbol in _safe_text_list(value))
+
+
+def _symbol_from(value: Mapping[str, Any], *, market: str | None = None) -> str:
+    return _canonical_symbol(
+        value.get("ticker") or value.get("symbol") or value.get("code"),
+        market=market,
+    )
 
 
 def _optional_token(value: Any) -> str | None:

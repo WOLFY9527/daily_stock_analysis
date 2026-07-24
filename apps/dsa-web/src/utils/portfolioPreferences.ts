@@ -43,27 +43,15 @@ export function savePortfolioDisplayCurrency(value: unknown): PortfolioDisplayCu
   return normalized;
 }
 
-export function inferSettlementCurrency(
-  rawSymbol: string,
-  accountBaseCurrency?: string | null,
-): PortfolioDisplayCurrency {
-  const symbol = rawSymbol.trim().toUpperCase();
-  const accountCurrency = normalizePortfolioDisplayCurrency(accountBaseCurrency);
-
-  if (!symbol) {
-    return accountCurrency;
+export function settlementCurrencyForMarket(market: string | null | undefined): PortfolioDisplayCurrency | null {
+  switch (market?.trim().toLowerCase()) {
+    case 'cn':
+      return 'CNY';
+    case 'hk':
+      return 'HKD';
+    case 'us':
+      return 'USD';
+    default:
+      return null;
   }
-  if (/^\d{4,5}\.HK$/.test(symbol) || /^HK:\d{4,5}$/.test(symbol)) {
-    return 'HKD';
-  }
-  if (/^\d{6}(\.(SH|SZ))?$/.test(symbol) || /^(SH|SZ):\d{6}$/.test(symbol)) {
-    return 'CNY';
-  }
-  if (/^(BTC|ETH|BTCUSDT|ETHUSDT)$/.test(symbol)) {
-    return 'USD';
-  }
-  if (/^[A-Z]{1,6}([.-][A-Z])?$/.test(symbol)) {
-    return 'USD';
-  }
-  return accountCurrency;
 }

@@ -21,6 +21,10 @@ const { languageState, mockLogout, mockHardRedirect, useAuthMock } = vi.hoisted(
   useAuthMock: vi.fn(),
 }));
 
+const { verifyTickerExistsMock } = vi.hoisted(() => ({
+  verifyTickerExistsMock: vi.fn(),
+}));
+
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
@@ -36,6 +40,17 @@ vi.mock('../../../contexts/UiLanguageContext', () => ({
 vi.mock('../../../utils/browserRedirect', () => ({
   hardRedirect: (...args: unknown[]) => mockHardRedirect(...args),
 }));
+
+vi.mock('../../../api/stocks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../api/stocks')>();
+  return {
+    ...actual,
+    stocksApi: {
+      ...actual.stocksApi,
+      verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
+    },
+  };
+});
 
 beforeAll(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -105,6 +120,15 @@ describe('Shell', () => {
       loggedIn: true,
       currentUser: { isAdmin: false },
       logout: mockLogout,
+    });
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stockName: 'Apple',
     });
   });
 
@@ -326,7 +350,7 @@ describe('Shell', () => {
     expect(drawerNav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   });
 
-  it('focuses shell stock search with Ctrl+K and hands off to the canonical stock route', async () => {
+  it('focuses shell stock search with Ctrl+K and resolves before handing off to the canonical stock route', async () => {
     render(
       <MemoryRouter initialEntries={['/market-overview']}>
         <ThemeProvider>
@@ -343,9 +367,10 @@ describe('Shell', () => {
 
     await waitFor(() => expect(searchInput).toHaveFocus());
     fireEvent.change(searchInput, { target: { value: ' aapl ' } });
-    fireEvent.click(await screen.findByRole('button', { name: /打开 AAPL/ }));
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
 
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision'));
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('aapl');
   });
 
   it('submits the shell stock search on Enter without losing Escape focus behavior', async () => {
@@ -369,6 +394,35 @@ describe('Shell', () => {
     fireEvent.keyDown(searchInput, { key: 'Escape' });
     expect(screen.queryByTestId('shell-stock-search-popover')).not.toBeInTheDocument();
     expect(searchInput).not.toHaveFocus();
+  });
+
+  it('uses the server canonical HK identity before opening Stock Research', async () => {
+    verifyTickerExistsMock.mockResolvedValueOnce({
+      stockCode: 'HK00700',
+      normalizedSymbol: 'HK00700',
+      market: 'hk',
+      status: 'unknown',
+      valid: false,
+      exists: false,
+      stockName: null,
+    });
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <LocationProbe />
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const searchInput = screen.getByLabelText('个股');
+    fireEvent.change(searchInput, { target: { value: '0700.HK' } });
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/HK00700/structure-decision'));
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('0700.HK');
   });
 
   it('keeps CTA route labels and aria labels owned by the core route registry', () => {

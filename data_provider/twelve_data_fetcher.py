@@ -10,39 +10,42 @@ from typing import Any, Dict, Optional
 import pandas as pd
 import requests
 
-from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, normalize_stock_code
+from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
 from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
 
 def _is_hk_symbol(stock_code: str) -> bool:
-    normalized = normalize_stock_code(stock_code).upper()
-    return normalized.startswith("HK") and normalized[2:].isdigit()
+    identity = parse_canonical_symbol(stock_code)
+    return identity is not None and not identity.ambiguous and identity.market == "hk"
 
 
 def _canonical_hk_code(stock_code: str) -> str:
-    normalized = normalize_stock_code(stock_code).upper()
-    if not _is_hk_symbol(normalized):
+    identity = parse_canonical_symbol(stock_code)
+    if identity is None or identity.ambiguous or identity.market != "hk":
         raise DataFetchError(f"TwelveDataFetcher 暂不支持该代码: {stock_code}")
-    return normalized
+    return identity.symbol
 
 
 def _provider_symbol_params(stock_code: str) -> Dict[str, Optional[str]]:
-    normalized = normalize_stock_code(stock_code).upper()
-    if is_us_stock_code(normalized):
+    identity = parse_canonical_symbol(stock_code)
+    if identity is None or identity.ambiguous or identity.market is None:
+        raise DataFetchError(f"TwelveDataFetcher 暂不支持该代码: {stock_code}")
+    if identity.market == "us" and is_us_stock_code(identity.symbol):
         return {
-            "normalized_code": normalized,
-            "symbol": normalized,
+            "normalized_code": identity.symbol,
+            "symbol": identity.symbol,
             "exchange": None,
         }
-    if _is_hk_symbol(normalized):
-        digits = normalized[2:]
+    if identity.market == "hk":
+        digits = identity.symbol[2:]
         symbol = str(int(digits)).zfill(4)
         return {
-            "normalized_code": normalized,
+            "normalized_code": identity.symbol,
             "symbol": symbol,
             "exchange": "HKEX",
         }
@@ -50,10 +53,10 @@ def _provider_symbol_params(stock_code: str) -> Dict[str, Optional[str]]:
 
 
 def _provider_symbol_to_hk_code(symbol: Any) -> str:
-    digits = "".join(ch for ch in str(symbol or "").strip() if ch.isdigit())
-    if not digits:
+    identity = parse_canonical_symbol(str(symbol or ""), market="hk")
+    if identity is None or identity.ambiguous or identity.market != "hk":
         return ""
-    return f"HK{str(int(digits)).zfill(5)}"
+    return identity.symbol
 
 
 class TwelveDataFetcher(BaseFetcher):

@@ -10,9 +10,14 @@ Covers:
 - Ambiguous names return None
 """
 
-import pytest
+import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import pandas as pd
+import pytest
+
+import src.services.name_to_code_resolver as name_to_code_resolver
 from src.services.name_to_code_resolver import (
     resolve_name_to_code,
     _is_code_like,
@@ -26,15 +31,15 @@ from src.services.name_to_code_resolver import (
 # ---------------------------------------------------------------------------
 
 class TestIsCodeLike:
-    def test_a_share_5_digits(self):
-        assert _is_code_like("60051") is True
+    def test_bare_five_digits_require_an_explicit_market(self):
+        assert _is_code_like("60051") is False
         assert _is_code_like("600519") is True
 
     def test_a_share_6_digits(self):
         assert _is_code_like("300750") is True
 
-    def test_hk_5_digits(self):
-        assert _is_code_like("00700") is True
+    def test_bare_hk_digits_require_an_explicit_market(self):
+        assert _is_code_like("00700") is False
 
     def test_us_stock_letters(self):
         assert _is_code_like("AAPL") is True
@@ -85,10 +90,10 @@ class TestBuildReverseMapNoDuplicates:
         assert result.get("贵州茅台") == "600519"
 
     def test_includes_unique_names(self):
-        code_to_name = {"600519": "贵州茅台", "00700": "腾讯控股"}
+        code_to_name = {"600519": "贵州茅台", "HK00700": "腾讯控股"}
         result = _build_reverse_map_no_duplicates(code_to_name)
         assert result["贵州茅台"] == "600519"
-        assert result["腾讯控股"] == "00700"
+        assert result["腾讯控股"] == "HK00700"
 
 
 # ---------------------------------------------------------------------------
@@ -99,11 +104,13 @@ class TestResolveNameToCode:
     def test_code_like_input_returned_normalized(self):
         assert resolve_name_to_code("600519") == "600519"
         assert resolve_name_to_code("600519.SH") == "600519"
+        assert resolve_name_to_code("0700.HK") == "HK00700"
         assert resolve_name_to_code("  AAPL  ") == "AAPL"
+        assert resolve_name_to_code("00700") is None
 
     def test_local_map_exact_match(self):
         assert resolve_name_to_code("贵州茅台") == "600519"
-        assert resolve_name_to_code("腾讯控股") == "00700"
+        assert resolve_name_to_code("腾讯控股") == "HK00700"
 
     def test_returns_none_for_empty_or_invalid_input(self):
         assert resolve_name_to_code("") is None
@@ -114,16 +121,26 @@ class TestResolveNameToCode:
         # "阿里巴巴" maps to both BABA and 09988 in STOCK_NAME_MAP
         assert resolve_name_to_code("阿里巴巴") is None
 
-    @patch("src.services.name_to_code_resolver._get_akshare_name_to_code")
-    def test_akshare_fallback_when_not_in_local(self, mock_akshare):
-        mock_akshare.return_value = {"平安银行": "000001"}
-        # 000001 is in local map as 平安银行, so we use a name that's only in akshare
-        # Actually local has 000001 -> 平安银行. So "平安银行" would hit local first.
-        # Use a name not in STOCK_NAME_MAP - e.g. some A-share only in AkShare
-        mock_akshare.return_value = {"浦发银行": "600000"}
-        result = resolve_name_to_code("浦发银行")
+    def test_akshare_fallback_when_not_in_local(self):
+        frame = pd.DataFrame(
+            [
+                {"code": "600000.SH", "name": "测试浦发银行"},
+                {"code": "0700.HK", "name": "港股不应进入A股映射"},
+                {"code": "00700", "name": "歧义代码不应进入映射"},
+                {"code": "BAD!", "name": "损坏代码不应进入映射"},
+            ]
+        )
+        akshare = SimpleNamespace(stock_info_a_code_name=lambda: frame)
+
+        with (
+            patch.object(name_to_code_resolver, "_akshare_cache", None),
+            patch.dict(sys.modules, {"akshare": akshare}),
+        ):
+            mapping = name_to_code_resolver._get_akshare_name_to_code()
+            result = resolve_name_to_code("测试浦发银行")
+
+        assert mapping == {"测试浦发银行": "600000"}
         assert result == "600000"
-        mock_akshare.assert_called()
 
     @patch("src.services.name_to_code_resolver._get_akshare_name_to_code")
     def test_fuzzy_match_fallback(self, mock_akshare):

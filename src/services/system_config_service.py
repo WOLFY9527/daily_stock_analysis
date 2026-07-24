@@ -52,6 +52,7 @@ from src.services.system_config_provider_projection import (
 )
 from src.storage import get_db
 from src.utils.security import is_masked_secret, is_sensitive_key, mask_secret, sanitize_message, sanitize_url
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -851,19 +852,10 @@ class SystemConfigService:
 
     @staticmethod
     def _normalize_twelve_data_hk_symbol(symbol: str) -> Optional[str]:
-        text = str(symbol or "").strip().upper()
-        if not text:
+        identity = parse_canonical_symbol(str(symbol or ""), market="hk")
+        if identity is None or identity.ambiguous or identity.market != "hk":
             return None
-        if text.endswith(".HK"):
-            digits = text[:-3]
-        elif text.startswith("HK"):
-            digits = text[2:]
-        else:
-            digits = text
-        digits = "".join(ch for ch in digits if ch.isdigit())
-        if len(digits) != 5:
-            return None
-        return digits[1:] if digits.startswith("0") else digits
+        return str(int(identity.symbol[2:])).zfill(4)
 
     @staticmethod
     def _sanitize_provider_probe_message(message: Any, credential: str) -> str:

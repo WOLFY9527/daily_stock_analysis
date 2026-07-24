@@ -1,24 +1,13 @@
 import type { AnalysisReport, HistoryItem, TaskInfo } from '../types/analysis';
 import { getSymbolDisplay } from '../utils/homeReportIdentity';
 
-const HOME_TICKER_ALIASES: Record<string, string> = {
-  NVIDIA: 'NVDA',
-  '英伟达': 'NVDA',
-  ORACLE: 'ORCL',
-  '甲骨文': 'ORCL',
-  TESLA: 'TSLA',
-  '特斯拉': 'TSLA',
-};
-
-const HOME_TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
-
-function normalizeHomeTickerQuery(rawValue?: string | null): string {
+function trimHomeTickerValue(rawValue?: string | null): string {
   const trimmed = String(rawValue || '').trim();
   if (!trimmed || trimmed === '-' || trimmed === '--') {
     return '';
   }
 
-  return HOME_TICKER_ALIASES[trimmed.toUpperCase()] || HOME_TICKER_ALIASES[trimmed] || trimmed.toUpperCase();
+  return trimmed;
 }
 
 function findCompletedTaskReportByTicker(activeTasks: TaskInfo[], ticker: string): AnalysisReport | null {
@@ -27,7 +16,7 @@ function findCompletedTaskReportByTicker(activeTasks: TaskInfo[], ticker: string
   }
 
   return activeTasks.find(
-    (task) => normalizeHomeTickerQuery(task.stockCode) === ticker && task.status === 'completed' && task.result?.report,
+    (task) => trimHomeTickerValue(task.stockCode) === ticker && task.status === 'completed' && task.result?.report,
   )?.result?.report || null;
 }
 
@@ -57,11 +46,11 @@ export type HomeDashboardSelectionResult = {
 export function resolveHomeDashboardSelection(
   input: HomeDashboardSelectionInput,
 ): HomeDashboardSelectionResult {
-  const routeSymbol = normalizeHomeTickerQuery(input.routeSymbol);
-  const activeTicker = normalizeHomeTickerQuery(input.activeTicker);
-  const pendingAnalysisTicker = normalizeHomeTickerQuery(input.pendingAnalysisTicker);
-  const selectedTicker = normalizeHomeTickerQuery(getSymbolDisplay(input.selectedReport));
-  const defaultTicker = normalizeHomeTickerQuery(input.defaultTicker);
+  const routeSymbol = trimHomeTickerValue(input.routeSymbol);
+  const activeTicker = trimHomeTickerValue(input.activeTicker);
+  const pendingAnalysisTicker = trimHomeTickerValue(input.pendingAnalysisTicker);
+  const selectedTicker = trimHomeTickerValue(getSymbolDisplay(input.selectedReport));
+  const defaultTicker = trimHomeTickerValue(input.defaultTicker);
 
   const completedTaskReport = input.routeTaskId
     ? input.activeTasks.find(
@@ -79,7 +68,7 @@ export function resolveHomeDashboardSelection(
 
     const taskTicker = pendingAnalysisTicker || activeTicker;
     if (taskTicker) {
-      const matchedByTicker = input.activeTasks.find((task) => normalizeHomeTickerQuery(task.stockCode) === taskTicker);
+      const matchedByTicker = input.activeTasks.find((task) => trimHomeTickerValue(task.stockCode) === taskTicker);
       if (matchedByTicker) {
         return matchedByTicker;
       }
@@ -89,7 +78,7 @@ export function resolveHomeDashboardSelection(
   })();
 
   const effectiveTicker = routeSymbol || activeTicker || selectedTicker || defaultTicker;
-  const completedTaskTicker = normalizeHomeTickerQuery(completedTaskReport?.meta.stockCode);
+  const completedTaskTicker = trimHomeTickerValue(completedTaskReport?.meta.stockCode);
 
   const dashboardReport = (() => {
     if (completedTaskReport && effectiveTicker && completedTaskTicker === effectiveTicker) {
@@ -123,18 +112,16 @@ export function resolveHomeDashboardSelection(
     return null;
   })();
 
-  const activeEvidenceTickerCandidate = normalizeHomeTickerQuery(
+  const activeEvidenceTicker = trimHomeTickerValue(
     activeTraceReport?.meta.stockCode
       || routeSymbol
       || activeTicker
       || selectedTicker
   );
-  const activeEvidenceTicker = HOME_TICKER_FORMAT_RE.test(activeEvidenceTickerCandidate) ? activeEvidenceTickerCandidate : '';
 
-  const reportTickerCandidate = normalizeHomeTickerQuery(
+  const reportTicker = trimHomeTickerValue(
     activeTraceReport ? getSymbolDisplay(activeTraceReport) : '',
   );
-  const reportTicker = HOME_TICKER_FORMAT_RE.test(reportTickerCandidate) ? reportTickerCandidate : '';
   const selectedReportOwnsSurfaceWithoutSymbol = Boolean(
     input.selectedReport
     && !selectedTicker
@@ -146,7 +133,7 @@ export function resolveHomeDashboardSelection(
   const reanalysisCandidate = selectedReportOwnsSurfaceWithoutSymbol
     ? ''
     : reportTicker || (activeTraceReport ? '' : activeEvidenceTicker || effectiveTicker);
-  const reanalysisTicker = HOME_TICKER_FORMAT_RE.test(reanalysisCandidate) ? reanalysisCandidate : '';
+  const reanalysisTicker = trimHomeTickerValue(reanalysisCandidate);
 
   return {
     selectedTicker,

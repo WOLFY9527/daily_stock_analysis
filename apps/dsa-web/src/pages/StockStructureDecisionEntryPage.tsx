@@ -15,18 +15,18 @@ import {
   consumerPresentationText,
 } from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
-import { validateStockCode } from '../utils/validation';
+import { canonicalStockSymbolFromValidation, stocksApi } from '../api/stocks';
 import { RoughBulletList, RoughSectionCard, RoughSurfaceIntro } from './roughShellShared';
 
 function parseStockStructureSymbols(value: string | null | undefined): string[] {
   return [...new Set(String(value || '')
     .split(/[,\s;|+]+/)
-    .map((item) => item.trim().toUpperCase())
+    .map((item) => item.trim())
     .filter(Boolean))];
 }
 
 function normalizeDirectSymbolInput(value: string): string {
-  return value.trim().toUpperCase();
+  return value.trim();
 }
 
 export default function StockStructureDecisionEntryPage() {
@@ -43,22 +43,31 @@ export default function StockStructureDecisionEntryPage() {
   const [symbolInput, setSymbolInput] = useState(carriedSymbol);
   const [symbolError, setSymbolError] = useState('');
 
-  const submitDirectSymbol = (event: FormEvent<HTMLFormElement>) => {
+  const submitDirectSymbol = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalized = normalizeDirectSymbolInput(symbolInput);
-    if (!normalized) {
+    const rawSymbol = normalizeDirectSymbolInput(symbolInput);
+    if (!rawSymbol) {
       setSymbolError(locale === 'en' ? 'Enter a stock symbol.' : '请输入股票代码。');
       return;
     }
-    const validation = validateStockCode(normalized);
-    if (!validation.valid) {
+
+    try {
+      const validation = await stocksApi.verifyTickerExists(rawSymbol);
+      const canonicalSymbol = canonicalStockSymbolFromValidation(validation);
+      if (!canonicalSymbol) {
+        setSymbolError(locale === 'en'
+          ? 'Use a supported stock symbol.'
+          : '股票代码格式不正确。');
+        return;
+      }
+
+      setSymbolError('');
+      navigate(localize(`/stocks/${encodeURIComponent(canonicalSymbol.symbol)}/structure-decision`));
+    } catch {
       setSymbolError(locale === 'en'
-        ? 'Use an existing app symbol format such as AAPL, 600519, or 0700.HK.'
-        : validation.message || '股票代码格式不正确。');
-      return;
+        ? 'Stock identity could not be verified.'
+        : '暂时无法验证股票代码。');
     }
-    setSymbolError('');
-    navigate(localize(`/stocks/${encodeURIComponent(validation.normalized)}/structure-decision`));
   };
 
   return (
@@ -154,7 +163,7 @@ export default function StockStructureDecisionEntryPage() {
                       <input
                         id="stock-structure-direct-symbol"
                         value={symbolInput}
-                        className="min-h-11 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface)] px-3 py-2 font-mono text-sm uppercase text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:normal-case placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+                        className="min-h-11 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface)] px-3 py-2 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:normal-case placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
                         onChange={(event) => {
                           setSymbolInput(event.target.value);
                           if (symbolError) setSymbolError('');

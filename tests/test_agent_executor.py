@@ -29,7 +29,7 @@ except ModuleNotFoundError:
 
 from src.agent.executor import AgentExecutor, AgentResult
 from src.agent.llm_adapter import LLMResponse, ToolCall
-from src.agent.runner import parse_dashboard_json, run_agent_loop, serialize_tool_result
+from src.agent.runner import _build_tool_cache_key, parse_dashboard_json, run_agent_loop, serialize_tool_result
 from src.agent.tools.registry import ToolRegistry, ToolDefinition, ToolParameter
 
 
@@ -474,6 +474,12 @@ class TestAgentExecutor(unittest.TestCase):
 
     def test_non_retriable_tool_failure_is_cached_across_hk_variants(self):
         """Equivalent HK code variants should not re-execute a non-retriable failing tool."""
+        explicit_hk_key = _build_tool_cache_key("get_realtime_quote", {"stock_code": "HK00700"})
+        alias_hk_key = _build_tool_cache_key("get_realtime_quote", {"stock_code": "0700.HK"})
+        ambiguous_hk_key = _build_tool_cache_key("get_realtime_quote", {"stock_code": "00700"})
+        self.assertEqual(explicit_hk_key, alias_hk_key)
+        self.assertNotEqual(explicit_hk_key, ambiguous_hk_key)
+
         calls = []
 
         def _quote(stock_code):
@@ -501,7 +507,7 @@ class TestAgentExecutor(unittest.TestCase):
             LLMResponse(
                 content="",
                 tool_calls=[
-                    ToolCall(id="q1", name="get_realtime_quote", arguments={"stock_code": "hk01810"}),
+                    ToolCall(id="q1", name="get_realtime_quote", arguments={"stock_code": "0700.HK"}),
                 ],
                 usage={"total_tokens": 10},
                 provider="openai",
@@ -509,7 +515,15 @@ class TestAgentExecutor(unittest.TestCase):
             LLMResponse(
                 content="",
                 tool_calls=[
-                    ToolCall(id="q2", name="get_realtime_quote", arguments={"stock_code": "1810.HK"}),
+                    ToolCall(id="q2", name="get_realtime_quote", arguments={"stock_code": "HK00700"}),
+                ],
+                usage={"total_tokens": 10},
+                provider="openai",
+            ),
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(id="q3", name="get_realtime_quote", arguments={"stock_code": "00700"}),
                 ],
                 usage={"total_tokens": 10},
                 provider="openai",
@@ -523,13 +537,30 @@ class TestAgentExecutor(unittest.TestCase):
         ]
 
         executor = AgentExecutor(registry, adapter, max_steps=5)
-        result = executor.run("Analyze HK01810")
+        result = executor.run("Analyze HK00700")
 
         self.assertTrue(result.success)
-        self.assertEqual(calls, ["hk01810"])
-        self.assertEqual(len(result.tool_calls_log), 2)
+        self.assertEqual(calls, ["HK00700"])
+        self.assertEqual(len(result.tool_calls_log), 3)
+        self.assertEqual(result.tool_calls_log[0]["arguments"], {"stock_code": "HK00700"})
         self.assertFalse(result.tool_calls_log[0]["cached"])
         self.assertTrue(result.tool_calls_log[1]["cached"])
+        self.assertFalse(result.tool_calls_log[2]["success"])
+        self.assertFalse(result.tool_calls_log[2]["cached"])
+        final_messages = adapter.call_with_tools.call_args_list[-1].args[0]
+        invalid_tool_result = next(
+            message
+            for message in final_messages
+            if message.get("role") == "tool" and message.get("tool_call_id") == "q3"
+        )
+        self.assertEqual(
+            json.loads(invalid_tool_result["content"]),
+            {
+                "error": "Stock symbol is invalid or requires an explicit market.",
+                "error_code": "invalid_or_ambiguous_stock_symbol",
+                "retriable": False,
+            },
+        )
 
     def test_model_trace_deduplicates_and_keeps_order(self):
         """Model trace should keep call order and de-duplicate repeated models."""

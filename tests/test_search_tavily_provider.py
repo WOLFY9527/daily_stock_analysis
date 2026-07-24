@@ -298,6 +298,11 @@ class TestTavilySearchProvider(unittest.TestCase):
                 news_strategy_profile="short",
                 tavily_client_factory=_FakeTavilyClient,
             )
+            self.assertTrue(service._is_foreign_stock("0700.HK"))
+            self.assertTrue(service._is_foreign_stock("HK00700"))
+            self.assertTrue(service._is_foreign_stock("AAPL"))
+            self.assertFalse(service._is_foreign_stock("00700"))
+            self.assertFalse(service._is_foreign_stock("600519"))
             service.search_comprehensive_intel("ORCL", "Oracle", max_searches=1)
 
         self.assertGreaterEqual(len(_FakeTavilyClient.search_calls), 1)

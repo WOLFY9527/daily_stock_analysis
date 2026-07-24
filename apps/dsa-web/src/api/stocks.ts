@@ -162,6 +162,27 @@ export type StockValidationResponse = {
   message?: string;
 };
 
+export type CanonicalStockSymbol = {
+  symbol: string;
+  market: string;
+};
+
+export function canonicalStockSymbolFromValidation(
+  validation: StockValidationResponse | null | undefined,
+): CanonicalStockSymbol | null {
+  if (!validation || (validation.status !== 'valid' && validation.status !== 'unknown')) {
+    return null;
+  }
+
+  const symbol = typeof validation.normalizedSymbol === 'string'
+    ? validation.normalizedSymbol.trim()
+    : '';
+  const market = typeof validation.market === 'string'
+    ? validation.market.trim()
+    : '';
+  return symbol && market ? { symbol, market } : null;
+}
+
 export type SymbolResearchAvailabilityState = 'available' | 'missing' | 'stale' | 'unknown' | string;
 export type SymbolResearchStructureAvailabilityState = 'available' | 'insufficient' | 'missing' | 'unknown' | string;
 export type SymbolResearchIntegratedState = 'available' | 'missing' | 'not_integrated' | 'unknown' | string;

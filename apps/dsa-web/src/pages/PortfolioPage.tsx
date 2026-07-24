@@ -49,8 +49,8 @@ import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
+import { canonicalStockSymbolFromValidation, stocksApi } from '../api/stocks';
 import {
-  inferSettlementCurrency,
   LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
   normalizePortfolioDisplayCurrency,
   PORTFOLIO_DISPLAY_CURRENCY_CHANGED_EVENT,
@@ -58,6 +58,7 @@ import {
   PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
   readPortfolioDisplayCurrency,
   savePortfolioDisplayCurrency,
+  settlementCurrencyForMarket,
   type PortfolioDisplayCurrency,
 } from '../utils/portfolioPreferences';
 import type {
@@ -158,6 +159,7 @@ type EditingTrade = {
   id: number;
   accountId: number;
   symbol: string;
+  market: string | null;
   side: PortfolioSide;
   quantity: string;
   price: string;
@@ -1901,7 +1903,6 @@ const PortfolioPage: React.FC = () => {
   const scopedAccount = selectedAccount === 'all' ? undefined : accounts.find((item) => item.id === selectedAccount);
   const writableAccount = selectedTradeAccount === 'all' ? undefined : writableAccounts.find((item) => item.id === selectedTradeAccount);
   const writableAccountId = writableAccount?.id;
-  const editingAccount = editingTrade ? activeAccounts.find((item) => item.id === editingTrade.accountId) : undefined;
   const ibkrConnection = brokerConnections.find((item) => item.brokerType === 'ibkr') || null;
   const ibkrSyncConfig = extractIbkrSyncConfig(ibkrConnection);
   const ibkrApiBaseUrl = ibkrApiBaseUrlDraft ?? ibkrSyncConfig.apiBaseUrl ?? '';
@@ -1914,7 +1915,7 @@ const PortfolioPage: React.FC = () => {
       : corporateEvents.length;
   const effectiveTradeCurrency = tradeCurrencyManuallyEdited
     ? tradeForm.currency
-    : inferSettlementCurrency(tradeForm.symbol, writableAccount?.baseCurrency);
+    : tradeForm.currency;
   const tradeCurrencyWarning = writableAccount?.baseCurrency
     && effectiveTradeCurrency !== normalizePortfolioDisplayCurrency(writableAccount.baseCurrency)
     ? (language === 'zh'
@@ -1922,8 +1923,8 @@ const PortfolioPage: React.FC = () => {
       : 'The symbol settlement currency differs from the account base currency and will rely on FX conversion.')
     : null;
   const tradeCurrencyHint = language === 'zh'
-    ? '自动按标的市场推断，可手动覆盖；流水会保留该结算币种。'
-    : 'Auto-inferred from the symbol market; manual override keeps the record settlement currency.';
+    ? '保存时按已验证市场确定结算币种；可手动覆盖，流水会保留该结算币种。'
+    : 'Saving verifies the market before selecting settlement currency; a manual override remains on the record.';
   const editTradeTitle = language === 'zh' ? '编辑持仓流水' : 'Edit holding record';
   const saveTradeChangesLabel = language === 'zh' ? '保存修改' : 'Save Changes';
   const updateTradeSuccessLabel = language === 'zh' ? '持仓流水已更新 · 持仓已刷新' : 'Holding record updated · holdings refreshed';
@@ -1944,7 +1945,7 @@ const PortfolioPage: React.FC = () => {
     ? (
       editingTrade.currencyManuallyEdited
         ? editingTrade.currency
-        : inferSettlementCurrency(editingTrade.symbol, editingAccount?.baseCurrency)
+        : settlementCurrencyForMarket(editingTrade.market) ?? editingTrade.currency
     )
     : 'CNY';
 
@@ -2262,31 +2263,63 @@ const PortfolioPage: React.FC = () => {
     if (tradeSubmitting) {
       return;
     }
-    const submittedSymbol = tradeForm.symbol.trim().toUpperCase();
+    const requestedSymbol = tradeForm.symbol.trim();
     const submittedSide = tradeForm.side;
     try {
       setTradeSubmitting(true);
       setTradeFeedback(null);
       setWriteWarning(null);
+      const validation = await stocksApi.verifyTickerExists(requestedSymbol);
+      const canonicalIdentity = canonicalStockSymbolFromValidation(validation);
+      if (!canonicalIdentity) {
+        setTradeFeedback({
+          tone: 'error',
+          text: validation.message || (language === 'zh' ? '标的代码无法验证，未保存持仓流水。' : 'The symbol could not be verified; the holding record was not saved.'),
+        });
+        return;
+      }
+      const canonicalMarket = canonicalIdentity.market === 'cn'
+        || canonicalIdentity.market === 'hk'
+        || canonicalIdentity.market === 'us'
+        ? canonicalIdentity.market
+        : null;
+      const marketSettlementCurrency = settlementCurrencyForMarket(canonicalMarket);
+      if (!canonicalMarket || !marketSettlementCurrency) {
+        setTradeFeedback({
+          tone: 'error',
+          text: language === 'zh' ? '标的市场未提供可用结算币种，未保存持仓流水。' : 'The verified market has no supported settlement currency; the holding record was not saved.',
+        });
+        return;
+      }
+      const submittedCurrency = tradeCurrencyManuallyEdited
+        ? tradeForm.currency
+        : marketSettlementCurrency;
       await portfolioApi.createTrade({
         accountId: writableAccountId,
-        symbol: submittedSymbol || tradeForm.symbol,
+        symbol: canonicalIdentity.symbol,
+        market: canonicalMarket,
         tradeDate: tradeForm.tradeDate,
         side: submittedSide,
         quantity: Number(tradeForm.quantity),
         price: Number(tradeForm.price),
         fee: Number(tradeForm.fee || 0),
         tax: Number(tradeForm.tax || 0),
-        currency: effectiveTradeCurrency,
+        currency: submittedCurrency,
         tradeUid: tradeForm.tradeUid || undefined,
         note: tradeForm.note || undefined,
       });
       await refreshPortfolioData();
       setTradeFeedback({
         tone: 'success',
-        text: `${submittedSymbol || tradeForm.symbol} ${formatSideLabel(submittedSide, language)}已保存 · 已刷新持仓`,
+        text: `${canonicalIdentity.symbol} ${formatSideLabel(submittedSide, language)}已保存 · 已刷新持仓`,
       });
-      setTradeForm((prev) => ({ ...prev, symbol: '', currency: inferSettlementCurrency('', writableAccount?.baseCurrency), tradeUid: '', note: '' }));
+      setTradeForm((prev) => ({
+        ...prev,
+        symbol: '',
+        currency: normalizePortfolioDisplayCurrency(writableAccount?.baseCurrency),
+        tradeUid: '',
+        note: '',
+      }));
       setTradeCurrencyManuallyEdited(false);
     } catch (err) {
       const parsed = getParsedApiError(err);
@@ -2484,18 +2517,18 @@ const PortfolioPage: React.FC = () => {
 
   const openTradeEditor = (item: PortfolioTradeListItem) => {
     setOpenTradeActionMenuId(null);
-    const tradeAccount = activeAccounts.find((account) => account.id === item.accountId);
-    const inferredCurrency = inferSettlementCurrency(item.symbol, tradeAccount?.baseCurrency);
+    const marketSettlementCurrency = settlementCurrencyForMarket(item.market);
     setEditingTrade({
       id: item.id,
       accountId: item.accountId,
       symbol: item.symbol,
+      market: item.market || null,
       side: item.side,
       quantity: String(item.quantity),
       price: String(item.price),
       tradeDate: item.tradeDate,
       currency: item.currency,
-      currencyManuallyEdited: item.currency !== inferredCurrency,
+      currencyManuallyEdited: !marketSettlementCurrency || item.currency !== marketSettlementCurrency,
       fee: String(item.fee ?? 0),
       tax: String(item.tax ?? 0),
       note: item.note || '',
@@ -2521,21 +2554,36 @@ const PortfolioPage: React.FC = () => {
     if (!editingTrade || tradeEditSubmitting) {
       return;
     }
-    const payload: PortfolioTradeUpdateRequest = {
-      accountId: editingTrade.accountId,
-      symbol: editingTrade.symbol,
-      side: editingTrade.side,
-      quantity: Number(editingTrade.quantity),
-      price: Number(editingTrade.price),
-      tradeDate: editingTrade.tradeDate,
-      currency: effectiveEditTradeCurrency,
-      fee: Number(editingTrade.fee || 0),
-      tax: Number(editingTrade.tax || 0),
-      note: editingTrade.note || undefined,
-    };
     try {
       setTradeEditSubmitting(true);
       setTradeFeedback(null);
+      const validation = await stocksApi.verifyTickerExists(editingTrade.symbol.trim());
+      const canonicalIdentity = canonicalStockSymbolFromValidation(validation);
+      const canonicalMarket = canonicalIdentity?.market === 'cn'
+        || canonicalIdentity?.market === 'hk'
+        || canonicalIdentity?.market === 'us'
+        ? canonicalIdentity.market
+        : null;
+      if (!canonicalIdentity || !canonicalMarket) {
+        setTradeFeedback({
+          tone: 'error',
+          text: validation.message || (language === 'zh' ? '标的代码无法验证，未更新持仓流水。' : 'The symbol could not be verified; the holding record was not updated.'),
+        });
+        return;
+      }
+      const payload: PortfolioTradeUpdateRequest = {
+        accountId: editingTrade.accountId,
+        symbol: canonicalIdentity.symbol,
+        market: canonicalMarket,
+        side: editingTrade.side,
+        quantity: Number(editingTrade.quantity),
+        price: Number(editingTrade.price),
+        tradeDate: editingTrade.tradeDate,
+        currency: effectiveEditTradeCurrency,
+        fee: Number(editingTrade.fee || 0),
+        tax: Number(editingTrade.tax || 0),
+        note: editingTrade.note || undefined,
+      };
       await portfolioApi.updateTrade(editingTrade.id, payload);
       await refreshPortfolioData();
       setEditingTrade(null);
@@ -5437,6 +5485,8 @@ const PortfolioPage: React.FC = () => {
                     ? {
                       ...prev,
                       symbol: e.target.value,
+                      market: null,
+                      currencyManuallyEdited: true,
                     }
                     : prev
                 ))}

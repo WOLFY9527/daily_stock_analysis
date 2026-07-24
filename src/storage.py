@@ -9689,6 +9689,7 @@ class DatabaseManager:
     def get_analysis_history_paginated(
         self,
         code: Optional[str] = None,
+        codes: Optional[Iterable[str]] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         offset: int = 0,
@@ -9717,7 +9718,16 @@ class DatabaseManager:
             if not include_all_owners:
                 conditions.append(AnalysisHistory.owner_id == self.require_user_id(owner_id))
             
-            if code:
+            normalized_codes = tuple(
+                dict.fromkeys(
+                    str(candidate or "").strip().upper()
+                    for candidate in (codes or ())
+                    if str(candidate or "").strip()
+                )
+            )
+            if normalized_codes:
+                conditions.append(AnalysisHistory.code.in_(normalized_codes))
+            elif code:
                 conditions.append(AnalysisHistory.code == code)
             if start_date:
                 # created_at >= start_date 00:00:00

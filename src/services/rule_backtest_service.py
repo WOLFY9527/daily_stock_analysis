@@ -56,7 +56,7 @@ from src.services.rule_backtest_support_exports import (
 )
 from src.services.rule_backtest_text_completion import RuleBacktestTextCompletion, create_rule_backtest_text_completion
 from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
-from src.utils.symbol_normalization import normalize_stock_code
+from src.utils.symbol_normalization import normalize_stock_code, parse_canonical_symbol
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.storage import (
     DatabaseManager,
@@ -5719,23 +5719,17 @@ class RuleBacktestService:
         if not raw_code:
             return None
 
-        normalized = normalize_stock_code(raw_code).strip().upper()
-        if normalized.isdigit() and 1 <= len(normalized) <= 5:
-            return f"HK{normalized.zfill(5)}"
-        return normalized or None
+        identity = parse_canonical_symbol(raw_code)
+        if identity is None or identity.ambiguous:
+            return None
+        return identity.symbol
 
     @staticmethod
     def _infer_compare_market_from_code(code: Optional[str]) -> Optional[str]:
-        normalized = str(code or "").strip().upper()
-        if not normalized:
+        identity = parse_canonical_symbol(code)
+        if identity is None or identity.ambiguous:
             return None
-        if is_us_index_code(normalized) or is_us_stock_code(normalized):
-            return "us"
-        if normalized.startswith("HK") and normalized[2:].isdigit() and 1 <= len(normalized[2:]) <= 5:
-            return "hk"
-        if normalized.isdigit() and len(normalized) == 6:
-            return "cn"
-        return None
+        return identity.market
 
     @staticmethod
     def _dedupe_compare_market_code_diagnostics(diagnostics: List[str]) -> List[str]:

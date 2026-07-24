@@ -76,6 +76,8 @@ class TestExtractStockCode(unittest.TestCase):
 
     def test_hk_lowercase(self):
         self.assertEqual(_extract_stock_code("look at hk00700"), "HK00700")
+        self.assertEqual(_extract_stock_code("analyze 0700.HK"), "HK00700")
+        self.assertEqual(_extract_stock_code("分析0700.HK"), "HK00700")
 
     def test_hk_uppercase(self):
         self.assertEqual(_extract_stock_code("HK00700 analysis"), "HK00700")
@@ -87,6 +89,8 @@ class TestExtractStockCode(unittest.TestCase):
         """Letters before 'hk' should not prevent match."""
         # "xhk00700" has alpha before hk, lookbehind should block
         self.assertNotEqual(_extract_stock_code("xhk00700"), "HK00700")
+        self.assertEqual(_extract_stock_code("analyze 00700"), "")
+        self.assertEqual(_extract_stock_code("analyze 0700.HKX"), "")
 
     # --- US ---
 
@@ -487,6 +491,21 @@ class TestOrchestratorModes(unittest.TestCase):
         self.assertEqual(ctx.stock_code, "600519")
         self.assertEqual(ctx.stock_name, "贵州茅台")
         self.assertEqual(ctx.meta["skills_requested"], ["bull_trend"])
+
+        for raw_symbol, canonical_symbol in {
+            "600519.SH": "600519",
+            "0700.HK": "HK00700",
+            "HK00700": "HK00700",
+            "aapl": "AAPL",
+        }.items():
+            with self.subTest(raw_symbol=raw_symbol):
+                parsed = orch._build_context("Analyze symbol", context={"stock_code": raw_symbol})
+                self.assertEqual(parsed.stock_code, canonical_symbol)
+
+        for invalid_symbol in ("00700", "BAD!"):
+            with self.subTest(invalid_symbol=invalid_symbol):
+                with self.assertRaises(ValueError):
+                    orch._build_context("Analyze symbol", context={"stock_code": invalid_symbol})
 
     def test_build_context_preserves_factory_skill_selection(self):
         explicit_empty = self._make_orchestrator(

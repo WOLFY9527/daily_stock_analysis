@@ -27,7 +27,12 @@ import pandas as pd
 import numpy as np
 from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
 from src.utils.symbol_classification import is_bse_code, is_kc_cy_stock, is_st_stock
-from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
+from src.utils.symbol_normalization import (
+    canonical_stock_code,
+    canonical_symbol_storage_values,
+    normalize_stock_code,
+    parse_canonical_symbol,
+)
 from src.services.uat_provider_isolation import check_uat_provider_transport
 from .fundamental_adapter import AkshareFundamentalAdapter
 from .provider_credentials import get_provider_credentials
@@ -94,21 +99,9 @@ def _is_us_market(code: str) -> bool:
 
 
 def _is_hk_market(code: str) -> bool:
-    """
-    判定是否为港股代码。
-
-    支持 `HK00700` 及纯 5 位数字形式（A 股 ETF/股票常见为 6 位）。
-    """
-    normalized = (code or "").strip().upper()
-    if normalized.endswith(".HK"):
-        base = normalized[:-3]
-        return base.isdigit() and 1 <= len(base) <= 5
-    if normalized.startswith("HK"):
-        digits = normalized[2:]
-        return digits.isdigit() and 1 <= len(digits) <= 5
-    if normalized.isdigit() and len(normalized) == 5:
-        return True
-    return False
+    """Classify HK routing through the shared canonical identity parser."""
+    identity = parse_canonical_symbol(code)
+    return bool(identity and not identity.ambiguous and identity.market == "hk")
 
 
 def _is_etf_code(code: str) -> bool:
@@ -2488,6 +2481,15 @@ class DataFetcherManager:
         # Normalize code (strip SH/SZ prefix etc.)
         stock_code = normalize_stock_code(stock_code)
         static_name = STOCK_NAME_MAP.get(stock_code)
+        if not static_name:
+            static_name = next(
+                (
+                    STOCK_NAME_MAP.get(storage_symbol)
+                    for storage_symbol in canonical_symbol_storage_values(stock_code, market="hk")
+                    if STOCK_NAME_MAP.get(storage_symbol)
+                ),
+                None,
+            )
 
         # 1. 先检查缓存
         if hasattr(self, '_stock_name_cache') and stock_code in self._stock_name_cache:

@@ -50,8 +50,8 @@ class _FakeResearchRadarService:
             "generatedAt": "2026-06-15T09:30:00+00:00",
             "researchQueue": [
                 {
-                    "symbol": "ALFA",
-                    "ticker": "ALFA",
+                    "symbol": "HK00700",
+                    "ticker": "HK00700",
                     "priority": "medium",
                     "researchBias": "Strength observation",
                     "researchBiasRaw": "strengthContinuation",
@@ -93,7 +93,7 @@ class _FakeResearchRadarService:
                     "drilldownTargets": [
                         {
                             "label": "Structure detail",
-                            "route": "/stocks/ALFA/structure-decision",
+                            "route": "/stocks/HK00700/structure-decision",
                             "reason": "Open the structure workspace for this ticker.",
                         }
                     ],
@@ -114,7 +114,7 @@ class _FakeResearchRadarService:
             "drilldownTargets": [
                 {
                     "label": "Structure detail",
-                    "route": "/stocks/ALFA/structure-decision",
+                    "route": "/stocks/HK00700/structure-decision",
                     "reason": "Open the structure workspace for this ticker.",
                 }
             ],
@@ -155,8 +155,8 @@ class _FakeResearchRadarService:
                     "nextDataAction": "Refresh scanner when candidate evidence needs a newer observation window.",
                     "evidenceCount": 1,
                     "totalCount": 1,
-                    "symbols": ["ALFA"],
-                    "details": ["ALFA is available for radar review."],
+                    "symbols": ["HK00700"],
+                    "details": ["HK00700 is available for radar review."],
                     "observationOnly": True,
                     "decisionGrade": False,
                 },
@@ -169,8 +169,8 @@ class _FakeResearchRadarService:
                     "nextDataAction": "Open Backtest and prepare or refresh samples for the radar symbols.",
                     "evidenceCount": 0,
                     "totalCount": 1,
-                    "symbols": ["ALFA"],
-                    "details": ["ALFA has no prepared backtest samples."],
+                    "symbols": ["HK00700"],
+                    "details": ["HK00700 has no prepared backtest samples."],
                     "observationOnly": True,
                     "decisionGrade": False,
                 },
@@ -183,8 +183,8 @@ class _FakeResearchRadarService:
                     "nextDataAction": "Refresh daily price history and technical evidence for radar symbols.",
                     "evidenceCount": 1,
                     "totalCount": 1,
-                    "symbols": ["ALFA"],
-                    "details": ["ALFA has technical readiness evidence."],
+                    "symbols": ["HK00700"],
+                    "details": ["HK00700 has technical readiness evidence."],
                     "observationOnly": True,
                     "decisionGrade": False,
                 },
@@ -216,8 +216,8 @@ class _FakeResearchRadarService:
                         "nextDataAction": "Open Backtest and prepare or refresh samples for the radar symbols.",
                         "evidenceCount": 0,
                         "totalCount": 1,
-                        "symbols": ["ALFA"],
-                        "details": ["ALFA has no prepared backtest samples."],
+                        "symbols": ["HK00700"],
+                        "details": ["HK00700 has no prepared backtest samples."],
                         "observationOnly": True,
                         "decisionGrade": False,
                     }
@@ -294,7 +294,7 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
     assert payload["freshnessState"] == "limited"
     assert payload["observationBoundary"]
     assert payload["researchNextSteps"]
-    assert payload["researchQueue"][0]["symbol"] == "ALFA"
+    assert payload["researchQueue"][0]["symbol"] == "HK00700"
     assert payload["researchQueue"][0]["researchBias"] == "Strength observation"
     assert "researchBiasRaw" not in payload["researchQueue"][0]
     assert payload["researchQueue"][0]["whyNotHigherPriority"] == [
@@ -303,7 +303,7 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
     assert payload["researchQueue"][0]["evidenceGaps"] == ["Theme breadth needs review"]
     assert "evidenceGapsRaw" not in payload["researchQueue"][0]
     assert payload["researchQueue"][0]["consumerIssues"][0]["label"] == "Evidence needs review"
-    assert payload["researchQueue"][0]["drilldownTargets"][0]["route"] == "/stocks/ALFA/structure-decision"
+    assert payload["researchQueue"][0]["drilldownTargets"][0]["route"] == "/stocks/HK00700/structure-decision"
     assert payload["consumerIssues"][0]["label"] == "Evidence needs review"
     assert payload["onboardingGuidance"] is None
     assert payload["emptyStateActions"] == []

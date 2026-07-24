@@ -1797,7 +1797,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("00700", date(2026, 1, 3), 400.0)
+        self._save_close("HK00700", date(2026, 1, 3), 400.0)
 
         updated = self.service.update_trade_event(
             trade["id"],
@@ -1808,15 +1808,131 @@ class PortfolioServiceTestCase(unittest.TestCase):
             price=50,
         )
 
-        self.assertEqual(updated["symbol"], "00700")
+        self.assertEqual(updated["symbol"], "HK00700")
         self.assertEqual(updated["market"], "hk")
         self.assertEqual(updated["currency"], "HKD")
 
         for method in ("fifo", "avg", "futu_diluted", "ths_pnl"):
             snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method=method)
             account_snapshot = snapshot["accounts"][0]
-            self.assertEqual([position["symbol"] for position in account_snapshot["positions"]], ["00700"])
+            self.assertEqual([position["symbol"] for position in account_snapshot["positions"]], ["HK00700"])
             self.assertAlmostEqual(account_snapshot["positions"][0]["quantity"], 20.0, places=6)
+
+    def test_global_account_canonicalizes_hk_symbol_and_rejects_ambiguous_market(self) -> None:
+        account = self.service.create_account(name="Global", broker="Demo", market="global", base_currency="USD")
+        account_id = account["id"]
+        self.service.record_cash_ledger(
+            account_id=account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        self._save_close("HK00700", date(2026, 1, 2), 400.0)
+
+        trade = self.service.record_trade(
+            account_id=account_id,
+            symbol="0700.HK",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=400,
+            currency="HKD",
+        )
+
+        with self.db.get_session() as session:
+            stored_trade = session.execute(
+                select(PortfolioTrade).where(PortfolioTrade.id == trade["id"])
+            ).scalar_one()
+        self.assertEqual(stored_trade.symbol, "HK00700")
+        self.assertEqual(stored_trade.market, "hk")
+        self.assertEqual(
+            self.service.repo.get_latest_closes_with_dates(
+                symbols=["0700.HK"],
+                as_of=date(2026, 1, 2),
+            ),
+            {"HK00700": (400.0, date(2026, 1, 2))},
+        )
+
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            self.service.record_trade(
+                account_id=account_id,
+                symbol="00700",
+                trade_date=date(2026, 1, 2),
+                side="buy",
+                quantity=1,
+                price=400,
+                currency="HKD",
+            )
+
+    def test_snapshot_uses_legacy_hk_trade_symbol_for_daily_close_lookup(self) -> None:
+        account = self.service.create_account(name="Hong Kong", broker="Demo", market="hk", base_currency="HKD")
+        account_id = account["id"]
+        self.service.record_cash_ledger(
+            account_id=account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000,
+            currency="HKD",
+        )
+        trade = self.service.record_trade(
+            account_id=account_id,
+            symbol="0700.HK",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="hk",
+            currency="HKD",
+        )
+        action = self.service.record_corporate_action(
+            account_id=account_id,
+            symbol="0700.HK",
+            effective_date=date(2026, 1, 3),
+            action_type="cash_dividend",
+            market="hk",
+            currency="HKD",
+            cash_dividend_per_share=1.0,
+        )
+        with self.db.get_session() as session:
+            legacy_trade = session.execute(
+                select(PortfolioTrade).where(PortfolioTrade.id == trade["id"])
+            ).scalar_one()
+            legacy_action = session.execute(
+                select(PortfolioCorporateAction).where(PortfolioCorporateAction.id == action["id"])
+            ).scalar_one()
+            legacy_trade.symbol = "00700"
+            legacy_action.symbol = "00700"
+            session.commit()
+
+        self._save_close("00700", date(2026, 1, 3), 110.0)
+
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=account_id,
+            as_of=date(2026, 1, 4),
+            cost_method="fifo",
+        )
+        position = snapshot["accounts"][0]["positions"][0]
+
+        self.assertEqual(position["symbol"], "HK00700")
+        self.assertAlmostEqual(position["last_price"], 110.0, places=6)
+        self.assertEqual(position["price_source"], "daily_close_quote")
+        self.assertFalse(position["is_price_fallback"])
+
+        trades = self.service.list_trade_events(
+            account_id=account_id,
+            symbol="0700.HK",
+            page=1,
+            page_size=20,
+        )
+        actions = self.service.list_corporate_action_events(
+            account_id=account_id,
+            symbol="0700.HK",
+            page=1,
+            page_size=20,
+        )
+        self.assertEqual([item["symbol"] for item in trades["items"]], ["HK00700"])
+        self.assertEqual([item["symbol"] for item in actions["items"]], ["HK00700"])
 
     def test_delete_buy_trade_soft_void_removes_active_holding(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -1897,6 +2013,14 @@ class PortfolioServiceTestCase(unittest.TestCase):
             currency="HKD",
         )
         self._save_close("00700", date(2026, 1, 2), 110.0)
+
+        self.assertEqual(
+            self.service.repo.get_latest_closes_with_dates(
+                symbols=["HK00700"],
+                as_of=date(2026, 1, 2),
+            ),
+            {"HK00700": (110.0, date(2026, 1, 2))},
+        )
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
         position = snapshot["accounts"][0]["positions"][0]
@@ -2166,6 +2290,16 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(position["price_source"], "daily_close_quote")
         self.assertEqual(position["price_as_of"], "2026-01-03")
         self.assertFalse(position["is_price_fallback"])
+
+        self._save_close("HK00700", date(2026, 1, 3), 390.0)
+        self._save_close("00700", date(2026, 1, 4), 405.0)
+        self.assertEqual(
+            self.service.repo.get_latest_closes_with_dates(
+                symbols=["HK00700"],
+                as_of=date(2026, 1, 5),
+            ),
+            {"HK00700": (405.0, date(2026, 1, 4))},
+        )
 
     def test_snapshot_discloses_avg_cost_price_fallback_without_mutating_ledger(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

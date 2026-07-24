@@ -6231,7 +6231,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 {
                     "run_id": 202,
                     "code": "UNKNOWN-CODE",
-                    "normalized_code": "UNKNOWN-CODE",
+                    "normalized_code": None,
                     "market": None,
                     "availability": "partial",
                     "diagnostics": ["unrecognized_market_from_code"],
@@ -9497,6 +9497,17 @@ class RuleBacktestTestCase(unittest.TestCase):
             "execution_model_identity",
             detail["execution_assumptions_snapshot"]["missing_keys"],
         )
+
+    def test_compare_market_identity_does_not_guess_hk_for_bare_five_digits(self) -> None:
+        self.assertEqual(
+            RuleBacktestService._canonicalize_compare_market_code("0700.HK"),
+            "HK00700",
+        )
+        self.assertEqual(
+            RuleBacktestService._infer_compare_market_from_code("HK00700"),
+            "hk",
+        )
+        self.assertIsNone(RuleBacktestService._canonicalize_compare_market_code("00700"))
 
 
 if __name__ == "__main__":

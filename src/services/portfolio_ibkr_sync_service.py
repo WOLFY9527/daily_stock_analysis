@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Protocol
@@ -19,7 +18,7 @@ from src.services.portfolio_ibkr_currency import (
 )
 from src.services.portfolio_import_service import IBKR_BROKER
 from src.services.portfolio_service import PortfolioConflictError, PortfolioService
-from src.utils.symbol_normalization import canonical_stock_code
+from src.utils.symbol_normalization import SymbolMarket, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -740,7 +739,7 @@ class PortfolioIbkrSyncService:
                 warnings.append(f"Skipped short position for {symbol_hint} in read-only sync")
                 continue
 
-            market = self._infer_position_market(item)
+            market_context = self._infer_position_market(item)
             raw_symbol = (
                 item.get("ticker")
                 or item.get("symbol")
@@ -748,10 +747,18 @@ class PortfolioIbkrSyncService:
                 or item.get("description")
                 or item.get("localSymbol")
             )
-            symbol = self._normalize_position_symbol(raw_symbol, market=market)
-            if not symbol:
-                warnings.append("Skipped IBKR position with missing symbol")
+            identity = parse_canonical_symbol(
+                str(raw_symbol or "").strip(),
+                market=market_context,
+            )
+            if identity is None:
+                warnings.append("Skipped IBKR position with missing or unsupported symbol")
                 continue
+            if identity.ambiguous or identity.market is None:
+                warnings.append("Skipped IBKR position with ambiguous symbol")
+                continue
+            symbol = identity.symbol
+            market = identity.market
 
             currency = self._require_ibkr_currency(item.get("currency"), scope="position")
             avg_cost = self._to_float(item.get("avgCost")) or self._to_float(item.get("avgPrice")) or 0.0
@@ -945,7 +952,7 @@ class PortfolioIbkrSyncService:
         merged["ibkr_api"] = ibkr_api_metadata
         return merged
 
-    def _infer_position_market(self, item: Dict[str, Any]) -> str:
+    def _infer_position_market(self, item: Dict[str, Any]) -> SymbolMarket | None:
         explicit = str(item.get("countryCode") or item.get("country_code") or "").strip().upper()
         if explicit in {"HK", "HKG"}:
             return "hk"
@@ -966,6 +973,7 @@ class PortfolioIbkrSyncService:
         if any(token in exchange for token in ("SSE", "SZSE", "SHSE", "XSHE")):
             return "cn"
 
+        # An explicit spelling can identify itself, but a bare code needs broker market evidence.
         raw_symbol = str(
             item.get("ticker")
             or item.get("symbol")
@@ -973,30 +981,10 @@ class PortfolioIbkrSyncService:
             or item.get("localSymbol")
             or ""
         ).strip().upper()
-        if raw_symbol.startswith("HK") or re.fullmatch(r"\d{1,5}(\.HK)?", raw_symbol):
-            return "hk"
-        if raw_symbol.isdigit() and len(raw_symbol) == 6:
-            return "cn"
-        currency = self._normalize_currency(item.get("currency") or "USD")
-        if currency == "HKD":
-            return "hk"
-        if currency == "CNY":
-            return "cn"
-        return "us"
-
-    def _normalize_position_symbol(self, value: Any, *, market: str) -> str:
-        text = str(value or "").strip().upper()
-        if not text:
-            return ""
-        text = text.replace(" ", "")
-        if market == "hk":
-            if re.fullmatch(r"\d{1,5}", text):
-                return canonical_stock_code(f"HK{text.zfill(5)}")
-            if re.fullmatch(r"\d{1,5}\.HK", text):
-                return canonical_stock_code(text)
-            if text.startswith("HK"):
-                return canonical_stock_code(text)
-        return canonical_stock_code(text)
+        identity = parse_canonical_symbol(raw_symbol)
+        if identity is None or identity.ambiguous:
+            return None
+        return identity.market
 
     def _summary_amount(self, summary: Dict[str, Any], *keys: str) -> Optional[float]:
         for key in keys:

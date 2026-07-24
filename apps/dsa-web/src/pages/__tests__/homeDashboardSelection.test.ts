@@ -291,4 +291,32 @@ describe('resolveHomeDashboardSelection', () => {
     expect(result.activeEvidenceTicker).toBe('');
     expect(result.reanalysisTicker).toBe('');
   });
+
+  it('keeps symbol values transport-only instead of creating aliases or rejecting canonical HK data', () => {
+    const aliasedResult = resolveHomeDashboardSelection({
+      activeTasks: [],
+      routeTaskId: null,
+      routeSymbol: null,
+      activeTicker: 'NVIDIA',
+      pendingAnalysisTicker: null,
+      selectedReport: null,
+      recentHistoryItems: [],
+      defaultTicker: 'ORCL',
+    });
+    const hkResult = resolveHomeDashboardSelection({
+      activeTasks: [],
+      routeTaskId: null,
+      routeSymbol: null,
+      activeTicker: 'HK00700',
+      pendingAnalysisTicker: null,
+      selectedReport: null,
+      recentHistoryItems: [],
+      defaultTicker: 'ORCL',
+    });
+
+    expect(aliasedResult.effectiveTicker).toBe('NVIDIA');
+    expect(aliasedResult.activeEvidenceTicker).toBe('NVIDIA');
+    expect(hkResult.activeEvidenceTicker).toBe('HK00700');
+    expect(hkResult.reanalysisTicker).toBe('HK00700');
+  });
 });

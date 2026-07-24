@@ -35,6 +35,7 @@ from src.services.yfinance_us_ohlcv_cache_provider import (
     YFINANCE_US_OHLCV_ENABLE_ENV,
     YfinanceUsOhlcvCacheProvider,
 )
+from src.utils.symbol_normalization import parse_canonical_symbol
 from src.utils.symbol_validation import validate_consumer_symbol_precheck
 
 
@@ -1358,7 +1359,10 @@ def _dedupe_issues(issues: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
 
 
 def _normalize_ticker(ticker: str) -> str:
-    return str(ticker or "").strip().upper()
+    identity = parse_canonical_symbol(ticker)
+    if identity is None or identity.ambiguous:
+        return ""
+    return identity.symbol
 
 
 def _normalize_unique_tickers(tickers: Sequence[str]) -> list[str]:

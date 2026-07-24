@@ -127,7 +127,7 @@ def test_stock_validate_endpoint_reports_unknown_when_lookup_cannot_confirm(monk
     service = _FakeStockService({"stock_code": "HK00700", "exists": False, "stock_name": None})
     monkeypatch.setattr(stocks_endpoint, "StockService", lambda: service)
 
-    response = _client().get("/api/v1/stocks/hk700/validate", params={"market": "hk"})
+    response = _client().get("/api/v1/stocks/0700.HK/validate")
 
     assert response.status_code == 200
     payload = response.json()

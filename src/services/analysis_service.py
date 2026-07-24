@@ -39,6 +39,7 @@ from src.services.home_report_evidence_citations import (
 )
 from src.services.home_source_provenance_sidecar import build_home_source_provenance_sidecar_v1
 from src.services.intelligence_report_packet import build_intelligence_report_packet_v2
+from src.utils.symbol_normalization import parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -1614,12 +1615,10 @@ class AnalysisService:
 
     @staticmethod
     def _market_from_symbol(symbol: str) -> str:
-        text = str(symbol or "").strip().upper()
-        if text.startswith("HK"):
-            return "HK"
-        if text.isalpha():
-            return "US"
-        return "CN" if text else "unknown"
+        identity = parse_canonical_symbol(symbol)
+        if identity is None or identity.ambiguous or identity.market is None:
+            return "unknown"
+        return identity.market.upper()
 
     def _build_decision_trace(
         self,

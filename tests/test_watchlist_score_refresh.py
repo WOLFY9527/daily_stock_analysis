@@ -14,6 +14,7 @@ from unittest.mock import patch
 from sqlalchemy import event
 
 from src.config import Config
+from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
 from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, UserWatchlistItem
 from src.services.watchlist_service import WatchlistService
 
@@ -55,6 +56,8 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         status: str = "completed",
         reason_summary: str = "Latest scanner score.",
         complete_evidence: bool = True,
+        owner_id: str = "user-1",
+        scope: str = OWNERSHIP_SCOPE_USER,
     ) -> None:
         now = datetime.now()
         diagnostics = dict(diagnostics_payload or {})
@@ -111,6 +114,8 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
                 },
             )
         run = MarketScannerRun(
+            owner_id=owner_id,
+            scope=scope,
             market=market,
             profile=f"{market}_preopen_v1",
             universe_name=f"{market}_watchlist",
@@ -521,7 +526,26 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
     def test_refresh_groups_candidates_by_market(self) -> None:
         self.service.add_item(owner_id="user-1", symbol="WULF", market="us", scanner_score=60)
-        self.service.add_item(owner_id="user-1", symbol="00700", market="hk", scanner_score=70)
+        with self.db.get_session() as session:
+            legacy_item = UserWatchlistItem(
+                owner_id="user-1",
+                symbol="00700",
+                market="hk",
+                source="scanner",
+                scanner_score=69,
+            )
+            session.add(legacy_item)
+            session.commit()
+            legacy_item_id = legacy_item.id
+        reconciled_item = self.service.add_item(
+            owner_id="user-1",
+            symbol="0700.HK",
+            market="hk",
+            scanner_score=70,
+        )
+        self.assertEqual(reconciled_item["id"], legacy_item_id)
+        self.assertFalse(reconciled_item["created_new"])
+        self.assertEqual(reconciled_item["symbol"], "HK00700")
         self._save_scanner_candidate(symbol="WULF", market="us", score=73, rank=2)
         self._save_scanner_candidate(symbol="00700", market="hk", score=81, rank=1)
 
@@ -529,6 +553,40 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         self.assertEqual(result["updated_count"], 2)
         self.assertEqual(sorted(result["markets"]), ["hk", "us"])
+        hk_items = [item for item in self.service.list_items(owner_id="user-1") if item["market"] == "hk"]
+        self.assertEqual([(item["symbol"], item["scanner_score"]) for item in hk_items], [("HK00700", 81.0)])
+
+        now = datetime.now() + timedelta(minutes=10)
+        duplicate_run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
+            market="hk",
+            profile="hk_preopen_v1",
+            universe_name="hk_watchlist",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=2,
+            universe_size=2,
+            preselected_size=2,
+            evaluated_size=2,
+        )
+        duplicate_candidates = [
+            MarketScannerCandidate(symbol="00700", name="Tencent", rank=1, score=95, reason_summary="alias one"),
+            MarketScannerCandidate(symbol="HK00700", name="Tencent", rank=2, score=94, reason_summary="alias two"),
+        ]
+        with self.db.get_session() as session:
+            session.add(duplicate_run)
+            session.flush()
+            for candidate in duplicate_candidates:
+                candidate.run_id = duplicate_run.id
+            session.add_all(duplicate_candidates)
+            session.commit()
+
+        conflicted_result = self.service.refresh_scores(owner_id="user-1", market="hk")
+        self.assertEqual(conflicted_result["updated_count"], 0)
+        self.assertEqual(conflicted_result["skipped_count"], 1)
+        self.assertIn("conflicting", conflicted_result["results"][0]["message"].lower())
 
     def test_refresh_uses_bounded_bulk_lookup_for_large_watchlist(self) -> None:
         self.db.create_or_update_app_user(
@@ -554,7 +612,8 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
                 scanner_score=10 + index,
                 scanner_rank=90 + index,
             )
-            key = (market, symbol)
+            canonical_symbol = f"HK{symbol}" if market == "hk" else symbol
+            key = (market, canonical_symbol)
             if index < 18:
                 score = 70.0 + index
                 expected_scores[key] = score
@@ -605,7 +664,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             reason_summary="Latest HK scanner score.",
         )
         expected_scores[("us", "DUAL")] = 91.0
-        expected_scores[("hk", "00700")] = 82.0
+        expected_scores[("hk", "HK00700")] = 82.0
 
         scanner_join_queries: list[str] = []
 
@@ -624,6 +683,15 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(result["skipped_count"], len(stale_keys))
         self.assertEqual(result["failed_count"], 0)
         self.assertEqual(len(scanner_join_queries), 1)
+        self.assertIn("row_number() over", scanner_join_queries[0].lower())
+        self.assertIn("storage_rank", scanner_join_queries[0].lower())
+
+        unsupported_candidates, unsupported_conflicts = self.service.scanner_repo.get_latest_completed_candidates_by_market_symbol(
+            pairs=[("crypto", "BAD!"), ("hk", "BAD!")],
+            owner_id="user-1",
+        )
+        self.assertEqual(unsupported_candidates, {})
+        self.assertEqual(unsupported_conflicts, set())
 
         user_one_items = {
             (item["market"], item["symbol"]): item
@@ -637,7 +705,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             self.assertIn("No scanner candidate", user_one_items[key]["score_error"])
 
         self.assertEqual(user_one_items[("us", "DUAL")]["score_reason"], "Latest US scanner score.")
-        self.assertEqual(user_one_items[("hk", "00700")]["score_reason"], "Latest HK scanner score.")
+        self.assertEqual(user_one_items[("hk", "HK00700")]["score_reason"], "Latest HK scanner score.")
         user_two_item = self.service.list_items(owner_id="user-2")[0]
         self.assertEqual(user_two_item["scanner_score"], 5.0)
         self.assertEqual(user_two_item["scanner_rank"], 88)
@@ -653,15 +721,43 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         )
         self.service.add_item(owner_id="user-1", symbol="WULF", market="us", scanner_score=60, scanner_rank=8)
         self.service.add_item(owner_id="user-2", symbol="WULF", market="us", scanner_score=55, scanner_rank=9)
-        self._save_scanner_candidate(symbol="WULF", market="us", score=72.5, rank=3)
+        now = datetime.now()
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=72.5,
+            rank=3,
+            run_at=now - timedelta(minutes=10),
+            completed_at=now - timedelta(minutes=10),
+            owner_id="user-1",
+        )
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=99.0,
+            rank=1,
+            run_at=now,
+            completed_at=now,
+            owner_id="user-2",
+        )
+        self._save_scanner_candidate(
+            symbol="WULF",
+            market="us",
+            score=80.0,
+            rank=2,
+            run_at=now - timedelta(minutes=5),
+            completed_at=now - timedelta(minutes=5),
+            owner_id=None,
+            scope=OWNERSHIP_SCOPE_SYSTEM,
+        )
 
         result = self.service.refresh_scores(owner_id="user-1", market="us")
 
         self.assertEqual(result["updated_count"], 1)
         user_one_item = self.service.list_items(owner_id="user-1")[0]
         user_two_item = self.service.list_items(owner_id="user-2")[0]
-        self.assertEqual(user_one_item["scanner_score"], 72.5)
-        self.assertEqual(user_one_item["scanner_rank"], 3)
+        self.assertEqual(user_one_item["scanner_score"], 80.0)
+        self.assertEqual(user_one_item["scanner_rank"], 2)
         self.assertEqual(user_one_item["score_status"], "fresh")
         self.assertEqual(user_two_item["scanner_score"], 55.0)
         self.assertEqual(user_two_item["scanner_rank"], 9)

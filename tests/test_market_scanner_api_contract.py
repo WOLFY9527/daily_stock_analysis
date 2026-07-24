@@ -1040,6 +1040,19 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         generated = next(item for item in themes.items if item.id == "white_house_stocks_test")
         self.assertIn("PLTR", generated.symbols)
 
+        hk_response = create_scanner_theme(
+            ScannerThemeGenerateRequest(
+                id="canonical_hk_theme_test",
+                label="Canonical HK Theme",
+                market="hk",
+                prompt="Hong Kong AI semiconductor exposure with manual Tencent input.",
+                manual_symbols=["0700.HK", "HKEX:00700"],
+            )
+        )
+
+        self.assertIn("HK00700", hk_response.theme.symbols)
+        self.assertNotIn("00700", hk_response.theme.symbols)
+
     def test_create_scanner_theme_rejects_invalid_theme_id(self) -> None:
         with self.assertRaises(HTTPException) as context:
             create_scanner_theme(

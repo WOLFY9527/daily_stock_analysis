@@ -777,6 +777,18 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertIn("data_sources", trace)
         self.assertNotIn("sk-", json.dumps(trace))
         self.assertNotIn("SYSTEM_PROMPT", json.dumps(trace))
+        for symbol, expected_market in {
+            "600519": "CN",
+            "600519.SH": "CN",
+            "0700.HK": "HK",
+            "HK00700": "HK",
+            "AAPL": "US",
+            "BRK.B": "US",
+            "00700": "unknown",
+            "BAD!": "unknown",
+        }.items():
+            with self.subTest(symbol=symbol):
+                self.assertEqual(service._market_from_symbol(symbol), expected_market)
 
     def test_decision_trace_flags_action_plan_and_quality_conflicts(self) -> None:
         service = AnalysisService()
@@ -1284,7 +1296,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             self.assertEqual(first.status_code, 202)
             self.assertEqual(second.status_code, 409)
             self.assertEqual(json.loads(second.body)["error"], "duplicate_task")
-            self.assertEqual(json.loads(second.body)["stock_code"], "600519.SH")
+            self.assertEqual(json.loads(second.body)["stock_code"], "600519")
             self.assertEqual(
                 json.loads(second.body)["existing_task_id"],
                 json.loads(first.body)["task_id"],
@@ -1404,6 +1416,10 @@ class BatchTaskQueueContractTestCase(unittest.TestCase):
         self.assertEqual(duplicates, [])
         self.assertEqual(sorted(task.stock_code for task in queue._tasks.values()), ["600519"])
 
+        with self.assertRaises(ValueError):
+            queue.submit_tasks_batch(["000858", "00700"], report_type="detailed")
+        self.assertEqual(sorted(task.stock_code for task in queue._tasks.values()), ["600519"])
+
     def test_batch_submit_deduplicates_equivalent_stock_code_shapes(self) -> None:
         queue = AnalysisTaskQueue(max_workers=1)
         queue._executor = type("ExecutorStub", (), {"submit": lambda self, *args, **kwargs: Future()})()
@@ -1419,8 +1435,26 @@ class BatchTaskQueueContractTestCase(unittest.TestCase):
 
         self.assertEqual(accepted_again, [])
         self.assertEqual(len(duplicates_again), 1)
-        self.assertEqual(duplicates_again[0].stock_code, "600519.SH")
+        self.assertEqual(duplicates_again[0].stock_code, "600519")
         self.assertEqual(duplicates_again[0].existing_task_id, accepted[0].task_id)
+
+        accepted_hk, duplicates_hk = queue.submit_tasks_batch(["0700.HK"], report_type="detailed")
+
+        self.assertEqual(duplicates_hk, [])
+        self.assertEqual([task.stock_code for task in accepted_hk], ["HK00700"])
+        self.assertTrue(queue.is_analyzing("0700.HK"))
+        self.assertTrue(queue.is_analyzing("HK00700"))
+
+        accepted_hk_again, duplicates_hk_again = queue.submit_tasks_batch(["HK00700"], report_type="detailed")
+
+        self.assertEqual(accepted_hk_again, [])
+        self.assertEqual(len(duplicates_hk_again), 1)
+        self.assertEqual(duplicates_hk_again[0].stock_code, "HK00700")
+        self.assertEqual(duplicates_hk_again[0].existing_task_id, accepted_hk[0].task_id)
+
+        accepted_us, duplicates_us = queue.submit_tasks_batch(["aapl"], report_type="detailed")
+        self.assertEqual(duplicates_us, [])
+        self.assertEqual([task.stock_code for task in accepted_us], ["AAPL"])
 
     def test_submit_task_rejects_blank_stock_code(self) -> None:
         queue = AnalysisTaskQueue(max_workers=1)
@@ -1428,6 +1462,10 @@ class BatchTaskQueueContractTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "股票代码不能为空或仅包含空白字符"):
             queue.submit_task("   ", report_type="detailed")
+        for stock_code in ("00700", "BAD!"):
+            with self.subTest(stock_code=stock_code):
+                with self.assertRaises(ValueError):
+                    queue.submit_task(stock_code, report_type="detailed")
 
         self.assertEqual(queue._tasks, {})
         self.assertEqual(queue._analyzing_stocks, {})
