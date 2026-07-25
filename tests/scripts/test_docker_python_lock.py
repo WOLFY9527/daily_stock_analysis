@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import subprocess
@@ -8,11 +9,86 @@ from pathlib import Path
 import pytest
 
 from scripts.environment.errors import EnvironmentFailure
+from scripts.environment.python_artifacts import LockedArtifact
+from scripts.environment.python_lock import PythonLockContract
 from tests.scripts.test_wolfy_python_lock import write_lock_repository
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = ROOT / "docker" / "Dockerfile"
+FIXTURE_ARTIFACTS = {
+    "fixture-1.0-py3-none-any.whl": b"reviewed Docker fixture wheel",
+    "setuptools-82.0.1-py3-none-any.whl": b"reviewed Docker setuptools wheel",
+}
+
+
+def docker_fixture_contract(tmp_path: Path) -> PythonLockContract:
+    hashes = {
+        name: hashlib.sha256(content).hexdigest()
+        for name, content in FIXTURE_ARTIFACTS.items()
+    }
+    lock_path = tmp_path / "requirements-python311-runtime.lock"
+    lock_path.write_text(
+        "fixture==1.0 "
+        f"--hash=sha256:{hashes['fixture-1.0-py3-none-any.whl']}\n"
+        "setuptools==82.0.1 "
+        f"--hash=sha256:{hashes['setuptools-82.0.1-py3-none-any.whl']}\n",
+        encoding="utf-8",
+    )
+    return PythonLockContract(
+        profile="runtime",
+        target={
+            "architecture": "aarch64",
+            "implementation": "CPython",
+            "os": "Linux",
+            "pythonVersion": "3.11",
+        },
+        lock_path=lock_path,
+        content_hash="c" * 64,
+        input_hashes={},
+        direct_requirements=frozenset({"fixture"}),
+        distributions={
+            "fixture": frozenset({"1.0"}),
+            "setuptools": frozenset({"82.0.1"}),
+        },
+        artifacts={
+            "fixture": (
+                LockedArtifact(
+                    "fixture-1.0-py3-none-any.whl",
+                    hashes["fixture-1.0-py3-none-any.whl"],
+                    "wheel",
+                ),
+            ),
+            "setuptools": (
+                LockedArtifact(
+                    "setuptools-82.0.1-py3-none-any.whl",
+                    hashes["setuptools-82.0.1-py3-none-any.whl"],
+                    "wheel",
+                ),
+            ),
+        },
+        artifact_hashes={
+            "fixture": frozenset({hashes["fixture-1.0-py3-none-any.whl"]}),
+            "setuptools": frozenset(
+                {hashes["setuptools-82.0.1-py3-none-any.whl"]}
+            ),
+        },
+        artifact_files=hashes,
+        build_requirements={"setuptools": "82.0.1"},
+        hash_count=2,
+        hash_verification=True,
+        projection="linux-aarch64-cpython311-runtime",
+        projection_hash="d" * 64,
+        source_build_count=0,
+        resolver={"name": "fixture", "version": "1"},
+        lock_files={},
+    )
+
+
+def materialize_fixture_artifacts(command: list[str]) -> None:
+    destination = Path(command[command.index("--dest") + 1])
+    for name, content in FIXTURE_ARTIFACTS.items():
+        (destination / name).write_bytes(content)
 
 
 def test_dockerfile_installs_dependencies_through_reviewed_lock_helper() -> None:
@@ -179,8 +255,15 @@ def test_docker_helper_delegates_target_and_install_authority() -> None:
 
 def test_docker_install_uses_shared_hashed_runtime_installer_without_lock_mutation(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     docker_python = importlib.import_module("scripts.environment.docker_python")
+    contract = docker_fixture_contract(tmp_path)
+    monkeypatch.setattr(
+        docker_python,
+        "select_docker_python_lock",
+        lambda *_args, **_kwargs: contract,
+    )
     destination = tmp_path / "python"
     commands: list[list[str]] = []
     backend_material = ""
@@ -195,6 +278,8 @@ def test_docker_install_uses_shared_hashed_runtime_installer_without_lock_mutati
             python.parent.mkdir(parents=True)
             python.write_bytes(b"fixture-python")
             (destination / "lib" / "python3.11" / "site-packages").mkdir(parents=True)
+        if "download" in command:
+            materialize_fixture_artifacts(command)
         if "install" in command and "-r" in command:
             requirements = Path(command[command.index("-r") + 1])
             if requirements.name.endswith(".requirements.txt"):
@@ -227,6 +312,12 @@ def test_docker_install_uses_shared_hashed_runtime_installer_without_lock_mutati
     assert "--no-deps" in download and "--require-hashes" in download
     assert all("--no-deps" in command and "--require-hashes" in command for command in installs)
     assert all("--no-build-isolation" in command for command in installs)
+    assert all("--find-links" in command for command in installs)
+    artifact_views = {
+        Path(command[command.index("--find-links") + 1]) for command in installs
+    }
+    assert len(artifact_views) == 1
+    assert all(not artifact_view.exists() for artifact_view in artifact_views)
     assert "requirements-python311-runtime.lock" in " ".join(runtime_install)
     argument_names = {Path(argument).name for command in pip_commands for argument in command}
     assert "requirements.txt" not in argument_names
@@ -268,14 +359,21 @@ def test_docker_download_failure_stops_before_install_without_fallback(
             command_runner=runner,
         )
 
-    assert raised.value.code == "python_locked_artifact_download_failed"
+    assert raised.value.code == "python_locked_artifact_missing"
     assert all(Path(argument).name != "requirements.txt" for command in commands for argument in command)
 
 
 def test_docker_missing_build_backend_fails_without_build_isolation_download(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     docker_python = importlib.import_module("scripts.environment.docker_python")
+    contract = docker_fixture_contract(tmp_path)
+    monkeypatch.setattr(
+        docker_python,
+        "select_docker_python_lock",
+        lambda *_args, **_kwargs: contract,
+    )
     destination = tmp_path / "python"
     commands: list[list[str]] = []
 
@@ -286,6 +384,8 @@ def test_docker_missing_build_backend_fails_without_build_isolation_download(
             python.parent.mkdir(parents=True)
             python.write_bytes(b"fixture-python")
             (destination / "lib" / "python3.11" / "site-packages").mkdir(parents=True)
+        if "download" in command:
+            materialize_fixture_artifacts(command)
         if "install" in command and "-r" in command:
             requirements = Path(command[command.index("-r") + 1])
             if requirements.name.endswith(".requirements.txt"):
@@ -307,6 +407,8 @@ def test_docker_missing_build_backend_fails_without_build_isolation_download(
     assert "--no-deps" in backend
     assert "--require-hashes" in backend
     assert "--no-build-isolation" in backend
+    artifact_view = Path(backend[backend.index("--find-links") + 1])
+    assert not artifact_view.exists()
     assert not any(
         "requirements-python311-runtime.lock" in " ".join(command)
         for command in commands

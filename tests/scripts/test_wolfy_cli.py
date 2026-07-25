@@ -7,8 +7,15 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.environment import cli as environment_cli
-from scripts.environment.cli import _execute, _format_development_result, _parser
+from scripts.environment.cli import (
+    _execute,
+    _format_development_result,
+    _managed_reexec,
+    _parser,
+)
 from scripts.environment.errors import EnvironmentFailure
 
 
@@ -130,6 +137,45 @@ def test_exec_parser_exposes_one_repeatable_reviewed_config_override_surface() -
         "MARKET_CACHE_REMOTE_URL=redis://fixture.invalid/0",
     ]
     assert parsed.child_command == ["--", "python", "-c", "pass"]
+
+
+def test_windows_managed_reexec_runs_managed_cli_and_propagates_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "repo"
+    expected = tmp_path / "managed" / "python.exe"
+    expected.parent.mkdir(parents=True)
+    expected.write_bytes(b"fixture")
+    observed: dict[str, object] = {}
+
+    def run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        observed["command"] = command
+        observed["environment"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 23)
+
+    monkeypatch.setattr(environment_cli, "managed_python_path", lambda _root: expected)
+    monkeypatch.setattr(environment_cli.sys, "executable", str(tmp_path / "bootstrap.exe"))
+    monkeypatch.setattr(environment_cli.os, "name", "nt")
+    monkeypatch.setattr(environment_cli.subprocess, "run", run)
+
+    with pytest.raises(SystemExit) as raised:
+        _managed_reexec(root, ["env", "verify"])
+
+    assert raised.value.code == 23
+    assert observed["command"] == [
+        str(expected),
+        "-E",
+        "-s",
+        "-B",
+        str(root / "scripts" / "wolfy.py"),
+        "env",
+        "verify",
+    ]
+    assert isinstance(observed["environment"], dict)
 
 
 def test_existing_worktree_entrypoints_are_thin_wolfy_delegates() -> None:
@@ -256,6 +302,7 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
             )
 
     def child(command, **kwargs):
+        observed["command"] = command
         observed["environment"] = kwargs["env"]
         return subprocess.CompletedProcess(command, 1)
 
@@ -269,7 +316,7 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
         tmp_path,
         Manager(),
         SimpleNamespace(
-            child_command=["--", "fixture-command"],
+            child_command=["--", "python", "-c", "pass"],
             config_override=[
                 "MARKET_CACHE_REMOTE_BACKEND=redis",
                 "MARKET_CACHE_REMOTE_URL=redis://user:private-value@fixture.invalid/0",
@@ -282,6 +329,7 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     assert result == 1
     assert observed["runId"] == run_id
+    assert observed["command"] == [str(Path("/managed/bin/python")), "-c", "pass"]
     assert evidence["operational"]["runId"] == run_id
     assert evidence["operational"]["configurationOverrideKeys"] == [
         "MARKET_CACHE_REMOTE_BACKEND",

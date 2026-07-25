@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -13,7 +16,11 @@ import pytest
 from scripts.environment.browser import BrowserComponent, load_browser_contract
 from scripts.environment.errors import EnvironmentFailure, OfflineMaterialUnavailable
 from scripts.environment.identity import ToolchainIdentity
-from scripts.environment.managed_tools import ManagedRgComponent
+from scripts.environment.managed_tools import (
+    ManagedRgComponent,
+    ManagedRgContract,
+    load_managed_rg_contract,
+)
 from scripts.environment.runtime import cleanup_run, create_run_context
 from scripts.environment.snapshots import ensure_snapshot, sweep_interrupted_builds
 
@@ -21,6 +28,15 @@ from scripts.environment.snapshots import ensure_snapshot, sweep_interrupted_bui
 TOOLCHAIN = ToolchainIdentity(
     os_name="Darwin",
     architecture="arm64",
+    python_implementation="CPython",
+    python_version="3.11.15",
+    node_version="20.20.2",
+    npm_version="10.8.2",
+    install_mode="pip-hash-lock+npm-ci",
+)
+WINDOWS_AMD64_TOOLCHAIN = ToolchainIdentity(
+    os_name="Windows",
+    architecture="AMD64",
     python_implementation="CPython",
     python_version="3.11.15",
     node_version="20.20.2",
@@ -227,8 +243,10 @@ def test_concurrent_browser_provisioning_builds_once_and_survives_interrupted_st
         node_executable=make_node_executable(tmp_path),
         command_runner=runner,
     )
-    input_root = tmp_path / "snapshots" / "browser" / component.input_fingerprint
-    interrupted = input_root / ".build-interrupted"
+    staging_root = tmp_path / "staging"
+    interrupted = (
+        staging_root / f"browser-{component.input_fingerprint[:12]}-interrupted"
+    )
     interrupted.mkdir(parents=True)
     old = time.time() - 7200
     os.utime(interrupted, (old, old))
@@ -260,30 +278,142 @@ def test_concurrent_browser_provisioning_builds_once_and_survives_interrupted_st
     assert results[0].is_dir()
 
 
-def test_rg_is_copied_to_managed_snapshot_and_verified_by_content_identity(tmp_path: Path) -> None:
-    host_rg = tmp_path / "host" / "rg"
-    host_rg.parent.mkdir()
-    host_rg.write_bytes(b"reviewed-rg-executable")
-    host_rg.chmod(0o700)
-    component = ManagedRgComponent(
-        TOOLCHAIN,
-        source_resolver=lambda _name: str(host_rg),
-        command_runner=lambda command, **_kwargs: completed(command, "ripgrep 15.1.0\n"),
+def test_rg_is_copied_to_managed_snapshot_and_verified_by_content_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reviewed = load_managed_rg_contract(WINDOWS_AMD64_TOOLCHAIN)
+    assert reviewed.version == "15.1.0"
+    assert reviewed.platform == "windows-x86_64"
+    assert (
+        reviewed.archive_filename
+        == "ripgrep-15.1.0-x86_64-pc-windows-msvc.zip"
     )
-    destination = tmp_path / "managed-rg"
+    assert (
+        reviewed.archive_sha256
+        == "124510b94b6baa3380d051fdf4650eaa80a302c876d611e9dba0b2e18d87493a"
+    )
+    assert reviewed.archive_member.endswith("/rg.exe")
+    assert reviewed.download_url == (
+        "https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/"
+        "ripgrep-15.1.0-x86_64-pc-windows-msvc.zip"
+    )
 
-    component.build(destination, offline=True)
-    installed = component.inspect(destination)
+    executable_content = b"reviewed-rg-executable"
+    archive_member = "ripgrep-15.1.0-fixture/rg.exe"
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w") as bundle:
+        member = zipfile.ZipInfo(archive_member, date_time=(1980, 1, 1, 0, 0, 0))
+        bundle.writestr(member, executable_content)
+    archive_content = archive_buffer.getvalue()
+    fixture_contract = ManagedRgContract(
+        version="15.1.0",
+        platform="windows-x86_64",
+        archive_filename="ripgrep-15.1.0-fixture.zip",
+        archive_sha256=hashlib.sha256(archive_content).hexdigest(),
+        archive_member=archive_member,
+        download_url="https://example.invalid/reviewed/ripgrep-15.1.0-fixture.zip",
+    )
+    cache_root = tmp_path / "empty-cache"
+    source_cache_root = cache_root / "artifacts" / "rg"
+    downloads: list[tuple[str, Path]] = []
 
-    assert (destination / "rg").read_bytes() == b"reviewed-rg-executable"
+    def downloader(url: str, destination: Path) -> None:
+        downloads.append((url, destination))
+        destination.write_bytes(archive_content)
+
+    def reject_host_lookup(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("managed rg must not inspect host PATH")
+
+    monkeypatch.setattr(shutil, "which", reject_host_lookup)
+    component = ManagedRgComponent(
+        WINDOWS_AMD64_TOOLCHAIN,
+        source_cache_root=source_cache_root,
+        contract=fixture_contract,
+        downloader=downloader,
+        command_runner=lambda command, **_kwargs: completed(
+            command,
+            "ripgrep 15.1.0 (rev af60c2de9d)\n",
+        ),
+    )
+    assert not source_cache_root.exists()
+
+    with pytest.raises(OfflineMaterialUnavailable) as missing:
+        component.build(tmp_path / "offline-missing", offline=True)
+    assert missing.value.code == "offline_managed_rg_source_missing"
+    assert downloads == []
+
+    result = ensure_snapshot(cache_root, component, offline=False)
+    assert result.network_used is True
+    assert result.reused is False
+    assert len(downloads) == 1
+    assert downloads[0][0] == fixture_contract.download_url
+    assert downloads[0][1].parent == component.source_cache_directory
+    assert component.source_archive == (
+        source_cache_root
+        / fixture_contract.archive_sha256
+        / fixture_contract.archive_filename
+    )
+    assert {
+        path.name for path in component.source_cache_directory.iterdir()
+    } == {fixture_contract.archive_filename}
+    assert hashlib.sha256(component.source_archive.read_bytes()).hexdigest() == (
+        fixture_contract.archive_sha256
+    )
+    assert (result.path / component.executable_name).read_bytes() == executable_content
+    provenance = json.loads(
+        (result.path / "provenance.json").read_text(encoding="utf-8")
+    )
+    installed = provenance["installed"]
     assert installed == {
-        "executable": "rg",
-        "executableSha256": hashlib.sha256(b"reviewed-rg-executable").hexdigest(),
-        "platform": "darwin-arm64",
+        "executable": component.executable_name,
+        "executableSha256": hashlib.sha256(executable_content).hexdigest(),
+        "platform": "windows-x86_64",
+        "sourceArchive": fixture_contract.archive_filename,
+        "sourceSha256": fixture_contract.archive_sha256,
         "version": "15.1.0",
     }
+    reused = ensure_snapshot(cache_root, component, offline=True)
+    assert reused.path == result.path
+    assert reused.reused is True
+    assert len(downloads) == 1
+
+    offline_destination = tmp_path / "offline-managed-rg"
+    component.build(offline_destination, offline=True)
+    assert (
+        offline_destination / component.executable_name
+    ).read_bytes() == executable_content
+    assert len(downloads) == 1
+
     manifest = {"installed": installed}
-    (destination / "rg").write_bytes(b"tampered")
+    (offline_destination / component.executable_name).write_bytes(b"tampered")
     with pytest.raises(EnvironmentFailure) as raised:
-        component.verify(destination, manifest)
+        component.verify(offline_destination, manifest)
     assert raised.value.code == "managed_rg_identity_mismatch"
+
+    unexpected_component = ManagedRgComponent(
+        WINDOWS_AMD64_TOOLCHAIN,
+        source_cache_root=tmp_path / "unexpected-cache",
+        contract=fixture_contract,
+        downloader=downloader,
+    )
+    unexpected_component.source_cache_directory.mkdir(parents=True)
+    unexpected_component.source_archive.write_bytes(archive_content)
+    (unexpected_component.source_cache_directory / "unexpected.zip").write_bytes(
+        archive_content
+    )
+    with pytest.raises(EnvironmentFailure) as unexpected:
+        unexpected_component.build(tmp_path / "unexpected-destination", offline=True)
+    assert unexpected.value.code == "managed_rg_source_unexpected"
+
+    invalid_component = ManagedRgComponent(
+        WINDOWS_AMD64_TOOLCHAIN,
+        source_cache_root=tmp_path / "invalid-cache",
+        contract=fixture_contract,
+        downloader=downloader,
+    )
+    invalid_component.source_cache_directory.mkdir(parents=True)
+    invalid_component.source_archive.write_bytes(b"hash-invalid")
+    with pytest.raises(EnvironmentFailure) as invalid:
+        invalid_component.build(tmp_path / "invalid-destination", offline=True)
+    assert invalid.value.code == "managed_rg_source_hash_mismatch"

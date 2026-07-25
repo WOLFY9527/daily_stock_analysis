@@ -10,8 +10,15 @@ from pathlib import Path
 import pytest
 
 from scripts.environment.errors import EnvironmentFailure, OfflineMaterialUnavailable
+from scripts.environment.identity import stable_hash
 from scripts.environment.locking import SnapshotLock
-from scripts.environment.snapshots import ensure_snapshot, sweep_interrupted_builds, verify_cached_snapshot
+from scripts.environment.snapshots import (
+    STAGING_MARKER,
+    STAGING_SCHEMA,
+    ensure_snapshot,
+    sweep_interrupted_builds,
+    verify_cached_snapshot,
+)
 
 
 @dataclass
@@ -25,8 +32,10 @@ class FakeComponent:
     corrupt_on_promotion: bool = False
     build_started: threading.Event | None = None
     release_build: threading.Event | None = None
+    build_destination: Path | None = None
 
     def build(self, destination: Path, *, offline: bool) -> None:
+        self.build_destination = destination
         self.build_count += 1
         if self.build_started:
             self.build_started.set()
@@ -75,8 +84,8 @@ def test_failed_installation_never_creates_a_valid_final_snapshot(tmp_path: Path
     with pytest.raises(EnvironmentFailure, match="fixture install failed"):
         ensure_snapshot(tmp_path, component, offline=True)
 
-    final_root = tmp_path / "snapshots" / "python" / component.input_fingerprint
-    assert not [path for path in final_root.glob("*") if not path.name.startswith(".build-")]
+    final_root = tmp_path / "snapshots" / "python"
+    assert not list(final_root.glob("*"))
 
 
 def test_failed_promotion_verification_never_exposes_final_snapshot(tmp_path: Path) -> None:
@@ -85,8 +94,64 @@ def test_failed_promotion_verification_never_exposes_final_snapshot(tmp_path: Pa
     with pytest.raises(EnvironmentFailure, match="snapshot payload does not match"):
         ensure_snapshot(tmp_path, component, offline=True)
 
-    final_root = tmp_path / "snapshots" / "python" / component.input_fingerprint
-    assert not [path for path in final_root.glob("*") if not path.name.startswith(".build-")]
+    final_root = tmp_path / "snapshots" / "python"
+    assert not list(final_root.glob("*"))
+
+
+def test_snapshot_build_uses_short_cache_root_staging_path(tmp_path: Path) -> None:
+    component = FakeComponent()
+
+    result = ensure_snapshot(tmp_path, component, offline=True)
+
+    assert component.build_destination is not None
+    assert component.build_destination.parent == tmp_path / "staging"
+    assert len(component.build_destination.name) == 32
+    assert int(component.build_destination.name, 16) >= 0
+    assert result.path.parent == tmp_path / "snapshots" / component.name
+    assert result.path.name == stable_hash(
+        {
+            "component": component.name,
+            "inputFingerprint": component.input_fingerprint,
+            "installedFingerprint": result.installed_fingerprint,
+        }
+    )
+
+
+def test_snapshots_for_distinct_input_fingerprints_coexist(tmp_path: Path) -> None:
+    first_component = FakeComponent(input_fingerprint="a" * 64)
+    second_component = FakeComponent(input_fingerprint="b" * 64)
+
+    first = ensure_snapshot(tmp_path, first_component, offline=True)
+    second = ensure_snapshot(tmp_path, second_component, offline=True)
+    reused_first = ensure_snapshot(tmp_path, first_component, offline=True)
+
+    assert first.path != second.path
+    assert first.path.is_dir()
+    assert second.path.is_dir()
+    assert reused_first.path == first.path
+    assert reused_first.reused is True
+    assert first_component.build_count == 1
+
+
+def test_non_python_snapshots_also_use_short_staging_and_compact_address(
+    tmp_path: Path,
+) -> None:
+    component = FakeComponent(name="web")
+
+    result = ensure_snapshot(tmp_path, component, offline=True)
+
+    assert component.build_destination is not None
+    assert component.build_destination.parent == tmp_path / "staging"
+    assert len(component.build_destination.name) == 32
+    assert int(component.build_destination.name, 16) >= 0
+    assert result.path.parent == tmp_path / "snapshots" / component.name
+    assert result.path.name == stable_hash(
+        {
+            "component": component.name,
+            "inputFingerprint": component.input_fingerprint,
+            "installedFingerprint": result.installed_fingerprint,
+        }
+    )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX snapshot permissions")
@@ -104,9 +169,19 @@ def test_writable_cached_snapshot_is_not_accepted_as_immutable(tmp_path: Path) -
 
 
 def test_interrupted_temporary_build_is_quarantined_and_ignored(tmp_path: Path) -> None:
-    input_root = tmp_path / "snapshots" / "web" / ("b" * 64)
-    interrupted = input_root / ".build-interrupted"
+    staging_root = tmp_path / "staging"
+    interrupted = staging_root / ("c" * 32)
     interrupted.mkdir(parents=True)
+    (interrupted / STAGING_MARKER).write_text(
+        json.dumps(
+            {
+                "schemaVersion": STAGING_SCHEMA,
+                "component": "web",
+                "inputFingerprint": "b" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
     (interrupted / "partial").write_text("partial", encoding="utf-8")
     old = time.time() - 7200
     os.utime(interrupted, (old, old))

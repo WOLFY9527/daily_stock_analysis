@@ -16,6 +16,8 @@ from .locking import SnapshotLock
 
 
 SNAPSHOT_SCHEMA = "wolfystock_dependency_snapshot_v1"
+STAGING_SCHEMA = "wolfystock_dependency_staging_v1"
+STAGING_MARKER = ".wolfy-build.json"
 
 
 class SnapshotComponent(Protocol):
@@ -43,6 +45,20 @@ class SnapshotResult:
     installed_fingerprint: str
     network_used: bool
     reused: bool
+
+
+def _snapshot_fingerprint(
+    component: str,
+    input_fingerprint: str,
+    installed_fingerprint: str,
+) -> str:
+    return stable_hash(
+        {
+            "component": component,
+            "inputFingerprint": input_fingerprint,
+            "installedFingerprint": installed_fingerprint,
+        }
+    )
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -86,7 +102,15 @@ def verify_cached_snapshot(snapshot: Path, component: SnapshotComponent) -> dict
     ):
         raise EnvironmentFailure("snapshot_provenance_mismatch", "snapshot provenance manifest does not match")
     installed_fingerprint = stable_hash(manifest["installed"])
-    if manifest.get("installedFingerprint") != installed_fingerprint or snapshot.name != installed_fingerprint:
+    snapshot_fingerprint = _snapshot_fingerprint(
+        component.name,
+        component.input_fingerprint,
+        installed_fingerprint,
+    )
+    if (
+        manifest.get("installedFingerprint") != installed_fingerprint
+        or snapshot.name != snapshot_fingerprint
+    ):
         raise EnvironmentFailure("snapshot_provenance_mismatch", "snapshot installed fingerprint does not match")
     component.verify(snapshot, manifest)
     if bool(getattr(component, "immutable", False)) and os.name != "nt":
@@ -109,12 +133,28 @@ def sweep_interrupted_builds(
     *,
     older_than_seconds: float = 1800.0,
 ) -> int:
-    input_root = cache_root / "snapshots" / component_name / input_fingerprint
-    if not input_root.is_dir():
+    staging_root = cache_root / "staging"
+    if not staging_root.is_dir():
         return 0
     now = time.time()
     swept = 0
-    for path in input_root.glob(".build-*"):
+    legacy_prefix = f"{component_name}-{input_fingerprint[:12]}-"
+    for path in staging_root.iterdir():
+        if not path.is_dir():
+            continue
+        marker_matches = False
+        try:
+            marker = json.loads((path / STAGING_MARKER).read_text(encoding="utf-8"))
+            marker_matches = (
+                isinstance(marker, dict)
+                and marker.get("schemaVersion") == STAGING_SCHEMA
+                and marker.get("component") == component_name
+                and marker.get("inputFingerprint") == input_fingerprint
+            )
+        except (OSError, json.JSONDecodeError):
+            pass
+        if not marker_matches and not path.name.startswith(legacy_prefix):
+            continue
         try:
             old = now - path.stat().st_mtime > older_than_seconds
         except OSError as exc:
@@ -128,9 +168,22 @@ def sweep_interrupted_builds(
     return swept
 
 
-def _valid_existing(cache_root: Path, input_root: Path, component: SnapshotComponent) -> SnapshotResult | None:
-    for candidate in sorted(input_root.iterdir() if input_root.is_dir() else ()):
+def _valid_existing(cache_root: Path, component_root: Path, component: SnapshotComponent) -> SnapshotResult | None:
+    for candidate in sorted(component_root.iterdir() if component_root.is_dir() else ()):
         if not candidate.is_dir() or candidate.name.startswith(".") or len(candidate.name) != 64:
+            continue
+        try:
+            candidate_manifest = json.loads(
+                (candidate / "provenance.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            candidate_manifest = None
+        if (
+            isinstance(candidate_manifest, dict)
+            and candidate_manifest.get("schemaVersion") == SNAPSHOT_SCHEMA
+            and candidate_manifest.get("component") == component.name
+            and candidate_manifest.get("inputFingerprint") != component.input_fingerprint
+        ):
             continue
         try:
             manifest = verify_cached_snapshot(candidate, component)
@@ -150,15 +203,25 @@ def _valid_existing(cache_root: Path, input_root: Path, component: SnapshotCompo
 
 def _build_once(
     cache_root: Path,
-    input_root: Path,
     component: SnapshotComponent,
     *,
     offline: bool,
 ) -> tuple[Path, dict[str, object]]:
-    temporary = input_root / f".build-{uuid.uuid4().hex}"
+    staging_root = cache_root / "staging"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    temporary = staging_root / uuid.uuid4().hex
     temporary.mkdir()
+    _write_json(
+        temporary / STAGING_MARKER,
+        {
+            "schemaVersion": STAGING_SCHEMA,
+            "component": component.name,
+            "inputFingerprint": component.input_fingerprint,
+        },
+    )
     try:
         component.build(temporary, offline=offline)
+        (temporary / STAGING_MARKER).unlink(missing_ok=True)
         installed = component.inspect(temporary)
         installed_fingerprint = stable_hash(installed)
         manifest: dict[str, object] = {
@@ -202,28 +265,32 @@ def ensure_snapshot(
     offline: bool,
     lock_timeout: float = 120.0,
 ) -> SnapshotResult:
-    input_root = cache_root / "snapshots" / component.name / component.input_fingerprint
-    input_root.mkdir(parents=True, exist_ok=True)
+    component_root = cache_root / "snapshots" / component.name
+    component_root.mkdir(parents=True, exist_ok=True)
     sweep_interrupted_builds(cache_root, component.name, component.input_fingerprint)
     lock = SnapshotLock(
         cache_root / "locks" / f"{component.name}-{component.input_fingerprint}.lock",
         timeout=lock_timeout,
     )
     with lock:
-        existing = _valid_existing(cache_root, input_root, component)
+        existing = _valid_existing(cache_root, component_root, component)
         if existing:
             return existing
         network_used = False
         if offline:
-            temporary, manifest = _build_once(cache_root, input_root, component, offline=True)
+            temporary, manifest = _build_once(cache_root, component, offline=True)
         else:
             try:
-                temporary, manifest = _build_once(cache_root, input_root, component, offline=True)
+                temporary, manifest = _build_once(cache_root, component, offline=True)
             except OfflineMaterialUnavailable:
-                temporary, manifest = _build_once(cache_root, input_root, component, offline=False)
+                temporary, manifest = _build_once(cache_root, component, offline=False)
                 network_used = True
         installed_fingerprint = str(manifest["installedFingerprint"])
-        final = input_root / installed_fingerprint
+        final = component_root / _snapshot_fingerprint(
+            component.name,
+            component.input_fingerprint,
+            installed_fingerprint,
+        )
         try:
             component.prepare_promotion(temporary, final)
             component.verify(temporary, manifest)

@@ -247,7 +247,7 @@ def write_lock_repository(root: Path) -> None:
         ),
     }
     for name, content in lock_files.items():
-        (root / name).write_text(content, encoding="utf-8")
+        (root / name).write_bytes(content.encode("utf-8"))
     profiles = {}
     for profile, input_name in (
         ("runtime", "requirements.txt"),
@@ -366,6 +366,40 @@ def test_every_direct_requirement_maps_to_exact_hashed_pins(tmp_path: Path) -> N
     assert contract.lock_path.name == "requirements-python311-dev.lock"
 
 
+def test_windows_cpython311_development_selects_greenlet_353() -> None:
+    contract = load_python_lock(
+        ROOT,
+        os_name="Windows",
+        architecture="AMD64",
+        python_version="3.11.9",
+        profile="development",
+    )
+
+    assert contract.distributions["greenlet"] == frozenset({"3.5.3"})
+    assert contract.projection == "windows-amd64-cpython311-development"
+
+
+def test_windows_cpython311_development_reviews_greenlet_wheel() -> None:
+    contract = load_python_lock(
+        ROOT,
+        os_name="Windows",
+        architecture="AMD64",
+        python_version="3.11.9",
+        profile="development",
+    )
+
+    assert [
+        (artifact.filename, artifact.sha256, artifact.artifact_type)
+        for artifact in contract.artifacts["greenlet"]
+    ] == [
+        (
+            "greenlet-3.5.3-cp311-cp311-win_amd64.whl",
+            "0f41e4a05a3c0cb31b17023eff28dd111e1d16bf7d7d00406cd7df23f31398a7",
+            "wheel",
+        )
+    ]
+
+
 def test_every_supported_projection_selects_one_reviewed_parquet_wheel() -> None:
     manifest = json.loads((ROOT / LOCK_MANIFEST).read_text(encoding="utf-8"))
     parquet_engines = {"pyarrow", "fastparquet"}
@@ -391,14 +425,14 @@ def test_every_supported_projection_selects_one_reviewed_parquet_wheel() -> None
     [
         (lambda root: (root / "requirements.txt").write_text("demo>=2\n", encoding="utf-8"), "python_lock_input_drift"),
         (
-            lambda root: (root / "requirements-python311-dev.lock").write_text(
-                "demo>=1\n", encoding="utf-8"
+            lambda root: (root / "requirements-python311-dev.lock").write_bytes(
+                b"demo>=1\n"
             ),
             "python_lock_content_drift",
         ),
         (
-            lambda root: (root / "requirements-python311-dev.lock").write_text(
-                "demo==1.0\n", encoding="utf-8"
+            lambda root: (root / "requirements-python311-dev.lock").write_bytes(
+                b"demo==1.0\n"
             ),
             "python_lock_content_drift",
         ),
@@ -423,7 +457,7 @@ def test_corrupt_or_stale_contract_fails_closed(tmp_path: Path, mutation, reason
 def test_missing_pin_or_hash_is_rejected_after_reviewed_hash_is_updated(tmp_path: Path) -> None:
     write_lock_repository(tmp_path)
     path = tmp_path / "requirements-python311-dev.lock"
-    path.write_text("demo>=1\n", encoding="utf-8")
+    path.write_bytes(b"demo>=1\n")
     manifest = json.loads((tmp_path / LOCK_MANIFEST).read_text(encoding="utf-8"))
     manifest["profiles"]["development"]["locks"]["3.11"]["sha256"] = hashlib.sha256(
         path.read_bytes()
@@ -447,7 +481,11 @@ def test_missing_pin_or_hash_is_rejected_after_reviewed_hash_is_updated(tmp_path
 def test_non_normalized_lock_format_is_rejected(tmp_path: Path) -> None:
     write_lock_repository(tmp_path)
     path = tmp_path / "requirements-python311-dev.lock"
-    path.write_text("# unreviewed annotation\n" + path.read_text(encoding="utf-8"), encoding="utf-8")
+    path.write_bytes(
+        ("# unreviewed annotation\n" + path.read_text(encoding="utf-8")).encode(
+            "utf-8"
+        )
+    )
     manifest = json.loads((tmp_path / LOCK_MANIFEST).read_text(encoding="utf-8"))
     manifest["profiles"]["development"]["locks"]["3.11"]["sha256"] = hashlib.sha256(
         path.read_bytes()
@@ -500,7 +538,9 @@ def test_lock_rejects_credentials_private_paths_and_timestamps(
 ) -> None:
     write_lock_repository(tmp_path)
     path = tmp_path / "requirements-python311-dev.lock"
-    path.write_text(unsafe_text + lock_text(("demo", "1.0", HASH_A, None)), encoding="utf-8")
+    path.write_bytes(
+        (unsafe_text + lock_text(("demo", "1.0", HASH_A, None))).encode("utf-8")
+    )
     manifest = json.loads((tmp_path / LOCK_MANIFEST).read_text(encoding="utf-8"))
     manifest["profiles"]["development"]["locks"]["3.11"]["sha256"] = hashlib.sha256(
         path.read_bytes()
@@ -555,13 +595,14 @@ def test_unsupported_python_implementation_fails_explicitly(tmp_path: Path) -> N
 def test_supported_environment_markers_select_exact_platform_projection(tmp_path: Path) -> None:
     write_lock_repository(tmp_path)
     path = tmp_path / "requirements-python311-dev.lock"
-    path.write_text(
-        path.read_text(encoding="utf-8")
-        + lock_text(
-            ("colorama", "0.4.6", HASH_A, "sys_platform == 'win32'"),
-            ("uvloop", "0.22.1", HASH_B, "sys_platform != 'win32'"),
-        ),
-        encoding="utf-8",
+    path.write_bytes(
+        (
+            path.read_text(encoding="utf-8")
+            + lock_text(
+                ("colorama", "0.4.6", HASH_A, "sys_platform == 'win32'"),
+                ("uvloop", "0.22.1", HASH_B, "sys_platform != 'win32'"),
+            )
+        ).encode("utf-8")
     )
     manifest = json.loads((tmp_path / LOCK_MANIFEST).read_text(encoding="utf-8"))
     metadata = manifest["profiles"]["development"]["locks"]["3.11"]
@@ -661,7 +702,11 @@ def test_lock_content_change_changes_contract_identity(tmp_path: Path) -> None:
         profile="development",
     )
     path = tmp_path / "requirements-python311-dev.lock"
-    path.write_text(path.read_text(encoding="utf-8").replace("pluggy==1.5", "pluggy==1.6"), encoding="utf-8")
+    path.write_bytes(
+        path.read_text(encoding="utf-8")
+        .replace("pluggy==1.5", "pluggy==1.6")
+        .encode("utf-8")
+    )
     manifest = json.loads((tmp_path / LOCK_MANIFEST).read_text(encoding="utf-8"))
     manifest["profiles"]["development"]["locks"]["3.11"]["sha256"] = hashlib.sha256(
         path.read_bytes()
@@ -704,7 +749,7 @@ def test_update_reports_direct_and_transitive_changes_separately(tmp_path: Path)
         records = [("demo", "2.0", HASH_A, None)]
         if profile == "dev":
             records.extend((("pluggy", "1.6", HASH_A, None), ("pytest", "8.3", HASH_B, None)))
-        output.write_text(lock_text(*records), encoding="utf-8")
+        output.write_bytes(lock_text(*records).encode("utf-8"))
         return subprocess.CompletedProcess(command, 0, "", "")
 
     result = update_python_lock(

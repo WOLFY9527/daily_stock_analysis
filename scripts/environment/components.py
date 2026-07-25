@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -20,6 +21,7 @@ from .python_lock import PythonLockContract
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
+WINDOWS_NORMAL_PATH_BOUNDARY = 260
 
 
 def _run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -46,6 +48,8 @@ def _bootstrap_environment(*, offline: bool) -> Iterator[dict[str, str]]:
         "LC_ALL",
         "PATH",
         "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "PROCESSOR_ARCHITEW6432",
         "SYSTEMROOT",
         "TEMP",
         "TMP",
@@ -98,6 +102,17 @@ def _update_digest(digest: Any, *values: str) -> None:
         digest.update(encoded)
 
 
+def _filesystem_path(path: Path) -> Path:
+    if os.name != "nt":
+        return path
+    absolute = os.path.abspath(path)
+    if absolute.startswith("\\\\?\\"):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
 def _content_tree_identity(snapshot: Path, roots: tuple[Path, ...]) -> dict[str, object]:
     digest = hashlib.sha256()
     file_count = 0
@@ -110,20 +125,21 @@ def _content_tree_identity(snapshot: Path, roots: tuple[Path, ...]) -> dict[str,
         entries.extend(root.rglob("*"))
     for path in sorted(entries, key=lambda item: item.relative_to(snapshot).as_posix()):
         relative = path.relative_to(snapshot).as_posix()
-        if path.is_symlink():
-            target = os.readlink(path)
+        filesystem_path = _filesystem_path(path)
+        if filesystem_path.is_symlink():
+            target = os.readlink(filesystem_path)
             _update_digest(digest, relative, "symlink", target)
             symlink_count += 1
             continue
-        if path.is_dir():
+        if filesystem_path.is_dir():
             _update_digest(digest, relative, "directory")
             continue
-        if not path.is_file():
+        if not filesystem_path.is_file():
             raise EnvironmentFailure(
                 "installed_content_entry_invalid", f"unsupported installed content entry: {relative}"
             )
-        size = path.stat().st_size
-        _update_digest(digest, relative, "file", str(size), file_hash(path))
+        size = filesystem_path.stat().st_size
+        _update_digest(digest, relative, "file", str(size), file_hash(filesystem_path))
         file_count += 1
         total_bytes += size
     return {
@@ -205,10 +221,101 @@ class LockedPythonInstaller:
         )
         return self.artifact_cache_root / self.lock_contract.content_hash / label
 
-    def _locked_artifact_arguments(self) -> list[str]:
-        directory = self._artifact_directory()
+    def _ensure_artifact_directory(self) -> Path:
+        directory = _filesystem_path(self._artifact_directory())
         directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    @staticmethod
+    def _locked_artifact_arguments(directory: Path) -> list[str]:
         return ["--no-index", "--find-links", str(directory)]
+
+    def _create_pip_artifact_view(self) -> Path:
+        root = Path(os.path.abspath(self.artifact_cache_root))
+        longest_filename = max(self.lock_contract.artifact_files, key=len, default="")
+        for _attempt in range(4):
+            directory = root / f"p-{uuid.uuid4().hex}"
+            if (
+                os.name == "nt"
+                and len(str(directory / longest_filename)) >= WINDOWS_NORMAL_PATH_BOUNDARY
+            ):
+                raise EnvironmentFailure(
+                    "python_locked_artifact_view_path_too_long",
+                    "temporary Python artifact view exceeds the normal Windows path boundary",
+                )
+            try:
+                _filesystem_path(directory).mkdir()
+            except FileExistsError:
+                continue
+            except OSError as exc:
+                raise EnvironmentFailure(
+                    "python_locked_artifact_view_creation_failed",
+                    "temporary Python artifact view could not be created",
+                ) from exc
+            return directory
+        raise EnvironmentFailure(
+            "python_locked_artifact_view_creation_failed",
+            "unique temporary Python artifact view could not be created",
+        )
+
+    def _validate_pip_artifact_view(
+        self,
+        directory: Path,
+        expected: dict[str, Path],
+    ) -> None:
+        filesystem_directory = _filesystem_path(directory)
+        try:
+            entries = tuple(filesystem_directory.iterdir())
+            if (
+                {entry.name for entry in entries} != set(expected)
+                or any(not entry.is_file() for entry in entries)
+            ):
+                raise EnvironmentFailure(
+                    "python_locked_artifact_view_invalid",
+                    "temporary Python artifact view does not match the verified projection",
+                )
+            for entry in entries:
+                source = expected[entry.name]
+                if (
+                    not os.path.samefile(source, entry)
+                    or file_hash(entry) != self.lock_contract.artifact_files[entry.name]
+                ):
+                    raise EnvironmentFailure(
+                        "python_locked_artifact_view_invalid",
+                        f"temporary Python artifact view is invalid: {entry.name}",
+                    )
+        except EnvironmentFailure:
+            raise
+        except OSError as exc:
+            raise EnvironmentFailure(
+                "python_locked_artifact_view_invalid",
+                "temporary Python artifact view could not be validated",
+            ) from exc
+
+    @contextmanager
+    def _pip_artifact_view(self, *, offline: bool) -> Iterator[Path]:
+        verified = self._verify_artifact_cache(offline=offline)
+        directory = self._create_pip_artifact_view()
+        try:
+            expected = {path.name: path for path in verified}
+            for name, source in expected.items():
+                try:
+                    os.link(source, _filesystem_path(directory / name))
+                except OSError as exc:
+                    raise EnvironmentFailure(
+                        "python_locked_artifact_view_creation_failed",
+                        f"reviewed Python artifact could not be linked into the temporary view: {name}",
+                    ) from exc
+            self._validate_pip_artifact_view(directory, expected)
+            yield directory
+        finally:
+            try:
+                shutil.rmtree(_filesystem_path(directory))
+            except OSError as exc:
+                raise EnvironmentFailure(
+                    "python_locked_artifact_view_cleanup_failed",
+                    "temporary Python artifact view could not be removed",
+                ) from exc
 
     @staticmethod
     def _is_hash_mismatch(result: subprocess.CompletedProcess[str]) -> bool:
@@ -216,46 +323,104 @@ class LockedPythonInstaller:
         return "do not match the hashes" in output or "hashes from the requirements file" in output
 
     def _download_locked_artifacts(self, python: Path) -> None:
-        directory = self._artifact_directory()
-        directory.mkdir(parents=True, exist_ok=True)
-        command = [
-            str(python),
-            "-I",
-            "-B",
-            "-m",
-            "pip",
-            "download",
-            "--no-input",
-            "--no-deps",
-            "--require-hashes",
-            "--dest",
-            str(directory),
-            "-r",
-            str(self.lock_contract.lock_path),
-        ]
-        with _bootstrap_environment(offline=False) as environment:
-            downloaded = self.command_runner(command, cwd=self.root, env=environment)
+        directory = self._ensure_artifact_directory()
+        lines: list[str] = []
+        for name, versions in sorted(self.lock_contract.distributions.items()):
+            version = next(iter(versions))
+            hashes = sorted(self.lock_contract.artifact_hashes.get(name, ()))
+            if not hashes:
+                raise EnvironmentFailure(
+                    "python_locked_artifact_missing",
+                    f"required reviewed Python artifact is missing: {name}",
+                )
+            lines.append(f"{name}=={version} \\")
+            for index, digest in enumerate(hashes):
+                suffix = " \\" if index < len(hashes) - 1 else ""
+                lines.append(f"    --hash=sha256:{digest}{suffix}")
+        requirements_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                prefix="target-artifacts-",
+                suffix=".requirements.txt",
+                dir=directory,
+                delete=False,
+            ) as handle:
+                handle.write("\n".join(lines) + "\n")
+                requirements_path = Path(handle.name)
+            command = [
+                str(python),
+                "-I",
+                "-B",
+                "-m",
+                "pip",
+                "download",
+                "--no-input",
+                "--no-deps",
+                "--require-hashes",
+                "--dest",
+                str(directory),
+                "-r",
+                str(requirements_path),
+            ]
+            with _bootstrap_environment(offline=False) as environment:
+                downloaded = self.command_runner(command, cwd=self.root, env=environment)
+        finally:
+            if requirements_path is not None:
+                requirements_path.unlink(missing_ok=True)
         if downloaded.returncode == 0:
             return
         if self._is_hash_mismatch(downloaded):
             raise EnvironmentFailure(
                 "python_locked_artifact_hash_mismatch", "locked Python artifact hash mismatch"
             )
+        self._verify_artifact_cache()
         raise EnvironmentFailure(
             "python_locked_artifact_download_failed", "locked Python artifact download failed"
         )
 
-    def _verify_artifact_cache(self) -> None:
+    def _verify_artifact_cache(self, *, offline: bool = False) -> tuple[Path, ...]:
         allowed = self.lock_contract.artifact_files
-        directory = self._artifact_directory()
-        directory.mkdir(parents=True, exist_ok=True)
+        directory = self._ensure_artifact_directory()
+        verified: list[Path] = []
         for path in directory.iterdir():
-            if not path.is_file() or allowed.get(path.name) != file_hash(path):
+            if not path.is_file() or path.name not in allowed:
                 raise EnvironmentFailure(
-                    "python_locked_artifact_hash_mismatch", "locked Python artifact hash mismatch"
+                    "python_locked_artifact_unexpected",
+                    f"unexpected Python artifact cache entry: {path.name}",
                 )
+            if allowed[path.name] != file_hash(path):
+                raise EnvironmentFailure(
+                    "python_locked_artifact_hash_mismatch",
+                    f"locked Python artifact hash mismatch: {path.name}",
+                )
+            verified.append(path)
+        missing: list[str] = []
+        for name in sorted(self.lock_contract.distributions):
+            artifacts = self.lock_contract.artifacts.get(name, ())
+            filenames = sorted(artifact.filename for artifact in artifacts)
+            if filenames and any((directory / filename).is_file() for filename in filenames):
+                continue
+            reviewed = " or ".join(filenames) if filenames else "no reviewed filename"
+            missing.append(f"{name} ({reviewed})")
+        if not missing:
+            return tuple(sorted(verified, key=lambda path: path.name))
+        detail = "required reviewed Python artifacts are missing: " + ", ".join(missing)
+        if offline:
+            raise OfflineMaterialUnavailable(
+                "offline_python_locked_artifact_missing",
+                detail,
+            )
+        raise EnvironmentFailure("python_locked_artifact_missing", detail)
 
-    def _install_build_backends(self, python: Path, *, offline: bool) -> None:
+    def _install_build_backends(
+        self,
+        python: Path,
+        *,
+        offline: bool,
+        artifact_view: Path,
+    ) -> None:
         if not self.lock_contract.build_requirements:
             return
         lines: list[str] = []
@@ -270,7 +435,6 @@ class LockedPythonInstaller:
             for index, digest in enumerate(hashes):
                 suffix = " \\" if index < len(hashes) - 1 else ""
                 lines.append(f"    --hash=sha256:{digest}{suffix}")
-        directory = self._artifact_directory()
         requirements_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -278,7 +442,7 @@ class LockedPythonInstaller:
                 encoding="utf-8",
                 prefix="build-backends-",
                 suffix=".requirements.txt",
-                dir=directory,
+                dir=artifact_view.parent,
                 delete=False,
             ) as handle:
                 handle.write("\n".join(lines) + "\n")
@@ -294,7 +458,7 @@ class LockedPythonInstaller:
                 "--no-deps",
                 "--no-build-isolation",
                 "--require-hashes",
-                *self._locked_artifact_arguments(),
+                *self._locked_artifact_arguments(artifact_view),
                 "-r",
                 str(requirements_path),
             ]
@@ -324,39 +488,45 @@ class LockedPythonInstaller:
         python = self.python_path(destination)
         if not offline:
             self._download_locked_artifacts(python)
-        self._verify_artifact_cache()
-        self._install_build_backends(python, offline=offline)
-        command = [
-            str(python),
-            "-I",
-            "-B",
-            "-m",
-            "pip",
-            "install",
-            "--no-input",
-            "--no-deps",
-            "--no-build-isolation",
-            "--require-hashes",
-            *self._locked_artifact_arguments(),
-            "-r",
-            str(self.lock_contract.lock_path),
-        ]
-        with _bootstrap_environment(offline=True) as environment:
-            existing_path = environment.get("PATH")
-            environment["PATH"] = str(python.parent)
-            if existing_path:
-                environment["PATH"] += os.pathsep + existing_path
-            install = self.command_runner(command, cwd=self.root, env=environment)
-        if install.returncode != 0:
-            if self._is_hash_mismatch(install):
+        with self._pip_artifact_view(offline=offline) as artifact_view:
+            self._install_build_backends(
+                python,
+                offline=offline,
+                artifact_view=artifact_view,
+            )
+            command = [
+                str(python),
+                "-I",
+                "-B",
+                "-m",
+                "pip",
+                "install",
+                "--no-input",
+                "--no-deps",
+                "--no-build-isolation",
+                "--require-hashes",
+                *self._locked_artifact_arguments(artifact_view),
+                "-r",
+                str(self.lock_contract.lock_path),
+            ]
+            with _bootstrap_environment(offline=True) as environment:
+                existing_path = environment.get("PATH")
+                environment["PATH"] = str(python.parent)
+                if existing_path:
+                    environment["PATH"] += os.pathsep + existing_path
+                install = self.command_runner(command, cwd=self.root, env=environment)
+            if install.returncode != 0:
+                if self._is_hash_mismatch(install):
+                    raise EnvironmentFailure(
+                        "python_locked_artifact_hash_mismatch", "locked Python artifact hash mismatch"
+                    )
+                if offline:
+                    raise OfflineMaterialUnavailable(
+                        "offline_python_locked_artifact_missing", "offline_python_locked_artifact_missing"
+                    )
                 raise EnvironmentFailure(
-                    "python_locked_artifact_hash_mismatch", "locked Python artifact hash mismatch"
+                    "python_locked_install_failed", "locked Python dependency installation failed"
                 )
-            if offline:
-                raise OfflineMaterialUnavailable(
-                    "offline_python_locked_artifact_missing", "offline_python_locked_artifact_missing"
-                )
-            raise EnvironmentFailure("python_locked_install_failed", "locked Python dependency installation failed")
         _remove_python_bytecode(destination)
         _normalize_distribution_records(destination)
 
@@ -395,10 +565,11 @@ class PythonComponent(LockedPythonInstaller):
             "print(json.dumps({'implementation':platform.python_implementation(),'version':platform.python_version(),"
             "'prefix':sys.prefix,'basePrefix':sys.base_prefix,'imports':imports},sort_keys=True))"
         )
-        result = self.command_runner(
-            [str(python), "-I", "-B", "-c", source, json.dumps(self.critical_imports)],
-            env={"PYTHONDONTWRITEBYTECODE": "1"},
-        )
+        with _bootstrap_environment(offline=True) as environment:
+            result = self.command_runner(
+                [str(python), "-I", "-B", "-c", source, json.dumps(self.critical_imports)],
+                env=environment,
+            )
         try:
             payload = json.loads(result.stdout)
         except json.JSONDecodeError as exc:
@@ -503,15 +674,20 @@ def _platform_allows(entry: dict[str, Any]) -> bool:
     return True
 
 
-def _normalize_npm_tree(value: Any) -> Any:
+def _normalize_npm_tree(value: Any, snapshot: Path) -> Any:
     if isinstance(value, dict):
         return {
-            key: _normalize_npm_tree(item)
+            key: _normalize_npm_tree(item, snapshot)
             for key, item in sorted(value.items())
             if key not in {"path", "resolved", "_id"}
         }
     if isinstance(value, list):
-        return [_normalize_npm_tree(item) for item in value]
+        return [_normalize_npm_tree(item, snapshot) for item in value]
+    if isinstance(value, str):
+        normalized = value
+        for prefix in {str(snapshot), snapshot.as_posix()}:
+            normalized = normalized.replace(prefix, "$SNAPSHOT")
+        return normalized
     return value
 
 
@@ -569,7 +745,7 @@ class WebComponent:
         if result.returncode != 0:
             raise EnvironmentFailure("web_dependency_tree_invalid", "web_dependency_tree_invalid")
         try:
-            return _normalize_npm_tree(json.loads(result.stdout))
+            return _normalize_npm_tree(json.loads(result.stdout), snapshot)
         except json.JSONDecodeError as exc:
             raise EnvironmentFailure("web_dependency_tree_invalid", "web_dependency_tree_invalid") from exc
 

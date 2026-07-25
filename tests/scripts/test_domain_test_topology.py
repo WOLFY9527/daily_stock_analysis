@@ -72,7 +72,7 @@ def test_manifest_schema_preserves_baseline_and_complete_surface_counts() -> Non
 
     assert result["status"] == "valid"
     assert result["baselineBackendTests"] == 7_609
-    assert result["backendTests"] == 7_964
+    assert result["backendTests"] == 7_986
     assert result["vitestFiles"] == 178
     assert result["playwrightSpecs"] == 68
     assert result["playwrightProjectCases"] == 726

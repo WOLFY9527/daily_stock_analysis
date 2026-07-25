@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7969,
-      "sha256": "9d0468d39ade5e86867aeefc2d14e207820ae0421e9c8ecaa82d8d50f10419e0"
+      "count": 7986,
+      "sha256": "f58e4c5e1e9aa83d816d7bdf6de62276d6dda5a932df6ea3098d1212a2df3079"
     },
     "tests": [
       {
@@ -6389,6 +6389,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_bootstrap_worktree.py::test_python_lock_authority_files_are_materialized_as_lf",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_bootstrap_worktree.py::test_qualification_accepts_repository_python",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -7579,7 +7584,27 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_cli.py::test_windows_managed_reexec_runs_managed_cli_and_propagates_exit",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_bootstrap_environment_preserves_windows_architecture_markers",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_components.py::test_broken_python_import_is_detected",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_complete_reviewed_artifact_cache_passes_validation",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_content_tree_identity_accepts_long_windows_promoted_paths",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7604,12 +7629,27 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_components.py::test_missing_reviewed_artifact_is_rejected_before_install",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_components.py::test_missing_transitive_web_dependency_is_detected",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_components.py::test_npm_tree_normalization_preserves_problems_without_snapshot_paths",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_components.py::test_offline_wheel_index_preserves_conflicting_cache_material",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_online_download_uses_marker_free_target_projection",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7649,6 +7689,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_components.py::test_python_probe_preserves_offline_windows_runtime_environment",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_components.py::test_python_promotion_rewrites_full_prefix_and_prompt_identity",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -7664,12 +7709,22 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_components.py::test_unexpected_cached_artifact_is_rejected",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_components.py::test_web_dependency_tree_command_failure_is_rejected",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
         "id": "tests/scripts/test_wolfy_components.py::test_web_installed_file_change_is_detected_against_provenance",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_components.py::test_wrong_cached_artifact_hash_is_rejected",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -8014,6 +8069,16 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_python_lock.py::test_windows_cpython311_development_reviews_greenlet_wheel",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_python_lock.py::test_windows_cpython311_development_selects_greenlet_353",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_qualification.py::test_baseline_comparison_reports_new_unchanged_and_removed_findings",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -8099,6 +8164,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_windows_process_runtime_is_preserved_without_host_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_services.py::test_generated_vite_config_is_run_scoped_and_has_no_top_level_await",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -8144,12 +8214,27 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_non_python_snapshots_also_use_short_staging_and_compact_address",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_offline_ensure_never_uses_online_builder",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
       {
         "id": "tests/scripts/test_wolfy_snapshots.py::test_online_ensure_reports_network_use_only_after_offline_material_miss",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_snapshot_build_uses_short_cache_root_staging_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_snapshots.py::test_snapshots_for_distinct_input_fingerprints_coexist",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

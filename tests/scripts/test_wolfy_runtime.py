@@ -79,6 +79,36 @@ def test_app_env_is_preserved_only_when_explicitly_present(tmp_path: Path) -> No
     assert project_test_environment({"APP_ENV": "production"}, **common)["APP_ENV"] == "production"
 
 
+def test_windows_process_runtime_is_preserved_without_host_path(
+    tmp_path: Path,
+) -> None:
+    context = create_run_context(tmp_path, run_id="run-windows-process")
+    source = {
+        "COMSPEC": r"C:\Windows\System32\cmd.exe",
+        "PATH": r"C:\unreviewed\host",
+        "PATHEXT": ".COM;.EXE;.BAT;.CMD",
+        "PROCESSOR_ARCHITECTURE": "AMD64",
+        "PROCESSOR_ARCHITEW6432": "AMD64",
+        "SYSTEMROOT": r"C:\Windows",
+    }
+
+    projected = project_test_environment(
+        source,
+        context,
+        managed_python=Path(r"C:\managed\.venv\Scripts\python.exe"),
+        node_bin=Path(r"C:\managed\node"),
+        command=["python", "-c", "pass"],
+        **MANAGED_PATHS,
+    )
+
+    assert projected["COMSPEC"] == source["COMSPEC"]
+    assert projected["PATHEXT"] == source["PATHEXT"]
+    assert projected["PROCESSOR_ARCHITECTURE"] == "AMD64"
+    assert projected["PROCESSOR_ARCHITEW6432"] == "AMD64"
+    assert projected["SYSTEMROOT"] == source["SYSTEMROOT"]
+    assert source["PATH"] not in projected["PATH"]
+
+
 def test_release_projection_preserves_only_non_secret_identity_controls(tmp_path: Path) -> None:
     context = create_run_context(tmp_path, run_id="run-release-controls")
     source = {

@@ -215,7 +215,19 @@ def project_test_environment(
         )
     preserved = {
         key: source[key]
-        for key in ("CI", "COLORTERM", "LANG", "LC_ALL", "TERM", "TZ")
+        for key in (
+            "CI",
+            "COLORTERM",
+            "COMSPEC",
+            "LANG",
+            "LC_ALL",
+            "PATHEXT",
+            "PROCESSOR_ARCHITECTURE",
+            "PROCESSOR_ARCHITEW6432",
+            "SYSTEMROOT",
+            "TERM",
+            "TZ",
+        )
         if source.get(key)
     }
     if source.get("APP_ENV"):

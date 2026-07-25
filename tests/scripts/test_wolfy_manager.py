@@ -18,16 +18,36 @@ from scripts.environment.manager import (
     link_worktree_environment,
     require_managed_python,
 )
-from scripts.environment.identity import ToolchainIdentity
+from scripts.environment.identity import ToolchainIdentity, stable_hash
 from scripts.environment.snapshots import SnapshotResult
 from scripts.environment.runtime import create_run_context
 from tests.scripts.test_wolfy_python_lock import write_lock_repository
 
 
 def snapshot(cache_root: Path, component: str, input_id: str, installed_id: str) -> SnapshotResult:
-    path = cache_root / "snapshots" / component / input_id / installed_id
+    path = (
+        cache_root
+        / "snapshots"
+        / component
+        / stable_hash(
+            {
+                "component": component,
+                "inputFingerprint": input_id,
+                "installedFingerprint": installed_id,
+            }
+        )
+    )
     path.mkdir(parents=True)
-    (path / "provenance.json").write_text("{}\n", encoding="utf-8")
+    (path / "provenance.json").write_text(
+        json.dumps(
+            {
+                "inputFingerprint": input_id,
+                "installedFingerprint": installed_id,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     if component == "web":
         (path / "node_modules").mkdir()
         (path / "node_modules" / "fixture.txt").write_text("web snapshot\n", encoding="utf-8")
@@ -85,6 +105,9 @@ def test_linux_arm64_manager_selects_normalized_runtime_projection(
     assert first.python_lock.target == second.python_lock.target
     assert first.python_lock.target["architecture"] == "aarch64"
     assert first.python_lock.projection_hash == second.python_lock.projection_hash
+    assert first._rg_component().source_cache_root == (
+        first.cache_root / "artifacts" / "rg"
+    )
 
 
 def test_migration_replaces_legacy_dependencies_only_after_snapshots_exist(tmp_path: Path) -> None:
@@ -209,6 +232,8 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
             "executable": "rg",
             "executableSha256": "4" * 64,
             "platform": "darwin-arm64",
+            "sourceArchive": "ripgrep-15.1.0-aarch64-apple-darwin.tar.gz",
+            "sourceSha256": "5" * 64,
             "version": "15.1.0",
         },
         manifest_hashes={"requirements.txt": "f" * 64},
@@ -232,6 +257,10 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
     assert evidence["browser"]["launchVerified"] is True
     assert evidence["browser"]["executable"].startswith("$CACHE/")
     assert evidence["managedTools"]["rg"]["executable"].startswith("$CACHE/")
+    assert evidence["managedTools"]["rg"]["sourceArchive"] == (
+        "ripgrep-15.1.0-aarch64-apple-darwin.tar.gz"
+    )
+    assert evidence["managedTools"]["rg"]["sourceSha256"] == "5" * 64
     assert evidence["environmentIdentity"]["bootstrapImplementationVersion"] == "wolfystock_bootstrap_v7"
     assert evidence["pythonLock"]["contentHash"] == "1" * 64
     assert evidence["pythonLock"]["hashVerification"] is True
@@ -283,7 +312,9 @@ def test_verify_rejects_pointer_component_identity_mismatch(
     )
     monkeypatch.setattr(
         "scripts.environment.manager.verify_cached_snapshot",
-        lambda path, _component: {"installedFingerprint": path.name},
+        lambda path, _component: json.loads(
+            (path / "provenance.json").read_text(encoding="utf-8")
+        ),
     )
 
     with pytest.raises(EnvironmentFailure) as raised:

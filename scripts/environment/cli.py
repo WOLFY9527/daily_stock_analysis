@@ -128,9 +128,20 @@ def _managed_reexec(root: Path, argv: Sequence[str]) -> None:
     if Path(sys.executable).resolve(strict=False) == expected.resolve(strict=True):
         return
     environment = os.environ.copy()
+    command = [
+        str(expected),
+        "-E",
+        "-s",
+        "-B",
+        str(root / "scripts" / "wolfy.py"),
+        *argv,
+    ]
+    if os.name == "nt":
+        result = subprocess.run(command, env=environment, check=False)
+        raise SystemExit(result.returncode)
     os.execve(
         str(expected),
-        [str(expected), "-E", "-s", "-B", str(root / "scripts" / "wolfy.py"), *argv],
+        command,
         environment,
     )
 
@@ -170,6 +181,9 @@ def _execute(root: Path, manager: EnvironmentManager, args: argparse.Namespace) 
         command.pop(0)
     if not command:
         raise EnvironmentFailure("child_command_missing", "exec requires '-- <command...>'")
+    managed_python = managed_python_path(root)
+    if command[0] == "python":
+        command[0] = str(managed_python)
     config_overrides = parse_test_config_overrides(args.config_override)
     run_id = "run-" + secrets.token_hex(8)
     context = create_run_context(manager.cache_root, run_id=run_id)
@@ -185,7 +199,7 @@ def _execute(root: Path, manager: EnvironmentManager, args: argparse.Namespace) 
         environment = project_test_environment(
             dict(os.environ),
             context,
-            managed_python=managed_python_path(root),
+            managed_python=managed_python,
             node_bin=Path(node).parent,
             managed_rg_dir=verified.rg.path,
             browser_path=verified.browser.path,

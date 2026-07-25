@@ -44,6 +44,21 @@ transitive changes separately. Bootstrap, tests, development, CI, and release
 qualification never update the lock implicitly. Runtime installation remains
 pip-based with `--no-deps --require-hashes`.
 
+The raw-byte-hashed generated Python lock files are checked out as LF on every
+platform. Online artifact materialization derives a marker-free download input
+from the selected target projection, not from the aggregate marker-rich lock.
+Before pip installation, the artifact cache must contain at least one exact
+reviewed filename and SHA-256 for every selected distribution; missing,
+unexpected, or hash-mismatched cache entries fail closed.
+
+The content-addressed target projection remains the sole artifact authority and
+the only download destination. Pip installation consumes a unique temporary
+hard-link view directly below the selected cache root only after that projection
+passes completeness, unexpected-file, and SHA-256 validation. The shared local
+and container installer uses the same view for locked build backends and final
+dependencies, validates exact file identity before use, enforces the normal
+Windows path boundary, and removes the view after success or failure.
+
 PyArrow is the single reviewed Parquet read/write authority in supported
 projections. Do not add a second engine or silent fallback.
 
@@ -80,12 +95,28 @@ projection. Offline mode requires verified snapshots and package caches:
 A missing artifact fails without network fallback. Python, Web, browser, and
 managed-tool snapshots are content-addressed under the OS cache root or the
 explicit `WOLFYSTOCK_ENV_CACHE` override. Worktrees link to those immutable
-snapshots, never another checkout's mutable `.venv` or `node_modules`.
+snapshots, never another checkout's mutable `.venv` or `node_modules`. Mutable
+snapshot builds use a short cache-root staging directory before atomic
+content-addressed promotion. Each final snapshot directory uses one combined
+input-and-installed fingerprint so nested Windows package paths do not inherit
+two fingerprint directory levels. Windows content verification uses
+extended-length filesystem paths while retaining logical relative paths in the
+content identity. Location-bearing npm diagnostic strings are normalized to the
+snapshot root without removing dependency problem evidence.
 
-The environment authority also provisions reviewed `rg` and the declared
-Playwright Chromium revision, verifies the executable can launch, and supplies
-it to Playwright. Host `PATH`, a global browser, or a system-browser fallback is
-not an equivalent authority.
+The environment authority provisions ripgrep 15.1.0 from the single pinned
+release archive selected by normalized OS and architecture. Online bootstrap
+materializes that archive under
+`artifacts/rg/<reviewed-archive-sha256>/<exact-filename>` and accepts it only
+when the selected directory contains that filename alone and its SHA-256
+matches. Offline bootstrap can reuse the validated archive but cannot download
+or discover host `rg`. The resulting immutable snapshot records the source
+archive identity, probes the exact reviewed version, and supplies its explicit
+path to managed commands.
+
+The authority also provisions the declared Playwright Chromium revision,
+verifies the executable can launch, and supplies it to Playwright. Host `PATH`,
+a global browser, or a system-browser fallback is not an equivalent authority.
 
 ## Test Profile
 

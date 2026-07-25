@@ -266,7 +266,13 @@ def build_environment_evidence(
     )
     rg_details = {
         key: rg_identity[key]
-        for key in ("executableSha256", "platform", "version")
+        for key in (
+            "executableSha256",
+            "platform",
+            "sourceArchive",
+            "sourceSha256",
+            "version",
+        )
         if key in rg_identity
     }
     rg_relative_executable = rg_identity.get("executable")
@@ -369,7 +375,10 @@ class EnvironmentManager:
         )
 
     def _rg_component(self) -> ManagedRgComponent:
-        return ManagedRgComponent(self.toolchain)
+        return ManagedRgComponent(
+            self.toolchain,
+            source_cache_root=self.cache_root / "artifacts" / "rg",
+        )
 
     @staticmethod
     def _installed_identity(result: SnapshotResult) -> dict[str, Any]:

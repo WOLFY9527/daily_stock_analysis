@@ -19,6 +19,20 @@ SCRIPT_PATH = REPO_ROOT / "scripts" / "bootstrap_worktree.sh"
 CORE_PATH = REPO_ROOT / "scripts" / "worktree_preflight.py"
 POWERSHELL_PATH = REPO_ROOT / "scripts" / "bootstrap_worktree.ps1"
 FINGERPRINT = "e" * 64
+PYTHON_LOCK_AUTHORITY_PATHS = (
+    "requirements-python311-dev.lock",
+    "requirements-python311-runtime.lock",
+    "requirements-python312-dev.lock",
+    "requirements-python312-runtime.lock",
+)
+
+
+def test_python_lock_authority_files_are_materialized_as_lf() -> None:
+    attributes = (REPO_ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    assert "/requirements-python*.lock text eol=lf" in attributes
+
+    for relative_path in PYTHON_LOCK_AUTHORITY_PATHS:
+        assert b"\r" not in (REPO_ROOT / relative_path).read_bytes()
 
 
 def _load_preflight():
@@ -105,7 +119,9 @@ def _promotion_fixture(module, root: Path):
             "shardResult": "b" * 64,
         },
     )
-    loader = lambda _worktree, _path: evidence
+
+    def loader(_worktree, _path):
+        return evidence
     authority = module.PromotionAuthority(
         evidence_loader=loader,
         environment_verify=lambda _path: FINGERPRINT,
