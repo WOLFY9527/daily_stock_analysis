@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -11,6 +10,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from src.sqlite_foreign_keys import connect_sqlite
 from src.storage import DatabaseManager
 
 
@@ -24,8 +24,8 @@ def _sqlite_backup(source: Path, destination: Path) -> None:
     if destination.exists():
         destination.unlink()
 
-    with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_conn:
-        with sqlite3.connect(destination) as destination_conn:
+    with connect_sqlite(f"file:{source}?mode=ro", uri=True) as source_conn:
+        with connect_sqlite(destination) as destination_conn:
             source_conn.backup(destination_conn)
 
 

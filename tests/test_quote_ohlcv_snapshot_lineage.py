@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker
 
 from src.repositories.quote_ohlcv_snapshot_repository import QuoteOhlcvSnapshotRepository
@@ -19,6 +19,7 @@ from src.services.quote_ohlcv_snapshot_lineage import (
     build_quote_snapshot_from_readiness,
 )
 from src.services.quote_snapshot_readiness import QuoteSnapshot
+from src.sqlite_foreign_keys import create_engine_with_sqlite_foreign_keys
 from src.storage import DatabaseManager, QuoteOhlcvSnapshotRow
 
 
@@ -294,7 +295,7 @@ def test_passive_reads_do_not_create_files_when_storage_is_unavailable(tmp_path)
 
 def test_repository_construction_and_passive_reads_do_not_apply_schema(tmp_path) -> None:
     db_path = tmp_path / "passive.sqlite"
-    engine = create_engine(f"sqlite:///{db_path}", pool_pre_ping=True)
+    engine = create_engine_with_sqlite_foreign_keys(f"sqlite:///{db_path}", pool_pre_ping=True)
     session_factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     db = object.__new__(DatabaseManager)
     db._engine = engine

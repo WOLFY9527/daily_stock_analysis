@@ -16,6 +16,7 @@ from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 import src.auth as auth
 from src.config import Config
+from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.storage import (
     DatabaseManager,
     MarketScannerCandidate,
@@ -103,6 +104,8 @@ class WatchlistResearchOverlayEndpointTestCase(unittest.TestCase):
     def _save_scanner_candidate(self) -> int:
         now = datetime(2026, 5, 4, 9, 30, 0)
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",

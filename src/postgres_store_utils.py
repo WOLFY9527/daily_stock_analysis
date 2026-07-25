@@ -9,11 +9,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.postgres_schema_bootstrap import apply_schema_slice
+from src.sqlite_foreign_keys import create_engine_with_sqlite_foreign_keys
 
 _CREATE_TABLE_PATTERN = re.compile(
     r"^create table if not exists\s+([a-z_][a-z0-9_]*)",
@@ -34,7 +35,7 @@ def baseline_sql_doc_path() -> Path:
 
 
 def create_store_engine(db_url: str) -> Engine:
-    return create_engine(
+    return create_engine_with_sqlite_foreign_keys(
         db_url,
         echo=False,
         pool_pre_ping=True,

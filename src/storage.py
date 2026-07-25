@@ -12,7 +12,7 @@ A股自选股智能分析系统 - 存储层
 """
 
 import atexit
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import hashlib
 import json
 import logging
@@ -25,7 +25,6 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import (
-    create_engine,
     Column,
     String,
     Float,
@@ -38,6 +37,7 @@ from sqlalchemy import (
     Index,
     UniqueConstraint,
     Text,
+    text,
     select,
     update,
     and_,
@@ -59,6 +59,12 @@ from sqlalchemy.pool import StaticPool
 
 from src.config import get_config
 from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
+from src.sqlite_foreign_keys import (
+    create_engine_with_sqlite_foreign_keys,
+    declared_sqlite_foreign_keys,
+    read_sqlite_foreign_keys,
+    verify_sqlite_foreign_key_schema,
+)
 from src.utils.security import is_sensitive_key, sanitize_message, sanitize_metadata
 from src.multi_user import (
     BOOTSTRAP_ADMIN_DISPLAY_NAME,
@@ -481,6 +487,13 @@ class AppUser(Base):
     mfa_last_verified_at = Column(DateTime, index=True)
     role = Column(String(16), nullable=False, default=ROLE_USER, index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_reference_anchor = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+        index=True,
+    )
     created_at = Column(DateTime, default=datetime.now, index=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -1769,7 +1782,7 @@ class MarketScannerRun(Base):
     __tablename__ = 'market_scanner_runs'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True)
     scope = Column(String(16), nullable=False, default=OWNERSHIP_SCOPE_USER, index=True)
     market = Column(String(8), nullable=False, default='cn', index=True)
     profile = Column(String(32), nullable=False, default='cn_preopen_v1', index=True)
@@ -2394,7 +2407,7 @@ class DatabaseManager:
                 }
 
             # 创建数据库引擎
-            self._engine = create_engine(
+            self._engine = create_engine_with_sqlite_foreign_keys(
                 resolved_db_url,
                 echo=False,  # 设为 True 可查看 SQL 语句
                 pool_pre_ping=True,  # 连接健康检查
@@ -2408,9 +2421,15 @@ class DatabaseManager:
                 autoflush=False,
             )
 
-            # 创建所有表
-            Base.metadata.create_all(self._engine)
-            bootstrap_identity_required = self._run_multi_user_migrations()
+            # Keep schema creation, legacy migration, and invariant verification
+            # in one transaction so a failed FK qualification cannot be committed.
+            with self._engine.begin() as connection:
+                if connection.dialect.name == "sqlite":
+                    connection.exec_driver_sql("BEGIN IMMEDIATE")
+                    self._assert_no_sqlite_migration_artifacts(connection)
+                    self._assert_no_unmanaged_sqlite_triggers(connection)
+                Base.metadata.create_all(connection)
+                bootstrap_identity_required = self._run_multi_user_migrations(connection)
             self._initialized = True
             if bootstrap_identity_required:
                 self.ensure_bootstrap_admin_user()
@@ -2656,20 +2675,44 @@ class DatabaseManager:
             row.last_error = concise_error
             row.last_error_at = datetime.now()
 
-    def _run_multi_user_migrations(self) -> bool:
+    def _run_multi_user_migrations(self, connection) -> bool:
         """Apply lightweight SQLite-safe schema migrations for Phase 1 ownership."""
         bootstrap_user_id = BOOTSTRAP_ADMIN_USER_ID
-        with self._engine.begin() as conn:
+        migration_context = nullcontext(connection)
+        with migration_context as conn:
             self._seed_admin_rbac_compatibility_rows(conn)
 
-            self._add_column_if_missing(conn, "analysis_history", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(
+                conn,
+                "analysis_history",
+                "owner_id",
+                "VARCHAR(64) REFERENCES app_users(id)",
+            )
             self._add_column_if_missing(conn, "analysis_history", "is_test", "BOOLEAN NOT NULL DEFAULT 0")
-            self._add_column_if_missing(conn, "backtest_results", "owner_id", "VARCHAR(64)")
-            self._add_column_if_missing(conn, "backtest_runs", "owner_id", "VARCHAR(64)")
-            self._add_column_if_missing(conn, "rule_backtest_runs", "owner_id", "VARCHAR(64)")
-            self._add_column_if_missing(conn, "rule_backtest_universe_jobs", "owner_id", "VARCHAR(64)")
-            self._add_column_if_missing(conn, "rule_backtest_universe_symbol_results", "owner_id", "VARCHAR(64)")
-            self._add_column_if_missing(conn, "market_scanner_runs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(
+                conn, "backtest_results", "owner_id", "VARCHAR(64) REFERENCES app_users(id)"
+            )
+            self._add_column_if_missing(
+                conn, "backtest_runs", "owner_id", "VARCHAR(64) REFERENCES app_users(id)"
+            )
+            self._add_column_if_missing(
+                conn, "rule_backtest_runs", "owner_id", "VARCHAR(64) REFERENCES app_users(id)"
+            )
+            self._add_column_if_missing(
+                conn,
+                "rule_backtest_universe_jobs",
+                "owner_id",
+                "VARCHAR(64) REFERENCES app_users(id)",
+            )
+            self._add_column_if_missing(
+                conn,
+                "rule_backtest_universe_symbol_results",
+                "owner_id",
+                "VARCHAR(64) REFERENCES app_users(id)",
+            )
+            self._add_column_if_missing(
+                conn, "market_scanner_runs", "owner_id", "VARCHAR(64) REFERENCES app_users(id)"
+            )
             self._add_column_if_missing(conn, "portfolio_trades", "is_active", "BOOLEAN NOT NULL DEFAULT 1")
             self._add_column_if_missing(conn, "portfolio_trades", "voided_at", "DATETIME")
             self._add_column_if_missing(conn, "portfolio_trades", "updated_at", "DATETIME")
@@ -2710,7 +2753,12 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "model_pricing_policies", "source_label", "VARCHAR(128)")
             self._add_column_if_missing(conn, "model_pricing_policies", "source_url", "VARCHAR(500)")
             self._add_column_if_missing(conn, "model_pricing_policies", "metadata_json", "TEXT")
-            self._add_column_if_missing(conn, "llm_cost_ledger", "owner_user_id", "VARCHAR(64)")
+            self._add_column_if_missing(
+                conn,
+                "llm_cost_ledger",
+                "owner_user_id",
+                "VARCHAR(64) REFERENCES app_users(id)",
+            )
             self._add_column_if_missing(conn, "llm_cost_ledger", "guest_bucket_hash", "VARCHAR(128)")
             self._add_column_if_missing(conn, "llm_cost_ledger", "route_family", "VARCHAR(64)")
             self._add_column_if_missing(conn, "llm_cost_ledger", "cached_input_tokens", "INTEGER NOT NULL DEFAULT 0")
@@ -2727,6 +2775,12 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "app_users", "mfa_last_verified_at", "DATETIME")
             self._add_column_if_missing(
                 conn,
+                "app_users",
+                "is_reference_anchor",
+                "BOOLEAN NOT NULL DEFAULT 0",
+            )
+            self._add_column_if_missing(
+                conn,
                 "market_scanner_runs",
                 "scope",
                 f"VARCHAR(16) NOT NULL DEFAULT '{OWNERSHIP_SCOPE_USER}'",
@@ -2737,6 +2791,12 @@ class DatabaseManager:
                 "ix_app_user_session_user_expiry",
                 "app_user_sessions",
                 "user_id, expires_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_app_users_is_reference_anchor",
+                "app_users",
+                "is_reference_anchor",
             )
             self._create_index_if_missing(
                 conn,
@@ -3045,6 +3105,10 @@ class DatabaseManager:
                 "result_bucket, created_at",
             )
 
+            bootstrap_identity_inserted = False
+            if self._legacy_backfill_requires_bootstrap_identity(conn):
+                bootstrap_identity_inserted = self._insert_bootstrap_identity_for_migration(conn)
+
             self._migrate_backtest_summaries_table(conn, bootstrap_user_id=bootstrap_user_id)
 
             conn.exec_driver_sql(
@@ -3093,7 +3157,680 @@ class DatabaseManager:
 
             self._backfill_market_scanner_ownership(conn, bootstrap_user_id=bootstrap_user_id)
             self._backfill_conversation_sessions(conn, bootstrap_user_id=bootstrap_user_id)
-            return self._has_bootstrap_owner_references(conn)
+            bootstrap_identity_required = self._has_bootstrap_owner_references(conn)
+            if bootstrap_identity_inserted and not bootstrap_identity_required:
+                conn.exec_driver_sql(
+                    "DELETE FROM app_users WHERE id = :user_id",
+                    {"user_id": BOOTSTRAP_ADMIN_USER_ID},
+                )
+            self._repair_legacy_sqlite_foreign_keys(conn)
+            verify_sqlite_foreign_key_schema(conn, Base.metadata)
+            return bootstrap_identity_required
+
+    @classmethod
+    def _legacy_backfill_requires_bootstrap_identity(cls, conn) -> bool:
+        owner_tables = (
+            "analysis_history",
+            "backtest_results",
+            "backtest_runs",
+            "backtest_summaries",
+            "conversation_sessions",
+            "market_scanner_runs",
+            "portfolio_accounts",
+            "rule_backtest_runs",
+            "rule_backtest_universe_jobs",
+            "rule_backtest_universe_symbol_results",
+        )
+        for table_name in owner_tables:
+            columns = cls._table_columns(conn, table_name)
+            predicate = (
+                "owner_id IS NULL OR TRIM(owner_id) = ''"
+                if "owner_id" in columns
+                else "1 = 1"
+            )
+            row = conn.exec_driver_sql(
+                f"SELECT 1 FROM {table_name} WHERE {predicate} LIMIT 1"
+            ).fetchone()
+            if row is not None:
+                return True
+        return (
+            conn.exec_driver_sql("SELECT 1 FROM conversation_messages LIMIT 1").fetchone()
+            is not None
+        )
+
+    @staticmethod
+    def _insert_bootstrap_identity_for_migration(conn) -> bool:
+        existing = conn.exec_driver_sql(
+            "SELECT 1 FROM app_users WHERE id = :user_id LIMIT 1",
+            {"user_id": BOOTSTRAP_ADMIN_USER_ID},
+        ).fetchone()
+        if existing is not None:
+            return False
+        now = datetime.now()
+        conn.exec_driver_sql(
+            """
+            INSERT INTO app_users (
+                id, username, display_name, password_hash, mfa_enabled,
+                role, is_active, is_reference_anchor, created_at, updated_at
+            ) VALUES (
+                :id, :username, :display_name, NULL, 0,
+                :role, 1, 0, :created_at, :updated_at
+            )
+            """,
+            {
+                "id": BOOTSTRAP_ADMIN_USER_ID,
+                "username": BOOTSTRAP_ADMIN_USERNAME,
+                "display_name": BOOTSTRAP_ADMIN_DISPLAY_NAME,
+                "role": ROLE_ADMIN,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        return True
+
+    @staticmethod
+    def _quote_sqlite_identifier(identifier: str) -> str:
+        return '"' + str(identifier).replace('"', '""') + '"'
+
+    @staticmethod
+    def _sqlite_table_exists(conn, table_name: str) -> bool:
+        return conn.exec_driver_sql(
+            "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = :table_name",
+            {"table_name": table_name},
+        ).fetchone() is not None
+
+    @classmethod
+    def _sqlite_table_xinfo(cls, conn, table_name: str) -> List[Dict[str, Any]]:
+        quoted_table = cls._quote_sqlite_identifier(table_name)
+        return [
+            dict(row)
+            for row in conn.exec_driver_sql(
+                f"PRAGMA table_xinfo({quoted_table})"
+            ).mappings()
+        ]
+
+    @classmethod
+    def _assert_sqlite_legacy_fk_source_column(
+        cls,
+        conn,
+        *,
+        table_name: str,
+        column_name: str,
+    ) -> None:
+        column_rows = [
+            row
+            for row in cls._sqlite_table_xinfo(conn, table_name)
+            if str(row["name"]) == column_name
+        ]
+        if len(column_rows) != 1:
+            raise RuntimeError(
+                f"SQLite FK migration requires manual source-column review: "
+                f"{table_name}.{column_name}"
+            )
+        row = column_rows[0]
+        identity = (
+            str(row["type"] or "").strip().upper(),
+            int(row["notnull"]),
+            row["dflt_value"],
+            int(row["pk"]),
+            int(row["hidden"]),
+        )
+        if identity != ("VARCHAR(64)", 0, None, 0, 0):
+            raise RuntimeError(
+                f"SQLite FK migration requires manual source-column review: "
+                f"{table_name}.{column_name}"
+            )
+
+        table_sql = str(
+            conn.exec_driver_sql(
+                "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = :table_name",
+                {"table_name": table_name},
+            ).scalar_one()
+        )
+        escaped_column = re.escape(column_name)
+        exact_definition = re.compile(
+            rf'(?:\(|,)\s*(?:"{escaped_column}"|`{escaped_column}`|'
+            rf'\[{escaped_column}\]|{escaped_column})\s+'
+            r'VARCHAR\s*\(\s*64\s*\)\s*(?=,|\))',
+            re.IGNORECASE,
+        )
+        if len(exact_definition.findall(table_sql)) != 1:
+            raise RuntimeError(
+                f"SQLite FK migration requires manual source-column review: "
+                f"{table_name}.{column_name}"
+            )
+
+        existing_column_foreign_keys = [
+            foreign_key
+            for foreign_key in read_sqlite_foreign_keys(conn, (table_name,)).elements()
+            if foreign_key[1] == column_name
+        ]
+        if existing_column_foreign_keys:
+            raise RuntimeError(
+                f"SQLite FK migration requires manual existing foreign-key review: "
+                f"{table_name}.{column_name}"
+            )
+
+        quoted_table = cls._quote_sqlite_identifier(table_name)
+        for index_row in conn.exec_driver_sql(
+            f"PRAGMA index_list({quoted_table})"
+        ).mappings():
+            if str(index_row["origin"]) == "c":
+                continue
+            quoted_index = cls._quote_sqlite_identifier(str(index_row["name"]))
+            indexed_columns = {
+                str(index_column["name"])
+                for index_column in conn.exec_driver_sql(
+                    f"PRAGMA index_xinfo({quoted_index})"
+                ).mappings()
+                if int(index_column["key"]) == 1 and index_column["name"] is not None
+            }
+            if column_name in indexed_columns:
+                raise RuntimeError(
+                    f"SQLite FK migration requires manual source-constraint review: "
+                    f"{table_name}.{column_name}"
+                )
+
+    @classmethod
+    def _assert_no_sqlite_migration_artifacts(cls, conn) -> None:
+        if conn.dialect.name != "sqlite":
+            return
+        if cls._sqlite_table_exists(conn, "backtest_summaries__new"):
+            raise RuntimeError(
+                "SQLite partial migration artifact requires manual recovery: "
+                "backtest_summaries__new"
+            )
+        for table_name in Base.metadata.tables:
+            if not cls._sqlite_table_exists(conn, table_name):
+                continue
+            partial_column = next(
+                (
+                    str(row["name"])
+                    for row in cls._sqlite_table_xinfo(conn, table_name)
+                    if str(row["name"]).startswith("__wolfy_fk_")
+                ),
+                None,
+            )
+            if partial_column is not None:
+                raise RuntimeError(
+                    "SQLite partial migration artifact requires manual recovery: "
+                    f"{table_name}.{partial_column}"
+                )
+
+    @staticmethod
+    def _assert_no_unmanaged_sqlite_triggers(conn) -> None:
+        if conn.dialect.name != "sqlite":
+            return
+        declared_tables = set(Base.metadata.tables)
+        trigger = next(
+            (
+                row
+                for row in conn.exec_driver_sql(
+                    "SELECT name, tbl_name FROM sqlite_schema "
+                    "WHERE type = 'trigger' ORDER BY tbl_name, name"
+                ).mappings()
+                if str(row["tbl_name"]) in declared_tables
+            ),
+            None,
+        )
+        if trigger is not None:
+            raise RuntimeError(
+                "SQLite migration requires manual trigger review: "
+                f"{trigger['tbl_name']}.{trigger['name']}"
+            )
+
+    @classmethod
+    def _sqlite_explicit_index_inventory(
+        cls,
+        conn,
+        *,
+        table_name: str,
+    ) -> Tuple[Tuple[Any, ...], ...]:
+        quoted_table = cls._quote_sqlite_identifier(table_name)
+        inventory: List[Tuple[Any, ...]] = []
+        for row in conn.exec_driver_sql(
+            f"PRAGMA index_list({quoted_table})"
+        ).mappings():
+            if str(row["origin"]) != "c":
+                continue
+            index_name = str(row["name"])
+            quoted_index = cls._quote_sqlite_identifier(index_name)
+            key_columns = tuple(
+                (
+                    None if item["name"] is None else str(item["name"]),
+                    int(item["desc"]),
+                    str(item["coll"] or "").upper(),
+                )
+                for item in conn.exec_driver_sql(
+                    f"PRAGMA index_xinfo({quoted_index})"
+                ).mappings()
+                if int(item["key"]) == 1
+            )
+            inventory.append(
+                (
+                    index_name,
+                    int(row["unique"]),
+                    int(row["partial"]),
+                    key_columns,
+                )
+            )
+        return tuple(sorted(inventory))
+
+    @classmethod
+    def _sqlite_unique_constraint_inventory(
+        cls,
+        conn,
+        *,
+        table_name: str,
+    ) -> Tuple[Tuple[Any, ...], ...]:
+        quoted_table = cls._quote_sqlite_identifier(table_name)
+        inventory: List[Tuple[Any, ...]] = []
+        for row in conn.exec_driver_sql(
+            f"PRAGMA index_list({quoted_table})"
+        ).mappings():
+            if str(row["origin"]) != "u":
+                continue
+            quoted_index = cls._quote_sqlite_identifier(str(row["name"]))
+            key_columns = tuple(
+                (
+                    None if item["name"] is None else str(item["name"]),
+                    int(item["desc"]),
+                    str(item["coll"] or "").upper(),
+                )
+                for item in conn.exec_driver_sql(
+                    f"PRAGMA index_xinfo({quoted_index})"
+                ).mappings()
+                if int(item["key"]) == 1
+            )
+            inventory.append((int(row["partial"]), key_columns))
+        return tuple(sorted(inventory))
+
+    @staticmethod
+    def _expected_backtest_summary_columns(variant: str) -> Tuple[Tuple[Any, ...], ...]:
+        if variant not in {
+            "pre_owner",
+            "caad_upgraded",
+            "fresh_owner",
+            "migrated_owner",
+        }:
+            raise ValueError(f"unsupported backtest summary schema variant: {variant}")
+        include_owner = variant != "pre_owner"
+        has_sql_defaults = variant in {"caad_upgraded", "migrated_owner"}
+        column_types = [
+            ("id", "INTEGER"),
+            ("scope", "VARCHAR(16)"),
+            ("code", "VARCHAR(16)"),
+            ("eval_window_days", "INTEGER"),
+            ("engine_version", "VARCHAR(16)"),
+            ("computed_at", "DATETIME"),
+            ("total_evaluations", "INTEGER"),
+            ("completed_count", "INTEGER"),
+            ("insufficient_count", "INTEGER"),
+            ("long_count", "INTEGER"),
+            ("cash_count", "INTEGER"),
+            ("win_count", "INTEGER"),
+            ("loss_count", "INTEGER"),
+            ("neutral_count", "INTEGER"),
+            ("direction_accuracy_pct", "FLOAT"),
+            ("win_rate_pct", "FLOAT"),
+            ("neutral_rate_pct", "FLOAT"),
+            ("avg_stock_return_pct", "FLOAT"),
+            ("avg_simulated_return_pct", "FLOAT"),
+            ("stop_loss_trigger_rate", "FLOAT"),
+            ("take_profit_trigger_rate", "FLOAT"),
+            ("ambiguous_rate", "FLOAT"),
+            ("avg_days_to_first_hit", "FLOAT"),
+            ("advice_breakdown_json", "TEXT"),
+            ("diagnostics_json", "TEXT"),
+        ]
+        if include_owner:
+            column_types.insert(1, ("owner_id", "VARCHAR(64)"))
+        required = {"scope", "eval_window_days", "engine_version"}
+        if include_owner:
+            required.add("owner_id")
+        defaults: Dict[str, Optional[str]] = {}
+        if has_sql_defaults:
+            defaults = {
+                "eval_window_days": "10",
+                "engine_version": "'v1'",
+                "total_evaluations": "0",
+                "completed_count": "0",
+                "insufficient_count": "0",
+                "long_count": "0",
+                "cash_count": "0",
+                "win_count": "0",
+                "loss_count": "0",
+                "neutral_count": "0",
+            }
+        return tuple(
+            (
+                name,
+                type_name,
+                int(
+                    name in required
+                    or (name == "id" and variant in {"pre_owner", "fresh_owner"})
+                ),
+                defaults.get(name),
+                int(name == "id"),
+                0,
+            )
+            for name, type_name in column_types
+        )
+
+    @classmethod
+    def _qualify_backtest_summary_rebuild_source(cls, conn) -> str:
+        rows = cls._sqlite_table_xinfo(conn, "backtest_summaries")
+        names = {str(row["name"]) for row in rows}
+        actual_foreign_keys = read_sqlite_foreign_keys(conn, ("backtest_summaries",))
+        expected_foreign_keys = declared_sqlite_foreign_keys(Base.metadata)
+        expected_foreign_keys = type(expected_foreign_keys)(
+            {
+                identity: count
+                for identity, count in expected_foreign_keys.items()
+                if identity[0] == "backtest_summaries"
+            }
+        )
+        if "owner_id" not in names:
+            candidates = ("pre_owner",)
+        elif not actual_foreign_keys:
+            candidates = ("caad_upgraded",)
+        elif actual_foreign_keys == expected_foreign_keys:
+            candidates = ("fresh_owner", "migrated_owner")
+        else:
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual constraint review"
+            )
+        actual_columns = tuple(
+            (
+                str(row["name"]),
+                str(row["type"] or "").strip().upper(),
+                int(row["notnull"]),
+                None if row["dflt_value"] is None else str(row["dflt_value"]),
+                int(row["pk"]),
+                int(row["hidden"]),
+            )
+            for row in rows
+        )
+        matching_variants = tuple(
+            variant
+            for variant in candidates
+            if actual_columns == cls._expected_backtest_summary_columns(variant)
+        )
+        if len(matching_variants) != 1:
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual column review"
+            )
+        variant = matching_variants[0]
+
+        expected_unique = (
+            (
+                "uix_backtest_summary_owner_scope_code_window_version",
+                ("owner_id", "scope", "code", "eval_window_days", "engine_version"),
+            )
+            if variant != "pre_owner"
+            else (
+                "uix_backtest_summary_scope_code_window_version",
+                ("scope", "code", "eval_window_days", "engine_version"),
+            )
+        )
+        reflected_unique_name = "" if variant == "migrated_owner" else expected_unique[0]
+        reflected_expected_unique = (reflected_unique_name, expected_unique[1])
+        actual_unique = tuple(
+            sorted(
+                (
+                    str(item.get("name") or ""),
+                    tuple(str(column) for column in item.get("column_names") or ()),
+                )
+                for item in inspect(conn).get_unique_constraints("backtest_summaries")
+            )
+        )
+        if actual_unique != (reflected_expected_unique,) or inspect(conn).get_check_constraints(
+            "backtest_summaries"
+        ):
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual constraint review"
+            )
+        expected_unique_inventory = (
+            (
+                0,
+                tuple((column_name, 0, "BINARY") for column_name in expected_unique[1]),
+            ),
+        )
+        if cls._sqlite_unique_constraint_inventory(
+            conn,
+            table_name="backtest_summaries",
+        ) != expected_unique_inventory:
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual constraint review"
+            )
+
+        expected_indexes: Tuple[Tuple[Any, ...], ...] = ()
+        if variant in {"pre_owner", "fresh_owner", "migrated_owner"}:
+            indexed_columns = ["code", "computed_at", "scope"]
+            if variant in {"fresh_owner", "migrated_owner"}:
+                indexed_columns.append("owner_id")
+            expected_indexes = tuple(
+                sorted(
+                    (
+                        f"ix_backtest_summaries_{column_name}",
+                        0,
+                        0,
+                        ((column_name, 0, "BINARY"),),
+                    )
+                    for column_name in indexed_columns
+                )
+            )
+        if cls._sqlite_explicit_index_inventory(
+            conn,
+            table_name="backtest_summaries",
+        ) != expected_indexes:
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual index review"
+            )
+
+        table_list_row = next(
+            (
+                row
+                for row in conn.exec_driver_sql("PRAGMA table_list").mappings()
+                if str(row["name"]) == "backtest_summaries"
+            ),
+            None,
+        )
+        if table_list_row is not None and (
+            int(table_list_row["wr"]) != 0 or int(table_list_row["strict"]) != 0
+        ):
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual constraint review"
+            )
+        table_sql = str(
+            conn.exec_driver_sql(
+                "SELECT sql FROM sqlite_schema "
+                "WHERE type = 'table' AND name = 'backtest_summaries'"
+            ).scalar_one()
+        )
+        normalized_sql = re.sub(r"\s+", " ", table_sql.upper())
+        if (
+            any(marker in table_sql for marker in ("--", "/*", "*/"))
+            or re.search(
+                r"\b(?:CHECK|COLLATE|DEFERRABLE|INITIALLY)\b|\bON\s+CONFLICT\b",
+                normalized_sql,
+            )
+            is not None
+        ):
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual constraint review"
+            )
+        has_autoincrement = " AUTOINCREMENT" in normalized_sql
+        if has_autoincrement != (variant in {"caad_upgraded", "migrated_owner"}):
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual column review"
+            )
+        return variant
+
+    @classmethod
+    def _assert_no_inbound_sqlite_foreign_keys(cls, conn, table_name: str) -> None:
+        table_names = [
+            str(row[0])
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name"
+            ).fetchall()
+        ]
+        inventory = read_sqlite_foreign_keys(conn, table_names)
+        inbound = sorted(
+            identity
+            for identity in inventory.elements()
+            if identity[2] == table_name
+        )
+        if inbound:
+            raise RuntimeError(
+                "SQLite backtest summary FK migration requires manual inbound foreign key review"
+            )
+
+    @classmethod
+    def _explicit_index_sql(
+        cls,
+        conn,
+        *,
+        table_name: str,
+    ) -> List[Tuple[str, str]]:
+        rows = conn.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master "
+            "WHERE type = 'index' AND tbl_name = :table_name AND sql IS NOT NULL",
+            {"table_name": table_name},
+        ).fetchall()
+        return [(str(name), str(statement)) for name, statement in rows]
+
+    @staticmethod
+    def _assert_sqlite_table_has_no_triggers(conn, table_name: str) -> None:
+        trigger = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'trigger' AND tbl_name = :table_name LIMIT 1",
+            {"table_name": table_name},
+        ).fetchone()
+        if trigger is not None:
+            raise RuntimeError(
+                f"SQLite FK migration requires manual trigger review: {table_name}"
+            )
+
+    @classmethod
+    def _retrofit_sqlite_foreign_key_column(
+        cls,
+        conn,
+        *,
+        table_name: str,
+        column_name: str,
+        parent_table: str,
+        parent_column: str,
+    ) -> None:
+        table = Base.metadata.tables[table_name]
+        column = table.columns[column_name]
+        if not column.nullable:
+            raise RuntimeError(
+                f"SQLite FK retrofit requires a dedicated table migration: {table_name}.{column_name}"
+            )
+
+        cls._assert_sqlite_legacy_fk_source_column(
+            conn,
+            table_name=table_name,
+            column_name=column_name,
+        )
+
+        temporary_column = f"__wolfy_fk_{column_name}"
+        if temporary_column in cls._table_columns(conn, table_name):
+            raise RuntimeError(
+                f"SQLite FK retrofit temporary column already exists: {table_name}.{temporary_column}"
+            )
+
+        version = tuple(
+            int(part) for part in str(conn.exec_driver_sql("SELECT sqlite_version()").scalar_one()).split(".")
+        )
+        if version < (3, 35, 0):
+            raise RuntimeError("SQLite 3.35 or newer is required for FK schema repair")
+        cls._assert_sqlite_table_has_no_triggers(conn, table_name)
+
+        quoted_table = cls._quote_sqlite_identifier(table_name)
+        quoted_column = cls._quote_sqlite_identifier(column_name)
+        quoted_temporary = cls._quote_sqlite_identifier(temporary_column)
+        quoted_parent_table = cls._quote_sqlite_identifier(parent_table)
+        quoted_parent_column = cls._quote_sqlite_identifier(parent_column)
+        column_type = column.type.compile(dialect=conn.dialect)
+        index_statements = cls._explicit_index_sql(
+            conn,
+            table_name=table_name,
+        )
+        row_count = int(
+            conn.exec_driver_sql(f"SELECT COUNT(*) FROM {quoted_table}").scalar_one()
+        )
+
+        conn.exec_driver_sql(
+            f"ALTER TABLE {quoted_table} ADD COLUMN {quoted_temporary} {column_type} "
+            f"REFERENCES {quoted_parent_table} ({quoted_parent_column})"
+        )
+        conn.exec_driver_sql(
+            f"UPDATE {quoted_table} SET {quoted_temporary} = {quoted_column}"
+        )
+        for index_name, _statement in index_statements:
+            conn.exec_driver_sql(
+                f"DROP INDEX {cls._quote_sqlite_identifier(index_name)}"
+            )
+        conn.exec_driver_sql(
+            f"ALTER TABLE {quoted_table} DROP COLUMN {quoted_column}"
+        )
+        conn.exec_driver_sql(
+            f"ALTER TABLE {quoted_table} RENAME COLUMN {quoted_temporary} TO {quoted_column}"
+        )
+        for _index_name, statement in index_statements:
+            conn.exec_driver_sql(statement)
+        migrated_row_count = int(
+            conn.exec_driver_sql(f"SELECT COUNT(*) FROM {quoted_table}").scalar_one()
+        )
+        if migrated_row_count != row_count:
+            raise RuntimeError(
+                f"SQLite FK migration changed row count for {table_name}"
+            )
+
+    @classmethod
+    def _repair_legacy_sqlite_foreign_keys(cls, conn) -> None:
+        if conn.dialect.name != "sqlite":
+            return
+
+        expected = declared_sqlite_foreign_keys(Base.metadata)
+        actual = read_sqlite_foreign_keys(
+            conn,
+            (table.name for table in Base.metadata.sorted_tables),
+        )
+        repairable_endpoints = {
+            ("analysis_history", "owner_id", "app_users", "id"),
+            ("backtest_results", "owner_id", "app_users", "id"),
+            ("backtest_runs", "owner_id", "app_users", "id"),
+            ("llm_cost_ledger", "owner_user_id", "app_users", "id"),
+            ("market_scanner_runs", "owner_id", "app_users", "id"),
+            ("portfolio_accounts", "owner_id", "app_users", "id"),
+            ("quota_usage_windows", "owner_user_id", "app_users", "id"),
+            ("rule_backtest_runs", "owner_id", "app_users", "id"),
+            ("rule_backtest_universe_jobs", "owner_id", "app_users", "id"),
+            (
+                "rule_backtest_universe_symbol_results",
+                "owner_id",
+                "app_users",
+                "id",
+            ),
+        }
+        missing = expected - actual
+        repairable_missing = [
+            identity
+            for identity in missing.elements()
+            if identity[:4] in repairable_endpoints
+        ]
+        for identity in sorted(repairable_missing):
+            table_name, column_name, parent_table, parent_column = identity[:4]
+            cls._retrofit_sqlite_foreign_key_column(
+                conn,
+                table_name=table_name,
+                column_name=column_name,
+                parent_table=parent_table,
+                parent_column=parent_column,
+            )
 
     @staticmethod
     def _has_bootstrap_owner_references(conn) -> bool:
@@ -3492,14 +4229,36 @@ class DatabaseManager:
         )
 
     def _migrate_backtest_summaries_table(self, conn, *, bootstrap_user_id: str) -> None:
-        columns = self._table_columns(conn, "backtest_summaries")
-        if "owner_id" in columns:
+        self._assert_no_sqlite_migration_artifacts(conn)
+        self._assert_sqlite_table_has_no_triggers(conn, "backtest_summaries")
+        columns = {
+            str(row["name"])
+            for row in self._sqlite_table_xinfo(conn, "backtest_summaries")
+        }
+        variant = self._qualify_backtest_summary_rebuild_source(conn)
+        if variant in {"fresh_owner", "migrated_owner"}:
             conn.exec_driver_sql(
                 "UPDATE backtest_summaries SET owner_id = :owner_id "
                 "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
                 {"owner_id": bootstrap_user_id},
             )
             return
+        self._assert_no_inbound_sqlite_foreign_keys(conn, "backtest_summaries")
+        row_count = int(
+            conn.exec_driver_sql("SELECT COUNT(*) FROM backtest_summaries").scalar_one()
+        )
+        sequence_row = None
+        if self._sqlite_table_exists(conn, "sqlite_sequence"):
+            sequence_row = conn.exec_driver_sql(
+                "SELECT seq FROM sqlite_sequence WHERE name = 'backtest_summaries'"
+            ).fetchone()
+        sequence_high_water = int(sequence_row[0]) if sequence_row is not None else None
+        owner_select_sql = (
+            "CASE WHEN owner_id IS NULL OR TRIM(owner_id) = '' "
+            "THEN :owner_id ELSE owner_id END"
+            if "owner_id" in columns
+            else ":owner_id"
+        )
 
         conn.exec_driver_sql(
             """
@@ -3531,12 +4290,13 @@ class DatabaseManager:
                 advice_breakdown_json TEXT,
                 diagnostics_json TEXT,
                 CONSTRAINT uix_backtest_summary_owner_scope_code_window_version
-                    UNIQUE (owner_id, scope, code, eval_window_days, engine_version)
+                    UNIQUE (owner_id, scope, code, eval_window_days, engine_version),
+                FOREIGN KEY (owner_id) REFERENCES app_users(id)
             )
             """
         )
         conn.exec_driver_sql(
-            """
+            f"""
             INSERT INTO backtest_summaries__new (
                 id,
                 owner_id,
@@ -3567,7 +4327,7 @@ class DatabaseManager:
             )
             SELECT
                 id,
-                :owner_id,
+                {owner_select_sql},
                 scope,
                 code,
                 eval_window_days,
@@ -3598,6 +4358,28 @@ class DatabaseManager:
         )
         conn.exec_driver_sql("DROP TABLE backtest_summaries")
         conn.exec_driver_sql("ALTER TABLE backtest_summaries__new RENAME TO backtest_summaries")
+        for index in sorted(
+            BacktestSummary.__table__.indexes,
+            key=lambda item: str(item.name),
+        ):
+            index.create(bind=conn, checkfirst=True)
+        migrated_row_count = int(
+            conn.exec_driver_sql("SELECT COUNT(*) FROM backtest_summaries").scalar_one()
+        )
+        if migrated_row_count != row_count:
+            raise RuntimeError("SQLite FK migration changed backtest summary row count")
+        if sequence_high_water is not None:
+            result = conn.exec_driver_sql(
+                "UPDATE sqlite_sequence SET seq = MAX(seq, :seq) "
+                "WHERE name = 'backtest_summaries'",
+                {"seq": sequence_high_water},
+            )
+            if result.rowcount == 0:
+                conn.exec_driver_sql(
+                    "INSERT INTO sqlite_sequence (name, seq) "
+                    "VALUES ('backtest_summaries', :seq)",
+                    {"seq": sequence_high_water},
+                )
 
     def _backfill_market_scanner_ownership(self, conn, *, bootstrap_user_id: str) -> None:
         rows = conn.exec_driver_sql(
@@ -3709,7 +4491,12 @@ class DatabaseManager:
             return None
         with self.get_session() as session:
             return session.execute(
-                select(AppUser).where(AppUser.id == normalized).limit(1)
+                select(AppUser)
+                .where(
+                    AppUser.id == normalized,
+                    AppUser.is_reference_anchor.is_(False),
+                )
+                .limit(1)
             ).scalar_one_or_none()
 
     def _sqlite_get_app_user_by_username(self, username: str) -> Optional[AppUser]:
@@ -3718,15 +4505,50 @@ class DatabaseManager:
             return None
         with self.get_session() as session:
             return session.execute(
-                select(AppUser).where(AppUser.username == normalized).limit(1)
+                select(AppUser)
+                .where(
+                    AppUser.username == normalized,
+                    AppUser.is_reference_anchor.is_(False),
+                )
+                .limit(1)
             ).scalar_one_or_none()
 
     def _sqlite_list_app_users(self) -> List[AppUser]:
         with self.get_session() as session:
             return list(
                 session.execute(
-                    select(AppUser).order_by(desc(AppUser.created_at), desc(AppUser.id))
+                    select(AppUser)
+                    .where(AppUser.is_reference_anchor.is_(False))
+                    .order_by(desc(AppUser.created_at), desc(AppUser.id))
                 ).scalars().all()
+            )
+
+    @staticmethod
+    def _sqlite_reference_anchor_username(user_id: str) -> str:
+        digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()
+        return f"__phase_a_fk_anchor__{digest}"
+
+    def _ensure_sqlite_user_reference_anchor(self, user_id: str) -> None:
+        normalized_id = str(user_id or "").strip()
+        if not normalized_id:
+            raise ValueError("user_id is required")
+        with self.session_scope() as session:
+            row = session.get(AppUser, normalized_id)
+            if row is not None:
+                return
+            session.add(
+                AppUser(
+                    id=normalized_id,
+                    username=self._sqlite_reference_anchor_username(normalized_id),
+                    display_name=None,
+                    password_hash=None,
+                    mfa_enabled=False,
+                    mfa_secret_ref=None,
+                    mfa_recovery_codes_hash=None,
+                    role=ROLE_USER,
+                    is_active=False,
+                    is_reference_anchor=True,
+                )
             )
 
     def _sqlite_create_or_update_app_user(
@@ -3771,6 +4593,7 @@ class DatabaseManager:
                     mfa_last_verified_at=mfa_last_verified_at,
                     role=normalized_role,
                     is_active=bool(is_active),
+                    is_reference_anchor=False,
                 )
                 session.add(row)
             else:
@@ -3791,6 +4614,7 @@ class DatabaseManager:
                     row.mfa_last_verified_at = mfa_last_verified_at
                 row.role = normalized_role
                 row.is_active = bool(is_active)
+                row.is_reference_anchor = False
                 row.updated_at = datetime.now()
             session.commit()
             session.refresh(row)
@@ -5997,6 +6821,7 @@ class DatabaseManager:
         if self._phase_a_enabled and self._phase_a_store is not None:
             row = self._phase_a_store.get_app_user(normalized)
             if row is not None:
+                self._ensure_sqlite_user_reference_anchor(normalized)
                 return row
             legacy_row = self._sqlite_get_app_user(normalized)
             if legacy_row is None:
@@ -6011,6 +6836,7 @@ class DatabaseManager:
         if self._phase_a_enabled and self._phase_a_store is not None:
             row = self._phase_a_store.get_app_user_by_username(normalized)
             if row is not None:
+                self._ensure_sqlite_user_reference_anchor(str(row.id))
                 return row
             legacy_row = self._sqlite_get_app_user_by_username(normalized)
             if legacy_row is None:
@@ -6187,6 +7013,7 @@ class DatabaseManager:
         normalized_role = normalize_role(role)
 
         if self._phase_a_enabled and self._phase_a_store is not None:
+            self._ensure_sqlite_user_reference_anchor(normalized_id)
             return self._phase_a_store.upsert_app_user(
                 user_id=normalized_id,
                 username=normalized_username,

@@ -118,7 +118,7 @@ class DatabaseManagerFormalIntegrationTestCase(unittest.TestCase):
 
         observed: dict[str, object] = {}
 
-        def _boom(manager: DatabaseManager) -> None:
+        def _boom(manager: DatabaseManager, _connection: object) -> None:
             observed["phase_a_enabled"] = manager._phase_a_enabled
             observed["phase_a_store"] = manager._phase_a_store
             raise RuntimeError("boom")

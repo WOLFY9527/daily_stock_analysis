@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import sys
 import tempfile
 import unittest
@@ -15,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.services.quota_policy_service import QuotaPolicyService
+from src.sqlite_foreign_keys import connect_sqlite
 from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
 
 
@@ -26,6 +26,7 @@ def _fresh_db() -> DatabaseManager:
 class QuotaStorageIdempotencyTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.db = _fresh_db()
+        self.db.create_or_update_app_user(user_id="user-1", username="user-1")
         self.service = QuotaPolicyService(db=self.db, enforcement_enabled=True)
 
     def tearDown(self) -> None:
@@ -73,8 +74,24 @@ class QuotaStorageIdempotencyTestCase(unittest.TestCase):
     def test_migration_backfills_quota_window_identity_before_unique_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "quota.sqlite3")
-            conn = sqlite3.connect(db_path)
+            conn = connect_sqlite(db_path)
             try:
+                conn.executescript(
+                    """
+                    CREATE TABLE app_users (
+                        id VARCHAR(64) PRIMARY KEY,
+                        username VARCHAR(128) NOT NULL UNIQUE,
+                        display_name VARCHAR(128),
+                        password_hash VARCHAR(255),
+                        role VARCHAR(16) NOT NULL,
+                        is_active BOOLEAN NOT NULL,
+                        created_at DATETIME,
+                        updated_at DATETIME
+                    );
+                    INSERT INTO app_users (id, username, role, is_active)
+                    VALUES ('user-1', 'user-1', 'user', 1);
+                    """
+                )
                 conn.execute(
                     """
                     CREATE TABLE quota_usage_windows (
@@ -89,7 +106,8 @@ class QuotaStorageIdempotencyTestCase(unittest.TestCase):
                         reserved_units INTEGER NOT NULL DEFAULT 0,
                         consumed_units INTEGER NOT NULL DEFAULT 0,
                         request_count INTEGER NOT NULL DEFAULT 0,
-                        updated_at DATETIME NOT NULL
+                        updated_at DATETIME NOT NULL,
+                        FOREIGN KEY (owner_user_id) REFERENCES app_users(id)
                     )
                     """
                 )

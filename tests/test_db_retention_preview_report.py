@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from scripts.db_retention_preview_report import POLICY_VERSION, build_report, check_evidence
+from src.sqlite_foreign_keys import connect_sqlite
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -17,9 +18,7 @@ SCRIPT = REPO_ROOT / "scripts" / "db_retention_preview_report.py"
 
 
 def _connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return connect_sqlite(path)
 
 
 def _create_preview_fixture(path: Path) -> None:

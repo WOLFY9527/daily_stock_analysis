@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7985,
-      "sha256": "21d2ad2af196a24f1a6091dc1f0f42375b92218077cd6dfd5861d7772d949eb7"
+      "count": 8022,
+      "sha256": "e5bb3bf8a060db9bfc580a0191cb33c3a93259090b9b91c5b69ab0eafece367c"
     },
     "tests": [
       {
@@ -36832,6 +36832,191 @@
         "id": "tests/test_source_freshness_summary_service.py::test_source_freshness_summary_sanitizes_source_labels_and_keys",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_legacy_variants_migrate_without_data_loss[caad_upgraded]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_legacy_variants_migrate_without_data_loss[pre_owner]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_partial_artifact_fails_startup_without_hiding_rows",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_qualified_fk_with_nullable_owner_fails_closed",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_qualified_trigger_fails_before_owner_backfill",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_rebuild_rejects_generated_columns_without_data_loss",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_rebuild_rejects_inbound_foreign_keys_without_cascade_loss",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_backtest_summary_rebuild_rejects_unknown_constraints_without_schema_loss",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_doctor_readonly_probe_enforces_foreign_keys",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_enforces_foreign_keys_before_use[file]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_enforces_foreign_keys_before_use[memory]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_physical_fk_inventory_matches_declared_metadata",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_rejects_orphans_for_owned_relations[other-owned-relation-to-user]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_rejects_orphans_for_owned_relations[portfolio-account-to-user]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_rejects_orphans_for_owned_relations[portfolio-cash-ledger-to-account]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_rejects_orphans_for_owned_relations[portfolio-trade-to-account]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_rejects_orphans_for_owned_relations[session-to-user]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_database_manager_rejects_orphans_for_owned_relations[watchlist-to-user]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_file_database_simultaneous_independent_checkouts_enforce_fks",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_fresh_backtest_summary_schema_is_qualified_and_idempotent",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_historical_repository_accepts_and_verifies_injected_connection",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_historical_repository_rejects_disabled_injected_connection",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_legacy_fk_retrofit_rejects_unqualified_source_column_without_schema_loss[collated]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_legacy_fk_retrofit_rejects_unqualified_source_column_without_schema_loss[constrained]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_legacy_fk_retrofit_rejects_wrong_existing_fk_without_schema_loss",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_memory_static_pool_worker_thread_enforces_fks_and_rejects_orphan",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_operational_readonly_owners_enforce_foreign_keys[migration-readiness]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_operational_readonly_owners_enforce_foreign_keys[retention-preview]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_phase_store_engine_enforces_fks_for_memory_and_file[file]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_phase_store_engine_enforces_fks_for_memory_and_file[memory]",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_phase_store_engine_enforces_fks_on_multiple_file_checkouts",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_release_backup_restore_starts_with_fk_integrity_and_retained_state",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_shared_authority_closes_and_raises_when_readback_stays_disabled",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_sqlalchemy_pool_checkout_reenforces_foreign_keys",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_sqlalchemy_prepopulated_pool_checkout_enforces_foreign_keys",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_unknown_legacy_fk_drift_fails_closed_and_rolls_back_schema_changes",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_sqlite_fk_invariants.py::test_valid_legacy_fk_migration_repairs_schema_and_retains_parent_and_child_rows",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_staging_ingress_operator_evidence_check.py::test_accepted_outcome_requires_staging_environment_and_required_summaries",

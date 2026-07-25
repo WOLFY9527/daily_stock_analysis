@@ -203,6 +203,8 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         now = datetime(2026, 5, 4, 10, 0, 0)
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_watchlist",
@@ -782,6 +784,8 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="cn",
             profile="cn_preopen_v1",
             universe_name="cn_watchlist",

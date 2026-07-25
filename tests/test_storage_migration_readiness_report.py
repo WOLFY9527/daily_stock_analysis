@@ -16,6 +16,7 @@ from scripts.storage_migration_readiness_report import (
     REPORT_SCHEMA_VERSION,
     build_report,
 )
+from src.sqlite_foreign_keys import connect_sqlite
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -23,9 +24,7 @@ SCRIPT = REPO_ROOT / "scripts" / "storage_migration_readiness_report.py"
 
 
 def _connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return connect_sqlite(path)
 
 
 def _create_quota_fixture(path: Path) -> None:
@@ -312,13 +311,11 @@ def test_no_sql_mutation_is_executed_with_guarded_connection(tmp_path: Path, mon
             assert MUTATION_SQL_RE.search(sql) is None, sql
             return super().execute(sql, parameters)
 
-    original_connect = sqlite3.connect
-
     def guarded_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
         kwargs["factory"] = GuardedConnection
-        return original_connect(*args, **kwargs)
+        return connect_sqlite(*args, **kwargs)
 
-    monkeypatch.setattr("scripts.storage_migration_readiness_report.sqlite3.connect", guarded_connect)
+    monkeypatch.setattr("scripts.storage_migration_readiness_report.connect_sqlite", guarded_connect)
 
     report = build_report(sqlite_db=db_path)
 

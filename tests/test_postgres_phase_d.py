@@ -110,6 +110,18 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
     def _db(self) -> DatabaseManager:
         return DatabaseManager.get_instance()
 
+    def _db_with_scanner_users(self, *user_ids: str) -> DatabaseManager:
+        self._configure_environment(enable_phase_d=False)
+        sqlite_db = self._db()
+        for user_id in user_ids:
+            sqlite_db.create_or_update_app_user(user_id=user_id, username=user_id)
+
+        self._configure_environment(enable_phase_d=True)
+        db = self._db()
+        for user_id in user_ids:
+            db.create_or_update_app_user(user_id=user_id, username=user_id)
+        return db
+
     def test_phase_d_dual_writes_scanner_runs_candidates_and_watchlists(self) -> None:
         from src.postgres_scanner_watchlist_store import (
             PhaseDScannerCandidate,
@@ -118,8 +130,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
             PhaseDWatchlistItem,
         )
 
-        db = self._db()
-        db.create_or_update_app_user(user_id="scanner-user", username="scanner-user")
+        db = self._db_with_scanner_users("scanner-user")
         service = MarketScannerService(db, owner_id="scanner-user")
 
         saved = service.record_terminal_run(
@@ -187,8 +198,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
     def test_phase_d_updates_shadow_watchlist_metadata_when_run_operation_state_changes(self) -> None:
         from src.postgres_scanner_watchlist_store import PhaseDScannerRun, PhaseDWatchlist, PhaseDWatchlistItem
 
-        db = self._db()
-        db.create_or_update_app_user(user_id="ops-user", username="ops-user")
+        db = self._db_with_scanner_users("ops-user")
         service = MarketScannerService(db, owner_id="ops-user")
 
         saved = service.record_terminal_run(
@@ -296,9 +306,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
     def test_phase_d_preserves_owner_partitioning_and_system_watchlist_visibility_contract(self) -> None:
         from src.postgres_scanner_watchlist_store import PhaseDScannerRun, PhaseDWatchlist
 
-        db = self._db()
-        db.create_or_update_app_user(user_id="user-a", username="user-a")
-        db.create_or_update_app_user(user_id="user-b", username="user-b")
+        db = self._db_with_scanner_users("user-a", "user-b")
         service_a = MarketScannerService(db, owner_id="user-a")
         service_b = MarketScannerService(db, owner_id="user-b")
 
@@ -387,8 +395,7 @@ class PostgresPhaseDStorageTestCase(unittest.TestCase):
     def test_phase_d_factory_reset_clears_user_shadow_state_but_keeps_system_watchlists(self) -> None:
         from src.postgres_scanner_watchlist_store import PhaseDScannerRun, PhaseDWatchlist
 
-        db = self._db()
-        db.create_or_update_app_user(user_id="cleanup-user", username="cleanup-user")
+        db = self._db_with_scanner_users("cleanup-user")
         service = MarketScannerService(db, owner_id="cleanup-user")
 
         user_run = service.record_terminal_run(

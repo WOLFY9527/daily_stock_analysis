@@ -1133,6 +1133,8 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",
@@ -1201,6 +1203,8 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",
@@ -1294,6 +1298,8 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime(2026, 5, 4, 9, 30, 0)
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",
@@ -1419,6 +1425,8 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",
@@ -1520,6 +1528,8 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",
@@ -1600,6 +1610,8 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         now = datetime.now()
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market="us",
             profile="us_preopen_v1",
             universe_name="us_preopen_watchlist_v1",

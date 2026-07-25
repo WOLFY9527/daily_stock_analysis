@@ -38,6 +38,8 @@ from src.storage import (
     DatabaseManager,
     PortfolioAccount,
     PortfolioBrokerConnection,
+    PortfolioBrokerSyncCashBalance,
+    PortfolioBrokerSyncPosition,
     PortfolioBrokerSyncState,
     PortfolioTrade,
 )
@@ -1038,6 +1040,21 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         )
 
         with db.get_session() as session:
+            session.execute(
+                delete(PortfolioBrokerSyncPosition).where(
+                    PortfolioBrokerSyncPosition.broker_connection_id == connection["id"]
+                )
+            )
+            session.execute(
+                delete(PortfolioBrokerSyncCashBalance).where(
+                    PortfolioBrokerSyncCashBalance.broker_connection_id == connection["id"]
+                )
+            )
+            session.execute(
+                delete(PortfolioBrokerSyncState).where(
+                    PortfolioBrokerSyncState.broker_connection_id == connection["id"]
+                )
+            )
             session.execute(
                 delete(PortfolioBrokerConnection).where(
                     PortfolioBrokerConnection.id == connection["id"]
@@ -3221,7 +3238,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
 
         raw_failure = (
             "comparison source unavailable "
-            "token=sk-proj-portfolio-diagnostic-secret "
+            "token=unit-test-redacted-placeholder "
             "path=/Users/operator/private/portfolio.sql "
             'raw_payload={"account":"sensitive"}'
         )
@@ -3247,7 +3264,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(failure_report["comparison_decision"], "legacy_served_due_to_query_failure")
         self.assertEqual(failure_report["query_failure_detail"], "comparison_query_failed")
         self.assertEqual(failure_report["query_failure_reason_code"], "query_execution_failure")
-        self.assertNotIn("sk-proj-portfolio-diagnostic-secret", json.dumps(failure_report))
+        self.assertNotIn("unit-test-redacted-placeholder", json.dumps(failure_report))
         self.assertNotIn("/Users/operator/private/portfolio.sql", json.dumps(failure_report))
         self.assertNotIn('"account": "sensitive"', json.dumps(failure_report))
         self.assertIsNone(failure_report["pg_summary"])

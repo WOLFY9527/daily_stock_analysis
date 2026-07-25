@@ -14,6 +14,7 @@ from src.services.historical_market_data_foundation import (
     HistoricalBarQualityOutcome,
     HistoricalPersistenceResult,
 )
+from src.sqlite_foreign_keys import connect_sqlite, enforce_sqlite_foreign_keys
 
 
 SCHEMA_VERSION = "historical_market_data_foundation_v1"
@@ -21,7 +22,7 @@ SCHEMA_VERSION = "historical_market_data_foundation_v1"
 
 class HistoricalMarketDataRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
-        self.conn = conn
+        self.conn = enforce_sqlite_foreign_keys(conn)
         self.conn.row_factory = sqlite3.Row
         self.apply_schema()
 
@@ -29,7 +30,7 @@ class HistoricalMarketDataRepository:
     def sqlite(cls, path: str | Path) -> "HistoricalMarketDataRepository":
         resolved = Path(path)
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(resolved))
+        conn = connect_sqlite(str(resolved))
         return cls(conn)
 
     def apply_schema(self) -> None:

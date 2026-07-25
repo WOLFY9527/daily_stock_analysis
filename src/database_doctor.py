@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import sqlite3
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -24,6 +23,7 @@ from src.postgres_market_metadata_store import PostgresPhaseCStore
 from src.postgres_portfolio_coexistence_store import PostgresPhaseFStore
 from src.postgres_scanner_watchlist_store import PostgresPhaseDStore
 from src.postgres_store_utils import probe_engine_connection, redact_database_url
+from src.sqlite_foreign_keys import connect_sqlite
 from src.storage import DatabaseManager
 
 _ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -152,7 +152,7 @@ def _probe_sqlite_path(path: Path) -> dict[str, Any]:
             "error": "SQLite database file does not exist yet.",
         }
     try:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn = connect_sqlite(f"file:{path}?mode=ro", uri=True)
         try:
             conn.execute("select 1")
         finally:

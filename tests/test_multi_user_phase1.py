@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import tempfile
 import unittest
 from datetime import date, datetime
@@ -18,6 +17,7 @@ from src.multi_user import (
     OWNERSHIP_SCOPE_USER,
     ROLE_ADMIN,
 )
+from src.sqlite_foreign_keys import connect_sqlite
 from src.services.backtest_service import BacktestService
 from src.services.market_scanner_service import MarketScannerService
 from src.services.portfolio_service import PortfolioService
@@ -51,7 +51,7 @@ class MultiUserLegacyMigrationTestCase(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_bootstrap_owner_and_legacy_rows_are_backfilled(self) -> None:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect_sqlite(self.db_path)
         conn.execute(
             """
             CREATE TABLE analysis_history (
@@ -308,6 +308,18 @@ class MultiUserOwnershipIsolationTestCase(unittest.TestCase):
         self.assertEqual({item["id"] for item in history_b["items"]}, {run_b["id"], system_run["id"]})
         self.assertEqual(recent_watchlists["total"], 1)
         self.assertEqual(recent_watchlists["items"][0]["id"], system_run["id"])
+        with self.db.get_session() as session:
+            persisted = {
+                row.id: (row.owner_id, row.scope)
+                for row in session.execute(
+                    select(MarketScannerRun).where(
+                        MarketScannerRun.id.in_((run_a["id"], system_run["id"], run_b["id"]))
+                    )
+                ).scalars()
+            }
+        self.assertEqual(persisted[run_a["id"]], ("user-a", OWNERSHIP_SCOPE_USER))
+        self.assertEqual(persisted[run_b["id"]], ("user-b", OWNERSHIP_SCOPE_USER))
+        self.assertEqual(persisted[system_run["id"]], (None, OWNERSHIP_SCOPE_SYSTEM))
 
     def test_portfolio_defaults_to_bootstrap_owner_and_hides_other_users_accounts(self) -> None:
         bootstrap_service = PortfolioService()

@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 import tarfile
@@ -12,6 +11,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+
+from src.sqlite_foreign_keys import connect_sqlite
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,7 +70,7 @@ def test_release_runtime_fixture_assigns_explicit_super_admin_without_secret_out
     assert second.returncode == 0, second.stderr
     assert "release-admin-password" not in first.stdout + first.stderr
     assert "release-member-password" not in first.stdout + first.stderr
-    with sqlite3.connect(database_path) as connection:
+    with connect_sqlite(database_path) as connection:
         roles = connection.execute(
             "SELECT role_key FROM admin_user_roles WHERE user_id = ? ORDER BY role_key",
             ("bootstrap-admin",),

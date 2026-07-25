@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker
 
 from src.repositories.scenario_baseline_snapshot_repository import (
@@ -18,6 +18,7 @@ from src.repositories.scenario_baseline_snapshot_repository import (
     ScenarioBaselineSnapshotStorageError,
 )
 from src.services.scenario_baseline_snapshot_service import ScenarioBaselineSnapshotService
+from src.sqlite_foreign_keys import create_engine_with_sqlite_foreign_keys
 from src.storage import DatabaseManager, ScenarioBaselineSnapshotRow
 
 
@@ -467,7 +468,7 @@ def test_zero_usable_data_durable_snapshot_persists_domain_not_available_state(t
 
 def test_durable_readback_is_side_effect_free_when_snapshot_is_missing(tmp_path: Path) -> None:
     db_path = tmp_path / "passive.sqlite"
-    engine = create_engine(f"sqlite:///{db_path}", pool_pre_ping=True)
+    engine = create_engine_with_sqlite_foreign_keys(f"sqlite:///{db_path}", pool_pre_ping=True)
     session_factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     db = object.__new__(DatabaseManager)
     db._engine = engine

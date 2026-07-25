@@ -272,14 +272,19 @@ class PostgresPhaseAStorageTestCase(unittest.TestCase):
         self.assertIsNotNone(db._phase_a_store)
 
         with db.get_session() as session:
-            self.assertEqual(
-                session.query(AppUser).filter(AppUser.id == "user-phase-a").count(),
-                0,
-            )
+            anchor = session.get(AppUser, "user-phase-a")
+            self.assertIsNotNone(anchor)
+            self.assertTrue(anchor.is_reference_anchor)
+            self.assertFalse(anchor.is_active)
+            self.assertIsNone(anchor.password_hash)
+            self.assertIsNone(anchor.mfa_secret_ref)
+            self.assertIsNone(anchor.mfa_recovery_codes_hash)
+            self.assertTrue(str(anchor.username).startswith("__phase_a_fk_anchor__"))
             self.assertEqual(
                 session.query(AppUserSession).filter(AppUserSession.session_id == "session-phase-a").count(),
                 0,
             )
+        self.assertIsNone(db._sqlite_get_app_user("user-phase-a"))
 
         with db._phase_a_store.session_scope() as session:
             self.assertEqual(

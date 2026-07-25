@@ -20,6 +20,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from src.sqlite_foreign_keys import connect_sqlite
+
 
 REPORT_SCHEMA_VERSION = "wolfystock_storage_migration_readiness_v1"
 REPORT_MODE = "report_only"
@@ -110,7 +116,7 @@ def _open_sqlite_readonly(path: Path) -> sqlite3.Connection:
     if not path.exists() or not path.is_file():
         raise SystemExit("[FAIL] SQLite database file is required for inspection")
     uri = f"file:{path.resolve().as_posix()}?mode=ro"
-    conn = sqlite3.connect(uri, uri=True)
+    conn = connect_sqlite(uri, uri=True)
     conn.row_factory = sqlite3.Row
     conn.set_trace_callback(_guard_sql)
     return conn

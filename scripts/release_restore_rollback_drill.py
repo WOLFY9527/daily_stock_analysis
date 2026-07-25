@@ -14,7 +14,6 @@ import hashlib
 import json
 import os
 import re
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -28,7 +27,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from backup_restore_drill_safe_root import validate_run_identity
+from scripts.backup_restore_drill_safe_root import validate_run_identity
+from src.sqlite_foreign_keys import connect_sqlite
 
 
 SCHEMA_VERSION = "wolfystock_release_restore_rollback_drill_v1"
@@ -354,15 +354,15 @@ def _sqlite_backup(source: Path, destination: Path) -> None:
     if source.resolve() == destination.resolve():
         raise LocalDrillError("backup_source_equals_target")
 
-    with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection:
-        with sqlite3.connect(destination) as destination_connection:
+    with connect_sqlite(f"file:{source}?mode=ro", uri=True) as source_connection:
+        with connect_sqlite(destination) as destination_connection:
             source_connection.backup(destination_connection)
 
 
 def _sqlite_schema_sha256(path: Path) -> str:
     if not path.is_file():
         raise LocalDrillError("schema_target_missing")
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+    with connect_sqlite(f"file:{path}?mode=ro", uri=True) as connection:
         user_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         rows = connection.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_master "

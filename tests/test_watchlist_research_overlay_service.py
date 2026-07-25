@@ -13,6 +13,7 @@ from pathlib import Path
 from sqlalchemy import event
 
 from src.config import Config
+from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.services.watchlist_research_overlay_service import WatchlistResearchOverlayService
 from src.services.watchlist_service import WatchlistService
 from src.storage import (
@@ -119,6 +120,8 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
     ) -> int:
         now = datetime(2026, 5, 4, 9, 30, 0)
         run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
             market=market,
             profile=f"{market}_preopen_v1",
             universe_name=f"{market}_preopen_watchlist_v1",
