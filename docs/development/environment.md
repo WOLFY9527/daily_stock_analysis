@@ -114,6 +114,15 @@ or discover host `rg`. The resulting immutable snapshot records the source
 archive identity, probes the exact reviewed version, and supplies its explicit
 path to managed commands.
 
+On Windows, bootstrap also discovers one host `git.exe` through the environment
+authority, probes its exact version, hashes the executable, and records a
+path-redacted resolved-path identity in the worktree pointer, environment
+evidence, and combined fingerprint. Verification fails if Git is absent,
+invalid, changed, or inconsistent with that retained identity. Managed
+profiles add only the verified executable's directory at a deterministic PATH
+position; they do not inherit the remaining host PATH. Non-Windows profile
+projection is unchanged.
+
 The authority also provisions the declared Playwright Chromium revision,
 verifies the executable can launch, and supplies it to Playwright. Host `PATH`,
 a global browser, or a system-browser fallback is not an equivalent authority.

@@ -19,6 +19,7 @@ from scripts.environment.manager import (
     require_managed_python,
 )
 from scripts.environment.identity import ToolchainIdentity, stable_hash
+from scripts.environment.managed_tools import WindowsGitIdentity
 from scripts.environment.snapshots import SnapshotResult
 from scripts.environment.runtime import create_run_context
 from tests.scripts.test_wolfy_python_lock import write_lock_repository
@@ -85,6 +86,15 @@ def make_dependency_root(tmp_path: Path) -> Path:
 
 def fixture_toolchain() -> ToolchainIdentity:
     return ToolchainIdentity("Darwin", "arm64", "CPython", "3.11.15", "20.20.2", "10.8.2", "fixture")
+
+
+def fixture_windows_git() -> WindowsGitIdentity:
+    return WindowsGitIdentity(
+        executable=Path("unexposed-git.exe"),
+        executable_sha256="6" * 64,
+        resolved_path_sha256="7" * 64,
+        version="2.54.0.windows.1",
+    )
 
 
 def test_linux_arm64_manager_selects_normalized_runtime_projection(
@@ -246,6 +256,7 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
         run_id="run-evidence",
         network_used=False,
         verified_at="2026-07-17T00:00:00Z",
+        windows_git=fixture_windows_git(),
     )
     encoded = json.dumps(evidence, sort_keys=True)
 
@@ -261,9 +272,148 @@ def test_environment_evidence_redacts_cache_paths_and_credentials(tmp_path: Path
         "ripgrep-15.1.0-aarch64-apple-darwin.tar.gz"
     )
     assert evidence["managedTools"]["rg"]["sourceSha256"] == "5" * 64
+    assert evidence["externalTools"]["git"] == {
+        "executableSha256": "6" * 64,
+        "resolvedPathSha256": "7" * 64,
+        "version": "2.54.0.windows.1",
+    }
+    assert "Program Files" not in encoded
     assert evidence["environmentIdentity"]["bootstrapImplementationVersion"] == "wolfystock_bootstrap_v7"
     assert evidence["pythonLock"]["contentHash"] == "1" * 64
     assert evidence["pythonLock"]["hashVerification"] is True
+
+
+def test_windows_git_identity_changes_fingerprint_and_is_retained_in_pointer(
+    tmp_path: Path,
+) -> None:
+    root = make_root(tmp_path)
+    cache_root = tmp_path / "cache"
+    python = snapshot(cache_root, "python", "a" * 64, "b" * 64)
+    web = snapshot(cache_root, "web", "c" * 64, "d" * 64)
+    browser, rg = tool_snapshots(cache_root)
+    identity = SimpleNamespace(combined_input_fingerprint="8" * 64)
+    windows_git = fixture_windows_git()
+
+    without_git = combined_environment_fingerprint(
+        identity, python, web, browser, rg
+    )
+    with_git = combined_environment_fingerprint(
+        identity, python, web, browser, rg, windows_git
+    )
+    pointer_path = link_worktree_environment(
+        root,
+        cache_root,
+        python,
+        web,
+        browser,
+        rg,
+        combined_fingerprint=with_git,
+        windows_git=windows_git,
+    )
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+
+    assert with_git != without_git
+    assert pointer["externalTools"] == {"git": windows_git.evidence()}
+    assert str(windows_git.executable) not in json.dumps(pointer, sort_keys=True)
+
+
+def test_verify_rejects_unexpected_retained_external_tool_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = make_dependency_root(tmp_path)
+    cache_root = tmp_path / "cache"
+    manager = EnvironmentManager(
+        root, cache_root=cache_root, toolchain=fixture_toolchain()
+    )
+    windows_git = fixture_windows_git()
+    manager.windows_git = windows_git
+    verified_gits: list[WindowsGitIdentity] = []
+
+    def verify_git(identity: WindowsGitIdentity) -> WindowsGitIdentity:
+        verified_gits.append(identity)
+        return identity
+
+    monkeypatch.setattr(
+        "scripts.environment.manager.verify_windows_git",
+        verify_git,
+    )
+    python = snapshot(
+        cache_root,
+        "python",
+        manager.identity.python_input_fingerprint,
+        "b" * 64,
+    )
+    web = snapshot(
+        cache_root,
+        "web",
+        manager.identity.web_input_fingerprint,
+        "d" * 64,
+    )
+    browser, rg = tool_snapshots(cache_root)
+    monkeypatch.setattr(
+        manager,
+        "_browser_component",
+        lambda _web: SimpleNamespace(name="browser", input_fingerprint="e" * 64),
+    )
+    monkeypatch.setattr(
+        manager,
+        "_rg_component",
+        lambda: SimpleNamespace(name="tool-rg", input_fingerprint="1" * 64),
+    )
+    combined = combined_environment_fingerprint(
+        manager.identity, python, web, browser, rg, windows_git
+    )
+    pointer_path = link_worktree_environment(
+        root,
+        cache_root,
+        python,
+        web,
+        browser,
+        rg,
+        combined_fingerprint=combined,
+        windows_git=windows_git,
+    )
+    installed_fingerprints = {
+        python.path.resolve(): python.installed_fingerprint,
+        web.path.resolve(): web.installed_fingerprint,
+        browser.path.resolve(): browser.installed_fingerprint,
+        rg.path.resolve(): rg.installed_fingerprint,
+    }
+    monkeypatch.setattr(
+        "scripts.environment.manager.verify_cached_snapshot",
+        lambda snapshot_path, _component: {
+            "installedFingerprint": installed_fingerprints[snapshot_path.resolve()]
+        },
+    )
+    monkeypatch.setattr(
+        manager,
+        "_verified",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            windows_git=windows_git, combined_fingerprint=combined
+        ),
+    )
+    verified = manager.verify()
+    assert verified.windows_git == windows_git
+    assert verified.combined_fingerprint == combined
+    assert verified_gits == [windows_git]
+
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    pointer["externalTools"] = {
+        "git": {**windows_git.evidence(), "version": "0.0.0.windows.1"}
+    }
+    pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+    with pytest.raises(EnvironmentFailure) as raised:
+        manager.verify()
+
+    assert raised.value.code == "windows_git_identity_mismatch"
+
+    pointer_path.unlink()
+    with pytest.raises(EnvironmentFailure) as missing_pointer:
+        manager.verify()
+
+    assert missing_pointer.value.code == "worktree_pointer_missing_retained_materialization"
 
 
 @pytest.mark.parametrize(

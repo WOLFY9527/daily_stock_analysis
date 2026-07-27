@@ -639,12 +639,14 @@ class PythonComponent(LockedPythonInstaller):
             raise EnvironmentFailure("python_installed_identity_mismatch", "python_installed_identity_mismatch")
 
     def prepare_promotion(self, temporary: Path, final: Path) -> None:
-        scripts = temporary / ("Scripts" if os.name == "nt" else "bin")
         old = str(temporary).encode()
         new = str(final).encode()
         old_name = temporary.name.encode()
         new_name = final.name.encode()
-        candidates = list(scripts.iterdir()) if scripts.is_dir() else []
+        candidates: list[Path] = []
+        for scripts in (temporary / "bin", temporary / "Scripts"):
+            if scripts.is_dir():
+                candidates.extend(sorted(scripts.iterdir(), key=lambda path: path.name.casefold()))
         candidates.append(temporary / "pyvenv.cfg")
         for path in candidates:
             if not path.is_file() or path.is_symlink():

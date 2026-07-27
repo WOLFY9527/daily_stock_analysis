@@ -25,7 +25,12 @@ from .identity import (
     detect_toolchain,
     stable_hash,
 )
-from .managed_tools import ManagedRgComponent
+from .managed_tools import (
+    ManagedRgComponent,
+    WindowsGitIdentity,
+    qualify_windows_git,
+    verify_windows_git,
+)
 from .python_lock import (
     PythonLockContract,
     bootstrap_profile_for_target,
@@ -47,8 +52,13 @@ class VerifiedEnvironment:
     browser: SnapshotResult
     rg: SnapshotResult
     browser_executable: Path
+    windows_git: WindowsGitIdentity | None
     combined_fingerprint: str
     evidence: dict[str, Any]
+
+    @property
+    def git_executable(self) -> Path | None:
+        return self.windows_git.executable if self.windows_git is not None else None
 
 
 def _cache_relative(cache_root: Path, path: Path) -> str:
@@ -119,20 +129,22 @@ def combined_environment_fingerprint(
     web: SnapshotResult,
     browser: SnapshotResult,
     rg: SnapshotResult,
+    windows_git: WindowsGitIdentity | None = None,
 ) -> str:
-    return stable_hash(
-        {
-            "schemaVersion": EVIDENCE_SCHEMA,
-            "combinedInputFingerprint": identity.combined_input_fingerprint,
-            "pythonInstalledFingerprint": python.installed_fingerprint,
-            "webInstalledFingerprint": web.installed_fingerprint,
-            "browserInputFingerprint": browser.input_fingerprint,
-            "browserInstalledFingerprint": browser.installed_fingerprint,
-            "managedRgInputFingerprint": rg.input_fingerprint,
-            "managedRgInstalledFingerprint": rg.installed_fingerprint,
-            "environmentPolicyVersion": ENVIRONMENT_POLICY_VERSION,
-        }
-    )
+    payload: dict[str, Any] = {
+        "schemaVersion": EVIDENCE_SCHEMA,
+        "combinedInputFingerprint": identity.combined_input_fingerprint,
+        "pythonInstalledFingerprint": python.installed_fingerprint,
+        "webInstalledFingerprint": web.installed_fingerprint,
+        "browserInputFingerprint": browser.input_fingerprint,
+        "browserInstalledFingerprint": browser.installed_fingerprint,
+        "managedRgInputFingerprint": rg.input_fingerprint,
+        "managedRgInstalledFingerprint": rg.installed_fingerprint,
+        "environmentPolicyVersion": ENVIRONMENT_POLICY_VERSION,
+    }
+    if windows_git is not None:
+        payload["windowsGit"] = windows_git.evidence()
+    return stable_hash(payload)
 
 
 def link_worktree_environment(
@@ -144,6 +156,7 @@ def link_worktree_environment(
     rg: SnapshotResult,
     *,
     combined_fingerprint: str,
+    windows_git: WindowsGitIdentity | None = None,
 ) -> Path:
     root = root.resolve(strict=True)
     cache_root.mkdir(parents=True, exist_ok=True)
@@ -158,35 +171,35 @@ def link_worktree_environment(
         root / "apps" / "dsa-web" / "node_modules", web.path / "node_modules", cache_root, "web"
     )
     pointer = root / ".wolfy" / "environment.json"
-    _write_json_atomic(
-        pointer,
-        {
-            "schemaVersion": POINTER_SCHEMA,
-            "combinedFingerprint": combined_fingerprint,
-            "components": {
-                "python": {
-                    "inputFingerprint": python.input_fingerprint,
-                    "installedFingerprint": python.installed_fingerprint,
-                    "snapshot": _cache_relative(cache_root, python.path),
-                },
-                "web": {
-                    "inputFingerprint": web.input_fingerprint,
-                    "installedFingerprint": web.installed_fingerprint,
-                    "snapshot": _cache_relative(cache_root, web.path),
-                },
-                "browser": {
-                    "inputFingerprint": browser.input_fingerprint,
-                    "installedFingerprint": browser.installed_fingerprint,
-                    "snapshot": _cache_relative(cache_root, browser.path),
-                },
-                "rg": {
-                    "inputFingerprint": rg.input_fingerprint,
-                    "installedFingerprint": rg.installed_fingerprint,
-                    "snapshot": _cache_relative(cache_root, rg.path),
-                },
+    payload: dict[str, Any] = {
+        "schemaVersion": POINTER_SCHEMA,
+        "combinedFingerprint": combined_fingerprint,
+        "components": {
+            "python": {
+                "inputFingerprint": python.input_fingerprint,
+                "installedFingerprint": python.installed_fingerprint,
+                "snapshot": _cache_relative(cache_root, python.path),
+            },
+            "web": {
+                "inputFingerprint": web.input_fingerprint,
+                "installedFingerprint": web.installed_fingerprint,
+                "snapshot": _cache_relative(cache_root, web.path),
+            },
+            "browser": {
+                "inputFingerprint": browser.input_fingerprint,
+                "installedFingerprint": browser.installed_fingerprint,
+                "snapshot": _cache_relative(cache_root, browser.path),
+            },
+            "rg": {
+                "inputFingerprint": rg.input_fingerprint,
+                "installedFingerprint": rg.installed_fingerprint,
+                "snapshot": _cache_relative(cache_root, rg.path),
             },
         },
-    )
+    }
+    if windows_git is not None:
+        payload["externalTools"] = {"git": windows_git.evidence()}
+    _write_json_atomic(pointer, payload)
     return pointer
 
 
@@ -241,6 +254,7 @@ def build_environment_evidence(
     network_used: bool,
     verified_at: str,
     cache_root: Path | None = None,
+    windows_git: WindowsGitIdentity | None = None,
 ) -> dict[str, Any]:
     root = cache_root or python.path.parents[3]
     browser_details = {
@@ -281,7 +295,7 @@ def build_environment_evidence(
             "managed_rg_executable_missing", "managed rg executable identity is missing"
         )
     rg_details["executable"] = _cache_relative(root, rg.path / rg_relative_executable)
-    return {
+    evidence = {
         "schemaVersion": EVIDENCE_SCHEMA,
         "environmentIdentity": {
             "schemaVersion": ENVIRONMENT_SCHEMA_VERSION,
@@ -318,6 +332,9 @@ def build_environment_evidence(
             "verifiedAt": verified_at,
         },
     }
+    if windows_git is not None:
+        evidence["externalTools"] = {"git": windows_git.evidence()}
+    return evidence
 
 
 class EnvironmentManager:
@@ -354,6 +371,7 @@ class EnvironmentManager:
             profile=python_profile,
         )
         self.identity = calculate_environment_identity(self.root, self.toolchain)
+        self.windows_git = qualify_windows_git(self.toolchain)
 
     def _components(self) -> tuple[PythonComponent, WebComponent]:
         return (
@@ -405,8 +423,13 @@ class EnvironmentManager:
         network_used: bool,
         run_id: str | None = None,
     ) -> VerifiedEnvironment:
+        windows_git = (
+            verify_windows_git(self.windows_git)
+            if self.windows_git is not None
+            else None
+        )
         combined = combined_environment_fingerprint(
-            self.identity, python, web, browser, rg
+            self.identity, python, web, browser, rg, windows_git
         )
         evidence = build_environment_evidence(
             combined_fingerprint=combined,
@@ -423,6 +446,7 @@ class EnvironmentManager:
             network_used=network_used,
             verified_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             cache_root=self.cache_root,
+            windows_git=windows_git,
         )
         return VerifiedEnvironment(
             self.identity,
@@ -431,6 +455,7 @@ class EnvironmentManager:
             browser,
             rg,
             browser_executable_path(browser.path),
+            windows_git,
             combined,
             evidence,
         )
@@ -464,6 +489,7 @@ class EnvironmentManager:
             browser,
             rg,
             combined_fingerprint=verified.combined_fingerprint,
+            windows_git=verified.windows_git,
         )
         return self.verify(
             network_used=verified.evidence["operational"]["bootstrapNetworkUsed"],
@@ -474,10 +500,36 @@ class EnvironmentManager:
         pointer_path = self.root / ".wolfy" / "environment.json"
         try:
             pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            retained_materialization = (
+                self.root / ".venv",
+                self.root / "apps" / "dsa-web" / "node_modules",
+            )
+            if any(path.exists() or path.is_symlink() for path in retained_materialization):
+                raise EnvironmentFailure(
+                    "worktree_pointer_missing_retained_materialization",
+                    "worktree environment pointer is missing while dependency materialization is retained",
+                ) from exc
+            raise EnvironmentFailure("worktree_pointer_missing", "worktree environment pointer is missing") from exc
         except (OSError, json.JSONDecodeError) as exc:
-            raise EnvironmentFailure("worktree_pointer_invalid", "worktree environment pointer is missing or invalid") from exc
+            raise EnvironmentFailure("worktree_pointer_invalid", "worktree environment pointer is invalid") from exc
         if pointer.get("schemaVersion") != POINTER_SCHEMA or not isinstance(pointer.get("components"), dict):
             raise EnvironmentFailure("worktree_pointer_invalid", "worktree environment pointer is invalid")
+        expected_external_tools = (
+            {"git": verify_windows_git(self.windows_git).evidence()}
+            if self.windows_git is not None
+            else None
+        )
+        if pointer.get("externalTools") != expected_external_tools:
+            if self.windows_git is not None:
+                raise EnvironmentFailure(
+                    "windows_git_identity_mismatch",
+                    "retained Windows Git identity does not match",
+                )
+            raise EnvironmentFailure(
+                "worktree_pointer_mismatch",
+                "external tool pointer identity does not match",
+            )
         python_component, web_component = self._components()
         results: dict[str, SnapshotResult] = {}
         for name, destination, component in (

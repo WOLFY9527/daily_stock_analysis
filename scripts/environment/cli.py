@@ -202,6 +202,7 @@ def _execute(root: Path, manager: EnvironmentManager, args: argparse.Namespace) 
             managed_python=managed_python,
             node_bin=Path(node).parent,
             managed_rg_dir=verified.rg.path,
+            verified_git_executable=verified.git_executable,
             browser_path=verified.browser.path,
             browser_executable=verified.browser_executable,
             command=command,
@@ -283,17 +284,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             _emit_development_result(payload, root=root, as_json=args.json)
             return 0
         baseline = _validate_baseline(args) if args.command == "qualify-env" else None
+        manager: EnvironmentManager | None = None
         if args.command == "dev":
-            try:
-                require_managed_python(root)
-            except EnvironmentFailure:
-                EnvironmentManager(root).ensure(
-                    offline=False, run_id="dev-bootstrap-" + secrets.token_hex(8)
-                )
+            from .services import _verify_development_environment
+
+            manager = EnvironmentManager(root)
+            _verify_development_environment(
+                manager, run_id="dev-bootstrap-" + secrets.token_hex(8)
+            )
         if args.command != "bootstrap":
             _managed_reexec(root, raw)
             require_managed_python(root)
-        manager = EnvironmentManager(root)
+        if manager is None:
+            manager = EnvironmentManager(root)
         if args.command == "bootstrap":
             verified = manager.ensure(offline=args.offline, run_id="bootstrap-" + secrets.token_hex(8))
             _emit({"status": "ok", "environmentEvidence": verified.evidence})

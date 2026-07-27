@@ -193,6 +193,7 @@ def project_test_environment(
     managed_python: Path,
     node_bin: Path,
     managed_rg_dir: Path,
+    verified_git_executable: Path | None,
     browser_path: Path,
     browser_executable: Path,
     command: list[str],
@@ -257,6 +258,11 @@ def project_test_environment(
                     str(managed_python.parent),
                     str(node_bin),
                     str(managed_rg_dir),
+                    *(
+                        (str(verified_git_executable.parent),)
+                        if verified_git_executable is not None
+                        else ()
+                    ),
                     "/usr/bin",
                     "/bin",
                 )
@@ -306,6 +312,7 @@ def project_development_environment(
     repository_root: Path,
     managed_python: Path,
     node_bin: Path,
+    verified_git_executable: Path | None,
 ) -> dict[str, str]:
     """Project local development onto managed tools and run-scoped mutable state."""
 
@@ -332,6 +339,11 @@ def project_development_environment(
                 (
                     str(managed_python.parent),
                     str(node_bin),
+                    *(
+                        (str(verified_git_executable.parent),)
+                        if verified_git_executable is not None
+                        else ()
+                    ),
                     "/usr/bin",
                     "/bin",
                 )

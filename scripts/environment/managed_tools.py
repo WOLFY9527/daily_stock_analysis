@@ -23,6 +23,7 @@ MANAGED_RG_RELEASE_ROOT = (
 )
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 Downloader = Callable[[str, Path], None]
+ExecutableFinder = Callable[[str], str | None]
 
 
 def _run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -47,6 +48,110 @@ def _platform_identity(toolchain: ToolchainIdentity) -> str:
         architecture, architecture
     )
     return f"{toolchain.os_name.lower()}-{architecture}"
+
+
+@dataclass(frozen=True)
+class WindowsGitIdentity:
+    executable: Path
+    executable_sha256: str
+    resolved_path_sha256: str
+    version: str
+
+    def evidence(self) -> dict[str, str]:
+        return {
+            "executableSha256": self.executable_sha256,
+            "resolvedPathSha256": self.resolved_path_sha256,
+            "version": self.version,
+        }
+
+
+def _inspect_windows_git(
+    executable: Path,
+    *,
+    command_runner: CommandRunner,
+) -> WindowsGitIdentity:
+    try:
+        resolved = executable.resolve(strict=True)
+    except OSError as exc:
+        raise EnvironmentFailure(
+            "windows_git_invalid", "resolved Windows Git executable is unavailable"
+        ) from exc
+    if (
+        not resolved.is_file()
+        or resolved.is_symlink()
+        or resolved.name.casefold() != "git.exe"
+    ):
+        raise EnvironmentFailure(
+            "windows_git_invalid", "resolved Windows Git executable is invalid"
+        )
+    environment = {
+        key: os.environ[key]
+        for key in ("COMSPEC", "LANG", "LC_ALL", "PATHEXT", "SYSTEMROOT")
+        if os.environ.get(key)
+    }
+    environment["PATH"] = str(resolved.parent)
+    try:
+        result = command_runner(
+            [str(resolved), "--version"],
+            env=environment,
+            timeout=10,
+        )
+        executable_sha256 = file_hash(resolved)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise EnvironmentFailure(
+            "windows_git_probe_failed", "resolved Windows Git identity probe failed"
+        ) from exc
+    match = re.fullmatch(
+        r"git version ([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9A-Za-z]+)*)",
+        result.stdout.strip(),
+    )
+    if result.returncode != 0 or match is None:
+        raise EnvironmentFailure(
+            "windows_git_probe_failed", "resolved Windows Git identity probe failed"
+        )
+    normalized_path = str(resolved).replace("\\", "/").casefold()
+    return WindowsGitIdentity(
+        executable=resolved,
+        executable_sha256=executable_sha256,
+        resolved_path_sha256=stable_hash(
+            {"windowsGitExecutable": normalized_path}
+        ),
+        version=match.group(1),
+    )
+
+
+def qualify_windows_git(
+    toolchain: ToolchainIdentity,
+    *,
+    executable_finder: ExecutableFinder = shutil.which,
+    command_runner: CommandRunner = _run,
+) -> WindowsGitIdentity | None:
+    if toolchain.os_name.casefold() != "windows":
+        return None
+    discovered = executable_finder("git.exe")
+    if not discovered:
+        raise EnvironmentFailure(
+            "windows_git_missing",
+            "Git is required for repository-managed Windows profiles",
+        )
+    return _inspect_windows_git(Path(discovered), command_runner=command_runner)
+
+
+def verify_windows_git(
+    identity: WindowsGitIdentity,
+    *,
+    command_runner: CommandRunner = _run,
+) -> WindowsGitIdentity:
+    current = _inspect_windows_git(
+        identity.executable,
+        command_runner=command_runner,
+    )
+    if current != identity:
+        raise EnvironmentFailure(
+            "windows_git_identity_mismatch",
+            "resolved Windows Git identity does not match retained environment evidence",
+        )
+    return current
 
 
 @dataclass(frozen=True)

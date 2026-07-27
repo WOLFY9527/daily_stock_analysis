@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +19,7 @@ from scripts.environment.runtime import (
 
 MANAGED_PATHS = {
     "managed_rg_dir": Path("/managed/tools/rg"),
+    "verified_git_executable": Path("/verified/tools/git/git.exe"),
     "browser_path": Path("/managed/browsers/chromium-1208"),
     "browser_executable": Path("/managed/browsers/chromium-1208/chrome"),
 }
@@ -62,7 +66,9 @@ def test_test_projection_strips_credentials_dsns_admin_flags_and_startup_modifie
     assert projected["DATABASE_PATH"] == str(context.database_path)
     assert projected["ENV_FILE"] == str(context.root / "empty.env")
     assert not Path(projected["ENV_FILE"]).exists()
-    assert projected["PATH"].split(os.pathsep)[0] == "/managed/.venv/bin"
+    assert projected["PATH"].split(os.pathsep)[0] == str(
+        Path("/managed/.venv/bin")
+    )
 
 
 def test_app_env_is_preserved_only_when_explicitly_present(tmp_path: Path) -> None:
@@ -107,6 +113,108 @@ def test_windows_process_runtime_is_preserved_without_host_path(
     assert projected["PROCESSOR_ARCHITEW6432"] == "AMD64"
     assert projected["SYSTEMROOT"] == source["SYSTEMROOT"]
     assert source["PATH"] not in projected["PATH"]
+    assert str(MANAGED_PATHS["verified_git_executable"].parent) in projected[
+        "PATH"
+    ].split(os.pathsep)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows executable resolution")
+def test_windows_projected_profile_executes_verified_git_and_r01_identity(
+    tmp_path: Path,
+) -> None:
+    discovered = shutil.which("git.exe")
+    assert discovered is not None
+    git_executable = Path(discovered).resolve(strict=True)
+    repository_root = Path(__file__).resolve().parents[2]
+    expected_revision = subprocess.run(
+        [str(git_executable), "rev-parse", "HEAD"],
+        cwd=repository_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert expected_revision.returncode == 0, expected_revision.stderr
+    context = create_run_context(tmp_path, run_id="run-windows-verified-git")
+    source = {
+        key: os.environ[key]
+        for key in ("COMSPEC", "PATHEXT", "SYSTEMROOT")
+        if os.environ.get(key)
+    }
+    source["PATH"] = r"C:\unreviewed\host"
+    projected = project_test_environment(
+        source,
+        context,
+        managed_python=Path(sys.executable),
+        node_bin=Path(sys.executable).parent,
+        managed_rg_dir=tmp_path / "managed-rg",
+        verified_git_executable=git_executable,
+        browser_path=tmp_path / "managed-browser",
+        browser_executable=tmp_path / "managed-browser" / "chrome.exe",
+        command=["python", "-c", "pass"],
+    )
+
+    where_result = subprocess.run(
+        ["where.exe", "git"],
+        cwd=repository_root,
+        env=projected,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert where_result.returncode == 0, where_result.stderr
+    assert [
+        Path(line).resolve(strict=True)
+        for line in where_result.stdout.splitlines()
+        if line.strip()
+    ] == [git_executable]
+
+    version_result = subprocess.run(
+        ["git", "--version"],
+        cwd=repository_root,
+        env=projected,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert version_result.returncode == 0, version_result.stderr
+    assert version_result.stdout.startswith("git version ")
+
+    subprocess_result = subprocess.run(
+        [
+            str(Path(sys.executable)),
+            "-c",
+            "import subprocess, sys; result = subprocess.run(['git', 'rev-parse', 'HEAD'], text=True, capture_output=True); print(result.stdout.strip()); raise SystemExit(result.returncode)",
+        ],
+        cwd=repository_root,
+        env=projected,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert subprocess_result.returncode == 0, subprocess_result.stderr
+    assert subprocess_result.stdout.strip() == expected_revision.stdout.strip()
+
+    r01_probe = (
+        "from pathlib import Path\n"
+        "import sys\n"
+        "sys.path.insert(0, str(Path.cwd() / 'scripts'))\n"
+        "from release_restore_rollback_drill import _git_revision\n"
+        "print(_git_revision(Path.cwd(), 'HEAD'))\n"
+    )
+    r01_identity_result = subprocess.run(
+        [
+            str(Path(sys.executable)),
+            "-c",
+            r01_probe,
+        ],
+        cwd=repository_root,
+        env=projected,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert r01_identity_result.returncode == 0, r01_identity_result.stderr
+    assert r01_identity_result.stdout.strip() == expected_revision.stdout.strip()
 
 
 def test_release_projection_preserves_only_non_secret_identity_controls(tmp_path: Path) -> None:
@@ -189,16 +297,19 @@ def test_profile_defaults_are_deterministic_without_freezing_product_settings(tm
     assert "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED" not in projected
     assert projected["WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS"] == "true"
     assert projected["PATH"].split(os.pathsep) == [
-        "/managed/.venv/bin",
-        "/managed/node/bin",
-        "/managed/tools/rg",
+        str(Path("/managed/.venv/bin")),
+        str(Path("/managed/node/bin")),
+        str(Path("/managed/tools/rg")),
+        str(Path("/verified/tools/git")),
         "/usr/bin",
         "/bin",
     ]
     assert "/unreviewed/bin" not in projected["PATH"]
-    assert projected["PLAYWRIGHT_BROWSERS_PATH"] == "/managed/browsers/chromium-1208"
+    assert projected["PLAYWRIGHT_BROWSERS_PATH"] == str(
+        Path("/managed/browsers/chromium-1208")
+    )
     assert projected["WOLFYSTOCK_MANAGED_CHROMIUM_EXECUTABLE"] == (
-        "/managed/browsers/chromium-1208/chrome"
+        str(Path("/managed/browsers/chromium-1208/chrome"))
     )
 
 

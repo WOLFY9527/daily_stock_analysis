@@ -79,7 +79,7 @@ def test_cli_help_exposes_single_canonical_command_surface(monkeypatch, capsys) 
         "WolfyStock is ready\n\n"
         "Frontend: http://127.0.0.1:5173\n"
         "Backend:  http://127.0.0.1:8000\n\n"
-        "Stop: /repo/wolfy dev --stop"
+        f"Stop: {Path('/repo/wolfy')} dev --stop"
     )
     assert _format_development_result(
         {"status": "already_running", "frontendUrl": "http://127.0.0.1:5173", "backendUrl": "http://127.0.0.1:8000"},
@@ -92,7 +92,11 @@ def test_cli_help_exposes_single_canonical_command_surface(monkeypatch, capsys) 
     monkeypatch.setattr(environment_cli, "_root", lambda: ROOT)
     monkeypatch.setattr(environment_cli, "require_managed_python", lambda _root: None)
     monkeypatch.setattr(environment_cli, "_managed_reexec", lambda _root, _argv: None)
-    monkeypatch.setattr(environment_cli, "EnvironmentManager", lambda _root: SimpleNamespace())
+    monkeypatch.setattr(
+        environment_cli,
+        "EnvironmentManager",
+        lambda _root: SimpleNamespace(verify=lambda *, run_id=None: object()),
+    )
 
     def transform_failure(_root, _manager, *, isolated: bool):
         assert isolated is False
@@ -103,6 +107,118 @@ def test_cli_help_exposes_single_canonical_command_surface(monkeypatch, capsys) 
     output = capsys.readouterr()
     assert "WolfyStock could not start: frontend entrypoint transform failed" in output.err
     assert "WolfyStock is ready" not in output.out + output.err
+
+
+def test_dev_preflight_rejects_retained_windows_git_identity_without_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = tmp_path / "repo"
+    ensure_calls: list[tuple[bool, str | None]] = []
+    reexec_calls: list[list[str]] = []
+
+    class RetainedMismatchManager:
+        def verify(self, *, run_id=None):
+            raise EnvironmentFailure(
+                "windows_git_identity_mismatch",
+                "retained Windows Git identity does not match",
+            )
+
+        def ensure(self, *, offline: bool, run_id=None):
+            ensure_calls.append((offline, run_id))
+            raise AssertionError("retained Git mismatch must not be repaired")
+
+    def wrong_interpreter(_root: Path) -> None:
+        raise EnvironmentFailure("wrong_managed_interpreter", "wrong_managed_interpreter")
+
+    monkeypatch.setattr(environment_cli, "_root", lambda: root)
+    monkeypatch.setattr(environment_cli, "EnvironmentManager", lambda _root: RetainedMismatchManager())
+    monkeypatch.setattr(environment_cli, "require_managed_python", wrong_interpreter)
+    monkeypatch.setattr(
+        environment_cli,
+        "_managed_reexec",
+        lambda _root, argv: reexec_calls.append(list(argv)),
+    )
+    monkeypatch.setattr(
+        "scripts.environment.services.run_development_services",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("services must not start")),
+    )
+
+    assert environment_cli.main(["dev", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().err)
+    assert payload["reasonCode"] == "windows_git_identity_mismatch"
+    assert ensure_calls == []
+    assert reexec_calls == []
+
+
+def test_dev_preflight_creates_missing_environment_and_preserves_valid_retained_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "repo"
+    selected: dict[str, object] = {}
+    reexec_calls: list[list[str]] = []
+    service_managers: list[object] = []
+
+    class MissingManager:
+        def __init__(self) -> None:
+            self.ensure_calls: list[tuple[bool, str | None]] = []
+
+        def verify(self, *, run_id=None):
+            raise EnvironmentFailure("worktree_pointer_missing", "worktree environment pointer is missing")
+
+        def ensure(self, *, offline: bool, run_id=None):
+            self.ensure_calls.append((offline, run_id))
+            return object()
+
+    class ValidManager:
+        def __init__(self) -> None:
+            self.verify_calls = 0
+
+        def verify(self, *, run_id=None):
+            self.verify_calls += 1
+            return object()
+
+        def ensure(self, *, offline: bool, run_id=None):
+            raise AssertionError("valid retained environment must not be repaired")
+
+    missing = MissingManager()
+    valid = ValidManager()
+    selected["manager"] = missing
+
+    monkeypatch.setattr(environment_cli, "_root", lambda: root)
+    monkeypatch.setattr(
+        environment_cli,
+        "EnvironmentManager",
+        lambda _root: selected["manager"],
+    )
+    monkeypatch.setattr(environment_cli, "require_managed_python", lambda _root: None)
+    monkeypatch.setattr(
+        environment_cli,
+        "_managed_reexec",
+        lambda _root, argv: reexec_calls.append(list(argv)),
+    )
+    monkeypatch.setattr(environment_cli.secrets, "token_hex", lambda _count: "a" * 16)
+    monkeypatch.setattr(
+        "scripts.environment.services.run_development_services",
+        lambda _root, manager, *, isolated: service_managers.append(manager)
+        or {
+            "status": "ready",
+            "frontendUrl": "http://127.0.0.1:5173",
+            "backendUrl": "http://127.0.0.1:8000",
+        },
+    )
+
+    assert environment_cli.main(["dev", "--json"]) == 0
+    assert missing.ensure_calls == [(False, "dev-bootstrap-" + "a" * 16)]
+    assert service_managers == [missing]
+
+    selected["manager"] = valid
+    assert environment_cli.main(["dev", "--json"]) == 0
+    assert valid.verify_calls == 1
+    assert service_managers == [missing, valid]
+    assert reexec_calls == [["dev", "--json"], ["dev", "--json"]]
 
 
 def test_lock_command_has_one_bounded_python_check_and_update_surface() -> None:
@@ -294,6 +410,7 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
                 browser=SimpleNamespace(path=Path("/managed/browsers/browser-snapshot")),
                 browser_executable=Path("/managed/browsers/browser-snapshot/chrome"),
                 rg=SimpleNamespace(path=Path("/managed/tools/rg-snapshot")),
+                git_executable=Path("/verified/tools/git/git.exe"),
                 evidence={
                     "schemaVersion": "wolfystock_environment_evidence_v1",
                     "environmentFingerprint": "e" * 64,
@@ -338,3 +455,6 @@ def test_failed_exec_retains_run_scoped_environment_evidence(
     assert "must-not-be-recorded" not in evidence_path.read_text(encoding="utf-8")
     assert "private-value" not in evidence_path.read_text(encoding="utf-8")
     assert "ALPACA_API_KEY" not in observed["environment"]
+    assert str(Path("/verified/tools/git")) in observed["environment"][
+        "PATH"
+    ].split(os.pathsep)

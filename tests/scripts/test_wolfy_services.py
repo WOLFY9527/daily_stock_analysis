@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import socket
 import subprocess
 import urllib.error
@@ -74,6 +76,7 @@ def _service_fixture(tmp_path: Path) -> tuple[Path, SimpleNamespace]:
         rg=SimpleNamespace(path=tmp_path / "managed-rg"),
         browser=SimpleNamespace(path=tmp_path / "managed-browser"),
         browser_executable=tmp_path / "managed-browser" / "chrome",
+        git_executable=tmp_path / "verified-git" / "git.exe",
     )
 
 
@@ -197,11 +200,14 @@ def test_partial_service_startup_rolls_back_started_sibling(tmp_path: Path, monk
         active_runtime.setattr("scripts.environment.services._running_local_payload", lambda _cache_root: running)
         assert run_development_services(tmp_path, SimpleNamespace(cache_root=cache_root)) == running
 
-    def killpg(pid: int, sig: int) -> None:
+    def stop_process(pid: int, sig: int) -> None:
         killed.append((pid, sig))
         commands.pop(pid, None)
 
-    monkeypatch.setattr("scripts.environment.services.os.killpg", killpg)
+    monkeypatch.setattr(
+        "scripts.environment.services.os.killpg", stop_process, raising=False
+    )
+    monkeypatch.setattr("scripts.environment.services.os.kill", stop_process)
     stopped = stop_development_services(cache_root)
 
     assert stopped["status"] == "stopped"
@@ -258,7 +264,7 @@ def test_partial_service_startup_rolls_back_started_sibling(tmp_path: Path, monk
     for code, detail in (
         ("worktree_pointer_mismatch", "web pointer input fingerprint does not match"),
         ("worktree_pointer_mismatch", "python pointer input fingerprint does not match"),
-        ("worktree_pointer_invalid", "worktree environment pointer is missing or invalid"),
+        ("worktree_pointer_missing", "worktree environment pointer is missing"),
         ("worktree_dependency_link_broken", "web dependency link is broken"),
         ("worktree_dependency_link_broken", "python dependency link is broken"),
         ("worktree_pointer_mismatch", "Node toolchain identity changed"),
@@ -289,6 +295,31 @@ def test_partial_service_startup_rolls_back_started_sibling(tmp_path: Path, monk
     with pytest.raises(EnvironmentFailure) as immutable_snapshot_failure:
         _verify_development_environment(ImmutableSnapshotManager(), run_id="dev-projection-fixture")
     assert immutable_snapshot_failure.value.code == "snapshot_hash_mismatch"
+
+    for code, detail in (
+        ("worktree_pointer_invalid", "worktree environment pointer is invalid"),
+        ("windows_git_identity_mismatch", "retained Windows Git identity does not match"),
+        (
+            "worktree_pointer_missing_retained_materialization",
+            "worktree environment pointer is missing while dependency materialization is retained",
+        ),
+    ):
+        class RetainedEnvironmentManager:
+            def __init__(self) -> None:
+                self.ensure_calls: list[tuple[bool, str | None]] = []
+
+            def verify(self, *, run_id=None):
+                raise EnvironmentFailure(code, detail)
+
+            def ensure(self, *, offline: bool, run_id=None):
+                self.ensure_calls.append((offline, run_id))
+                raise AssertionError("retained environment failure must remain fail closed")
+
+        retained_manager = RetainedEnvironmentManager()
+        with pytest.raises(EnvironmentFailure) as retained_failure:
+            _verify_development_environment(retained_manager, run_id="dev-projection-fixture")
+        assert retained_failure.value.code == code
+        assert retained_manager.ensure_calls == []
 
     root, verified = _service_fixture(tmp_path)
     frontend_socket = FakeSocket(401)
@@ -343,7 +374,9 @@ def test_partial_service_startup_rolls_back_started_sibling(tmp_path: Path, monk
     assert frontend_options["cwd"] == web_root
     assert frontend_command[1] == str(managed_vite.resolve())
     assert frontend_command[2] == str(web_root)
-    assert frontend_command[frontend_command.index("--config") + 1].endswith("/services/vite.wolfy.config.ts")
+    assert Path(
+        frontend_command[frontend_command.index("--config") + 1]
+    ).as_posix().endswith("/services/vite.wolfy.config.ts")
     assert any(url.endswith("/src/main.tsx") for url in readiness_urls)
 
     transform_error = urllib.error.HTTPError(
@@ -421,8 +454,8 @@ def test_generated_vite_config_is_run_scoped_and_has_no_top_level_await(tmp_path
     assert "dev-fixture" in content
     assert "41001" in content
     assert "41002" in content
-    assert str(context.frontend_dir / "vite-cache") in content
-    assert str(context.frontend_dir / "build") in content
+    assert json.dumps(str(context.frontend_dir / "vite-cache")) in content
+    assert json.dumps(str(context.frontend_dir / "build")) in content
     assert "node_modules/.vite" not in content
     assert not str(context.frontend_dir).startswith(str(root / "apps" / "dsa-web" / "node_modules"))
 
@@ -439,6 +472,7 @@ def test_generated_vite_config_is_run_scoped_and_has_no_top_level_await(tmp_path
         repository_root=root,
         managed_python=Path("/managed/bin/python"),
         node_bin=Path("/managed/node/bin"),
+        verified_git_executable=Path("/verified/tools/git/git.exe"),
     )
     assert projected["ENV_FILE"] == str(root / ".env")
     assert projected["HTTP_PROXY"] == "http://proxy.example.test:8080"
@@ -451,6 +485,9 @@ def test_generated_vite_config_is_run_scoped_and_has_no_top_level_await(tmp_path
     assert projected["TMPDIR"] == str(run_context.temp_dir)
     assert projected["WOLFYSTOCK_FRONTEND_OUTPUT_DIR"] == str(run_context.frontend_dir)
     assert projected["WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS"] == "true"
+    assert str(Path("/verified/tools/git")) in projected["PATH"].split(
+        os.pathsep
+    )
 
     without_proxy = project_development_environment(
         {},
@@ -458,6 +495,7 @@ def test_generated_vite_config_is_run_scoped_and_has_no_top_level_await(tmp_path
         repository_root=root,
         managed_python=Path("/managed/bin/python"),
         node_bin=Path("/managed/node/bin"),
+        verified_git_executable=Path("/verified/tools/git/git.exe"),
     )
     assert not ({"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"} & without_proxy.keys())
 

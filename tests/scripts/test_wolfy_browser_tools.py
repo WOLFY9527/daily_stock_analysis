@@ -20,6 +20,8 @@ from scripts.environment.managed_tools import (
     ManagedRgComponent,
     ManagedRgContract,
     load_managed_rg_contract,
+    qualify_windows_git,
+    verify_windows_git,
 )
 from scripts.environment.runtime import cleanup_run, create_run_context
 from scripts.environment.snapshots import ensure_snapshot, sweep_interrupted_builds
@@ -417,3 +419,86 @@ def test_rg_is_copied_to_managed_snapshot_and_verified_by_content_identity(
     with pytest.raises(EnvironmentFailure) as invalid:
         invalid_component.build(tmp_path / "invalid-destination", offline=True)
     assert invalid.value.code == "managed_rg_source_hash_mismatch"
+
+
+def test_windows_git_is_discovered_probed_and_bound_without_exposing_its_path(
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "Git" / "cmd" / "git.exe"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"reviewed-host-git")
+    commands: list[list[str]] = []
+
+    def runner(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return completed(command, "git version 2.54.0.windows.1\n")
+
+    identity = qualify_windows_git(
+        WINDOWS_AMD64_TOOLCHAIN,
+        executable_finder=lambda name: str(executable) if name == "git.exe" else None,
+        command_runner=runner,
+    )
+
+    assert identity is not None
+    assert identity.executable == executable.resolve(strict=True)
+    assert commands == [[str(identity.executable), "--version"]]
+    assert identity.evidence() == {
+        "executableSha256": hashlib.sha256(b"reviewed-host-git").hexdigest(),
+        "resolvedPathSha256": identity.resolved_path_sha256,
+        "version": "2.54.0.windows.1",
+    }
+    assert str(tmp_path) not in json.dumps(identity.evidence(), sort_keys=True)
+    assert (
+        verify_windows_git(identity, command_runner=runner).evidence()
+        == identity.evidence()
+    )
+
+
+def test_windows_git_qualification_fails_closed_for_missing_invalid_or_changed_tool(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(EnvironmentFailure) as missing:
+        qualify_windows_git(
+            WINDOWS_AMD64_TOOLCHAIN,
+            executable_finder=lambda _name: None,
+        )
+    assert missing.value.code == "windows_git_missing"
+
+    executable = tmp_path / "git.exe"
+    executable.write_bytes(b"git-one")
+    with pytest.raises(EnvironmentFailure) as invalid:
+        qualify_windows_git(
+            WINDOWS_AMD64_TOOLCHAIN,
+            executable_finder=lambda name: str(executable) if name == "git.exe" else None,
+            command_runner=lambda command, **_kwargs: completed(
+                command, "not git\n"
+            ),
+        )
+    assert invalid.value.code == "windows_git_probe_failed"
+
+    identity = qualify_windows_git(
+        WINDOWS_AMD64_TOOLCHAIN,
+        executable_finder=lambda name: str(executable) if name == "git.exe" else None,
+        command_runner=lambda command, **_kwargs: completed(
+            command, "git version 2.54.0.windows.1\n"
+        ),
+    )
+    assert identity is not None
+    executable.write_bytes(b"git-two")
+    with pytest.raises(EnvironmentFailure) as changed:
+        verify_windows_git(
+            identity,
+            command_runner=lambda command, **_kwargs: completed(
+                command, "git version 2.54.0.windows.1\n"
+            ),
+        )
+    assert changed.value.code == "windows_git_identity_mismatch"
+
+
+def test_non_windows_git_qualification_does_not_inspect_host_path() -> None:
+    def reject_lookup(_name: str) -> str | None:
+        raise AssertionError("non-Windows qualification must not inspect host Git")
+
+    assert qualify_windows_git(TOOLCHAIN, executable_finder=reject_lookup) is None

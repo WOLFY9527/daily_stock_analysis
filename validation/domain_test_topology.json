@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7986,
-      "sha256": "f58e4c5e1e9aa83d816d7bdf6de62276d6dda5a932df6ea3098d1212a2df3079"
+      "count": 7994,
+      "sha256": "8924c0da63d7e9bafb84d209def075b2b73e82320591e2752c07e46f874107d2"
     },
     "tests": [
       {
@@ -7529,6 +7529,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_non_windows_git_qualification_does_not_inspect_host_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_browser_tools.py::test_online_browser_install_uses_reviewed_playwright_cli_and_launches_exact_revision",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -7539,7 +7544,27 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_windows_git_is_discovered_probed_and_bound_without_exposing_its_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_windows_git_qualification_fails_closed_for_missing_invalid_or_changed_tool",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_cli.py::test_cli_help_exposes_single_canonical_command_surface",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_dev_preflight_creates_missing_environment_and_preserves_valid_retained_environment",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_dev_preflight_rejects_retained_windows_git_identity_without_repair",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7835,6 +7860,16 @@
       },
       {
         "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[web-snapshot-$CACHE/snapshots/web/wrong/snapshot]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_unexpected_retained_external_tool_identity",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_manager.py::test_windows_git_identity_changes_fingerprint_and_is_retained_in_pointer",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -8165,6 +8200,11 @@
       },
       {
         "id": "tests/scripts/test_wolfy_runtime.py::test_windows_process_runtime_is_preserved_without_host_path",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_runtime.py::test_windows_projected_profile_executes_verified_git_and_r01_identity",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

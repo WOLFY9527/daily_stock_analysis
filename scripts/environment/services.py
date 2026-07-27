@@ -32,7 +32,7 @@ DEFAULT_BACKEND_PORT = 8000
 _RUN_ID = re.compile(r"dev-[a-z0-9-]{1,64}")
 _RECOVERABLE_PROJECTION_FAILURE_CODES = frozenset(
     {
-        "worktree_pointer_invalid",
+        "worktree_pointer_missing",
         "worktree_pointer_mismatch",
         "worktree_dependency_link_broken",
     }
@@ -426,6 +426,7 @@ def run_development_services(
             managed_python=managed_python_path(root),
             node_bin=Path(node).parent,
             managed_rg_dir=verified.rg.path,
+            verified_git_executable=verified.git_executable,
             browser_path=verified.browser.path,
             browser_executable=verified.browser_executable,
             command=["dev"],
@@ -437,6 +438,7 @@ def run_development_services(
             repository_root=root,
             managed_python=managed_python_path(root),
             node_bin=Path(node).parent,
+            verified_git_executable=verified.git_executable,
         )
     environment["WOLFYSTOCK_ENV_FINGERPRINT"] = verified.combined_fingerprint
     environment["WOLFYSTOCK_ENV_CACHE"] = str(manager.cache_root)
@@ -553,6 +555,8 @@ def run_development_services(
         if frontend_socket is not None:
             frontend_socket.close()
         group.rollback()
+        backend_handle.close()
+        frontend_handle.close()
         if not isolated:
             _remove_local_pointer(manager.cache_root, run_id)
         cleanup_run(context, success=False)
