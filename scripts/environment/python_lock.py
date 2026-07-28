@@ -705,6 +705,50 @@ def _default_resolver_runner(root: Path) -> ResolverRunner:
     return run
 
 
+def resolver_runner_for_executable(root: Path, executable: Path) -> ResolverRunner:
+    root = root.resolve(strict=True)
+    try:
+        reviewed_executable = executable.resolve(strict=True)
+    except OSError as exc:
+        raise EnvironmentFailure(
+            "python_lock_resolver_unavailable", "reviewed Python resolver is unavailable"
+        ) from exc
+    if not reviewed_executable.is_file():
+        raise EnvironmentFailure(
+            "python_lock_resolver_unavailable", "reviewed Python resolver is unavailable"
+        )
+
+    def run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        if not command or command[0] != RESOLVER_IMPLEMENTATION:
+            raise EnvironmentFailure(
+                "python_lock_resolver_command_invalid", "reviewed Python resolver command is invalid"
+            )
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key in {"HOME", "LANG", "LC_ALL", "SSL_CERT_FILE", "SYSTEMROOT", "SystemRoot"}
+        }
+        environment["PATH"] = str(reviewed_executable.parent)
+        try:
+            return subprocess.run(
+                [str(reviewed_executable), *command[1:]],
+                cwd=root,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                check=False,
+                timeout=900,
+                env=environment,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise EnvironmentFailure(
+                "python_lock_resolver_unavailable", "reviewed Python resolver is unavailable"
+            ) from exc
+
+    return run
+
+
 def _verify_resolver(runner: ResolverRunner) -> None:
     result = runner([RESOLVER_IMPLEMENTATION, "--version"])
     identity = result.stdout.strip().split()

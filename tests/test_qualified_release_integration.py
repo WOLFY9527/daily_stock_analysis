@@ -451,9 +451,22 @@ def test_release_workflows_use_managed_environment_and_digest_only_promotion() -
     assert "npm run build" not in promotion_text
     assert "docker buildx imagetools create" in promotion_text
 
+    candidate_bootstrap = release_text.split("- name: Online managed candidate bootstrap", 1)[1].split(
+        "- name: Capture nested environment evidence", 1
+    )[0]
+    assert candidate_bootstrap.index("./wolfy bootstrap --ensure") < candidate_bootstrap.index(
+        "./wolfy lock python --check"
+    )
+
     assert "pip install" not in ci_text
     assert "npm ci" not in ci_text
     assert "./wolfy bootstrap --ensure" in ci_text
+    ci_bootstrap = ci_text.split("- name: Online managed environment bootstrap", 1)[1].split(
+        "- name: Qualify nested environment evidence", 1
+    )[0]
+    assert ci_bootstrap.index("./wolfy bootstrap --ensure") < ci_bootstrap.index(
+        "./wolfy lock python --check"
+    )
     assert (
         "./wolfy exec --profile test -- npm --prefix apps/dsa-web exec -- "
         "playwright test --project=chromium --project=chromium-mobile"

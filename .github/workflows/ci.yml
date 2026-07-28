@@ -31,8 +31,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p output/ci
-          ./wolfy lock python --check > output/ci/python-lock-check.json
           ./wolfy bootstrap --ensure
+          ./wolfy lock python --check > output/ci/python-lock-check.json
       - name: Qualify nested environment evidence
         run: |
           set -euo pipefail

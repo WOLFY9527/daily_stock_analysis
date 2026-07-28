@@ -19,7 +19,10 @@ from scripts.environment.identity import ToolchainIdentity
 from scripts.environment.managed_tools import (
     ManagedRgComponent,
     ManagedRgContract,
+    ManagedUvComponent,
+    ManagedUvContract,
     load_managed_rg_contract,
+    load_managed_uv_contract,
     qualify_windows_git,
     verify_windows_git,
 )
@@ -419,6 +422,85 @@ def test_rg_is_copied_to_managed_snapshot_and_verified_by_content_identity(
     with pytest.raises(EnvironmentFailure) as invalid:
         invalid_component.build(tmp_path / "invalid-destination", offline=True)
     assert invalid.value.code == "managed_rg_source_hash_mismatch"
+
+
+def test_reviewed_uv_resolver_is_materialized_without_host_path_lookup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reviewed = load_managed_uv_contract(WINDOWS_AMD64_TOOLCHAIN)
+    assert reviewed.version == "0.11.19"
+    assert reviewed.platform == "windows-x86_64"
+    assert reviewed.archive_filename == "uv-x86_64-pc-windows-msvc.zip"
+    assert reviewed.archive_member == "uv.exe"
+    assert reviewed.archive_sha256 == (
+        "1665fc8e37b5d70a134820d6d7891747471a2ac8bc940ee7af0b69fd03b28d61"
+    )
+    assert reviewed.download_url == (
+        "https://releases.astral.sh/github/uv/releases/download/0.11.19/"
+        "uv-x86_64-pc-windows-msvc.zip"
+    )
+
+    executable_content = b"reviewed-uv-executable"
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w") as bundle:
+        member = zipfile.ZipInfo("uv.exe", date_time=(1980, 1, 1, 0, 0, 0))
+        bundle.writestr(member, executable_content)
+    archive_content = archive_buffer.getvalue()
+    fixture_contract = ManagedUvContract(
+        version="0.11.19",
+        platform="windows-x86_64",
+        archive_filename="uv-x86_64-pc-windows-msvc-fixture.zip",
+        archive_sha256=hashlib.sha256(archive_content).hexdigest(),
+        archive_member="uv.exe",
+        download_url="https://example.invalid/reviewed/uv-0.11.19-fixture.zip",
+    )
+    cache_root = tmp_path / "empty-cache"
+    source_cache_root = cache_root / "artifacts" / "uv"
+    downloads: list[tuple[str, Path]] = []
+    commands: list[list[str]] = []
+
+    def downloader(url: str, destination: Path) -> None:
+        downloads.append((url, destination))
+        destination.write_bytes(archive_content)
+
+    def command_runner(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return completed(command, "uv 0.11.19 (reviewed)\n")
+
+    def reject_host_lookup(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("managed uv must not inspect host PATH")
+
+    monkeypatch.setattr(shutil, "which", reject_host_lookup)
+    component = ManagedUvComponent(
+        WINDOWS_AMD64_TOOLCHAIN,
+        source_cache_root=source_cache_root,
+        contract=fixture_contract,
+        downloader=downloader,
+        command_runner=command_runner,
+    )
+
+    with pytest.raises(OfflineMaterialUnavailable) as missing:
+        component.build(tmp_path / "offline-missing", offline=True)
+    assert missing.value.code == "offline_managed_uv_source_missing"
+    result = ensure_snapshot(cache_root, component, offline=False)
+
+    assert result.network_used is True
+    assert downloads == [(fixture_contract.download_url, downloads[0][1])]
+    assert downloads[0][1].parent == component.source_cache_directory
+    assert (result.path / "uv.exe").read_bytes() == executable_content
+    assert commands
+    assert all(Path(command[0]).name == "uv.exe" and command[1:] == ["--version"] for command in commands)
+    assert json.loads((result.path / "provenance.json").read_text(encoding="utf-8"))["installed"] == {
+        "executable": "uv.exe",
+        "executableSha256": hashlib.sha256(executable_content).hexdigest(),
+        "platform": "windows-x86_64",
+        "sourceArchive": fixture_contract.archive_filename,
+        "sourceSha256": fixture_contract.archive_sha256,
+        "version": "0.11.19",
+    }
 
 
 def test_windows_git_is_discovered_probed_and_bound_without_exposing_its_path(

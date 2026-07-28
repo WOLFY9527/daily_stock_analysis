@@ -27,12 +27,14 @@ from .identity import (
 )
 from .managed_tools import (
     ManagedRgComponent,
+    ManagedUvComponent,
     WindowsGitIdentity,
     qualify_windows_git,
     verify_windows_git,
 )
 from .python_lock import (
     PythonLockContract,
+    RESOLVER_IMPLEMENTATION,
     bootstrap_profile_for_target,
     load_python_lock,
 )
@@ -51,7 +53,9 @@ class VerifiedEnvironment:
     web: SnapshotResult
     browser: SnapshotResult
     rg: SnapshotResult
+    resolver: SnapshotResult
     browser_executable: Path
+    resolver_executable: Path
     windows_git: WindowsGitIdentity | None
     combined_fingerprint: str
     evidence: dict[str, Any]
@@ -129,6 +133,8 @@ def combined_environment_fingerprint(
     web: SnapshotResult,
     browser: SnapshotResult,
     rg: SnapshotResult,
+    *,
+    resolver: SnapshotResult,
     windows_git: WindowsGitIdentity | None = None,
 ) -> str:
     payload: dict[str, Any] = {
@@ -140,6 +146,8 @@ def combined_environment_fingerprint(
         "browserInstalledFingerprint": browser.installed_fingerprint,
         "managedRgInputFingerprint": rg.input_fingerprint,
         "managedRgInstalledFingerprint": rg.installed_fingerprint,
+        "managedResolverInputFingerprint": resolver.input_fingerprint,
+        "managedResolverInstalledFingerprint": resolver.installed_fingerprint,
         "environmentPolicyVersion": ENVIRONMENT_POLICY_VERSION,
     }
     if windows_git is not None:
@@ -155,12 +163,13 @@ def link_worktree_environment(
     browser: SnapshotResult,
     rg: SnapshotResult,
     *,
+    resolver: SnapshotResult,
     combined_fingerprint: str,
     windows_git: WindowsGitIdentity | None = None,
 ) -> Path:
     root = root.resolve(strict=True)
     cache_root.mkdir(parents=True, exist_ok=True)
-    for result in (python, web, browser, rg):
+    for result in (python, web, browser, rg, resolver):
         if not result.path.is_dir() or not (result.path / "provenance.json").is_file():
             raise EnvironmentFailure("replacement_snapshot_missing", "replacement_snapshot_missing")
         _cache_relative(cache_root, result.path)
@@ -194,6 +203,11 @@ def link_worktree_environment(
                 "inputFingerprint": rg.input_fingerprint,
                 "installedFingerprint": rg.installed_fingerprint,
                 "snapshot": _cache_relative(cache_root, rg.path),
+            },
+            "resolver": {
+                "inputFingerprint": resolver.input_fingerprint,
+                "installedFingerprint": resolver.installed_fingerprint,
+                "snapshot": _cache_relative(cache_root, resolver.path),
             },
         },
     }
@@ -245,8 +259,10 @@ def build_environment_evidence(
     web: SnapshotResult,
     browser: SnapshotResult,
     rg: SnapshotResult,
+    resolver: SnapshotResult,
     browser_identity: Mapping[str, Any],
     rg_identity: Mapping[str, Any],
+    resolver_identity: Mapping[str, Any],
     manifest_hashes: dict[str, str],
     python_lock_evidence: dict[str, Any],
     toolchain: Mapping[str, Any],
@@ -295,6 +311,25 @@ def build_environment_evidence(
             "managed_rg_executable_missing", "managed rg executable identity is missing"
         )
     rg_details["executable"] = _cache_relative(root, rg.path / rg_relative_executable)
+    resolver_details = {
+        key: resolver_identity[key]
+        for key in (
+            "executableSha256",
+            "platform",
+            "sourceArchive",
+            "sourceSha256",
+            "version",
+        )
+        if key in resolver_identity
+    }
+    resolver_relative_executable = resolver_identity.get("executable")
+    if not isinstance(resolver_relative_executable, str):
+        raise EnvironmentFailure(
+            "managed_uv_executable_missing", "managed uv resolver executable identity is missing"
+        )
+    resolver_details["executable"] = _cache_relative(
+        root, resolver.path / resolver_relative_executable
+    )
     evidence = {
         "schemaVersion": EVIDENCE_SCHEMA,
         "environmentIdentity": {
@@ -322,9 +357,11 @@ def build_environment_evidence(
             "web": _cache_relative(root, web.path),
             "browser": _cache_relative(root, browser.path),
             "rg": _cache_relative(root, rg.path),
+            "resolver": _cache_relative(root, resolver.path),
         },
         "browser": browser_details,
         "managedTools": {"rg": rg_details},
+        "lockResolver": {"implementation": RESOLVER_IMPLEMENTATION, **resolver_details},
         "environmentPolicyVersion": ENVIRONMENT_POLICY_VERSION,
         "operational": {
             "bootstrapNetworkUsed": network_used,
@@ -398,6 +435,12 @@ class EnvironmentManager:
             source_cache_root=self.cache_root / "artifacts" / "rg",
         )
 
+    def _resolver_component(self) -> ManagedUvComponent:
+        return ManagedUvComponent(
+            self.toolchain,
+            source_cache_root=self.cache_root / "artifacts" / "uv",
+        )
+
     @staticmethod
     def _installed_identity(result: SnapshotResult) -> dict[str, Any]:
         try:
@@ -419,6 +462,7 @@ class EnvironmentManager:
         web: SnapshotResult,
         browser: SnapshotResult,
         rg: SnapshotResult,
+        resolver: SnapshotResult,
         *,
         network_used: bool,
         run_id: str | None = None,
@@ -428,8 +472,21 @@ class EnvironmentManager:
             if self.windows_git is not None
             else None
         )
+        browser_identity = self._installed_identity(browser)
+        rg_identity = self._installed_identity(rg)
+        resolver_identity = self._installed_identity(resolver)
+        resolver_name = resolver_identity.get("executable")
+        if not isinstance(resolver_name, str):
+            raise EnvironmentFailure(
+                "managed_uv_executable_missing", "managed uv resolver executable identity is missing"
+            )
+        resolver_executable = resolver.path / resolver_name
+        if not resolver_executable.is_file():
+            raise EnvironmentFailure(
+                "managed_uv_executable_missing", "managed uv resolver executable is missing"
+            )
         combined = combined_environment_fingerprint(
-            self.identity, python, web, browser, rg, windows_git
+            self.identity, python, web, browser, rg, resolver=resolver, windows_git=windows_git
         )
         evidence = build_environment_evidence(
             combined_fingerprint=combined,
@@ -437,8 +494,10 @@ class EnvironmentManager:
             web=web,
             browser=browser,
             rg=rg,
-            browser_identity=self._installed_identity(browser),
-            rg_identity=self._installed_identity(rg),
+            resolver=resolver,
+            browser_identity=browser_identity,
+            rg_identity=rg_identity,
+            resolver_identity=resolver_identity,
             manifest_hashes=self.identity.manifest_hashes,
             python_lock_evidence=self.python_lock.evidence(),
             toolchain=asdict(self.toolchain),
@@ -454,7 +513,9 @@ class EnvironmentManager:
             web,
             browser,
             rg,
+            resolver,
             browser_executable_path(browser.path),
+            resolver_executable,
             windows_git,
             combined,
             evidence,
@@ -465,6 +526,7 @@ class EnvironmentManager:
         python = ensure_snapshot(self.cache_root, python_component, offline=offline)
         web = ensure_snapshot(self.cache_root, web_component, offline=offline)
         rg = ensure_snapshot(self.cache_root, self._rg_component(), offline=offline)
+        resolver = ensure_snapshot(self.cache_root, self._resolver_component(), offline=offline)
         browser = ensure_snapshot(
             self.cache_root, self._browser_component(web), offline=offline
         )
@@ -473,11 +535,13 @@ class EnvironmentManager:
             web,
             browser,
             rg,
+            resolver,
             network_used=(
                 python.network_used
                 or web.network_used
                 or browser.network_used
                 or rg.network_used
+                or resolver.network_used
             ),
             run_id=run_id,
         )
@@ -488,6 +552,7 @@ class EnvironmentManager:
             web,
             browser,
             rg,
+            resolver=resolver,
             combined_fingerprint=verified.combined_fingerprint,
             windows_git=verified.windows_git,
         )
@@ -565,7 +630,12 @@ class EnvironmentManager:
             )
         browser_component = self._browser_component(results["web"])
         rg_component = self._rg_component()
-        for name, component in (("browser", browser_component), ("rg", rg_component)):
+        resolver_component = self._resolver_component()
+        for name, component in (
+            ("browser", browser_component),
+            ("rg", rg_component),
+            ("resolver", resolver_component),
+        ):
             details = pointer["components"].get(name)
             if not isinstance(details, dict) or details.get("inputFingerprint") != component.input_fingerprint:
                 raise EnvironmentFailure(
@@ -599,6 +669,7 @@ class EnvironmentManager:
             results["web"],
             results["browser"],
             results["rg"],
+            results["resolver"],
             network_used=network_used,
             run_id=run_id,
         )

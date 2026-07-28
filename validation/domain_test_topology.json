@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 7994,
-      "sha256": "8924c0da63d7e9bafb84d209def075b2b73e82320591e2752c07e46f874107d2"
+      "count": 8002,
+      "sha256": "45a0a5aedc46a8235356516541a692b9382b0014d81b488bcc60fd9c56a366e9"
     },
     "tests": [
       {
@@ -7539,6 +7539,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_browser_tools.py::test_reviewed_uv_resolver_is_materialized_without_host_path_lookup",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_browser_tools.py::test_rg_is_copied_to_managed_snapshot_and_verified_by_content_identity",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -7610,6 +7615,31 @@
       },
       {
         "id": "tests/scripts/test_wolfy_cli.py::test_windows_managed_reexec_runs_managed_cli_and_propagates_exit",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_windows_noninteractive_wolfy_probe_fails_closed_when_execution_or_parsing_fails[execution-failure-bootstrap_python_probe_execution_failed]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_windows_noninteractive_wolfy_probe_fails_closed_when_execution_or_parsing_fails[invalid-output-bootstrap_python_probe_invalid]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_windows_noninteractive_wolfy_probe_preserves_cpython_literal_and_accepts_cpython_311",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_windows_noninteractive_wolfy_probe_rejects_valid_unsupported_interpreters[unsupported-implementation]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_cli.py::test_windows_noninteractive_wolfy_probe_rejects_valid_unsupported_interpreters[unsupported-version]",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },
@@ -7854,6 +7884,11 @@
         "baseline": false
       },
       {
+        "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[resolver-installedFingerprint-7777777777777777777777777777777777777777777777777777777777777777]",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
         "id": "tests/scripts/test_wolfy_manager.py::test_verify_rejects_pointer_component_identity_mismatch[rg-installedFingerprint-8888888888888888888888888888888888888888888888888888888888888888]",
         "domain": "runtime_operator_tooling",
         "baseline": false
@@ -7925,6 +7960,11 @@
       },
       {
         "id": "tests/scripts/test_wolfy_python_lock.py::test_every_supported_projection_selects_one_reviewed_parquet_wheel",
+        "domain": "runtime_operator_tooling",
+        "baseline": false
+      },
+      {
+        "id": "tests/scripts/test_wolfy_python_lock.py::test_explicit_resolver_runner_uses_the_verified_snapshot_not_host_path",
         "domain": "runtime_operator_tooling",
         "baseline": false
       },

@@ -79,8 +79,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/candidate dist/build-evidence
-          ./wolfy lock python --check > dist/build-evidence/python-lock.json
           ./wolfy bootstrap --ensure
+          ./wolfy lock python --check > dist/build-evidence/python-lock.json
       - name: Capture nested environment evidence
         run: |
           set -euo pipefail

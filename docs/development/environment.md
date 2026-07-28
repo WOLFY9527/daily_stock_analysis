@@ -44,6 +44,15 @@ transitive changes separately. Bootstrap, tests, development, CI, and release
 qualification never update the lock implicitly. Runtime installation remains
 pip-based with `--no-deps --require-hashes`.
 
+`./wolfy bootstrap --ensure` is a required preparation step before
+`./wolfy lock python --check`. Bootstrap materializes the exact reviewed uv
+archive selected for the normalized host target, verifies its SHA-256 and
+version, and records its immutable snapshot in the worktree environment
+pointer. The check verifies that pointer and invokes that explicit executable;
+it never discovers a resolver through the host `PATH`. A missing or changed
+resolver snapshot fails closed. `./wolfy lock python --update` materializes the
+same reviewed resolver only as part of that explicit dependency-review action.
+
 The raw-byte-hashed generated Python lock files are checked out as LF on every
 platform. Online artifact materialization derives a marker-free download input
 from the selected target projection, not from the aggregate marker-rich lock.
@@ -113,6 +122,12 @@ matches. Offline bootstrap can reuse the validated archive but cannot download
 or discover host `rg`. The resulting immutable snapshot records the source
 archive identity, probes the exact reviewed version, and supplies its explicit
 path to managed commands.
+
+The authority provisions the reviewed Python lock resolver in the same way.
+The exact `uv 0.11.19` archive is selected by normalized OS and architecture,
+validated by SHA-256, extracted into an immutable `tool-uv` snapshot, and
+probed before it can resolve or check the lock family. Offline bootstrap can
+reuse that verified material but cannot discover or substitute a global `uv`.
 
 On Windows, bootstrap also discovers one host `git.exe` through the environment
 authority, probes its exact version, hashes the executable, and records a

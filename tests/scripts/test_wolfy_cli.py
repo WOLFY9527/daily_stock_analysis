@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from scripts.environment.cli import (
     _parser,
 )
 from scripts.environment.errors import EnvironmentFailure
+from tests import offline_network
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,6 +30,157 @@ BOOTSTRAP_SH = ROOT / "scripts" / "bootstrap_worktree.sh"
 BOOTSTRAP_PS1 = ROOT / "scripts" / "bootstrap_worktree.ps1"
 PREFLIGHT = ROOT / "scripts" / "worktree_preflight.py"
 CI_GATES = (ROOT / "scripts" / "ci_gate.sh", ROOT / "scripts" / "ci_gate_fast.sh")
+WINDOWS_BOOTSTRAP_PROBE_SOURCE = (
+    "import platform,sys; print(platform.python_implementation(), 'CPython', "
+    "sys.version_info[0], sys.version_info[1], sep='|')"
+)
+
+
+def _write_windows_bootstrap_probe_fixture(path: Path) -> None:
+    path.write_text(
+        "@echo off\r\n"
+        "setlocal EnableExtensions EnableDelayedExpansion\r\n"
+        'if /I "%~4"=="-c" (\r\n'
+        '  set "probe=%~5"\r\n'
+        '  > "%WOLFYSTOCK_TEST_T692_PROBE_RECORD%" echo(!probe!\r\n'
+        '  if /I "%WOLFYSTOCK_TEST_T692_PROBE_MODE%"=="supported" (\r\n'
+        "    echo CPython^|CPython^|3^|11\r\n"
+        "    exit /b 0\r\n"
+        "  )\r\n"
+        '  if /I "%WOLFYSTOCK_TEST_T692_PROBE_MODE%"=="unsupported-implementation" (\r\n'
+        "    echo PyPy^|CPython^|3^|11\r\n"
+        "    exit /b 0\r\n"
+        "  )\r\n"
+        '  if /I "%WOLFYSTOCK_TEST_T692_PROBE_MODE%"=="unsupported-version" (\r\n'
+        "    echo CPython^|CPython^|3^|12\r\n"
+        "    exit /b 0\r\n"
+        "  )\r\n"
+        '  if /I "%WOLFYSTOCK_TEST_T692_PROBE_MODE%"=="invalid-output" (\r\n'
+        "    echo malformed\r\n"
+        "    exit /b 0\r\n"
+        "  )\r\n"
+        "  echo unsupported fixture probe mode 1>&2\r\n"
+        "  exit /b 18\r\n"
+        ")\r\n"
+        "exit /b 0\r\n",
+        encoding="utf-8",
+        newline="",
+    )
+
+
+def _run_windows_wolfy_bootstrap_probe(
+    tmp_path: Path,
+    *,
+    mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    powershell = shutil.which("powershell.exe")
+    if powershell is None:
+        pytest.skip("Windows PowerShell is required for the native launcher contract")
+
+    fixture_root = tmp_path / "wolfy-probe-fixture"
+    fixture_root.mkdir()
+    fixture_wolfy = fixture_root / "wolfy.ps1"
+    fixture_wolfy.write_text(WOLFY_POWERSHELL.read_text(encoding="utf-8"), encoding="utf-8")
+    entrypoint = fixture_root / "scripts" / "wolfy.py"
+    entrypoint.parent.mkdir()
+    entrypoint.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    if mode == "execution-failure":
+        bootstrap_python = Path(os.environ["SystemRoot"]) / "System32" / "where.exe"
+    else:
+        bootstrap_python = fixture_root / "bootstrap-python.cmd"
+        _write_windows_bootstrap_probe_fixture(bootstrap_python)
+    probe_record = fixture_root / "probe-source.txt"
+    monkeypatch.setattr(
+        offline_network,
+        "CHILD_ENVIRONMENT_ALLOWLIST",
+        offline_network.CHILD_ENVIRONMENT_ALLOWLIST | {"WOLFYSTOCK_BOOTSTRAP_PYTHON"},
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "WOLFYSTOCK_BOOTSTRAP_PYTHON": str(bootstrap_python),
+            "WOLFYSTOCK_TEST_T692_PROBE_MODE": mode,
+            "WOLFYSTOCK_TEST_T692_PROBE_RECORD": str(probe_record),
+        }
+    )
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(fixture_wolfy),
+            "bootstrap",
+            "--ensure",
+        ],
+        cwd=fixture_root,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+    return result, probe_record
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell native argument handling")
+def test_windows_noninteractive_wolfy_probe_preserves_cpython_literal_and_accepts_cpython_311(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result, probe_record = _run_windows_wolfy_bootstrap_probe(
+        tmp_path, mode="supported", monkeypatch=monkeypatch
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert probe_record.read_text(encoding="utf-8").strip() == WINDOWS_BOOTSTRAP_PROBE_SOURCE
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell native argument handling")
+@pytest.mark.parametrize("mode", ("unsupported-implementation", "unsupported-version"))
+def test_windows_noninteractive_wolfy_probe_rejects_valid_unsupported_interpreters(
+    tmp_path: Path,
+    mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result, probe_record = _run_windows_wolfy_bootstrap_probe(
+        tmp_path, mode=mode, monkeypatch=monkeypatch
+    )
+
+    assert probe_record.read_text(encoding="utf-8").strip() == WINDOWS_BOOTSTRAP_PROBE_SOURCE
+    assert result.returncode == 1
+    assert '"reasonCode":"unsupported_bootstrap_python"' in result.stderr
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell native argument handling")
+@pytest.mark.parametrize(
+    ("mode", "reason_code"),
+    (
+        ("execution-failure", "bootstrap_python_probe_execution_failed"),
+        ("invalid-output", "bootstrap_python_probe_invalid"),
+    ),
+)
+def test_windows_noninteractive_wolfy_probe_fails_closed_when_execution_or_parsing_fails(
+    tmp_path: Path,
+    mode: str,
+    reason_code: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result, probe_record = _run_windows_wolfy_bootstrap_probe(
+        tmp_path, mode=mode, monkeypatch=monkeypatch
+    )
+
+    if mode == "execution-failure":
+        assert not probe_record.exists()
+    else:
+        assert probe_record.read_text(encoding="utf-8").strip() == WINDOWS_BOOTSTRAP_PROBE_SOURCE
+    assert result.returncode == 1
+    assert f'"reasonCode":"{reason_code}"' in result.stderr
+    assert '"reasonCode":"unsupported_bootstrap_python"' not in result.stderr
 
 
 def test_root_launchers_select_supported_bootstrap_without_using_mutable_worktree_dependencies() -> None:
@@ -221,7 +374,11 @@ def test_dev_preflight_creates_missing_environment_and_preserves_valid_retained_
     assert reexec_calls == [["dev", "--json"], ["dev", "--json"]]
 
 
-def test_lock_command_has_one_bounded_python_check_and_update_surface() -> None:
+def test_lock_command_has_one_bounded_python_check_and_update_surface(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     parser = _parser()
 
     check = parser.parse_args(["lock", "python", "--check"])
@@ -229,6 +386,68 @@ def test_lock_command_has_one_bounded_python_check_and_update_surface() -> None:
 
     assert (check.command, check.lock_family, check.lock_action) == ("lock", "python", "check")
     assert (update.command, update.lock_family, update.lock_action) == ("lock", "python", "update")
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    resolver = tmp_path / "cache" / "tool-uv" / "uv.exe"
+    resolver.parent.mkdir(parents=True)
+    resolver.write_bytes(b"reviewed")
+    check_runner = object()
+    update_runner = object()
+    verify_calls: list[str | None] = []
+
+    def verify(*, run_id: str | None = None) -> SimpleNamespace:
+        verify_calls.append(run_id)
+        return SimpleNamespace(resolver_executable=resolver)
+
+    monkeypatch.setattr(environment_cli, "_root", lambda: root)
+    monkeypatch.setattr(
+        environment_cli, "EnvironmentManager", lambda _root: SimpleNamespace(verify=verify)
+    )
+    monkeypatch.setattr(
+        environment_cli,
+        "resolver_runner_for_executable",
+        lambda actual_root, executable: (
+            check_runner
+            if (actual_root, executable) == (root, resolver)
+            else pytest.fail("lock check must use the verified resolver executable")
+        ),
+    )
+    monkeypatch.setattr(
+        environment_cli,
+        "check_python_lock",
+        lambda actual_root, *, resolver_runner: (
+            {"status": "ok", "resolver": "checked"}
+            if (actual_root, resolver_runner) == (root, check_runner)
+            else pytest.fail("lock check did not receive the managed resolver runner")
+        ),
+    )
+    monkeypatch.setattr(
+        environment_cli,
+        "_managed_resolver_runner_for_update",
+        lambda actual_root: (
+            update_runner
+            if actual_root == root
+            else pytest.fail("lock update resolved the wrong repository")
+        ),
+    )
+    monkeypatch.setattr(
+        environment_cli,
+        "update_python_lock",
+        lambda actual_root, *, resolver_runner: (
+            {"status": "updated", "resolver": "updated"}
+            if (actual_root, resolver_runner) == (root, update_runner)
+            else pytest.fail("lock update did not receive the managed resolver runner")
+        ),
+    )
+    monkeypatch.setattr(environment_cli.secrets, "token_hex", lambda _count: "a" * 16)
+
+    assert environment_cli.main(["lock", "python", "--check"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"resolver": "checked", "status": "ok"}
+    assert verify_calls == ["lock-check-" + "a" * 16]
+
+    assert environment_cli.main(["lock", "python", "--update"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"resolver": "updated", "status": "updated"}
 
 
 def test_exec_parser_exposes_one_repeatable_reviewed_config_override_surface() -> None:

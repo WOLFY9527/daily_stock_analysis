@@ -14,12 +14,17 @@ from typing import Callable
 
 from .errors import EnvironmentFailure, OfflineMaterialUnavailable
 from .identity import ToolchainIdentity, file_hash, stable_hash
+from .python_lock import RESOLVER_IMPLEMENTATION, RESOLVER_VERSION
 
 
 MANAGED_RG_POLICY_VERSION = "wolfystock_managed_rg_v2"
 MANAGED_RG_VERSION = "15.1.0"
 MANAGED_RG_RELEASE_ROOT = (
     "https://github.com/BurntSushi/ripgrep/releases/download/15.1.0"
+)
+MANAGED_UV_POLICY_VERSION = "wolfystock_managed_uv_v1"
+MANAGED_UV_RELEASE_ROOT = (
+    "https://releases.astral.sh/github/uv/releases/download/" + RESOLVER_VERSION
 )
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 Downloader = Callable[[str, Path], None]
@@ -33,7 +38,7 @@ def _run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[st
 def _download(url: str, destination: Path) -> None:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "WolfyStock-reviewed-rg/1"},
+        headers={"User-Agent": "WolfyStock-reviewed-tool/1"},
     )
     with (
         urllib.request.urlopen(request, timeout=60) as source,
@@ -164,6 +169,16 @@ class ManagedRgContract:
     download_url: str
 
 
+@dataclass(frozen=True)
+class ManagedUvContract:
+    version: str
+    platform: str
+    archive_filename: str
+    archive_sha256: str
+    archive_member: str
+    download_url: str
+
+
 def _contract(
     platform: str,
     target: str,
@@ -182,6 +197,26 @@ def _contract(
             f"ripgrep-{MANAGED_RG_VERSION}-{target}/{executable_name}"
         ),
         download_url=f"{MANAGED_RG_RELEASE_ROOT}/{archive_filename}",
+    )
+
+
+def _uv_contract(
+    platform: str,
+    target: str,
+    archive_sha256: str,
+    *,
+    extension: str,
+    archive_member: str | None = None,
+) -> ManagedUvContract:
+    archive_filename = f"{RESOLVER_IMPLEMENTATION}-{target}.{extension}"
+    executable_name = "uv.exe" if platform.startswith("windows-") else "uv"
+    return ManagedUvContract(
+        version=RESOLVER_VERSION,
+        platform=platform,
+        archive_filename=archive_filename,
+        archive_sha256=archive_sha256,
+        archive_member=archive_member or f"{RESOLVER_IMPLEMENTATION}-{target}/{executable_name}",
+        download_url=f"{MANAGED_UV_RELEASE_ROOT}/{archive_filename}",
     )
 
 
@@ -225,6 +260,41 @@ MANAGED_RG_CONTRACTS = {
 }
 
 
+MANAGED_UV_CONTRACTS = {
+    "darwin-arm64": _uv_contract(
+        "darwin-arm64",
+        "aarch64-apple-darwin",
+        "d8f59c38e8c4168ee468d423cd63184be12fa6995a4283d41ee1a14d003c9453",
+        extension="tar.gz",
+    ),
+    "darwin-x86_64": _uv_contract(
+        "darwin-x86_64",
+        "x86_64-apple-darwin",
+        "1585f415cade9f061e7f00fe5b00030a79ccfac60c650242ce639ba946138d40",
+        extension="tar.gz",
+    ),
+    "linux-arm64": _uv_contract(
+        "linux-arm64",
+        "aarch64-unknown-linux-gnu",
+        "83b13ab184a45b7d9a3b0e4b10eaebd50ad41e66cb16dcce8e60aa7be13ae399",
+        extension="tar.gz",
+    ),
+    "linux-x86_64": _uv_contract(
+        "linux-x86_64",
+        "x86_64-unknown-linux-gnu",
+        "7035608168e106375b36d0c818d537a889c51a8625fe7f8f7cad5e62b947c368",
+        extension="tar.gz",
+    ),
+    "windows-x86_64": _uv_contract(
+        "windows-x86_64",
+        "x86_64-pc-windows-msvc",
+        "1665fc8e37b5d70a134820d6d7891747471a2ac8bc940ee7af0b69fd03b28d61",
+        extension="zip",
+        archive_member="uv.exe",
+    ),
+}
+
+
 def load_managed_rg_contract(toolchain: ToolchainIdentity) -> ManagedRgContract:
     platform = _platform_identity(toolchain)
     try:
@@ -236,16 +306,31 @@ def load_managed_rg_contract(toolchain: ToolchainIdentity) -> ManagedRgContract:
         ) from exc
 
 
+def load_managed_uv_contract(toolchain: ToolchainIdentity) -> ManagedUvContract:
+    platform = _platform_identity(toolchain)
+    try:
+        return MANAGED_UV_CONTRACTS[platform]
+    except KeyError as exc:
+        raise EnvironmentFailure(
+            "managed_uv_platform_unsupported",
+            f"reviewed uv source does not support platform: {platform}",
+        ) from exc
+
+
 class ManagedRgComponent:
     name = "tool-rg"
     immutable = True
+    policy_version = MANAGED_RG_POLICY_VERSION
+    tool_name = "rg"
+    error_prefix = "managed_rg"
+    source_label = "rg"
 
     def __init__(
         self,
         toolchain: ToolchainIdentity,
         *,
         source_cache_root: Path,
-        contract: ManagedRgContract | None = None,
+        contract: ManagedRgContract | ManagedUvContract | None = None,
         downloader: Downloader = _download,
         command_runner: CommandRunner = _run,
     ) -> None:
@@ -253,8 +338,8 @@ class ManagedRgComponent:
         self.platform = self.contract.platform
         self.input_fingerprint = stable_hash(
             {
-                "policyVersion": MANAGED_RG_POLICY_VERSION,
-                "tool": "rg",
+                "policyVersion": self.policy_version,
+                "tool": self.tool_name,
                 "source": asdict(self.contract),
             }
         )
@@ -274,45 +359,55 @@ class ManagedRgComponent:
     def source_archive(self) -> Path:
         return self.source_cache_directory / self.contract.archive_filename
 
+    def _failure(self, suffix: str, detail: str) -> EnvironmentFailure:
+        return EnvironmentFailure(f"{self.error_prefix}_{suffix}", detail)
+
+    def _parse_version(self, first_line: str) -> str | None:
+        match = re.fullmatch(
+            r"ripgrep ([0-9]+\.[0-9]+\.[0-9]+)(?: \(rev [0-9a-f]+\))?",
+            first_line.strip(),
+        )
+        return match.group(1) if match is not None else None
+
     def _verified_source(self) -> Path:
         directory = self.source_cache_directory
         if not directory.is_dir():
             raise OfflineMaterialUnavailable(
-                "offline_managed_rg_source_missing",
-                "reviewed rg source is absent; run online ./wolfy bootstrap --ensure",
+                f"offline_{self.error_prefix}_source_missing",
+                f"reviewed {self.source_label} source is absent; run online ./wolfy bootstrap --ensure",
             )
         if directory.is_symlink():
-            raise EnvironmentFailure(
-                "managed_rg_source_unexpected",
-                "reviewed rg source cache contains unexpected material",
+            raise self._failure(
+                "source_unexpected",
+                f"reviewed {self.source_label} source cache contains unexpected material",
             )
         try:
             entries = tuple(directory.iterdir())
         except OSError as exc:
-            raise EnvironmentFailure(
-                "managed_rg_source_validation_failed",
-                "reviewed rg source cache could not be inspected",
+            raise self._failure(
+                "source_validation_failed",
+                f"reviewed {self.source_label} source cache could not be inspected",
             ) from exc
         if (
             {entry.name for entry in entries} != {self.contract.archive_filename}
             or any(not entry.is_file() or entry.is_symlink() for entry in entries)
         ):
-            raise EnvironmentFailure(
-                "managed_rg_source_unexpected",
-                "reviewed rg source cache contains unexpected material",
+            raise self._failure(
+                "source_unexpected",
+                f"reviewed {self.source_label} source cache contains unexpected material",
             )
         archive = self.source_archive
         try:
             digest = file_hash(archive)
         except OSError as exc:
-            raise EnvironmentFailure(
-                "managed_rg_source_validation_failed",
-                "reviewed rg source could not be hashed",
+            raise self._failure(
+                "source_validation_failed",
+                f"reviewed {self.source_label} source could not be hashed",
             ) from exc
         if digest != self.contract.archive_sha256:
-            raise EnvironmentFailure(
-                "managed_rg_source_hash_mismatch",
-                f"reviewed rg source hash does not match: {self.contract.archive_filename}",
+            raise self._failure(
+                "source_hash_mismatch",
+                f"reviewed {self.source_label} source hash does not match: {self.contract.archive_filename}",
             )
         return archive
 
@@ -321,14 +416,14 @@ class ManagedRgComponent:
         try:
             directory.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise EnvironmentFailure(
-                "managed_rg_source_cache_creation_failed",
-                "reviewed rg source cache could not be created",
+            raise self._failure(
+                "source_cache_creation_failed",
+                f"reviewed {self.source_label} source cache could not be created",
             ) from exc
         if not directory.is_dir() or directory.is_symlink():
-            raise EnvironmentFailure(
-                "managed_rg_source_cache_creation_failed",
-                "reviewed rg source cache is not a local directory",
+            raise self._failure(
+                "source_cache_creation_failed",
+                f"reviewed {self.source_label} source cache is not a local directory",
             )
         temporary = directory / (
             f".{self.contract.archive_filename}.{uuid.uuid4().hex}.tmp"
@@ -337,9 +432,9 @@ class ManagedRgComponent:
             try:
                 self.downloader(self.contract.download_url, temporary)
             except (OSError, ValueError) as exc:
-                raise EnvironmentFailure(
-                    "managed_rg_source_download_failed",
-                    "reviewed rg source download failed",
+                raise self._failure(
+                    "source_download_failed",
+                    f"reviewed {self.source_label} source download failed",
                 ) from exc
             try:
                 valid = (
@@ -348,29 +443,29 @@ class ManagedRgComponent:
                     and file_hash(temporary) == self.contract.archive_sha256
                 )
             except OSError as exc:
-                raise EnvironmentFailure(
-                    "managed_rg_source_validation_failed",
-                    "downloaded reviewed rg source could not be validated",
+                raise self._failure(
+                    "source_validation_failed",
+                    f"downloaded reviewed {self.source_label} source could not be validated",
                 ) from exc
             if not valid:
-                raise EnvironmentFailure(
-                    "managed_rg_source_hash_mismatch",
-                    f"reviewed rg source hash does not match: {self.contract.archive_filename}",
+                raise self._failure(
+                    "source_hash_mismatch",
+                    f"reviewed {self.source_label} source hash does not match: {self.contract.archive_filename}",
                 )
             try:
                 os.replace(temporary, self.source_archive)
             except OSError as exc:
-                raise EnvironmentFailure(
-                    "managed_rg_source_promotion_failed",
-                    "reviewed rg source could not be promoted",
+                raise self._failure(
+                    "source_promotion_failed",
+                    f"reviewed {self.source_label} source could not be promoted",
                 ) from exc
         finally:
             try:
                 temporary.unlink(missing_ok=True)
             except OSError as exc:
-                raise EnvironmentFailure(
-                    "managed_rg_source_cleanup_failed",
-                    "temporary reviewed rg source could not be removed",
+                raise self._failure(
+                    "source_cleanup_failed",
+                    f"temporary reviewed {self.source_label} source could not be removed",
                 ) from exc
         return self._verified_source()
 
@@ -385,9 +480,9 @@ class ManagedRgComponent:
                         and not info.is_dir()
                     ]
                     if len(matches) != 1:
-                        raise EnvironmentFailure(
-                            "managed_rg_source_archive_invalid",
-                            "reviewed rg archive does not contain exactly one executable",
+                        raise self._failure(
+                            "source_archive_invalid",
+                            f"reviewed {self.source_label} archive does not contain exactly one executable",
                         )
                     with bundle.open(matches[0]) as source, executable.open("xb") as target:
                         shutil.copyfileobj(source, target)
@@ -396,18 +491,18 @@ class ManagedRgComponent:
                     member = bundle.getmember(self.contract.archive_member)
                     source = bundle.extractfile(member) if member.isfile() else None
                     if source is None:
-                        raise EnvironmentFailure(
-                            "managed_rg_source_archive_invalid",
-                            "reviewed rg archive does not contain its executable",
+                        raise self._failure(
+                            "source_archive_invalid",
+                            f"reviewed {self.source_label} archive does not contain its executable",
                         )
                     with source, executable.open("xb") as target:
                         shutil.copyfileobj(source, target)
         except EnvironmentFailure:
             raise
         except (KeyError, OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
-            raise EnvironmentFailure(
-                "managed_rg_source_archive_invalid",
-                "reviewed rg source archive is invalid",
+            raise self._failure(
+                "source_archive_invalid",
+                f"reviewed {self.source_label} source archive is invalid",
             ) from exc
 
     def build(self, destination: Path, *, offline: bool) -> None:
@@ -426,8 +521,8 @@ class ManagedRgComponent:
     def inspect(self, snapshot: Path) -> dict[str, object]:
         executable = snapshot / self.executable_name
         if not executable.is_file():
-            raise EnvironmentFailure(
-                "managed_rg_executable_missing", "managed rg executable is missing"
+            raise self._failure(
+                "executable_missing", f"managed {self.source_label} executable is missing"
             )
         environment = {
             key: os.environ[key]
@@ -437,18 +532,15 @@ class ManagedRgComponent:
         environment["PATH"] = os.pathsep.join((str(snapshot), "/usr/bin", "/bin"))
         result = self.command_runner([str(executable), "--version"], env=environment)
         first_line = result.stdout.splitlines()[0] if result.stdout.splitlines() else ""
-        match = re.fullmatch(
-            r"ripgrep ([0-9]+\.[0-9]+\.[0-9]+)(?: \(rev [0-9a-f]+\))?",
-            first_line.strip(),
-        )
-        if result.returncode != 0 or match is None:
-            raise EnvironmentFailure(
-                "managed_rg_probe_failed", "managed rg identity probe failed"
+        version = self._parse_version(first_line)
+        if result.returncode != 0 or version is None:
+            raise self._failure(
+                "probe_failed", f"managed {self.source_label} identity probe failed"
             )
-        if match.group(1) != self.contract.version:
-            raise EnvironmentFailure(
-                "managed_rg_version_mismatch",
-                "managed rg version does not match the reviewed source",
+        if version != self.contract.version:
+            raise self._failure(
+                "version_mismatch",
+                f"managed {self.source_label} version does not match the reviewed source",
             )
         return {
             "executable": self.executable_name,
@@ -461,9 +553,48 @@ class ManagedRgComponent:
 
     def verify(self, snapshot: Path, manifest: dict[str, object]) -> None:
         if self.inspect(snapshot) != manifest.get("installed"):
-            raise EnvironmentFailure(
-                "managed_rg_identity_mismatch", "managed rg installed identity does not match"
+            raise self._failure(
+                "identity_mismatch", f"managed {self.source_label} installed identity does not match"
             )
 
     def prepare_promotion(self, temporary: Path, final: Path) -> None:
         return None
+
+
+class ManagedUvComponent(ManagedRgComponent):
+    name = "tool-uv"
+    policy_version = MANAGED_UV_POLICY_VERSION
+    tool_name = RESOLVER_IMPLEMENTATION
+    error_prefix = "managed_uv"
+    source_label = "uv resolver"
+
+    def __init__(
+        self,
+        toolchain: ToolchainIdentity,
+        *,
+        source_cache_root: Path,
+        contract: ManagedUvContract | None = None,
+        downloader: Downloader = _download,
+        command_runner: CommandRunner = _run,
+    ) -> None:
+        super().__init__(
+            toolchain,
+            source_cache_root=source_cache_root,
+            contract=contract or load_managed_uv_contract(toolchain),
+            downloader=downloader,
+            command_runner=command_runner,
+        )
+
+    @property
+    def executable_name(self) -> str:
+        return "uv.exe" if self.platform.startswith("windows-") else "uv"
+
+    def _parse_version(self, first_line: str) -> str | None:
+        identity = first_line.strip().split()
+        if (
+            len(identity) < 2
+            or identity[0] != RESOLVER_IMPLEMENTATION
+            or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", identity[1]) is None
+        ):
+            return None
+        return identity[1]

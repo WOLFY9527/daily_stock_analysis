@@ -12,9 +12,12 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from .cache import environment_cache_root
 from .errors import EnvironmentFailure
+from .identity import detect_toolchain
 from .manager import EnvironmentManager, managed_python_path, require_managed_python
-from .python_lock import check_python_lock, update_python_lock
+from .managed_tools import ManagedUvComponent
+from .python_lock import check_python_lock, resolver_runner_for_executable, update_python_lock
 from .qualification import compare_findings, normalize_findings
 from .runtime import (
     cleanup_run,
@@ -23,6 +26,7 @@ from .runtime import (
     project_test_environment,
     write_run_json,
 )
+from .snapshots import ensure_snapshot
 
 
 FINDINGS_SCHEMA = "wolfystock_qualification_findings_v1"
@@ -143,6 +147,25 @@ def _managed_reexec(root: Path, argv: Sequence[str]) -> None:
         str(expected),
         command,
         environment,
+    )
+
+
+def _managed_resolver_runner_for_update(root: Path):
+    cache_root = environment_cache_root()
+    component = ManagedUvComponent(
+        detect_toolchain(),
+        source_cache_root=cache_root / "artifacts" / "uv",
+    )
+    resolver = ensure_snapshot(cache_root, component, offline=False)
+    return resolver_runner_for_executable(root, resolver.path / component.executable_name)
+
+
+def _check_python_lock_with_managed_resolver(root: Path) -> dict[str, Any]:
+    manager = EnvironmentManager(root)
+    verified = manager.verify(run_id="lock-check-" + secrets.token_hex(8))
+    return check_python_lock(
+        root,
+        resolver_runner=resolver_runner_for_executable(root, verified.resolver_executable),
     )
 
 
@@ -268,9 +291,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         root = _root()
         if args.command == "lock":
             payload = (
-                check_python_lock(root)
+                _check_python_lock_with_managed_resolver(root)
                 if args.lock_action == "check"
-                else update_python_lock(root)
+                else update_python_lock(root, resolver_runner=_managed_resolver_runner_for_update(root))
             )
             _emit(payload)
             return 0

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import subprocess
 import tarfile
 from pathlib import Path
@@ -10,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from scripts.environment import python_lock
 from scripts.environment.errors import EnvironmentFailure
 from scripts.environment.python_artifacts import (
     ArtifactCandidate,
@@ -25,6 +27,7 @@ from scripts.environment.python_lock import (
     check_python_lock,
     load_python_lock,
     normalized_content_hash,
+    resolver_runner_for_executable,
     update_python_lock,
 )
 
@@ -282,6 +285,38 @@ def write_lock_repository(root: Path) -> None:
         "targetProjections": target_projections(),
     }
     write_manifest(root, manifest)
+
+
+def test_explicit_resolver_runner_uses_the_verified_snapshot_not_host_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repository"
+    root.mkdir()
+    executable = tmp_path / "cache" / "snapshots" / "tool-uv" / "reviewed" / "uv.exe"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"reviewed uv")
+    observed: dict[str, object] = {}
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        observed["command"] = command
+        observed["environment"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 0, "uv 0.11.19\\n", "")
+
+    monkeypatch.setenv("PATH", r"C:\\host\\contains-an-unreviewed-uv")
+    monkeypatch.setattr(python_lock.subprocess, "run", run)
+
+    result = resolver_runner_for_executable(root, executable)(["uv", "--version"])
+
+    assert result.returncode == 0
+    assert observed["command"] == [str(executable.resolve()), "--version"]
+    assert observed["environment"] == {
+        "PATH": str(executable.parent.resolve()),
+        **{
+            key: value
+            for key, value in os.environ.items()
+            if key in {"HOME", "LANG", "LC_ALL", "SSL_CERT_FILE", "SYSTEMROOT", "SystemRoot"}
+        },
+    }
 
 
 def test_unchanged_contract_is_current_and_byte_stable(tmp_path: Path) -> None:
