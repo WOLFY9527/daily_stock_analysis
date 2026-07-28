@@ -10,7 +10,12 @@ from typing import Any, Dict, Optional
 import pandas as pd
 import requests
 
-from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
+from .base import (
+    BaseFetcher,
+    DataFetchError,
+    STANDARD_COLUMNS,
+    attach_stock_daily_close_tokens,
+)
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
 from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
@@ -146,6 +151,7 @@ class TwelveDataFetcher(BaseFetcher):
         normalized = df.copy()
         if "datetime" in normalized.columns:
             normalized = normalized.rename(columns={"datetime": "date"})
+        normalized["__wolfystock_stock_daily_close_token"] = normalized.get("close")
         normalized["date"] = pd.to_datetime(normalized.get("date"), errors="coerce")
         normalized["open"] = pd.to_numeric(normalized.get("open"), errors="coerce")
         normalized["high"] = pd.to_numeric(normalized.get("high"), errors="coerce")
@@ -155,9 +161,11 @@ class TwelveDataFetcher(BaseFetcher):
         normalized["amount"] = normalized["close"] * normalized["volume"]
         normalized["pct_chg"] = normalized["close"].pct_change().fillna(0.0) * 100.0
         normalized["code"] = str(_provider_symbol_params(stock_code)["normalized_code"])
-        normalized = normalized[["code", *STANDARD_COLUMNS]]
+        normalized = normalized[["code", *STANDARD_COLUMNS, "__wolfystock_stock_daily_close_token"]]
         normalized = normalized.dropna(subset=["date", "open", "high", "low", "close"])
-        return normalized.sort_values("date").reset_index(drop=True)
+        normalized = normalized.sort_values("date").reset_index(drop=True)
+        raw_close_tokens = normalized.pop("__wolfystock_stock_daily_close_token").tolist()
+        return attach_stock_daily_close_tokens(normalized, raw_close_tokens)
 
     def get_daily_data(
         self,

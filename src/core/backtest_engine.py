@@ -159,7 +159,12 @@ class BacktestEngine:
             }
 
         window_bars = list(forward_bars[:eval_days])
-        end_close = window_bars[-1].close
+        # Backtest metrics are explicitly float analytics, not Portfolio value authority.
+        end_close = (
+            float(window_bars[-1].close)
+            if window_bars[-1].close is not None
+            else None
+        )
         highs = [b.high for b in window_bars if b.high is not None]
         lows = [b.low for b in window_bars if b.low is not None]
         max_high = max(highs) if highs else None

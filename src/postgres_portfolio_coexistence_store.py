@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from contextlib import contextmanager
 from datetime import date, datetime, time
+from decimal import Decimal
+from math import isfinite, ulp
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 
@@ -20,7 +23,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -31,6 +33,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
+from src.portfolio_exact_numeric import (
+    PortfolioExactNumeric,
+    serialize_portfolio_decimal,
+)
 from src.postgres_identity_store import PhaseABase
 from src.postgres_store_utils import (
     apply_baseline_schema,
@@ -41,6 +47,9 @@ from src.postgres_store_utils import (
     describe_store_runtime,
     load_baseline_sql_statements,
     managed_session_scope,
+)
+from src.sqlite_foreign_keys import (
+    read_sqlite_foreign_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,11 +151,11 @@ class PhaseFPortfolioLedger(PhaseFBase):
     market = Column(Text)
     currency = Column(Text)
     direction = Column(Text)
-    quantity = Column(Numeric(24, 8))
-    price = Column(Numeric(24, 8))
-    amount = Column(Numeric(24, 8))
-    fee = Column(Numeric(24, 8))
-    tax = Column(Numeric(24, 8))
+    quantity = Column(PortfolioExactNumeric())
+    price = Column(PortfolioExactNumeric())
+    amount = Column(PortfolioExactNumeric())
+    fee = Column(PortfolioExactNumeric())
+    tax = Column(PortfolioExactNumeric())
     corporate_action_type = Column(Text)
     external_ref = Column(Text)
     dedup_hash = Column(Text)
@@ -183,16 +192,17 @@ class PhaseFPortfolioPosition(PhaseFBase):
     canonical_symbol = Column(Text, nullable=False)
     market = Column(Text, nullable=False)
     currency = Column(Text, nullable=False)
-    quantity = Column(Numeric(24, 8), nullable=False, default=0)
-    avg_cost = Column(Numeric(24, 8), nullable=False, default=0)
-    total_cost = Column(Numeric(24, 8), nullable=False, default=0)
-    last_price = Column(Numeric(24, 8))
-    market_value_base = Column(Numeric(24, 8))
-    unrealized_pnl_base = Column(Numeric(24, 8))
+    quantity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    avg_cost = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_cost = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    last_price = Column(PortfolioExactNumeric())
+    market_value_base = Column(PortfolioExactNumeric())
+    unrealized_pnl_base = Column(PortfolioExactNumeric())
     valuation_currency = Column(Text)
     as_of_time = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
+    price_cost = Column(PortfolioExactNumeric())
 
     __table_args__ = (
         UniqueConstraint(
@@ -225,11 +235,11 @@ class PhaseFPortfolioSyncState(PhaseFBase):
     snapshot_date = Column(Date, nullable=False)
     synced_at = Column(DateTime(timezone=True), nullable=False)
     base_currency = Column(Text, nullable=False)
-    total_cash = Column(Numeric(24, 8), nullable=False, default=0)
-    total_market_value = Column(Numeric(24, 8), nullable=False, default=0)
-    total_equity = Column(Numeric(24, 8), nullable=False, default=0)
-    realized_pnl = Column(Numeric(24, 8), nullable=False, default=0)
-    unrealized_pnl = Column(Numeric(24, 8), nullable=False, default=0)
+    total_cash = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_market_value = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_equity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    realized_pnl = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    unrealized_pnl = Column(PortfolioExactNumeric(), nullable=False, default=0)
     fx_stale = Column(Boolean, nullable=False, default=False)
     payload_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
@@ -259,11 +269,11 @@ class PhaseFPortfolioSyncPosition(PhaseFBase):
     canonical_symbol = Column(Text, nullable=False)
     market = Column(Text, nullable=False)
     currency = Column(Text, nullable=False)
-    quantity = Column(Numeric(24, 8), nullable=False, default=0)
-    avg_cost = Column(Numeric(24, 8), nullable=False, default=0)
-    last_price = Column(Numeric(24, 8), nullable=False, default=0)
-    market_value_base = Column(Numeric(24, 8), nullable=False, default=0)
-    unrealized_pnl_base = Column(Numeric(24, 8), nullable=False, default=0)
+    quantity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    avg_cost = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    last_price = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    market_value_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    unrealized_pnl_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
     valuation_currency = Column(Text)
     payload_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
@@ -293,8 +303,8 @@ class PhaseFPortfolioSyncCashBalance(PhaseFBase):
     owner_user_id = Column(String(64), ForeignKey("app_users.id"), nullable=False, index=True)
     portfolio_account_id = Column(_BIGINT_PK, ForeignKey("portfolio_accounts.id"), nullable=False, index=True)
     currency = Column(Text, nullable=False)
-    amount = Column(Numeric(24, 8), nullable=False, default=0)
-    amount_base = Column(Numeric(24, 8), nullable=False, default=0)
+    amount = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    amount_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
 
@@ -305,6 +315,42 @@ class PhaseFPortfolioSyncCashBalance(PhaseFBase):
             name="uq_phase_f_portfolio_sync_cash_balances_key",
         ),
     )
+
+
+_PHASE_F_EXACT_TABLES = (
+    PhaseFPortfolioLedger.__table__,
+    PhaseFPortfolioPosition.__table__,
+    PhaseFPortfolioSyncState.__table__,
+    PhaseFPortfolioSyncPosition.__table__,
+    PhaseFPortfolioSyncCashBalance.__table__,
+)
+_PHASE_F_EXACT_TABLES_BY_NAME = {
+    str(table.name): table for table in _PHASE_F_EXACT_TABLES
+}
+_PHASE_F_SQLITE_REBUILD_SOURCE_TABLES = (
+    PhaseFPortfolioAccount.__table__,
+    PhaseFBrokerConnection.__table__,
+    *_PHASE_F_EXACT_TABLES,
+)
+_PHASE_F_SQLITE_REBUILD_SOURCE_TABLES_BY_NAME = {
+    str(table.name): table for table in _PHASE_F_SQLITE_REBUILD_SOURCE_TABLES
+}
+_PHASE_F_SQLITE_REBUILD_TARGET_TABLE_NAMES = frozenset(_PHASE_F_EXACT_TABLES_BY_NAME)
+_PHASE_F_EXACT_NUMERIC_COLUMNS = {
+    str(table.name): tuple(
+        str(column.name)
+        for column in table.columns
+        if isinstance(column.type, PortfolioExactNumeric)
+    )
+    for table in _PHASE_F_EXACT_TABLES
+}
+_PHASE_F_SQLITE_REBUILD_CREATE_ORDER = _PHASE_F_EXACT_TABLES
+_PHASE_F_SQLITE_REBUILD_DROP_ORDER = tuple(reversed(_PHASE_F_EXACT_TABLES))
+_PHASE_F_SQLITE_OPTIONAL_LEGACY_COLUMNS = {
+    "portfolio_positions": frozenset({"price_cost"}),
+}
+_PHASE_F_SQLITE_LEGACY_NUMERIC_DECLARATION = "NUMERIC(24, 8)"
+_PHASE_F_SQLITE_STORAGE_QUANTUM = Decimal("0.00000001")
 
 
 def _phase_f_sql_doc_path() -> Path:
@@ -351,6 +397,7 @@ class PostgresPhaseFStore:
 
     def apply_schema(self) -> None:
         try:
+            self._migrate_sqlite_exact_numeric_storage()
             self._last_schema_apply_report = apply_baseline_schema(
                 self._engine,
                 schema_key=self.SCHEMA_KEY,
@@ -360,6 +407,7 @@ class PostgresPhaseFStore:
                 constraint_names=self.EXPECTED_CONSTRAINTS,
                 source_path=_phase_f_sql_doc_path(),
             )
+            self._migrate_portfolio_position_price_cost_column()
         except Exception as exc:
             self._last_schema_apply_report = build_schema_apply_report(
                 schema_key=self.SCHEMA_KEY,
@@ -370,6 +418,678 @@ class PostgresPhaseFStore:
             )
             logger.exception("Phase F schema initialization failed")
             raise
+
+    @staticmethod
+    def _quote_sqlite_identifier(identifier: str) -> str:
+        return '"' + str(identifier).replace('"', '""') + '"'
+
+    @staticmethod
+    def _sqlite_exact_numeric_error(message: str) -> RuntimeError:
+        return RuntimeError(f"SQLite Phase F exact-numeric migration {message}")
+
+    @staticmethod
+    def _normalize_sqlite_declaration(value: Any) -> str:
+        return re.sub(r"\s+", "", str(value or "")).upper()
+
+    @classmethod
+    def _is_sqlite_legacy_numeric_type(cls, declared_type: str) -> bool:
+        return cls._normalize_sqlite_declaration(
+            declared_type
+        ) == cls._normalize_sqlite_declaration(
+            _PHASE_F_SQLITE_LEGACY_NUMERIC_DECLARATION
+        )
+
+    def _expected_sqlite_rebuild_column_type(self, connection: Any, column: Any) -> str:
+        if isinstance(column.type, PortfolioExactNumeric):
+            return "TEXT"
+        return self._normalize_sqlite_declaration(
+            connection.dialect.type_compiler.process(column.type)
+        )
+
+    def _sqlite_explicit_index_inventory(
+        self,
+        connection: Any,
+        *,
+        table_name: str,
+    ) -> tuple[tuple[Any, ...], ...]:
+        quoted_table = self._quote_sqlite_identifier(table_name)
+        inventory: list[tuple[Any, ...]] = []
+        for row in connection.exec_driver_sql(
+            f"PRAGMA index_list({quoted_table})"
+        ).mappings():
+            if str(row["origin"]) != "c":
+                continue
+            index_name = str(row["name"])
+            quoted_index = self._quote_sqlite_identifier(index_name)
+            key_rows = sorted(
+                (
+                    item
+                    for item in connection.exec_driver_sql(
+                        f"PRAGMA index_xinfo({quoted_index})"
+                    ).mappings()
+                    if int(item["key"]) == 1
+                ),
+                key=lambda item: int(item["seqno"]),
+            )
+            inventory.append(
+                (
+                    index_name,
+                    int(row["unique"]),
+                    int(row["partial"]),
+                    tuple(
+                        (
+                            None if item["name"] is None else str(item["name"]),
+                            int(item["desc"]),
+                            str(item["coll"] or "").upper(),
+                        )
+                        for item in key_rows
+                    ),
+                )
+            )
+        return tuple(sorted(inventory))
+
+    def _expected_sqlite_explicit_index_inventory(
+        self,
+        *,
+        table: Any,
+    ) -> tuple[tuple[Any, ...], ...]:
+        inventory: list[tuple[Any, ...]] = []
+        for index in table.indexes:
+            if index.name is None or index.dialect_options["sqlite"].get("where") is not None:
+                raise self._sqlite_exact_numeric_error(
+                    f"requires manual index review: {table.name}"
+                )
+            inventory.append(
+                (
+                    str(index.name),
+                    int(bool(index.unique)),
+                    0,
+                    tuple((str(column.name), 0, "BINARY") for column in index.columns),
+                )
+            )
+        return tuple(sorted(inventory))
+
+    def _sqlite_unique_constraint_inventory(
+        self,
+        connection: Any,
+        *,
+        table_name: str,
+    ) -> tuple[tuple[Any, ...], ...]:
+        quoted_table = self._quote_sqlite_identifier(table_name)
+        inventory: list[tuple[Any, ...]] = []
+        for row in connection.exec_driver_sql(
+            f"PRAGMA index_list({quoted_table})"
+        ).mappings():
+            if str(row["origin"]) != "u":
+                continue
+            quoted_index = self._quote_sqlite_identifier(str(row["name"]))
+            key_rows = sorted(
+                (
+                    item
+                    for item in connection.exec_driver_sql(
+                        f"PRAGMA index_xinfo({quoted_index})"
+                    ).mappings()
+                    if int(item["key"]) == 1
+                ),
+                key=lambda item: int(item["seqno"]),
+            )
+            inventory.append(
+                (
+                    int(row["partial"]),
+                    tuple(
+                        (
+                            None if item["name"] is None else str(item["name"]),
+                            int(item["desc"]),
+                            str(item["coll"] or "").upper(),
+                        )
+                        for item in key_rows
+                    ),
+                )
+            )
+        return tuple(sorted(inventory))
+
+    def _expected_sqlite_unique_constraint_inventory(
+        self,
+        *,
+        table: Any,
+    ) -> tuple[tuple[Any, ...], ...]:
+        inventory = []
+        for constraint in table.constraints:
+            if not isinstance(constraint, UniqueConstraint):
+                continue
+            inventory.append(
+                (
+                    0,
+                    tuple(
+                        (str(column.name), 0, "BINARY")
+                        for column in constraint.columns
+                    ),
+                )
+            )
+        return tuple(sorted(inventory))
+
+    @staticmethod
+    def _normalize_sqlite_check_sql(expression: Any) -> str:
+        value = "" if expression is None else str(expression)
+        return re.sub(r"\s+", " ", value).strip().casefold()
+
+    def _expected_sqlite_check_constraint_inventory(
+        self,
+        *,
+        table: Any,
+    ) -> tuple[tuple[str, str], ...]:
+        return tuple(
+            sorted(
+                (
+                    str(constraint.name or ""),
+                    self._normalize_sqlite_check_sql(constraint.sqltext),
+                )
+                for constraint in table.constraints
+                if isinstance(constraint, CheckConstraint)
+            )
+        )
+
+    def _assert_sqlite_legacy_exact_numeric_source_table(
+        self,
+        connection: Any,
+        *,
+        table: Any,
+    ) -> None:
+        table_name = str(table.name)
+        optional_missing = _PHASE_F_SQLITE_OPTIONAL_LEGACY_COLUMNS.get(
+            table_name,
+            frozenset(),
+        )
+        actual_rows = tuple(
+            connection.exec_driver_sql(
+                f"PRAGMA table_xinfo({self._quote_sqlite_identifier(table_name)})"
+            ).mappings()
+        )
+        all_expected_columns = tuple(table.columns)
+        full_column_names = tuple(str(column.name) for column in all_expected_columns)
+        allowed_missing_column_names = tuple(
+            str(column.name)
+            for column in all_expected_columns
+            if str(column.name) not in optional_missing
+        )
+        actual_column_names = tuple(str(row["name"]) for row in actual_rows)
+        if actual_column_names == full_column_names:
+            expected_columns = all_expected_columns
+        elif actual_column_names == allowed_missing_column_names:
+            expected_columns = tuple(
+                column
+                for column in all_expected_columns
+                if str(column.name) not in optional_missing
+            )
+        else:
+            raise self._sqlite_exact_numeric_error(
+                f"requires manual column review: {table_name}"
+            )
+
+        exact_column_names = set(_PHASE_F_EXACT_NUMERIC_COLUMNS.get(table_name, ()))
+        for row, column in zip(actual_rows, expected_columns):
+            if column.server_default is not None:
+                raise self._sqlite_exact_numeric_error(
+                    f"requires manual default review: {table_name}.{column.name}"
+                )
+            actual_identity = (
+                int(row["notnull"]),
+                None if row["dflt_value"] is None else str(row["dflt_value"]),
+                int(row["pk"]),
+                int(row["hidden"]),
+            )
+            expected_identity = (
+                int(not column.nullable),
+                None,
+                int(column.primary_key),
+                0,
+            )
+            if actual_identity != expected_identity:
+                raise self._sqlite_exact_numeric_error(
+                    f"requires manual column review: {table_name}.{column.name}"
+                )
+
+            actual_type = self._normalize_sqlite_declaration(row["type"])
+            if str(column.name) in exact_column_names:
+                expected_type = self._normalize_sqlite_declaration(
+                    _PHASE_F_SQLITE_LEGACY_NUMERIC_DECLARATION
+                )
+                if actual_type != expected_type:
+                    raise self._sqlite_exact_numeric_error(
+                        "requires supported legacy exact declaration: "
+                        f"{table_name}.{column.name}"
+                    )
+                continue
+
+            expected_type = self._expected_sqlite_rebuild_column_type(connection, column)
+            if actual_type != expected_type:
+                raise self._sqlite_exact_numeric_error(
+                    f"requires manual column review: {table_name}.{column.name}"
+                )
+
+        if self._sqlite_explicit_index_inventory(
+            connection,
+            table_name=table_name,
+        ) != self._expected_sqlite_explicit_index_inventory(table=table):
+            raise self._sqlite_exact_numeric_error(
+                f"requires manual index review: {table_name}"
+            )
+        if self._sqlite_unique_constraint_inventory(
+            connection,
+            table_name=table_name,
+        ) != self._expected_sqlite_unique_constraint_inventory(table=table):
+            raise self._sqlite_exact_numeric_error(
+                f"requires manual unique-constraint review: {table_name}"
+            )
+
+        actual_checks = tuple(
+            sorted(
+                (
+                    str(constraint.get("name") or ""),
+                    self._normalize_sqlite_check_sql(constraint.get("sqltext")),
+                )
+                for constraint in inspect(connection).get_check_constraints(table_name)
+            )
+        )
+        if actual_checks != self._expected_sqlite_check_constraint_inventory(table=table):
+            raise self._sqlite_exact_numeric_error(
+                f"requires manual check-constraint review: {table_name}"
+            )
+
+        table_sql = connection.exec_driver_sql(
+            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = :table_name",
+            {"table_name": table_name},
+        ).scalar_one_or_none()
+        normalized_sql = re.sub(r"\s+", " ", str(table_sql or "").upper())
+        if not normalized_sql or (
+            " AUTOINCREMENT" in normalized_sql
+            or any(marker in str(table_sql) for marker in ("--", "/*", "*/"))
+            or re.search(
+                r"\b(?:COLLATE|DEFERRABLE|INITIALLY)\b|\bON\s+CONFLICT\b|"
+                r"\bWITHOUT\s+ROWID\b|\bSTRICT\b",
+                normalized_sql,
+            )
+            is not None
+        ):
+            raise self._sqlite_exact_numeric_error(
+                f"requires manual constraint review: {table_name}"
+            )
+
+    @classmethod
+    def _sqlite_schema_sql_references_table(
+        cls,
+        statement: Any,
+        *,
+        table_name: str,
+    ) -> bool:
+        escaped_table_name = re.escape(table_name)
+        return re.search(
+            rf"(?<![A-Za-z0-9_$])(?:\"{escaped_table_name}\"|"
+            rf"`{escaped_table_name}`|\[{escaped_table_name}\]|{escaped_table_name})"
+            r"(?![A-Za-z0-9_$])",
+            str(statement or ""),
+            flags=re.IGNORECASE,
+        ) is not None
+
+    def _assert_sqlite_rebuild_has_no_unmanaged_triggers(self, connection: Any) -> None:
+        for row in connection.exec_driver_sql(
+            "SELECT name, tbl_name, sql FROM sqlite_schema "
+            "WHERE type = 'trigger' ORDER BY tbl_name, name"
+        ).mappings():
+            trigger_table = str(row["tbl_name"] or "")
+            if trigger_table in _PHASE_F_SQLITE_REBUILD_SOURCE_TABLES_BY_NAME or any(
+                self._sqlite_schema_sql_references_table(
+                    row["sql"],
+                    table_name=table_name,
+                )
+                for table_name in _PHASE_F_SQLITE_REBUILD_TARGET_TABLE_NAMES
+            ):
+                raise self._sqlite_exact_numeric_error(
+                    "requires manual trigger review: "
+                    f"{trigger_table}.{row['name']}"
+                )
+
+    def _assert_sqlite_rebuild_has_no_referencing_views(self, connection: Any) -> None:
+        for row in connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_schema WHERE type = 'view' ORDER BY name"
+        ).mappings():
+            if any(
+                self._sqlite_schema_sql_references_table(
+                    row["sql"],
+                    table_name=table_name,
+                )
+                for table_name in _PHASE_F_SQLITE_REBUILD_TARGET_TABLE_NAMES
+            ):
+                raise self._sqlite_exact_numeric_error(
+                    f"requires manual view review: {row['name']}"
+                )
+
+    def _assert_sqlite_legacy_exact_numeric_foreign_key_inventory(
+        self,
+        connection: Any,
+    ) -> None:
+        source_table_names = tuple(_PHASE_F_SQLITE_REBUILD_SOURCE_TABLES_BY_NAME)
+        actual_foreign_keys = read_sqlite_foreign_keys(
+            connection,
+            source_table_names,
+        )
+        expected_foreign_keys = type(actual_foreign_keys)(
+            (
+                str(table.name),
+                str(foreign_key.parent.name),
+                str(foreign_key.column.table.name),
+                str(foreign_key.column.name),
+                str(foreign_key.onupdate or "NO ACTION").strip().upper(),
+                str(foreign_key.ondelete or "NO ACTION").strip().upper(),
+                str(foreign_key.match or "NONE").strip().upper(),
+            )
+            for table in _PHASE_F_SQLITE_REBUILD_SOURCE_TABLES
+            for foreign_key in table.foreign_keys
+        )
+        if actual_foreign_keys != expected_foreign_keys:
+            raise self._sqlite_exact_numeric_error(
+                "requires manual foreign-key review for the Phase F source graph"
+            )
+
+        existing_table_names = tuple(
+            str(table_name)
+            for table_name in inspect(connection).get_table_names()
+        )
+        inbound_foreign_keys = sorted(
+            identity
+            for identity in read_sqlite_foreign_keys(
+                connection,
+                existing_table_names,
+            ).elements()
+            if identity[2] in _PHASE_F_SQLITE_REBUILD_TARGET_TABLE_NAMES
+            and identity[0] not in _PHASE_F_SQLITE_REBUILD_TARGET_TABLE_NAMES
+        )
+        if inbound_foreign_keys:
+            first = inbound_foreign_keys[0]
+            raise self._sqlite_exact_numeric_error(
+                "requires manual inbound foreign-key review: "
+                f"{first[0]}.{first[1]} -> {first[2]}.{first[3]}"
+            )
+
+    def _qualify_sqlite_legacy_exact_numeric_rebuild_source(self, connection: Any) -> None:
+        """Accept only the reviewed legacy graph before the destructive rebuild."""
+        self._assert_sqlite_rebuild_has_no_unmanaged_triggers(connection)
+        self._assert_sqlite_rebuild_has_no_referencing_views(connection)
+        for table in _PHASE_F_SQLITE_REBUILD_SOURCE_TABLES:
+            self._assert_sqlite_legacy_exact_numeric_source_table(
+                connection,
+                table=table,
+            )
+        self._assert_sqlite_legacy_exact_numeric_foreign_key_inventory(connection)
+        if connection.exec_driver_sql("PRAGMA foreign_key_check").first() is not None:
+            raise self._sqlite_exact_numeric_error(
+                "requires a foreign-key-clean source database"
+            )
+
+    def _sqlite_exact_numeric_schema_state(self, connection: Any) -> str:
+        """Classify an existing SQLite Phase F schema without accepting partial state."""
+        inspector = inspect(connection)
+        existing_table_names = {str(name) for name in inspector.get_table_names()}
+        present_phase_f_tables = _PHASE_F_TABLES & existing_table_names
+        if not present_phase_f_tables:
+            return "absent"
+
+        missing_phase_f_tables = sorted(_PHASE_F_TABLES - existing_table_names)
+        if missing_phase_f_tables:
+            raise self._sqlite_exact_numeric_error(
+                "requires a complete Phase F schema; missing tables: "
+                + ", ".join(missing_phase_f_tables)
+            )
+
+        table_states: set[str] = set()
+        for table_name, exact_column_names in _PHASE_F_EXACT_NUMERIC_COLUMNS.items():
+            table = _PHASE_F_EXACT_TABLES_BY_NAME[table_name]
+            columns_by_name = {
+                str(column["name"]): column
+                for column in inspector.get_columns(table_name)
+            }
+            expected_column_names = {str(column.name) for column in table.columns}
+            optional_missing = _PHASE_F_SQLITE_OPTIONAL_LEGACY_COLUMNS.get(table_name, frozenset())
+            missing_column_names = expected_column_names - set(columns_by_name)
+            unexpected_column_names = set(columns_by_name) - expected_column_names
+            if unexpected_column_names or (missing_column_names - optional_missing):
+                details: list[str] = []
+                if missing_column_names - optional_missing:
+                    details.append("missing columns: " + ", ".join(sorted(missing_column_names - optional_missing)))
+                if unexpected_column_names:
+                    details.append("unexpected columns: " + ", ".join(sorted(unexpected_column_names)))
+                raise self._sqlite_exact_numeric_error(
+                    f"requires a complete compatible table {table_name}; " + "; ".join(details)
+                )
+
+            column_states: set[str] = set()
+            for column_name in exact_column_names:
+                column = columns_by_name.get(column_name)
+                if column is None:
+                    if column_name in optional_missing:
+                        continue
+                    raise self._sqlite_exact_numeric_error(
+                        f"requires {table_name}.{column_name} before conversion"
+                    )
+                declared_type = str(column["type"] or "").strip().upper()
+                if declared_type == "TEXT":
+                    column_states.add("text")
+                    continue
+                if self._is_sqlite_legacy_numeric_type(declared_type):
+                    column_states.add("legacy_numeric")
+                    continue
+                raise self._sqlite_exact_numeric_error(
+                    f"cannot convert {table_name}.{column_name} declared {declared_type or '<empty>'}"
+                )
+
+            if len(column_states) != 1:
+                raise self._sqlite_exact_numeric_error(
+                    f"refuses mixed exact-numeric declarations in {table_name}"
+                )
+            table_state = column_states.pop()
+            self._validate_sqlite_exact_numeric_values(
+                connection,
+                table_name=table_name,
+                column_names=exact_column_names,
+                storage_state=table_state,
+                optional_missing=optional_missing,
+            )
+            table_states.add(table_state)
+
+        if len(table_states) != 1:
+            raise self._sqlite_exact_numeric_error(
+                "refuses mixed exact-numeric declarations across Phase F tables"
+            )
+        storage_state = table_states.pop()
+        if storage_state == "legacy_numeric":
+            self._qualify_sqlite_legacy_exact_numeric_rebuild_source(connection)
+        return storage_state
+
+    def _validate_sqlite_exact_numeric_values(
+        self,
+        connection: Any,
+        *,
+        table_name: str,
+        column_names: Sequence[str],
+        storage_state: str,
+        optional_missing: frozenset[str],
+    ) -> None:
+        quoted_table = self._quote_sqlite_identifier(table_name)
+        for column_name in column_names:
+            if column_name in optional_missing:
+                inspector = inspect(connection)
+                available_columns = {
+                    str(column["name"])
+                    for column in inspector.get_columns(table_name)
+                }
+                if column_name not in available_columns:
+                    continue
+            quoted_column = self._quote_sqlite_identifier(column_name)
+            if storage_state == "text":
+                non_text_count = int(
+                    connection.exec_driver_sql(
+                        f"SELECT COUNT(*) FROM {quoted_table} "
+                        f"WHERE {quoted_column} IS NOT NULL "
+                        f"AND typeof({quoted_column}) != 'text'"
+                    ).scalar_one()
+                )
+                if non_text_count:
+                    raise self._sqlite_exact_numeric_error(
+                        f"refuses non-TEXT values in {table_name}.{column_name}"
+                    )
+                continue
+
+            rows = connection.exec_driver_sql(
+                f"SELECT {quoted_column} FROM {quoted_table} "
+                f"WHERE {quoted_column} IS NOT NULL"
+            )
+            for (value,) in rows:
+                self._serialize_sqlite_legacy_exact_value(
+                    value,
+                    table_name=table_name,
+                    column_name=column_name,
+                )
+
+    def _serialize_sqlite_legacy_exact_value(
+        self,
+        value: Any,
+        *,
+        table_name: str,
+        column_name: str,
+    ) -> str:
+        if isinstance(value, (float, int)) and not isinstance(value, bool):
+            try:
+                binary64_value = float(value)
+                binary64_ulp = Decimal(str(ulp(binary64_value)))
+            except (OverflowError, ValueError) as exc:
+                raise self._sqlite_exact_numeric_error(
+                    f"cannot convert non-finite numeric storage in {table_name}.{column_name}"
+                ) from exc
+            if not isfinite(binary64_value) or binary64_ulp > _PHASE_F_SQLITE_STORAGE_QUANTUM:
+                raise self._sqlite_exact_numeric_error(
+                    f"refuses unrecoverable legacy numeric storage in {table_name}.{column_name}"
+                )
+        try:
+            return serialize_portfolio_decimal(value)
+        except Exception as exc:
+            raise self._sqlite_exact_numeric_error(
+                f"cannot convert {table_name}.{column_name} to canonical storage text"
+            ) from exc
+
+    def _migrate_sqlite_exact_numeric_storage(self) -> None:
+        """Rebuild one complete legacy SQLite Phase F schema with exact TEXT columns."""
+        if self._engine.dialect.name != "sqlite":
+            return
+
+        with self._engine.connect() as connection:
+            if self._sqlite_exact_numeric_schema_state(connection) != "legacy_numeric":
+                return
+
+            connection.commit()
+            connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
+            connection.commit()
+            if int(connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one()) != 0:
+                raise self._sqlite_exact_numeric_error("could not disable foreign-key checks for rebuild")
+            connection.commit()
+            try:
+                with connection.begin():
+                    connection.exec_driver_sql("BEGIN IMMEDIATE")
+                    if self._sqlite_exact_numeric_schema_state(connection) != "legacy_numeric":
+                        return
+                    stage_table_names = self._stage_sqlite_legacy_exact_tables(connection)
+                    for table in _PHASE_F_SQLITE_REBUILD_DROP_ORDER:
+                        connection.exec_driver_sql(
+                            f"DROP TABLE {self._quote_sqlite_identifier(str(table.name))}"
+                        )
+                    for table in _PHASE_F_SQLITE_REBUILD_CREATE_ORDER:
+                        table.create(connection, checkfirst=False)
+                    self._restore_sqlite_legacy_exact_tables(
+                        connection,
+                        stage_table_names=stage_table_names,
+                    )
+                    foreign_key_violations = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+                    if foreign_key_violations:
+                        raise self._sqlite_exact_numeric_error(
+                            "refuses legacy rows that violate foreign-key integrity"
+                        )
+            finally:
+                if connection.in_transaction():
+                    connection.rollback()
+                connection.exec_driver_sql("PRAGMA foreign_keys = ON")
+                connection.commit()
+                if int(connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one()) != 1:
+                    raise self._sqlite_exact_numeric_error("could not restore foreign-key checks after rebuild")
+
+    def _stage_sqlite_legacy_exact_tables(self, connection: Any) -> dict[str, str]:
+        stage_table_names: dict[str, str] = {}
+        for table in _PHASE_F_SQLITE_REBUILD_CREATE_ORDER:
+            table_name = str(table.name)
+            stage_table_name = f"__phase_f_exact_stage_{table_name}"
+            stage_table_names[table_name] = stage_table_name
+            connection.exec_driver_sql(
+                f"CREATE TEMP TABLE {self._quote_sqlite_identifier(stage_table_name)} AS "
+                f"SELECT * FROM {self._quote_sqlite_identifier(table_name)}"
+            )
+        return stage_table_names
+
+    def _restore_sqlite_legacy_exact_tables(
+        self,
+        connection: Any,
+        *,
+        stage_table_names: dict[str, str],
+    ) -> None:
+        for table in _PHASE_F_SQLITE_REBUILD_CREATE_ORDER:
+            table_name = str(table.name)
+            stage_table_name = stage_table_names[table_name]
+            staged_column_names = {
+                str(column[1])
+                for column in connection.exec_driver_sql(
+                    f"PRAGMA table_xinfo({self._quote_sqlite_identifier(stage_table_name)})"
+                )
+            }
+            target_column_names = [str(column.name) for column in table.columns]
+            exact_column_names = set(_PHASE_F_EXACT_NUMERIC_COLUMNS[table_name])
+            insert_columns = ", ".join(
+                self._quote_sqlite_identifier(column_name)
+                for column_name in target_column_names
+            )
+            placeholders = ", ".join("?" for _ in target_column_names)
+            insert_sql = (
+                f"INSERT INTO {self._quote_sqlite_identifier(table_name)} ({insert_columns}) "
+                f"VALUES ({placeholders})"
+            )
+            staged_rows = connection.exec_driver_sql(
+                f"SELECT * FROM {self._quote_sqlite_identifier(stage_table_name)}"
+            ).mappings()
+            for row in staged_rows:
+                values = []
+                for column_name in target_column_names:
+                    value = row[column_name] if column_name in staged_column_names else None
+                    if value is not None and column_name in exact_column_names:
+                        value = self._serialize_sqlite_legacy_exact_value(
+                            value,
+                            table_name=table_name,
+                            column_name=column_name,
+                        )
+                    values.append(value)
+                connection.exec_driver_sql(insert_sql, tuple(values))
+
+    def _migrate_portfolio_position_price_cost_column(self) -> None:
+        """Append the unavailable source field without synthesizing shadow values."""
+        with self._engine.begin() as connection:
+            table_names = set(inspect(connection).get_table_names())
+            if "portfolio_positions" not in table_names:
+                return
+            column_names = {
+                str(column["name"])
+                for column in inspect(connection).get_columns("portfolio_positions")
+            }
+            if "price_cost" in column_names:
+                return
+            column_type = "TEXT" if connection.dialect.name == "sqlite" else "NUMERIC(24, 8)"
+            connection.exec_driver_sql(
+                f"ALTER TABLE portfolio_positions ADD COLUMN price_cost {column_type}"
+            )
 
     def get_session(self) -> Session:
         return self._SessionLocal()
@@ -667,6 +1387,8 @@ class PostgresPhaseFStore:
         }
 
     def _serialize_ledger_row(self, row: Any) -> dict[str, Any]:
+        market = getattr(row, "market", None)
+        currency = getattr(row, "currency", None)
         return {
             "id": int(row.id),
             "owner_user_id": str(row.owner_user_id or ""),
@@ -674,14 +1396,34 @@ class PostgresPhaseFStore:
             "entry_type": str(row.entry_type or ""),
             "event_time": self._serialize_time_value(getattr(row, "event_time", None)),
             "canonical_symbol": row.canonical_symbol,
-            "market": row.market,
-            "currency": row.currency,
+            "market": market,
+            "currency": currency,
             "direction": row.direction,
-            "quantity": float(row.quantity) if row.quantity is not None else None,
-            "price": float(row.price) if row.price is not None else None,
-            "amount": float(row.amount) if row.amount is not None else None,
-            "fee": float(row.fee) if row.fee is not None else None,
-            "tax": float(row.tax) if row.tax is not None else None,
+            "quantity": (
+                serialize_portfolio_decimal(row.quantity)
+                if row.quantity is not None
+                else None
+            ),
+            "price": (
+                serialize_portfolio_decimal(row.price)
+                if row.price is not None
+                else None
+            ),
+            "amount": (
+                serialize_portfolio_decimal(row.amount)
+                if row.amount is not None
+                else None
+            ),
+            "fee": (
+                serialize_portfolio_decimal(row.fee)
+                if row.fee is not None
+                else None
+            ),
+            "tax": (
+                serialize_portfolio_decimal(row.tax)
+                if row.tax is not None
+                else None
+            ),
             "corporate_action_type": row.corporate_action_type,
             "external_ref": row.external_ref,
             "dedup_hash": row.dedup_hash,
@@ -693,6 +1435,8 @@ class PostgresPhaseFStore:
     def _serialize_trade_list_comparison_row(self, row: Any) -> dict[str, Any]:
         payload = self._safe_json_load(getattr(row, "payload_json", None))
         legacy_row_id = int(payload.get("legacy_row_id") or 0)
+        market = getattr(row, "market", None)
+        currency = getattr(row, "currency", None)
         event_time = getattr(row, "event_time", None)
         trade_date = ""
         if isinstance(event_time, datetime):
@@ -705,14 +1449,14 @@ class PostgresPhaseFStore:
             "account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
             "trade_uid": payload.get("trade_uid") if payload.get("trade_uid") is not None else getattr(row, "external_ref", None),
             "symbol": str(getattr(row, "canonical_symbol", "") or ""),
-            "market": getattr(row, "market", None),
-            "currency": getattr(row, "currency", None),
+            "market": market,
+            "currency": currency,
             "trade_date": trade_date,
             "side": str(getattr(row, "direction", "") or ""),
-            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
-            "price": float(getattr(row, "price", 0.0) or 0.0),
-            "fee": float(getattr(row, "fee", 0.0) or 0.0),
-            "tax": float(getattr(row, "tax", 0.0) or 0.0),
+            "quantity": serialize_portfolio_decimal(getattr(row, "quantity", 0) or 0),
+            "price": serialize_portfolio_decimal(getattr(row, "price", 0) or 0),
+            "fee": serialize_portfolio_decimal(getattr(row, "fee", 0) or 0),
+            "tax": serialize_portfolio_decimal(getattr(row, "tax", 0) or 0),
             "note": getattr(row, "note", None),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
         }
@@ -720,6 +1464,11 @@ class PostgresPhaseFStore:
     def _serialize_cash_ledger_comparison_row(self, row: Any) -> dict[str, Any]:
         payload = self._safe_json_load(getattr(row, "payload_json", None))
         legacy_row_id = int(payload.get("legacy_row_id") or 0)
+        currency = str(
+            payload.get("currency")
+            if payload.get("currency") is not None
+            else getattr(row, "currency", "")
+        )
         event_time = getattr(row, "event_time", None)
         event_date = ""
         if isinstance(event_time, datetime):
@@ -732,8 +1481,12 @@ class PostgresPhaseFStore:
             "account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
             "event_date": event_date,
             "direction": payload.get("direction") if payload.get("direction") is not None else getattr(row, "direction", None),
-            "amount": float(payload.get("amount")) if payload.get("amount") is not None else float(getattr(row, "amount", 0.0) or 0.0),
-            "currency": payload.get("currency") if payload.get("currency") is not None else getattr(row, "currency", None),
+            "amount": serialize_portfolio_decimal(
+                payload.get("amount")
+                if payload.get("amount") is not None
+                else (getattr(row, "amount", 0) or 0),
+            ),
+            "currency": currency,
             "note": payload.get("note") if payload.get("note") is not None else getattr(row, "note", None),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
         }
@@ -741,6 +1494,8 @@ class PostgresPhaseFStore:
     def _serialize_corporate_actions_comparison_row(self, row: Any) -> dict[str, Any]:
         payload = self._safe_json_load(getattr(row, "payload_json", None))
         legacy_row_id = int(payload.get("legacy_row_id") or 0)
+        market = getattr(row, "market", None)
+        currency = getattr(row, "currency", None)
         event_time = getattr(row, "event_time", None)
         effective_date = ""
         if isinstance(event_time, datetime):
@@ -754,21 +1509,30 @@ class PostgresPhaseFStore:
             "id": legacy_row_id,
             "account_id": int(getattr(row, "portfolio_account_id", 0) or 0),
             "symbol": str(getattr(row, "canonical_symbol", "") or ""),
-            "market": getattr(row, "market", None),
-            "currency": getattr(row, "currency", None),
+            "market": market,
+            "currency": currency,
             "effective_date": effective_date,
             "action_type": payload.get("action_type")
             if payload.get("action_type") is not None
             else getattr(row, "corporate_action_type", None),
             "cash_dividend_per_share": (
-                float(cash_dividend_per_share) if cash_dividend_per_share is not None else None
+                serialize_portfolio_decimal(cash_dividend_per_share)
+                if cash_dividend_per_share is not None
+                else None
             ),
-            "split_ratio": float(split_ratio) if split_ratio is not None else None,
+            "split_ratio": (
+                serialize_portfolio_decimal(split_ratio)
+                if split_ratio is not None
+                else None
+            ),
             "note": payload.get("note") if payload.get("note") is not None else getattr(row, "note", None),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
         }
 
     def _serialize_position_row(self, row: Any) -> dict[str, Any]:
+        market = str(row.market or "")
+        currency = str(row.currency or "")
+        valuation_currency = row.valuation_currency
         return {
             "id": int(row.id),
             "owner_user_id": str(row.owner_user_id or ""),
@@ -776,14 +1540,33 @@ class PostgresPhaseFStore:
             "source_kind": str(row.source_kind or ""),
             "cost_method": str(row.cost_method or ""),
             "canonical_symbol": str(row.canonical_symbol or ""),
-            "market": str(row.market or ""),
-            "currency": str(row.currency or ""),
-            "quantity": float(row.quantity) if row.quantity is not None else 0.0,
-            "avg_cost": float(row.avg_cost) if row.avg_cost is not None else 0.0,
-            "total_cost": float(row.total_cost) if row.total_cost is not None else 0.0,
-            "last_price": float(row.last_price) if row.last_price is not None else None,
-            "market_value_base": float(row.market_value_base) if row.market_value_base is not None else None,
-            "unrealized_pnl_base": float(row.unrealized_pnl_base) if row.unrealized_pnl_base is not None else None,
+            "market": market,
+            "currency": currency,
+            "quantity": serialize_portfolio_decimal(row.quantity if row.quantity is not None else 0),
+            "avg_cost": serialize_portfolio_decimal(row.avg_cost if row.avg_cost is not None else 0),
+            "total_cost": serialize_portfolio_decimal(
+                row.total_cost if row.total_cost is not None else 0
+            ),
+            "price_cost": (
+                serialize_portfolio_decimal(row.price_cost)
+                if row.price_cost is not None
+                else None
+            ),
+            "last_price": (
+                serialize_portfolio_decimal(row.last_price)
+                if row.last_price is not None
+                else None
+            ),
+            "market_value_base": (
+                serialize_portfolio_decimal(row.market_value_base)
+                if row.market_value_base is not None
+                else None
+            ),
+            "unrealized_pnl_base": (
+                serialize_portfolio_decimal(row.unrealized_pnl_base)
+                if row.unrealized_pnl_base is not None
+                else None
+            ),
             "valuation_currency": row.valuation_currency,
             "as_of_time": self._serialize_time_value(getattr(row, "as_of_time", None)),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
@@ -791,6 +1574,7 @@ class PostgresPhaseFStore:
         }
 
     def _serialize_sync_state_row(self, row: Any) -> dict[str, Any]:
+        base_currency = str(row.base_currency or "")
         return {
             "id": int(row.id),
             "owner_user_id": str(row.owner_user_id or ""),
@@ -802,12 +1586,16 @@ class PostgresPhaseFStore:
             "sync_status": str(row.sync_status or ""),
             "snapshot_date": self._serialize_time_value(getattr(row, "snapshot_date", None)),
             "synced_at": self._serialize_time_value(getattr(row, "synced_at", None)),
-            "base_currency": str(row.base_currency or ""),
-            "total_cash": float(row.total_cash) if row.total_cash is not None else 0.0,
-            "total_market_value": float(row.total_market_value) if row.total_market_value is not None else 0.0,
-            "total_equity": float(row.total_equity) if row.total_equity is not None else 0.0,
-            "realized_pnl": float(row.realized_pnl) if row.realized_pnl is not None else 0.0,
-            "unrealized_pnl": float(row.unrealized_pnl) if row.unrealized_pnl is not None else 0.0,
+            "base_currency": base_currency,
+            "total_cash": serialize_portfolio_decimal(row.total_cash if row.total_cash is not None else 0),
+            "total_market_value": serialize_portfolio_decimal(
+                row.total_market_value if row.total_market_value is not None else 0
+            ),
+            "total_equity": serialize_portfolio_decimal(row.total_equity if row.total_equity is not None else 0),
+            "realized_pnl": serialize_portfolio_decimal(row.realized_pnl if row.realized_pnl is not None else 0),
+            "unrealized_pnl": serialize_portfolio_decimal(
+                row.unrealized_pnl if row.unrealized_pnl is not None else 0
+            ),
             "fx_stale": bool(row.fx_stale),
             "payload_json": self._safe_json_load(getattr(row, "payload_json", None)),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
@@ -815,6 +1603,9 @@ class PostgresPhaseFStore:
         }
 
     def _serialize_sync_position_row(self, row: Any) -> dict[str, Any]:
+        market = str(row.market or "")
+        currency = str(row.currency or "")
+        valuation_currency = row.valuation_currency
         return {
             "id": int(row.id),
             "portfolio_sync_state_id": int(row.portfolio_sync_state_id),
@@ -822,28 +1613,33 @@ class PostgresPhaseFStore:
             "portfolio_account_id": int(row.portfolio_account_id),
             "broker_position_ref": row.broker_position_ref,
             "canonical_symbol": str(row.canonical_symbol or ""),
-            "market": str(row.market or ""),
-            "currency": str(row.currency or ""),
-            "quantity": float(row.quantity) if row.quantity is not None else 0.0,
-            "avg_cost": float(row.avg_cost) if row.avg_cost is not None else 0.0,
-            "last_price": float(row.last_price) if row.last_price is not None else 0.0,
-            "market_value_base": float(row.market_value_base) if row.market_value_base is not None else 0.0,
-            "unrealized_pnl_base": float(row.unrealized_pnl_base) if row.unrealized_pnl_base is not None else 0.0,
+            "market": market,
+            "currency": currency,
+            "quantity": serialize_portfolio_decimal(row.quantity if row.quantity is not None else 0),
+            "avg_cost": serialize_portfolio_decimal(row.avg_cost if row.avg_cost is not None else 0),
+            "last_price": serialize_portfolio_decimal(row.last_price if row.last_price is not None else 0),
+            "market_value_base": serialize_portfolio_decimal(
+                row.market_value_base if row.market_value_base is not None else 0
+            ),
+            "unrealized_pnl_base": serialize_portfolio_decimal(
+                row.unrealized_pnl_base if row.unrealized_pnl_base is not None else 0
+            ),
             "valuation_currency": row.valuation_currency,
             "payload_json": self._safe_json_load(getattr(row, "payload_json", None)),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
             "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
         }
 
-    def _serialize_sync_cash_balance_row(self, row: Any) -> dict[str, Any]:
+    def _serialize_sync_cash_balance_row(self, row: Any, *, base_currency: str) -> dict[str, Any]:
+        currency = str(row.currency or "")
         return {
             "id": int(row.id),
             "portfolio_sync_state_id": int(row.portfolio_sync_state_id),
             "owner_user_id": str(row.owner_user_id or ""),
             "portfolio_account_id": int(row.portfolio_account_id),
-            "currency": str(row.currency or ""),
-            "amount": float(row.amount) if row.amount is not None else 0.0,
-            "amount_base": float(row.amount_base) if row.amount_base is not None else 0.0,
+            "currency": currency,
+            "amount": serialize_portfolio_decimal(row.amount if row.amount is not None else 0),
+            "amount_base": serialize_portfolio_decimal(row.amount_base if row.amount_base is not None else 0),
             "created_at": self._serialize_time_value(getattr(row, "created_at", None)),
             "updated_at": self._serialize_time_value(getattr(row, "updated_at", None)),
         }
@@ -1046,10 +1842,10 @@ class PostgresPhaseFStore:
                             "legacy_row_id": int(row.id),
                             "trade_uid": getattr(row, "trade_uid", None),
                             "side": getattr(row, "side", None),
-                            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
-                            "price": float(getattr(row, "price", 0.0) or 0.0),
-                            "fee": float(getattr(row, "fee", 0.0) or 0.0),
-                            "tax": float(getattr(row, "tax", 0.0) or 0.0),
+                            "quantity": serialize_portfolio_decimal(getattr(row, "quantity", 0) or 0),
+                            "price": serialize_portfolio_decimal(getattr(row, "price", 0) or 0),
+                            "fee": serialize_portfolio_decimal(getattr(row, "fee", 0) or 0),
+                            "tax": serialize_portfolio_decimal(getattr(row, "tax", 0) or 0),
                             "note": getattr(row, "note", None),
                         },
                         created_at=getattr(row, "created_at", None) or datetime.now(),
@@ -1081,7 +1877,7 @@ class PostgresPhaseFStore:
                             "legacy_table": "portfolio_cash_ledger",
                             "legacy_row_id": int(row.id),
                             "direction": getattr(row, "direction", None),
-                            "amount": float(getattr(row, "amount", 0.0) or 0.0),
+                            "amount": serialize_portfolio_decimal(getattr(row, "amount", 0) or 0),
                             "currency": getattr(row, "currency", None),
                             "note": getattr(row, "note", None),
                         },
@@ -1117,8 +1913,16 @@ class PostgresPhaseFStore:
                             "legacy_table": "portfolio_corporate_actions",
                             "legacy_row_id": int(row.id),
                             "action_type": getattr(row, "action_type", None),
-                            "cash_dividend_per_share": getattr(row, "cash_dividend_per_share", None),
-                            "split_ratio": getattr(row, "split_ratio", None),
+                            "cash_dividend_per_share": (
+                                serialize_portfolio_decimal(row.cash_dividend_per_share)
+                                if row.cash_dividend_per_share is not None
+                                else None
+                            ),
+                            "split_ratio": (
+                                serialize_portfolio_decimal(row.split_ratio)
+                                if row.split_ratio is not None
+                                else None
+                            ),
                             "note": getattr(row, "note", None),
                         },
                         created_at=getattr(row, "created_at", None) or datetime.now(),
@@ -1139,6 +1943,7 @@ class PostgresPhaseFStore:
                         quantity=getattr(row, "quantity", None),
                         avg_cost=getattr(row, "avg_cost", None),
                         total_cost=getattr(row, "total_cost", None),
+                        price_cost=getattr(row, "price_cost", None),
                         last_price=getattr(row, "last_price", None),
                         market_value_base=getattr(row, "market_value_base", None),
                         unrealized_pnl_base=getattr(row, "unrealized_pnl_base", None),
@@ -1382,7 +2187,12 @@ class PostgresPhaseFStore:
                         for row in sync_positions_by_account.get(int(account_row.id), [])
                     ],
                     "sync_cash_balances": [
-                        self._serialize_sync_cash_balance_row(row)
+                        self._serialize_sync_cash_balance_row(
+                            row,
+                            base_currency=str(
+                                latest_sync_state_by_account[int(account_row.id)].base_currency or ""
+                            ),
+                        )
                         for row in sync_cash_balances_by_account.get(int(account_row.id), [])
                     ],
                 }

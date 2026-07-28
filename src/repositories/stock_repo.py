@@ -94,11 +94,7 @@ class StockRepository:
         Returns:
             保存的记录数
         """
-        try:
-            return self.db.save_daily_data(df, code, data_source)
-        except Exception as e:
-            logger.error(f"保存日线数据失败: {e}")
-            return 0
+        return self.db.save_daily_data(df, code, data_source)
     
     def has_today_data(self, code: str, target_date: Optional[date] = None) -> bool:
         """

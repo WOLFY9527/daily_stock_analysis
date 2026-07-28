@@ -11,6 +11,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from decimal import ROUND_DOWN, Decimal, localcontext
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -20,10 +21,16 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import select
 
 from src.config import Config
+from src.portfolio_exact_numeric import PortfolioPrecisionError
 from src.repositories.portfolio_repo import PortfolioBusyError, PortfolioRepository
 from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_risk_service import PortfolioRiskService
-from src.services.portfolio_service import PortfolioConflictError, PortfolioOversellError, PortfolioService
+from src.services.portfolio_service import (
+    PortfolioConflictError,
+    PortfolioOversellError,
+    PortfolioService,
+    _internal_snapshot_decimal,
+)
 from src.storage import (
     DatabaseManager,
     PortfolioCashLedger,
@@ -185,6 +192,36 @@ class PortfolioServiceTestCase(unittest.TestCase):
             self.service._normalize_phase_f_compare_value(field_name="symbol", value="AAPL"),
             "AAPL",
         )
+        self.assertEqual(
+            self.service._normalize_phase_f_compare_value(
+                field_name="fee",
+                value="9007199254740993.12000000",
+            ),
+            Decimal("9007199254740993.12000000"),
+        )
+
+        float_view = {
+            "request_context": {"account_id": 1, "page": 1, "page_size": 20},
+            "total": 1,
+            "items": [
+                {
+                    "id": 12,
+                    "account_id": 1,
+                    "event_date": "2026-04-21",
+                    "direction": "in",
+                    "amount": 0.0,
+                    "currency": "USD",
+                    "note": "seed",
+                    "created_at": "2026-04-21T00:49:23.107279",
+                }
+            ],
+        }
+        mismatch = self.service._compare_phase_f_cash_ledger_results(
+            legacy_view=float_view,
+            candidate_view=float_view,
+        )
+        self.assertIsNotNone(mismatch)
+        self.assertEqual(mismatch["first_mismatch_field"], "amount")
 
     def test_phase_f_result_view_summary_helper_returns_shared_shape(self) -> None:
         summary = self.service._summarize_phase_f_result_view(
@@ -228,10 +265,10 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "trade_date": "2026-04-21",
                             "side": "buy",
-                            "quantity": 10.0,
-                            "price": 100.0,
-                            "fee": 0.0,
-                            "tax": 0.0,
+                            "quantity": "10.00000000",
+                            "price": "100.00000000",
+                            "fee": "0.00000000",
+                            "tax": "0.00000000",
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:23.107279",
                         }
@@ -250,10 +287,10 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "trade_date": "2026-04-21",
                             "side": "buy",
-                            "quantity": 10.0,
-                            "price": 100.0,
-                            "fee": 0.0,
-                            "tax": 0.0,
+                            "quantity": "10.00000000",
+                            "price": "100.00000000",
+                            "fee": "0.00000000",
+                            "tax": "0.00000000",
                             "note": "seed",
                             "created_at": datetime(2026, 4, 21, 0, 49, 23, 107279, tzinfo=timezone(timedelta(hours=8))).isoformat(),
                         }
@@ -272,7 +309,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "account_id": 1,
                             "event_date": "2026-04-21",
                             "direction": "in",
-                            "amount": 1000.0,
+                            "amount": "1000.00000000",
                             "currency": "USD",
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:23.107279",
@@ -288,7 +325,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "account_id": 1,
                             "event_date": "2026-04-21",
                             "direction": "in",
-                            "amount": 1000.0,
+                            "amount": "1000.00000000",
                             "currency": "USD",
                             "note": "seed",
                             "created_at": datetime(2026, 4, 21, 0, 49, 23, 107279, tzinfo=timezone(timedelta(hours=8))).isoformat(),
@@ -311,7 +348,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "effective_date": "2026-04-21",
                             "action_type": "cash_dividend",
-                            "cash_dividend_per_share": 1.0,
+                            "cash_dividend_per_share": "1.00000000",
                             "split_ratio": None,
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:23.107279",
@@ -330,7 +367,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "effective_date": "2026-04-21",
                             "action_type": "cash_dividend",
-                            "cash_dividend_per_share": 1.0,
+                            "cash_dividend_per_share": "1.00000000",
                             "split_ratio": None,
                             "note": "seed",
                             "created_at": datetime(2026, 4, 21, 0, 49, 23, 107279, tzinfo=timezone(timedelta(hours=8))).isoformat(),
@@ -362,10 +399,10 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "trade_date": "2026-04-21",
                             "side": "buy",
-                            "quantity": 10.0,
-                            "price": 100.0,
-                            "fee": 0.0,
-                            "tax": 0.0,
+                            "quantity": "10.00000000",
+                            "price": "100.00000000",
+                            "fee": "0.00000000",
+                            "tax": "0.00000000",
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:23.107279",
                         }
@@ -384,10 +421,10 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "trade_date": "2026-04-21",
                             "side": "buy",
-                            "quantity": 10.0,
-                            "price": 100.0,
-                            "fee": 0.0,
-                            "tax": 0.0,
+                            "quantity": "10.00000000",
+                            "price": "100.00000000",
+                            "fee": "0.00000000",
+                            "tax": "0.00000000",
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:24.107279+08:00",
                         }
@@ -406,7 +443,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "account_id": 1,
                             "event_date": "2026-04-21",
                             "direction": "in",
-                            "amount": 1000.0,
+                            "amount": "1000.00000000",
                             "currency": "USD",
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:23.107279",
@@ -422,7 +459,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "account_id": 1,
                             "event_date": "2026-04-21",
                             "direction": "in",
-                            "amount": 1000.0,
+                            "amount": "1000.00000000",
                             "currency": "USD",
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:24.107279+08:00",
@@ -445,7 +482,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "effective_date": "2026-04-21",
                             "action_type": "cash_dividend",
-                            "cash_dividend_per_share": 1.0,
+                            "cash_dividend_per_share": "1.00000000",
                             "split_ratio": None,
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:23.107279",
@@ -464,7 +501,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                             "currency": "USD",
                             "effective_date": "2026-04-21",
                             "action_type": "cash_dividend",
-                            "cash_dividend_per_share": 1.0,
+                            "cash_dividend_per_share": "1.00000000",
                             "split_ratio": None,
                             "note": "seed",
                             "created_at": "2026-04-21T00:49:24.107279+08:00",
@@ -581,7 +618,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 4), 20.0)
+        self._save_close("AAPL", date(2026, 1, 4), Decimal("20.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 4), cost_method="fifo")
         position = snapshot["accounts"][0]["positions"][0]
@@ -635,21 +672,163 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 2, 4), 130.0)
+        self._save_close("AAPL", date(2026, 2, 4), Decimal("130.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 2, 4), cost_method="fifo")
         account_snapshot = snapshot["accounts"][0]
         position = account_snapshot["positions"][0]
 
-        self.assertAlmostEqual(account_snapshot["total_cash"], 8192.0, places=6)
-        self.assertAlmostEqual(account_snapshot["realized_pnl"], 195.333333, places=6)
-        self.assertAlmostEqual(account_snapshot["unrealized_pnl"], 596.666667, places=6)
-        self.assertAlmostEqual(account_snapshot["fee_total"], 4.0, places=6)
-        self.assertAlmostEqual(account_snapshot["tax_total"], 4.0, places=6)
-        self.assertAlmostEqual(position["quantity"], 20.0, places=6)
-        self.assertAlmostEqual(position["cost_basis_native"], 2003.33333333, places=6)
-        self.assertAlmostEqual(position["market_value_native"], 2600.0, places=6)
+        self.assertEqual(account_snapshot["total_cash"], Decimal("8192.00"))
+        self.assertEqual(account_snapshot["realized_pnl"], Decimal("195.33"))
+        self.assertEqual(account_snapshot["unrealized_pnl"], Decimal("596.67"))
+        self.assertEqual(account_snapshot["fee_total"], Decimal("4.00"))
+        self.assertEqual(account_snapshot["tax_total"], Decimal("4.00"))
+        self.assertEqual(position["quantity"], Decimal("20.00000000"))
+        self.assertEqual(position["cost_basis_native"], Decimal("2003.33"))
+        self.assertEqual(position["market_value_native"], Decimal("2600.00"))
         self.assertEqual(account_snapshot["realized_pnl_by_symbol"][0]["symbol"], "AAPL")
+
+        with self.db.get_session() as session:
+            position_row = session.execute(
+                select(PortfolioPosition).where(PortfolioPosition.account_id == aid)
+            ).scalar_one()
+            lot_row = session.execute(
+                select(PortfolioPositionLot).where(PortfolioPositionLot.account_id == aid)
+            ).scalar_one()
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            cached_payload = json.loads(snapshot_row.payload)
+
+        self.assertEqual(position_row.total_cost, Decimal("2003.33333333"))
+        self.assertEqual(position_row.avg_cost, Decimal("100.16666667"))
+        self.assertEqual(lot_row.unit_cost, Decimal("100.16666667"))
+        self.assertEqual(cached_payload["positions"][0]["total_cost"], "2003.33333333")
+        self.assertEqual(cached_payload["positions"][0]["avg_cost"], "100.16666667")
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("warm snapshot read should reuse the compatible cache"),
+        ):
+            cached_snapshot = self.service.get_portfolio_snapshot(
+                account_id=aid,
+                as_of=date(2026, 2, 4),
+                cost_method="fifo",
+            )
+
+        cached_account = cached_snapshot["accounts"][0]
+        self.assertEqual(cached_account["realized_pnl"], Decimal("195.33"))
+        self.assertEqual(cached_account["unrealized_pnl"], Decimal("596.67"))
+        self.assertEqual(cached_account["positions"][0]["cost_basis_native"], Decimal("2003.33"))
+
+    def test_internal_account_snapshot_preserves_decimal_authority_before_public_serialization(self) -> None:
+        account = self.service.create_account(name="LedgerDecimal", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 2, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 2, 2),
+            side="buy",
+            quantity=30,
+            price=100,
+            fee=3,
+            tax=2,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 2, 3),
+            side="sell",
+            quantity=10,
+            price=120,
+            fee=1,
+            tax=2,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 2, 4), Decimal("130.0"))
+
+        account_row = self.service.repo.get_account(aid)
+        self.assertIsNotNone(account_row)
+
+        built = self.service._build_account_snapshot(
+            account=account_row,
+            as_of_date=date(2026, 2, 4),
+            cost_method="fifo",
+        )
+        position_cache = built["positions_cache"][0]
+
+        self.assertIsInstance(built["total_cash"], Decimal)
+        self.assertIsInstance(built["total_equity"], Decimal)
+        self.assertIsInstance(built["realized_pnl"], Decimal)
+        self.assertIsInstance(built["unrealized_pnl"], Decimal)
+        self.assertIsInstance(position_cache["quantity"], Decimal)
+        self.assertIsInstance(position_cache["avg_cost"], Decimal)
+        self.assertIsInstance(position_cache["market_value_base"], Decimal)
+
+    def test_realized_symbol_cache_payload_preserves_exact_decimal_values(self) -> None:
+        payload = self.service._realized_symbol_payload(
+            {
+                ("AAPL", "us", "USD"): {
+                    "symbol": "AAPL",
+                    "market": "us",
+                    "currency": "USD",
+                    "amount_native": Decimal("9007199254740993.12"),
+                    "amount_base": Decimal("9007199254740993.12"),
+                    "quantity_sold": Decimal("9007199254740993.12345678"),
+                    "fx_status": "live",
+                }
+            },
+            base_currency="USD",
+        )
+
+        self.assertEqual(
+            payload,
+            [
+                {
+                    "symbol": "AAPL",
+                    "market": "us",
+                    "currency": "USD",
+                    "amount_native": "9007199254740993.12",
+                    "amount_base": "9007199254740993.12",
+                    "quantity_sold": "9007199254740993.12345678",
+                    "fx_status": "live",
+                }
+            ],
+        )
+        self.assertEqual(json.loads(json.dumps({"realized_pnl_by_symbol": payload})), {
+            "realized_pnl_by_symbol": payload
+        })
+
+    def test_public_conversion_keeps_decimal_and_rejects_float_ingress(self) -> None:
+        converted, stale, source = self.service.convert_amount(
+            amount="9007199254740993.12345678",
+            from_currency="USD",
+            to_currency="USD",
+            as_of_date=date(2026, 2, 4),
+        )
+
+        self.assertEqual(converted, Decimal("9007199254740993.12345678"))
+        self.assertFalse(stale)
+        self.assertEqual(source, "identity")
+        with self.assertRaises(ValueError):
+            self.service.convert_amount(
+                amount=1.0,
+                from_currency="USD",
+                to_currency="USD",
+                as_of_date=date(2026, 2, 4),
+            )
 
     def test_corporate_actions_and_ledger_views_are_owner_scoped(self) -> None:
         self._create_app_user("alice-ledger", "alice-ledger")
@@ -690,9 +869,9 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=1.0,
+            cash_dividend_per_share=Decimal("1"),
         )
-        self._save_close("AAPL", date(2026, 3, 4), 55.0)
+        self._save_close("AAPL", date(2026, 3, 4), Decimal("55.0"))
 
         alice_actions = alice.list_corporate_action_events(page_size=100)
         alice_trades = alice.list_trade_events(page_size=100)
@@ -742,9 +921,9 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=0.5,
+            cash_dividend_per_share=Decimal("0.5"),
         )
-        self._save_close("AAPL", date(2026, 4, 4), 105.0)
+        self._save_close("AAPL", date(2026, 4, 4), Decimal("105.0"))
         before = self._ledger_counts()
 
         self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 4, 4), cost_method="fifo")
@@ -806,9 +985,9 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=0.5,
+            cash_dividend_per_share=Decimal("0.5"),
         )
-        self._save_close("AAPL", date(2026, 4, 4), 105.0)
+        self._save_close("AAPL", date(2026, 4, 4), Decimal("105.0"))
         before = self._ledger_counts()
 
         with self.db.get_session() as session:
@@ -1000,9 +1179,9 @@ class PortfolioServiceTestCase(unittest.TestCase):
                 action_type="cash_dividend",
                 market="cn",
                 currency="CNY",
-                cash_dividend_per_share=0.5,
+                cash_dividend_per_share=Decimal("0.5"),
             )
-            self._save_close("600519", as_of_date, 105.0)
+            self._save_close("600519", as_of_date, Decimal("105.0"))
             before = self._ledger_counts()
 
             patch_kwargs = (
@@ -1125,7 +1304,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 5, 10), 105.0)
+        self._save_close("AAPL", date(2026, 5, 10), Decimal("105.0"))
         before_counts = self._ledger_counts()
         before_connections = [
             {
@@ -1210,7 +1389,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="cn",
             currency="CNY",
-            cash_dividend_per_share=1.0,
+            cash_dividend_per_share=Decimal("1"),
         )
         self.service.record_corporate_action(
             account_id=aid,
@@ -1219,9 +1398,9 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="split_adjustment",
             market="cn",
             currency="CNY",
-            split_ratio=2.0,
+            split_ratio=Decimal("2"),
         )
-        self._save_close("600519", date(2026, 1, 5), 6.0)
+        self._save_close("600519", date(2026, 1, 5), Decimal("6.00"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 5), cost_method="fifo")
         acc = snapshot["accounts"][0]
@@ -1306,7 +1485,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=1.0,
+            cash_dividend_per_share=Decimal("1"),
         )
         self._save_close("MSFT", date(2026, 1, 4), 10)
 
@@ -1316,6 +1495,56 @@ class PortfolioServiceTestCase(unittest.TestCase):
             cost_method="futu_diluted",
         )
         self.assertAlmostEqual(dividend_snapshot["accounts"][0]["positions"][0]["avg_cost"], 9.0, places=6)
+
+    def test_futu_and_ths_preserve_final_exact_quantum_cost_adjustment(self) -> None:
+        for cost_method in ("futu_diluted", "ths_pnl"):
+            with self.subTest(cost_method=cost_method):
+                account = self.service.create_account(
+                    name=f"Exact {cost_method}",
+                    broker="Demo",
+                    market="us",
+                    base_currency="USD",
+                )
+                account_id = account["id"]
+                self.service.record_cash_ledger(
+                    account_id=account_id,
+                    event_date=date(2026, 1, 1),
+                    direction="in",
+                    amount=Decimal("30000000"),
+                    currency="USD",
+                )
+                self.service.record_trade(
+                    account_id=account_id,
+                    symbol="AAPL",
+                    trade_date=date(2026, 1, 2),
+                    side="buy",
+                    quantity=Decimal("0.00000002"),
+                    price=Decimal("1000000000000000.00000000"),
+                    market="us",
+                    currency="USD",
+                )
+                self.service.record_trade(
+                    account_id=account_id,
+                    symbol="AAPL",
+                    trade_date=date(2026, 1, 3),
+                    side="sell",
+                    quantity=Decimal("0.00000001"),
+                    price=Decimal("2000000000000000.00000000"),
+                    market="us",
+                    currency="USD",
+                )
+                self._save_close("AAPL", date(2026, 1, 4), Decimal("2000000000000000.00000000"))
+
+                snapshot = self.service.get_portfolio_snapshot(
+                    account_id=account_id,
+                    as_of=date(2026, 1, 4),
+                    cost_method=cost_method,
+                )
+                position = snapshot["accounts"][0]["positions"][0]
+
+                self.assertEqual(position["quantity"], Decimal("0.00000001"))
+                self.assertEqual(position["total_cost"], 0.0)
+                self.assertEqual(position["avg_cost"], 0.0)
 
     def test_ths_pnl_cost_uses_net_cashflows_and_resets_after_flat(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
@@ -1392,7 +1621,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="cn",
             currency="CNY",
-            cash_dividend_per_share=1.0,
+            cash_dividend_per_share=Decimal("1"),
         )
         self.service.record_trade(
             account_id=aid,
@@ -1404,7 +1633,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 2), 10.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("10.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
         acc = snapshot["accounts"][0]
@@ -1441,7 +1670,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="split_adjustment",
             market="cn",
             currency="CNY",
-            split_ratio=2.0,
+            split_ratio=Decimal("2"),
         )
         self.service.record_trade(
             account_id=aid,
@@ -1453,7 +1682,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 2), 6.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("6.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
         acc = snapshot["accounts"][0]
@@ -1579,6 +1808,43 @@ class PortfolioServiceTestCase(unittest.TestCase):
                 broker_account_ref="U1234567",
             )
 
+        with self.assertRaisesRegex(PortfolioPrecisionError, "unsupported portfolio currency"):
+            self.service.replace_broker_sync_state(
+                broker_connection_id=created["id"],
+                portfolio_account_id=aid,
+                broker_type="ibkr",
+                broker_account_ref="U1234567",
+                sync_source="api",
+                sync_status="success",
+                snapshot_date=date(2026, 5, 10),
+                synced_at=datetime(2026, 5, 10, 12, 0, 0),
+                base_currency="USD",
+                total_cash="0.00",
+                total_market_value="0.00",
+                total_equity="0.00",
+                realized_pnl="0.00",
+                unrealized_pnl="0.00",
+                fx_stale=False,
+                payload={},
+                positions=[
+                    {
+                        "broker_position_ref": "unsupported-currency-position",
+                        "symbol": "AAPL",
+                        "market": "us",
+                        "currency": "ZZZ",
+                        "quantity": "0.00000000",
+                        "avg_cost": "0.00000000",
+                        "last_price": "0.00000000",
+                        "market_value_base": "0.00",
+                        "unrealized_pnl_base": "0.00",
+                        "valuation_currency": "USD",
+                    }
+                ],
+                cash_balances=[],
+            )
+
+        self.assertIsNone(self.service.get_latest_broker_sync_state(portfolio_account_id=aid))
+
     def test_event_delete_respects_owner_scope(self) -> None:
         self.db.create_or_update_app_user(user_id="user-a", username="alice")
         self.db.create_or_update_app_user(user_id="user-b", username="bob")
@@ -1612,7 +1878,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="cn",
             currency="CNY",
-            cash_dividend_per_share=1.0,
+            cash_dividend_per_share=Decimal("1"),
         )["id"]
 
         self.assertFalse(service_b.delete_trade_event(trade_id))
@@ -1644,7 +1910,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 3), 100.0)
+        self._save_close("600519", date(2026, 1, 3), Decimal("100.0"))
         self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method="fifo")
 
         with self.db.get_session() as session:
@@ -1707,7 +1973,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 2), 100.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("100.0"))
         self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
         self.assertTrue(self.service.delete_trade_event(trade["id"]))
@@ -1754,7 +2020,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 3), 125.0)
+        self._save_close("AAPL", date(2026, 1, 3), Decimal("125.0"))
 
         self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method="fifo")
 
@@ -1765,8 +2031,8 @@ class PortfolioServiceTestCase(unittest.TestCase):
         )
 
         self.assertEqual(updated["id"], trade["id"])
-        self.assertEqual(updated["quantity"], 5.0)
-        self.assertEqual(updated["price"], 120.0)
+        self.assertEqual(updated["quantity"], "5.00000000")
+        self.assertEqual(updated["price"], "120.00000000")
         self.assertTrue(updated["is_active"])
         self.assertIsNone(updated["voided_at"])
 
@@ -1797,7 +2063,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("HK00700", date(2026, 1, 3), 400.0)
+        self._save_close("HK00700", date(2026, 1, 3), Decimal("400.0"))
 
         updated = self.service.update_trade_event(
             trade["id"],
@@ -1806,6 +2072,8 @@ class PortfolioServiceTestCase(unittest.TestCase):
             currency="HKD",
             quantity=20,
             price=50,
+            fee=Decimal("0"),
+            tax=Decimal("0"),
         )
 
         self.assertEqual(updated["symbol"], "HK00700")
@@ -1828,7 +2096,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             amount=10000,
             currency="USD",
         )
-        self._save_close("HK00700", date(2026, 1, 2), 400.0)
+        self._save_close("HK00700", date(2026, 1, 2), Decimal("400.0"))
 
         trade = self.service.record_trade(
             account_id=account_id,
@@ -1851,7 +2119,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
                 symbols=["0700.HK"],
                 as_of=date(2026, 1, 2),
             ),
-            {"HK00700": (400.0, date(2026, 1, 2))},
+            {"HK00700": (Decimal("400"), date(2026, 1, 2))},
         )
 
         with self.assertRaisesRegex(ValueError, "ambiguous"):
@@ -1892,7 +2160,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="hk",
             currency="HKD",
-            cash_dividend_per_share=1.0,
+            cash_dividend_per_share=Decimal("1"),
         )
         with self.db.get_session() as session:
             legacy_trade = session.execute(
@@ -1905,7 +2173,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             legacy_action.symbol = "00700"
             session.commit()
 
-        self._save_close("00700", date(2026, 1, 3), 110.0)
+        self._save_close("HK00700", date(2026, 1, 3), Decimal("110.0"))
 
         snapshot = self.service.get_portfolio_snapshot(
             account_id=account_id,
@@ -1954,7 +2222,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 3), 100.0)
+        self._save_close("600519", date(2026, 1, 3), Decimal("100.0"))
 
         self.assertTrue(self.service.delete_trade_event(trade["id"]))
 
@@ -1990,8 +2258,8 @@ class PortfolioServiceTestCase(unittest.TestCase):
             currency="CNY",
         )
         self.assertTrue(self.service.delete_trade_event(voided["id"]))
-        self._save_close("600519", date(2026, 1, 2), 200.0)
-        self._save_close("000001", date(2026, 1, 2), 12.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("200.0"))
+        self._save_close("000001", date(2026, 1, 2), Decimal("12.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
@@ -2012,14 +2280,14 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="hk",
             currency="HKD",
         )
-        self._save_close("00700", date(2026, 1, 2), 110.0)
+        self._save_close("HK00700", date(2026, 1, 2), Decimal("110.0"))
 
         self.assertEqual(
             self.service.repo.get_latest_closes_with_dates(
                 symbols=["HK00700"],
                 as_of=date(2026, 1, 2),
             ),
-            {"HK00700": (110.0, date(2026, 1, 2))},
+            {"HK00700": (Decimal("110"), date(2026, 1, 2))},
         )
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
@@ -2061,7 +2329,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 3), 100.0)
+        self._save_close("600519", date(2026, 1, 3), Decimal("100.0"))
 
         self.assertTrue(self.service.delete_trade_event(sell_trade["id"]))
 
@@ -2235,8 +2503,8 @@ class PortfolioServiceTestCase(unittest.TestCase):
             "get_latest_closes_with_dates",
             create=True,
             return_value={
-                "600519": (100.0, date(2026, 1, 1)),
-                "000001": (20.0, date(2026, 1, 1)),
+                "600519": (Decimal("100"), date(2026, 1, 1)),
+                "000001": (Decimal("20"), date(2026, 1, 1)),
             },
         ) as batch_lookup:
             snapshot = self.service.get_portfolio_snapshot(
@@ -2273,7 +2541,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 3), 125.0)
+        self._save_close("600519", date(2026, 1, 3), Decimal("125.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 5), cost_method="fifo")
 
@@ -2291,14 +2559,14 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(position["price_as_of"], "2026-01-03")
         self.assertFalse(position["is_price_fallback"])
 
-        self._save_close("HK00700", date(2026, 1, 3), 390.0)
-        self._save_close("00700", date(2026, 1, 4), 405.0)
+        self._save_close("HK00700", date(2026, 1, 3), Decimal("390.0"))
+        self._save_close("HK00700", date(2026, 1, 4), Decimal("405.0"))
         self.assertEqual(
             self.service.repo.get_latest_closes_with_dates(
                 symbols=["HK00700"],
                 as_of=date(2026, 1, 5),
             ),
-            {"HK00700": (405.0, date(2026, 1, 4))},
+            {"HK00700": (Decimal("405"), date(2026, 1, 4))},
         )
 
     def test_snapshot_discloses_avg_cost_price_fallback_without_mutating_ledger(self) -> None:
@@ -2360,7 +2628,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 2), 125.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("125.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
@@ -2375,14 +2643,23 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertIsNone(position["price_fallback_reason"])
         self.assertGreaterEqual(position["valuation_confidence"], 1.0)
 
-    def test_repeated_snapshot_read_reuses_cached_snapshot_without_replay_or_writeback(self) -> None:
+    @patch.object(PortfolioRiskService, "_fetch_belong_boards", return_value=[])
+    def test_repeated_snapshot_read_reuses_cached_snapshot_without_replay_or_writeback(self, _fetch_belong_boards) -> None:
+        with localcontext() as decimal_context:
+            decimal_context.rounding = ROUND_DOWN
+            self.assertEqual(
+                _internal_snapshot_decimal(Decimal("1.000000015")),
+                Decimal("1.00000002"),
+            )
+        with self.assertRaisesRegex(PortfolioPrecisionError, "binary floats"):
+            _internal_snapshot_decimal(1.0)
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]
         self.service.record_cash_ledger(
             account_id=aid,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=10000,
+            amount=Decimal("9007199254740993.12"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -2395,9 +2672,189 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 2), 100.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("100.00"))
 
         first = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            cached_payload = json.loads(snapshot_row.payload)
+
+        cached_position = cached_payload["positions"][0]
+        self.assertEqual(cached_position["quantity"], "10.00000000")
+        self.assertEqual(cached_position["avg_cost"], "100.00000000")
+        self.assertTrue(
+            all(
+                isinstance(cached_position[field], str)
+                for field in (
+                    "quantity",
+                    "avg_cost",
+                    "total_cost",
+                    "last_price",
+                    "market_value_base",
+                    "unrealized_pnl_base",
+                )
+            )
+        )
+        self.assertEqual(cached_position["price_cost_basis_native"], "1000.00000000")
+        self.assertTrue(
+            all(
+                isinstance(cached_position[field], str)
+                for field in (
+                    "cost_basis_native",
+                    "price_cost_basis_native",
+                    "market_value_native",
+                    "price_pnl_native",
+                    "unrealized_pnl_native",
+                    "display_market_value",
+                    "display_unrealized_pnl",
+                )
+            )
+        )
+        self.assertEqual(
+            cached_payload["performance"]["cash_flows"]["deposits"],
+            "9007199254740993.12",
+        )
+        self.assertEqual(cached_payload["industry_attribution"]["total_market_value"], "1000.00")
+        self.assertEqual(
+            cached_payload["_cache_meta"]["contract_version"],
+            2,
+        )
+
+        for invalid_cache_meta in (
+            {"fx_currencies": []},
+            {"contract_version": 2},
+            {"contract_version": 1, "fx_currencies": []},
+            {"contract_version": 3, "fx_currencies": []},
+            "malformed",
+        ):
+            with self.subTest(invalid_cache_meta=invalid_cache_meta):
+                with self.db.get_session() as session:
+                    snapshot_row = session.execute(
+                        select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+                    ).scalar_one()
+                    incompatible_payload = json.loads(snapshot_row.payload)
+                    incompatible_payload["_cache_meta"] = invalid_cache_meta
+                    snapshot_row.payload = json.dumps(incompatible_payload)
+                    session.commit()
+
+                with patch.object(
+                    self.service,
+                    "_build_account_snapshot",
+                    wraps=self.service._build_account_snapshot,
+                ) as rebuild:
+                    incompatible_cache = self.service.get_portfolio_snapshot(
+                        account_id=aid,
+                        as_of=date(2026, 1, 2),
+                        cost_method="fifo",
+                    )
+
+                rebuild.assert_called_once()
+                self.assertEqual(
+                    incompatible_cache["accounts"][0]["positions"][0]["display_currency"],
+                    "CNY",
+                )
+
+        for field, corrupted_value in (
+            ("symbol", " 600519 "),
+            ("market", " cn "),
+            ("currency", " CNY "),
+            ("valuation_currency", " CNY "),
+        ):
+            with self.db.get_session() as session:
+                snapshot_row = session.execute(
+                    select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+                ).scalar_one()
+                cached_payload = json.loads(snapshot_row.payload)
+                cached_payload["positions"][0][field] = corrupted_value
+                snapshot_row.payload = json.dumps(cached_payload)
+                session.commit()
+
+            with patch.object(
+                self.service,
+                "_build_account_snapshot",
+                wraps=self.service._build_account_snapshot,
+            ) as rebuild:
+                identity_mismatch = self.service.get_portfolio_snapshot(
+                    account_id=aid,
+                    as_of=date(2026, 1, 2),
+                    cost_method="fifo",
+                )
+
+            rebuild.assert_called_once()
+            self.assertEqual(
+                identity_mismatch["accounts"][0]["positions"][0][field],
+                "600519" if field == "symbol" else ("cn" if field == "market" else "CNY"),
+            )
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            cached_payload = json.loads(snapshot_row.payload)
+            cached_payload["positions"][0]["quantity"] = "10.000000004"
+            snapshot_row.payload = json.dumps(cached_payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            position_mismatch = self.service.get_portfolio_snapshot(
+                account_id=aid,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(position_mismatch["accounts"][0]["positions"][0]["quantity"], 10.0)
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            cached_payload = json.loads(snapshot_row.payload)
+            cached_payload["positions"][0]["price_cost_basis_native"] = "1000.00000001"
+            snapshot_row.payload = json.dumps(cached_payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            derived_mismatch = self.service.get_portfolio_snapshot(
+                account_id=aid,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(derived_mismatch["accounts"][0]["positions"][0]["price_cost_basis_native"], 1000.0)
+
+        with self.db.get_session() as session:
+            position_row = session.execute(
+                select(PortfolioPosition).where(PortfolioPosition.account_id == aid)
+            ).scalar_one()
+            position_row.price_cost = None
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            legacy_price_cost = self.service.get_portfolio_snapshot(
+                account_id=aid,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(legacy_price_cost["accounts"][0]["positions"][0]["price_cost_basis_native"], 1000.0)
 
         with self.db.get_session() as session:
             snapshot_row = session.execute(
@@ -2456,9 +2913,22 @@ class PortfolioServiceTestCase(unittest.TestCase):
             "tax_total",
             "valuation",
             "performance",
+            "industry_attribution",
             "positions",
         ):
             self.assertEqual(second["accounts"][0][field], first["accounts"][0][field], field)
+        self.assertEqual(
+            first["accounts"][0]["performance"]["cash_flows"]["deposits"],
+            Decimal("9007199254740993.12"),
+        )
+        self.assertIsInstance(
+            second["accounts"][0]["performance"]["cash_flows"]["deposits"],
+            Decimal,
+        )
+        self.assertIsInstance(
+            second["accounts"][0]["industry_attribution"]["total_market_value"],
+            Decimal,
+        )
 
         with self.db.get_session() as session:
             snapshot_row_after = session.execute(
@@ -2481,6 +2951,85 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(position_ids_after, position_ids_before)
         self.assertEqual(lot_ids_after, lot_ids_before)
 
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            malformed_payload = json.loads(snapshot_row.payload)
+            del malformed_payload["positions"][0]["display_currency"]
+            snapshot_row.payload = json.dumps(malformed_payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            malformed_cache = self.service.get_portfolio_snapshot(
+                account_id=aid,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(
+            malformed_cache["accounts"][0]["positions"][0]["display_currency"],
+            "CNY",
+        )
+
+        boundary_account = self.service.create_account(
+            name="Rounding boundary",
+            broker="Demo",
+            market="us",
+            base_currency="USD",
+        )
+        boundary_account_id = boundary_account["id"]
+        self.service.record_cash_ledger(
+            account_id=boundary_account_id,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=Decimal("10.00"),
+            currency="USD",
+        )
+        for side, quantity in (
+            ("buy", Decimal("1.00000000")),
+            ("sell", Decimal("0.00495050")),
+        ):
+            self.service.record_trade(
+                account_id=boundary_account_id,
+                symbol="AAPL",
+                trade_date=date(2026, 1, 2),
+                side=side,
+                quantity=quantity,
+                price=Decimal("1.01000001"),
+                market="us",
+                currency="USD",
+            )
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("1.01000001"))
+
+        boundary_cold = self.service.get_portfolio_snapshot(
+            account_id=boundary_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("rounding-boundary warm read should reuse cached snapshot"),
+        ):
+            boundary_warm = self.service.get_portfolio_snapshot(
+                account_id=boundary_account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        for field in ("total_cost", "cost_basis_native"):
+            self.assertEqual(
+                boundary_cold["accounts"][0]["positions"][0][field],
+                boundary_warm["accounts"][0]["positions"][0][field],
+                field,
+            )
+
     def test_corrupt_or_incompatible_cached_snapshot_payload_recomputes_without_scalar_synthesis(self) -> None:
         account = self.service.create_account(name="Integrity", broker="Demo", market="cn", base_currency="CNY")
         account_id = account["id"]
@@ -2497,6 +3046,106 @@ class PortfolioServiceTestCase(unittest.TestCase):
             cost_method="fifo",
         )
 
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            persisted_payload = json.loads(snapshot_row.payload)
+
+        self.assertEqual(persisted_payload["total_cash"], "10000.00000000")
+        self.assertTrue(
+            all(
+                isinstance(persisted_payload[field], str)
+                for field in (
+                    "total_cash",
+                    "total_market_value",
+                    "total_equity",
+                    "realized_pnl",
+                    "unrealized_pnl",
+                    "fee_total",
+                    "tax_total",
+                )
+            )
+        )
+
+        legacy_payload = json.loads(json.dumps(persisted_payload))
+        legacy_payload.pop("_cache_meta")
+        legacy_payload.pop("industry_attribution")
+        legacy_payload.update(
+            {
+                "total_cash": "10000.00",
+                "total_market_value": "0.00",
+                "total_equity": "10000.00",
+                "realized_pnl": "0.00",
+                "unrealized_pnl": "0.00",
+                "fee_total": "0.00",
+                "tax_total": "0.00",
+            }
+        )
+        legacy_payload["performance"] = {
+            "contract_version": "portfolio_performance_v1",
+            "calculation_state": "available",
+            "cash_flows": {"net": "0.00"},
+        }
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            snapshot_row.payload = json.dumps(legacy_payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("valid metadata-less legacy cache should be reused"),
+        ):
+            legacy_cache = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        self.assertEqual(legacy_cache["accounts"][0]["total_equity"], expected["accounts"][0]["total_equity"])
+        self.assertEqual(
+            legacy_cache["accounts"][0]["performance"]["cash_flows"]["net"],
+            Decimal("0.00"),
+        )
+
+        for field, invalid_value in (
+            ("performance.cash_flows.net", "0.000"),
+            ("performance.cash_flows.net", 0.0),
+            ("base_currency", None),
+            ("base_currency", "USD"),
+        ):
+            with self.subTest(legacy_field=field, invalid_value=invalid_value):
+                invalid_legacy_payload = json.loads(json.dumps(legacy_payload))
+                if field == "performance.cash_flows.net":
+                    invalid_legacy_payload["performance"]["cash_flows"]["net"] = invalid_value
+                elif invalid_value is None:
+                    invalid_legacy_payload.pop(field)
+                else:
+                    invalid_legacy_payload[field] = invalid_value
+                with self.db.get_session() as session:
+                    snapshot_row = session.execute(
+                        select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+                    ).scalar_one()
+                    snapshot_row.payload = json.dumps(invalid_legacy_payload)
+                    session.commit()
+
+                with patch.object(
+                    self.service,
+                    "_build_account_snapshot",
+                    wraps=self.service._build_account_snapshot,
+                ) as rebuild:
+                    invalid_legacy_cache = self.service.get_portfolio_snapshot(
+                        account_id=account_id,
+                        as_of=date(2026, 1, 2),
+                        cost_method="fifo",
+                    )
+
+                rebuild.assert_called_once()
+                self.assertEqual(invalid_legacy_cache["total_equity"], expected["total_equity"])
+
         for corrupt_payload in ("{", "[]"):
             with self.subTest(corrupt_payload=corrupt_payload):
                 with self.db.get_session() as session:
@@ -2504,8 +3153,8 @@ class PortfolioServiceTestCase(unittest.TestCase):
                         select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
                     ).scalar_one()
                     snapshot_row.payload = corrupt_payload
-                    snapshot_row.total_cash = 999999.0
-                    snapshot_row.total_equity = 999999.0
+                    snapshot_row.total_cash = Decimal("999999")
+                    snapshot_row.total_equity = Decimal("999999")
                     session.commit()
 
                 with patch.object(
@@ -2528,8 +3177,8 @@ class PortfolioServiceTestCase(unittest.TestCase):
             snapshot_row = session.execute(
                 select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
             ).scalar_one()
-            snapshot_row.total_cash = 777777.0
-            snapshot_row.total_equity = 777777.0
+            snapshot_row.total_cash = Decimal("777777")
+            snapshot_row.total_equity = Decimal("777777")
             session.commit()
 
         with patch.object(
@@ -2546,6 +3195,132 @@ class PortfolioServiceTestCase(unittest.TestCase):
         rebuild.assert_called_once()
         self.assertEqual(semantic_mismatch["total_equity"], expected["total_equity"])
         self.assertNotEqual(semantic_mismatch["total_equity"], 777777.0)
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            payload = json.loads(snapshot_row.payload)
+            payload["total_cash"] = "1234567890123456.12345679"
+            snapshot_row.total_cash = Decimal("1234567890123456.12345678")
+            snapshot_row.payload = json.dumps(payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            exact_mismatch = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(exact_mismatch["total_cash"], expected["total_cash"])
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            payload = json.loads(snapshot_row.payload)
+            payload["performance"]["cash_flows"]["deposits"] = "10000.000"
+            snapshot_row.payload = json.dumps(payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            nested_performance_mismatch = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(
+            nested_performance_mismatch["accounts"][0]["performance"],
+            expected["accounts"][0]["performance"],
+        )
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            payload = json.loads(snapshot_row.payload)
+            payload["performance"]["currency"] = "USD"
+            snapshot_row.payload = json.dumps(payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            nested_currency_mismatch = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(
+            nested_currency_mismatch["accounts"][0]["performance"],
+            expected["accounts"][0]["performance"],
+        )
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            payload = json.loads(snapshot_row.payload)
+            payload["industry_attribution"]["total_market_value"] = "0.000"
+            snapshot_row.payload = json.dumps(payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            nested_industry_mismatch = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(
+            nested_industry_mismatch["accounts"][0]["industry_attribution"],
+            expected["accounts"][0]["industry_attribution"],
+        )
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == account_id)
+            ).scalar_one()
+            payload = json.loads(snapshot_row.payload)
+            payload["total_cash"] = "10000.000000004"
+            snapshot_row.total_cash = Decimal("10000.00000000")
+            snapshot_row.payload = json.dumps(payload)
+            session.commit()
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            wraps=self.service._build_account_snapshot,
+        ) as rebuild:
+            noncanonical_mismatch = self.service.get_portfolio_snapshot(
+                account_id=account_id,
+                as_of=date(2026, 1, 2),
+                cost_method="fifo",
+            )
+
+        rebuild.assert_called_once()
+        self.assertEqual(noncanonical_mismatch["total_cash"], expected["total_cash"])
 
     def test_authoritative_zero_cached_snapshot_remains_usable(self) -> None:
         account = self.service.create_account(name="Zero", broker="Demo", market="cn", base_currency="CNY")
@@ -2591,12 +3366,12 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 2), 125.0)
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("125.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.1,
+            rate=Decimal("7.1"),
             source="manual",
             is_stale=True,
         )
@@ -2645,7 +3420,38 @@ class PortfolioServiceTestCase(unittest.TestCase):
             snapshot_row_after = session.execute(
                 select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
             ).scalar_one()
-        self.assertEqual(snapshot_row_after.updated_at, snapshot_updated_at_before)
+            self.assertEqual(snapshot_row_after.updated_at, snapshot_updated_at_before)
+
+    def test_refresh_fx_rates_persists_canonical_decimal_text_without_float_coercion(self) -> None:
+        account = self.service.create_account(name="FX exact", broker="Demo", market="global", base_currency="USD")
+        account_id = account["id"]
+        as_of = date(2026, 1, 2)
+        self.service.record_cash_ledger(
+            account_id=account_id,
+            event_date=as_of,
+            direction="in",
+            amount=Decimal("1.00"),
+            currency="CNY",
+        )
+
+        config = Config()
+        config.portfolio_fx_update_enabled = True
+        with patch("src.services.portfolio_service.get_config", return_value=config), patch.object(
+            self.service,
+            "_fetch_fx_rate_from_yfinance",
+            return_value="7.12345678",
+        ):
+            refreshed = self.service.refresh_fx_rates(account_id=account_id, as_of=as_of)
+
+        self.assertEqual(refreshed["pair_count"], 1)
+        self.assertEqual(refreshed["updated_count"], 1)
+        stored = self.service.repo.get_latest_fx_rate(
+            from_currency="CNY",
+            to_currency="USD",
+            as_of=as_of,
+        )
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored.rate, Decimal("7.12345678"))
 
     def test_historical_cached_snapshot_does_not_reuse_newer_position_cache(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -2667,7 +3473,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
         first_snapshot = self.service.get_portfolio_snapshot(
             account_id=aid,
             as_of=date(2026, 1, 1),
@@ -2684,7 +3490,7 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 2), 110.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("110.0"))
         second_snapshot = self.service.get_portfolio_snapshot(
             account_id=aid,
             as_of=date(2026, 1, 2),
@@ -2721,10 +3527,10 @@ class PortfolioServiceTestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 2), 100.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("100.0"))
         self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
-        self._save_close("600519", date(2026, 1, 2), 120.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("120.0"))
         refreshed = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
         position = refreshed["accounts"][0]["positions"][0]

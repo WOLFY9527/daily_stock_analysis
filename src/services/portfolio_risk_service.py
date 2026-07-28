@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import Config, get_config
+from src.portfolio_exact_numeric import (
+    parse_portfolio_decimal,
+    round_portfolio_decimal_value,
+)
 from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.portfolio_risk_board_lookup import PortfolioRiskBoardLookup
 from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnostics
@@ -38,6 +43,27 @@ class PortfolioRiskService:
             "owner_id": getattr(self.portfolio_service, "owner_id", None),
             "include_all_owners": bool(getattr(self.portfolio_service, "include_all_owners", False)),
         }
+
+    @staticmethod
+    def _required_currency(value: Any, *, field_name: str) -> str:
+        currency = str(value or "").strip().upper()
+        if not currency:
+            raise ValueError(f"portfolio risk {field_name} currency is required")
+        return currency
+
+    @classmethod
+    def _money(cls, value: Any, *, currency: str) -> Decimal:
+        return round_portfolio_decimal_value(
+            Decimal("0") if value is None else value,
+            kind="money",
+            currency=cls._required_currency(currency, field_name="money"),
+        )
+
+    @staticmethod
+    def _weight_pct(numerator: Decimal, denominator: Decimal) -> float:
+        if denominator <= 0:
+            return 0.0
+        return float((numerator / denominator) * Decimal("100"))
 
     def get_risk_report(
         self,
@@ -213,31 +239,35 @@ class PortfolioRiskService:
         return max(window_start, min(first_activity_candidates))
 
     def _build_concentration(self, snapshot: Dict[str, Any], threshold_pct: float, *, as_of_date: date) -> Dict[str, Any]:
-        total_mv = float(snapshot.get("total_market_value", 0.0) or 0.0)
-        report_currency = str(snapshot.get("currency") or "CNY")
-        exposure_by_symbol: Dict[str, float] = {}
+        report_currency = self._required_currency(snapshot.get("currency"), field_name="snapshot")
+        total_mv = self._money(snapshot.get("total_market_value"), currency=report_currency)
+        exposure_by_symbol: Dict[str, Decimal] = {}
         for account in snapshot.get("accounts", []):
             for pos in account.get("positions", []):
                 symbol = str(pos.get("symbol") or "").strip().upper()
                 if not symbol:
                     continue
-                market_value = float(pos.get("market_value_base") or 0.0)
-                valuation_currency = str(pos.get("valuation_currency") or account.get("base_currency") or "CNY")
-                converted, _, _ = self.portfolio_service.convert_amount(
+                valuation_currency = self._required_currency(
+                    pos.get("valuation_currency") or account.get("base_currency"),
+                    field_name="position valuation",
+                )
+                market_value = self._money(pos.get("market_value_base"), currency=valuation_currency)
+                converted, _, _ = self.portfolio_service.convert_amount_exact(
                     amount=market_value,
                     from_currency=valuation_currency,
                     to_currency=report_currency,
                     as_of_date=as_of_date,
                 )
-                exposure_by_symbol[symbol] = exposure_by_symbol.get(symbol, 0.0) + converted
+                exposure_by_symbol[symbol] = exposure_by_symbol.get(symbol, Decimal("0")) + converted
 
         rows = []
         for symbol, exposure in exposure_by_symbol.items():
-            weight = (exposure / total_mv * 100.0) if total_mv > 0 else 0.0
+            market_value_base = self._money(exposure, currency=report_currency)
+            weight = self._weight_pct(market_value_base, total_mv)
             rows.append(
                 {
                     "symbol": symbol,
-                    "market_value_base": round(exposure, 6),
+                    "market_value_base": market_value_base,
                     "weight_pct": round(weight, 4),
                     "is_alert": bool(weight >= threshold_pct),
                 }
@@ -246,7 +276,7 @@ class PortfolioRiskService:
 
         top_weight = rows[0]["weight_pct"] if rows else 0.0
         return {
-            "total_market_value": round(total_mv, 6),
+            "total_market_value": total_mv,
             "top_weight_pct": round(float(top_weight), 4),
             "alert": bool(top_weight >= threshold_pct),
             "top_positions": rows[:10],
@@ -277,7 +307,7 @@ class PortfolioRiskService:
         top_weight = rows[0]["weight_pct"] if rows else 0.0
 
         return {
-            "total_market_value": round(total_mv, 6),
+            "total_market_value": total_mv,
             "top_weight_pct": round(float(top_weight), 4),
             "alert": bool(top_weight >= threshold_pct),
             "top_sectors": rows[:10],
@@ -298,7 +328,7 @@ class PortfolioRiskService:
             include_sector_source_provenance=include_sector_source_provenance,
         )
         payload = {
-            "total_market_value": round(total_mv, 6),
+            "total_market_value": total_mv,
             "top_industries": rows[:10],
             "coverage": coverage,
             "errors": errors[:20],
@@ -313,10 +343,10 @@ class PortfolioRiskService:
         snapshot: Dict[str, Any],
         as_of_date: date,
         include_sector_source_provenance: bool = False,
-    ) -> Tuple[float, List[Dict[str, Any]], Dict[str, int], List[str], Dict[str, Any]]:
-        total_mv = float(snapshot.get("total_market_value", 0.0) or 0.0)
-        report_currency = str(snapshot.get("currency") or "CNY")
-        industry_exposure: Dict[str, float] = {}
+    ) -> Tuple[Decimal, List[Dict[str, Any]], Dict[str, int], List[str], Dict[str, Any]]:
+        report_currency = self._required_currency(snapshot.get("currency"), field_name="snapshot")
+        total_mv = self._money(snapshot.get("total_market_value"), currency=report_currency)
+        industry_exposure: Dict[str, Decimal] = {}
         industry_symbols: Dict[str, set] = {}
         coverage = {
             "classified_count": 0,
@@ -334,9 +364,12 @@ class PortfolioRiskService:
                 if not symbol:
                     continue
 
-                market_value = float(pos.get("market_value_base") or 0.0)
-                valuation_currency = str(pos.get("valuation_currency") or account.get("base_currency") or "CNY")
-                converted, _, _ = self.portfolio_service.convert_amount(
+                valuation_currency = self._required_currency(
+                    pos.get("valuation_currency") or account.get("base_currency"),
+                    field_name="position valuation",
+                )
+                market_value = self._money(pos.get("market_value_base"), currency=valuation_currency)
+                converted, _, _ = self.portfolio_service.convert_amount_exact(
                     amount=market_value,
                     from_currency=valuation_currency,
                     to_currency=report_currency,
@@ -354,16 +387,17 @@ class PortfolioRiskService:
                 )
                 if include_sector_source_provenance and not was_cached:
                     provenance_items.append(provenance_item)
-                industry_exposure[industry] = industry_exposure.get(industry, 0.0) + converted
+                industry_exposure[industry] = industry_exposure.get(industry, Decimal("0")) + converted
                 industry_symbols.setdefault(industry, set()).add(symbol)
 
         rows: List[Dict[str, Any]] = []
         for industry, exposure in industry_exposure.items():
-            weight = (exposure / total_mv * 100.0) if total_mv > 0 else 0.0
+            market_value_base = self._money(exposure, currency=report_currency)
+            weight = self._weight_pct(market_value_base, total_mv)
             rows.append(
                 {
                     "industry": industry,
-                    "market_value_base": round(exposure, 6),
+                    "market_value_base": market_value_base,
                     "weight_pct": round(weight, 4),
                     "symbol_count": len(industry_symbols.get(industry, set())),
                 }
@@ -652,37 +686,43 @@ class PortfolioRiskService:
                 "fx_stale": False,
             }
 
-        grouped: Dict[str, float] = {}
+        grouped: Dict[str, Decimal] = {}
         stale_flag = False
         for row in rows:
             key = row.snapshot_date.isoformat()
-            converted, stale, _ = self.portfolio_service.convert_amount(
-                amount=float(row.total_equity or 0.0),
-                from_currency=str(row.base_currency or "CNY"),
+            row_currency = self._required_currency(row.base_currency, field_name="daily snapshot")
+            converted, stale, _ = self.portfolio_service.convert_amount_exact(
+                # Repository projections retain storage-scale Decimal values until
+                # the risk calculation reaches its public response boundary.
+                amount=parse_portfolio_decimal(
+                    Decimal("0") if row.total_equity is None else row.total_equity,
+                    kind="storage",
+                ),
+                from_currency=row_currency,
                 to_currency=report_currency,
                 as_of_date=row.snapshot_date,
             )
-            grouped[key] = grouped.get(key, 0.0) + converted
+            grouped[key] = grouped.get(key, Decimal("0")) + converted
             stale_flag = stale_flag or stale or bool(row.fx_stale)
 
-        series: List[Tuple[str, float]] = sorted(grouped.items(), key=lambda item: item[0])
-        peak = 0.0
-        max_drawdown = 0.0
-        current_drawdown = 0.0
+        series: List[Tuple[str, Decimal]] = sorted(grouped.items(), key=lambda item: item[0])
+        peak = Decimal("0")
+        max_drawdown = Decimal("0")
+        current_drawdown = Decimal("0")
         for _, equity in series:
             peak = max(peak, equity)
             if peak <= 0:
-                drawdown = 0.0
+                drawdown = Decimal("0")
             else:
-                drawdown = (peak - equity) / peak * 100.0
+                drawdown = (peak - equity) / peak * Decimal("100")
             max_drawdown = max(max_drawdown, drawdown)
             current_drawdown = drawdown
 
         return {
             "series_points": len(series),
-            "max_drawdown_pct": round(max_drawdown, 4),
-            "current_drawdown_pct": round(current_drawdown, 4),
-            "alert": bool(max_drawdown >= threshold_pct),
+            "max_drawdown_pct": round(float(max_drawdown), 4),
+            "current_drawdown_pct": round(float(current_drawdown), 4),
+            "alert": bool(float(max_drawdown) >= threshold_pct),
             "fx_stale": stale_flag,
         }
 
@@ -692,68 +732,86 @@ class PortfolioRiskService:
         snapshot: Dict[str, Any],
         as_of_date: date,
     ) -> Dict[str, Any]:
-        report_currency = str(snapshot.get("currency") or "CNY")
-        total_equity = float(snapshot.get("total_equity", 0.0) or 0.0)
-        total_market_value = float(snapshot.get("total_market_value", 0.0) or 0.0)
+        report_currency = self._required_currency(snapshot.get("currency"), field_name="snapshot")
+        total_equity = self._money(snapshot.get("total_equity"), currency=report_currency)
+        total_market_value = self._money(snapshot.get("total_market_value"), currency=report_currency)
 
         rows: List[Dict[str, Any]] = []
         for account in snapshot.get("accounts", []):
-            converted_equity, stale_equity, _ = self.portfolio_service.convert_amount(
-                amount=float(account.get("total_equity", 0.0) or 0.0),
-                from_currency=str(account.get("base_currency") or report_currency),
+            account_currency = self._required_currency(
+                account.get("base_currency"), field_name="account base"
+            )
+            converted_equity, stale_equity, _ = self.portfolio_service.convert_amount_exact(
+                amount=self._money(account.get("total_equity"), currency=account_currency),
+                from_currency=account_currency,
                 to_currency=report_currency,
                 as_of_date=as_of_date,
             )
-            converted_market_value, stale_market_value, _ = self.portfolio_service.convert_amount(
-                amount=float(account.get("total_market_value", 0.0) or 0.0),
-                from_currency=str(account.get("base_currency") or report_currency),
+            converted_market_value, stale_market_value, _ = self.portfolio_service.convert_amount_exact(
+                amount=self._money(account.get("total_market_value"), currency=account_currency),
+                from_currency=account_currency,
                 to_currency=report_currency,
                 as_of_date=as_of_date,
             )
+            total_equity_base = self._money(converted_equity, currency=report_currency)
+            total_market_value_base = self._money(converted_market_value, currency=report_currency)
             rows.append(
                 {
                     "account_id": int(account.get("account_id")),
                     "account_name": str(account.get("account_name") or ""),
                     "market": str(account.get("market") or "").lower(),
-                    "total_equity_base": round(float(converted_equity), 6),
-                    "equity_weight_pct": round((float(converted_equity) / total_equity) * 100.0, 4) if total_equity > 0 else 0.0,
-                    "total_market_value_base": round(float(converted_market_value), 6),
-                    "market_value_weight_pct": round((float(converted_market_value) / total_market_value) * 100.0, 4) if total_market_value > 0 else 0.0,
+                    "total_equity_base": total_equity_base,
+                    "equity_weight_pct": round(self._weight_pct(total_equity_base, total_equity), 4),
+                    "total_market_value_base": total_market_value_base,
+                    "market_value_weight_pct": round(
+                        self._weight_pct(total_market_value_base, total_market_value), 4
+                    ),
                     "fx_stale": bool(account.get("fx_stale")) or stale_equity or stale_market_value,
                 }
             )
 
-        rows.sort(key=lambda item: (-float(item["total_equity_base"]), int(item["account_id"])))
+        rows.sort(key=lambda item: (-item["total_equity_base"], int(item["account_id"])))
         return {
-            "total_equity": round(total_equity, 6),
-            "total_market_value": round(total_market_value, 6),
+            "total_equity": total_equity,
+            "total_market_value": total_market_value,
             "top_accounts": rows[:20],
         }
 
     @staticmethod
     def _build_stop_loss(snapshot: Dict[str, Any], thresholds: Dict[str, Any]) -> Dict[str, Any]:
-        stop_loss_pct = float(thresholds["stop_loss_alert_pct"])
-        near_ratio = float(thresholds["stop_loss_near_ratio"])
+        stop_loss_pct = parse_portfolio_decimal(str(thresholds["stop_loss_alert_pct"]), kind="ratio")
+        near_ratio = parse_portfolio_decimal(str(thresholds["stop_loss_near_ratio"]), kind="ratio")
         near_threshold = stop_loss_pct * near_ratio
 
         warnings: List[Dict[str, Any]] = []
         for account in snapshot.get("accounts", []):
             for pos in account.get("positions", []):
-                avg_cost = float(pos.get("avg_cost", 0.0) or 0.0)
-                last_price = float(pos.get("last_price", 0.0) or 0.0)
+                market = str(pos.get("market") or account.get("market") or "").strip().lower()
+                if not market:
+                    raise ValueError("portfolio risk stop-loss position market is required")
+                avg_cost = round_portfolio_decimal_value(
+                    Decimal("0") if pos.get("avg_cost") is None else pos.get("avg_cost"),
+                    kind="price",
+                    market=market,
+                )
+                last_price = round_portfolio_decimal_value(
+                    Decimal("0") if pos.get("last_price") is None else pos.get("last_price"),
+                    kind="price",
+                    market=market,
+                )
                 if avg_cost <= 0:
                     continue
-                loss_pct = max(0.0, (avg_cost - last_price) / avg_cost * 100.0)
+                loss_pct = max(Decimal("0"), (avg_cost - last_price) / avg_cost * Decimal("100"))
                 if loss_pct < near_threshold:
                     continue
                 warnings.append(
                     {
                         "account_id": account.get("account_id"),
                         "symbol": pos.get("symbol"),
-                        "avg_cost": round(avg_cost, 8),
-                        "last_price": round(last_price, 8),
-                        "loss_pct": round(loss_pct, 4),
-                        "near_threshold_pct": round(near_threshold, 4),
+                        "avg_cost": avg_cost,
+                        "last_price": last_price,
+                        "loss_pct": round(float(loss_pct), 4),
+                        "near_threshold_pct": round(float(near_threshold), 4),
                         "is_triggered": bool(loss_pct >= stop_loss_pct),
                     }
                 )

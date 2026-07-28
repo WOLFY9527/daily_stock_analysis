@@ -1,5 +1,6 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
+import { parsePortfolioDecimal, portfolioDecimalSign, requirePortfolioDecimal } from '../utils/portfolioDecimal';
 import type {
   PortfolioAccountItem,
   PortfolioAccountCreateRequest,
@@ -11,6 +12,7 @@ import type {
   PortfolioCorporateActionCreateRequest,
   PortfolioCorporateActionListResponse,
   PortfolioCostMethod,
+  PortfolioDecimal,
   PortfolioDeleteResponse,
   PortfolioEventCreatedResponse,
   PortfolioExposureResearchContext,
@@ -40,6 +42,7 @@ import type {
   PortfolioStructureReviewDataQuality,
   PortfolioStructureReviewDegradedLinkage,
   PortfolioStructureReviewEvidenceLinkage,
+  PortfolioStructureReviewExposureItem,
   PortfolioStructureReviewHolding,
   PortfolioStructureReviewHoldingDrilldown,
   PortfolioStructureReviewLinkTarget,
@@ -242,6 +245,73 @@ function buildEventParams(query: EventQuery): Record<string, string | number> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const AUTHORITATIVE_PORTFOLIO_DECIMAL_KEYS = new Set([
+  'amount',
+  'authoritativeTotal',
+  'avgCost',
+  'cashDividendPerShare',
+  'costBasisNative',
+  'coveredSubtotal',
+  'displayMarketValue',
+  'displayUnrealizedPnl',
+  'displayValue',
+  'fee',
+  'feeTotal',
+  'lastPrice',
+  'marketValue',
+  'marketValueBase',
+  'marketValueNative',
+  'nativeValue',
+  'price',
+  'quantity',
+  'rate',
+  'realizedPnl',
+  'splitRatio',
+  'tax',
+  'taxTotal',
+  'totalCash',
+  'totalCost',
+  'totalEquity',
+  'totalMarketValue',
+  'unrealizedPnl',
+  'unrealizedPnlBase',
+  'unrealizedPnlNative',
+]);
+
+const PORTFOLIO_DECIMAL_OPAQUE_SUBTREES = new Set([
+  'portfolioRiskEvidence',
+  'riskDiagnostics',
+]);
+
+function normalizeAuthoritativePortfolioDecimals(value: unknown, path = 'portfolio'): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => normalizeAuthoritativePortfolioDecimals(item, `${path}[${index}]`));
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+    const entryPath = `${path}.${key}`;
+    if (PORTFOLIO_DECIMAL_OPAQUE_SUBTREES.has(key)) {
+      return [key, entry];
+    }
+    if (AUTHORITATIVE_PORTFOLIO_DECIMAL_KEYS.has(key) && entry !== null && entry !== undefined) {
+      const decimal = parsePortfolioDecimal(entry);
+      if (!decimal) {
+        throw new Error(`Invalid portfolio decimal contract at ${entryPath}`);
+      }
+      return [key, decimal];
+    }
+    return [key, normalizeAuthoritativePortfolioDecimals(entry, entryPath)];
+  }));
+}
+
+function decodePortfolioContract<T>(value: unknown): T {
+  const camelized = toCamelCase<Record<string, unknown>>(value);
+  return normalizeAuthoritativePortfolioDecimals(camelized) as T;
 }
 
 function pickString(...values: unknown[]): string | undefined {
@@ -724,6 +794,40 @@ function normalizeStructureReviewConsumerIssues(value: unknown): PortfolioStruct
   return issues.length ? issues : [];
 }
 
+function normalizeStructureReviewExposure(value: unknown): PortfolioStructureReviewExposureItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const sanitized = stripStructureReviewUnsafeKeys(entry);
+    const key = pickString(sanitized.key);
+    const label = pickString(sanitized.label);
+    const marketValue = parsePortfolioDecimal(sanitized.marketValue);
+    const displayCurrency = pickString(sanitized.displayCurrency);
+    const percent = pickNumber(sanitized.percent);
+    const holdingCount = pickNumber(sanitized.holdingCount);
+    if (
+      !key
+      || !label
+      || !marketValue
+      || !displayCurrency
+      || percent === undefined
+      || holdingCount === undefined
+      || !Number.isInteger(holdingCount)
+      || holdingCount < 0
+    ) {
+      return [];
+    }
+
+    return [{ key, label, marketValue, displayCurrency, percent, holdingCount }];
+  });
+}
+
 function normalizeStructureReviewHolding(value: unknown): PortfolioStructureReviewHolding[] {
   if (!isRecord(value)) {
     return [];
@@ -770,6 +874,21 @@ function normalizeNullableString(value: unknown): string | null | undefined {
   return typeof value === 'string' ? value : value === null ? null : undefined;
 }
 
+function normalizeNullablePortfolioDecimal(value: unknown): PortfolioDecimal | null | undefined {
+  const decimal = parsePortfolioDecimal(value);
+  return decimal ?? (value === null ? null : undefined);
+}
+
+function normalizePortfolioDecimalField(
+  value: unknown,
+  field: string,
+): PortfolioDecimal | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return requirePortfolioDecimal(value, field);
+}
+
 function normalizeNullableNumber(value: unknown): number | null | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : value === null ? null : undefined;
 }
@@ -809,8 +928,8 @@ function normalizePortfolioTruth(value: unknown): PortfolioTruth {
   const accountState = pickString(value.accountState);
   const valuationState = pickString(value.valuationState);
   const valueSemantics = pickString(value.valueSemantics);
-  const authoritativeTotal = normalizeNullableNumber(value.authoritativeTotal);
-  const coveredSubtotal = normalizeNullableNumber(value.coveredSubtotal);
+  const authoritativeTotal = normalizeNullablePortfolioDecimal(value.authoritativeTotal);
+  const coveredSubtotal = normalizeNullablePortfolioDecimal(value.coveredSubtotal);
   const accountCount = value.accountCount;
   const positionCount = value.positionCount;
   if (
@@ -865,8 +984,8 @@ function normalizePortfolioTruth(value: unknown): PortfolioTruth {
     || (truth.state === 'valuation_partial' && truth.accountCount === 0)
     || ((truth.state === 'fully_valued_zero' || truth.state === 'fully_valued_nonzero')
       && (truth.accountCount === 0 || truth.positionCount === 0))
-    || (truth.state === 'fully_valued_zero' && truth.authoritativeTotal !== 0)
-    || (truth.state === 'fully_valued_nonzero' && truth.authoritativeTotal === 0)
+    || (truth.state === 'fully_valued_zero' && truth.authoritativeTotal !== null && portfolioDecimalSign(truth.authoritativeTotal) !== 0)
+    || (truth.state === 'fully_valued_nonzero' && truth.authoritativeTotal !== null && portfolioDecimalSign(truth.authoritativeTotal) === 0)
   ) {
     throw new Error('Invalid portfolio truth contract');
   }
@@ -883,7 +1002,7 @@ function normalizeExposureResearchDominantExposure(value: unknown): PortfolioExp
   const label = normalizeNullableString(data.label);
   const market = normalizeNullableString(data.market);
   const currency = normalizeNullableString(data.currency);
-  const marketValue = normalizeNullableNumber(data.marketValue);
+  const marketValue = normalizeNullablePortfolioDecimal(data.marketValue);
   const weightPct = normalizeNullableNumber(data.weightPct);
   const fxStatus = normalizeNullableString(data.fxStatus);
   if (symbol !== undefined) normalized.symbol = symbol;
@@ -1129,7 +1248,7 @@ function normalizeRiskExposureReadiness(value: unknown): PortfolioRiskExposureRe
 }
 
 function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotWithLineage {
-  const normalized = toCamelCase<Record<string, unknown>>(data);
+  const normalized = decodePortfolioContract<Record<string, unknown>>(data);
   const normalizedRecord = isRecord(normalized) ? normalized : {};
   const portfolioTruth = normalizePortfolioTruth(normalizedRecord.portfolioTruth);
   const priceLineage = normalizePriceLineage(normalizedRecord.priceLineage);
@@ -1169,7 +1288,7 @@ function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotWit
 }
 
 function normalizePortfolioRiskResponse(data: unknown): PortfolioRiskResponse {
-  const normalized = toCamelCase<PortfolioRiskResponse>(data);
+  const normalized = decodePortfolioContract<PortfolioRiskResponse>(data);
   return {
     ...normalized,
     exposureResearchContext: normalizeExposureResearchContext(
@@ -1182,9 +1301,9 @@ function normalizePortfolioRiskResponse(data: unknown): PortfolioRiskResponse {
 }
 
 function normalizeStructureReviewResponse(data: unknown): PortfolioStructureReviewResponse {
-  const camelized = toCamelCase<Record<string, unknown>>(data);
-  const normalized = isRecord(camelized)
-    ? stripStructureReviewUnsafeKeys(camelized)
+  const decoded = decodePortfolioContract<Record<string, unknown>>(data);
+  const normalized = isRecord(decoded)
+    ? stripStructureReviewUnsafeKeys(decoded)
     : {};
 
   return {
@@ -1192,9 +1311,7 @@ function normalizeStructureReviewResponse(data: unknown): PortfolioStructureRevi
     aggregateSummary: isRecord(normalized.aggregateSummary)
       ? stripStructureReviewUnsafeKeys(normalized.aggregateSummary)
       : {},
-    exposureByThemeOrSector: Array.isArray(normalized.exposureByThemeOrSector)
-      ? normalized.exposureByThemeOrSector.filter(isRecord).map((entry) => stripStructureReviewUnsafeKeys(entry))
-      : [],
+    exposureByThemeOrSector: normalizeStructureReviewExposure(normalized.exposureByThemeOrSector),
     countsByStructureState: isRecord(normalized.countsByStructureState)
       ? Object.fromEntries(
         Object.entries(normalized.countsByStructureState).flatMap(([key, entry]) => (
@@ -1230,26 +1347,27 @@ function normalizeStructureReviewResponse(data: unknown): PortfolioStructureRevi
   };
 }
 
-function normalizeScenarioRiskShockValue(value: unknown): number | PortfolioScenarioRiskShockValueInput | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
+function normalizeScenarioRiskShockValue(value: unknown): PortfolioDecimal | PortfolioScenarioRiskShockValueInput | undefined {
+  if (typeof value === 'string') {
+    return requirePortfolioDecimal(value, 'Scenario shock');
   }
   if (!isRecord(value)) {
-    return undefined;
+    throw new Error('Scenario shock must be a canonical decimal string or structured shock object');
   }
 
   const normalized: PortfolioScenarioRiskShockValueInput = {};
-  const shockPct = pickNumber(value.shockPct);
+  const shockPct = normalizePortfolioDecimalField(value.shockPct, 'Scenario shock percent');
   const labelType = pickString(value.labelType);
 
-  if (shockPct !== undefined) {
-    normalized.shockPct = shockPct;
+  if (shockPct == null) {
+    return undefined;
   }
+  normalized.shockPct = shockPct;
   if (labelType !== undefined) {
     normalized.labelType = labelType;
   }
 
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
+  return normalized;
 }
 
 function normalizeScenarioRiskScenarioInputs(value: unknown): PortfolioScenarioRiskScenarioInput[] {
@@ -1274,6 +1392,9 @@ function normalizeScenarioRiskScenarioInputs(value: unknown): PortfolioScenarioR
         return normalizedValue === undefined ? [] : [[label, normalizedValue]];
       }),
     );
+    if (Object.keys(normalizedShocks).length === 0) {
+      throw new Error('Scenario shocks must include at least one supported shock');
+    }
 
     return [{
       name,
@@ -1288,6 +1409,7 @@ function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Re
 
   return {
     asOf: pickString(payload.asOf) ?? '',
+    baseCurrency: pickString(payload.baseCurrency) ?? '',
     positions: rawPositions.flatMap((entry) => {
       if (!isRecord(entry)) {
         return [];
@@ -1295,14 +1417,13 @@ function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Re
 
       const normalized = {
         symbol: pickString(entry.symbol),
-        weight: pickNumber(entry.weight),
-        weightPct: pickNumber(entry.weightPct),
-        marketValue: pickNumber(entry.marketValue),
-        marketValueBase: pickNumber(entry.marketValueBase),
+        weight: normalizePortfolioDecimalField(entry.weight, 'Scenario position weight'),
+        weightPct: normalizePortfolioDecimalField(entry.weightPct, 'Scenario position weight percent'),
+        marketValueBase: normalizePortfolioDecimalField(entry.marketValueBase, 'Scenario position base market value'),
+        baseCurrency: pickString(entry.baseCurrency),
         bucket: pickString(entry.bucket),
         bucketLabel: pickString(entry.bucketLabel),
         theme: pickString(entry.theme),
-        currency: pickString(entry.currency),
         factor: pickString(entry.factor),
       };
 
@@ -1319,7 +1440,7 @@ function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Re
         symbol: pickString(entry.symbol),
         label: pickString(entry.label),
         labelType: pickString(entry.labelType),
-        exposure: pickNumber(entry.exposure),
+        exposure: normalizePortfolioDecimalField(entry.exposure, 'Scenario exposure'),
       };
 
       return [Object.fromEntries(
@@ -1338,8 +1459,8 @@ function normalizeScenarioRiskCoverage(value: unknown): PortfolioScenarioRiskCov
       totalPositions: pickNumber(data.totalPositions),
       positionsWithUsableWeight: pickNumber(data.positionsWithUsableWeight),
       positionsWithMarketValue: pickNumber(data.positionsWithMarketValue),
-      effectiveWeightSum: pickNumber(data.effectiveWeightSum),
-      totalMarketValue: pickNumber(data.totalMarketValue),
+      effectiveWeightSum: normalizePortfolioDecimalField(data.effectiveWeightSum, 'Scenario effective weight sum'),
+      totalMarketValue: normalizePortfolioDecimalField(data.totalMarketValue, 'Scenario total market value'),
       explicitExposureRows: pickNumber(data.explicitExposureRows),
       labelsWithExplicitCoverage: pickStringArray(data.labelsWithExplicitCoverage),
     }).filter(([, entry]) => entry !== undefined),
@@ -1366,10 +1487,10 @@ function normalizeScenarioRiskAppliedShocks(value: unknown): PortfolioScenarioRi
       ...Object.fromEntries(
         Object.entries({
           labelType: pickString(entry.labelType),
-          shockPct: pickNumber(entry.shockPct),
-          exposure: pickNumber(entry.exposure),
-          impactPct: pickNumber(entry.impactPct),
-          impactAmount: pickNumber(entry.impactAmount),
+          shockPct: normalizePortfolioDecimalField(entry.shockPct, 'Scenario applied shock percent'),
+          exposure: normalizePortfolioDecimalField(entry.exposure, 'Scenario applied shock exposure'),
+          impactPct: normalizePortfolioDecimalField(entry.impactPct, 'Scenario applied shock impact percent'),
+          impactAmount: normalizePortfolioDecimalField(entry.impactAmount, 'Scenario applied shock impact amount'),
         }).filter(([, item]) => item !== undefined),
       ),
     }];
@@ -1396,11 +1517,11 @@ function normalizeScenarioRiskPositionContributions(value: unknown): PortfolioSc
       ...Object.fromEntries(
         Object.entries({
           bucket: pickString(entry.bucket),
-          weight: pickNumber(entry.weight),
-          marketValue: pickNumber(entry.marketValue),
-          impactPct: pickNumber(entry.impactPct),
-          impactAmount: pickNumber(entry.impactAmount),
-          contributionToScenarioLoss: pickNumber(entry.contributionToScenarioLoss),
+          weight: normalizePortfolioDecimalField(entry.weight, 'Scenario position weight'),
+          marketValue: normalizePortfolioDecimalField(entry.marketValue, 'Scenario position market value'),
+          impactPct: normalizePortfolioDecimalField(entry.impactPct, 'Scenario position impact percent'),
+          impactAmount: normalizePortfolioDecimalField(entry.impactAmount, 'Scenario position impact amount'),
+          contributionToScenarioLoss: normalizePortfolioDecimalField(entry.contributionToScenarioLoss, 'Scenario position contribution'),
           warnings: pickStringArray(entry.warnings),
           appliedShocks: normalizeScenarioRiskAppliedShocks(entry.appliedShocks),
         }).filter(([, item]) => item !== undefined),
@@ -1429,9 +1550,9 @@ function normalizeScenarioRiskBucketContributions(value: unknown): PortfolioScen
       ...Object.fromEntries(
         Object.entries({
           positionCount: pickNumber(entry.positionCount),
-          impactPct: pickNumber(entry.impactPct),
-          impactAmount: pickNumber(entry.impactAmount),
-          contributionToScenarioLoss: pickNumber(entry.contributionToScenarioLoss),
+          impactPct: normalizePortfolioDecimalField(entry.impactPct, 'Scenario bucket impact percent'),
+          impactAmount: normalizePortfolioDecimalField(entry.impactAmount, 'Scenario bucket impact amount'),
+          contributionToScenarioLoss: normalizePortfolioDecimalField(entry.contributionToScenarioLoss, 'Scenario bucket contribution'),
         }).filter(([, item]) => item !== undefined),
       ),
     }];
@@ -1484,10 +1605,10 @@ function normalizeScenarioRiskScenarios(value: unknown): PortfolioScenarioRiskSc
       name,
       ...Object.fromEntries(
         Object.entries({
-          portfolioImpactPct: pickNumber(entry.portfolioImpactPct),
-          portfolioImpactAmount: pickNumber(entry.portfolioImpactAmount),
-          coveredWeight: pickNumber(entry.coveredWeight),
-          coveredMarketValue: pickNumber(entry.coveredMarketValue),
+          portfolioImpactPct: normalizePortfolioDecimalField(entry.portfolioImpactPct, 'Scenario portfolio impact percent'),
+          portfolioImpactAmount: normalizePortfolioDecimalField(entry.portfolioImpactAmount, 'Scenario portfolio impact amount'),
+          coveredWeight: normalizePortfolioDecimalField(entry.coveredWeight, 'Scenario covered weight'),
+          coveredMarketValue: normalizePortfolioDecimalField(entry.coveredMarketValue, 'Scenario covered market value'),
           warnings: pickStringArray(entry.warnings),
           missingCoverage: normalizeScenarioRiskMissingCoverage(entry.missingCoverage),
           positionContributions: normalizeScenarioRiskPositionContributions(entry.positionContributions),
@@ -1516,6 +1637,10 @@ function normalizeScenarioRiskResponse(data: unknown): PortfolioScenarioRiskResp
   const normalized = isRecord(toCamelCase<Record<string, unknown>>(data))
     ? toCamelCase<Record<string, unknown>>(data)
     : {};
+  const baseCurrency = pickString(normalized.baseCurrency);
+  if (!baseCurrency) {
+    throw new Error('Invalid scenario risk response base currency');
+  }
 
   return {
     readModelType: pickString(normalized.readModelType) ?? '',
@@ -1525,6 +1650,7 @@ function normalizeScenarioRiskResponse(data: unknown): PortfolioScenarioRiskResp
     tradeExecution: pickBoolean(normalized.tradeExecution),
     executionReadiness: pickString(normalized.executionReadiness),
     asOf: pickString(normalized.asOf),
+    baseCurrency,
     coverage: normalizeScenarioRiskCoverage(normalized.coverage),
     scenarios: normalizeScenarioRiskScenarios(normalized.scenarios),
     insufficientDataReasons: pickStringArray(normalized.insufficientDataReasons) ?? [],
@@ -1604,14 +1730,14 @@ export const portfolioApi = {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/fx-rate', {
       params: { base: query.base, quote: query.quote },
     });
-    return toCamelCase<PortfolioLiveFxRateResponse>(response.data);
+    return decodePortfolioContract<PortfolioLiveFxRateResponse>(response.data);
   },
 
   async refreshFxRate(query: FxRateQuery): Promise<PortfolioLiveFxRateResponse> {
     const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/fx-rate/refresh', undefined, {
       params: { base: query.base, quote: query.quote },
     });
-    return toCamelCase<PortfolioLiveFxRateResponse>(response.data);
+    return decodePortfolioContract<PortfolioLiveFxRateResponse>(response.data);
   },
 
   async createTrade(payload: PortfolioTradeCreateRequest): Promise<PortfolioEventCreatedResponse> {
@@ -1620,10 +1746,10 @@ export const portfolioApi = {
       symbol: payload.symbol,
       trade_date: payload.tradeDate,
       side: payload.side,
-      quantity: payload.quantity,
-      price: payload.price,
-      fee: payload.fee ?? 0,
-      tax: payload.tax ?? 0,
+      quantity: requirePortfolioDecimal(payload.quantity, 'Trade quantity'),
+      price: requirePortfolioDecimal(payload.price, 'Trade price'),
+      fee: payload.fee == null ? '0' : requirePortfolioDecimal(payload.fee, 'Trade fee'),
+      tax: payload.tax == null ? '0' : requirePortfolioDecimal(payload.tax, 'Trade tax'),
       market: payload.market,
       currency: payload.currency,
       trade_uid: payload.tradeUid,
@@ -1643,15 +1769,15 @@ export const portfolioApi = {
       symbol: payload.symbol,
       trade_date: payload.tradeDate,
       side: payload.side,
-      quantity: payload.quantity,
-      price: payload.price,
-      fee: payload.fee,
-      tax: payload.tax,
+      quantity: payload.quantity == null ? undefined : requirePortfolioDecimal(payload.quantity, 'Trade quantity'),
+      price: payload.price == null ? undefined : requirePortfolioDecimal(payload.price, 'Trade price'),
+      fee: payload.fee == null ? undefined : requirePortfolioDecimal(payload.fee, 'Trade fee'),
+      tax: payload.tax == null ? undefined : requirePortfolioDecimal(payload.tax, 'Trade tax'),
       market: payload.market,
       currency: payload.currency,
       note: payload.note,
     });
-    return toCamelCase<PortfolioTradeListItem>(response.data);
+    return decodePortfolioContract<PortfolioTradeListItem>(response.data);
   },
 
   async createCashLedger(payload: PortfolioCashLedgerCreateRequest): Promise<PortfolioEventCreatedResponse> {
@@ -1659,7 +1785,7 @@ export const portfolioApi = {
       account_id: payload.accountId,
       event_date: payload.eventDate,
       direction: payload.direction,
-      amount: payload.amount,
+      amount: requirePortfolioDecimal(payload.amount, 'Cash amount'),
       currency: payload.currency,
       note: payload.note,
     });
@@ -1679,8 +1805,12 @@ export const portfolioApi = {
       action_type: payload.actionType,
       market: payload.market,
       currency: payload.currency,
-      cash_dividend_per_share: payload.cashDividendPerShare,
-      split_ratio: payload.splitRatio,
+      cash_dividend_per_share: payload.cashDividendPerShare == null
+        ? undefined
+        : requirePortfolioDecimal(payload.cashDividendPerShare, 'Cash dividend per share'),
+      split_ratio: payload.splitRatio == null
+        ? undefined
+        : requirePortfolioDecimal(payload.splitRatio, 'Split ratio'),
       note: payload.note,
     });
     return toCamelCase<PortfolioEventCreatedResponse>(response.data);
@@ -1703,7 +1833,7 @@ export const portfolioApi = {
       params.include_voided = String(query.includeVoided);
     }
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/trades', { params });
-    return toCamelCase<PortfolioTradeListResponse>(response.data);
+    return decodePortfolioContract<PortfolioTradeListResponse>(response.data);
   },
 
   async listCashLedger(query: CashListQuery = {}): Promise<PortfolioCashLedgerListResponse> {
@@ -1712,7 +1842,7 @@ export const portfolioApi = {
       params.direction = query.direction;
     }
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/cash-ledger', { params });
-    return toCamelCase<PortfolioCashLedgerListResponse>(response.data);
+    return decodePortfolioContract<PortfolioCashLedgerListResponse>(response.data);
   },
 
   async listCorporateActions(query: CorporateListQuery = {}): Promise<PortfolioCorporateActionListResponse> {
@@ -1724,7 +1854,7 @@ export const portfolioApi = {
       params.action_type = query.actionType;
     }
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/corporate-actions', { params });
-    return toCamelCase<PortfolioCorporateActionListResponse>(response.data);
+    return decodePortfolioContract<PortfolioCorporateActionListResponse>(response.data);
   },
 
   async listImportBrokers(): Promise<PortfolioImportBrokerListResponse> {
@@ -1739,7 +1869,7 @@ export const portfolioApi = {
     const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/imports/parse', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return toCamelCase<PortfolioImportParseResponse>(response.data);
+    return decodePortfolioContract<PortfolioImportParseResponse>(response.data);
   },
 
   async commitCsvImport(
@@ -1756,7 +1886,7 @@ export const portfolioApi = {
     const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/imports/commit', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return toCamelCase<PortfolioImportCommitResponse>(response.data);
+    return decodePortfolioContract<PortfolioImportCommitResponse>(response.data);
   },
 
   async syncIbkrReadOnly(payload: PortfolioIbkrSyncRequest): Promise<PortfolioIbkrSyncResponse> {
@@ -1768,6 +1898,6 @@ export const portfolioApi = {
       api_base_url: payload.apiBaseUrl,
       verify_ssl: payload.verifySsl,
     });
-    return toCamelCase<PortfolioIbkrSyncResponse>(response.data);
+    return decodePortfolioContract<PortfolioIbkrSyncResponse>(response.data);
   },
 };

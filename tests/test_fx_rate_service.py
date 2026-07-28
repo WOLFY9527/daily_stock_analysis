@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import unittest
+from decimal import Decimal
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -18,27 +19,38 @@ class FxRateServiceTestCase(unittest.TestCase):
         response.status_code = 200
         response.json.return_value = {
             "amount": 1.0,
-            "base": "USD",
-            "quote": "CNY",
-            "rate": 7.21,
+            "base": "INR",
+            "quote": "SEK",
+            "rate": "0.21",
         }
 
         with patch("src.services.fx_rate_service.requests.get", return_value=response) as mock_get:
             service = FxRateService()
-            result = service.fetch_rate("usd", "cny", force_refresh=True)
+            result = service.fetch_rate("inr", "sek", force_refresh=True)
 
-        self.assertEqual(result["base_currency"], "USD")
-        self.assertEqual(result["quote_currency"], "CNY")
-        self.assertAlmostEqual(result["rate"], 7.21, places=6)
+        self.assertEqual(result["base_currency"], "INR")
+        self.assertEqual(result["quote_currency"], "SEK")
+        self.assertEqual(result["rate"], "0.21000000")
         self.assertEqual(result["provider"], "frankfurter")
         self.assertFalse(result["cache_hit"])
         self.assertFalse(result["stale"])
         mock_get.assert_called_once()
+        response.json.assert_called_once_with(parse_float=Decimal)
+
+    def test_preserves_provider_decimal_as_canonical_text(self) -> None:
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"rate": "7.12345678"}
+
+        with patch("src.services.fx_rate_service.requests.get", return_value=response):
+            result = FxRateService().fetch_rate("USD", "CNY", force_refresh=True)
+
+        self.assertEqual(result["rate"], "7.12345678")
 
     def test_returns_cache_hit_on_second_request_within_ttl(self) -> None:
         response = MagicMock()
         response.status_code = 200
-        response.json.return_value = {"rate": 7.21}
+        response.json.return_value = {"rate": "7.21"}
 
         with patch("src.services.fx_rate_service.requests.get", return_value=response):
             service = FxRateService(ttl_seconds=600)
@@ -48,7 +60,7 @@ class FxRateServiceTestCase(unittest.TestCase):
         self.assertFalse(first["cache_hit"])
         self.assertTrue(second["cache_hit"])
         self.assertFalse(second["stale"])
-        self.assertAlmostEqual(second["rate"], 7.21, places=6)
+        self.assertEqual(second["rate"], "7.21000000")
 
     def test_returns_stale_cache_when_provider_fails(self) -> None:
         service = FxRateService(ttl_seconds=1)
@@ -56,7 +68,7 @@ class FxRateServiceTestCase(unittest.TestCase):
         service._cache[("USD", "CNY")] = {
             "base_currency": "USD",
             "quote_currency": "CNY",
-            "rate": 7.1,
+            "rate": "7.10000000",
             "provider": "frankfurter",
             "fetched_at": stale_time.isoformat(),
             "cache_hit": False,
@@ -73,12 +85,12 @@ class FxRateServiceTestCase(unittest.TestCase):
         self.assertTrue(result["cache_hit"])
         self.assertTrue(result["stale"])
         self.assertEqual(result["error"], "network down")
-        self.assertAlmostEqual(result["rate"], 7.1, places=6)
+        self.assertEqual(result["rate"], "7.10000000")
 
     def test_timeout_is_three_seconds(self) -> None:
         response = MagicMock()
         response.status_code = 200
-        response.json.return_value = {"rate": 7.21}
+        response.json.return_value = {"rate": "7.21"}
 
         with patch("src.services.fx_rate_service.requests.get", return_value=response) as mock_get:
             FxRateService().fetch_rate("USD", "CNY", force_refresh=True)

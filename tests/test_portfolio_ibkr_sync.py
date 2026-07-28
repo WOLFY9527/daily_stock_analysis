@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
-from unittest.mock import patch
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
@@ -21,8 +23,10 @@ from src.services.portfolio_ibkr_sync_service import (
     IbkrHttpResult,
     PortfolioIbkrSyncError,
     PortfolioIbkrSyncService,
+    RequestsIbkrHttpTransport,
 )
 from src.services.portfolio_import_service import PortfolioImportService
+from src.portfolio_exact_numeric import PortfolioExactNumericError
 from src.services.portfolio_service import PortfolioService
 from src.storage import DatabaseManager
 from src.utils.symbol_normalization import parse_canonical_symbol
@@ -82,6 +86,68 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
         self.temp_dir.cleanup()
+
+    def test_requests_transport_preserves_json_decimal_and_normalizer_rejects_float(self) -> None:
+        response = MagicMock(status_code=200)
+        payload_text = '{"amount": 9007199254740993.12345678}'
+
+        def parse_json(**kwargs):
+            return json.loads(payload_text, **kwargs)
+
+        response.json.side_effect = parse_json
+        with patch("src.services.portfolio_ibkr_sync_service.requests.get", return_value=response):
+            result = RequestsIbkrHttpTransport().get(
+                "https://localhost:5000/v1/api/portfolio/U1234567/summary",
+                headers={},
+                params=None,
+                verify=True,
+                timeout=20,
+            )
+
+        self.assertEqual(result.payload["amount"], Decimal("9007199254740993.12345678"))
+        response.json.assert_called_once_with(parse_float=Decimal)
+        with self.assertRaises(PortfolioIbkrSyncError) as ctx:
+            PortfolioIbkrSyncService._to_decimal(1.25)
+        self.assertEqual(ctx.exception.code, "ibkr_precision_invalid")
+
+    def test_transport_decoded_bare_decimal_summary_survives_read_only_sync(self) -> None:
+        exact_money = "9007199254740993.12"
+        payloads = {
+            "/v1/api/portfolio/accounts": '[{"accountId": "U-BARE", "displayName": "Bare Decimal", "currency": "USD"}]',
+            "/v1/api/portfolio/U-BARE/summary": (
+                "{"
+                f"\"totalcashvalue\": {exact_money}, "
+                "\"stockmarketvalue\": 0, "
+                f"\"netliquidation\": {exact_money}, "
+                "\"unrealizedpnl\": 0"
+                "}"
+            ),
+            "/v1/api/portfolio/U-BARE/ledger": "{}",
+            "/v1/api/portfolio/U-BARE/positions/0": "[]",
+        }
+
+        def fake_get(url, **_kwargs):
+            from urllib.parse import urlparse
+
+            response = MagicMock(status_code=200)
+            payload_text = payloads[urlparse(url).path]
+            response.json.side_effect = lambda **kwargs: json.loads(payload_text, **kwargs)
+            return response
+
+        account = self.service.create_account(name="Bare Summary", broker="IBKR", market="us", base_currency="USD")
+        with patch("src.services.portfolio_ibkr_sync_service.requests.get", side_effect=fake_get):
+            result = PortfolioIbkrSyncService(portfolio_service=self.service).sync_read_only_account_state(
+                account_id=account["id"],
+                session_token="unit-test-session",
+                api_base_url="https://localhost:5000",
+            )
+
+        self.assertEqual(result["total_cash"], exact_money)
+        self.assertEqual(result["total_equity"], exact_money)
+        latest = self.service.get_latest_broker_sync_state(portfolio_account_id=account["id"])
+        self.assertIsNotNone(latest)
+        assert latest is not None
+        self.assertEqual(latest["total_cash"], exact_money)
 
     @staticmethod
     def _ibkr_flex_xml_bytes() -> bytes:
@@ -194,6 +260,8 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
     def test_ibkr_currency_classifier_distinguishes_all_states(self) -> None:
         cases = [
             (" usd ", None, IbkrCurrencyStatus.VALID, "USD"),
+            ("inr", None, IbkrCurrencyStatus.VALID, "INR"),
+            ("sek", None, IbkrCurrencyStatus.VALID, "SEK"),
             (None, None, IbkrCurrencyStatus.MISSING, None),
             ("   ", None, IbkrCurrencyStatus.MISSING, None),
             ("US D", None, IbkrCurrencyStatus.MALFORMED, None),
@@ -210,6 +278,83 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
                 )
                 self.assertEqual(result.status, expected_status)
                 self.assertEqual(result.code, expected_code)
+
+    def test_position_normalization_keeps_decimal_values_until_public_serialization(self) -> None:
+        portfolio_service = MagicMock()
+        portfolio_service.convert_amount_exact.side_effect = lambda *, amount, **_kwargs: (
+            Decimal(amount),
+            False,
+            "identity",
+        )
+        sync_service = PortfolioIbkrSyncService(portfolio_service=portfolio_service)
+
+        rows, market_total, unrealized_total, fx_stale, warnings, markets = (
+            sync_service._normalize_positions(
+                positions=[
+                    {
+                        "conid": "265598",
+                        "contractDesc": "AAPL",
+                        "position": "10.12345678",
+                        "avgCost": "150.12345678",
+                        "mktPrice": "160.12345678",
+                        "mktValue": "1620.00000000",
+                        "unrealizedPnl": "100.00000000",
+                        "currency": "USD",
+                        "assetClass": "STK",
+                        "listingExchange": "NASDAQ",
+                    }
+                ],
+                base_currency="USD",
+                as_of_date=date(2026, 1, 3),
+            )
+        )
+
+        self.assertEqual(rows[0]["quantity"], Decimal("10.12345678"))
+        self.assertEqual(rows[0]["avg_cost"], Decimal("150.12345678"))
+        self.assertEqual(rows[0]["last_price"], Decimal("160.12345678"))
+        self.assertEqual(rows[0]["market_value_base"], Decimal("1620.00000000"))
+        self.assertEqual(market_total, Decimal("1620.00000000"))
+        self.assertEqual(unrealized_total, Decimal("100.00000000"))
+        self.assertFalse(fx_stale)
+        self.assertEqual(warnings, [])
+        self.assertEqual(markets, ["us"])
+
+    def test_position_normalization_rounds_derived_market_price_before_strict_parse(self) -> None:
+        portfolio_service = MagicMock()
+        portfolio_service.convert_amount_exact.side_effect = lambda *, amount, **_kwargs: (
+            Decimal(amount),
+            False,
+            "identity",
+        )
+        sync_service = PortfolioIbkrSyncService(portfolio_service=portfolio_service)
+
+        rows, market_total, unrealized_total, fx_stale, warnings, markets = (
+            sync_service._normalize_positions(
+                positions=[
+                    {
+                        "conid": "265598",
+                        "contractDesc": "AAPL",
+                        "position": "3",
+                        "avgCost": "30",
+                        "mktPrice": "0",
+                        "mktValue": "100",
+                        "unrealizedPnl": "0",
+                        "currency": "USD",
+                        "assetClass": "STK",
+                        "listingExchange": "NASDAQ",
+                    }
+                ],
+                base_currency="USD",
+                as_of_date=date(2026, 1, 3),
+            )
+        )
+
+        self.assertEqual(rows[0]["last_price"], Decimal("33.33333333"))
+        self.assertEqual(market_total, Decimal("100.00"))
+        self.assertEqual(unrealized_total, Decimal("0.00"))
+        self.assertFalse(fx_stale)
+        self.assertEqual(warnings, [])
+        self.assertEqual(markets, ["us"])
 
     def test_read_only_sync_requires_explicit_valid_broker_base_currency(self) -> None:
         cases = [
@@ -312,27 +457,74 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
         self.assertEqual(aligned["base_currency"], "USD")
 
     def test_read_only_sync_uses_direct_fx_for_material_position_values(self) -> None:
-        account = self.service.create_account(name="Direct FX", broker="IBKR", market="hk", base_currency="USD")
+        account = self.service.create_account(name="Direct FX", broker="IBKR", market="hk", base_currency="INR")
         self.service.repo.save_fx_rate(
-            from_currency="HKD",
-            to_currency="USD",
+            from_currency="SEK",
+            to_currency="INR",
             rate_date=date.today(),
-            rate=0.128,
+            rate=Decimal("1.28"),
             source="unit-test",
             is_stale=False,
         )
 
         result = PortfolioIbkrSyncService(
             portfolio_service=self.service,
-            transport=self._build_cross_currency_transport(),
+            transport=self._build_cross_currency_transport(
+                account_currency="INR",
+                position_currency="SEK",
+                ledger_currency="INR",
+            ),
         ).sync_read_only_account_state(
             account_id=account["id"],
             session_token="unit-test-session",
         )
 
         state = self.service.get_latest_broker_sync_state(portfolio_account_id=account["id"])
-        self.assertAlmostEqual(state["positions"][0]["market_value_base"], 204.8, places=6)
-        self.assertAlmostEqual(state["positions"][0]["unrealized_pnl_base"], 12.8, places=6)
+        self.assertEqual(state["positions"][0]["market_value_base"], "2048.00")
+        self.assertEqual(state["positions"][0]["unrealized_pnl_base"], "128.00")
+        self.assertFalse(result["fx_stale"])
+
+    def test_read_only_sync_rounds_derived_fx_values_at_destination_money_boundary(self) -> None:
+        account = self.service.create_account(name="Derived FX Rounding", broker="IBKR", market="hk", base_currency="USD")
+        original_convert_amount_exact = self.service.convert_amount_exact
+
+        def convert_amount_exact(*, amount, from_currency, to_currency, as_of_date):
+            if from_currency == "HKD" and to_currency == "USD":
+                self.assertIsInstance(amount, Decimal)
+                converted = {
+                    Decimal("1600"): Decimal("204.805"),
+                    Decimal("100"): Decimal("12.805"),
+                }[amount]
+                return converted, False, "unit-test-derived-fx"
+            return original_convert_amount_exact(
+                amount=amount,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                as_of_date=as_of_date,
+            )
+
+        with patch.object(
+            self.service,
+            "convert_amount_exact",
+            side_effect=convert_amount_exact,
+        ) as convert_amount_exact_mock:
+            result = PortfolioIbkrSyncService(
+                portfolio_service=self.service,
+                transport=self._build_cross_currency_transport(),
+            ).sync_read_only_account_state(
+                account_id=account["id"],
+                session_token="unit-test-session",
+            )
+
+        cross_currency_amounts = {
+            call.kwargs["amount"]
+            for call in convert_amount_exact_mock.call_args_list
+            if call.kwargs["from_currency"] == "HKD" and call.kwargs["to_currency"] == "USD"
+        }
+        self.assertEqual(cross_currency_amounts, {Decimal("1600"), Decimal("100")})
+        state = self.service.get_latest_broker_sync_state(portfolio_account_id=account["id"])
+        self.assertEqual(state["positions"][0]["market_value_base"], "204.80")
+        self.assertEqual(state["positions"][0]["unrealized_pnl_base"], "12.80")
         self.assertFalse(result["fx_stale"])
 
     def test_read_only_sync_uses_inverse_fx_for_material_position_values(self) -> None:
@@ -341,7 +533,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
             from_currency="USD",
             to_currency="HKD",
             rate_date=date.today(),
-            rate=7.8125,
+            rate=Decimal("7.8125"),
             source="unit-test",
             is_stale=False,
         )
@@ -355,8 +547,8 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
         )
 
         state = self.service.get_latest_broker_sync_state(portfolio_account_id=account["id"])
-        self.assertAlmostEqual(state["positions"][0]["market_value_base"], 204.8, places=6)
-        self.assertAlmostEqual(state["positions"][0]["unrealized_pnl_base"], 12.8, places=6)
+        self.assertEqual(state["positions"][0]["market_value_base"], "204.80")
+        self.assertEqual(state["positions"][0]["unrealized_pnl_base"], "12.80")
 
     def test_rejected_sync_preserves_account_overlay_cash_positions_and_cached_snapshot(self) -> None:
         account = self.service.create_account(name="Preserved Sync", broker="IBKR", market="us", base_currency="USD")
@@ -496,9 +688,132 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
         self.assertAlmostEqual(acc["total_cash"], 5000.0, places=6)
         self.assertAlmostEqual(acc["total_market_value"], 1600.0, places=6)
         self.assertAlmostEqual(acc["total_equity"], 6600.0, places=6)
+        self.assertNotIn("price_cost_basis_native", acc["positions"][0])
+        self.assertNotIn("price_pnl_native", acc["positions"][0])
+
+        cached = self.service.repo.get_cached_snapshot_bundle(
+            account_id=account["id"],
+            snapshot_date=snapshot_date,
+            cost_method="fifo",
+        )
+        self.assertIsNotNone(cached)
+        self.assertIsNone(cached["positions"][0].price_cost)
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("synced snapshot cache should preserve unavailable price cost"),
+        ):
+            cached_snapshot = self.service.get_portfolio_snapshot(
+                account_id=account["id"],
+                as_of=snapshot_date,
+                cost_method="fifo",
+            )
+
+        cached_position = cached_snapshot["accounts"][0]["positions"][0]
+        self.assertAlmostEqual(cached_position["quantity"], 10.0, places=6)
+        self.assertNotIn("price_cost_basis_native", cached_position)
+        self.assertNotIn("price_pnl_native", cached_position)
 
         trades = self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)
         self.assertEqual(trades["total"], 0)
+
+    def test_read_only_sync_preserves_exact_broker_snapshot_values_through_latest_state_and_overlay(self) -> None:
+        exact_money = "9007199254740993.12"
+        exact_quantity = "9007199254740993.00000000"
+        account = self.service.create_account(
+            name="IBKR Exact Overlay",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        transport = FakeIbkrTransport(
+            {
+                "/v1/api/portfolio/accounts": [
+                    {"accountId": "U-EXACT", "displayName": "Exact IBKR", "currency": "USD"}
+                ],
+                "/v1/api/portfolio/U-EXACT/summary": {
+                    "totalcashvalue": {"amount": exact_money},
+                    "stockmarketvalue": {"amount": "0.00"},
+                    "netliquidation": {"amount": exact_money},
+                    "unrealizedpnl": {"amount": "0.00"},
+                },
+                "/v1/api/portfolio/U-EXACT/ledger": {
+                    "USD": {"cashbalance": exact_money},
+                },
+                "/v1/api/portfolio/U-EXACT/positions/0": [
+                    {
+                        "conid": "265598",
+                        "contractDesc": "AAPL",
+                        "position": exact_quantity,
+                        "avgCost": "1.00000000",
+                        "mktPrice": "1.00000000",
+                        "mktValue": exact_money,
+                        "unrealizedPnl": "0.00",
+                        "currency": "USD",
+                        "assetClass": "STK",
+                        "listingExchange": "NASDAQ",
+                        "countryCode": "US",
+                    }
+                ],
+                "/v1/api/portfolio/U-EXACT/positions/1": [],
+            }
+        )
+
+        result = PortfolioIbkrSyncService(
+            portfolio_service=self.service,
+            transport=transport,
+        ).sync_read_only_account_state(
+            account_id=account["id"],
+            session_token="unit-test-session",
+            api_base_url="https://localhost:5000",
+        )
+
+        self.assertEqual(result["total_cash"], exact_money)
+        latest = self.service.get_latest_broker_sync_state(portfolio_account_id=account["id"])
+        self.assertIsNotNone(latest)
+        assert latest is not None
+        self.assertEqual(latest["total_cash"], exact_money)
+        self.assertEqual(latest["cash_balances"][0]["amount"], exact_money)
+        self.assertEqual(latest["positions"][0]["quantity"], exact_quantity)
+        self.assertEqual(latest["positions"][0]["market_value_base"], exact_money)
+
+        snapshot_date = date.fromisoformat(result["snapshot_date"])
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=account["id"],
+            as_of=snapshot_date,
+            cost_method="fifo",
+        )
+        overlay = snapshot["accounts"][0]
+        self.assertEqual(overlay["total_cash"], Decimal(exact_money))
+        self.assertEqual(overlay["positions"][0]["quantity"], Decimal(exact_quantity))
+        self.assertEqual(overlay["positions"][0]["market_value_base"], Decimal(exact_money))
+
+        connection_id = self.service.list_broker_connections(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+        )[0]["id"]
+        with self.assertRaises(PortfolioExactNumericError):
+            self.service.replace_broker_sync_state(
+                broker_connection_id=connection_id,
+                portfolio_account_id=account["id"],
+                broker_type="ibkr",
+                broker_account_ref="U-EXACT",
+                sync_source="api",
+                sync_status="success",
+                snapshot_date=snapshot_date,
+                synced_at=datetime.now(),
+                base_currency="USD",
+                total_cash=1.0,
+                total_market_value="0.00",
+                total_equity="1.00",
+                realized_pnl="0.00",
+                unrealized_pnl="0.00",
+                fx_stale=False,
+                payload={},
+                positions=[],
+                cash_balances=[],
+            )
 
     def test_read_only_sync_does_not_infer_hk_for_bare_five_digit_position_without_context(self) -> None:
         account = self.service.create_account(name="IBKR Ambiguous Position", broker="IBKR", market="us", base_currency="USD")
@@ -506,7 +821,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
             from_currency="HKD",
             to_currency="USD",
             rate_date=date.today(),
-            rate=0.128,
+            rate=Decimal("0.128"),
             source="unit-test",
             is_stale=False,
         )
@@ -634,7 +949,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
             from_currency="HKD",
             to_currency="USD",
             rate_date=date.today(),
-            rate=0.128,
+            rate=Decimal("0.128"),
             source="unit-test",
             is_stale=False,
         )
@@ -685,7 +1000,7 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
             from_currency="HKD",
             to_currency="USD",
             rate_date=date.today(),
-            rate=0.128,
+            rate=Decimal("0.128"),
             source="unit-test",
             is_stale=False,
         )

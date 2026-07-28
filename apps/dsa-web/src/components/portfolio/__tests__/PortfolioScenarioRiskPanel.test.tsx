@@ -6,16 +6,14 @@ import { PortfolioScenarioRiskPanel } from '../PortfolioScenarioRiskPanel';
 const positions = [
   {
     symbol: 'AAPL',
-    marketValue: 1600,
-    marketValueBase: 1600,
-    currency: 'USD',
+    marketValueBase: '1600',
+    baseCurrency: 'USD',
     bucketLabel: 'Main',
   },
   {
     symbol: 'BABA',
-    marketValue: 400,
-    marketValueBase: 400,
-    currency: 'HKD',
+    marketValueBase: '400',
+    baseCurrency: 'USD',
     bucketLabel: 'Main',
   },
 ];
@@ -25,6 +23,8 @@ function renderPanel(runScenario = vi.fn()) {
     <UiLanguageProvider>
       <PortfolioScenarioRiskPanel
         snapshotAsOf="2026-03-19"
+        baseCurrency="USD"
+        portfolioTruthValueSemantics="authoritative_total"
         positions={positions}
         onRunScenario={runScenario}
       />
@@ -59,18 +59,18 @@ describe('PortfolioScenarioRiskPanel', () => {
         totalPositions: 2,
         positionsWithUsableWeight: 2,
         positionsWithMarketValue: 2,
-        effectiveWeightSum: 1,
-        totalMarketValue: 2000,
+        effectiveWeightSum: '1',
+        totalMarketValue: '2000',
         explicitExposureRows: 1,
         labelsWithExplicitCoverage: ['QQQ'],
       },
       scenarios: [
         {
           name: 'index_proxy_qqq_down_-6',
-          portfolioImpactPct: -3.2,
-          portfolioImpactAmount: -64,
-          coveredWeight: 0.8,
-          coveredMarketValue: 1600,
+          portfolioImpactPct: '-3.2',
+          portfolioImpactAmount: '-64',
+          coveredWeight: '0.8',
+          coveredMarketValue: '1600',
           warnings: ['coverage_partial', 'missing_scenario_coverage'],
           missingCoverage: [
             {
@@ -83,20 +83,20 @@ describe('PortfolioScenarioRiskPanel', () => {
             {
               symbol: 'AAPL',
               bucket: 'Main',
-              weight: 0.8,
-              marketValue: 1600,
-              impactPct: -3.2,
-              impactAmount: -64,
-              contributionToScenarioLoss: 1,
+              weight: '0.8',
+              marketValue: '1600',
+              impactPct: '-3.2',
+              impactAmount: '-64',
+              contributionToScenarioLoss: '1',
               warnings: [],
               appliedShocks: [
                 {
                   label: 'QQQ',
                   labelType: 'index_proxy',
-                  shockPct: -6,
-                  exposure: 1,
-                  impactPct: -3.2,
-                  impactAmount: -64,
+                  shockPct: '-6',
+                  exposure: '1',
+                  impactPct: '-3.2',
+                  impactAmount: '-64',
                 },
               ],
             },
@@ -105,9 +105,9 @@ describe('PortfolioScenarioRiskPanel', () => {
             {
               bucket: 'Main',
               positionCount: 1,
-              impactPct: -3.2,
-              impactAmount: -64,
-              contributionToScenarioLoss: 1,
+              impactPct: '-3.2',
+              impactAmount: '-64',
+              contributionToScenarioLoss: '1',
             },
           ],
         },
@@ -136,22 +136,19 @@ describe('PortfolioScenarioRiskPanel', () => {
 
     expect(runScenario).toHaveBeenCalledWith({
       asOf: '2026-03-19',
+      baseCurrency: 'USD',
       positions: [
         {
           symbol: 'AAPL',
-          weightPct: 80,
-          marketValue: 1600,
-          marketValueBase: 1600,
+          marketValueBase: '1600',
+          baseCurrency: 'USD',
           bucketLabel: 'Main',
-          currency: 'USD',
         },
         {
           symbol: 'BABA',
-          weightPct: 20,
-          marketValue: 400,
-          marketValueBase: 400,
+          marketValueBase: '400',
+          baseCurrency: 'USD',
           bucketLabel: 'Main',
-          currency: 'HKD',
         },
       ],
       exposures: [
@@ -159,7 +156,7 @@ describe('PortfolioScenarioRiskPanel', () => {
           symbol: 'AAPL',
           label: 'QQQ',
           labelType: 'index_proxy',
-          exposure: 1,
+          exposure: '1',
         },
       ],
       scenarioShocks: [
@@ -167,7 +164,7 @@ describe('PortfolioScenarioRiskPanel', () => {
           name: 'index_proxy_qqq_down_-6',
           shocks: {
             QQQ: {
-              shockPct: -6,
+              shockPct: '-6',
               labelType: 'index_proxy',
             },
           },
@@ -200,6 +197,58 @@ describe('PortfolioScenarioRiskPanel', () => {
     expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
   });
 
+  it('blocks a scenario when valued positions do not share one base currency', async () => {
+    const runScenario = vi.fn();
+    render(
+      <UiLanguageProvider>
+        <PortfolioScenarioRiskPanel
+          snapshotAsOf="2026-03-19"
+          baseCurrency="USD"
+          portfolioTruthValueSemantics="authoritative_total"
+          positions={[
+            { symbol: 'AAPL', marketValueBase: '1600', baseCurrency: 'USD', bucketLabel: 'Main' },
+            { symbol: '00700.HK', marketValueBase: '400', baseCurrency: 'HKD', bucketLabel: 'Main' },
+          ]}
+          onRunScenario={runScenario}
+        />
+      </UiLanguageProvider>,
+    );
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-8' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    expect(await screen.findByText('当前可见持仓的计价币种不一致，暂时无法推演。')).toBeInTheDocument();
+    expect(runScenario).not.toHaveBeenCalled();
+  });
+
+  it('blocks a scenario when any visible holding lacks a valuation', async () => {
+    const runScenario = vi.fn();
+    render(
+      <UiLanguageProvider>
+        <PortfolioScenarioRiskPanel
+          snapshotAsOf="2026-03-19"
+          baseCurrency="USD"
+          portfolioTruthValueSemantics="authoritative_total"
+          positions={[
+            { symbol: 'AAPL', marketValueBase: '1600', baseCurrency: 'USD', bucketLabel: 'Main' },
+            { symbol: 'BABA', bucketLabel: 'Main' },
+          ]}
+          onRunScenario={runScenario}
+        />
+      </UiLanguageProvider>,
+    );
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-8' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    expect(await screen.findByText('当前可见持仓缺少估值或计价币种，暂时无法推演。')).toBeInTheDocument();
+    expect(runScenario).not.toHaveBeenCalled();
+  });
+
   it('uses explicit protected scenario flags instead of inferring observation boundaries from metadata', async () => {
     const runScenario = vi.fn().mockResolvedValue({
       readModelType: 'portfolio_scenario_risk_advisory_v1',
@@ -213,18 +262,18 @@ describe('PortfolioScenarioRiskPanel', () => {
         totalPositions: 2,
         positionsWithUsableWeight: 2,
         positionsWithMarketValue: 2,
-        effectiveWeightSum: 1,
-        totalMarketValue: 2000,
+        effectiveWeightSum: '1',
+        totalMarketValue: '2000',
         explicitExposureRows: 0,
         labelsWithExplicitCoverage: [],
       },
       scenarios: [
         {
           name: 'symbol_aapl_down_-4',
-          portfolioImpactPct: -4,
-          portfolioImpactAmount: -80,
-          coveredWeight: 1,
-          coveredMarketValue: 2000,
+          portfolioImpactPct: '-4',
+          portfolioImpactAmount: '-80',
+          coveredWeight: '1',
+          coveredMarketValue: '2000',
           warnings: [],
           missingCoverage: [],
           positionContributions: [],
@@ -264,18 +313,18 @@ describe('PortfolioScenarioRiskPanel', () => {
         totalPositions: 2,
         positionsWithUsableWeight: 2,
         positionsWithMarketValue: 2,
-        effectiveWeightSum: 1,
-        totalMarketValue: 2000,
+        effectiveWeightSum: '1',
+        totalMarketValue: '2000',
         explicitExposureRows: 0,
         labelsWithExplicitCoverage: [],
       },
       scenarios: [
         {
           name: 'symbol_aapl_down_-5',
-          portfolioImpactPct: -2.5,
-          portfolioImpactAmount: -50,
-          coveredWeight: 1,
-          coveredMarketValue: 2000,
+          portfolioImpactPct: '-2.5',
+          portfolioImpactAmount: '-50',
+          coveredWeight: '1',
+          coveredMarketValue: '2000',
           warnings: ['stale', 'unavailable', 'insufficient', 'updating', 'empty', 'sample'],
           missingCoverage: [],
           positionContributions: [],

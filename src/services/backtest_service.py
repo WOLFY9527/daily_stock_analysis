@@ -8,6 +8,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, select
@@ -39,7 +40,10 @@ from src.services.us_ohlcv_coverage_readiness import (
     resolve_us_ohlcv_coverage_universe,
     starter_us_ohlcv_coverage_symbols,
 )
-from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
+from src.services.us_history_helper import (
+    fetch_daily_history_with_local_us_fallback,
+    has_complete_local_us_close_provenance,
+)
 from src.services.yfinance_us_ohlcv_cache_provider import build_readonly_local_us_ohlcv_cache_provider_from_env
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
 
@@ -1115,7 +1119,7 @@ class BacktestService:
 
     @staticmethod
     def _positive_price(value: Any) -> bool:
-        return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+        return isinstance(value, (Decimal, int, float)) and not isinstance(value, bool) and value > 0
 
     @staticmethod
     def _standard_result_content_identity(*, code: str, rows: List[StockDaily]) -> str:
@@ -1126,7 +1130,7 @@ class BacktestService:
                 "open": row.open,
                 "high": row.high,
                 "low": row.low,
-                "close": row.close,
+                "close": format(row.close, "f") if isinstance(row.close, Decimal) else row.close,
                 "volume": row.volume,
                 "source": row.data_source,
             }
@@ -1848,6 +1852,18 @@ class BacktestService:
             return "insufficient_history"
         return "blocked"
 
+    @staticmethod
+    def _has_complete_local_us_close_provenance(frame: Any) -> bool:
+        """Return whether a local-US frame can be persisted without float reconstruction."""
+
+        return has_complete_local_us_close_provenance(frame)
+
+    @classmethod
+    def _local_us_frame_is_persistence_eligible(cls, *, frame: Any, source: Any) -> bool:
+        if str(source or "").strip().lower() != "local_us_parquet":
+            return True
+        return cls._has_complete_local_us_close_provenance(frame)
+
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> Optional[BacktestSourceMetadata]:
         try:
             # Fetch a window that covers the analysis bar plus the forward evaluation bars.
@@ -1869,6 +1885,12 @@ class BacktestService:
                     code,
                     source,
                     ",".join(authority.reason_codes),
+                )
+                return None
+            if not self._local_us_frame_is_persistence_eligible(frame=df, source=source):
+                logger.warning(
+                    "Rejected historical backtest fill source for %s: exact local-US close provenance is missing, malformed, incomplete, or mismatched",
+                    code,
                 )
                 return None
             self.db.save_daily_data(df, code=code, data_source=source)
@@ -1920,6 +1942,12 @@ class BacktestService:
                     code,
                     source,
                     ",".join(authority.reason_codes),
+                )
+                return 0, None
+            if not self._local_us_frame_is_persistence_eligible(frame=df, source=source):
+                logger.warning(
+                    "Rejected historical backtest warmup source for %s: exact local-US close provenance is missing, malformed, incomplete, or mismatched",
+                    code,
                 )
                 return 0, None
             saved_count = self.db.save_daily_data(df, code=code, data_source=source)

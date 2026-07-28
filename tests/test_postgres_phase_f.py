@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import json
 import os
+import re
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -31,6 +35,7 @@ from src.postgres_portfolio_coexistence_store import (
     PhaseFPortfolioSyncCashBalance,
     PhaseFPortfolioSyncPosition,
     PhaseFPortfolioSyncState,
+    PostgresPhaseFStore,
 )
 from api.v1.schemas.portfolio import PortfolioCorporateActionListResponse
 from src.services.portfolio_service import PortfolioService
@@ -41,6 +46,8 @@ from src.storage import (
     PortfolioBrokerSyncCashBalance,
     PortfolioBrokerSyncPosition,
     PortfolioBrokerSyncState,
+    PortfolioCorporateAction,
+    PortfolioPosition,
     PortfolioTrade,
 )
 
@@ -109,6 +116,484 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
 
     def _db(self) -> DatabaseManager:
         return DatabaseManager.get_instance()
+
+    def _recreate_phase_f_exact_tables_as_legacy_numeric(
+        self,
+        *,
+        text_tables: frozenset[str] = frozenset(),
+    ) -> None:
+        table_names = (
+            "portfolio_ledger",
+            "portfolio_positions",
+            "portfolio_sync_states",
+            "portfolio_sync_positions",
+            "portfolio_sync_cash_balances",
+        )
+        create_order = table_names
+        drop_order = tuple(reversed(table_names))
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            canonical_sql_by_table = {
+                table_name: connection.execute(
+                    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?",
+                    (table_name,),
+                ).fetchone()[0]
+                for table_name in table_names
+            }
+            canonical_index_sql_by_table = {
+                table_name: tuple(
+                    str(row[0])
+                    for row in connection.execute(
+                        "SELECT sql FROM sqlite_schema "
+                        "WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL "
+                        "ORDER BY name",
+                        (table_name,),
+                    ).fetchall()
+                )
+                for table_name in table_names
+            }
+            legacy_sql_by_table: dict[str, str] = {}
+            exact_columns_by_table = {
+                "portfolio_ledger": ("quantity", "price", "amount", "fee", "tax"),
+                "portfolio_positions": (
+                    "quantity",
+                    "avg_cost",
+                    "total_cost",
+                    "last_price",
+                    "market_value_base",
+                    "unrealized_pnl_base",
+                    "price_cost",
+                ),
+                "portfolio_sync_states": (
+                    "total_cash",
+                    "total_market_value",
+                    "total_equity",
+                    "realized_pnl",
+                    "unrealized_pnl",
+                ),
+                "portfolio_sync_positions": (
+                    "quantity",
+                    "avg_cost",
+                    "last_price",
+                    "market_value_base",
+                    "unrealized_pnl_base",
+                ),
+                "portfolio_sync_cash_balances": ("amount", "amount_base"),
+            }
+            for table_name, canonical_sql in canonical_sql_by_table.items():
+                legacy_sql = str(canonical_sql)
+                if table_name in text_tables:
+                    legacy_sql_by_table[table_name] = legacy_sql
+                    continue
+                for column_name in exact_columns_by_table[table_name]:
+                    legacy_sql, replacements = re.subn(
+                        rf"(?m)^([ \t]*){re.escape(column_name)}\s+TEXT\b",
+                        rf"\1{column_name} NUMERIC(24, 8)",
+                        legacy_sql,
+                    )
+                    self.assertEqual(replacements, 1, f"{table_name}.{column_name}: {legacy_sql}")
+                legacy_sql_by_table[table_name] = legacy_sql
+
+            for table_name in drop_order:
+                connection.execute(f'DROP TABLE "{table_name}"')
+            for table_name in create_order:
+                connection.execute(legacy_sql_by_table[table_name])
+                for index_sql in canonical_index_sql_by_table[table_name]:
+                    connection.execute(index_sql)
+
+    def _phase_f_legacy_source_snapshot(self) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        table_names = (
+            "portfolio_accounts",
+            "broker_connections",
+            "portfolio_ledger",
+            "portfolio_positions",
+            "portfolio_sync_states",
+            "portfolio_sync_positions",
+            "portfolio_sync_cash_balances",
+        )
+        placeholders = ", ".join("?" for _ in table_names)
+        with sqlite3.connect(self.phase_db_path) as connection:
+            schema = tuple(
+                connection.execute(
+                    "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+                    f"WHERE tbl_name IN ({placeholders}) "
+                    f"OR (type = 'table' AND name IN ({placeholders})) "
+                    "ORDER BY type, name",
+                    (*table_names, *table_names),
+                ).fetchall()
+            )
+            rows = tuple(
+                (
+                    table_name,
+                    tuple(
+                        connection.execute(
+                            f'SELECT * FROM "{table_name}" ORDER BY id'
+                        ).fetchall()
+                    ),
+                )
+                for table_name in table_names
+            )
+        return schema, rows
+
+    def test_phase_f_sqlite_legacy_numeric_schema_migrates_complete_storage_values(self) -> None:
+        db = self._db()
+        owner_id = "phase-f-legacy-numeric-migration"
+        db.create_or_update_app_user(user_id=owner_id, username=owner_id)
+        service = PortfolioService(owner_id=owner_id)
+        account = service.create_account(
+            name="Legacy Numeric Migration",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        broker_connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Legacy Numeric Connection",
+            broker_account_ref="LEGACY-NUMERIC-1",
+            import_mode="api",
+        )
+        self._recreate_phase_f_exact_tables_as_legacy_numeric()
+
+        timestamp = "2026-04-23 09:30:00"
+        storage_value = "0.00400000"
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute(
+                "INSERT INTO portfolio_ledger "
+                "(id, owner_user_id, portfolio_account_id, entry_type, event_time, canonical_symbol, "
+                "market, currency, direction, quantity, price, fee, tax, payload_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7_100_001,
+                    owner_id,
+                    account["id"],
+                    "trade",
+                    timestamp,
+                    "AAPL",
+                    "us",
+                    "USD",
+                    "buy",
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    "{}",
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO portfolio_positions "
+                "(id, owner_user_id, portfolio_account_id, source_kind, cost_method, canonical_symbol, "
+                "market, currency, quantity, avg_cost, total_cost, last_price, market_value_base, "
+                "unrealized_pnl_base, valuation_currency, as_of_time, created_at, updated_at, price_cost) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7_100_002,
+                    owner_id,
+                    account["id"],
+                    "broker_sync_overlay",
+                    "fifo",
+                    "AAPL",
+                    "us",
+                    "USD",
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    "USD",
+                    timestamp,
+                    timestamp,
+                    timestamp,
+                    storage_value,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO portfolio_sync_states "
+                "(id, owner_user_id, broker_connection_id, portfolio_account_id, broker_type, "
+                "sync_source, sync_status, snapshot_date, synced_at, base_currency, total_cash, "
+                "total_market_value, total_equity, realized_pnl, unrealized_pnl, fx_stale, payload_json, "
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7_100_003,
+                    owner_id,
+                    broker_connection["id"],
+                    account["id"],
+                    "ibkr",
+                    "api",
+                    "success",
+                    "2026-04-23",
+                    timestamp,
+                    "USD",
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    0,
+                    "{}",
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO portfolio_sync_positions "
+                "(id, portfolio_sync_state_id, owner_user_id, portfolio_account_id, broker_position_ref, "
+                "canonical_symbol, market, currency, quantity, avg_cost, last_price, market_value_base, "
+                "unrealized_pnl_base, valuation_currency, payload_json, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7_100_004,
+                    7_100_003,
+                    owner_id,
+                    account["id"],
+                    "AAPL-LEGACY-1",
+                    "AAPL",
+                    "us",
+                    "USD",
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    storage_value,
+                    "USD",
+                    "{}",
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO portfolio_sync_cash_balances "
+                "(id, portfolio_sync_state_id, owner_user_id, portfolio_account_id, currency, amount, "
+                "amount_base, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7_100_005,
+                    7_100_003,
+                    owner_id,
+                    account["id"],
+                    "USD",
+                    storage_value,
+                    storage_value,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute(
+                "INSERT INTO portfolio_ledger "
+                "(id, owner_user_id, portfolio_account_id, entry_type, event_time, payload_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7_100_099,
+                    owner_id,
+                    7_199_999,
+                    "trade",
+                    timestamp,
+                    "{}",
+                    timestamp,
+                ),
+            )
+        orphan_snapshot = self._phase_f_legacy_source_snapshot()
+        with patch.object(
+            db._phase_f_store,
+            "_stage_sqlite_legacy_exact_tables",
+            wraps=db._phase_f_store._stage_sqlite_legacy_exact_tables,
+        ) as stage_tables:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"SQLite Phase F exact-numeric migration requires a foreign-key-clean source database",
+            ):
+                db._phase_f_store.apply_schema()
+        stage_tables.assert_not_called()
+        self.assertEqual(self._phase_f_legacy_source_snapshot(), orphan_snapshot)
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute("DELETE FROM portfolio_ledger WHERE id = 7100099")
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute(
+                "CREATE TRIGGER phase_f_exact_guard_ledger_trigger "
+                "AFTER INSERT ON portfolio_ledger BEGIN SELECT 1; END"
+            )
+        trigger_snapshot = self._phase_f_legacy_source_snapshot()
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"SQLite Phase F exact-numeric migration requires manual trigger review: "
+            r"portfolio_ledger\.phase_f_exact_guard_ledger_trigger",
+        ):
+            db._phase_f_store.apply_schema()
+        self.assertEqual(self._phase_f_legacy_source_snapshot(), trigger_snapshot)
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute("DROP TRIGGER phase_f_exact_guard_ledger_trigger")
+            connection.execute(
+                "CREATE INDEX idx_phase_f_exact_guard_ledger_note "
+                "ON portfolio_ledger(note)"
+            )
+        index_snapshot = self._phase_f_legacy_source_snapshot()
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"SQLite Phase F exact-numeric migration requires manual index review: portfolio_ledger",
+        ):
+            db._phase_f_store.apply_schema()
+        self.assertEqual(self._phase_f_legacy_source_snapshot(), index_snapshot)
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute("DROP INDEX idx_phase_f_exact_guard_ledger_note")
+
+        original_schema_state = db._phase_f_store._sqlite_exact_numeric_schema_state
+        schema_state_calls = 0
+        injected_index_snapshots: list[tuple[tuple[Any, ...], tuple[Any, ...]]] = []
+
+        def inject_index_after_initial_admission(connection: Any) -> str:
+            nonlocal schema_state_calls
+            state = original_schema_state(connection)
+            if schema_state_calls == 0:
+                connection.commit()
+                with sqlite3.connect(self.phase_db_path) as writer:
+                    writer.execute(
+                        "CREATE INDEX idx_phase_f_exact_guard_race "
+                        "ON portfolio_ledger(note)"
+                    )
+                injected_index_snapshots.append(self._phase_f_legacy_source_snapshot())
+            schema_state_calls += 1
+            return state
+
+        with patch.object(
+            db._phase_f_store,
+            "_stage_sqlite_legacy_exact_tables",
+            wraps=db._phase_f_store._stage_sqlite_legacy_exact_tables,
+        ) as stage_tables:
+            with patch.object(
+                db._phase_f_store,
+                "_sqlite_exact_numeric_schema_state",
+                side_effect=inject_index_after_initial_admission,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    r"SQLite Phase F exact-numeric migration requires manual index review: portfolio_ledger",
+                ):
+                    db._phase_f_store.apply_schema()
+        stage_tables.assert_not_called()
+        self.assertEqual(self._phase_f_legacy_source_snapshot(), injected_index_snapshots[0])
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute("DROP INDEX idx_phase_f_exact_guard_race")
+
+        db._phase_f_store.apply_schema()
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            for table_name, column_names in {
+                "portfolio_ledger": ("quantity", "price", "fee", "tax"),
+                "portfolio_positions": ("quantity", "total_cost", "price_cost"),
+                "portfolio_sync_states": ("total_cash", "total_equity"),
+                "portfolio_sync_positions": ("quantity", "market_value_base"),
+                "portfolio_sync_cash_balances": ("amount", "amount_base"),
+            }.items():
+                columns = {
+                    str(row[1]): row
+                    for row in connection.execute(f'PRAGMA table_xinfo("{table_name}")')
+                }
+                for column_name in column_names:
+                    self.assertEqual(str(columns[column_name][2]).upper(), "TEXT")
+                    self.assertEqual(
+                        connection.execute(
+                            f'SELECT typeof("{column_name}") FROM "{table_name}" LIMIT 1'
+                        ).fetchone()[0],
+                        "text",
+                    )
+            self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
+
+        bundle = db._phase_f_store.get_account_shadow_bundle(account_id=account["id"])
+        self.assertIsNotNone(bundle)
+        self.assertEqual(bundle["ledger"][0]["fee"], storage_value)
+        self.assertEqual(bundle["positions"][0]["price_cost"], storage_value)
+        self.assertEqual(bundle["sync_state"]["total_equity"], storage_value)
+        self.assertEqual(bundle["sync_positions"][0]["market_value_base"], storage_value)
+        self.assertEqual(bundle["sync_cash_balances"][0]["amount_base"], storage_value)
+
+    def test_phase_f_sqlite_exact_numeric_migration_refuses_mixed_declarations(self) -> None:
+        db = self._db()
+        self._recreate_phase_f_exact_tables_as_legacy_numeric(
+            text_tables=frozenset({"portfolio_sync_states"})
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"SQLite Phase F exact-numeric migration refuses mixed exact-numeric declarations across Phase F tables",
+        ):
+            db._phase_f_store.apply_schema()
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            ledger_columns = {
+                str(row[1]): row
+                for row in connection.execute("PRAGMA table_xinfo(portfolio_ledger)")
+            }
+            sync_state_columns = {
+                str(row[1]): row
+                for row in connection.execute("PRAGMA table_xinfo(portfolio_sync_states)")
+            }
+
+        self.assertEqual(str(ledger_columns["quantity"][2]).upper(), "NUMERIC(24, 8)")
+        self.assertEqual(str(sync_state_columns["total_cash"][2]).upper(), "TEXT")
+
+    def test_phase_f_sqlite_exact_numeric_migration_refuses_unrecoverable_legacy_numeric(self) -> None:
+        db = self._db()
+        owner_id = "phase-f-legacy-real-rejection"
+        db.create_or_update_app_user(user_id=owner_id, username=owner_id)
+        service = PortfolioService(owner_id=owner_id)
+        account = service.create_account(
+            name="Legacy Real Rejection",
+            broker="IBKR",
+            market="us",
+            base_currency="USD",
+        )
+        self._recreate_phase_f_exact_tables_as_legacy_numeric()
+
+        unsafe_value = "67108864.12345677"
+        timestamp = "2026-04-24 09:30:00"
+        with sqlite3.connect(self.phase_db_path) as connection:
+            connection.execute(
+                "INSERT INTO portfolio_ledger "
+                "(id, owner_user_id, portfolio_account_id, entry_type, event_time, quantity, payload_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    7_200_001,
+                    owner_id,
+                    account["id"],
+                    "trade",
+                    timestamp,
+                    unsafe_value,
+                    "{}",
+                    timestamp,
+                ),
+            )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"SQLite Phase F exact-numeric migration refuses unrecoverable legacy numeric storage "
+            r"in portfolio_ledger\.quantity",
+        ):
+            db._phase_f_store.apply_schema()
+
+        with sqlite3.connect(self.phase_db_path) as connection:
+            columns = {
+                str(row[1]): row
+                for row in connection.execute("PRAGMA table_xinfo(portfolio_ledger)")
+            }
+            stored_value, value_type = connection.execute(
+                "SELECT quantity, typeof(quantity) FROM portfolio_ledger WHERE id = ?",
+                (7_200_001,),
+            ).fetchone()
+
+        self.assertEqual(str(columns["quantity"][2]).upper(), "NUMERIC(24, 8)")
+        self.assertEqual(value_type, "real")
+        self.assertNotEqual(Decimal(str(stored_value)), Decimal(unsafe_value))
 
     def test_phase_f_account_metadata_surface_returns_service_compatible_rows(self) -> None:
         db = self._db()
@@ -207,6 +692,401 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(shadow["sync_positions"], [])
         self.assertEqual(shadow["sync_cash_balances"], [])
         self.assertIsNone(db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"] + 999))
+
+    def test_phase_f_shadow_bundle_serializes_high_scale_exact_values_as_canonical_text(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-exact-sync", username="phase-f-exact-sync")
+        service = PortfolioService(owner_id="phase-f-exact-sync")
+        account = service.create_account(name="Exact Sync", broker="IBKR", market="us", base_currency="USD")
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Exact Sync IBKR",
+            broker_account_ref="EXACT-SYNC-1",
+            import_mode="api",
+        )
+        exact_market = Decimal("1234567890123456.12345678")
+        exact_money = Decimal("1234567890123456.12")
+        exact_position_basis = Decimal("0.00000001")
+        exact_storage_value = Decimal("0.00400000")
+        synced_at = datetime(2026, 4, 20, 9, 30, 0)
+
+        with db._phase_f_store.session_scope() as session:
+            session.add_all(
+                [
+                    PhaseFPortfolioLedger(
+                        id=7_000_001,
+                        owner_user_id="phase-f-exact-sync",
+                        portfolio_account_id=account["id"],
+                        entry_type="trade",
+                        event_time=synced_at,
+                        canonical_symbol="AAPL",
+                        market="us",
+                        currency="USD",
+                        direction="buy",
+                        quantity=exact_market,
+                        price=exact_market,
+                        fee=exact_storage_value,
+                        tax=exact_storage_value,
+                        payload_json={},
+                    ),
+                    PhaseFPortfolioLedger(
+                        id=7_000_002,
+                        owner_user_id="phase-f-exact-sync",
+                        portfolio_account_id=account["id"],
+                        entry_type="cash",
+                        event_time=synced_at,
+                        currency="USD",
+                        direction="in",
+                        amount=exact_storage_value,
+                        payload_json={},
+                    ),
+                    PhaseFPortfolioPosition(
+                        id=7_000_003,
+                        owner_user_id="phase-f-exact-sync",
+                        portfolio_account_id=account["id"],
+                        source_kind="broker_sync_overlay",
+                        cost_method="fifo",
+                        canonical_symbol="AAPL",
+                        market="us",
+                        currency="USD",
+                        quantity=exact_market,
+                        avg_cost=exact_market,
+                        total_cost=exact_position_basis,
+                        price_cost=exact_position_basis,
+                        last_price=exact_market,
+                        market_value_base=exact_position_basis,
+                        unrealized_pnl_base=exact_position_basis,
+                        valuation_currency="USD",
+                        as_of_time=synced_at,
+                    ),
+                    PhaseFPortfolioSyncState(
+                        id=7_000_004,
+                        owner_user_id="phase-f-exact-sync",
+                        broker_connection_id=connection["id"],
+                        portfolio_account_id=account["id"],
+                        broker_type="ibkr",
+                        sync_source="api",
+                        sync_status="success",
+                        snapshot_date=synced_at.date(),
+                        synced_at=synced_at,
+                        base_currency="USD",
+                        total_cash=exact_storage_value,
+                        total_market_value=exact_storage_value,
+                        total_equity=exact_storage_value,
+                        realized_pnl=exact_storage_value,
+                        unrealized_pnl=exact_storage_value,
+                        fx_stale=False,
+                        payload_json={},
+                    ),
+                ]
+            )
+            session.flush()
+            session.add_all(
+                [
+                    PhaseFPortfolioSyncPosition(
+                        id=7_000_005,
+                        portfolio_sync_state_id=7_000_004,
+                        owner_user_id="phase-f-exact-sync",
+                        portfolio_account_id=account["id"],
+                        canonical_symbol="AAPL",
+                        market="us",
+                        currency="USD",
+                        quantity=exact_market,
+                        avg_cost=exact_market,
+                        last_price=exact_market,
+                        market_value_base=exact_storage_value,
+                        unrealized_pnl_base=exact_storage_value,
+                        valuation_currency="USD",
+                        payload_json={},
+                    ),
+                    PhaseFPortfolioSyncCashBalance(
+                        id=7_000_006,
+                        portfolio_sync_state_id=7_000_004,
+                        owner_user_id="phase-f-exact-sync",
+                        portfolio_account_id=account["id"],
+                        currency="USD",
+                        amount=exact_storage_value,
+                        amount_base=exact_storage_value,
+                    ),
+                ]
+            )
+
+        bundle = db._phase_f_store.get_account_shadow_bundle(account_id=account["id"])
+        self.assertIsNotNone(bundle)
+
+        ledger_by_type = {item["entry_type"]: item for item in bundle["ledger"]}
+        self.assertEqual(ledger_by_type["trade"]["quantity"], "1234567890123456.12345678")
+        self.assertEqual(ledger_by_type["trade"]["price"], "1234567890123456.12345678")
+        self.assertEqual(ledger_by_type["trade"]["fee"], "0.00400000")
+        self.assertEqual(ledger_by_type["trade"]["tax"], "0.00400000")
+        self.assertEqual(ledger_by_type["cash"]["amount"], "0.00400000")
+
+        position = bundle["positions"][0]
+        self.assertEqual(position["quantity"], "1234567890123456.12345678")
+        self.assertEqual(position["avg_cost"], "1234567890123456.12345678")
+        self.assertEqual(position["total_cost"], "0.00000001")
+        self.assertEqual(position["price_cost"], "0.00000001")
+        self.assertEqual(position["last_price"], "1234567890123456.12345678")
+        self.assertEqual(position["market_value_base"], "0.00000001")
+        self.assertEqual(position["unrealized_pnl_base"], "0.00000001")
+
+        sync_state = bundle["sync_state"]
+        self.assertEqual(sync_state["total_cash"], "0.00400000")
+        self.assertEqual(sync_state["total_market_value"], "0.00400000")
+        self.assertEqual(sync_state["total_equity"], "0.00400000")
+        self.assertEqual(sync_state["realized_pnl"], "0.00400000")
+        self.assertEqual(sync_state["unrealized_pnl"], "0.00400000")
+
+        sync_position = bundle["sync_positions"][0]
+        self.assertEqual(sync_position["quantity"], "1234567890123456.12345678")
+        self.assertEqual(sync_position["avg_cost"], "1234567890123456.12345678")
+        self.assertEqual(sync_position["last_price"], "1234567890123456.12345678")
+        self.assertEqual(sync_position["market_value_base"], "0.00400000")
+        self.assertEqual(sync_position["unrealized_pnl_base"], "0.00400000")
+
+        cash_balance = bundle["sync_cash_balances"][0]
+        self.assertEqual(cash_balance["amount"], "0.00400000")
+        self.assertEqual(cash_balance["amount_base"], "0.00400000")
+
+    def test_phase_f_shadow_position_rehydration_preserves_exact_decimal_authority(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-exact-shadow", username="phase-f-exact-shadow")
+        service = PortfolioService(owner_id="phase-f-exact-shadow")
+        account = service.create_account(name="Exact Shadow", broker="Demo", market="us", base_currency="USD")
+        exact_value = Decimal("1234567890123456.12345678")
+        exact_money = Decimal("1234567890123456.12")
+
+        with db.get_session() as session:
+            session.add(
+                PortfolioPosition(
+                    account_id=account["id"],
+                    cost_method="fifo",
+                    symbol="AAPL",
+                    market="us",
+                    currency="USD",
+                    quantity=exact_value,
+                    avg_cost=exact_value,
+                    total_cost=exact_money,
+                    last_price=exact_value,
+                    market_value_base=exact_money,
+                    unrealized_pnl_base=exact_money,
+                    valuation_currency="USD",
+                    price_cost=exact_value,
+                )
+            )
+            self.assertTrue(
+                db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=account["id"],
+                )
+            )
+            session.commit()
+
+        with db._phase_f_store.session_scope() as session:
+            initial_shadow = session.execute(
+                select(PhaseFPortfolioPosition).where(
+                    PhaseFPortfolioPosition.portfolio_account_id == account["id"]
+                )
+            ).scalar_one()
+            self.assertEqual(initial_shadow.quantity, exact_value)
+            self.assertEqual(initial_shadow.price_cost, exact_value)
+
+        with db.get_session() as session:
+            session.execute(
+                delete(PortfolioPosition).where(
+                    PortfolioPosition.account_id == account["id"]
+                )
+            )
+            self.assertTrue(
+                db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=account["id"],
+                )
+            )
+            session.commit()
+
+        with db._phase_f_store.session_scope() as session:
+            rehydrated_shadow = session.execute(
+                select(PhaseFPortfolioPosition).where(
+                    PhaseFPortfolioPosition.portfolio_account_id == account["id"]
+                )
+            ).scalar_one()
+
+        self.assertEqual(rehydrated_shadow.quantity, exact_value)
+        self.assertEqual(rehydrated_shadow.avg_cost, exact_value)
+        self.assertEqual(rehydrated_shadow.total_cost, exact_money)
+        self.assertEqual(rehydrated_shadow.price_cost, exact_value)
+        self.assertEqual(rehydrated_shadow.last_price, exact_value)
+        self.assertEqual(rehydrated_shadow.market_value_base, exact_money)
+        self.assertEqual(rehydrated_shadow.unrealized_pnl_base, exact_money)
+
+    def test_phase_f_price_cost_schema_migration_leaves_legacy_values_unavailable(self) -> None:
+        db = self._db()
+
+        with db._phase_f_store._engine.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE portfolio_positions DROP COLUMN price_cost")
+
+        db._phase_f_store.apply_schema()
+
+        with db._phase_f_store._engine.connect() as connection:
+            columns = {
+                str(row[1]): row
+                for row in connection.exec_driver_sql("PRAGMA table_xinfo(portfolio_positions)")
+            }
+
+        self.assertEqual(str(columns["price_cost"][2]).upper(), "TEXT")
+        self.assertEqual(int(columns["price_cost"][3]), 0)
+        self.assertIsNone(columns["price_cost"][4])
+
+        legacy_phase_path = self.data_dir / "phase-f-legacy-numeric.sqlite"
+        legacy_value = "9007199254740993.12345678"
+        with sqlite3.connect(legacy_phase_path) as connection:
+            connection.execute(
+                "CREATE TABLE portfolio_positions ("
+                "id INTEGER PRIMARY KEY, total_cost NUMERIC(24, 8) NOT NULL"
+                ")"
+            )
+            connection.execute(
+                "INSERT INTO portfolio_positions (id, total_cost) VALUES (?, ?)",
+                (1, legacy_value),
+            )
+            before_tables = connection.execute(
+                "SELECT name, sql FROM sqlite_schema "
+                "WHERE type = 'table' ORDER BY name"
+            ).fetchall()
+            before_rows = connection.execute(
+                "SELECT id, quote(total_cost), typeof(total_cost) "
+                "FROM portfolio_positions ORDER BY id"
+            ).fetchall()
+
+        self.assertIn(before_rows[0][2], {"integer", "real"})
+        self.assertNotEqual(before_rows[0][1], f"'{legacy_value}'")
+        legacy_store = PostgresPhaseFStore(
+            f"sqlite:///{legacy_phase_path}",
+            auto_apply_schema=False,
+        )
+        try:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"SQLite Phase F exact-numeric migration requires a complete Phase F schema",
+            ):
+                legacy_store.apply_schema()
+        finally:
+            legacy_store.dispose()
+
+        with sqlite3.connect(legacy_phase_path) as connection:
+            after_tables = connection.execute(
+                "SELECT name, sql FROM sqlite_schema "
+                "WHERE type = 'table' ORDER BY name"
+            ).fetchall()
+            after_rows = connection.execute(
+                "SELECT id, quote(total_cost), typeof(total_cost) "
+                "FROM portfolio_positions ORDER BY id"
+            ).fetchall()
+
+        self.assertEqual(after_tables, before_tables)
+        self.assertEqual(after_rows, before_rows)
+
+    def test_phase_f_shadow_ledger_payload_preserves_exact_decimal_authority(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-exact-ledger", username="phase-f-exact-ledger")
+        service = PortfolioService(owner_id="phase-f-exact-ledger")
+        account = service.create_account(name="Exact Ledger", broker="Demo", market="us", base_currency="USD")
+        exact_value = Decimal("1234567890123456.12345678")
+
+        with db.get_session() as session:
+            session.add_all(
+                [
+                    PortfolioCorporateAction(
+                        account_id=account["id"],
+                        symbol="AAPL",
+                        market="us",
+                        currency="USD",
+                        effective_date=date(2026, 4, 21),
+                        action_type="cash_dividend",
+                        cash_dividend_per_share=exact_value,
+                    ),
+                    PortfolioCorporateAction(
+                        account_id=account["id"],
+                        symbol="MSFT",
+                        market="us",
+                        currency="USD",
+                        effective_date=date(2026, 4, 22),
+                        action_type="split_adjustment",
+                        split_ratio=exact_value,
+                    ),
+                ]
+            )
+            self.assertTrue(
+                db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=account["id"],
+                )
+            )
+            session.commit()
+
+        with db._phase_f_store.session_scope() as session:
+            ledger_rows = session.execute(
+                select(PhaseFPortfolioLedger)
+                .where(
+                    PhaseFPortfolioLedger.portfolio_account_id == account["id"],
+                    PhaseFPortfolioLedger.entry_type == "corporate_action",
+                )
+                .order_by(PhaseFPortfolioLedger.event_time.asc())
+            ).scalars().all()
+
+        self.assertEqual(
+            [row.payload_json["cash_dividend_per_share"] for row in ledger_rows],
+            ["1234567890123456.12345678", None],
+        )
+        self.assertEqual(
+            [row.payload_json["split_ratio"] for row in ledger_rows],
+            [None, "1234567890123456.12345678"],
+        )
+
+    def test_phase_f_ledger_authority_preserves_exact_trade_and_cash_values(self) -> None:
+        db = self._db()
+        db.create_or_update_app_user(user_id="phase-f-exact-ledger-parity", username="phase-f-exact-ledger-parity")
+        service = PortfolioService(owner_id="phase-f-exact-ledger-parity")
+        account = service.create_account(name="Exact Ledger Parity", broker="Demo", market="us", base_currency="USD")
+        exact_money = Decimal("9007199254740993.12")
+        exact_market = Decimal("9007199254740993.12345678")
+
+        service.record_cash_ledger(
+            account_id=account["id"],
+            event_date=date(2026, 4, 20),
+            direction="in",
+            amount=exact_money,
+            currency="USD",
+        )
+        service.record_trade(
+            account_id=account["id"],
+            symbol="AAPL",
+            trade_date=date(2026, 4, 21),
+            side="buy",
+            quantity=exact_market,
+            price=Decimal("1.00000000"),
+            fee=Decimal("0.00"),
+            tax=Decimal("0.00"),
+            market="us",
+            currency="USD",
+            trade_uid="phase-f-exact-ledger-parity-trade",
+            dedup_hash="phase-f-exact-ledger-parity-trade",
+        )
+
+        authority_state = db.get_phase_f_ledger_event_payload_authority_state(account_id=account["id"])
+        self.assertIsNotNone(authority_state)
+        self.assertEqual(authority_state["current_signal"], "payload_parity_observed")
+
+        bundle = db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"])
+        self.assertIsNotNone(bundle)
+        ledger_by_type = {row["entry_type"]: row for row in bundle["ledger"]}
+        self.assertEqual(ledger_by_type["cash"]["amount"], "9007199254740993.12000000")
+        self.assertEqual(ledger_by_type["cash"]["payload_json"]["amount"], "9007199254740993.12000000")
+        self.assertEqual(ledger_by_type["trade"]["quantity"], "9007199254740993.12345678")
+        self.assertEqual(ledger_by_type["trade"]["payload_json"]["quantity"], "9007199254740993.12345678")
 
     def test_phase_f_broker_connection_metadata_surface_returns_service_compatible_rows(self) -> None:
         db = self._db()
@@ -356,11 +1236,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 20),
             synced_at=datetime(2026, 4, 20, 9, 45, 0),
             base_currency="USD",
-            total_cash=900.0,
-            total_market_value=1100.0,
-            total_equity=2000.0,
-            realized_pnl=10.0,
-            unrealized_pnl=20.0,
+            total_cash=Decimal("900.00"),
+            total_market_value=Decimal("1100.00"),
+            total_equity=Decimal("2000.00"),
+            realized_pnl=Decimal("10.00"),
+            unrealized_pnl=Decimal("20.00"),
             fx_stale=False,
             payload={"slice": "sync-surface"},
             positions=[
@@ -369,15 +1249,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 6.0,
-                    "avg_cost": 150.0,
-                    "last_price": 170.0,
-                    "market_value_base": 1020.0,
-                    "unrealized_pnl_base": 120.0,
+                    "quantity": Decimal("6.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("170.00000000"),
+                    "market_value_base": Decimal("1020.00"),
+                    "unrealized_pnl_base": Decimal("120.00"),
                     "valuation_currency": "USD",
                 }
             ],
-            cash_balances=[{"currency": "USD", "amount": 900.0, "amount_base": 900.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("900.00"), "amount_base": Decimal("900.00")}],
         )
 
         bundle = db.get_phase_f_latest_broker_sync_state_bundle(portfolio_account_id=account["id"])
@@ -389,6 +1269,92 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(bundle["state_row"].payload_json, '{"slice": "sync-surface"}')
         self.assertEqual([item.symbol for item in bundle["positions"]], ["AAPL"])
         self.assertEqual([item.currency for item in bundle["cash_balances"]], ["USD"])
+
+    def test_phase_f_latest_broker_sync_state_bundle_preserves_high_scale_decimal_authority(self) -> None:
+        db = self._db()
+        owner_id = "phase-f-exact-sync-surface"
+        db.create_or_update_app_user(user_id=owner_id, username=owner_id)
+        service = PortfolioService(owner_id=owner_id)
+        account = service.create_account(name="Exact Sync Surface", broker="IBKR", market="us", base_currency="USD")
+        connection = service.create_broker_connection(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Exact Sync Surface IBKR",
+            broker_account_ref="UEXACT-SURFACE-1",
+            import_mode="api",
+        )
+        exact_market = Decimal("1234567890123456.12345678")
+        exact_money = Decimal("1234567890123456.12")
+        synced_at = datetime(2026, 4, 20, 10, 0, 0)
+
+        with db.get_session() as session:
+            session.add(
+                PortfolioBrokerSyncState(
+                    owner_id=owner_id,
+                    broker_connection_id=connection["id"],
+                    portfolio_account_id=account["id"],
+                    broker_type="ibkr",
+                    broker_account_ref="UEXACT-SURFACE-1",
+                    sync_source="api",
+                    sync_status="success",
+                    snapshot_date=synced_at.date(),
+                    synced_at=synced_at,
+                    base_currency="USD",
+                    total_cash=exact_money,
+                    total_market_value=exact_money,
+                    total_equity=exact_money,
+                    realized_pnl=exact_money,
+                    unrealized_pnl=exact_money,
+                    payload_json=json.dumps({"slice": "exact-sync-surface"}),
+                )
+            )
+            session.add(
+                PortfolioBrokerSyncPosition(
+                    owner_id=owner_id,
+                    broker_connection_id=connection["id"],
+                    portfolio_account_id=account["id"],
+                    broker_position_ref="AAPL-EXACT-SURFACE",
+                    symbol="AAPL",
+                    market="us",
+                    currency="USD",
+                    quantity=exact_market,
+                    avg_cost=exact_market,
+                    last_price=exact_market,
+                    market_value_base=exact_money,
+                    unrealized_pnl_base=exact_money,
+                    valuation_currency="USD",
+                    payload_json=json.dumps({"slice": "exact-sync-surface"}),
+                )
+            )
+            session.add(
+                PortfolioBrokerSyncCashBalance(
+                    owner_id=owner_id,
+                    broker_connection_id=connection["id"],
+                    portfolio_account_id=account["id"],
+                    currency="USD",
+                    amount=exact_money,
+                    amount_base=exact_money,
+                )
+            )
+            self.assertTrue(
+                db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=account["id"],
+                )
+            )
+            session.commit()
+
+        bundle = db.get_phase_f_latest_broker_sync_state_bundle(portfolio_account_id=account["id"])
+
+        self.assertIsNotNone(bundle)
+        self.assertEqual(bundle["state_row"].total_equity, exact_money)
+        self.assertEqual(bundle["state_row"].unrealized_pnl, exact_money)
+        self.assertEqual(bundle["positions"][0].quantity, exact_market)
+        self.assertEqual(bundle["positions"][0].last_price, exact_market)
+        self.assertEqual(bundle["positions"][0].market_value_base, exact_money)
+        self.assertEqual(bundle["cash_balances"][0].amount, exact_money)
+        self.assertEqual(bundle["cash_balances"][0].amount_base, exact_money)
 
     def test_phase_f_latest_sync_bundle_uses_batched_authority_materialization(self) -> None:
         db = self._db()
@@ -414,15 +1380,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 20),
             synced_at=datetime(2026, 4, 20, 10, 30, 0),
             base_currency="USD",
-            total_cash=1000.0,
-            total_market_value=1200.0,
-            total_equity=2200.0,
-            realized_pnl=10.0,
-            unrealized_pnl=15.0,
+            total_cash=Decimal("1000.00"),
+            total_market_value=Decimal("1200.00"),
+            total_equity=Decimal("2200.00"),
+            realized_pnl=Decimal("10.00"),
+            unrealized_pnl=Decimal("15.00"),
             fx_stale=False,
             payload={"slice": "batched-sync"},
             positions=[],
-            cash_balances=[{"currency": "USD", "amount": 1000.0, "amount_base": 1000.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("1000.00"), "amount_base": Decimal("1000.00")}],
         )
 
         with patch.object(
@@ -468,15 +1434,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 20),
             synced_at=datetime(2026, 4, 20, 10, 0, 0),
             base_currency="USD",
-            total_cash=700.0,
-            total_market_value=1300.0,
-            total_equity=2000.0,
-            realized_pnl=10.0,
-            unrealized_pnl=30.0,
+            total_cash=Decimal("700.00"),
+            total_market_value=Decimal("1300.00"),
+            total_equity=Decimal("2000.00"),
+            realized_pnl=Decimal("10.00"),
+            unrealized_pnl=Decimal("30.00"),
             fx_stale=False,
             payload={"slice": "sync-drift"},
             positions=[],
-            cash_balances=[{"currency": "USD", "amount": 700.0, "amount_base": 700.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("700.00"), "amount_base": Decimal("700.00")}],
         )
 
         with db.get_session() as session:
@@ -485,7 +1451,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     PortfolioBrokerSyncState.portfolio_account_id == account["id"]
                 ).limit(1)
             ).scalar_one()
-            row.total_equity = 2100.0
+            row.total_equity = Decimal("2100.00")
             session.commit()
 
         authority = db.get_phase_f_portfolio_shadow_authority_state(account_id=account["id"])
@@ -527,11 +1493,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 16),
             synced_at=datetime(2026, 4, 16, 8, 30, 0),
             base_currency="USD",
-            total_cash=1000.0,
-            total_market_value=2500.0,
-            total_equity=3500.0,
-            realized_pnl=25.0,
-            unrealized_pnl=75.0,
+            total_cash=Decimal("1000.00"),
+            total_market_value=Decimal("2500.00"),
+            total_equity=Decimal("3500.00"),
+            realized_pnl=Decimal("25.00"),
+            unrealized_pnl=Decimal("75.00"),
             fx_stale=False,
             payload={"snapshot": "initial"},
             positions=[
@@ -540,11 +1506,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 10.0,
-                    "avg_cost": 150.0,
-                    "last_price": 160.0,
-                    "market_value_base": 1600.0,
-                    "unrealized_pnl_base": 100.0,
+                    "quantity": Decimal("10.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("160.00000000"),
+                    "market_value_base": Decimal("1600.00"),
+                    "unrealized_pnl_base": Decimal("100.00"),
                     "valuation_currency": "USD",
                     "payload_json": '{"source":"ibkr"}',
                 },
@@ -553,18 +1519,18 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "MSFT",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 5.0,
-                    "avg_cost": 180.0,
-                    "last_price": 190.0,
-                    "market_value_base": 950.0,
-                    "unrealized_pnl_base": 50.0,
+                    "quantity": Decimal("5.00000000"),
+                    "avg_cost": Decimal("180.00000000"),
+                    "last_price": Decimal("190.00000000"),
+                    "market_value_base": Decimal("950.00"),
+                    "unrealized_pnl_base": Decimal("50.00"),
                     "valuation_currency": "USD",
                     "payload_json": '{"source":"ibkr"}',
                 },
             ],
             cash_balances=[
-                {"currency": "USD", "amount": 800.0, "amount_base": 800.0},
-                {"currency": "HKD", "amount": 1560.0, "amount_base": 200.0},
+                {"currency": "USD", "amount": Decimal("800.00"), "amount_base": Decimal("800.00")},
+                {"currency": "HKD", "amount": Decimal("1560.00"), "amount_base": Decimal("200.00")},
             ],
         )
 
@@ -623,7 +1589,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account_a["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service_a.record_trade(
@@ -631,10 +1597,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="alice-buy-1",
@@ -647,14 +1613,14 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=0.2,
+            cash_dividend_per_share=Decimal("0.2"),
         )
 
         service_b.record_cash_ledger(
             account_id=account_b["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=3000.0,
+            amount=Decimal("3000.0"),
             currency="USD",
         )
 
@@ -663,13 +1629,13 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 [
                     {
                         "date": date(2026, 4, 12),
-                        "open": 160.0,
-                        "high": 160.0,
-                        "low": 160.0,
-                        "close": 160.0,
-                        "volume": 1.0,
-                        "amount": 160.0,
-                        "pct_chg": 0.0,
+                        "open": Decimal("160.00000000"),
+                        "high": Decimal("160.00000000"),
+                        "low": Decimal("160.00000000"),
+                        "close": Decimal("160.00000000"),
+                        "volume": Decimal("1.00000000"),
+                        "amount": Decimal("160.00000000"),
+                        "pct_chg": Decimal("0.00000000"),
                     }
                 ]
             ),
@@ -735,8 +1701,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 10),
             side="buy",
-            quantity=10.0,
-            price=150.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
             market="us",
             currency="USD",
             trade_uid="cleanup-trade-1",
@@ -753,11 +1719,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 16),
             synced_at=datetime(2026, 4, 16, 9, 0, 0),
             base_currency="USD",
-            total_cash=500.0,
-            total_market_value=1600.0,
-            total_equity=2100.0,
-            realized_pnl=0.0,
-            unrealized_pnl=100.0,
+            total_cash=Decimal("500.00"),
+            total_market_value=Decimal("1600.00"),
+            total_equity=Decimal("2100.00"),
+            realized_pnl=Decimal("0.00"),
+            unrealized_pnl=Decimal("100.00"),
             fx_stale=False,
             payload={"revision": 1},
             positions=[
@@ -766,15 +1732,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 10.0,
-                    "avg_cost": 150.0,
-                    "last_price": 160.0,
-                    "market_value_base": 1600.0,
-                    "unrealized_pnl_base": 100.0,
+                    "quantity": Decimal("10.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("160.00000000"),
+                    "market_value_base": Decimal("1600.00"),
+                    "unrealized_pnl_base": Decimal("100.00"),
                     "valuation_currency": "USD",
                 }
             ],
-            cash_balances=[{"currency": "USD", "amount": 500.0, "amount_base": 500.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("500.00"), "amount_base": Decimal("500.00")}],
         )
 
         service.replace_broker_sync_state(
@@ -787,15 +1753,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 17),
             synced_at=datetime(2026, 4, 17, 9, 0, 0),
             base_currency="USD",
-            total_cash=650.0,
-            total_market_value=0.0,
-            total_equity=650.0,
-            realized_pnl=50.0,
-            unrealized_pnl=0.0,
+            total_cash=Decimal("650.00"),
+            total_market_value=Decimal("0.00"),
+            total_equity=Decimal("650.00"),
+            realized_pnl=Decimal("50.00"),
+            unrealized_pnl=Decimal("0.00"),
             fx_stale=False,
             payload={"revision": 2},
             positions=[],
-            cash_balances=[{"currency": "USD", "amount": 650.0, "amount_base": 650.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("650.00"), "amount_base": Decimal("650.00")}],
         )
         deleted = service.delete_trade_event(trade["id"])
 
@@ -850,7 +1816,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -858,10 +1824,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="shadow-buy-1",
@@ -872,13 +1838,13 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 [
                     {
                         "date": date(2026, 4, 12),
-                        "open": 160.0,
-                        "high": 160.0,
-                        "low": 160.0,
-                        "close": 160.0,
-                        "volume": 1.0,
-                        "amount": 160.0,
-                        "pct_chg": 0.0,
+                        "open": Decimal("160.00000000"),
+                        "high": Decimal("160.00000000"),
+                        "low": Decimal("160.00000000"),
+                        "close": Decimal("160.00000000"),
+                        "volume": Decimal("1.00000000"),
+                        "amount": Decimal("160.00000000"),
+                        "pct_chg": Decimal("0.00000000"),
                     }
                 ]
             ),
@@ -901,11 +1867,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 16),
             synced_at=datetime(2026, 4, 16, 9, 30, 0),
             base_currency="USD",
-            total_cash=1000.0,
-            total_market_value=1600.0,
-            total_equity=2600.0,
-            realized_pnl=0.0,
-            unrealized_pnl=100.0,
+            total_cash=Decimal("1000.00"),
+            total_market_value=Decimal("1600.00"),
+            total_equity=Decimal("2600.00"),
+            realized_pnl=Decimal("0.00"),
+            unrealized_pnl=Decimal("100.00"),
             fx_stale=False,
             payload={"snapshot": "shadow"},
             positions=[
@@ -914,15 +1880,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 10.0,
-                    "avg_cost": 150.0,
-                    "last_price": 160.0,
-                    "market_value_base": 1600.0,
-                    "unrealized_pnl_base": 100.0,
+                    "quantity": Decimal("10.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("160.00000000"),
+                    "market_value_base": Decimal("1600.00"),
+                    "unrealized_pnl_base": Decimal("100.00"),
                     "valuation_currency": "USD",
                 }
             ],
-            cash_balances=[{"currency": "USD", "amount": 1000.0, "amount_base": 1000.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("1000.00"), "amount_base": Decimal("1000.00")}],
         )
 
         shadow = db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"])
@@ -962,11 +1928,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 18),
             synced_at=datetime(2026, 4, 18, 10, 15, 0),
             base_currency="USD",
-            total_cash=1200.0,
-            total_market_value=800.0,
-            total_equity=2000.0,
-            realized_pnl=10.0,
-            unrealized_pnl=20.0,
+            total_cash=Decimal("1200.00"),
+            total_market_value=Decimal("800.00"),
+            total_equity=Decimal("2000.00"),
+            realized_pnl=Decimal("10.00"),
+            unrealized_pnl=Decimal("20.00"),
             fx_stale=False,
             payload={"slice": "authority"},
             positions=[
@@ -975,15 +1941,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 5.0,
-                    "avg_cost": 150.0,
-                    "last_price": 160.0,
-                    "market_value_base": 800.0,
-                    "unrealized_pnl_base": 50.0,
+                    "quantity": Decimal("5.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("160.00000000"),
+                    "market_value_base": Decimal("800.00"),
+                    "unrealized_pnl_base": Decimal("50.00"),
                     "valuation_currency": "USD",
                 }
             ],
-            cash_balances=[{"currency": "USD", "amount": 1200.0, "amount_base": 1200.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("1200.00"), "amount_base": Decimal("1200.00")}],
         )
 
         shadow = db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"])
@@ -1028,15 +1994,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 18),
             synced_at=datetime(2026, 4, 18, 10, 45, 0),
             base_currency="USD",
-            total_cash=1000.0,
-            total_market_value=0.0,
-            total_equity=1000.0,
-            realized_pnl=0.0,
-            unrealized_pnl=0.0,
+            total_cash=Decimal("1000.00"),
+            total_market_value=Decimal("0.00"),
+            total_equity=Decimal("1000.00"),
+            realized_pnl=Decimal("0.00"),
+            unrealized_pnl=Decimal("0.00"),
             fx_stale=False,
             payload={"slice": "authority-drift"},
             positions=[],
-            cash_balances=[{"currency": "USD", "amount": 1000.0, "amount_base": 1000.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("1000.00"), "amount_base": Decimal("1000.00")}],
         )
 
         with db.get_session() as session:
@@ -1082,7 +2048,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -1090,10 +2056,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-trade-1",
@@ -1104,13 +2070,13 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 [
                     {
                         "date": date(2026, 4, 12),
-                        "open": 160.0,
-                        "high": 160.0,
-                        "low": 160.0,
-                        "close": 160.0,
-                        "volume": 1.0,
-                        "amount": 160.0,
-                        "pct_chg": 0.0,
+                        "open": Decimal("160.00000000"),
+                        "high": Decimal("160.00000000"),
+                        "low": Decimal("160.00000000"),
+                        "close": Decimal("160.00000000"),
+                        "volume": Decimal("1.00000000"),
+                        "amount": Decimal("160.00000000"),
+                        "pct_chg": Decimal("0.00000000"),
                     }
                 ]
             ),
@@ -1234,7 +2200,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -1242,10 +2208,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-summary-trade-1",
@@ -1256,13 +2222,13 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 [
                     {
                         "date": date(2026, 4, 12),
-                        "open": 160.0,
-                        "high": 160.0,
-                        "low": 160.0,
-                        "close": 160.0,
-                        "volume": 1.0,
-                        "amount": 160.0,
-                        "pct_chg": 0.0,
+                        "open": Decimal("160.00000000"),
+                        "high": Decimal("160.00000000"),
+                        "low": Decimal("160.00000000"),
+                        "close": Decimal("160.00000000"),
+                        "volume": Decimal("1.00000000"),
+                        "amount": Decimal("160.00000000"),
+                        "pct_chg": Decimal("0.00000000"),
                     }
                 ]
             ),
@@ -1348,10 +2314,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-summary-observed-trade-1",
@@ -1422,10 +2388,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-summary-blocked-trade-1",
@@ -1436,7 +2402,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             row = session.execute(
                 select(PortfolioTrade).where(PortfolioTrade.id == trade["id"]).limit(1)
             ).scalar_one()
-            row.price = 151.0
+            row.price = Decimal("151.00000000")
             session.commit()
 
         summary = db.get_phase_f_effective_authority_summary(account_id=account["id"])
@@ -1488,7 +2454,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -1496,10 +2462,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-gate-trade-1",
@@ -1510,13 +2476,13 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 [
                     {
                         "date": date(2026, 4, 12),
-                        "open": 160.0,
-                        "high": 160.0,
-                        "low": 160.0,
-                        "close": 160.0,
-                        "volume": 1.0,
-                        "amount": 160.0,
-                        "pct_chg": 0.0,
+                        "open": Decimal("160.00000000"),
+                        "high": Decimal("160.00000000"),
+                        "low": Decimal("160.00000000"),
+                        "close": Decimal("160.00000000"),
+                        "volume": Decimal("1.00000000"),
+                        "amount": Decimal("160.00000000"),
+                        "pct_chg": Decimal("0.00000000"),
                     }
                 ]
             ),
@@ -1619,10 +2585,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-gate-observed-trade-1",
@@ -1678,10 +2644,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-gate-blocked-trade-1",
@@ -1692,7 +2658,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             row = session.execute(
                 select(PortfolioTrade).where(PortfolioTrade.id == trade["id"]).limit(1)
             ).scalar_one()
-            row.price = 151.0
+            row.price = Decimal("151.00000000")
             session.commit()
 
         ledger_gate = db.get_phase_f_domain_readiness_gate(
@@ -1738,10 +2704,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-drift-trade-1",
@@ -1752,7 +2718,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             row = session.execute(
                 select(PortfolioTrade).where(PortfolioTrade.id == trade["id"]).limit(1)
             ).scalar_one()
-            row.price = 151.0
+            row.price = Decimal("151.00000000")
             session.commit()
 
         state = db.get_phase_f_portfolio_prerequisite_state(account_id=account["id"])
@@ -1814,10 +2780,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-observed-trade-1",
@@ -1850,7 +2816,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -1858,10 +2824,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-evidence-trade-1",
@@ -1872,7 +2838,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             effective_date=date(2026, 4, 12),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.5,
+            cash_dividend_per_share=Decimal("0.5"),
             split_ratio=None,
             market="us",
             currency="USD",
@@ -1931,10 +2897,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-narrow-audit-trade-1",
@@ -1976,10 +2942,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-drift-detail-trade-1",
@@ -1990,7 +2956,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             row = session.execute(
                 select(PortfolioTrade).where(PortfolioTrade.id == trade["id"]).limit(1)
             ).scalar_one()
-            row.price = 151.0
+            row.price = Decimal("151.00000000")
             session.commit()
 
         authority_state = db.get_phase_f_ledger_event_payload_authority_state(account_id=account["id"])
@@ -2026,7 +2992,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -2034,10 +3000,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-mismatch-detail-trade-1",
@@ -2091,10 +3057,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-event-history-observed-trade-1",
@@ -2127,10 +3093,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-replay-observed-trade-1",
@@ -2204,10 +3170,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-snapshot-observed-trade-1",
@@ -2375,7 +3341,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -2383,10 +3349,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-count-trade-1",
@@ -2420,7 +3386,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -2428,10 +3394,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-event-history-count-trade-1",
@@ -2465,7 +3431,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -2473,10 +3439,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-replay-count-trade-1",
@@ -2510,7 +3476,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -2518,10 +3484,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-snapshot-count-trade-1",
@@ -2556,10 +3522,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-prereq-shadow-trade-1",
@@ -2593,10 +3559,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-event-history-shadow-trade-1",
@@ -2630,10 +3596,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-replay-shadow-trade-1",
@@ -2667,10 +3633,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="phase-f-snapshot-shadow-trade-1",
@@ -2910,11 +3876,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 19),
             synced_at=datetime(2026, 4, 19, 9, 30, 0),
             base_currency="USD",
-            total_cash=1250.0,
-            total_market_value=2750.0,
-            total_equity=4000.0,
-            realized_pnl=50.0,
-            unrealized_pnl=125.0,
+            total_cash=Decimal("1250.00"),
+            total_market_value=Decimal("2750.00"),
+            total_equity=Decimal("4000.00"),
+            realized_pnl=Decimal("50.00"),
+            unrealized_pnl=Decimal("125.00"),
             fx_stale=False,
             payload={"slice": "latest-sync"},
             positions=[
@@ -2923,17 +3889,17 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 10.0,
-                    "avg_cost": 150.0,
-                    "last_price": 165.0,
-                    "market_value_base": 1650.0,
-                    "unrealized_pnl_base": 150.0,
+                    "quantity": Decimal("10.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("165.00000000"),
+                    "market_value_base": Decimal("1650.00"),
+                    "unrealized_pnl_base": Decimal("150.00"),
                     "valuation_currency": "USD",
                 }
             ],
             cash_balances=[
-                {"currency": "USD", "amount": 1250.0, "amount_base": 1250.0},
-                {"currency": "HKD", "amount": 3900.0, "amount_base": 500.0},
+                {"currency": "USD", "amount": Decimal("1250.00"), "amount_base": Decimal("1250.00")},
+                {"currency": "HKD", "amount": Decimal("3900.00"), "amount_base": Decimal("500.00")},
             ],
         )
 
@@ -2987,11 +3953,11 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 19),
             synced_at=datetime(2026, 4, 19, 11, 0, 0),
             base_currency="USD",
-            total_cash=800.0,
-            total_market_value=1200.0,
-            total_equity=2000.0,
-            realized_pnl=0.0,
-            unrealized_pnl=40.0,
+            total_cash=Decimal("800.00"),
+            total_market_value=Decimal("1200.00"),
+            total_equity=Decimal("2000.00"),
+            realized_pnl=Decimal("0.00"),
+            unrealized_pnl=Decimal("40.00"),
             fx_stale=False,
             payload={"slice": "before-drift"},
             positions=[
@@ -3000,15 +3966,15 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     "symbol": "MSFT",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 4.0,
-                    "avg_cost": 250.0,
-                    "last_price": 260.0,
-                    "market_value_base": 1040.0,
-                    "unrealized_pnl_base": 40.0,
+                    "quantity": Decimal("4.00000000"),
+                    "avg_cost": Decimal("250.00000000"),
+                    "last_price": Decimal("260.00000000"),
+                    "market_value_base": Decimal("1040.00"),
+                    "unrealized_pnl_base": Decimal("40.00"),
                     "valuation_currency": "USD",
                 }
             ],
-            cash_balances=[{"currency": "USD", "amount": 800.0, "amount_base": 800.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("800.00"), "amount_base": Decimal("800.00")}],
         )
 
         with db.get_session() as session:
@@ -3017,7 +3983,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     PortfolioBrokerSyncState.portfolio_account_id == account["id"]
                 ).limit(1)
             ).scalar_one()
-            row.total_equity = 2100.0
+            row.total_equity = Decimal("2100.00")
             session.commit()
 
         authority = db.get_phase_f_portfolio_shadow_authority_state(account_id=account["id"])
@@ -3058,8 +4024,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
             market="us",
             currency="USD",
         )
@@ -3087,8 +4053,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="MSFT",
             trade_date=date(2026, 4, 12),
             side="buy",
-            quantity=5.0,
-            price=300.0,
+            quantity=Decimal("5.0"),
+            price=Decimal("300.0"),
             market="us",
             currency="USD",
         )
@@ -3146,10 +4112,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                 "currency": "USD",
                 "trade_date": "2026-04-12",
                 "side": "buy",
-                "quantity": 5.0,
-                "price": 300.0,
-                "fee": 0.0,
-                "tax": 0.0,
+                "quantity": "5.00000000",
+                "price": "300.00000000",
+                "fee": "0.00",
+                "tax": "0.00",
                 "note": None,
                 "created_at": result["items"][0]["created_at"],
             },
@@ -3166,8 +4132,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 15),
             side="buy",
-            quantity=3.0,
-            price=175.0,
+            quantity=Decimal("3.0"),
+            price=Decimal("175.0"),
             market="us",
             currency="USD",
         )
@@ -3179,9 +4145,9 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                     PhaseFPortfolioLedger.entry_type == "trade",
                 )
             ).scalar_one()
-            row.price = 176.0
+            row.price = Decimal("176.00000000")
             payload = dict(row.payload_json or {})
-            payload["price"] = 176.0
+            payload["price"] = "176.00000000"
             row.payload_json = payload
 
         mismatch_report: Dict[str, Any] = {}
@@ -3200,7 +4166,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual([item["symbol"] for item in result["items"]], ["AAPL"])
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["id"], trade["id"])
-        self.assertEqual(result["items"][0]["price"], 175.0)
+        self.assertEqual(result["items"][0]["price"], "175.00000000")
         self.assertEqual(pg_candidate_loader.call_count, 1)
         self.assertEqual(report_emitter.call_count, 1)
         self.assertEqual(mismatch_report["mismatch_class"], "payload_field_mismatch")
@@ -3214,8 +4180,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(mismatch_report["pg_summary"]["total"], 1)
         self.assertEqual(mismatch_report["first_mismatch_position"], 0)
         self.assertEqual(mismatch_report["first_mismatch_field"], "price")
-        self.assertEqual(mismatch_report["first_legacy_value"], 175.0)
-        self.assertEqual(mismatch_report["first_pg_value"], 176.0)
+        self.assertEqual(mismatch_report["first_legacy_value"], "175.00000000")
+        self.assertEqual(mismatch_report["first_pg_value"], "176.00000000")
 
     def test_phase_f_trade_list_comparison_mode_query_failure_still_serves_legacy(self) -> None:
         db = self._db()
@@ -3228,8 +4194,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="TSLA",
             trade_date=date(2026, 4, 16),
             side="buy",
-            quantity=1.0,
-            price=250.0,
+            quantity=Decimal("1.0"),
+            price=Decimal("250.0"),
             market="us",
             currency="USD",
         )
@@ -3283,7 +4249,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 16),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         raw_failure = (
@@ -3333,8 +4299,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AMD",
             trade_date=date(2026, 4, 17),
             side="buy",
-            quantity=4.0,
-            price=120.0,
+            quantity=Decimal("4.0"),
+            price=Decimal("120.0"),
             market="us",
             currency="USD",
         )
@@ -3379,8 +4345,8 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="NVDA",
             trade_date=date(2026, 4, 12),
             side="buy",
-            quantity=2.0,
-            price=800.0,
+            quantity=Decimal("2.0"),
+            price=Decimal("800.0"),
             market="us",
             currency="USD",
         )
@@ -3388,7 +4354,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=2000.0,
+            amount=Decimal("2000.0"),
             currency="USD",
         )
         service.record_corporate_action(
@@ -3396,7 +4362,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="NVDA",
             effective_date=date(2026, 4, 13),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.1,
+            cash_dividend_per_share=Decimal("0.1"),
             split_ratio=None,
             market="us",
             currency="USD",
@@ -3427,7 +4393,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             effective_date=date(2026, 4, 21),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.25,
+            cash_dividend_per_share=Decimal("0.25"),
             market="us",
             currency="USD",
         )
@@ -3456,7 +4422,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="MSFT",
             effective_date=date(2026, 4, 22),
             action_type="split_adjustment",
-            split_ratio=2.0,
+            split_ratio=Decimal("2.0"),
             market="us",
             currency="USD",
         )
@@ -3506,7 +4472,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="NVDA",
             effective_date=date(2026, 4, 23),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.1,
+            cash_dividend_per_share=Decimal("0.1"),
             market="us",
             currency="USD",
         )
@@ -3614,7 +4580,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="TSLA",
             effective_date=date(2026, 4, 24),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.05,
+            cash_dividend_per_share=Decimal("0.05"),
             market="us",
             currency="USD",
         )
@@ -3670,7 +4636,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             effective_date=date(2026, 4, 23),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.15,
+            cash_dividend_per_share=Decimal("0.15"),
             market="us",
             currency="USD",
             note="dividend",
@@ -3680,7 +4646,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="AAPL",
             effective_date=date(2026, 4, 24),
             action_type="split_adjustment",
-            split_ratio=2.0,
+            split_ratio=Decimal("2.0"),
             market="us",
             currency="USD",
             note="split",
@@ -3710,6 +4676,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(result["total"], 2)
         self.assertEqual([item["id"] for item in result["items"]], [second_action["id"], first_action["id"]])
         self.assertEqual([item["effective_date"] for item in result["items"]], ["2026-04-24", "2026-04-23"])
+        self.assertEqual(result["items"][0]["split_ratio"], "2.00000000")
+        self.assertEqual(result["items"][0]["cash_dividend_per_share"], None)
+        self.assertEqual(result["items"][1]["cash_dividend_per_share"], "0.15000000")
+        self.assertEqual(result["items"][1]["split_ratio"], None)
         self.assertEqual(validated.total, 2)
         self.assertEqual(validated.page, 1)
         self.assertEqual(validated.page_size, 20)
@@ -3733,7 +4703,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
             symbol="MSFT",
             effective_date=date(2026, 4, 25),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.3,
+            cash_dividend_per_share=Decimal("0.3"),
             market="us",
             currency="USD",
             note="legacy-note",
@@ -3768,6 +4738,7 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["id"], action["id"])
         self.assertEqual(result["items"][0]["note"], "legacy-note")
+        self.assertEqual(result["items"][0]["cash_dividend_per_share"], "0.30000000")
         self.assertEqual(mismatch_report["comparison_status"], "mismatch")
         self.assertTrue(mismatch_report["comparison_attempted"])
         self.assertEqual(mismatch_report["comparison_decision"], "legacy_served_due_to_mismatch")
@@ -3897,10 +4868,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                         "currency": "USD",
                         "trade_date": "2026-04-21",
                         "side": "buy",
-                        "quantity": 10.0,
-                        "price": 100.0,
-                        "fee": 0.0,
-                        "tax": 0.0,
+                        "quantity": "10.00000000",
+                        "price": "100.00000000",
+                        "fee": "0.00000000",
+                        "tax": "0.00000000",
                         "note": "seed",
                         "created_at": "2026-04-21T00:49:23.107279",
                     }
@@ -3919,10 +4890,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                         "currency": "USD",
                         "trade_date": "2026-04-21",
                         "side": "buy",
-                        "quantity": 10.0,
-                        "price": 100.0,
-                        "fee": 0.0,
-                        "tax": 0.0,
+                        "quantity": "10.00000000",
+                        "price": "100.00000000",
+                        "fee": "0.00000000",
+                        "tax": "0.00000000",
                         "note": "seed",
                         "created_at": datetime(
                             2026,
@@ -3960,10 +4931,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                         "currency": "USD",
                         "trade_date": "2026-04-21",
                         "side": "buy",
-                        "quantity": 10.0,
-                        "price": 100.0,
-                        "fee": 0.0,
-                        "tax": 0.0,
+                        "quantity": "10.00000000",
+                        "price": "100.00000000",
+                        "fee": "0.00000000",
+                        "tax": "0.00000000",
                         "note": "seed",
                         "created_at": "2026-04-21T00:49:23.107279",
                     }
@@ -3982,10 +4953,10 @@ class PostgresPhaseFStorageTestCase(unittest.TestCase):
                         "currency": "USD",
                         "trade_date": "2026-04-21",
                         "side": "buy",
-                        "quantity": 10.0,
-                        "price": 100.0,
-                        "fee": 0.0,
-                        "tax": 0.0,
+                        "quantity": "10.00000000",
+                        "price": "100.00000000",
+                        "fee": "0.00000000",
+                        "tax": "0.00000000",
                         "note": "seed",
                         "created_at": "2026-04-21T00:49:24.107279+08:00",
                     }

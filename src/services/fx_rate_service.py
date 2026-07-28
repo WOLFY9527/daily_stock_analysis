@@ -4,9 +4,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Dict, Optional, Tuple
 
 import requests
+
+from src.portfolio_exact_numeric import (
+    PortfolioExactNumericError,
+    PortfolioPrecisionError,
+    parse_portfolio_decimal,
+    resolve_portfolio_precision,
+    serialize_portfolio_decimal_value,
+)
 
 DEFAULT_FX_TTL_SECONDS = 10 * 60
 
@@ -21,10 +30,14 @@ class FxRateService:
 
     @staticmethod
     def _normalize_currency(value: str) -> str:
-        normalized = str(value or "").strip().upper()
-        if len(normalized) < 3 or len(normalized) > 8 or not normalized.isalpha():
-            raise ValueError("currency code must be a 3-8 character ISO-like code")
-        return normalized
+        try:
+            return resolve_portfolio_precision(
+                kind="fx_rate",
+                from_currency=value,
+                to_currency=value,
+            ).from_currency or ""
+        except PortfolioPrecisionError as exc:
+            raise ValueError("currency code is unsupported for the Portfolio FX policy") from exc
 
     def fetch_rate(self, base_currency: str, quote_currency: str, *, force_refresh: bool = False) -> Dict[str, Any]:
         base = self._normalize_currency(base_currency)
@@ -42,7 +55,7 @@ class FxRateService:
             payload = self._build_payload(
                 base_currency=base,
                 quote_currency=quote,
-                rate=1.0,
+                rate="1",
                 provider="identity",
                 fetched_at=now,
             )
@@ -71,10 +84,8 @@ class FxRateService:
                     response.raise_for_status()
                 if status_code >= 500:
                     response.raise_for_status()
-                data = response.json()
+                data = response.json(parse_float=Decimal)
                 rate = self._extract_rate(data=data, quote=quote)
-                if rate <= 0:
-                    raise ValueError("provider returned non-positive rate")
                 return self._build_payload(
                     base_currency=base,
                     quote_currency=quote,
@@ -99,12 +110,16 @@ class FxRateService:
         raise RuntimeError("FX provider request failed")
 
     @staticmethod
-    def _extract_rate(*, data: Dict[str, Any], quote: str) -> float:
-        if isinstance(data.get("rate"), (int, float)):
-            return float(data["rate"])
+    def _extract_rate(*, data: Dict[str, Any], quote: str) -> str:
+        if isinstance(data.get("rate"), (Decimal, int, str)) and not isinstance(data.get("rate"), bool):
+            return str(data["rate"])
         rates = data.get("rates")
-        if isinstance(rates, dict) and isinstance(rates.get(quote), (int, float)):
-            return float(rates[quote])
+        if (
+            isinstance(rates, dict)
+            and isinstance(rates.get(quote), (Decimal, int, str))
+            and not isinstance(rates.get(quote), bool)
+        ):
+            return str(rates[quote])
         raise ValueError("provider response did not include rate")
 
     @staticmethod
@@ -112,14 +127,30 @@ class FxRateService:
         *,
         base_currency: str,
         quote_currency: str,
-        rate: float,
+        rate: Any,
         provider: str,
         fetched_at: datetime,
     ) -> Dict[str, Any]:
+        try:
+            canonical_rate = serialize_portfolio_decimal_value(
+                rate,
+                kind="fx_rate",
+                from_currency=base_currency,
+                to_currency=quote_currency,
+            )
+        except (PortfolioExactNumericError, PortfolioPrecisionError) as exc:
+            raise ValueError("provider returned an invalid FX rate") from exc
+        if parse_portfolio_decimal(
+            canonical_rate,
+            kind="fx_rate",
+            from_currency=base_currency,
+            to_currency=quote_currency,
+        ) <= 0:
+            raise ValueError("provider returned non-positive rate")
         return {
             "base_currency": base_currency,
             "quote_currency": quote_currency,
-            "rate": float(rate),
+            "rate": canonical_rate,
             "provider": provider,
             "fetched_at": fetched_at.isoformat(),
             "cache_hit": False,

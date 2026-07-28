@@ -4,10 +4,19 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from datetime import date
+from decimal import Decimal, localcontext
 from typing import Any, Optional
 
+from src.portfolio_exact_numeric import (
+    PORTFOLIO_ROUNDING,
+    PORTFOLIO_STORAGE_PRECISION,
+    PortfolioPrecisionError,
+    parse_portfolio_decimal,
+    serialize_portfolio_decimal_value,
+)
 from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.stock_structure_decision_engine import NO_ADVICE_DISCLOSURE
@@ -226,15 +235,38 @@ class PortfolioStructureReviewService:
                 continue
 
             payload = _parse_snapshot_payload(getattr(snapshot, "payload", None))
-            exposure_by_theme_or_sector.extend(_extract_theme_or_sector_exposure(payload))
-            account_market_value = _to_float(getattr(snapshot, "total_market_value", None))
+            account_exposure, exposure_unavailable = _extract_theme_or_sector_exposure(payload)
+            exposure_by_theme_or_sector.extend(account_exposure)
+            if exposure_unavailable:
+                missing_evidence.append(
+                    _missing(
+                        "theme_or_sector_exposure",
+                        "Theme or sector exposure is unavailable from cached portfolio holdings.",
+                    )
+                )
+            try:
+                account_market_value = parse_portfolio_decimal(
+                    getattr(snapshot, "total_market_value", None),
+                    kind="storage",
+                )
+            except PortfolioPrecisionError:
+                missing_evidence.append(
+                    _missing("cached_portfolio_holdings", "Cached portfolio holdings are unavailable.")
+                )
+                continue
 
             for row in positions:
-                holding = _holding_from_position(
-                    row,
-                    account=account,
-                    account_market_value=account_market_value,
-                )
+                try:
+                    holding = _holding_from_position(
+                        row,
+                        account=account,
+                        account_market_value=account_market_value,
+                    )
+                except PortfolioPrecisionError:
+                    missing_evidence.append(
+                        _missing("cached_portfolio_holdings", "Cached portfolio holdings are unavailable.")
+                    )
+                    continue
                 if holding is None:
                     invalid_holdings.append(_invalid_holding_payload())
                     missing_evidence.append(
@@ -290,21 +322,40 @@ def _normalize_cost_method(cost_method: str) -> str:
     return method
 
 
-def _holding_from_position(row: Any, *, account: Any, account_market_value: float) -> dict[str, Any] | None:
+def _holding_from_position(
+    row: Any,
+    *,
+    account: Any,
+    account_market_value: Decimal,
+) -> dict[str, Any] | None:
     ticker = str(getattr(row, "symbol", "") or "").strip().upper()
     market = str(getattr(row, "market", "") or "").strip().lower()
     currency = str(getattr(row, "currency", "") or "").strip().upper()
     if not ticker or not market or not currency:
         return None
 
-    market_value = _to_float(getattr(row, "market_value_base", None))
-    percent = round((market_value / account_market_value) * 100.0, 4) if account_market_value > 0 else None
+    market_value = parse_portfolio_decimal(
+        getattr(row, "market_value_base", None),
+        kind="storage",
+    )
+    percent = None
+    if account_market_value > 0:
+        # Both operands are valid storage-scale values, but their ratio can need
+        # more than the default Decimal context before terminal public rounding.
+        with localcontext() as context:
+            context.prec = (PORTFOLIO_STORAGE_PRECISION * 2) + 8
+            percent = float(
+                ((market_value / account_market_value) * Decimal("100")).quantize(
+                    Decimal("0.0001"),
+                    rounding=PORTFOLIO_ROUNDING,
+                )
+            )
     return {
         "ticker": ticker,
         "accountId": _safe_int(getattr(account, "id", None)),
         "market": market,
         "currency": currency,
-        "marketValue": round(market_value, 6),
+        "marketValue": market_value,
         "percent": percent,
     }
 
@@ -401,7 +452,7 @@ def _largest_holding(holdings: Sequence[Mapping[str, Any]]) -> dict[str, Any] | 
     ranked = sorted(
         holdings,
         key=lambda item: (
-            -float(item.get("marketValue") or 0.0),
+            -item["marketValue"],
             str(item.get("ticker") or ""),
         ),
     )
@@ -499,14 +550,80 @@ def _holding_metadata_status(
     return "unavailable"
 
 
-def _extract_theme_or_sector_exposure(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _extract_theme_or_sector_exposure(
+    payload: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], bool]:
     analytics = _safe_mapping(payload.get("analytics"))
     exposure = _safe_mapping(analytics.get("exposure"))
     sector_status = str(exposure.get("sector_status") or exposure.get("sectorStatus") or "")
     rows = _safe_list(exposure.get("by_sector") or exposure.get("bySector"))
     if sector_status == "unavailable" or not rows:
-        return []
-    return _safe_dict_rows(rows)
+        return [], False
+
+    projected_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            return [], True
+        projected = _structure_review_exposure_payload(row)
+        if projected is None:
+            return [], True
+        projected_rows.append(projected)
+    return projected_rows, False
+
+
+def _structure_review_exposure_payload(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Project a cached sector row through its explicit money context.
+
+    The cached portfolio snapshot is the source of both the value and its
+    display currency. Structure review must not recreate that context from an
+    account default or accept a binary number whose original precision is lost.
+    """
+
+    key_raw = row.get("key")
+    label_raw = row.get("label")
+    market_value = row.get("market_value") if "market_value" in row else row.get("marketValue")
+    display_currency = (
+        row.get("display_currency") if "display_currency" in row else row.get("displayCurrency")
+    )
+    percent = row.get("percent")
+    holding_count = row.get("holding_count") if "holding_count" in row else row.get("holdingCount")
+
+    if not isinstance(key_raw, str) or not key_raw.strip():
+        return None
+    if not isinstance(label_raw, str) or not label_raw.strip():
+        return None
+    if not isinstance(market_value, str):
+        return None
+    if not isinstance(display_currency, str) or not display_currency.strip():
+        return None
+    if isinstance(percent, bool) or not isinstance(percent, (int, float)):
+        return None
+    try:
+        percent_value = float(percent)
+    except OverflowError:
+        return None
+    if not math.isfinite(percent_value):
+        return None
+    if isinstance(holding_count, bool) or not isinstance(holding_count, int) or holding_count < 0:
+        return None
+
+    currency = display_currency.strip().upper()
+    try:
+        market_value_text = serialize_portfolio_decimal_value(
+            market_value,
+            kind="money",
+            currency=currency,
+        )
+    except PortfolioPrecisionError:
+        return None
+    return {
+        "key": key_raw.strip(),
+        "label": label_raw.strip(),
+        "marketValue": market_value_text,
+        "displayCurrency": currency,
+        "percent": percent_value,
+        "holdingCount": holding_count,
+    }
 
 
 def _consumer_state(data_quality: Mapping[str, Any]) -> str:
@@ -807,13 +924,6 @@ def _safe_list(value: Any) -> list[Any]:
 
 def _safe_dict_rows(value: Sequence[Any]) -> list[dict[str, Any]]:
     return [dict(item) for item in value if isinstance(item, Mapping)]
-
-
-def _to_float(value: Any) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _safe_int(value: Any) -> int | None:

@@ -4,6 +4,7 @@
 import unittest
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal
 
 from src.core.backtest_engine import BacktestEngine, EvaluationConfig
 
@@ -40,6 +41,29 @@ class BacktestEngineTestCase(unittest.TestCase):
         self.assertEqual(res["eval_status"], "completed")
         self.assertEqual(res["outcome"], "win")
         self.assertTrue(res["direction_correct"])  # up
+
+    def test_decimal_stock_daily_close_is_converted_at_analytics_boundary(self):
+        cfg = EvaluationConfig(eval_window_days=3, neutral_band_pct=2.0)
+        bars = self._bars(
+            date(2024, 1, 1),
+            [Decimal("102"), Decimal("104"), Decimal("105")],
+            highs=[103, 105, 106],
+            lows=[101, 103, 104],
+        )
+
+        result = BacktestEngine.evaluate_single(
+            operation_advice="buy",
+            analysis_date=date(2024, 1, 1),
+            start_price=100.0,
+            forward_bars=bars,
+            stop_loss=95.0,
+            take_profit=110.0,
+            config=cfg,
+        )
+
+        self.assertEqual(result["eval_status"], "completed")
+        self.assertEqual(result["end_close"], 105.0)
+        self.assertEqual(result["stock_return_pct"], 5.0)
 
     def test_sell_win_when_down_cash(self):
         cfg = EvaluationConfig(eval_window_days=3, neutral_band_pct=2.0)

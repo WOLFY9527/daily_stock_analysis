@@ -43,21 +43,22 @@ def _make_user() -> CurrentUser:
 def _payload() -> dict[str, Any]:
     return {
         "asOf": "2026-05-18T09:30:00Z",
+        "baseCurrency": "USD",
         "positions": [
-            {"symbol": "NVDA", "market_value": 1000.0, "bucket": "AI Semis"},
-            {"symbol": "MSFT", "marketValue": 500.0, "bucket": "Mega Cap Software"},
-            {"symbol": "BND", "marketValue": 500.0, "bucket": "Defensive Bonds"},
+            {"symbol": "NVDA", "marketValueBase": "1000.00", "baseCurrency": "USD", "bucket": "AI Semis"},
+            {"symbol": "MSFT", "marketValueBase": "500.00", "baseCurrency": "USD", "bucket": "Mega Cap Software"},
+            {"symbol": "BND", "marketValueBase": "500.00", "baseCurrency": "USD", "bucket": "Defensive Bonds"},
         ],
         "exposures": [
-            {"symbol": "NVDA", "label": "QQQ", "label_type": "index_proxy", "exposure": 1.0},
-            {"symbol": "MSFT", "label": "QQQ", "labelType": "index_proxy", "exposure": 0.8},
-            {"symbol": "NVDA", "label": "ai_theme", "labelType": "theme", "exposure": 1.0},
-            {"symbol": "MSFT", "label": "ai_theme", "labelType": "theme", "exposure": 0.5},
+            {"symbol": "NVDA", "label": "QQQ", "label_type": "index_proxy", "exposure": "1"},
+            {"symbol": "MSFT", "label": "QQQ", "labelType": "index_proxy", "exposure": "0.8"},
+            {"symbol": "NVDA", "label": "ai_theme", "labelType": "theme", "exposure": "1"},
+            {"symbol": "MSFT", "label": "ai_theme", "labelType": "theme", "exposure": "0.5"},
         ],
         "scenarioShocks": [
-            {"name": "nvda_gap_down", "shocks": {"NVDA": -0.10}},
-            {"name": "qqq_proxy_down", "shocks": {"QQQ": -0.05}},
-            {"name": "ai_theme_down", "shocks": {"ai_theme": {"shockPct": -8.0, "labelType": "theme"}}},
+            {"name": "nvda_gap_down", "shocks": {"NVDA": "-0.10"}},
+            {"name": "qqq_proxy_down", "shocks": {"QQQ": "-0.05"}},
+            {"name": "ai_theme_down", "shocks": {"ai_theme": {"shockPct": "-8", "labelType": "theme"}}},
         ],
     }
 
@@ -134,8 +135,9 @@ def test_scenario_risk_endpoint_returns_advisory_projection_from_caller_inputs()
     assert payload["advisoryOnly"] is True
     assert payload["executionReadiness"] == "advisory_only_not_trade_execution"
     assert payload["asOf"] == "2026-05-18T09:30:00Z"
+    assert payload["baseCurrency"] == "USD"
     assert payload["coverage"]["totalPositions"] == 3
-    assert payload["coverage"]["totalMarketValue"] == 2000.0
+    assert payload["coverage"]["totalMarketValue"] == "2000.00"
     assert payload["coverage"]["labelsWithExplicitCoverage"] == ["AI_THEME", "QQQ"]
 
     metadata = payload["metadata"]
@@ -147,6 +149,45 @@ def test_scenario_risk_endpoint_returns_advisory_projection_from_caller_inputs()
     assert metadata["noProviderRuntime"] is True
 
 
+def test_scenario_risk_requires_and_echoes_explicit_base_currency() -> None:
+    payload = {
+        "asOf": "2026-05-18T09:30:00Z",
+        "baseCurrency": "USD",
+        "positions": [
+            {
+                "symbol": "NVDA",
+                "marketValueBase": "1000.00",
+                "baseCurrency": "USD",
+            }
+        ],
+        "exposures": [],
+        "scenarioShocks": [{"name": "nvda_gap_down", "shocks": {"NVDA": "-0.10"}}],
+    }
+
+    with ScenarioRiskClient() as client:
+        response = client.post("/api/v1/portfolio/scenario-risk", json=payload)
+        missing_base_response = client.post(
+            "/api/v1/portfolio/scenario-risk",
+            json={key: value for key, value in payload.items() if key != "baseCurrency"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["baseCurrency"] == "USD"
+    assert missing_base_response.status_code == 422
+
+
+def test_scenario_risk_rejects_market_value_without_row_base_currency() -> None:
+    payload = _payload()
+    for position in payload["positions"]:
+        position.pop("baseCurrency")
+
+    with ScenarioRiskClient() as client:
+        response = client.post("/api/v1/portfolio/scenario-risk", json=payload)
+
+    assert response.status_code == 422
+    assert "baseCurrency" in str(response.json())
+
+
 def test_symbol_proxy_and_theme_shocks_work_from_explicit_exposures() -> None:
     with ScenarioRiskClient() as client:
         response = client.post("/api/v1/portfolio/scenario-risk", json=_payload())
@@ -155,19 +196,19 @@ def test_symbol_proxy_and_theme_shocks_work_from_explicit_exposures() -> None:
     scenarios = {item["name"]: item for item in response.json()["scenarios"]}
 
     symbol = scenarios["nvda_gap_down"]
-    assert symbol["portfolioImpactPct"] == -5.0
-    assert symbol["portfolioImpactAmount"] == -100.0
+    assert symbol["portfolioImpactPct"] == "-5.00000000"
+    assert symbol["portfolioImpactAmount"] == "-100.00"
     assert symbol["missingCoverage"] == []
 
     proxy = scenarios["qqq_proxy_down"]
-    assert proxy["portfolioImpactPct"] == -3.5
-    assert proxy["portfolioImpactAmount"] == -70.0
+    assert proxy["portfolioImpactPct"] == "-3.50000000"
+    assert proxy["portfolioImpactAmount"] == "-70.00"
     assert proxy["missingCoverage"] == [{"label": "QQQ", "labelType": "index_proxy", "missingSymbols": ["BND"]}]
     assert proxy["positionContributions"][0]["appliedShocks"][0]["labelType"] == "index_proxy"
 
     theme = scenarios["ai_theme_down"]
-    assert theme["portfolioImpactPct"] == -5.0
-    assert theme["portfolioImpactAmount"] == -100.0
+    assert theme["portfolioImpactPct"] == "-5.00000000"
+    assert theme["portfolioImpactAmount"] == "-100.00"
     assert theme["missingCoverage"] == [{"label": "AI_THEME", "labelType": "theme", "missingSymbols": ["BND"]}]
     assert theme["positionContributions"][0]["appliedShocks"][0]["labelType"] == "theme"
 
@@ -175,9 +216,10 @@ def test_symbol_proxy_and_theme_shocks_work_from_explicit_exposures() -> None:
 def test_missing_coverage_is_reported_not_inferred() -> None:
     payload = {
         "asOf": "2026-05-18",
-        "positions": [{"symbol": "AAA", "weight": 0.6}, {"symbol": "BBB", "weight": 0.4}],
-        "exposures": [{"symbol": "AAA", "label": "growth_theme", "labelType": "theme", "exposure": 1.0}],
-        "scenarioShocks": [{"name": "theme_and_currency", "shocks": {"growth_theme": -0.10, "USD": 0.02}}],
+        "baseCurrency": "USD",
+        "positions": [{"symbol": "AAA", "weight": "0.6"}, {"symbol": "BBB", "weight": "0.4"}],
+        "exposures": [{"symbol": "AAA", "label": "growth_theme", "labelType": "theme", "exposure": "1"}],
+        "scenarioShocks": [{"name": "theme_and_currency", "shocks": {"growth_theme": "-0.10", "USD": "0.02"}}],
     }
 
     with ScenarioRiskClient() as client:
@@ -185,12 +227,52 @@ def test_missing_coverage_is_reported_not_inferred() -> None:
 
     assert response.status_code == 200
     scenario = response.json()["scenarios"][0]
-    assert scenario["portfolioImpactPct"] == -6.0
+    assert scenario["portfolioImpactPct"] == "-6.00000000"
     assert scenario["missingCoverage"] == [
         {"label": "GROWTH_THEME", "labelType": "theme", "missingSymbols": ["BBB"]},
         {"label": "USD", "labelType": "explicit_label", "missingSymbols": ["AAA", "BBB"]},
     ]
     assert response.json()["missingDataWarnings"] == ["scenario_coverage_incomplete"]
+
+
+def test_symbol_weight_mapping_preserves_legacy_scenario_positions() -> None:
+    payload = {
+        "asOf": "2026-05-18",
+        "baseCurrency": "USD",
+        "positions": {"AAA": "0.6", "BBB": "0.4"},
+        "exposures": [],
+        "scenarioShocks": [{"name": "aaa_down", "shocks": {"AAA": "-0.10"}}],
+    }
+
+    with ScenarioRiskClient() as client:
+        response = client.post("/api/v1/portfolio/scenario-risk", json=payload)
+
+    assert response.status_code == 200
+    response_payload = response.json()
+    assert response_payload["coverage"]["totalPositions"] == 2
+    assert response_payload["coverage"]["effectiveWeightSum"] == "1.00000000"
+    assert response_payload["scenarios"][0]["portfolioImpactPct"] == "-6.00000000"
+    assert "no_positions" not in response_payload["insufficientDataReasons"]
+
+
+def test_scenario_risk_endpoint_serializes_zero_decimals_as_fixed_point() -> None:
+    payload = {
+        "asOf": "2026-05-18T09:30:00Z",
+        "baseCurrency": "USD",
+        "positions": [{"symbol": "ZERO", "marketValueBase": "0.00", "baseCurrency": "USD"}],
+        "exposures": [],
+        "scenarioShocks": [{"name": "zero_shock", "shocks": {"ZERO": "0"}}],
+    }
+
+    with ScenarioRiskClient() as client:
+        response = client.post("/api/v1/portfolio/scenario-risk", json=payload)
+
+    assert response.status_code == 200
+    response_payload = response.json()
+    assert response_payload["coverage"]["effectiveWeightSum"] == "0.00000000"
+    scenario = response_payload["scenarios"][0]
+    assert scenario["portfolioImpactPct"] == "0.00000000"
+    assert scenario["positionContributions"][0]["appliedShocks"][0]["shockPct"] == "0.00000000"
 
 
 def test_forbidden_account_broker_order_and_sync_fields_are_ignored_safely() -> None:

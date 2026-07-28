@@ -295,7 +295,7 @@ class StockAnalysisPipeline:
                             f"(来源: {source_name})"
                         )
 
-            if (df is None or df.empty) and is_us_stock:
+            if (df is None or df.empty) and is_us_stock and history_fetch_error is None:
                 df, source_name = self._build_us_realtime_snapshot_df(code)
                 if df is not None and not df.empty:
                     logger.warning(
@@ -327,39 +327,12 @@ class StockAnalysisPipeline:
             return False
 
     def _build_us_realtime_snapshot_df(self, code: str) -> Tuple[Optional[pd.DataFrame], str]:
-        quote = self.fetcher_manager.get_realtime_quote(code)
-        if not quote or not getattr(quote, "has_basic_data", lambda: False)():
-            return None, ""
-
-        trade_date = self._resolve_market_trade_date(code, quote)
-        price = getattr(quote, "price", None)
-        if price is None:
-            return None, ""
-
-        open_price = getattr(quote, "open_price", None) or getattr(quote, "pre_close", None) or price
-        high = getattr(quote, "high", None) or price
-        low = getattr(quote, "low", None) or price
-        volume = getattr(quote, "volume", None)
-        amount = getattr(quote, "amount", None)
-        pct_chg = getattr(quote, "change_pct", None)
-
-        snapshot = pd.DataFrame([{
-            "code": code,
-            "date": trade_date,
-            "open": open_price,
-            "high": high,
-            "low": low,
-            "close": price,
-            "volume": volume,
-            "amount": amount,
-            "pct_chg": pct_chg,
-            "ma5": None,
-            "ma10": None,
-            "ma20": None,
-            "volume_ratio": None,
-        }])
-        source = getattr(getattr(quote, "source", None), "value", "realtime_snapshot")
-        return snapshot, f"{source}_realtime_snapshot"
+        logger.warning(
+            "%s realtime snapshot is unavailable for strict daily persistence: "
+            "UnifiedRealtimeQuote has no exact close-token contract",
+            code,
+        )
+        return None, ""
 
     def _resolve_market_trade_date(self, code: str, quote: Any) -> str:
         market_tz_name = self._get_market_timezone_name(code)

@@ -18,6 +18,7 @@ import logging
 import random
 import re
 import time
+from decimal import Decimal
 from threading import BoundedSemaphore, RLock, Thread
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -34,6 +35,7 @@ from src.utils.symbol_normalization import (
     parse_canonical_symbol,
 )
 from src.services.uat_provider_isolation import check_uat_provider_transport
+from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from .fundamental_adapter import AkshareFundamentalAdapter
 from .provider_credentials import get_provider_credentials
 
@@ -43,6 +45,34 @@ logger = logging.getLogger(__name__)
 
 # === 标准化列名定义 ===
 STANDARD_COLUMNS = ['date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg']
+_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN = "__wolfystock_stock_daily_close_token"
+
+
+def attach_stock_daily_close_tokens(
+    frame: pd.DataFrame,
+    raw_close_tokens: List[Any],
+) -> pd.DataFrame:
+    """Attach verified textual/Decimal daily-close provenance for strict storage."""
+
+    result = frame.copy()
+    result.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+    if "date" not in result.columns or len(result) != len(raw_close_tokens):
+        return result
+
+    token_by_date: Dict[str, Any] = {}
+    for row_date, token in zip(result["date"].tolist(), raw_close_tokens):
+        if not isinstance(token, (Decimal, str)):
+            return result
+        parsed_date = pd.to_datetime(row_date, errors="coerce")
+        if pd.isna(parsed_date):
+            return result
+        date_key = parsed_date.date().isoformat()
+        if date_key in token_by_date:
+            return result
+        token_by_date[date_key] = token
+
+    result.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = token_by_date
+    return result
 
 
 def unwrap_exception(exc: Exception) -> Exception:
@@ -603,6 +633,11 @@ class BaseFetcher(ABC):
         4. 按日期排序
         """
         df = df.copy()
+        has_existing_close_tokens = STOCK_DAILY_CLOSE_PROVENANCE_ATTR in df.attrs
+        existing_close_tokens = df.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+
+        if not has_existing_close_tokens and 'close' in df.columns:
+            df[_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN] = df['close']
         
         # 确保日期列为 datetime 类型
         if 'date' in df.columns:
@@ -619,8 +654,17 @@ class BaseFetcher(ABC):
         
         # 按日期升序排序
         df = df.sort_values('date', ascending=True).reset_index(drop=True)
-        
-        return df
+
+        if isinstance(existing_close_tokens, dict):
+            raw_close_tokens = [
+                existing_close_tokens.get(row_date.date().isoformat())
+                for row_date in df['date'].tolist()
+            ]
+        elif _STOCK_DAILY_CLOSE_PROVENANCE_COLUMN in df.columns:
+            raw_close_tokens = df.pop(_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN).tolist()
+        else:
+            return df
+        return attach_stock_daily_close_tokens(df, raw_close_tokens)
     
     def _calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """

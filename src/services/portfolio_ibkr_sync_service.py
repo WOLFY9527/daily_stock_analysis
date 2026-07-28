@@ -6,12 +6,20 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Protocol
 from urllib.parse import urlparse, urlunparse
 
 import requests
 
+from src.portfolio_exact_numeric import (
+    PortfolioExactNumericError,
+    PortfolioPrecisionError,
+    parse_portfolio_decimal,
+    round_portfolio_decimal_value,
+    serialize_portfolio_decimal_value,
+)
 from src.services.portfolio_ibkr_currency import (
     IbkrCurrencyStatus,
     classify_ibkr_currency,
@@ -74,7 +82,7 @@ class RequestsIbkrHttpTransport:
             timeout=timeout,
         )
         try:
-            payload = response.json()
+            payload = response.json(parse_float=Decimal)
         except ValueError:
             payload = response.text
         return IbkrHttpResult(status_code=int(response.status_code), payload=payload)
@@ -367,11 +375,11 @@ class PortfolioIbkrSyncService:
             "snapshot_date": normalized["snapshot_date"].isoformat(),
             "synced_at": normalized["synced_at"].isoformat(),
             "base_currency": normalized["base_currency"],
-            "total_cash": round(normalized["total_cash"], 6),
-            "total_market_value": round(normalized["total_market_value"], 6),
-            "total_equity": round(normalized["total_equity"], 6),
-            "realized_pnl": round(normalized["realized_pnl"], 6),
-            "unrealized_pnl": round(normalized["unrealized_pnl"], 6),
+            "total_cash": self._serialize_money(normalized["total_cash"], normalized["base_currency"]),
+            "total_market_value": self._serialize_money(normalized["total_market_value"], normalized["base_currency"]),
+            "total_equity": self._serialize_money(normalized["total_equity"], normalized["base_currency"]),
+            "realized_pnl": self._serialize_money(normalized["realized_pnl"], normalized["base_currency"]),
+            "unrealized_pnl": self._serialize_money(normalized["unrealized_pnl"], normalized["base_currency"]),
             "position_count": len(normalized["positions"]),
             "cash_balance_count": len(normalized["cash_balances"]),
             "fx_stale": bool(normalized["fx_stale"]),
@@ -597,22 +605,22 @@ class PortfolioIbkrSyncService:
         if not cash_rows:
             warnings.append("IBKR 当前未返回现金余额明细，系统已按空余额或摘要回退口径处理。")
 
-        total_cash = self._summary_amount(summary, "totalcashvalue", "settledcash")
+        total_cash = self._summary_amount(summary, base_currency, "totalcashvalue", "settledcash")
         if total_cash is None:
             total_cash = cash_total_base
             warnings.append("IBKR 摘要中缺少总现金字段，已根据 ledger 明细回退计算。")
-        total_market_value = self._summary_amount(summary, "stockmarketvalue", "netstockmarketvalue")
+        total_market_value = self._summary_amount(summary, base_currency, "stockmarketvalue", "netstockmarketvalue")
         if total_market_value is None:
             total_market_value = position_total_base
             warnings.append("IBKR 摘要中缺少持仓市值字段，已根据持仓明细回退计算。")
-        total_equity = self._summary_amount(summary, "netliquidation")
+        total_equity = self._summary_amount(summary, base_currency, "netliquidation")
         if total_equity is None:
             total_equity = total_cash + total_market_value
             warnings.append("IBKR 摘要中缺少总权益字段，已按现金加市值回退计算。")
-        realized_pnl = self._summary_amount(summary, "realizedpnl")
+        realized_pnl = self._summary_amount(summary, base_currency, "realizedpnl")
         if realized_pnl is None:
-            realized_pnl = 0.0
-        unrealized_pnl = self._summary_amount(summary, "unrealizedpnl")
+            realized_pnl = Decimal("0")
+        unrealized_pnl = self._summary_amount(summary, base_currency, "unrealizedpnl")
         if unrealized_pnl is None:
             unrealized_pnl = unrealized_total_base
             if position_rows:
@@ -622,11 +630,11 @@ class PortfolioIbkrSyncService:
             "snapshot_date": snapshot_date,
             "synced_at": synced_at,
             "base_currency": base_currency,
-            "total_cash": float(total_cash),
-            "total_market_value": float(total_market_value),
-            "total_equity": float(total_equity),
-            "realized_pnl": float(realized_pnl),
-            "unrealized_pnl": float(unrealized_pnl),
+            "total_cash": total_cash,
+            "total_market_value": total_market_value,
+            "total_equity": total_equity,
+            "realized_pnl": realized_pnl,
+            "unrealized_pnl": unrealized_pnl,
             "positions": position_rows,
             "cash_balances": cash_rows,
             "fx_stale": bool(cash_fx_stale or position_fx_stale),
@@ -651,12 +659,12 @@ class PortfolioIbkrSyncService:
         ledger: Dict[str, Any],
         base_currency: str,
         as_of_date: date,
-    ) -> tuple[List[Dict[str, Any]], float, bool]:
+    ) -> tuple[List[Dict[str, Any]], Decimal, bool]:
         rows: List[Dict[str, Any]] = []
-        total_base = 0.0
+        total_base = Decimal("0")
         fx_stale = False
         explicit_base_present = False
-        base_fallback_amount: Optional[float] = None
+        base_fallback_amount: Optional[Decimal] = None
 
         for currency_key, block in ledger.items():
             if not isinstance(block, dict):
@@ -671,13 +679,13 @@ class PortfolioIbkrSyncService:
             if raw_amount is None:
                 continue
             if str(currency_key or "").strip().upper() == "BASE":
-                base_fallback_amount = float(raw_amount)
+                base_fallback_amount = raw_amount
                 continue
             currency = self._require_ibkr_currency(currency_key, scope="ledger")
             if currency == base_currency:
                 explicit_base_present = True
             amount_base, stale = self._convert_required_amount(
-                amount=float(raw_amount),
+                amount=raw_amount,
                 from_currency=currency,
                 to_currency=base_currency,
                 as_of_date=as_of_date,
@@ -686,25 +694,25 @@ class PortfolioIbkrSyncService:
             rows.append(
                 {
                     "currency": currency,
-                    "amount": float(raw_amount),
-                    "amount_base": float(amount_base),
+                    "amount": self._serialize_money(raw_amount, currency),
+                    "amount_base": self._serialize_money(amount_base, base_currency),
                 }
             )
-            total_base += float(amount_base)
+            total_base += amount_base
             fx_stale = fx_stale or stale
 
         if not explicit_base_present and base_fallback_amount is not None:
             rows.append(
                 {
                     "currency": base_currency,
-                    "amount": float(base_fallback_amount),
-                    "amount_base": float(base_fallback_amount),
+                    "amount": self._serialize_money(base_fallback_amount, base_currency),
+                    "amount_base": self._serialize_money(base_fallback_amount, base_currency),
                 }
             )
-            total_base += float(base_fallback_amount)
+            total_base += base_fallback_amount
 
         rows.sort(key=lambda item: item["currency"])
-        return rows, float(total_base), bool(fx_stale)
+        return rows, total_base, bool(fx_stale)
 
     def _normalize_positions(
         self,
@@ -712,11 +720,11 @@ class PortfolioIbkrSyncService:
         positions: Iterable[Dict[str, Any]],
         base_currency: str,
         as_of_date: date,
-    ) -> tuple[List[Dict[str, Any]], float, float, bool, List[str], List[str]]:
+    ) -> tuple[List[Dict[str, Any]], Decimal, Decimal, bool, List[str], List[str]]:
         rows: List[Dict[str, Any]] = []
         warnings: List[str] = []
-        total_market_value_base = 0.0
-        total_unrealized_base = 0.0
+        total_market_value_base = Decimal("0")
+        total_unrealized_base = Decimal("0")
         fx_stale = False
         markets: set[str] = set()
 
@@ -731,8 +739,8 @@ class PortfolioIbkrSyncService:
                 warnings.append(f"Skipped unsupported IBKR asset class: {asset_class or 'unknown'}")
                 continue
 
-            quantity = self._to_float(item.get("position"))
-            if quantity is None or abs(quantity) <= 1e-8:
+            quantity = self._to_decimal(item.get("position"))
+            if quantity is None or quantity == 0:
                 continue
             if quantity < 0:
                 symbol_hint = item.get("contractDesc") or item.get("symbol") or item.get("ticker") or "unknown"
@@ -761,24 +769,28 @@ class PortfolioIbkrSyncService:
             market = identity.market
 
             currency = self._require_ibkr_currency(item.get("currency"), scope="position")
-            avg_cost = self._to_float(item.get("avgCost")) or self._to_float(item.get("avgPrice")) or 0.0
-            last_price = self._to_float(item.get("mktPrice")) or self._to_float(item.get("marketPrice")) or 0.0
-            market_value_local = self._to_float(item.get("mktValue")) or self._to_float(item.get("marketValue"))
+            avg_cost = self._to_decimal(item.get("avgCost")) or self._to_decimal(item.get("avgPrice")) or Decimal("0")
+            last_price = self._to_decimal(item.get("mktPrice")) or self._to_decimal(item.get("marketPrice")) or Decimal("0")
+            market_value_local = self._to_decimal(item.get("mktValue")) or self._to_decimal(item.get("marketValue"))
             if market_value_local is None:
-                market_value_local = float(quantity) * float(last_price or avg_cost)
-            if last_price <= 0 and abs(quantity) > 1e-8:
-                last_price = float(market_value_local) / float(quantity)
-            unrealized_local = self._to_float(item.get("unrealizedPnl")) or self._to_float(item.get("upl")) or 0.0
+                market_value_local = quantity * (last_price or avg_cost)
+            if last_price <= 0 and quantity != 0:
+                last_price = round_portfolio_decimal_value(
+                    market_value_local / quantity,
+                    kind="price",
+                    market=market,
+                )
+            unrealized_local = self._to_decimal(item.get("unrealizedPnl")) or self._to_decimal(item.get("upl")) or Decimal("0")
 
             market_value_base, stale_mv = self._convert_required_amount(
-                amount=float(market_value_local),
+                amount=market_value_local,
                 from_currency=currency,
                 to_currency=base_currency,
                 as_of_date=as_of_date,
                 scope="position_market_value",
             )
             unrealized_base, stale_upnl = self._convert_required_amount(
-                amount=float(unrealized_local),
+                amount=unrealized_local,
                 from_currency=currency,
                 to_currency=base_currency,
                 as_of_date=as_of_date,
@@ -790,11 +802,11 @@ class PortfolioIbkrSyncService:
                     "symbol": symbol,
                     "market": market,
                     "currency": currency,
-                    "quantity": float(quantity),
-                    "avg_cost": float(avg_cost),
-                    "last_price": float(last_price),
-                    "market_value_base": float(market_value_base),
-                    "unrealized_pnl_base": float(unrealized_base),
+                    "quantity": self._parse_market_decimal(quantity, kind="quantity", market=market),
+                    "avg_cost": self._parse_market_decimal(avg_cost, kind="price", market=market),
+                    "last_price": self._parse_market_decimal(last_price, kind="price", market=market),
+                    "market_value_base": self._parse_money(market_value_base, base_currency),
+                    "unrealized_pnl_base": self._parse_money(unrealized_base, base_currency),
                     "valuation_currency": base_currency,
                     "payload_json": json.dumps(
                         {
@@ -807,13 +819,13 @@ class PortfolioIbkrSyncService:
                     ),
                 }
             )
-            total_market_value_base += float(market_value_base)
-            total_unrealized_base += float(unrealized_base)
+            total_market_value_base += self._parse_money(market_value_base, base_currency)
+            total_unrealized_base += self._parse_money(unrealized_base, base_currency)
             fx_stale = fx_stale or stale_mv or stale_upnl
             markets.add(market)
 
         rows.sort(key=lambda item: (item["market"], item["symbol"], item["currency"]))
-        return rows, float(total_market_value_base), float(total_unrealized_base), bool(fx_stale), warnings[:20], sorted(markets)
+        return rows, total_market_value_base, total_unrealized_base, bool(fx_stale), warnings[:20], sorted(markets)
 
     def _apply_account_alignment(
         self,
@@ -986,21 +998,24 @@ class PortfolioIbkrSyncService:
             return None
         return identity.market
 
-    def _summary_amount(self, summary: Dict[str, Any], *keys: str) -> Optional[float]:
+    def _summary_amount(
+        self,
+        summary: Dict[str, Any],
+        currency: str,
+        *keys: str,
+    ) -> Optional[Decimal]:
         for key in keys:
             block = summary.get(key)
-            amount = self._pick_amount_from_block(block)
+            amount = self._pick_amount_from_block(block, currency=currency)
             if amount is not None:
                 return amount
         return None
 
-    def _pick_amount_from_block(self, value: Any) -> Optional[float]:
+    def _pick_amount_from_block(self, value: Any, *, currency: str) -> Optional[Decimal]:
         if value is None:
             return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            return self._to_float(value)
+        if isinstance(value, (int, Decimal, str)) and not isinstance(value, bool):
+            return self._parse_money(value, currency)
         if isinstance(value, dict):
             return self._pick_first_numeric(
                 value,
@@ -1008,31 +1023,89 @@ class PortfolioIbkrSyncService:
                 "value",
                 "current",
                 "rawValue",
+                currency=currency,
             )
         return None
 
     @staticmethod
-    def _pick_first_numeric(block: Dict[str, Any], *keys: str) -> Optional[float]:
+    def _pick_first_numeric(
+        block: Dict[str, Any],
+        *keys: str,
+        currency: Optional[str] = None,
+    ) -> Optional[Decimal]:
         for key in keys:
             value = block.get(key)
-            numeric = PortfolioIbkrSyncService._to_float(value)
+            numeric = (
+                PortfolioIbkrSyncService._parse_money(value, currency)
+                if currency is not None
+                else PortfolioIbkrSyncService._to_decimal(value)
+            )
             if numeric is not None:
                 return numeric
         return None
 
     @staticmethod
-    def _to_float(value: Any) -> Optional[float]:
+    def _to_decimal(value: Any) -> Optional[Decimal]:
         if value is None:
             return None
-        if isinstance(value, (int, float)):
-            return float(value)
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, Decimal):
+            return value if value.is_finite() else None
+        if isinstance(value, int):
+            return Decimal(value)
+        if isinstance(value, float):
+            raise PortfolioIbkrSyncError(
+                code="ibkr_precision_invalid",
+                message="IBKR numeric values must retain exact decimal transport.",
+            )
         text = str(value).strip().replace(",", "")
         if not text or text.lower() == "nan":
             return None
         try:
-            return float(text)
-        except ValueError:
+            parsed = Decimal(text)
+        except (InvalidOperation, ValueError):
             return None
+        return parsed if parsed.is_finite() else None
+
+    @staticmethod
+    def _parse_money(value: Any, currency: str) -> Optional[Decimal]:
+        raw = PortfolioIbkrSyncService._to_decimal(value)
+        if raw is None:
+            return None
+        try:
+            return parse_portfolio_decimal(raw, kind="money", currency=currency)
+        except (PortfolioExactNumericError, PortfolioPrecisionError) as exc:
+            raise PortfolioIbkrSyncError(
+                code="ibkr_precision_invalid",
+                message="IBKR monetary value exceeds the Portfolio precision policy.",
+            ) from exc
+
+    @staticmethod
+    def _parse_market_decimal(value: Any, *, kind: str, market: str) -> Decimal:
+        raw = PortfolioIbkrSyncService._to_decimal(value)
+        if raw is None:
+            raise PortfolioIbkrSyncError(
+                code="ibkr_precision_invalid",
+                message="IBKR market value is invalid.",
+            )
+        try:
+            return parse_portfolio_decimal(raw, kind=kind, market=market)
+        except (PortfolioExactNumericError, PortfolioPrecisionError) as exc:
+            raise PortfolioIbkrSyncError(
+                code="ibkr_precision_invalid",
+                message="IBKR market value exceeds the Portfolio precision policy.",
+            ) from exc
+
+    @staticmethod
+    def _serialize_money(value: Any, currency: str) -> str:
+        try:
+            return serialize_portfolio_decimal_value(value, kind="money", currency=currency)
+        except (PortfolioExactNumericError, PortfolioPrecisionError) as exc:
+            raise PortfolioIbkrSyncError(
+                code="ibkr_precision_invalid",
+                message="IBKR monetary value exceeds the Portfolio precision policy.",
+            ) from exc
 
     @staticmethod
     def _normalize_currency(value: Any) -> str:
@@ -1118,13 +1191,13 @@ class PortfolioIbkrSyncService:
     def _convert_required_amount(
         self,
         *,
-        amount: float,
+        amount: Decimal,
         from_currency: str,
         to_currency: str,
         as_of_date: date,
         scope: str,
-    ) -> tuple[float, bool]:
-        converted, stale, source = self.portfolio_service.convert_amount(
+    ) -> tuple[Decimal, bool]:
+        converted, stale, source = self.portfolio_service.convert_amount_exact(
             amount=amount,
             from_currency=from_currency,
             to_currency=to_currency,
@@ -1135,7 +1208,17 @@ class PortfolioIbkrSyncService:
                 code="ibkr_fx_unavailable",
                 message=f"IBKR {scope} 所需 FX 无 direct/inverse 证据，已拒绝整次同步。",
             )
-        return float(converted), bool(stale)
+        try:
+            return round_portfolio_decimal_value(
+                converted,
+                kind="money",
+                currency=to_currency,
+            ), bool(stale)
+        except (PortfolioExactNumericError, PortfolioPrecisionError) as exc:
+            raise PortfolioIbkrSyncError(
+                code="ibkr_precision_invalid",
+                message="IBKR derived monetary value cannot be rounded under the Portfolio precision policy.",
+            ) from exc
 
     def _mark_connection_sync_error(
         self,

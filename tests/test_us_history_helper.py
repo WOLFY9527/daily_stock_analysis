@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.services.us_history_helper import (
     LOCAL_US_PARQUET_SOURCE,
     LocalUsHistoryLoadResult,
@@ -150,6 +153,37 @@ class UsHistoryHelperTestCase(unittest.TestCase):
         saved_frame = written["frame"]
         self.assertEqual(list(saved_frame["date"].dt.strftime("%Y-%m-%d")), ["2026-01-02"])
         self.assertEqual(float(saved_frame["adjusted_close"].iloc[0]), 100.5)
+        self.assertEqual(
+            saved_frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR],
+            {"2026-01-02": "101.0"},
+        )
+
+    def test_persist_local_us_daily_history_round_trips_decimal_close_provenance(self) -> None:
+        raw = pd.DataFrame(
+            [
+                {
+                    "date": "2026-01-02",
+                    "open": "100.0",
+                    "high": "102.0",
+                    "low": "99.0",
+                    "close": Decimal("101.2300"),
+                }
+            ]
+        )
+        raw.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {"2026-01-02": Decimal("101.2300")}
+
+        with tempfile.TemporaryDirectory() as directory:
+            parquet_dir = Path(directory)
+            persisted = persist_local_us_daily_history("AAPL", raw, parquet_dir=parquet_dir)
+            loaded = load_local_us_daily_history("AAPL", parquet_dir=parquet_dir)
+
+        self.assertEqual(persisted.status, "saved")
+        self.assertEqual(loaded.status, "hit")
+        self.assertIsNotNone(loaded.dataframe)
+        self.assertEqual(
+            loaded.dataframe.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR],
+            {"2026-01-02": "101.2300"},
+        )
 
     def test_persist_local_us_daily_history_rejects_non_us_symbol_without_write(self) -> None:
         raw = pd.DataFrame(
@@ -160,6 +194,47 @@ class UsHistoryHelperTestCase(unittest.TestCase):
             result = persist_local_us_daily_history("600519", raw)
 
         self.assertEqual(result.status, "not_applicable")
+
+    def test_persist_local_us_daily_history_rejects_malformed_provenance_and_does_not_invent_float_tokens(self) -> None:
+        raw = pd.DataFrame(
+            [
+                {
+                    "date": "2026-01-02",
+                    "open": "100.0",
+                    "high": "102.0",
+                    "low": "99.0",
+                    "close": "101.0",
+                }
+            ]
+        )
+        raw.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = []
+
+        with patch.object(pd.DataFrame, "to_parquet", side_effect=AssertionError("should not write")):
+            result = persist_local_us_daily_history("AAPL", raw)
+
+        self.assertEqual(result.status, "invalid")
+
+        mismatched = raw.copy()
+        mismatched.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {"2026-01-02": "100.0"}
+        with patch.object(pd.DataFrame, "to_parquet") as to_parquet:
+            result = persist_local_us_daily_history("AAPL", mismatched, parquet_dir=Path("/tmp/us-cache"))
+
+        self.assertEqual(result.status, "invalid")
+        to_parquet.assert_not_called()
+
+        float_origin = raw.drop(columns=[]).copy()
+        float_origin.attrs.clear()
+        float_origin["close"] = [101.0]
+        written: dict[str, object] = {}
+
+        def fake_to_parquet(self, path, index=False):  # noqa: ANN001
+            written["frame"] = self.copy()
+
+        with patch.object(pd.DataFrame, "to_parquet", fake_to_parquet):
+            result = persist_local_us_daily_history("AAPL", float_origin, parquet_dir=Path("/tmp/us-cache"))
+
+        self.assertEqual(result.status, "saved")
+        self.assertNotIn(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, written["frame"].attrs)
 
 
 if __name__ == "__main__":

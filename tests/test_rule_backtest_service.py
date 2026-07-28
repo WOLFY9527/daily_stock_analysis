@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from dataclasses import FrozenInstanceError
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ import pandas as pd
 from sqlalchemy import select
 
 from src.config import Config
+from data_provider.base import attach_stock_daily_close_tokens
 from src.core.rule_backtest_engine import ParsedStrategy, RuleBacktestEngine, RuleBacktestParser
 from src.services.backtest_parameter_stability import build_parameter_stability_plan
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
@@ -413,16 +415,41 @@ class RuleBacktestTestCase(unittest.TestCase):
         self._ensure_market_history_patcher_active = True
 
         with self.db.get_session() as session:
-            closes = [10, 10.2, 10.1, 10.5, 11.0, 11.6, 11.8, 11.2, 10.8, 10.2, 9.9, 10.3, 10.9, 11.4, 11.9, 12.1, 11.7, 11.1, 10.7, 10.4, 10.8, 11.3, 11.8, 12.2]
+            closes = [
+                Decimal("10"),
+                Decimal("10.2"),
+                Decimal("10.1"),
+                Decimal("10.5"),
+                Decimal("11.0"),
+                Decimal("11.6"),
+                Decimal("11.8"),
+                Decimal("11.2"),
+                Decimal("10.8"),
+                Decimal("10.2"),
+                Decimal("9.9"),
+                Decimal("10.3"),
+                Decimal("10.9"),
+                Decimal("11.4"),
+                Decimal("11.9"),
+                Decimal("12.1"),
+                Decimal("11.7"),
+                Decimal("11.1"),
+                Decimal("10.7"),
+                Decimal("10.4"),
+                Decimal("10.8"),
+                Decimal("11.3"),
+                Decimal("11.8"),
+                Decimal("12.2"),
+            ]
             for index, close in enumerate(closes):
                 session.add(
                     StockDaily(
                         code="600519",
                         date=date(2024, 1, 1).fromordinal(date(2024, 1, 1).toordinal() + index),
-                        open=close - 0.1,
-                        high=close + 0.2,
-                        low=close - 0.3,
-                        close=float(close),
+                        open=close - Decimal("0.10"),
+                        high=close + Decimal("0.20"),
+                        low=close - Decimal("0.30"),
+                        close=close,
                     )
                 )
             session.commit()
@@ -487,7 +514,7 @@ class RuleBacktestTestCase(unittest.TestCase):
     def _seed_history(
         self,
         code: str,
-        closes: list[float],
+        closes: list[Decimal],
         *,
         start: date = date(2024, 1, 1),
         data_source: str | None = None,
@@ -501,7 +528,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                         open=float(close) - 0.1,
                         high=float(close) + 0.2,
                         low=max(0.01, float(close) - 0.3),
-                        close=float(close),
+                        close=close,
                         data_source=data_source,
                     )
                 )
@@ -1935,6 +1962,67 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(result.execution_assumptions.indicator_price_basis, "close")
         self.assertEqual(result.execution_assumptions.entry_fill_timing, "next_bar_open")
 
+    def test_engine_consumes_decimal_backed_stored_bars_at_analytics_boundary(self) -> None:
+        decimal_closes = [
+            Decimal(value)
+            for value in (
+                "10.00000001",
+                "10.20000001",
+                "10.10000001",
+                "10.50000001",
+                "11.00000001",
+                "11.60000001",
+                "11.80000001",
+                "11.20000001",
+                "10.80000001",
+                "10.20000001",
+                "9.90000001",
+                "10.30000001",
+                "10.90000001",
+                "11.40000001",
+                "11.90000001",
+                "12.10000001",
+                "11.70000001",
+                "11.10000001",
+                "10.70000001",
+                "10.40000001",
+                "10.80000001",
+                "11.30000001",
+                "11.80000001",
+                "12.20000001",
+            )
+        ]
+        with self.db.get_session() as session:
+            for index, close in enumerate(decimal_closes):
+                session.add(
+                    StockDaily(
+                        code="DECIMAL",
+                        date=date(2024, 1, 1) + timedelta(days=index),
+                        open=close - Decimal("0.1"),
+                        high=close + Decimal("0.2"),
+                        low=close - Decimal("0.3"),
+                        close=close,
+                    )
+                )
+            session.commit()
+
+        with self.db.get_session() as session:
+            bars = session.query(StockDaily).filter(StockDaily.code == "DECIMAL").order_by(StockDaily.date).all()
+
+        self.assertTrue(all(isinstance(bar.close, Decimal) for bar in bars))
+        result = RuleBacktestEngine().run(
+            code="DECIMAL",
+            parsed_strategy=RuleBacktestParser().parse("Buy when Close > MA3. Sell when Close < MA3."),
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            lookback_bars=20,
+        )
+
+        self.assertGreater(result.metrics["trade_count"], 0)
+        self.assertTrue(all(isinstance(point.close, float) for point in result.equity_curve))
+        self.assertTrue(all(isinstance(point.total_portfolio_value, float) for point in result.equity_curve))
+
     def test_engine_fixture_is_deterministic_explicit_and_uses_next_bar_entries(self) -> None:
         parser = RuleBacktestParser()
         parsed = parser.parse("Buy when Close > MA3. Sell when Close < MA3.")
@@ -2503,7 +2591,19 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         self._seed_history(
             "MISS",
-            [100, 101, 102, 103, 104, 105, 106, 170, 108, 109, 110],
+            [
+                Decimal("100"),
+                Decimal("101"),
+                Decimal("102"),
+                Decimal("103"),
+                Decimal("104"),
+                Decimal("105"),
+                Decimal("106"),
+                Decimal("170"),
+                Decimal("108"),
+                Decimal("109"),
+                Decimal("110"),
+            ],
             start=date(2024, 1, 1),
         )
         with self.db.get_session() as session:
@@ -2576,6 +2676,10 @@ class RuleBacktestTestCase(unittest.TestCase):
     def test_service_run_backtest_fetches_missing_us_history_via_shared_local_first_helper(self) -> None:
         self._allow_market_history_fetch()
         service = RuleBacktestService(self.db)
+        source_close_tokens = [
+            f"{100 + index}.00000000"
+            for index in range(24)
+        ]
         frame = pd.DataFrame(
             [
                 {
@@ -2593,6 +2697,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 ]
             ]
         )
+        frame = attach_stock_daily_close_tokens(frame, source_close_tokens)
         frame.attrs.update(
             {
                 "adjustments_available": True,
@@ -2638,9 +2743,40 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(daily_rows[0].date.isoformat(), "2024-01-01")
         self.assertEqual(daily_rows[-1].date.isoformat(), "2024-01-24")
 
+    def test_local_us_float_history_is_not_hydrated_into_relational_storage(self) -> None:
+        self._allow_market_history_fetch()
+        service = RuleBacktestService(self.db)
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": (date(2024, 1, 1) + timedelta(days=index)).isoformat(),
+                    "open": 100.0 + index,
+                    "high": 101.0 + index,
+                    "low": 99.0 + index,
+                    "close": 100.5 + index,
+                    "volume": 1000,
+                }
+                for index in range(3)
+            ]
+        )
+
+        with patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(frame, "local_us_parquet"),
+        ), patch.object(service.stock_repo, "save_dataframe") as save_mock:
+            result = service._ensure_market_history(
+                code="AAPL",
+                load_count=3,
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 1, 3),
+            )
+
+        self.assertEqual(result, 0)
+        save_mock.assert_not_called()
+
     def test_service_run_backtest_missing_adjustments_fails_closed(self) -> None:
         service = RuleBacktestService(self.db)
-        self._seed_history("AAPL", [100.0 + index for index in range(24)])
+        self._seed_history("AAPL", [Decimal("100") + Decimal(index) for index in range(24)])
 
         with patch.object(service, "_get_llm_adapter", return_value=None):
             response = service.run_backtest(
@@ -2723,7 +2859,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_service_applies_custom_benchmark_context_for_custom_code_mode(self) -> None:
         service = RuleBacktestService(self.db)
-        self._seed_history("SPY", [100.0 + index for index in range(30)])
+        self._seed_history("SPY", [Decimal("100") + Decimal(index) for index in range(30)])
 
         with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
             service,
@@ -2767,7 +2903,17 @@ class RuleBacktestTestCase(unittest.TestCase):
     def test_custom_benchmark_context_uses_stored_rows_without_provider_or_market_cache(self) -> None:
         self._allow_market_history_fetch()
         service = RuleBacktestService(self.db)
-        self._seed_history("SPY", [100.0, 101.0, 103.0, 102.0, 104.0, 106.0])
+        self._seed_history(
+            "SPY",
+            [
+                Decimal("100.0"),
+                Decimal("101.0"),
+                Decimal("103.0"),
+                Decimal("102.0"),
+                Decimal("104.0"),
+                Decimal("106.0"),
+            ],
+        )
         selection = service._resolve_benchmark_selection(
             instrument_code="600519",
             benchmark_mode="custom_code",
@@ -3082,7 +3228,12 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_run_backtest_persists_custom_monte_carlo_robustness_config(self) -> None:
         service = RuleBacktestService(self.db)
-        closes = [100.0 + (index * 0.35) + ((-1) ** index) * 1.0 for index in range(96)]
+        closes = [
+            Decimal("100")
+            + Decimal(index) * Decimal("0.35")
+            + Decimal((-1) ** index)
+            for index in range(96)
+        ]
         self._seed_history(
             "AAPL",
             closes,
@@ -3266,7 +3417,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         self._seed_history(
             "000001",
-            [100.0 + (index * 0.3) + ((-1) ** index) * 1.1 for index in range(96)],
+            [
+                Decimal("100")
+                + Decimal(index) * Decimal("0.3")
+                + Decimal((-1) ** index) * Decimal("1.1")
+                for index in range(96)
+            ],
             start=date(2024, 1, 1),
         )
 
@@ -3386,12 +3542,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         self._seed_history(
             "AAPL",
-            [100.0 + (index * 0.2) for index in range(80)],
+            [Decimal("100") + Decimal(index) * Decimal("0.2") for index in range(80)],
             start=date(2024, 1, 1),
         )
         self._seed_history(
             "MSFT",
-            [200.0 + (index * 0.15) for index in range(80)],
+            [Decimal("200") + Decimal(index) * Decimal("0.15") for index in range(80)],
             start=date(2024, 1, 1),
         )
 
@@ -4253,7 +4409,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         self._seed_history(
             "000001",
-            [100.0 + (index * 0.3) + ((-1) ** index) * 1.1 for index in range(96)],
+            [
+                Decimal("100")
+                + Decimal(index) * Decimal("0.3")
+                + Decimal((-1) ** index) * Decimal("1.1")
+                for index in range(96)
+            ],
             start=date(2024, 1, 1),
         )
 
@@ -4318,7 +4479,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         self._seed_history(
             "000001",
-            [100.0 + (index * 0.3) + ((-1) ** index) * 1.1 for index in range(96)],
+            [
+                Decimal("100")
+                + Decimal(index) * Decimal("0.3")
+                + Decimal((-1) ** index) * Decimal("1.1")
+                for index in range(96)
+            ],
             start=date(2024, 1, 1),
         )
 
@@ -4349,7 +4515,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         self._seed_history(
             "000001",
-            [100.0 + (index * 0.3) + ((-1) ** index) * 1.1 for index in range(96)],
+            [
+                Decimal("100")
+                + Decimal(index) * Decimal("0.3")
+                + Decimal((-1) ** index) * Decimal("1.1")
+                for index in range(96)
+            ],
             start=date(2024, 1, 1),
         )
 

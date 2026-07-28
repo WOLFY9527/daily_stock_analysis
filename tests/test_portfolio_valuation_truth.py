@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import os
 import tempfile
 import unittest
@@ -56,7 +58,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
                 os.environ[key] = value
         self.temp_dir.cleanup()
 
-    def _save_close(self, symbol: str, on_date: date, close: float) -> None:
+    def _save_close(self, symbol: str, on_date: date, close: Decimal) -> None:
         frame = pd.DataFrame(
             [
                 {
@@ -88,7 +90,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -96,12 +98,12 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 1, 1),
             side="buy",
-            quantity=1.0,
-            price=100.0,
+            quantity=Decimal("1.0"),
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 2), 100.0)
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("100.0"))
 
         snapshot = self.service.get_portfolio_snapshot(
             account_id=account_id,
@@ -122,7 +124,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             [
                 {
                     "component": f"account:{account_id}:position:AAPL:us:USD",
-                    "amount": 100.0,
+                    "amount": "100.00000000",
                     "currency": "USD",
                 }
             ],
@@ -135,7 +137,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=cash_account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=25.0,
+            amount=Decimal("25.0"),
             currency="USD",
         )
         cash_snapshot = self.service.get_portfolio_snapshot(
@@ -149,18 +151,62 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             [
                 {
                     "component": f"account:{cash_account_id}:cash:USD",
-                    "amount": 25.0,
+                    "amount": "25.00000000",
                     "currency": "USD",
                 }
             ],
         )
+
+        sub_minor_account_id = self._create_account(name="Sub-minor FX", base_currency="CNY")
+        self.service.record_trade(
+            account_id=sub_minor_account_id,
+            symbol="MSFT",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=Decimal("0.00000001"),
+            price=Decimal("400000.00000000"),
+            market="us",
+            currency="USD",
+        )
+        self._save_close("MSFT", date(2026, 1, 2), Decimal("400000.00000000"))
+        sub_minor_cold = self.service.get_portfolio_snapshot(
+            account_id=sub_minor_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+        sub_minor_warm = self.service.get_portfolio_snapshot(
+            account_id=sub_minor_account_id,
+            as_of=date(2026, 1, 2),
+            cost_method="fifo",
+        )
+
+        expected_sub_minor_native_values = [
+            {
+                "component": f"account:{sub_minor_account_id}:cash:USD",
+                "amount": "-0.00400000",
+                "currency": "USD",
+            },
+            {
+                "component": f"account:{sub_minor_account_id}:position:MSFT:us:USD",
+                "amount": "0.00400000",
+                "currency": "USD",
+            },
+        ]
+        for sub_minor_snapshot in (sub_minor_cold, sub_minor_warm):
+            valuation = sub_minor_snapshot["availability"]["valuation"]
+            self.assertEqual(valuation["state"], "unavailable")
+            self.assertEqual(valuation["covered_component_count"], 0)
+            self.assertEqual(valuation["unavailable_component_count"], 2)
+            self.assertEqual(valuation["missing_fx_pairs"], ["USD/CNY"])
+            self.assertEqual(valuation["unavailable_native_values"], expected_sub_minor_native_values)
+            self.assertEqual(sub_minor_snapshot["performance"]["calculation_state"], "unavailable")
 
         covered_account_id = self._create_account(name="Covered", base_currency="CNY")
         self.service.record_cash_ledger(
             account_id=covered_account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="CNY",
         )
         partial = self.service.get_portfolio_snapshot(as_of=date(2026, 1, 2), cost_method="fifo")
@@ -209,7 +255,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=unavailable_account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=25.0,
+            amount=Decimal("25.0"),
             currency="USD",
         )
         unavailable = self.service.get_portfolio_snapshot(
@@ -228,14 +274,14 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=partial_account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=25.0,
+            amount=Decimal("25.0"),
             currency="USD",
         )
         self.service.record_cash_ledger(
             account_id=partial_account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="CNY",
         )
         partial = self.service.get_portfolio_snapshot(
@@ -251,15 +297,15 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         zero_account_id = self._create_account(name="Fully Valued Zero", base_currency="USD")
         self.service.record_trade(
             account_id=zero_account_id,
-            symbol="ZERO",
+            symbol="AAPL",
             trade_date=date(2026, 1, 1),
             side="buy",
-            quantity=1.0,
-            price=100.0,
+            quantity=Decimal("1.0"),
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("ZERO", date(2026, 1, 2), 100.0)
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("100.0"))
         fully_valued_zero = self.service.get_portfolio_snapshot(
             account_id=zero_account_id,
             as_of=date(2026, 1, 2),
@@ -272,15 +318,15 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
         nonzero_account_id = self._create_account(name="Fully Valued Nonzero", base_currency="USD")
         self.service.record_trade(
             account_id=nonzero_account_id,
-            symbol="NONZERO",
+            symbol="MSFT",
             trade_date=date(2026, 1, 1),
             side="buy",
-            quantity=1.0,
-            price=100.0,
+            quantity=Decimal("1.0"),
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("NONZERO", date(2026, 1, 2), 110.0)
+        self._save_close("MSFT", date(2026, 1, 2), Decimal("110.0"))
         fully_valued_nonzero = self.service.get_portfolio_snapshot(
             account_id=nonzero_account_id,
             as_of=date(2026, 1, 2),
@@ -293,9 +339,9 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
     def test_multicurrency_components_keep_price_income_fees_fx_and_cash_distinct(self) -> None:
         account_id = self._create_account(base_currency="CNY")
         for rate_date, rate in (
-            (date(2026, 2, 1), 7.0),
-            (date(2026, 2, 2), 7.5),
-            (date(2026, 2, 3), 8.0),
+            (date(2026, 2, 1), Decimal("7.0")),
+            (date(2026, 2, 2), Decimal("7.5")),
+            (date(2026, 2, 3), Decimal("8.0")),
         ):
             self.service.repo.save_fx_rate(
                 from_currency="USD",
@@ -309,7 +355,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 2, 1),
             direction="in",
-            amount=200.0,
+            amount=Decimal("200.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -317,9 +363,9 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 2, 1),
             side="buy",
-            quantity=1.0,
-            price=100.0,
-            fee=2.0,
+            quantity=Decimal("1.0"),
+            price=Decimal("100.0"),
+            fee=Decimal("2.0"),
             market="us",
             currency="USD",
         )
@@ -330,9 +376,9 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=5.0,
+            cash_dividend_per_share=Decimal("5.0"),
         )
-        self._save_close("AAPL", date(2026, 2, 3), 110.0)
+        self._save_close("AAPL", date(2026, 2, 3), Decimal("110.0"))
 
         snapshot = self.service.get_portfolio_snapshot(
             account_id=account_id,
@@ -361,7 +407,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 3, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
         first = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 3, 1))
@@ -369,7 +415,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 3, 2),
             direction="in",
-            amount=500.0,
+            amount=Decimal("500.0"),
             currency="USD",
         )
         second = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 3, 2))
@@ -377,7 +423,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 3, 3),
             direction="out",
-            amount=400.0,
+            amount=Decimal("400.0"),
             currency="USD",
         )
         third = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 3, 3))
@@ -393,22 +439,22 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 3, 4),
             side="buy",
-            quantity=10.0,
-            price=100.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 3, 4), 100.0)
+        self._save_close("AAPL", date(2026, 3, 4), Decimal("100.0"))
         self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 3, 4))
         self.service.record_cash_ledger(
             account_id=account_id,
             event_date=date(2026, 3, 5),
             direction="out",
-            amount=50.0,
+            amount=Decimal("50.0"),
             currency="USD",
         )
         fourth = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 3, 5))
-        self._save_close("AAPL", date(2026, 3, 6), 90.0)
+        self._save_close("AAPL", date(2026, 3, 6), Decimal("90.0"))
         fifth = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 3, 6))
 
         self.assertEqual(fourth["performance"]["pnl"]["net"], 0.0)
@@ -432,7 +478,7 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 4, 1),
             direction="in",
-            amount=2000.0,
+            amount=Decimal("2000.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -440,9 +486,9 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             symbol="MSFT",
             trade_date=date(2026, 4, 1),
             side="buy",
-            quantity=10.0,
-            price=100.0,
-            fee=10.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("100.0"),
+            fee=Decimal("10.0"),
             market="us",
             currency="USD",
         )
@@ -453,9 +499,9 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=5.0,
+            cash_dividend_per_share=Decimal("5.0"),
         )
-        self._save_close("MSFT", date(2026, 4, 3), 110.0)
+        self._save_close("MSFT", date(2026, 4, 3), Decimal("110.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 4, 3))
 
@@ -479,12 +525,12 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 5, 1),
             side="buy",
-            quantity=1.0,
-            price=100.0,
+            quantity=Decimal("1.0"),
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 5, 2), 110.0)
+        self._save_close("AAPL", date(2026, 5, 2), Decimal("110.0"))
 
         snapshot = self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 5, 2))
 
@@ -501,14 +547,14 @@ class PortfolioValuationTruthTestCase(unittest.TestCase):
             account_id=first_id,
             event_date=date(2026, 6, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
         self.service.record_cash_ledger(
             account_id=second_id,
             event_date=date(2026, 6, 1),
             direction="in",
-            amount=3000.0,
+            amount=Decimal("3000.0"),
             currency="USD",
         )
 

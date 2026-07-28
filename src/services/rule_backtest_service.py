@@ -55,6 +55,7 @@ from src.services.rule_backtest_support_exports import (
     resolve_stored_robustness_evidence_payload,
 )
 from src.services.rule_backtest_text_completion import RuleBacktestTextCompletion, create_rule_backtest_text_completion
+from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
 from src.utils.symbol_normalization import normalize_stock_code, parse_canonical_symbol
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
@@ -3981,6 +3982,9 @@ class RuleBacktestService:
                 )
                 if df is None or df.empty:
                     return 0
+                if not isinstance(df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR), dict):
+                    logger.warning("Rejected rule backtest date-range hydration for %s: exact close provenance missing", code)
+                    return 0
                 self._remember_adjusted_close_values(code, df)
                 authority = assess_backtest_data_source_eligibility(code=code, source=source)
                 if authority.rejected:
@@ -4014,6 +4018,9 @@ class RuleBacktestService:
                 allow_provider_fallback=False,
             )
             if df is None or df.empty:
+                return 0
+            if not isinstance(df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR), dict):
+                logger.warning("Rejected rule backtest history hydration for %s: exact close provenance missing", code)
                 return 0
             self._remember_adjusted_close_values(code, df)
             authority = assess_backtest_data_source_eligibility(code=code, source=source)

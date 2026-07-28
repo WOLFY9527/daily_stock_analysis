@@ -5,13 +5,19 @@ from __future__ import annotations
 
 import logging
 import os
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 import pandas as pd
 import requests
 
-from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
+from .base import (
+    BaseFetcher,
+    DataFetchError,
+    STANDARD_COLUMNS,
+    attach_stock_daily_close_tokens,
+)
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
 from src.services.uat_provider_isolation import require_uat_provider_transport_allowed
@@ -203,7 +209,7 @@ class AlpacaFetcher(BaseFetcher):
             timeout=self.timeout,
         )
         response.raise_for_status()
-        payload = response.json()
+        payload = response.json(parse_float=Decimal, parse_int=Decimal)
         if isinstance(payload, dict) and payload.get("message"):
             # Alpaca 4xx payloads commonly use {"message": "..."}.
             if response.status_code >= 400:
@@ -275,6 +281,7 @@ class AlpacaFetcher(BaseFetcher):
                 "vw": "vwap",
             }
         )
+        normalized["__wolfystock_stock_daily_close_token"] = normalized.get("close")
         normalized["date"] = pd.to_datetime(normalized["date"], utc=True, errors="coerce").dt.tz_localize(None)
         normalized["amount"] = pd.to_numeric(normalized.get("vwap"), errors="coerce") * pd.to_numeric(
             normalized.get("volume"),
@@ -282,9 +289,11 @@ class AlpacaFetcher(BaseFetcher):
         )
         normalized["pct_chg"] = pd.to_numeric(normalized["close"], errors="coerce").pct_change().fillna(0.0) * 100.0
         normalized["code"] = str(stock_code or "").strip().upper()
-        keep_cols = ["code", *STANDARD_COLUMNS]
+        keep_cols = ["code", *STANDARD_COLUMNS, "__wolfystock_stock_daily_close_token"]
         normalized = normalized[keep_cols].dropna(subset=["date", "open", "high", "low", "close"])
-        return normalized.reset_index(drop=True)
+        normalized = normalized.reset_index(drop=True)
+        raw_close_tokens = normalized.pop("__wolfystock_stock_daily_close_token").tolist()
+        return attach_stock_daily_close_tokens(normalized, raw_close_tokens)
 
     def get_daily_data(
         self,

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from decimal import Decimal
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -382,14 +383,14 @@ class MultiUserOwnershipIsolationTestCase(unittest.TestCase):
             )
             session.add_all(
                 [
-                    StockDaily(code="600519", date=date(2024, 1, 1), open=100.0, high=101.0, low=99.0, close=100.0),
-                    StockDaily(code="600519", date=date(2024, 1, 2), open=105.0, high=111.0, low=100.0, close=105.0),
-                    StockDaily(code="600519", date=date(2024, 1, 3), open=106.0, high=108.0, low=103.0, close=106.0),
-                    StockDaily(code="600519", date=date(2024, 1, 4), open=107.0, high=109.0, low=104.0, close=107.0),
-                    StockDaily(code="000001", date=date(2024, 1, 1), open=10.0, high=10.2, low=9.8, close=10.0),
-                    StockDaily(code="000001", date=date(2024, 1, 2), open=9.6, high=10.0, low=9.0, close=9.3),
-                    StockDaily(code="000001", date=date(2024, 1, 3), open=9.2, high=9.5, low=9.0, close=9.1),
-                    StockDaily(code="000001", date=date(2024, 1, 4), open=9.1, high=9.4, low=8.9, close=9.0),
+                    StockDaily(code="600519", date=date(2024, 1, 1), open=100.0, high=101.0, low=99.0, close=Decimal("100")),
+                    StockDaily(code="600519", date=date(2024, 1, 2), open=105.0, high=111.0, low=100.0, close=Decimal("105")),
+                    StockDaily(code="600519", date=date(2024, 1, 3), open=106.0, high=108.0, low=103.0, close=Decimal("106")),
+                    StockDaily(code="600519", date=date(2024, 1, 4), open=107.0, high=109.0, low=104.0, close=Decimal("107")),
+                    StockDaily(code="000001", date=date(2024, 1, 1), open=10.0, high=10.2, low=9.8, close=Decimal("10")),
+                    StockDaily(code="000001", date=date(2024, 1, 2), open=9.6, high=10.0, low=9.0, close=Decimal("9.3")),
+                    StockDaily(code="000001", date=date(2024, 1, 3), open=9.2, high=9.5, low=9.0, close=Decimal("9.1")),
+                    StockDaily(code="000001", date=date(2024, 1, 4), open=9.1, high=9.4, low=8.9, close=Decimal("9")),
                 ]
             )
             session.commit()

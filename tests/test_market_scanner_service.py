@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +21,14 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager, normalize_stock_code
+from data_provider.base import (
+    BaseFetcher,
+    DataFetchError,
+    DataFetcherManager,
+    attach_stock_daily_close_tokens,
+    normalize_stock_code,
+)
+from src.portfolio_exact_numeric import PortfolioExactNumericError, STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.repositories.stock_repo import StockRepository
 from src.core.scanner_profile import get_scanner_profile
 from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner_theme
@@ -62,7 +70,7 @@ def _make_history(
     volumes = np.array([volume_base * (1.0 + 0.08 * np.cos(idx / 6.0)) for idx in range(bars)], dtype=float)
     amounts = closes * volumes
     pct_chg = pd.Series(closes).pct_change().fillna(0.0) * 100.0
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "date": dates,
             "open": opens,
@@ -74,6 +82,9 @@ def _make_history(
             "pct_chg": pct_chg,
         }
     )
+    # This fixture models provider-supplied canonical quote text before its
+    # independent numeric analytics projection is used by scanner tests.
+    return attach_stock_daily_close_tokens(frame, [f"{value:.8f}" for value in closes])
 
 
 class FakeScannerDataManager:
@@ -827,12 +838,99 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         market_cache.clear()
         DatabaseManager.reset_instance()
 
-    def _make_review_df(self, rows: list[tuple[str, float, float, float]]) -> pd.DataFrame:
+    def test_normalize_history_frame_rejects_malformed_close_provenance(self) -> None:
+        history = _make_history(start_price=11.0, slope=0.085, amount_base=9.0e8, volume_base=48_000_000)
+        history.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = ["not", "a mapping"]
+
+        normalized = self.service._normalize_history_frame(history)
+
+        self.assertTrue(normalized.empty)
+
+    def test_remote_float_history_remains_analytics_available_and_reports_not_persisted(self) -> None:
+        history = self.data_manager.histories["600002"].copy()
+        history.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+        self.data_manager.histories["600002"] = history
+
+        loaded, diagnostics = self.service._load_history_remote_after_local(
+            code="600002",
+            profile=get_scanner_profile(market="cn"),
+            local_df=pd.DataFrame(),
+            persist_remote=True,
+        )
+
+        self.assertFalse(loaded.empty)
+        self.assertEqual(diagnostics["cache_write_state"], "not_persisted")
+        self.assertEqual(diagnostics["cache_write_reason"], "exact_close_provenance_missing")
+        self.assertEqual(self.stock_repo.get_recent_daily_rows(code="600002", limit=1), [])
+
+        valid_history = self.data_manager.histories["600002"].copy()
+        self.data_manager.histories["600002"] = attach_stock_daily_close_tokens(
+            valid_history,
+            [f"{value:.8f}" for value in valid_history["close"]],
+        )
+        with patch.object(
+            self.service.stock_repo,
+            "save_dataframe",
+            side_effect=PortfolioExactNumericError("exact close rejected"),
+        ):
+            loaded, diagnostics = self.service._load_history_remote_after_local(
+                code="600002",
+                profile=get_scanner_profile(market="cn"),
+                local_df=pd.DataFrame(),
+                persist_remote=True,
+            )
+
+        self.assertFalse(loaded.empty)
+        self.assertFalse(diagnostics["network_failed"])
+        self.assertEqual(diagnostics["cache_write_state"], "not_persisted")
+        self.assertEqual(diagnostics["cache_write_reason"], "exact_close_rejected")
+
+    def test_parallel_remote_float_history_reports_not_persisted_in_diagnostics(self) -> None:
+        history = self.data_manager.histories["600002"].copy()
+        history.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+        self.data_manager.histories["600002"] = history
+
+        results = self.service._load_detail_histories_ordered(
+            preselected_rows=[{"code": "600002", "name": "机器人核心"}],
+            profile=get_scanner_profile(market="cn"),
+        )
+
+        self.assertEqual(len(results), 1)
+        _, loaded, diagnostics = results[0]
+        self.assertFalse(loaded.empty)
+        self.assertEqual(diagnostics["cache_write_state"], "not_persisted")
+        self.assertEqual(diagnostics["cache_write_reason"], "exact_close_provenance_missing")
+        self.assertEqual(self.stock_repo.get_recent_daily_rows(code="600002", limit=1), [])
+
+        valid_history = self.data_manager.histories["600002"].copy()
+        self.data_manager.histories["600002"] = attach_stock_daily_close_tokens(
+            valid_history,
+            [f"{value:.8f}" for value in valid_history["close"]],
+        )
+        with patch.object(
+            self.service.stock_repo,
+            "save_dataframe",
+            side_effect=PortfolioExactNumericError("exact close rejected"),
+        ):
+            results = self.service._load_detail_histories_ordered(
+                preselected_rows=[{"code": "600002", "name": "机器人核心"}],
+                profile=get_scanner_profile(market="cn"),
+            )
+
+        self.assertEqual(len(results), 1)
+        _, loaded, diagnostics = results[0]
+        self.assertFalse(loaded.empty)
+        self.assertFalse(diagnostics["network_failed"])
+        self.assertEqual(diagnostics["cache_write_state"], "not_persisted")
+        self.assertEqual(diagnostics["cache_write_reason"], "exact_close_rejected")
+
+    def _make_review_df(self, rows: list[tuple[str, Decimal, float, float]]) -> pd.DataFrame:
         dates = pd.to_datetime([item[0] for item in rows])
-        closes = [item[1] for item in rows]
+        close_tokens = [item[1] for item in rows]
+        closes = [float(value) for value in close_tokens]
         highs = [item[2] for item in rows]
         lows = [item[3] for item in rows]
-        return pd.DataFrame(
+        frame = pd.DataFrame(
             {
                 "date": dates,
                 "open": closes,
@@ -844,6 +942,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 "pct_chg": pd.Series(closes).pct_change().fillna(0.0) * 100.0,
             }
         )
+        return attach_stock_daily_close_tokens(frame, close_tokens)
 
     def _set_run_timestamps(self, run_id: int, run_at_iso: str, completed_at_iso: str) -> None:
         with self.db.get_session() as session:
@@ -956,32 +1055,32 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
     def _seed_review_watchlists(self) -> tuple[int, int]:
         rows_600001 = [
-            ("2026-04-09", 10.0, 10.2, 9.8),
-            ("2026-04-10", 10.2, 10.4, 10.0),
-            ("2026-04-13", 10.7, 10.9, 10.4),
-            ("2026-04-14", 11.1, 11.3, 10.8),
-            ("2026-04-15", 11.0, 11.2, 10.7),
+            ("2026-04-09", Decimal("10.0"), 10.2, 9.8),
+            ("2026-04-10", Decimal("10.2"), 10.4, 10.0),
+            ("2026-04-13", Decimal("10.7"), 10.9, 10.4),
+            ("2026-04-14", Decimal("11.1"), 11.3, 10.8),
+            ("2026-04-15", Decimal("11.0"), 11.2, 10.7),
         ]
         rows_600002 = [
-            ("2026-04-09", 9.5, 9.7, 9.3),
-            ("2026-04-10", 9.4, 9.6, 9.2),
-            ("2026-04-13", 9.2, 9.3, 8.9),
-            ("2026-04-14", 9.0, 9.1, 8.8),
-            ("2026-04-15", 8.9, 9.0, 8.7),
+            ("2026-04-09", Decimal("9.5"), 9.7, 9.3),
+            ("2026-04-10", Decimal("9.4"), 9.6, 9.2),
+            ("2026-04-13", Decimal("9.2"), 9.3, 8.9),
+            ("2026-04-14", Decimal("9.0"), 9.1, 8.8),
+            ("2026-04-15", Decimal("8.9"), 9.0, 8.7),
         ]
         rows_300123 = [
-            ("2026-04-09", 20.0, 20.2, 19.8),
-            ("2026-04-10", 20.5, 20.8, 20.1),
-            ("2026-04-13", 21.3, 21.8, 21.0),
-            ("2026-04-14", 21.8, 22.2, 21.5),
-            ("2026-04-15", 22.1, 22.5, 21.8),
+            ("2026-04-09", Decimal("20.0"), 20.2, 19.8),
+            ("2026-04-10", Decimal("20.5"), 20.8, 20.1),
+            ("2026-04-13", Decimal("21.3"), 21.8, 21.0),
+            ("2026-04-14", Decimal("21.8"), 22.2, 21.5),
+            ("2026-04-15", Decimal("22.1"), 22.5, 21.8),
         ]
         rows_benchmark = [
-            ("2026-04-09", 4000.0, 4010.0, 3990.0),
-            ("2026-04-10", 4020.0, 4035.0, 4010.0),
-            ("2026-04-13", 4040.0, 4055.0, 4030.0),
-            ("2026-04-14", 4050.0, 4065.0, 4040.0),
-            ("2026-04-15", 4060.0, 4075.0, 4050.0),
+            ("2026-04-09", Decimal("4000.0"), 4010.0, 3990.0),
+            ("2026-04-10", Decimal("4020.0"), 4035.0, 4010.0),
+            ("2026-04-13", Decimal("4040.0"), 4055.0, 4030.0),
+            ("2026-04-14", Decimal("4050.0"), 4065.0, 4040.0),
+            ("2026-04-15", Decimal("4060.0"), 4075.0, 4050.0),
         ]
         self.stock_repo.save_dataframe(self._make_review_df(rows_600001), "600001", data_source="ReviewFixture")
         self.stock_repo.save_dataframe(self._make_review_df(rows_600002), "600002", data_source="ReviewFixture")
@@ -3701,20 +3800,20 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         stock_repo.get_recent_daily_rows.return_value = [
             SimpleNamespace(
                 date=pd.Timestamp("2026-04-10").date(),
-                open=10.0,
-                high=10.5,
-                low=9.8,
-                close=10.2,
+                open=Decimal("10.0"),
+                high=Decimal("10.5"),
+                low=Decimal("9.8"),
+                close=Decimal("10.2"),
                 volume=1_000_000,
                 amount=10_200_000,
                 pct_chg=2.0,
             ),
             SimpleNamespace(
                 date=pd.Timestamp("2026-04-11").date(),
-                open=10.2,
-                high=10.8,
-                low=10.1,
-                close=10.6,
+                open=Decimal("10.2"),
+                high=Decimal("10.8"),
+                low=Decimal("10.1"),
+                close=Decimal("10.6"),
                 volume=1_100_000,
                 amount=11_660_000,
                 pct_chg=3.92,
@@ -3725,7 +3824,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         frame = self.service._load_local_history("600001", history_days=2)
 
         stock_repo.get_recent_daily_rows.assert_called_once_with(code="600001", limit=2)
+        self.assertTrue(pd.api.types.is_numeric_dtype(frame["close"]))
         self.assertEqual(frame["close"].tolist(), [10.2, 10.6])
+        self.assertEqual(frame["date"].dt.date.tolist(), [date(2026, 4, 10), date(2026, 4, 11)])
 
     def test_run_scan_rejects_unknown_market_profile(self) -> None:
         with self.assertRaises(ValueError):

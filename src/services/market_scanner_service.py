@@ -16,7 +16,7 @@ import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 
-from data_provider.base import DataFetcherManager
+from data_provider.base import DataFetcherManager, attach_stock_daily_close_tokens
 from src.config import get_config
 from src.core.scanner_profile import ScannerMarketProfile, get_scanner_profile
 from src.core.scanner_skip_reason import normalize_scanner_skip_reason
@@ -24,6 +24,7 @@ from src.core.scanner_theme_registry import ScannerTheme, get_scanner_theme
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.core.trading_calendar import MARKET_TIMEZONE, is_market_open
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normalize_scope
+from src.portfolio_exact_numeric import PortfolioExactNumericError, STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import apply_source_confidence_caps, coerce_source_confidence_contract
@@ -94,6 +95,7 @@ from src.utils.symbol_classification import (
 from src.utils.symbol_normalization import normalize_stock_code, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
+_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN = "__wolfystock_scanner_close_token"
 
 BaoStockHistoryObservationResolver = Callable[[str, Mapping[str, Any]], Optional[Mapping[str, Any]]]
 
@@ -7589,7 +7591,14 @@ class MarketScannerService:
                         and history_source
                         and history_source not in {"local_db", "local_partial_fallback", "unavailable"}
                     ):
-                        self.stock_repo.save_dataframe(history_df, normalized_code, history_source)
+                        history_diag = {
+                            **history_diag,
+                            **self._persist_remote_history_if_qualified(
+                                history_df=history_df,
+                                code=normalized_code,
+                                source=history_source,
+                            ),
+                        }
                     results[index] = (row, history_df, history_diag)
 
         return [item for item in results if item is not None]
@@ -7633,6 +7642,27 @@ class MarketScannerService:
             persist_remote=True,
         )
 
+    def _persist_remote_history_if_qualified(
+        self,
+        *,
+        history_df: pd.DataFrame,
+        code: str,
+        source: str,
+    ) -> Dict[str, str]:
+        if not isinstance(history_df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR), dict):
+            return {
+                "cache_write_state": "not_persisted",
+                "cache_write_reason": "exact_close_provenance_missing",
+            }
+        try:
+            self.stock_repo.save_dataframe(history_df, code, source)
+        except PortfolioExactNumericError:
+            return {
+                "cache_write_state": "not_persisted",
+                "cache_write_reason": "exact_close_rejected",
+            }
+        return {}
+
     def _load_history_remote_after_local(
         self,
         *,
@@ -7652,8 +7682,15 @@ class MarketScannerService:
                 )
                 normalized_remote_df = self._normalize_history_frame(remote_df)
                 if not normalized_remote_df.empty:
-                    if persist_remote:
-                        self.stock_repo.save_dataframe(normalized_remote_df, normalized_code, remote_source)
+                    cache_diag = (
+                        self._persist_remote_history_if_qualified(
+                            history_df=normalized_remote_df,
+                            code=normalized_code,
+                            source=remote_source,
+                        )
+                        if persist_remote
+                        else {}
+                    )
                     latest_trade_date = (
                         pd.to_datetime(normalized_remote_df["date"]).max().date().isoformat()
                         if "date" in normalized_remote_df.columns
@@ -7670,6 +7707,7 @@ class MarketScannerService:
                             "network_used": remote_source != "local_us_parquet",
                             "network_failed": False,
                             "partial_local_fallback": False,
+                            **cache_diag,
                         },
                     )
             except Exception as exc:
@@ -7715,8 +7753,15 @@ class MarketScannerService:
             )
             normalized_remote_df = self._normalize_history_frame(remote_df)
             if not normalized_remote_df.empty:
-                if persist_remote:
-                    self.stock_repo.save_dataframe(normalized_remote_df, normalized_code, remote_source)
+                cache_diag = (
+                    self._persist_remote_history_if_qualified(
+                        history_df=normalized_remote_df,
+                        code=normalized_code,
+                        source=remote_source,
+                    )
+                    if persist_remote
+                    else {}
+                )
                 latest_trade_date = (
                     pd.to_datetime(normalized_remote_df["date"]).max().date().isoformat()
                     if "date" in normalized_remote_df.columns
@@ -7733,6 +7778,7 @@ class MarketScannerService:
                         "network_used": True,
                         "network_failed": False,
                         "partial_local_fallback": False,
+                        **cache_diag,
                     },
                 )
         except Exception as exc:
@@ -8072,6 +8118,11 @@ class MarketScannerService:
             return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume", "amount", "pct_chg"])
 
         df = history_df.copy()
+        has_existing_close_tokens = STOCK_DAILY_CLOSE_PROVENANCE_ATTR in df.attrs
+        existing_close_tokens = df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+        df.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+        if has_existing_close_tokens and not isinstance(existing_close_tokens, dict):
+            return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume", "amount", "pct_chg"])
         rename_map = {}
         for source_name, target_name in (
             ("日期", "date"),
@@ -8092,6 +8143,9 @@ class MarketScannerService:
             if column not in df.columns:
                 df[column] = np.nan
 
+        if not has_existing_close_tokens:
+            df[_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN] = df["close"]
+
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
         for column in ("open", "high", "low", "close", "volume", "amount", "pct_chg"):
             df[column] = pd.to_numeric(df[column], errors="coerce")
@@ -8101,7 +8155,14 @@ class MarketScannerService:
             df["amount"] = df["amount"].fillna(df["close"] * df["volume"].fillna(0.0))
         df = df.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
         df["date"] = df["date"].dt.tz_localize(None)
-        return df
+        if has_existing_close_tokens:
+            raw_close_tokens = [
+                existing_close_tokens.get(row_date.date().isoformat())
+                for row_date in df["date"].tolist()
+            ]
+        else:
+            raw_close_tokens = df.pop(_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN).tolist()
+        return attach_stock_daily_close_tokens(df, raw_close_tokens)
 
     def _build_candidate_from_history(
         self,

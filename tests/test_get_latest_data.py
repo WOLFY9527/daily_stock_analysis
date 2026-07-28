@@ -14,6 +14,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pandas as pd
 
@@ -39,7 +40,7 @@ class GetLatestDataTestCase(unittest.TestCase):
         DatabaseManager.reset_instance()
         self._temp_dir.cleanup()
 
-    def _insert_stock_data(self, code: str, days_ago: int, close: float) -> None:
+    def _insert_stock_data(self, code: str, days_ago: int, close: Decimal) -> None:
         """插入测试用股票数据"""
         target_date = date.today() - timedelta(days=days_ago)
         df = pd.DataFrame([{
@@ -63,7 +64,7 @@ class GetLatestDataTestCase(unittest.TestCase):
         """返回正确数量的数据"""
         # 插入5天数据
         for i in range(5):
-            self._insert_stock_data("600519", days_ago=i, close=100.0 + i)
+            self._insert_stock_data("600519", days_ago=i, close=Decimal("100.00") + Decimal(i))
 
         # 请求2天数据
         result = self.db.get_latest_data("600519", days=2)
@@ -77,7 +78,7 @@ class GetLatestDataTestCase(unittest.TestCase):
         """验证数据按日期降序排列"""
         # 插入3天数据
         for i in range(3):
-            self._insert_stock_data("600519", days_ago=i, close=100.0 + i)
+            self._insert_stock_data("600519", days_ago=i, close=Decimal("100.00") + Decimal(i))
 
         result = self.db.get_latest_data("600519", days=3)
 
@@ -89,8 +90,8 @@ class GetLatestDataTestCase(unittest.TestCase):
     def test_get_latest_data_filters_by_code(self) -> None:
         """验证按股票代码过滤"""
         # 插入不同股票的数据
-        self._insert_stock_data("600519", days_ago=0, close=100.0)
-        self._insert_stock_data("000001", days_ago=0, close=50.0)
+        self._insert_stock_data("600519", days_ago=0, close=Decimal("100.00"))
+        self._insert_stock_data("000001", days_ago=0, close=Decimal("50.00"))
 
         result = self.db.get_latest_data("600519", days=5)
         self.assertEqual(len(result), 1)

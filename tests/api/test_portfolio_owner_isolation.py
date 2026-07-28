@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -240,7 +241,7 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                 "action_type": "cash_dividend",
                 "market": "us",
                 "currency": "USD",
-                "cash_dividend_per_share": 0.1,
+                "cash_dividend_per_share": "0.1",
             },
         )
         self.assertEqual(action.status_code, 200)
@@ -251,9 +252,10 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         *,
         account_id: int,
         snapshot_date: str,
-        total_equity: float,
+        total_equity: Decimal,
         secret: str,
     ) -> None:
+        total_market_value = total_equity - Decimal("1000.00")
         with self.db.get_session() as session:
             session.add(
                 PortfolioDailySnapshot(
@@ -261,13 +263,13 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                     snapshot_date=date.fromisoformat(snapshot_date),
                     cost_method="fifo",
                     base_currency="USD",
-                    total_cash=1000.0,
-                    total_market_value=total_equity - 1000.0,
+                    total_cash=Decimal("1000.00"),
+                    total_market_value=total_market_value,
                     total_equity=total_equity,
-                    unrealized_pnl=10.0,
-                    realized_pnl=5.0,
-                    fee_total=0.0,
-                    tax_total=0.0,
+                    unrealized_pnl=Decimal("10.00"),
+                    realized_pnl=Decimal("5.00"),
+                    fee_total=Decimal("0.00"),
+                    tax_total=Decimal("0.00"),
                     fx_stale=False,
                     payload=json.dumps(
                         {
@@ -276,13 +278,13 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                             "as_of": snapshot_date,
                             "cost_method": "fifo",
                             "base_currency": "USD",
-                            "total_cash": 1000.0,
-                            "total_market_value": total_equity - 1000.0,
-                            "total_equity": total_equity,
-                            "unrealized_pnl": 10.0,
-                            "realized_pnl": 5.0,
-                            "fee_total": 0.0,
-                            "tax_total": 0.0,
+                            "total_cash": "1000.00",
+                            "total_market_value": format(total_market_value, "f"),
+                            "total_equity": format(total_equity, "f"),
+                            "unrealized_pnl": "10.00",
+                            "realized_pnl": "5.00",
+                            "fee_total": "0.00",
+                            "tax_total": "0.00",
                             "fx_stale": False,
                             "positions": [],
                             "valuation": {
@@ -297,7 +299,7 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                             "performance": {
                                 "contract_version": "portfolio_performance_v1",
                                 "calculation_state": "available",
-                                "cash_flows": {"net": 0.0},
+                                "cash_flows": {"net": "0.00"},
                             },
                         }
                     ),
@@ -570,20 +572,20 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             "cost_method": "fifo",
             "currency": "USD",
             "account_count": 1,
-            "total_cash": 1000.0,
-            "total_market_value": 1800.0,
-            "total_equity": 2800.0,
-            "realized_pnl": 5.0,
-            "unrealized_pnl": 300.0,
-            "fee_total": 0.0,
-            "tax_total": 0.0,
+            "total_cash": Decimal("1000.00"),
+            "total_market_value": Decimal("1800.00"),
+            "total_equity": Decimal("2800.00"),
+            "realized_pnl": Decimal("5.00"),
+            "unrealized_pnl": Decimal("300.00"),
+            "fee_total": Decimal("0.00"),
+            "tax_total": Decimal("0.00"),
             "fx_stale": False,
             "portfolio_truth": {
                 "state": "fully_valued_nonzero",
                 "account_state": "holdings_present",
                 "valuation_state": "fully_valued",
                 "value_semantics": "authoritative_total",
-                "authoritative_total": 2800.0,
+                "authoritative_total": Decimal("2800.00"),
                 "covered_subtotal": None,
                 "account_count": 1,
                 "position_count": 1,
@@ -642,25 +644,25 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                     "base_currency": "USD",
                     "as_of": "2026-01-03",
                     "cost_method": "fifo",
-                    "total_cash": 1000.0,
-                    "total_market_value": 1800.0,
-                    "total_equity": 2800.0,
-                    "realized_pnl": 5.0,
-                    "unrealized_pnl": 300.0,
-                    "fee_total": 0.0,
-                    "tax_total": 0.0,
+                    "total_cash": Decimal("1000.00"),
+                    "total_market_value": Decimal("1800.00"),
+                    "total_equity": Decimal("2800.00"),
+                    "realized_pnl": Decimal("5.00"),
+                    "unrealized_pnl": Decimal("300.00"),
+                    "fee_total": Decimal("0.00"),
+                    "tax_total": Decimal("0.00"),
                     "fx_stale": False,
                     "positions": [
                         {
                             "symbol": "AAPL",
                             "market": "us",
                             "currency": "USD",
-                            "quantity": 10.0,
-                            "avg_cost": 150.0,
-                            "total_cost": 1500.0,
-                            "last_price": 180.0,
-                            "market_value_base": 1800.0,
-                            "unrealized_pnl_base": 300.0,
+                            "quantity": Decimal("10.00000000"),
+                            "avg_cost": Decimal("150.00000000"),
+                            "total_cost": Decimal("1500.00"),
+                            "last_price": Decimal("180.00000000"),
+                            "market_value_base": Decimal("1800.00"),
+                            "unrealized_pnl_base": Decimal("300.00"),
                             "valuation_currency": "USD",
                             "admin_diagnostics": {"raw_payload_stored": True},
                         },
@@ -698,13 +700,13 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         self._seed_daily_snapshot(
             account_id=alice_account,
             snapshot_date="2026-01-02",
-            total_equity=1234.0,
+            total_equity=Decimal("1234.00"),
             secret="ALICE_HISTORY_SECRET",
         )
         self._seed_daily_snapshot(
             account_id=bob_account,
             snapshot_date="2026-01-02",
-            total_equity=999999.0,
+            total_equity=Decimal("999999.00"),
             secret="BOB_HISTORY_SECRET",
         )
         before_count = self._snapshot_count()
@@ -753,37 +755,37 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         self._seed_daily_snapshot(
             account_id=alice_account,
             snapshot_date="2026-01-02",
-            total_equity=1000.0,
+            total_equity=Decimal("1000.00"),
             secret="ALICE_RISK_HISTORY_SECRET",
         )
         self._seed_daily_snapshot(
             account_id=alice_account,
             snapshot_date="2026-01-03",
-            total_equity=800.0,
+            total_equity=Decimal("800.00"),
             secret="ALICE_RISK_HISTORY_SECRET",
         )
         self._seed_daily_snapshot(
             account_id=bob_account,
             snapshot_date="2026-01-02",
-            total_equity=9000.0,
+            total_equity=Decimal("9000.00"),
             secret="BOB_RISK_HISTORY_SECRET",
         )
         self._seed_daily_snapshot(
             account_id=bob_account,
             snapshot_date="2026-01-03",
-            total_equity=100.0,
+            total_equity=Decimal("100.00"),
             secret="BOB_RISK_HISTORY_SECRET",
         )
         self._seed_daily_snapshot(
             account_id=int(bootstrap_account.id),
             snapshot_date="2026-01-02",
-            total_equity=5000.0,
+            total_equity=Decimal("5000.00"),
             secret="BOOTSTRAP_RISK_HISTORY_SECRET",
         )
         self._seed_daily_snapshot(
             account_id=int(bootstrap_account.id),
             snapshot_date="2026-01-03",
-            total_equity=500.0,
+            total_equity=Decimal("500.00"),
             secret="BOOTSTRAP_RISK_HISTORY_SECRET",
         )
         before_count = self._snapshot_count()

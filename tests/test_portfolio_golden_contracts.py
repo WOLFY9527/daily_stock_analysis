@@ -143,7 +143,7 @@ def _assert_no_sensitive_public_payload(value: Any) -> None:
 
 
 def _assert_no_ui_owned_accounting_authority(value: Any) -> None:
-    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True).lower()
+    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).lower()
     for term in FORBIDDEN_UI_AUTHORITY_TERMS:
         assert term not in serialized
 

@@ -10,14 +10,177 @@ import os
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
-from unittest.mock import patch
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pandas as pd
 
 from src.config import Config
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE
+from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.services.backtest_service import BacktestService
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
+
+
+class BacktestDecimalConsumerTestCase(unittest.TestCase):
+    def test_standard_result_identity_serializes_decimal_close_as_canonical_text(self) -> None:
+        close = Decimal("1234567890123456.12345678")
+        row = SimpleNamespace(
+            code="AAPL",
+            date=date(2024, 1, 2),
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=close,
+            volume=10.0,
+            data_source="exact-fixture",
+        )
+
+        identity = BacktestService._standard_result_content_identity(
+            code="AAPL",
+            rows=[row],
+        )
+        canonical_row_fields = vars(row).copy()
+        canonical_row_fields["close"] = "1234567890123456.12345678"
+        canonical_identity = BacktestService._standard_result_content_identity(
+            code="AAPL",
+            rows=[SimpleNamespace(**canonical_row_fields)],
+        )
+
+        self.assertTrue(BacktestService._positive_price(close))
+        self.assertEqual(len(identity), 64)
+        self.assertEqual(identity, canonical_identity)
+
+
+class BacktestExactCloseProvenanceTestCase(unittest.TestCase):
+    @staticmethod
+    def _float_origin_frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {"date": "2024-01-02", "open": 100.0, "high": 102.0, "low": 99.0, "close": 101.0},
+                {"date": "2024-01-03", "open": 101.0, "high": 103.0, "low": 100.0, "close": 102.0},
+            ]
+        )
+
+    @staticmethod
+    def _service_with_save_mock() -> tuple[BacktestService, Mock]:
+        save_daily_data = Mock(return_value=2)
+        return BacktestService(SimpleNamespace(save_daily_data=save_daily_data)), save_daily_data
+
+    def test_fill_rejects_missing_malformed_or_incomplete_exact_close_provenance(self) -> None:
+        for provenance in (
+            None,
+            ["not", "a", "map"],
+            {"2024-01-02": "101.0"},
+            {"2024-01-02": 101.0, "2024-01-03": "102.0"},
+            {"2024-01-02": "not-a-decimal", "2024-01-03": "102.0"},
+            {"2024-01-02": "100.0", "2024-01-03": "102.0"},
+        ):
+            with self.subTest(provenance=provenance):
+                service, save_daily_data = self._service_with_save_mock()
+                frame = self._float_origin_frame()
+                if provenance is not None:
+                    frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = provenance
+
+                with patch(
+                    "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+                    return_value=(frame, "local_us_parquet"),
+                ):
+                    metadata = service._try_fill_daily_data(
+                        code="AAPL",
+                        analysis_date=date(2024, 1, 2),
+                        eval_window_days=3,
+                    )
+
+                self.assertIsNone(metadata)
+                save_daily_data.assert_not_called()
+
+    def test_warmup_rejects_missing_malformed_or_incomplete_exact_close_provenance(self) -> None:
+        for provenance in (
+            None,
+            ["not", "a", "map"],
+            {"2024-01-02": "101.0"},
+            {"2024-01-02": 101.0, "2024-01-03": "102.0"},
+            {"2024-01-02": "not-a-decimal", "2024-01-03": "102.0"},
+            {"2024-01-02": "100.0", "2024-01-03": "102.0"},
+        ):
+            with self.subTest(provenance=provenance):
+                service, save_daily_data = self._service_with_save_mock()
+                frame = self._float_origin_frame()
+                if provenance is not None:
+                    frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = provenance
+
+                with (
+                    patch.object(service, "_load_stock_daily_rows", return_value=[]),
+                    patch(
+                        "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+                        return_value=(frame, "local_us_parquet"),
+                    ),
+                ):
+                    saved, metadata = service._ensure_market_history(
+                        code="AAPL",
+                        min_age_days=14,
+                        eval_window_days=3,
+                        sample_count=2,
+                        force_refresh=False,
+                        allow_provider_fallback=False,
+                    )
+
+                self.assertEqual(saved, 0)
+                self.assertIsNone(metadata)
+                save_daily_data.assert_not_called()
+
+    def test_complete_exact_close_provenance_is_persistence_eligible(self) -> None:
+        service, save_daily_data = self._service_with_save_mock()
+        frame = self._float_origin_frame()
+        frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {
+            "2024-01-02": "101.0",
+            "2024-01-03": "102.0",
+        }
+
+        with patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(frame, "local_us_parquet"),
+        ):
+            metadata = service._try_fill_daily_data(
+                code="AAPL",
+                analysis_date=date(2024, 1, 2),
+                eval_window_days=3,
+            )
+
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.resolved_source, "LocalParquet")
+        save_daily_data.assert_called_once_with(frame, code="AAPL", data_source="local_us_parquet")
+
+    def test_warmup_with_complete_exact_close_provenance_is_persistence_eligible(self) -> None:
+        service, save_daily_data = self._service_with_save_mock()
+        frame = self._float_origin_frame()
+        frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {
+            "2024-01-02": "101.0",
+            "2024-01-03": "102.0",
+        }
+
+        with (
+            patch.object(service, "_load_stock_daily_rows", return_value=[]),
+            patch(
+                "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+                return_value=(frame, "local_us_parquet"),
+            ),
+        ):
+            saved, metadata = service._ensure_market_history(
+                code="AAPL",
+                min_age_days=14,
+                eval_window_days=3,
+                sample_count=2,
+                force_refresh=False,
+                allow_provider_fallback=False,
+            )
+
+        self.assertEqual(saved, 2)
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.resolved_source, "LocalParquet")
+        save_daily_data.assert_called_once_with(frame, code="AAPL", data_source="local_us_parquet")
 
 
 class BacktestServiceTestCase(unittest.TestCase):
@@ -36,6 +199,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         Config._instance = None
         DatabaseManager.reset_instance()
         self.db = DatabaseManager.get_instance()
+        self.db.get_default_owner_id()
         self._history_fetch_patch = patch(
             "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
             return_value=(None, None),
@@ -69,19 +233,19 @@ class BacktestServiceTestCase(unittest.TestCase):
                 StockDaily(
                     code="600519",
                     date=date(2024, 1, 1),
-                    open=100.0,
-                    high=101.0,
-                    low=99.0,
-                    close=100.0,
+                    open=Decimal("100.0"),
+                    high=Decimal("101.0"),
+                    low=Decimal("99.0"),
+                    close=Decimal("100.0"),
                 )
             )
 
             # Forward bars (3 days) that hit take-profit on day1
             session.add_all(
                 [
-                    StockDaily(code="600519", date=date(2024, 1, 2), high=111.0, low=100.0, close=105.0),
-                    StockDaily(code="600519", date=date(2024, 1, 3), high=108.0, low=103.0, close=106.0),
-                    StockDaily(code="600519", date=date(2024, 1, 4), high=109.0, low=104.0, close=107.0),
+                    StockDaily(code="600519", date=date(2024, 1, 2), high=Decimal("111.0"), low=Decimal("100.0"), close=Decimal("105.0")),
+                    StockDaily(code="600519", date=date(2024, 1, 3), high=Decimal("108.0"), low=Decimal("103.0"), close=Decimal("106.0")),
+                    StockDaily(code="600519", date=date(2024, 1, 4), high=Decimal("109.0"), low=Decimal("104.0"), close=Decimal("107.0")),
                 ]
             )
             session.commit()
@@ -126,10 +290,10 @@ class BacktestServiceTestCase(unittest.TestCase):
         with self.db.get_session() as session:
             session.add_all(
                 [
-                    StockDaily(code=code, date=date(2024, 3, 1), open=10.0, high=10.2, low=9.8, close=10.0, volume=100),
-                    StockDaily(code=code, date=date(2024, 3, 4), open=10.1, high=10.5, low=10.0, close=10.4, volume=110),
-                    StockDaily(code=code, date=date(2024, 3, 5), open=10.4, high=10.8, low=10.2, close=10.7, volume=120),
-                    StockDaily(code=code, date=date(2024, 3, 6), open=10.7, high=10.9, low=10.4, close=10.5, volume=130),
+                    StockDaily(code=code, date=date(2024, 3, 1), open=Decimal("10.0"), high=Decimal("10.2"), low=Decimal("9.8"), close=Decimal("10.0"), volume=100),
+                    StockDaily(code=code, date=date(2024, 3, 4), open=Decimal("10.1"), high=Decimal("10.5"), low=Decimal("10.0"), close=Decimal("10.4"), volume=110),
+                    StockDaily(code=code, date=date(2024, 3, 5), open=Decimal("10.4"), high=Decimal("10.8"), low=Decimal("10.2"), close=Decimal("10.7"), volume=120),
+                    StockDaily(code=code, date=date(2024, 3, 6), open=Decimal("10.7"), high=Decimal("10.9"), low=Decimal("10.4"), close=Decimal("10.5"), volume=130),
                 ]
             )
             session.commit()
@@ -401,8 +565,8 @@ class BacktestServiceTestCase(unittest.TestCase):
         with self.db.get_session() as session:
             session.add_all(
                 [
-                    StockDaily(code="SHORT", date=date(2024, 2, 1), open=10.0, high=10.1, low=9.9, close=10.0),
-                    StockDaily(code="SHORT", date=date(2024, 2, 2), open=10.0, high=10.2, low=9.8, close=10.1),
+                    StockDaily(code="SHORT", date=date(2024, 2, 1), open=Decimal("10.0"), high=Decimal("10.1"), low=Decimal("9.9"), close=Decimal("10.0")),
+                    StockDaily(code="SHORT", date=date(2024, 2, 2), open=Decimal("10.0"), high=Decimal("10.2"), low=Decimal("9.8"), close=Decimal("10.1")),
                 ]
             )
             session.commit()
@@ -435,8 +599,8 @@ class BacktestServiceTestCase(unittest.TestCase):
             )
             session.add_all(
                 [
-                    StockDaily(code="SHORT", date=date(2024, 2, 1), open=10.0, high=10.1, low=9.9, close=10.0),
-                    StockDaily(code="SHORT", date=date(2024, 2, 2), open=10.0, high=10.2, low=9.8, close=10.1),
+                    StockDaily(code="SHORT", date=date(2024, 2, 1), open=Decimal("10.0"), high=Decimal("10.1"), low=Decimal("9.9"), close=Decimal("10.0")),
+                    StockDaily(code="SHORT", date=date(2024, 2, 2), open=Decimal("10.0"), high=Decimal("10.2"), low=Decimal("9.8"), close=Decimal("10.1")),
                 ]
             )
             session.commit()
@@ -1078,21 +1242,21 @@ class BacktestServiceTestCase(unittest.TestCase):
     def test_prepare_backtest_samples_populates_analysis_history_and_enables_run(self) -> None:
         with self.db.get_session() as session:
             session.add_all([
-                StockDaily(code="000001", date=date(2024, 1, 1), open=10.0, high=10.2, low=9.8, close=10.0),
-                StockDaily(code="000001", date=date(2024, 1, 2), open=10.1, high=10.8, low=10.0, close=10.6),
-                StockDaily(code="000001", date=date(2024, 1, 3), open=10.6, high=10.7, low=10.2, close=10.3),
-                StockDaily(code="000001", date=date(2024, 1, 4), open=10.3, high=10.6, low=10.1, close=10.5),
-                StockDaily(code="000001", date=date(2024, 1, 5), open=10.5, high=10.9, low=10.4, close=10.8),
-                StockDaily(code="000001", date=date(2024, 1, 8), open=10.8, high=11.1, low=10.7, close=11.0),
-                StockDaily(code="000001", date=date(2024, 1, 9), open=11.0, high=11.3, low=10.9, close=11.2),
-                StockDaily(code="000001", date=date(2024, 1, 10), open=11.2, high=11.4, low=11.0, close=11.1),
-                StockDaily(code="000001", date=date(2024, 1, 11), open=11.1, high=11.5, low=11.0, close=11.4),
-                StockDaily(code="000001", date=date(2024, 1, 12), open=11.4, high=11.7, low=11.2, close=11.6),
-                StockDaily(code="000001", date=date(2024, 1, 15), open=11.6, high=11.8, low=11.3, close=11.5),
-                StockDaily(code="000001", date=date(2024, 1, 16), open=11.5, high=11.9, low=11.4, close=11.8),
-                StockDaily(code="000001", date=date(2024, 1, 17), open=11.8, high=12.0, low=11.6, close=11.7),
-                StockDaily(code="000001", date=date(2024, 1, 18), open=11.7, high=12.2, low=11.6, close=12.1),
-                StockDaily(code="000001", date=date(2024, 1, 19), open=12.1, high=12.4, low=12.0, close=12.3),
+                StockDaily(code="000001", date=date(2024, 1, 1), open=Decimal("10.0"), high=Decimal("10.2"), low=Decimal("9.8"), close=Decimal("10.0")),
+                StockDaily(code="000001", date=date(2024, 1, 2), open=Decimal("10.1"), high=Decimal("10.8"), low=Decimal("10.0"), close=Decimal("10.6")),
+                StockDaily(code="000001", date=date(2024, 1, 3), open=Decimal("10.6"), high=Decimal("10.7"), low=Decimal("10.2"), close=Decimal("10.3")),
+                StockDaily(code="000001", date=date(2024, 1, 4), open=Decimal("10.3"), high=Decimal("10.6"), low=Decimal("10.1"), close=Decimal("10.5")),
+                StockDaily(code="000001", date=date(2024, 1, 5), open=Decimal("10.5"), high=Decimal("10.9"), low=Decimal("10.4"), close=Decimal("10.8")),
+                StockDaily(code="000001", date=date(2024, 1, 8), open=Decimal("10.8"), high=Decimal("11.1"), low=Decimal("10.7"), close=Decimal("11.0")),
+                StockDaily(code="000001", date=date(2024, 1, 9), open=Decimal("11.0"), high=Decimal("11.3"), low=Decimal("10.9"), close=Decimal("11.2")),
+                StockDaily(code="000001", date=date(2024, 1, 10), open=Decimal("11.2"), high=Decimal("11.4"), low=Decimal("11.0"), close=Decimal("11.1")),
+                StockDaily(code="000001", date=date(2024, 1, 11), open=Decimal("11.1"), high=Decimal("11.5"), low=Decimal("11.0"), close=Decimal("11.4")),
+                StockDaily(code="000001", date=date(2024, 1, 12), open=Decimal("11.4"), high=Decimal("11.7"), low=Decimal("11.2"), close=Decimal("11.6")),
+                StockDaily(code="000001", date=date(2024, 1, 15), open=Decimal("11.6"), high=Decimal("11.8"), low=Decimal("11.3"), close=Decimal("11.5")),
+                StockDaily(code="000001", date=date(2024, 1, 16), open=Decimal("11.5"), high=Decimal("11.9"), low=Decimal("11.4"), close=Decimal("11.8")),
+                StockDaily(code="000001", date=date(2024, 1, 17), open=Decimal("11.8"), high=Decimal("12.0"), low=Decimal("11.6"), close=Decimal("11.7")),
+                StockDaily(code="000001", date=date(2024, 1, 18), open=Decimal("11.7"), high=Decimal("12.2"), low=Decimal("11.6"), close=Decimal("12.1")),
+                StockDaily(code="000001", date=date(2024, 1, 19), open=Decimal("12.1"), high=Decimal("12.4"), low=Decimal("12.0"), close=Decimal("12.3")),
             ])
             session.commit()
 
@@ -1129,6 +1293,15 @@ class BacktestServiceTestCase(unittest.TestCase):
                 {"date": "2024-01-09", "open": 106.0, "high": 107.0, "low": 105.0, "close": 106.0, "volume": 10},
             ]
         )
+        frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {
+            "2024-01-01": "100.0",
+            "2024-01-02": "101.0",
+            "2024-01-03": "102.0",
+            "2024-01-04": "103.0",
+            "2024-01-05": "104.0",
+            "2024-01-08": "105.0",
+            "2024-01-09": "106.0",
+        }
         service = BacktestService(self.db)
 
         with patch("src.services.backtest_service.fetch_daily_history_with_local_us_fallback", return_value=(frame, "local_us_parquet")) as fetch_mock:
@@ -1194,6 +1367,12 @@ class BacktestServiceTestCase(unittest.TestCase):
                 {"date": "2024-01-04", "open": 106.0, "high": 109.0, "low": 104.0, "close": 107.0, "volume": 10},
             ]
         )
+        frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {
+            "2024-01-01": "100.0",
+            "2024-01-02": "105.0",
+            "2024-01-03": "106.0",
+            "2024-01-04": "107.0",
+        }
         service = BacktestService(self.db)
 
         with patch("src.services.backtest_service.fetch_daily_history_with_local_us_fallback", return_value=(frame, "local_us_parquet")) as fetch_mock:
@@ -1334,10 +1513,10 @@ class BacktestServiceTestCase(unittest.TestCase):
                     StockDaily(
                         code="600519",
                         date=date(2024, 1, 5) + timedelta(days=index),
-                        open=108.0 + index,
-                        high=109.0 + index,
-                        low=107.0 + index,
-                        close=108.5 + index,
+                        open=Decimal("108.0") + index,
+                        high=Decimal("109.0") + index,
+                        low=Decimal("107.0") + index,
+                        close=Decimal("108.5") + index,
                         data_source="DatabaseCache",
                     )
                     for index in range(20)
@@ -1390,12 +1569,12 @@ class BacktestServiceTestCase(unittest.TestCase):
                 )
             )
             session.add(
-                StockDaily(code="000001", date=date(2024, 1, 1), open=10.0, high=10.2, low=9.8, close=10.0)
+                StockDaily(code="000001", date=date(2024, 1, 1), open=Decimal("10.0"), high=Decimal("10.2"), low=Decimal("9.8"), close=Decimal("10.0"))
             )
             session.add_all([
-                StockDaily(code="000001", date=date(2024, 1, 2), high=10.0, low=9.5, close=9.6),
-                StockDaily(code="000001", date=date(2024, 1, 3), high=9.7, low=9.3, close=9.4),
-                StockDaily(code="000001", date=date(2024, 1, 4), high=9.5, low=9.0, close=9.1),
+                StockDaily(code="000001", date=date(2024, 1, 2), high=Decimal("10.0"), low=Decimal("9.5"), close=Decimal("9.6")),
+                StockDaily(code="000001", date=date(2024, 1, 3), high=Decimal("9.7"), low=Decimal("9.3"), close=Decimal("9.4")),
+                StockDaily(code="000001", date=date(2024, 1, 4), high=Decimal("9.5"), low=Decimal("9.0"), close=Decimal("9.1")),
             ])
             session.commit()
 

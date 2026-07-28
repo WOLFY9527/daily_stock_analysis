@@ -12,6 +12,7 @@ import tempfile
 import time
 import unittest
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -30,7 +31,7 @@ from src.config import Config
 from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError
 from src.services.portfolio_service import PortfolioService
 from src.services.portfolio_service import PortfolioBusyError, PortfolioConflictError
-from src.storage import DatabaseManager
+from src.storage import DatabaseManager, PortfolioDailySnapshot
 
 
 def _reset_public_limiter_state_if_available() -> None:
@@ -234,7 +235,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         _reset_public_limiter_state_if_available()
         self.temp_dir.cleanup()
 
-    def _save_close(self, symbol: str, on_date: date, close: float) -> None:
+    def _save_close(self, symbol: str, on_date: date, close: Decimal) -> None:
         df = pd.DataFrame(
             [
                 {
@@ -343,7 +344,7 @@ class PortfolioApiTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(trade_resp.status_code, 200)
-        self._save_close("600519", date(2026, 1, 3), 110.0)
+        self._save_close("600519", date(2026, 1, 3), Decimal("110.00"))
 
         snapshot_resp = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -354,9 +355,9 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["account_count"], 1)
         self.assertEqual(payload["cost_method"], "fifo")
         account_snapshot = payload["accounts"][0]
-        self.assertAlmostEqual(account_snapshot["total_cash"], 0.0, places=6)
-        self.assertAlmostEqual(account_snapshot["total_market_value"], 11000.0, places=6)
-        self.assertAlmostEqual(account_snapshot["total_equity"], 11000.0, places=6)
+        self.assertEqual(account_snapshot["total_cash"], "0.00")
+        self.assertEqual(account_snapshot["total_market_value"], "11000.00")
+        self.assertEqual(account_snapshot["total_equity"], "11000.00")
         logs, total_logs = self.db.list_execution_log_sessions(stock_code="600519", limit=10)
         self.assertEqual(total_logs, 1)
         self.assertEqual(logs[0]["summary"]["meta"]["subsystem"], "portfolio")
@@ -366,6 +367,52 @@ class PortfolioApiTestCase(unittest.TestCase):
         cash_logs, total_cash_logs = self.db.list_execution_log_sessions(task_id="portfolio:cash_ledger", limit=10)
         self.assertEqual(total_cash_logs, 1)
         self.assertEqual(cash_logs[0]["summary"]["portfolio_event"]["currency"], "CNY")
+
+    def test_history_preserves_high_scale_stored_base_currency_money_as_decimal_text(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Exact History", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        high_value = Decimal("1234567890123456.12")
+
+        with self.db.get_session() as session:
+            session.add(
+                PortfolioDailySnapshot(
+                    account_id=account_id,
+                    snapshot_date=date(2026, 1, 2),
+                    cost_method="fifo",
+                    base_currency="USD",
+                    total_cash=high_value,
+                    total_market_value=high_value,
+                    total_equity=high_value,
+                    unrealized_pnl=high_value,
+                    realized_pnl=high_value,
+                    fee_total=high_value,
+                    tax_total=high_value,
+                    fx_stale=False,
+                    payload="{}",
+                )
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/api/v1/portfolio/history",
+            params={"account_id": account_id, "date_from": "2026-01-02", "date_to": "2026-01-02"},
+        )
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            self.assertEqual(item[field_name], "1234567890123456.12")
 
     def test_snapshot_api_preserves_performance_and_partial_valuation_contracts(self) -> None:
         service = PortfolioService()
@@ -380,7 +427,7 @@ class PortfolioApiTestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 7, 1),
             direction="in",
-            amount=100.0,
+            amount="1234567890123456.12",
             currency="USD",
         )
         service.record_trade(
@@ -388,12 +435,11 @@ class PortfolioApiTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 7, 1),
             side="buy",
-            quantity=1.0,
-            price=100.0,
+            quantity="1.00000000",
+            price="1234567890123456.12",
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 7, 2), 100.0)
 
         response = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -421,13 +467,13 @@ class PortfolioApiTestCase(unittest.TestCase):
             [
                 {
                     "component": f"account:{account_id}:position:AAPL:us:USD",
-                    "amount": 100.0,
+                    "amount": "1234567890123456.12000000",
                     "currency": "USD",
                 }
             ],
         )
         position = payload["accounts"][0]["positions"][0]
-        self.assertEqual(position["market_value_native"], 100.0)
+        self.assertEqual(position["market_value_native"], "1234567890123456.12")
         self.assertEqual(position["display_fx_status"], "unavailable")
         performance = payload["portfolio_attribution"]["performance"]
         self.assertEqual(performance["calculation_state"], "unavailable")
@@ -516,7 +562,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "account_id": cn_id,
                 "event_date": "2026-01-01",
                 "direction": "in",
-                "amount": 1000.0,
+                "amount": "1000.00",
                 "currency": "CNY",
             },
         )
@@ -527,8 +573,8 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "symbol": "600519",
                 "trade_date": "2026-01-01",
                 "side": "buy",
-                "quantity": 10,
-                "price": 100.0,
+                "quantity": "10.00000000",
+                "price": "100.00000000",
                 "market": "cn",
                 "currency": "CNY",
             },
@@ -539,7 +585,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "account_id": us_id,
                 "event_date": "2026-01-01",
                 "direction": "in",
-                "amount": 100.0,
+                "amount": "100.00",
                 "currency": "USD",
             },
         )
@@ -550,19 +596,19 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "symbol": "AAPL",
                 "trade_date": "2026-01-01",
                 "side": "buy",
-                "quantity": 1,
-                "price": 100.0,
+                "quantity": "1.00000000",
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.00"))
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.00"))
         PortfolioService().repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -580,13 +626,13 @@ class PortfolioApiTestCase(unittest.TestCase):
                 {
                     "market": "cn",
                     "position_count": 1,
-                    "total_market_value": 1000.0,
+                    "total_market_value": "1000.00",
                     "weight_pct": 58.8235,
                 },
                 {
                     "market": "us",
                     "position_count": 1,
-                    "total_market_value": 700.0,
+                    "total_market_value": "700.00",
                     "weight_pct": 41.1765,
                 },
             ],
@@ -594,7 +640,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(len(payload["fx_rates"]), 1)
         self.assertEqual(payload["fx_rates"][0]["from_currency"], "USD")
         self.assertEqual(payload["fx_rates"][0]["to_currency"], "CNY")
-        self.assertAlmostEqual(payload["fx_rates"][0]["rate"], 7.0, places=6)
+        self.assertEqual(payload["fx_rates"][0]["rate"], "7.00000000")
         self.assertEqual(payload["fx_rates"][0]["source"], "manual")
         self.assertFalse(payload["fx_rates"][0]["is_stale"])
 
@@ -612,13 +658,13 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "symbol": "AAPL",
                 "trade_date": "2026-01-01",
                 "side": "buy",
-                "quantity": 10,
-                "price": 100.0,
+                "quantity": "10.00000000",
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
         )
-        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("130.00"))
 
         snapshot_resp = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -633,8 +679,17 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertIn("pnl", payload["analytics"])
         self.assertIn("exposure", payload["analytics"])
         self.assertIn("risk", payload["analytics"])
-        self.assertAlmostEqual(payload["analytics"]["pnl"]["unrealized"]["amount"], 300.0, places=6)
-        self.assertEqual(payload["analytics"]["exposure"]["by_symbol"][0]["symbol"], "AAPL")
+        self.assertEqual(payload["analytics"]["pnl"]["unrealized"]["amount"], "300.00")
+        exposure = payload["analytics"]["exposure"]["by_symbol"][0]
+        self.assertEqual(exposure["symbol"], "AAPL")
+        self.assertEqual(exposure["market_value"], "1300.00")
+        self.assertEqual(exposure["display_value"], "1300.00")
+        self.assertEqual(exposure["unrealized_pnl"], "300.00")
+        self.assertEqual(
+            payload["exposureResearchContext"]["dominantExposure"]["marketValue"],
+            "1300.00",
+        )
+        self.assertEqual(payload["exposureResearchContext"]["dominantExposure"]["currency"], "USD")
         self.assertEqual(payload["analytics"]["risk"]["largest_position"]["symbol"], "AAPL")
 
     def test_snapshot_lineage_marks_complete_price_fx_inputs_available(self) -> None:
@@ -644,25 +699,26 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(create_resp.status_code, 200)
         account_id = create_resp.json()["id"]
-        self.client.post(
+        trade_resp = self.client.post(
             "/api/v1/portfolio/trades",
             json={
                 "account_id": account_id,
                 "symbol": "AAPL",
                 "trade_date": "2026-01-01",
                 "side": "buy",
-                "quantity": 2,
-                "price": 100.0,
+                "quantity": "2.00000000",
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
         )
-        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+        self.assertEqual(trade_resp.status_code, 200)
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("130.00"))
         PortfolioService().repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 2),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -733,7 +789,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "trade_date": "2026-01-01",
                 "side": "buy",
                 "quantity": 10,
-                "price": 100.0,
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
@@ -767,20 +823,21 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(create_resp.status_code, 200)
         account_id = create_resp.json()["id"]
-        self.client.post(
+        trade_resp = self.client.post(
             "/api/v1/portfolio/trades",
             json={
                 "account_id": account_id,
                 "symbol": "AAPL",
                 "trade_date": "2026-01-01",
                 "side": "buy",
-                "quantity": 2,
-                "price": 100.0,
+                "quantity": "2.00000000",
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
         )
-        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+        self.assertEqual(trade_resp.status_code, 200)
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("130.00"))
 
         snapshot_resp = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -809,25 +866,26 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(create_resp.status_code, 200)
         account_id = create_resp.json()["id"]
-        self.client.post(
+        trade_resp = self.client.post(
             "/api/v1/portfolio/trades",
             json={
                 "account_id": account_id,
                 "symbol": "AAPL",
                 "trade_date": "2026-01-01",
                 "side": "buy",
-                "quantity": 2,
-                "price": 100.0,
+                "quantity": "2.00000000",
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
         )
-        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+        self.assertEqual(trade_resp.status_code, 200)
+        self._save_close("AAPL", date(2026, 1, 2), Decimal("130.00"))
         PortfolioService().repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 2),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=True,
         )
@@ -921,7 +979,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "account_state": "no_holdings",
                 "valuation_state": "fully_valued",
                 "value_semantics": "authoritative_total",
-                "authoritative_total": 0.0,
+                "authoritative_total": "0.00",
                 "covered_subtotal": None,
                 "account_count": 1,
                 "position_count": 0,
@@ -951,7 +1009,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "trade_date": "2026-01-01",
                 "side": "buy",
                 "quantity": 10,
-                "price": 100.0,
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
@@ -1009,7 +1067,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "trade_date": "2026-01-02",
                 "side": "buy",
                 "quantity": 10,
-                "price": 100.0,
+                "price": "100.00000000",
                 "market": "cn",
                 "currency": "CNY",
             },
@@ -1067,7 +1125,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "currency": "CNY",
             },
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.00"))
 
         risk_resp = self.client.get(
             "/api/v1/portfolio/risk",
@@ -1112,7 +1170,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "currency": "CNY",
             },
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.00"))
 
         snapshot_resp = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -1397,6 +1455,12 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(account_resp.status_code, 200)
         account_id = account_resp.json()["id"]
+        huatai_account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Bounded Huatai", "broker": "Huatai", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(huatai_account_resp.status_code, 200)
+        huatai_account_id = huatai_account_resp.json()["id"]
         raw_cases = (
             (
                 "/api/v1/portfolio/imports/parse",
@@ -1421,7 +1485,7 @@ class PortfolioApiTestCase(unittest.TestCase):
             ),
             (
                 "/api/v1/portfolio/imports/csv/commit",
-                {"account_id": str(account_id), "broker": "huatai", "dry_run": "false"},
+                {"account_id": str(huatai_account_id), "broker": "huatai", "dry_run": "false"},
                 "bounded.csv",
                 "text/csv",
                 self._bounded_import_csv(),
@@ -1816,11 +1880,11 @@ class PortfolioApiTestCase(unittest.TestCase):
             "snapshot_date": "2026-04-15",
             "synced_at": "2026-04-15T09:00:00",
             "base_currency": "USD",
-            "total_cash": 5000.0,
-            "total_market_value": 1600.0,
-            "total_equity": 6600.0,
-            "realized_pnl": 0.0,
-            "unrealized_pnl": 100.0,
+            "total_cash": "5000.00",
+            "total_market_value": "1600.00",
+            "total_equity": "6600.00",
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "100.00",
             "position_count": 1,
             "cash_balance_count": 1,
             "fx_stale": False,
@@ -1847,6 +1911,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertRegex(payload["api_base_url"], r"^url_[a-f0-9]{12}$")
         self.assertNotIn("U1234567", self._json_text(resp))
         self.assertNotIn("https://localhost:5000", self._json_text(resp))
+        self.assertEqual(payload["total_cash"], "5000.00")
+        self.assertEqual(payload["total_market_value"], "1600.00")
         self.assertTrue(payload["snapshot_overlay_active"])
         sync_mock.assert_called_once_with(
             account_id=account_id,
@@ -1874,11 +1940,11 @@ class PortfolioApiTestCase(unittest.TestCase):
             "snapshot_date": "2026-04-15",
             "synced_at": "2026-04-15T09:00:00",
             "base_currency": "USD",
-            "total_cash": 5000.0,
-            "total_market_value": 1600.0,
-            "total_equity": 6600.0,
-            "realized_pnl": 0.0,
-            "unrealized_pnl": 100.0,
+            "total_cash": "5000.00",
+            "total_market_value": "1600.00",
+            "total_equity": "6600.00",
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "100.00",
             "position_count": 1,
             "cash_balance_count": 1,
             "fx_stale": False,
@@ -2220,7 +2286,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                     "action_type": "cash_dividend",
                     "market": "cn",
                     "currency": "CNY",
-                    "cash_dividend_per_share": 0.5,
+                    "cash_dividend_per_share": "0.5",
                 },
             ).status_code,
             200,
@@ -2235,6 +2301,10 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(trades_payload["total"], 2)
         self.assertEqual(len(trades_payload["items"]), 1)
         self.assertEqual(trades_payload["items"][0]["trade_date"], "2026-01-03")
+        self.assertEqual(trades_payload["items"][0]["quantity"], "10.00000000")
+        self.assertEqual(trades_payload["items"][0]["price"], "100.00000000")
+        self.assertEqual(trades_payload["items"][0]["fee"], "1.00")
+        self.assertEqual(trades_payload["items"][0]["tax"], "0.00")
 
         cash_list_resp = self.client.get(
             "/api/v1/portfolio/cash-ledger",
@@ -2244,6 +2314,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         cash_payload = cash_list_resp.json()
         self.assertEqual(cash_payload["total"], 1)
         self.assertEqual(cash_payload["items"][0]["direction"], "in")
+        self.assertEqual(cash_payload["items"][0]["amount"], "10000.00")
 
         corp_list_resp = self.client.get(
             "/api/v1/portfolio/corporate-actions",
@@ -2253,6 +2324,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         corp_payload = corp_list_resp.json()
         self.assertEqual(corp_payload["total"], 1)
         self.assertEqual(corp_payload["items"][0]["action_type"], "cash_dividend")
+        self.assertEqual(corp_payload["items"][0]["cash_dividend_per_share"], "0.50000000")
 
     def test_delete_event_endpoints_remove_records_and_allow_snapshot_recovery(self) -> None:
         create_resp = self.client.post(
@@ -2296,20 +2368,20 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "action_type": "cash_dividend",
                 "market": "cn",
                 "currency": "CNY",
-                "cash_dividend_per_share": 1.0,
+                "cash_dividend_per_share": "1",
             },
         )
         self.assertEqual(cash_resp.status_code, 200)
         self.assertEqual(trade_resp.status_code, 200)
         self.assertEqual(corp_resp.status_code, 200)
 
-        self._save_close("600519", date(2026, 1, 3), 100.0)
+        self._save_close("600519", date(2026, 1, 3), Decimal("100.00"))
         snapshot_before = self.client.get(
             "/api/v1/portfolio/snapshot",
             params={"account_id": account_id, "as_of": "2026-01-03"},
         )
         self.assertEqual(snapshot_before.status_code, 200)
-        self.assertEqual(snapshot_before.json()["accounts"][0]["positions"][0]["quantity"], 10.0)
+        self.assertEqual(snapshot_before.json()["accounts"][0]["positions"][0]["quantity"], "10.00000000")
 
         delete_trade = self.client.delete(f"/api/v1/portfolio/trades/{trade_resp.json()['id']}")
         self.assertEqual(delete_trade.status_code, 200)
@@ -2438,7 +2510,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(trade_resp.status_code, 200)
         trade_id = trade_resp.json()["id"]
-        self._save_close("AAPL", date(2026, 1, 3), 125.0)
+        self._save_close("AAPL", date(2026, 1, 3), Decimal("125.00"))
 
         update_resp = self.client.patch(
             f"/api/v1/portfolio/trades/{trade_id}",
@@ -2450,8 +2522,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(update_resp.status_code, 200)
         updated_payload = update_resp.json()
         self.assertEqual(updated_payload["id"], trade_id)
-        self.assertEqual(updated_payload["quantity"], 5.0)
-        self.assertEqual(updated_payload["price"], 120.0)
+        self.assertEqual(updated_payload["quantity"], "5.00000000")
+        self.assertEqual(updated_payload["price"], "120.00000000")
         self.assertTrue(updated_payload["is_active"])
         self.assertIsNone(updated_payload["voided_at"])
 
@@ -2461,8 +2533,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(snapshot_resp.status_code, 200)
         account_snapshot = snapshot_resp.json()["accounts"][0]
-        self.assertEqual(account_snapshot["positions"][0]["quantity"], 5.0)
-        self.assertEqual(account_snapshot["positions"][0]["avg_cost"], 120.0)
+        self.assertEqual(account_snapshot["positions"][0]["quantity"], "5.00000000")
+        self.assertEqual(account_snapshot["positions"][0]["avg_cost"], "120.00000000")
 
     def test_update_trade_invalid_payload_returns_400_and_missing_trade_returns_404(self) -> None:
         missing_resp = self.client.patch("/api/v1/portfolio/trades/999999", json={"quantity": 5})
@@ -2580,7 +2652,7 @@ class PortfolioApiTestCase(unittest.TestCase):
                     "action_type": "split_adjustment",
                     "market": "cn",
                     "currency": "CNY",
-                    "split_ratio": 2.0,
+                    "split_ratio": "2",
                 },
             )
 

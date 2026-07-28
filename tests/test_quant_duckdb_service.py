@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -289,11 +290,11 @@ def test_ingest_ohlcv_from_existing_store_is_bounded_and_dry_run_safe(tmp_path) 
         def __init__(self, code: str, offset: int) -> None:
             self.code = code
             self.date = date(2026, 1, 1) + timedelta(days=offset)
-            self.open = 10.0 + offset
-            self.high = 11.0 + offset
-            self.low = 9.0 + offset
-            self.close = 10.5 + offset
-            self.volume = 1000 + offset
+            self.open = Decimal("10.0") + offset
+            self.high = Decimal("11.0") + offset
+            self.low = Decimal("9.0") + offset
+            self.close = Decimal("10.5") + offset
+            self.volume = Decimal("1000") + offset
             self.amount = self.close * self.volume
             self.data_source = "stock_daily"
 

@@ -11,8 +11,9 @@ Tools:
 
 import logging
 from datetime import date
+from decimal import Decimal
 from threading import Lock
-from typing import Optional
+from typing import Any, Optional
 
 from src.agent.tools.registry import ToolParameter, ToolDefinition
 
@@ -49,6 +50,19 @@ def _get_db():
     """Lazy import for DatabaseManager."""
     from src.storage import get_db
     return get_db()
+
+
+def _json_compatible_value(value: Any) -> Any:
+    """Project exact values to JSON-safe text without changing their authority."""
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    if isinstance(value, dict):
+        return {key: _json_compatible_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_compatible_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_compatible_value(item) for item in value]
+    return value
 
 
 def _compact_fundamental_context(fundamental_context: dict) -> dict:
@@ -342,7 +356,7 @@ def _handle_get_analysis_context(stock_code: str) -> dict:
             safe_context["has_raw_data"] = True
             safe_context["raw_data_count"] = len(v) if isinstance(v, list) else 0
         else:
-            safe_context[k] = v
+            safe_context[k] = _json_compatible_value(v)
 
     return safe_context
 

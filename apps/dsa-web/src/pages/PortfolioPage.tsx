@@ -51,6 +51,16 @@ import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRout
 import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
 import { canonicalStockSymbolFromValidation, stocksApi } from '../api/stocks';
 import {
+  addPortfolioDecimals,
+  comparePortfolioDecimals,
+  formatPortfolioDecimal,
+  multiplyPortfolioDecimals,
+  parsePortfolioDecimal,
+  portfolioDecimalSign,
+  PORTFOLIO_ZERO,
+  requirePortfolioDecimal,
+} from '../utils/portfolioDecimal';
+import {
   LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
   normalizePortfolioDisplayCurrency,
   PORTFOLIO_DISPLAY_CURRENCY_CHANGED_EVENT,
@@ -69,6 +79,7 @@ import type {
   PortfolioCorporateActionListItem,
   PortfolioCorporateActionType,
   PortfolioCostMethod,
+  PortfolioDecimal,
   PortfolioExposureItem,
   PortfolioFxRateItem,
   PortfolioImportBrokerItem,
@@ -134,7 +145,7 @@ type PortfolioSegmentOption = {
 };
 
 type DisplayFxRate = {
-  rate: number;
+  rate: PortfolioDecimal;
   timestamp?: string;
   provider?: string;
   cacheHit?: boolean;
@@ -144,9 +155,9 @@ type DisplayFxRate = {
 type DisplayCurrency = PortfolioDisplayCurrency;
 
 type ConvertedMoney = {
-  value: number;
+  value: PortfolioDecimal;
   currency: DisplayCurrency;
-  rate: number;
+  rate: PortfolioDecimal;
   stale: boolean;
 } | null;
 
@@ -759,10 +770,10 @@ function buildPortfolioValuationEvidencePack(options: {
   priceLineage?: PortfolioPriceLineage;
   fxLineage?: PortfolioFxLineage;
   valuationLineage?: PortfolioValuationSnapshotLineage;
-  totalMarketValue: number | null;
-  totalEquity: number | null;
-  totalCash: number | null;
-  unrealizedPnl: number | null;
+  totalMarketValue: PortfolioDecimal | null;
+  totalEquity: PortfolioDecimal | null;
+  totalCash: PortfolioDecimal | null;
+  unrealizedPnl: PortfolioDecimal | null;
   currency: string;
   warnings: string[];
 }): PortfolioValuationEvidencePack {
@@ -780,7 +791,7 @@ function buildPortfolioValuationEvidencePack(options: {
   const fxLineage = options.fxLineage;
   const safeWarnings = uniqueSafeEvidenceList(options.warnings);
   const authoritativeTotals = options.portfolioTruth.valueSemantics === 'authoritative_total';
-  const formatAuthoritativeAmount = (value: number | null): string | null => (
+  const formatAuthoritativeAmount = (value: PortfolioDecimal | null): string | null => (
     authoritativeTotals && value !== null ? formatMoney(value, options.currency) : null
   );
   const coveredSubtotal = options.portfolioTruth.valueSemantics === 'covered_subtotal'
@@ -1079,13 +1090,13 @@ function getPortfolioCopy(
       tradeDate: item.tradeDate,
       sideLabel: formatSideLabel(item.side, language),
       symbol: item.symbol,
-      quantity: item.quantity,
-      price: item.price,
+      quantity: formatPortfolioDecimal(item.quantity),
+      price: formatPortfolioDecimal(item.price),
     }),
     cashDeleteMessage: (item: PortfolioCashLedgerListItem) => t('portfolio.cashDeleteMessage', {
       eventDate: item.eventDate,
       directionLabel: formatCashDirectionLabel(item.direction, language),
-      amount: item.amount,
+      amount: formatPortfolioDecimal(item.amount),
       currency: item.currency,
     }),
     corporateDeleteMessage: (item: PortfolioCorporateActionListItem) => t('portfolio.corporateDeleteMessage', {
@@ -1104,20 +1115,52 @@ function getTodayIso(): string {
   return toDateInputValue(new Date());
 }
 
-function formatMoney(value: number | undefined | null, currency = 'CNY'): string {
-  if (value == null || Number.isNaN(value)) return '--';
-  return `${currency} ${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const DISPLAY_MONEY_SCALES: Record<DisplayCurrency, number> = {
+  CNY: 2,
+  USD: 2,
+  HKD: 2,
+  EUR: 2,
+  JPY: 0,
+};
+
+function quantizeConvertedMoney(value: PortfolioDecimal, currency: DisplayCurrency): PortfolioDecimal {
+  const scale = DISPLAY_MONEY_SCALES[currency];
+  const negative = value.startsWith('-');
+  const absolute = negative ? value.slice(1) : value;
+  const [whole, fraction = ''] = absolute.split('.');
+  if (fraction.length <= scale) {
+    return value;
+  }
+
+  const retainedFraction = fraction.slice(0, scale);
+  const discardedFraction = fraction.slice(scale);
+  const retainedDigits = `${whole}${retainedFraction}`;
+  const firstDiscardedDigit = Number(discardedFraction[0]);
+  const discardedTailHasValue = /[1-9]/.test(discardedFraction.slice(1));
+  const shouldRoundUp = firstDiscardedDigit > 5
+    || (
+      firstDiscardedDigit === 5
+      && (discardedTailHasValue || Number(retainedDigits[retainedDigits.length - 1]) % 2 === 1)
+    );
+  const roundedDigits = (BigInt(retainedDigits) + (shouldRoundUp ? 1n : 0n))
+    .toString()
+    .padStart(scale + 1, '0');
+  const roundedWhole = scale === 0 ? roundedDigits : roundedDigits.slice(0, -scale);
+  const roundedFraction = scale === 0 ? '' : roundedDigits.slice(-scale);
+  const roundedAbsolute = roundedFraction ? `${roundedWhole}.${roundedFraction}` : roundedWhole;
+  const isZero = roundedDigits.split('').every((digit) => digit === '0');
+  return requirePortfolioDecimal(
+    isZero ? PORTFOLIO_ZERO : `${negative ? '-' : ''}${roundedAbsolute}`,
+    'Converted display money',
+  );
 }
 
-function formatFxRate(rate: number | undefined | null): string {
-  if (rate == null || Number.isNaN(rate)) return '--';
-  return Number(rate).toLocaleString(undefined, {
-    minimumFractionDigits: 4,
-    maximumFractionDigits: 4,
-  });
+function formatMoney(value: PortfolioDecimal | undefined | null, currency = 'CNY'): string {
+  return value == null ? '--' : `${currency} ${formatPortfolioDecimal(value, { minimumFractionDigits: 2 })}`;
+}
+
+function formatFxRate(rate: PortfolioDecimal | undefined | null): string {
+  return rate == null ? '--' : formatPortfolioDecimal(rate, { minimumFractionDigits: 4 });
 }
 
 function formatFxTimestamp(value: string | undefined | null): string {
@@ -1180,11 +1223,10 @@ function formatExposureMarketLabel(row: PortfolioExposureItem | undefined | null
   return row.label || marketValue.toUpperCase();
 }
 
-function formatSignedMoney(value: number, currency: string): string {
-  const formatted = formatMoney(Math.abs(value), currency);
-  if (value > 0) return `+${formatted}`;
-  if (value < 0) return `-${formatted}`;
-  return formatted;
+function formatSignedMoney(value: PortfolioDecimal, currency: string): string {
+  const formatted = formatMoney(value.startsWith('-') ? value.slice(1) : value, currency);
+  const sign = portfolioDecimalSign(value);
+  return sign > 0 ? `+${formatted}` : sign < 0 ? `-${formatted}` : formatted;
 }
 
 function formatPercent(value: number | undefined | null): string {
@@ -1282,21 +1324,16 @@ function getFxRateForDisplay(
   fxRows: PortfolioFxRateItem[],
   fromCurrency: string | undefined | null,
   toCurrency: DisplayCurrency,
-): { rate: number; stale: boolean } | null {
+): { rate: PortfolioDecimal; stale: boolean } | null {
   const from = (fromCurrency || '').toUpperCase();
   const to = toCurrency.toUpperCase();
   if (!from || from === to) {
-    return { rate: 1, stale: false };
+    return { rate: '1', stale: false };
   }
 
   const direct = fxRows.find((item) => item.fromCurrency === from && item.toCurrency === to);
-  if (direct && typeof direct.rate === 'number' && direct.rate > 0) {
+  if (direct?.rate && portfolioDecimalSign(direct.rate) > 0) {
     return { rate: direct.rate, stale: direct.isStale };
-  }
-
-  const inverse = fxRows.find((item) => item.fromCurrency === to && item.toCurrency === from);
-  if (inverse && typeof inverse.rate === 'number' && inverse.rate > 0) {
-    return { rate: 1 / inverse.rate, stale: inverse.isStale };
   }
 
   return null;
@@ -2247,7 +2284,7 @@ const PortfolioPage: React.FC = () => {
         });
       }
     }
-    rows.sort((a, b) => Number(b.marketValueBase || 0) - Number(a.marketValueBase || 0));
+    rows.sort((a, b) => comparePortfolioDecimals(b.marketValueBase, a.marketValueBase));
     return rows;
   }, [language, snapshot]);
 
@@ -2300,10 +2337,10 @@ const PortfolioPage: React.FC = () => {
         market: canonicalMarket,
         tradeDate: tradeForm.tradeDate,
         side: submittedSide,
-        quantity: Number(tradeForm.quantity),
-        price: Number(tradeForm.price),
-        fee: Number(tradeForm.fee || 0),
-        tax: Number(tradeForm.tax || 0),
+        quantity: requirePortfolioDecimal(tradeForm.quantity.trim(), 'Trade quantity'),
+        price: requirePortfolioDecimal(tradeForm.price.trim(), 'Trade price'),
+        fee: requirePortfolioDecimal(tradeForm.fee.trim() || PORTFOLIO_ZERO, 'Trade fee'),
+        tax: requirePortfolioDecimal(tradeForm.tax.trim() || PORTFOLIO_ZERO, 'Trade tax'),
         currency: submittedCurrency,
         tradeUid: tradeForm.tradeUid || undefined,
         note: tradeForm.note || undefined,
@@ -2345,7 +2382,7 @@ const PortfolioPage: React.FC = () => {
         accountId: writableAccountId,
         eventDate: cashForm.eventDate,
         direction: cashForm.direction,
-        amount: Number(cashForm.amount),
+        amount: requirePortfolioDecimal(cashForm.amount.trim(), 'Cash amount'),
         currency: cashForm.currency || undefined,
         note: cashForm.note || undefined,
       });
@@ -2372,8 +2409,12 @@ const PortfolioPage: React.FC = () => {
         symbol: corpForm.symbol,
         effectiveDate: corpForm.effectiveDate,
         actionType: corpForm.actionType,
-        cashDividendPerShare: corpForm.cashDividendPerShare ? Number(corpForm.cashDividendPerShare) : undefined,
-        splitRatio: corpForm.splitRatio ? Number(corpForm.splitRatio) : undefined,
+        cashDividendPerShare: corpForm.cashDividendPerShare
+          ? requirePortfolioDecimal(corpForm.cashDividendPerShare.trim(), 'Cash dividend per share')
+          : undefined,
+        splitRatio: corpForm.splitRatio
+          ? requirePortfolioDecimal(corpForm.splitRatio.trim(), 'Split ratio')
+          : undefined,
         note: corpForm.note || undefined,
       });
       await refreshPortfolioData();
@@ -2524,13 +2565,13 @@ const PortfolioPage: React.FC = () => {
       symbol: item.symbol,
       market: item.market || null,
       side: item.side,
-      quantity: String(item.quantity),
-      price: String(item.price),
+      quantity: item.quantity,
+      price: item.price,
       tradeDate: item.tradeDate,
       currency: item.currency,
       currencyManuallyEdited: !marketSettlementCurrency || item.currency !== marketSettlementCurrency,
-      fee: String(item.fee ?? 0),
-      tax: String(item.tax ?? 0),
+      fee: item.fee ?? PORTFOLIO_ZERO,
+      tax: item.tax ?? PORTFOLIO_ZERO,
       note: item.note || '',
     });
   };
@@ -2576,12 +2617,12 @@ const PortfolioPage: React.FC = () => {
         symbol: canonicalIdentity.symbol,
         market: canonicalMarket,
         side: editingTrade.side,
-        quantity: Number(editingTrade.quantity),
-        price: Number(editingTrade.price),
+        quantity: requirePortfolioDecimal(editingTrade.quantity.trim(), 'Trade quantity'),
+        price: requirePortfolioDecimal(editingTrade.price.trim(), 'Trade price'),
         tradeDate: editingTrade.tradeDate,
         currency: effectiveEditTradeCurrency,
-        fee: Number(editingTrade.fee || 0),
-        tax: Number(editingTrade.tax || 0),
+        fee: requirePortfolioDecimal(editingTrade.fee.trim() || PORTFOLIO_ZERO, 'Trade fee'),
+        tax: requirePortfolioDecimal(editingTrade.tax.trim() || PORTFOLIO_ZERO, 'Trade tax'),
         note: editingTrade.note || undefined,
       };
       await portfolioApi.updateTrade(editingTrade.id, payload);
@@ -2804,26 +2845,16 @@ const PortfolioPage: React.FC = () => {
     }
 
     if (fxBaseCurrency === fxQuoteCurrency) {
-      return { rate: 1, timestamp: fxLastUpdated === '--' ? undefined : fxLastUpdated, provider: 'identity', isStale: false };
+      return { rate: '1', timestamp: fxLastUpdated === '--' ? undefined : fxLastUpdated, provider: 'identity', isStale: false };
     }
 
     const direct = fxRateRows.find((item) => item.fromCurrency === fxBaseCurrency && item.toCurrency === fxQuoteCurrency);
-    if (direct && typeof direct.rate === 'number') {
+    if (direct?.rate && portfolioDecimalSign(direct.rate) > 0) {
       return {
         rate: direct.rate,
         timestamp: direct.updatedAt || direct.rateDate || undefined,
         provider: direct.source,
         isStale: direct.isStale,
-      };
-    }
-
-    const reverse = fxRateRows.find((item) => item.fromCurrency === fxQuoteCurrency && item.toCurrency === fxBaseCurrency);
-    if (reverse && typeof reverse.rate === 'number' && reverse.rate !== 0) {
-      return {
-        rate: 1 / reverse.rate,
-        timestamp: reverse.updatedAt || reverse.rateDate || undefined,
-        provider: reverse.source,
-        isStale: reverse.isStale,
       };
     }
 
@@ -2835,12 +2866,14 @@ const PortfolioPage: React.FC = () => {
   const rawTotalEquity = snapshot?.totalEquity ?? null;
   const rawTotalCash = snapshot?.totalCash ?? null;
   const rawTotalMarketValue = snapshot?.totalMarketValue ?? null;
-  const rawTotalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
+  const rawTotalUnrealizedPnl = positionRows.length
+    ? addPortfolioDecimals(...positionRows.map((row) => row.unrealizedPnlBase))
+    : PORTFOLIO_ZERO;
   const totalEquity = displaysAuthoritativeAmounts ? portfolioTruth.authoritativeTotal : null;
   const totalCash = displaysAuthoritativeAmounts ? rawTotalCash : null;
   const totalMarketValue = displaysAuthoritativeAmounts ? rawTotalMarketValue : null;
   const totalUnrealizedPnl = displaysAuthoritativeAmounts ? rawTotalUnrealizedPnl : null;
-  const convertMoney = (value: number | null, fromCurrency: string | undefined | null): ConvertedMoney => {
+  const convertMoney = (value: PortfolioDecimal | null, fromCurrency: string | undefined | null): ConvertedMoney => {
     if (value === null) {
       return null;
     }
@@ -2849,7 +2882,7 @@ const PortfolioPage: React.FC = () => {
       return null;
     }
     return {
-      value: value * rate.rate,
+      value: quantizeConvertedMoney(multiplyPortfolioDecimals(value, rate.rate), displayCurrency),
       currency: displayCurrency,
       rate: rate.rate,
       stale: rate.stale,
@@ -2865,7 +2898,7 @@ const PortfolioPage: React.FC = () => {
   const totalHistoryRows = tradeEvents.length + cashEvents.length + corporateEvents.length;
   const hasSmallHistory = totalHistoryRows <= 5;
   const shouldRenderFullHistory = hasHoldings || (isEmptyPortfolio && hasHistory && (!hasSmallHistory || showEmptyFullHistory));
-  const formatPortfolioAmount = (value: number | null, converted: ConvertedMoney, fromCurrency: string) => {
+  const formatPortfolioAmount = (value: PortfolioDecimal | null, converted: ConvertedMoney, fromCurrency: string) => {
     if (value === null) return portfolioTruthLabel;
     if (converted) return formatMoney(converted.value, displayCurrency);
     return formatMoney(value, fromCurrency);
@@ -2880,10 +2913,10 @@ const PortfolioPage: React.FC = () => {
     : null;
   const hasFxUnavailable = fxRateRows.some((item) => item.source === 'missing' || item.rate == null)
     || (displaysAuthoritativeAmounts && (
-      (!totalEquityDisplay && rawTotalEquity !== null && rawTotalEquity !== 0)
-      || (!totalCashDisplay && rawTotalCash !== null && rawTotalCash !== 0)
-      || (!totalMarketValueDisplay && rawTotalMarketValue !== null && rawTotalMarketValue !== 0)
-      || (!totalUnrealizedDisplay && rawTotalUnrealizedPnl !== 0)
+      (!totalEquityDisplay && rawTotalEquity !== null && portfolioDecimalSign(rawTotalEquity) !== 0)
+      || (!totalCashDisplay && rawTotalCash !== null && portfolioDecimalSign(rawTotalCash) !== 0)
+      || (!totalMarketValueDisplay && rawTotalMarketValue !== null && portfolioDecimalSign(rawTotalMarketValue) !== 0)
+      || (!totalUnrealizedDisplay && portfolioDecimalSign(rawTotalUnrealizedPnl) !== 0)
     ));
   const hasPriceFallback = positionRows.some((row) => row.isPriceFallback);
   const hasUpdatingPrice = hasHoldings && positionRows.some((row) => !row.priceAsOf && !row.isPriceFallback);
@@ -2912,7 +2945,7 @@ const PortfolioPage: React.FC = () => {
   const portfolioEmptyStateGuidance = language === 'zh'
     ? '添加持仓后显示'
     : 'Displays after adding holdings';
-  const formatConvertedDisplay = (value: number, nativeCurrency: string) => {
+  const formatConvertedDisplay = (value: PortfolioDecimal, nativeCurrency: string) => {
     if (nativeCurrency === displayCurrency) {
       return null;
     }
@@ -2924,7 +2957,7 @@ const PortfolioPage: React.FC = () => {
   const realizedPnl = displaysAuthoritativeAmounts ? (analytics?.pnl.realized.amount ?? snapshot?.realizedPnl ?? null) : null;
   const unrealizedPnl = displaysAuthoritativeAmounts ? (analytics?.pnl.unrealized.amount ?? totalUnrealizedPnl) : null;
   const totalPnl = displaysAuthoritativeAmounts
-    ? (analytics?.pnl.total.amount ?? (realizedPnl ?? 0) + (unrealizedPnl ?? 0))
+    ? (analytics?.pnl.total.amount ?? addPortfolioDecimals(realizedPnl ?? PORTFOLIO_ZERO, unrealizedPnl ?? PORTFOLIO_ZERO))
     : null;
   const realizedPnlDisplay = convertMoney(realizedPnl, pnlSourceCurrency);
   const unrealizedPnlDisplay = convertMoney(unrealizedPnl, pnlSourceCurrency);
@@ -2962,17 +2995,17 @@ const PortfolioPage: React.FC = () => {
     if (exposureTab === 'symbol') return exposure.bySymbol || [];
     return exposure.bySector || [];
   })();
-  const formatAnalyticsMoney = (value: number, currency: string) => {
+  const formatAnalyticsMoney = (value: PortfolioDecimal, currency: string) => {
     const converted = convertMoney(value, currency);
     if (converted) return formatMoney(converted.value, displayCurrency);
-    if (value === 0) return formatMoney(0, displayCurrency);
+    if (portfolioDecimalSign(value) === 0) return formatMoney(PORTFOLIO_ZERO, displayCurrency);
     return formatMoney(value, currency);
   };
   const renderExposureValue = (row: PortfolioExposureItem) => {
     const currency = row.displayCurrency || snapshotCurrency;
-    const displaySource = Number.isFinite(row.displayValue)
+    const displaySource = parsePortfolioDecimal(row.displayValue)
       ? row.displayValue
-      : Number.isFinite(row.marketValue)
+      : parsePortfolioDecimal(row.marketValue)
         ? row.marketValue
         : null;
     const display = displaySource == null
@@ -2981,7 +3014,7 @@ const PortfolioPage: React.FC = () => {
     const native = row.nativeCurrency
       && row.nativeCurrency !== displayCurrency
       && row.nativeValue != null
-      && Number.isFinite(row.nativeValue)
+      && parsePortfolioDecimal(row.nativeValue)
       ? formatMoney(row.nativeValue, row.nativeCurrency)
       : null;
     return { display, native };
@@ -3272,10 +3305,9 @@ const PortfolioPage: React.FC = () => {
   const scenarioRiskPositions = useMemo<PortfolioScenarioRiskVisiblePosition[]>(
     () => positionRows.map((row) => ({
       symbol: row.symbol,
-      marketValue: row.marketValueBase,
       marketValueBase: row.marketValueBase,
+      baseCurrency: row.valuationCurrency,
       bucketLabel: formatConsumerAccountLabel(row.accountName, language),
-      currency: row.currency || row.valuationCurrency || null,
     })),
     [language, positionRows],
   );
@@ -4165,7 +4197,7 @@ const PortfolioPage: React.FC = () => {
                       <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{pnlLabels.total}</div>
                       <div
                         data-testid="portfolio-summary-pnl-value"
-                        className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl == null ? 'text-[color:var(--wolfy-text-secondary)]' : totalPnl >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}
+                        className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl == null ? 'text-[color:var(--wolfy-text-secondary)]' : portfolioDecimalSign(totalPnl) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}
                       >
                         {totalPnl == null
                           ? portfolioTruthLabel
@@ -4446,6 +4478,8 @@ const PortfolioPage: React.FC = () => {
                   {hasHoldings ? (
                     <PortfolioScenarioRiskPanel
                       snapshotAsOf={snapshot?.asOf}
+                      baseCurrency={snapshot?.currency}
+                      portfolioTruthValueSemantics={portfolioTruth?.valueSemantics ?? null}
                       positions={scenarioRiskPositions}
                       onRunScenario={(payload) => portfolioApi.projectScenarioRisk(payload)}
                     />
@@ -4586,7 +4620,7 @@ const PortfolioPage: React.FC = () => {
                                         })}
                                       </p>
                                     </div>
-                                    <div className={`shrink-0 text-right font-mono text-sm ${row.unrealizedPnlBase >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
+                                    <div className={`shrink-0 text-right font-mono text-sm ${portfolioDecimalSign(row.unrealizedPnlBase) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
                                       {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
                                       <div className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{formatPercent(row.unrealizedPnlPct)}</div>
                                     </div>
@@ -4594,7 +4628,7 @@ const PortfolioPage: React.FC = () => {
                                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
                                     <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2">
                                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '数量' : 'Qty'}</p>
-                                      <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
+                                      <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatPortfolioDecimal(row.quantity)}</p>
                                     </div>
                                     <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2">
                                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '成本' : 'Cost'}</p>
@@ -4671,7 +4705,7 @@ const PortfolioPage: React.FC = () => {
                                       })}
                                     </div>
                                   </td>
-                                  <td className="px-3 py-2 font-mono">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                                  <td className="px-3 py-2 font-mono">{formatPortfolioDecimal(row.quantity)}</td>
                                   <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
                                   <td className="px-3 py-2 font-mono">
                                     {formatMoney(row.marketValueBase, row.valuationCurrency)}
@@ -4682,7 +4716,7 @@ const PortfolioPage: React.FC = () => {
                                         : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
                                     </div>
                                   </td>
-                                  <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
+                                  <td className={`px-3 py-2 font-mono ${portfolioDecimalSign(row.unrealizedPnlBase) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}`}>
                                     {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
                                     <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatPercent(row.unrealizedPnlPct)}</div>
                                   </td>
@@ -4939,8 +4973,8 @@ const PortfolioPage: React.FC = () => {
                               {exposureTab === 'symbol' && row.unrealizedPnl != null ? (
                                 <div className="mt-2 flex justify-between gap-3 text-xs text-[color:var(--wolfy-text-muted)]">
                                   <span>{copy.positionUnrealized}</span>
-                                  <span className={Number(row.unrealizedPnl) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}>
-                                    {formatSignedMoney(Number(row.unrealizedPnl), row.displayCurrency || snapshotCurrency)}
+                                  <span className={portfolioDecimalSign(row.unrealizedPnl) >= 0 ? 'text-[color:var(--state-success-text)]' : 'text-[color:var(--state-danger-text)]'}>
+                                    {formatSignedMoney(row.unrealizedPnl, row.displayCurrency || snapshotCurrency)}
                                     {' '}
                                     {formatPercent(row.unrealizedPnlPct)}
                                   </span>

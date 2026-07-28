@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -93,6 +94,15 @@ class PortfolioHistoryClient:
         self.temp_dir.cleanup()
 
     def seed_account(self, *, owner_id: str = "history-user", name: str = "History Account") -> int:
+        if owner_id != "history-user":
+            self.db.create_or_update_app_user(
+                user_id=owner_id,
+                username=owner_id,
+                display_name=name,
+                role="user",
+                password_hash=f"pbkdf2:{owner_id}",
+                is_active=True,
+            )
         with self.db.get_session() as session:
             row = PortfolioAccount(
                 owner_id=owner_id,
@@ -111,11 +121,11 @@ class PortfolioHistoryClient:
         *,
         account_id: int,
         snapshot_date: date,
-        total_cash: float,
-        total_market_value: float,
-        total_equity: float,
-        unrealized_pnl: float,
-        realized_pnl: float,
+        total_cash: Decimal,
+        total_market_value: Decimal,
+        total_equity: Decimal,
+        unrealized_pnl: Decimal,
+        realized_pnl: Decimal,
         payload: str = '{"secret": "SNAPSHOT_SECRET"}',
     ) -> None:
         with self.db.get_session() as session:
@@ -130,8 +140,8 @@ class PortfolioHistoryClient:
                     total_equity=total_equity,
                     unrealized_pnl=unrealized_pnl,
                     realized_pnl=realized_pnl,
-                    fee_total=1.5,
-                    tax_total=0.25,
+                    fee_total=Decimal("1.5"),
+                    tax_total=Decimal("0.25"),
                     fx_stale=False,
                     payload=payload,
                 )
@@ -159,38 +169,38 @@ def test_history_returns_stored_snapshots_with_date_filter_limit_and_coverage() 
         ctx.seed_snapshot(
             account_id=account_id,
             snapshot_date=date(2026, 1, 1),
-            total_cash=1000.0,
-            total_market_value=2000.0,
-            total_equity=3000.0,
-            unrealized_pnl=100.0,
-            realized_pnl=20.0,
+            total_cash=Decimal("1000"),
+            total_market_value=Decimal("2000"),
+            total_equity=Decimal("3000"),
+            unrealized_pnl=Decimal("100"),
+            realized_pnl=Decimal("20"),
         )
         ctx.seed_snapshot(
             account_id=account_id,
             snapshot_date=date(2026, 1, 3),
-            total_cash=900.0,
-            total_market_value=2300.0,
-            total_equity=3200.0,
-            unrealized_pnl=150.0,
-            realized_pnl=30.0,
+            total_cash=Decimal("900"),
+            total_market_value=Decimal("2300"),
+            total_equity=Decimal("3200"),
+            unrealized_pnl=Decimal("150"),
+            realized_pnl=Decimal("30"),
         )
         ctx.seed_snapshot(
             account_id=account_id,
             snapshot_date=date(2026, 1, 4),
-            total_cash=850.0,
-            total_market_value=2100.0,
-            total_equity=2950.0,
-            unrealized_pnl=-50.0,
-            realized_pnl=35.0,
+            total_cash=Decimal("850"),
+            total_market_value=Decimal("2100"),
+            total_equity=Decimal("2950"),
+            unrealized_pnl=Decimal("-50"),
+            realized_pnl=Decimal("35"),
         )
         ctx.seed_snapshot(
             account_id=other_account_id,
             snapshot_date=date(2026, 1, 4),
-            total_cash=999999.0,
-            total_market_value=999999.0,
-            total_equity=1999998.0,
-            unrealized_pnl=999999.0,
-            realized_pnl=999999.0,
+            total_cash=Decimal("999999"),
+            total_market_value=Decimal("999999"),
+            total_equity=Decimal("1999998"),
+            unrealized_pnl=Decimal("999999"),
+            realized_pnl=Decimal("999999"),
             payload='{"secret": "OTHER_OWNER_SNAPSHOT_SECRET"}',
         )
         before_count = ctx.snapshot_count()
@@ -219,11 +229,11 @@ def test_history_returns_stored_snapshots_with_date_filter_limit_and_coverage() 
         assert payload["account_id"] == account_id
         assert payload["cost_method"] == "fifo"
         assert [item["snapshot_date"] for item in payload["items"]] == ["2026-01-03", "2026-01-04"]
-        assert payload["items"][0]["total_cash"] == 900.0
-        assert payload["items"][0]["total_market_value"] == 2300.0
-        assert payload["items"][0]["total_equity"] == 3200.0
-        assert payload["items"][0]["unrealized_pnl"] == 150.0
-        assert payload["items"][0]["realized_pnl"] == 30.0
+        assert payload["items"][0]["total_cash"] == "900.00"
+        assert payload["items"][0]["total_market_value"] == "2300.00"
+        assert payload["items"][0]["total_equity"] == "3200.00"
+        assert payload["items"][0]["unrealized_pnl"] == "150.00"
+        assert payload["items"][0]["realized_pnl"] == "30.00"
         assert payload["coverage"]["status"] == "available"
         assert payload["coverage"]["point_count"] == 2
         assert payload["coverage"]["insufficient_data"] is False
@@ -245,11 +255,11 @@ def test_history_reports_insufficient_data_without_backfill_or_recalculation() -
         ctx.seed_snapshot(
             account_id=account_id,
             snapshot_date=date(2026, 2, 5),
-            total_cash=500.0,
-            total_market_value=700.0,
-            total_equity=1200.0,
-            unrealized_pnl=25.0,
-            realized_pnl=5.0,
+            total_cash=Decimal("500"),
+            total_market_value=Decimal("700"),
+            total_equity=Decimal("1200"),
+            unrealized_pnl=Decimal("25"),
+            realized_pnl=Decimal("5"),
         )
         before_count = ctx.snapshot_count()
 

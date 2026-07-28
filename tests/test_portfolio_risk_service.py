@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import hashlib
+import json
 import os
 import shutil
 import tempfile
@@ -122,7 +125,7 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
         self._restore_previous_environment()
         self.temp_dir.cleanup()
 
-    def _save_close(self, symbol: str, on_date: date, close: float) -> None:
+    def _save_close(self, symbol: str, on_date: date, close: Decimal) -> None:
         df = pd.DataFrame(
             [
                 {
@@ -146,7 +149,7 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 5, 10),
             direction="in",
-            amount=2000.0,
+            amount=Decimal("2000.0"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -154,12 +157,12 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
             symbol="600519",
             trade_date=date(2026, 5, 10),
             side="buy",
-            quantity=10.0,
-            price=100.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("100.0"),
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 5, 10), 100.0)
+        self._save_close("600519", date(2026, 5, 10), Decimal("100.00"))
 
         report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 5, 10), cost_method="fifo")
 
@@ -177,7 +180,7 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 5, 10),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -185,12 +188,12 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 5, 10),
             side="buy",
-            quantity=1.0,
-            price=100.0,
+            quantity=Decimal("1.0"),
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 5, 10), 100.0)
+        self._save_close("AAPL", date(2026, 5, 10), Decimal("100.00"))
 
         snapshot = self.service.get_portfolio_snapshot(
             account_id=aid,
@@ -207,6 +210,148 @@ class PortfolioRiskServiceDiagnosticsTestCase(unittest.TestCase):
         self.assertEqual(report["fxFreshnessState"], "unavailable")
         self.assertLessEqual(report["confidenceCap"]["value"], 40)
         self.assertIn("FX 汇率缺失", report["confidenceCap"]["limitation_labels"])
+
+    def test_risk_blocks_preserve_high_scale_snapshot_money_and_prices(self) -> None:
+        total = Decimal("9007199254740993.12")
+        avg_cost = Decimal("9007199254740993.12345678")
+        last_price = Decimal("8106473329275893.00000000")
+        snapshot = {
+            "currency": "CNY",
+            "total_equity": total,
+            "total_market_value": total,
+            "accounts": [
+                {
+                    "account_id": 1,
+                    "account_name": "Exact",
+                    "market": "cn",
+                    "base_currency": "CNY",
+                    "total_equity": total,
+                    "total_market_value": total,
+                    "positions": [
+                        {
+                            "symbol": "600519",
+                            "market": "cn",
+                            "currency": "CNY",
+                            "valuation_currency": "CNY",
+                            "market_value_base": total,
+                            "avg_cost": avg_cost,
+                            "last_price": last_price,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        concentration = self.risk_service._build_concentration(
+            snapshot,
+            threshold_pct=35.0,
+            as_of_date=date(2026, 5, 10),
+        )
+        attribution = self.risk_service._build_account_attribution(
+            snapshot=snapshot,
+            as_of_date=date(2026, 5, 10),
+        )
+        stop_loss = self.risk_service._build_stop_loss(
+            snapshot,
+            {"stop_loss_alert_pct": 10.0, "stop_loss_near_ratio": 0.8},
+        )
+
+        self.assertEqual(concentration["total_market_value"], total)
+        self.assertEqual(concentration["top_positions"][0]["market_value_base"], total)
+        self.assertEqual(attribution["total_equity"], total)
+        self.assertEqual(attribution["top_accounts"][0]["total_market_value_base"], total)
+        self.assertEqual(stop_loss["items"][0]["avg_cost"], avg_cost)
+        self.assertEqual(stop_loss["items"][0]["last_price"], last_price)
+
+    def test_stop_loss_uses_exact_decimal_thresholds(self) -> None:
+        snapshot = {
+            "accounts": [
+                {
+                    "account_id": 1,
+                    "market": "cn",
+                    "positions": [
+                        {
+                            "symbol": "600519",
+                            "market": "cn",
+                            "avg_cost": Decimal("100.00000000"),
+                            "last_price": Decimal("91.92000000"),
+                        }
+                    ],
+                }
+            ]
+        }
+
+        stop_loss = self.risk_service._build_stop_loss(
+            snapshot,
+            {"stop_loss_alert_pct": 10.1, "stop_loss_near_ratio": 0.8},
+        )
+
+        self.assertTrue(stop_loss["near_alert"])
+        self.assertEqual(stop_loss["triggered_count"], 0)
+        self.assertEqual(stop_loss["near_count"], 1)
+        self.assertEqual(stop_loss["items"][0]["near_threshold_pct"], 8.08)
+
+    def test_drawdown_unitization_preserves_high_scale_snapshot_cash_flow(self) -> None:
+        account = self.service.create_account(
+            name="Exact drawdown",
+            broker="Demo",
+            market="cn",
+            base_currency="USD",
+        )
+        account_id = int(account["id"])
+        opening_equity = Decimal("0.00400000")
+        deposited_equity = Decimal("1.00300000")
+        snapshots = (
+            (date(2026, 5, 10), opening_equity, "0.00000000"),
+            (date(2026, 5, 11), deposited_equity, "1.00000000"),
+        )
+        for snapshot_date, total_equity, cumulative_cash_flow in snapshots:
+            self.service.repo.upsert_daily_snapshot(
+                account_id=account_id,
+                snapshot_date=snapshot_date,
+                cost_method="fifo",
+                base_currency="USD",
+                total_cash=total_equity,
+                total_market_value=Decimal("0.00"),
+                total_equity=total_equity,
+                unrealized_pnl=Decimal("0.00"),
+                realized_pnl=Decimal("0.00"),
+                fee_total=Decimal("0.00"),
+                tax_total=Decimal("0.00"),
+                fx_stale=False,
+                payload=json.dumps(
+                    {
+                        "performance": {
+                            "contract_version": "portfolio_performance_v1",
+                            "calculation_state": "available",
+                            "cash_flows": {"net": cumulative_cash_flow},
+                        }
+                    }
+                ),
+            )
+
+        projections = self.service.repo.list_daily_snapshots_for_risk(
+            as_of=date(2026, 5, 11),
+            cost_method="fifo",
+            account_id=account_id,
+            owner_id=self.service.owner_id,
+        )
+        drawdown = self.risk_service._build_drawdown(
+            account_id=account_id,
+            as_of_date=date(2026, 5, 11),
+            cost_method="fifo",
+            threshold_pct=10.0,
+            lookback_days=180,
+            report_currency="USD",
+        )
+
+        self.assertEqual(
+            [item.total_equity for item in projections],
+            [opening_equity, Decimal("0.00300000")],
+        )
+        self.assertEqual(drawdown["series_points"], 2)
+        self.assertEqual(drawdown["max_drawdown_pct"], 25.0)
+        self.assertEqual(drawdown["current_drawdown_pct"], 25.0)
 
 
 if __name__ == "__main__":

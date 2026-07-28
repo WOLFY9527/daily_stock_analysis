@@ -371,6 +371,7 @@ create table if not exists portfolio_positions (
     as_of_time timestamptz not null,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
+    price_cost numeric(24, 8),
     unique (portfolio_account_id, source_kind, cost_method, canonical_symbol, market, currency)
 );
 

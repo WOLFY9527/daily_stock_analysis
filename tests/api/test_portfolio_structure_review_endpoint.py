@@ -28,8 +28,15 @@ def _make_user() -> CurrentUser:
 
 
 class _FakePortfolioStructureReviewService:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        exposure_market_value: Any = "1500.00",
+        exposure_display_currency: Any = "USD",
+    ) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.exposure_market_value = exposure_market_value
+        self.exposure_display_currency = exposure_display_currency
 
     def build_review(
         self,
@@ -60,7 +67,16 @@ class _FakePortfolioStructureReviewService:
                 "evaluatedCount": 1,
                 "largestHolding": {"ticker": "AAPL", "percent": 100.0},
             },
-            "exposureByThemeOrSector": [],
+            "exposureByThemeOrSector": [
+                {
+                    "key": "ai_infrastructure",
+                    "label": "AI Infrastructure",
+                    "marketValue": self.exposure_market_value,
+                    "displayCurrency": self.exposure_display_currency,
+                    "percent": 75.0,
+                    "holdingCount": 1,
+                }
+            ],
             "countsByStructureState": {"mixed": 1},
             "holdingsStructure": [
                 {
@@ -210,6 +226,16 @@ def test_portfolio_structure_review_endpoint_returns_read_only_projection() -> N
     assert payload["observationBoundary"]
     assert payload["researchNextSteps"]
     assert payload["aggregateSummary"]["holdingCount"] == 1
+    assert payload["exposureByThemeOrSector"] == [
+        {
+            "key": "ai_infrastructure",
+            "label": "AI Infrastructure",
+            "marketValue": "1500.00",
+            "displayCurrency": "USD",
+            "percent": 75.0,
+            "holdingCount": 1,
+        }
+    ]
     assert payload["holdingsStructure"][0]["ticker"] == "AAPL"
     assert payload["readOnly"] is True
     assert payload["failClosed"] is False
@@ -233,3 +259,12 @@ def test_portfolio_structure_review_endpoint_returns_read_only_projection() -> N
             "owner_id": "portfolio-review-user",
         }
     ]
+
+    numeric_wire_response = _client(
+        _FakePortfolioStructureReviewService(exposure_market_value=1500.0)
+    ).get("/api/v1/portfolio/structure-review")
+    assert numeric_wire_response.status_code == 400
+    assert numeric_wire_response.json()["detail"]["error"] == "validation_error"
+    assert numeric_wire_response.json()["detail"]["message"] == (
+        "Portfolio request could not be processed."
+    )

@@ -59,8 +59,8 @@
       "sha256": "445301088c77a7235c8ed97c90367203124ec54c87a1e5adc614af43a0aca2f4"
     },
     "currentInventory": {
-      "count": 8022,
-      "sha256": "e5bb3bf8a060db9bfc580a0191cb33c3a93259090b9b91c5b69ab0eafece367c"
+      "count": 8136,
+      "sha256": "3dc01d7836ea986bc6093b9b492fe15a30cd065484cc8cd3a9f3dbaca01152d6"
     },
     "tests": [
       {
@@ -4414,9 +4414,29 @@
         "baseline": true
       },
       {
+        "id": "tests/api/test_portfolio_scenario_risk.py::test_scenario_risk_endpoint_serializes_zero_decimals_as_fixed_point",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_portfolio_scenario_risk.py::test_scenario_risk_rejects_market_value_without_row_base_currency",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/api/test_portfolio_scenario_risk.py::test_scenario_risk_requires_and_echoes_explicit_base_currency",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/api/test_portfolio_scenario_risk.py::test_symbol_proxy_and_theme_shocks_work_from_explicit_exposures",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/api/test_portfolio_scenario_risk.py::test_symbol_weight_mapping_preserves_legacy_scenario_positions",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/api/test_portfolio_structure_review_endpoint.py::test_portfolio_structure_review_endpoint_returns_read_only_projection",
@@ -10259,6 +10279,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_agent_stock_evidence_service.py::test_stock_evidence_projects_decimal_backed_technical_rows_as_numeric_analytics",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_agent_stock_evidence_service.py::test_stock_evidence_routes_injected_sec_sidecar_through_router_without_network_or_cik_lookup",
         "domain": "market",
         "baseline": true
@@ -10584,6 +10609,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_cache_update_is_reported_as_persisted_after_exact_readback",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_default_disabled_runtime_returns_safe_status_without_provider_call",
         "domain": "provider_external_network",
         "baseline": true
@@ -10599,6 +10629,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_float_origin_history_is_not_reported_as_a_persisted_cache",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_insufficient_stale_and_missing_adjustments_classifications_remain_honest",
         "domain": "provider_external_network",
         "baseline": true
@@ -10607,6 +10642,11 @@
         "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_local_cache_hit_avoids_second_akshare_provider_call",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_malformed_close_provenance_is_not_reconstructed",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_akshare_cn_ohlcv_cache_runtime.py::test_process_scoped_cn_runtime_activation_is_read_without_cached_settings",
@@ -12714,6 +12754,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_backtest_engine.py::BacktestEngineTestCase::test_decimal_stock_daily_close_is_converted_at_analytics_boundary",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_backtest_engine.py::BacktestEngineTestCase::test_direction_correct_false_buy_down",
         "domain": "backtest",
         "baseline": true
@@ -13179,6 +13224,31 @@
         "baseline": true
       },
       {
+        "id": "tests/test_backtest_service.py::BacktestDecimalConsumerTestCase::test_standard_result_identity_serializes_decimal_close_as_canonical_text",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_service.py::BacktestExactCloseProvenanceTestCase::test_complete_exact_close_provenance_is_persistence_eligible",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_service.py::BacktestExactCloseProvenanceTestCase::test_fill_rejects_missing_malformed_or_incomplete_exact_close_provenance",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_service.py::BacktestExactCloseProvenanceTestCase::test_warmup_rejects_missing_malformed_or_incomplete_exact_close_provenance",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_backtest_service.py::BacktestExactCloseProvenanceTestCase::test_warmup_with_complete_exact_close_provenance_is_persistence_eligible",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_backtest_service.py::BacktestServiceTestCase::test_agent_learning_summary_helpers_keep_skill_rollups_neutral_until_supported",
         "domain": "backtest",
         "baseline": true
@@ -13594,6 +13664,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_baostock_source_contract.py::test_baostock_cleaning_preserves_existing_exact_close_provenance",
+        "domain": "provider_external_network",
+        "baseline": false
+      },
+      {
         "id": "tests/test_baostock_source_contract.py::test_baostock_contract_capabilities_exclude_unsupported_probe_capabilities",
         "domain": "provider_external_network",
         "baseline": true
@@ -13607,6 +13682,11 @@
         "id": "tests/test_baostock_source_contract.py::test_baostock_contracts_remain_cautious_observation_only_metadata",
         "domain": "provider_external_network",
         "baseline": true
+      },
+      {
+        "id": "tests/test_baostock_source_contract.py::test_baostock_daily_normalization_keeps_exact_close_provenance",
+        "domain": "provider_external_network",
+        "baseline": false
       },
       {
         "id": "tests/test_build_provenance_service.py::test_build_provenance_marks_static_bundle_stale_when_asset_older_than_backend_commit",
@@ -15109,6 +15189,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_data_tools_analysis_context.py::AnalysisContextToolExactNumericTestCase::test_preserves_decimal_text_and_is_json_serializable",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_data_tools_get_stock_info.py::TestGetStockInfoContract::test_get_stock_info_preserves_board_semantics",
         "domain": "market",
         "baseline": true
@@ -16439,6 +16524,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_fetcher_logging.py::TestFetcherLogging::test_base_fetcher_keeps_string_close_provenance_while_close_stays_numeric",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_fetcher_logging.py::TestFetcherLogging::test_base_fetcher_logs_start_and_success",
         "domain": "residual_repository_integration",
         "baseline": true
@@ -17067,6 +17157,11 @@
         "id": "tests/test_fx_rate_service.py::FxRateServiceTestCase::test_fetches_rate_from_frankfurter_provider",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_fx_rate_service.py::FxRateServiceTestCase::test_preserves_provider_decimal_as_canonical_text",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_fx_rate_service.py::FxRateServiceTestCase::test_returns_cache_hit_on_second_request_within_ttl",
@@ -23839,6 +23934,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_normalize_history_frame_rejects_malformed_close_provenance",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_not_run_status_activates_bounded_us_local_parquet_universe",
         "domain": "scanner",
         "baseline": true
@@ -23859,6 +23959,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_parallel_remote_float_history_reports_not_persisted_in_diagnostics",
+        "domain": "scanner",
+        "baseline": false
+      },
+      {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_prepare_shortlist_excludes_blocked_candidates_without_assigning_rank",
         "domain": "scanner",
         "baseline": false
@@ -23877,6 +23982,11 @@
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_quote_snapshot_cache_readiness_can_supply_quote_context_without_live_quotes",
         "domain": "scanner",
         "baseline": true
+      },
+      {
+        "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_remote_float_history_remains_analytics_available_and_reports_not_persisted",
+        "domain": "scanner",
+        "baseline": false
       },
       {
         "id": "tests/test_market_scanner_service.py::MarketScannerServiceTestCase::test_resolve_cn_stock_universe_uses_builtin_mapping_after_tushare_permission_denied",
@@ -28374,9 +28484,9 @@
         "baseline": true
       },
       {
-        "id": "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_build_us_realtime_snapshot_df_uses_market_trade_date",
+        "id": "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_build_us_realtime_snapshot_df_rejects_float_quote_without_fetching",
         "domain": "residual_repository_integration",
-        "baseline": true
+        "baseline": false
       },
       {
         "id": "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_enhance_context_injects_runtime_news_window_days",
@@ -28394,9 +28504,14 @@
         "baseline": true
       },
       {
-        "id": "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_fetch_and_save_us_stock_falls_back_to_realtime_snapshot_when_daily_fails",
+        "id": "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_fetch_and_save_us_stock_rejects_float_realtime_snapshot_when_daily_fails",
         "domain": "residual_repository_integration",
-        "baseline": true
+        "baseline": false
+      },
+      {
+        "id": "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_fetch_and_save_us_stock_reports_yfinance_float_history_rejection",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_last_completed_session_keeps_eod_today_even_with_realtime_and_trend",
@@ -28759,6 +28874,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_history_preserves_high_scale_stored_base_currency_money_as_decimal_text",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_api.py::PortfolioApiTestCase::test_ibkr_import_currency_rejection_uses_safe_structured_error",
         "domain": "portfolio_broker",
         "baseline": false
@@ -28929,6 +29049,146 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_ibkr_sync_response_uses_base_currency_precision_and_rejects_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_import_preview_response_preserves_decimal_text_and_rejects_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_openapi_exact_decimal_schema_excludes_binary_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_remaining_event_requests_preserve_decimal_transport_and_reject_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_snapshot_analytics_money_preserves_canonical_decimal_text_and_rejects_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_snapshot_history_and_fx_responses_preserve_contextual_decimal_text",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_snapshot_truth_money_preserves_canonical_decimal_text_and_rejects_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_api_contract.py::PortfolioExactWireContractTestCase::test_trade_request_preserves_canonical_decimal_text_and_rejects_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_asset_quantity_and_price_precision_use_the_market_registry[cn]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_asset_quantity_and_price_precision_use_the_market_registry[global]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_asset_quantity_and_price_precision_use_the_market_registry[hk]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_asset_quantity_and_price_precision_use_the_market_registry[us]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_currency_money_precision_uses_the_reviewed_minor_unit_registry",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_fx_precision_and_half_even_derived_rounding_are_explicit",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_legacy_float_conversion_is_explicit_and_uses_storage_scale",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_equality_is_exact_at_the_resolved_quantum",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_ingress_rejects_binary_or_malformed_or_excess_precision[0.1]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_ingress_rejects_binary_or_malformed_or_excess_precision[1.234]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_ingress_rejects_binary_or_malformed_or_excess_precision[1e-2]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_ingress_rejects_binary_or_malformed_or_excess_precision[Infinity]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_ingress_rejects_binary_or_malformed_or_excess_precision[NaN]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_ingress_rejects_binary_or_malformed_or_excess_precision[True]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_public_ingress_rejects_binary_or_malformed_or_excess_precision[not-a-number]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_stable_policy_api_uses_named_kinds_and_rejects_binary_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_unknown_precision_context_fails_closed[kwargs0-1.00]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_unknown_precision_context_fails_closed[kwargs1-1]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_unknown_precision_context_fails_closed[kwargs2-1]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_exact_numeric.py::test_unknown_precision_context_fails_closed[kwargs3-1]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_golden_contracts.py::test_all_portfolio_golden_fixtures_exclude_raw_secrets_payloads_and_stack_traces",
         "domain": "portfolio_broker",
         "baseline": true
@@ -28989,6 +29249,16 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_position_normalization_keeps_decimal_values_until_public_serialization",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_position_normalization_rounds_derived_market_price_before_strict_parse",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_accepts_explicit_summary_currency_evidence",
         "domain": "portfolio_broker",
         "baseline": false
@@ -29014,6 +29284,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_preserves_exact_broker_snapshot_values_through_latest_state_and_overlay",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_rejects_accounts_payload_without_supported_identifier",
         "domain": "portfolio_broker",
         "baseline": true
@@ -29037,6 +29312,11 @@
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_requires_transient_session_token",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_rounds_derived_fx_values_at_destination_money_boundary",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_read_only_sync_surfaces_expired_session_as_safe_error",
@@ -29069,6 +29349,11 @@
         "baseline": false
       },
       {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_requests_transport_preserves_json_decimal_and_normalizer_rejects_float",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_same_day_overlay_resync_refreshes_cached_snapshot",
         "domain": "portfolio_broker",
         "baseline": true
@@ -29077,6 +29362,11 @@
         "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_same_user_multi_account_sync_keeps_mapping_stable_and_overlays_isolated",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_ibkr_sync.py::PortfolioIbkrSyncServiceTestCase::test_transport_decoded_bare_decimal_summary_survives_read_only_sync",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_account_attribution_uses_normalized_total_equity_across_accounts",
@@ -29095,6 +29385,16 @@
       },
       {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_concurrent_duplicate_ibkr_import_has_one_complete_winner",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_csv_import_dedup_hash_ignores_cosmetic_decimal_scale",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_csv_import_preserves_decimal_text_before_account_context_is_known",
         "domain": "portfolio_broker",
         "baseline": false
       },
@@ -29155,6 +29455,11 @@
       },
       {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_historical_replay_does_not_duplicate_cash_or_actions",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_ibkr_import_collapses_cash_rows_that_differ_only_by_decimal_scale",
         "domain": "portfolio_broker",
         "baseline": false
       },
@@ -29227,6 +29532,16 @@
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_irrelevant_fx_rate_update_does_not_invalidate_warm_snapshot_cache",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_no_uid_import_does_not_drop_adjacent_exact_value_on_legacy_v1_hash_collision",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_no_uid_import_recognizes_pre_r05_v1_dedup_hash",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_pr2.py::PortfolioPr2TestCase::test_risk_drawdown_backfills_snapshot_window_on_first_call",
@@ -29319,14 +29634,39 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_drawdown_unitization_preserves_high_scale_snapshot_cash_flow",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_fx_fallback_caps_confidence_without_changing_risk_values",
         "domain": "portfolio_broker",
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_risk_blocks_preserve_high_scale_snapshot_money_and_prices",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_risk_report_includes_additive_diagnostics",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_risk_service.py::PortfolioRiskServiceDiagnosticsTestCase::test_stop_loss_uses_exact_decimal_thresholds",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_aggregates_raw_money_before_terminal_rounding",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_aggregates_raw_percent_before_terminal_rounding",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_calculates_symbol_and_proxy_shock_impacts",
@@ -29344,9 +29684,59 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_preserves_high_scale_exact_arithmetic_and_strings",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_rejects_inexact_public_numeric_values[positions0-exposures0-scenario_shocks0]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_rejects_inexact_public_numeric_values[positions1-exposures1-scenario_shocks1]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_rejects_inexact_public_numeric_values[positions2-exposures2-scenario_shocks2]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_rejects_inexact_public_numeric_values[positions3-exposures3-scenario_shocks3]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_rejects_inexact_public_numeric_values[positions4-exposures4-scenario_shocks4]",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_rejects_mixed_currency_market_values",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_rejects_native_market_values_without_base_provenance",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_reports_missing_coverage_without_inferring_labels",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_requires_base_currency_provenance_for_market_values",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_scenario_risk_read_model.py::test_portfolio_scenario_risk_uses_raw_bucket_money_for_loss_shares_before_rounding",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_service.py::PortfolioImportServiceOwnerGuardTestCase::test_non_ibkr_commit_requires_account_before_duplicate_probes",
@@ -29419,6 +29809,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_futu_and_ths_preserve_final_exact_quantum_cost_adjustment",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_futu_diluted_cost_examples_allow_negative_and_dividend_adjustment",
         "domain": "portfolio_broker",
         "baseline": true
@@ -29432,6 +29827,11 @@
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_historical_cached_snapshot_does_not_reuse_newer_position_cache",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_internal_account_snapshot_preserves_decimal_authority_before_public_serialization",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_ledger_cash_movement_and_pnl_after_buy_sell_fixture",
@@ -29467,6 +29867,21 @@
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_portfolio_write_session_maps_sqlite_locked_error",
         "domain": "portfolio_broker",
         "baseline": true
+      },
+      {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_public_conversion_keeps_decimal_and_rejects_float_ingress",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_realized_symbol_cache_payload_preserves_exact_decimal_values",
+        "domain": "portfolio_broker",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_refresh_fx_rates_persists_canonical_decimal_text_without_float_coercion",
+        "domain": "portfolio_broker",
+        "baseline": false
       },
       {
         "id": "tests/test_portfolio_service.py::PortfolioServiceTestCase::test_repeated_snapshot_read_reuses_cached_snapshot_without_replay_or_writeback",
@@ -30014,6 +30429,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_latest_broker_sync_state_bundle_preserves_high_scale_decimal_authority",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_latest_broker_sync_state_bundle_surface_returns_none_on_authority_drift",
         "domain": "database_storage_migrations",
         "baseline": true
@@ -30027,6 +30447,11 @@
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_latest_sync_bundle_uses_batched_authority_materialization",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_ledger_authority_preserves_exact_trade_and_cash_values",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_ledger_event_payload_authority_state_blocks_count_mismatch",
@@ -30104,6 +30529,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_price_cost_schema_migration_leaves_legacy_values_unavailable",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_replay_input_authority_state_blocks_count_mismatch",
         "domain": "database_storage_migrations",
         "baseline": true
@@ -30132,6 +30562,21 @@
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_shadow_bundle_preserves_replayed_positions_after_broker_sync_cache_invalidation",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_shadow_bundle_serializes_high_scale_exact_values_as_canonical_text",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_shadow_ledger_payload_preserves_exact_decimal_authority",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_shadow_position_rehydration_preserves_exact_decimal_authority",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_shadow_resync_tracks_delete_paths_and_overlay_replacement",
@@ -30182,6 +30627,21 @@
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_snapshot_cache_authority_state_requires_event_history_authority",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_sqlite_exact_numeric_migration_refuses_mixed_declarations",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_sqlite_exact_numeric_migration_refuses_unrecoverable_legacy_numeric",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_sqlite_legacy_numeric_schema_migrates_complete_storage_values",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_postgres_phase_f.py::PostgresPhaseFStorageTestCase::test_phase_f_trade_list_comparison_collector_aggregates_emitted_reports_for_summary_and_review",
@@ -34374,6 +34834,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_engine_consumes_decimal_backed_stored_bars_at_analytics_boundary",
+        "domain": "backtest",
+        "baseline": false
+      },
+      {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_engine_entry_fill_is_stable_when_future_candles_change",
         "domain": "backtest",
         "baseline": true
@@ -34602,6 +35067,11 @@
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_history_reads_prefer_stored_summary_metrics_over_row_columns",
         "domain": "backtest",
         "baseline": true
+      },
+      {
+        "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_local_us_float_history_is_not_hydrated_into_relational_storage",
+        "domain": "backtest",
+        "baseline": false
       },
       {
         "id": "tests/test_rule_backtest_service.py::RuleBacktestTestCase::test_module_level_run_backtest_automated_exports_trace_files",
@@ -37194,6 +37664,11 @@
         "baseline": true
       },
       {
+        "id": "tests/test_stock_analyzer_exact_numeric.py::StockTrendAnalyzerExactNumericTestCase::test_analyze_accepts_decimal_backed_ohlcv",
+        "domain": "market",
+        "baseline": false
+      },
+      {
         "id": "tests/test_stock_api_freshness_contract.py::test_intraday_endpoint_preserves_old_fields_and_adds_proxy_provenance_metadata",
         "domain": "market",
         "baseline": true
@@ -37709,9 +38184,94 @@
         "baseline": true
       },
       {
+        "id": "tests/test_storage.py::TestStorage::test_phase_f_shadow_sync_state_comparison_payload_preserves_storage_scale",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_authoritative_columns_use_exact_numeric_types",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_authoritative_sqlite_storage_representation",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_exact_numeric_migration_rejects_external_inbound_foreign_key",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_exact_numeric_migration_rejects_invalid_legacy_value_before_rename",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_exact_numeric_migration_rejects_mixed_storage_before_rebuild",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_exact_numeric_migration_rejects_partial_artifact",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_exact_numeric_normalization_is_finite_and_uses_half_even_rounding",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_exact_numeric_runtime_bind_rejects_binary_float",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_legacy_float_schema_is_rebuilt_to_exact_text_without_losing_fk_rows",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_position_price_cost_migration_keeps_legacy_rows_unavailable",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_portfolio_repository_preserves_exact_decimal_authority",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
         "id": "tests/test_storage.py::TestStorage::test_revoke_all_app_user_sessions_counts_distinct_phase_a_and_legacy_sessions",
         "domain": "database_storage_migrations",
         "baseline": true
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_save_daily_data_requires_exact_market_price_ingress",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_save_daily_data_uses_date_keyed_exact_close_provenance",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_stock_daily_close_preserves_exact_decimal_storage",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_stock_daily_exact_migration_refuses_unsupported_primary_dialect",
+        "domain": "database_storage_migrations",
+        "baseline": false
+      },
+      {
+        "id": "tests/test_storage.py::TestStorage::test_stock_daily_legacy_float_close_migrates_to_canonical_text",
+        "domain": "database_storage_migrations",
+        "baseline": false
       },
       {
         "id": "tests/test_storage.py::TestStorage::test_touch_and_revoke_app_user_session_keep_session_state_consistent",
@@ -39089,9 +39649,19 @@
         "baseline": true
       },
       {
+        "id": "tests/test_us_history_helper.py::UsHistoryHelperTestCase::test_persist_local_us_daily_history_rejects_malformed_provenance_and_does_not_invent_float_tokens",
+        "domain": "residual_repository_integration",
+        "baseline": false
+      },
+      {
         "id": "tests/test_us_history_helper.py::UsHistoryHelperTestCase::test_persist_local_us_daily_history_rejects_non_us_symbol_without_write",
         "domain": "residual_repository_integration",
         "baseline": true
+      },
+      {
+        "id": "tests/test_us_history_helper.py::UsHistoryHelperTestCase::test_persist_local_us_daily_history_round_trips_decimal_close_provenance",
+        "domain": "residual_repository_integration",
+        "baseline": false
       },
       {
         "id": "tests/test_us_history_helper.py::UsHistoryHelperTestCase::test_persist_local_us_daily_history_writes_normalized_parquet_cache",
@@ -40435,6 +41005,8 @@
       "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_a_share_5_digits",
       "tests/test_name_to_code_resolver.py::TestIsCodeLike::test_hk_5_digits",
       "tests/test_options_event_calendar_authority.py::test_event_intelligence_timeline_payload_stays_non_authoritative_observation_only",
+      "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_build_us_realtime_snapshot_df_uses_market_trade_date",
+      "tests/test_pipeline_realtime_indicators.py::TestEnhanceContextRealtimeOverride::test_fetch_and_save_us_stock_falls_back_to_realtime_snapshot_when_daily_fails",
       "tests/test_pure_helper_import_boundaries.py::test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains[tests/test_user_alert_dry_run_summary.py]",
       "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_builder]",
       "tests/test_pure_helper_import_boundaries.py::test_pure_helper_modules_do_not_import_protected_runtime_domains[data_coverage_matrix_contract]",

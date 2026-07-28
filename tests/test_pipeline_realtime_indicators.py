@@ -10,6 +10,7 @@ Covers:
 
 import os
 import sys
+import tempfile
 import unittest
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
@@ -24,8 +25,11 @@ except ModuleNotFoundError:
     sys.modules["litellm"] = MagicMock()
 
 from data_provider.realtime_types import UnifiedRealtimeQuote, RealtimeSource
+from src.config import Config
+from src.storage import DatabaseManager
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult, TrendStatus
 from src.core.pipeline import StockAnalysisPipeline
+from src.portfolio_exact_numeric import PortfolioExactNumericError
 
 
 def _make_realtime_quote(
@@ -80,15 +84,19 @@ class TestAugmentHistoricalWithRealtime(unittest.TestCase):
     """Tests for _augment_historical_with_realtime."""
 
     def setUp(self) -> None:
-        self._db_path = os.path.join(
-            os.path.dirname(__file__), "..", "data", "test_issue234.db"
-        )
-        os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
-        with patch.dict(os.environ, {"DATABASE_PATH": self._db_path}):
-            from src.config import Config
-            Config._instance = None
-            self.config = Config._load_from_env()
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp_dir.cleanup)
+        self._db_path = os.path.join(self._temp_dir.name, "test_issue234.db")
+        self._database_env = patch.dict(os.environ, {"DATABASE_PATH": self._db_path})
+        self._database_env.start()
+        self.addCleanup(self._database_env.stop)
+        Config.reset_instance()
+        DatabaseManager.reset_instance()
+        self.addCleanup(Config.reset_instance)
+        self.addCleanup(DatabaseManager.reset_instance)
+        self.config = Config.get_instance()
         self.pipeline = StockAnalysisPipeline(config=self.config)
+        self.assertTrue(os.path.exists(self._db_path))
 
     def test_returns_unchanged_when_realtime_none(self) -> None:
         df = _make_historical_df()
@@ -165,15 +173,19 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
     """Tests for _enhance_context today override with realtime + trend."""
 
     def setUp(self) -> None:
-        self._db_path = os.path.join(
-            os.path.dirname(__file__), "..", "data", "test_issue234.db"
-        )
-        os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
-        with patch.dict(os.environ, {"DATABASE_PATH": self._db_path}):
-            from src.config import Config
-            Config._instance = None
-            self.config = Config._load_from_env()
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp_dir.cleanup)
+        self._db_path = os.path.join(self._temp_dir.name, "test_issue234.db")
+        self._database_env = patch.dict(os.environ, {"DATABASE_PATH": self._db_path})
+        self._database_env.start()
+        self.addCleanup(self._database_env.stop)
+        Config.reset_instance()
+        DatabaseManager.reset_instance()
+        self.addCleanup(Config.reset_instance)
+        self.addCleanup(DatabaseManager.reset_instance)
+        self.config = Config.get_instance()
         self.pipeline = StockAnalysisPipeline(config=self.config)
+        self.assertTrue(os.path.exists(self._db_path))
 
     def test_today_overridden_when_realtime_and_trend_exist(self) -> None:
         context = {
@@ -482,7 +494,7 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
         self.assertEqual(enhanced["today"]["close"], 15.0)
         self.assertEqual(enhanced["today"]["ma5"], 14.8)
 
-    def test_fetch_and_save_us_stock_falls_back_to_realtime_snapshot_when_daily_fails(self) -> None:
+    def test_fetch_and_save_us_stock_rejects_float_realtime_snapshot_when_daily_fails(self) -> None:
         self.pipeline.fetcher_manager.get_stock_name = MagicMock(return_value="Apple")
         self.pipeline.fetcher_manager.get_daily_data = MagicMock(side_effect=RuntimeError("daily fetch failed"))
         self.pipeline.fetcher_manager.get_realtime_quote = MagicMock(
@@ -503,13 +515,30 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
 
         ok, err = self.pipeline.fetch_and_save_stock_data("AAPL", force_refresh=True)
 
-        self.assertTrue(ok)
-        self.assertIsNone(err)
-        args, _ = self.pipeline.db.save_daily_data.call_args
-        self.assertEqual(args[0].iloc[0]["close"], 251.64)
-        self.assertEqual(args[1], "AAPL")
-        self.assertEqual(args[2], "stooq_realtime_snapshot")
+        self.assertFalse(ok)
+        self.assertIn("历史日线获取失败且无可用实时快照", err or "")
+        self.pipeline.db.save_daily_data.assert_not_called()
         self.pipeline.fetcher_manager.get_daily_data.assert_called_once_with("AAPL", days=180)
+        self.pipeline.fetcher_manager.get_realtime_quote.assert_not_called()
+
+    def test_fetch_and_save_us_stock_reports_yfinance_float_history_rejection(self) -> None:
+        self.pipeline.fetcher_manager.get_stock_name = MagicMock(return_value="Apple")
+        self.pipeline.fetcher_manager.get_daily_data = MagicMock(
+            return_value=(_make_historical_df(days=70, last_date=date.today()), "YfinanceFetcher")
+        )
+        self.pipeline.fetcher_manager.get_realtime_quote = MagicMock()
+        self.pipeline.db.save_daily_data = MagicMock(
+            side_effect=PortfolioExactNumericError(
+                "portfolio public numeric values must not be binary floats"
+            )
+        )
+
+        ok, err = self.pipeline.fetch_and_save_stock_data("AAPL", force_refresh=True)
+
+        self.assertFalse(ok)
+        self.assertIn("portfolio public numeric values must not be binary floats", err or "")
+        self.pipeline.db.save_daily_data.assert_called_once()
+        self.pipeline.fetcher_manager.get_realtime_quote.assert_not_called()
 
     def test_fetch_and_save_us_stock_backfills_history_when_today_row_exists_but_bars_insufficient(self) -> None:
         self.pipeline.fetcher_manager.get_stock_name = MagicMock(return_value="NVIDIA")
@@ -533,7 +562,7 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
         self.pipeline.fetcher_manager.get_daily_data.assert_called_once_with("NVDA", days=180)
         self.pipeline.db.save_daily_data.assert_called_once()
 
-    def test_build_us_realtime_snapshot_df_uses_market_trade_date(self) -> None:
+    def test_build_us_realtime_snapshot_df_rejects_float_quote_without_fetching(self) -> None:
         self.pipeline.fetcher_manager.get_realtime_quote = MagicMock(
             return_value=UnifiedRealtimeQuote(
                 code="NVDA",
@@ -551,10 +580,9 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
 
         df, source = self.pipeline._build_us_realtime_snapshot_df("NVDA")
 
-        self.assertEqual(source, "yfinance_realtime_snapshot")
-        self.assertIsNotNone(df)
-        assert df is not None
-        self.assertEqual(df.iloc[0]["date"], "2026-03-27")
+        self.assertEqual(source, "")
+        self.assertIsNone(df)
+        self.pipeline.fetcher_manager.get_realtime_quote.assert_not_called()
 
     def test_us_stock_volume_ratio_marks_missing_when_history_insufficient(self) -> None:
         context = {

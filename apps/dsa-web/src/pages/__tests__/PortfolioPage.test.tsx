@@ -182,7 +182,7 @@ function makeSnapshot(options: {
   fxRates?: Array<{
     fromCurrency: string;
     toCurrency: string;
-    rate: number | null;
+    rate: string | null;
     rateDate?: string | null;
     source: string;
     isStale: boolean;
@@ -197,19 +197,19 @@ function makeSnapshot(options: {
       symbol: 'AAPL',
       market: 'us',
       currency: 'USD',
-      quantity: 10,
-      avgCost: 150,
-      totalCost: 1500,
-      lastPrice: 160,
-      marketValueBase: 1600,
-      unrealizedPnlBase: 100,
+      quantity: '10',
+      avgCost: '150',
+      totalCost: '1500',
+      lastPrice: '160',
+      marketValueBase: '1600',
+      unrealizedPnlBase: '100',
       valuationCurrency: 'USD',
-      costBasisNative: 1500,
-      marketValueNative: 1600,
-      unrealizedPnlNative: 100,
+      costBasisNative: '1500',
+      marketValueNative: '1600',
+      unrealizedPnlNative: '100',
       unrealizedPnlPct: 6.6667,
-      displayMarketValue: 1600,
-      displayUnrealizedPnl: 100,
+      displayMarketValue: '1600',
+      displayUnrealizedPnl: '100',
       displayCurrency: 'USD',
       displayFxStatus: 'live' as const,
       priceSource: 'daily_close_quote',
@@ -224,30 +224,30 @@ function makeSnapshot(options: {
   const analytics = {
     pnl: {
       displayCurrency: 'CNY',
-      realized: { amount: 120, amountDisplay: 'CNY 120.00', percent: 4, currency: 'CNY', fxStatus: 'live' as const },
-      unrealized: { amount: options.includePosition ? 100 : 0, amountDisplay: 'CNY 100.00', percent: 3.3, currency: 'CNY', fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const },
-      total: { amount: options.includePosition ? 220 : 120, amountDisplay: 'CNY 220.00', percent: 7.3, currency: 'CNY', fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const },
+      realized: { amount: '120', amountDisplay: 'CNY 120.00', percent: 4, currency: 'CNY', fxStatus: 'live' as const },
+      unrealized: { amount: options.includePosition ? '100' : '0', amountDisplay: 'CNY 100.00', percent: 3.3, currency: 'CNY', fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const },
+      total: { amount: options.includePosition ? '220' : '120', amountDisplay: 'CNY 220.00', percent: 7.3, currency: 'CNY', fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const },
     },
     exposure: {
       byAccount: options.includePosition ? [
-        { key: String(accountId), label: `Account ${accountId}`, marketValue: 2000, displayValue: 2000, displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, accountId, accountName: `Account ${accountId}`, baseCurrency: 'CNY', holdingCount: 1 },
+        { key: String(accountId), label: `Account ${accountId}`, marketValue: '2000', displayValue: '2000', displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, accountId, accountName: `Account ${accountId}`, baseCurrency: 'CNY', holdingCount: 1 },
       ] : [],
       byCurrency: options.includePosition ? [
-        { key: 'USD', label: 'USD', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const, nativeValue: 1600, nativeCurrency: 'USD', currency: 'USD', holdingCount: 1 },
+        { key: 'USD', label: 'USD', marketValue: '1600', displayValue: '1600', displayCurrency: 'USD', percent: 100, fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const, nativeValue: '1600', nativeCurrency: 'USD', currency: 'USD', holdingCount: 1 },
       ] : [],
       byMarket: options.includePosition ? [
-        { key: 'us', label: 'US', marketValue: 2000, displayValue: 2000, displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, market: 'us', holdingCount: 1 },
+        { key: 'us', label: 'US', marketValue: '2000', displayValue: '2000', displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, market: 'us', holdingCount: 1 },
       ] : [],
       bySymbol: options.includePosition ? [
-        { key: 'AAPL', label: 'AAPL', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const, symbol: 'AAPL', market: 'us', currency: 'USD', unrealizedPnl: 100, unrealizedPnlPct: 6.6667, holdingCount: 1 },
+        { key: 'AAPL', label: 'AAPL', marketValue: '1600', displayValue: '1600', displayCurrency: 'USD', percent: 100, fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const, symbol: 'AAPL', market: 'us', currency: 'USD', unrealizedPnl: '100', unrealizedPnlPct: 6.6667, holdingCount: 1 },
       ] : [],
       bySector: [],
       sectorStatus: 'unavailable' as const,
     },
     risk: {
-      largestPosition: options.includePosition ? { key: 'AAPL', label: 'AAPL', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: 'live' as const, symbol: 'AAPL' } : null,
-      largestCurrency: options.includePosition ? { key: 'USD', label: 'USD', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: 'live' as const, currency: 'USD' } : null,
-      largestMarket: options.includePosition ? { key: 'us', label: 'US', marketValue: 2000, displayValue: 2000, displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, market: 'us' } : null,
+      largestPosition: options.includePosition ? { key: 'AAPL', label: 'AAPL', marketValue: '1600', displayValue: '1600', displayCurrency: 'USD', percent: 100, fxStatus: 'live' as const, symbol: 'AAPL' } : null,
+      largestCurrency: options.includePosition ? { key: 'USD', label: 'USD', marketValue: '1600', displayValue: '1600', displayCurrency: 'USD', percent: 100, fxStatus: 'live' as const, currency: 'USD' } : null,
+      largestMarket: options.includePosition ? { key: 'us', label: 'US', marketValue: '2000', displayValue: '2000', displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, market: 'us' } : null,
       holdingCount: options.includePosition ? 1 : 0,
       accountCount: options.accountCount ?? 1,
       cashPercent: options.includePosition ? 33.3333 : null,
@@ -272,7 +272,7 @@ function makeSnapshot(options: {
         accountState: 'holdings_present' as const,
         valuationState: 'fully_valued' as const,
         valueSemantics: 'authoritative_total' as const,
-        authoritativeTotal: 3000,
+        authoritativeTotal: '3000',
         coveredSubtotal: null,
         accountCount,
         positionCount: 1,
@@ -282,7 +282,7 @@ function makeSnapshot(options: {
         accountState: 'no_holdings' as const,
         valuationState: 'fully_valued' as const,
         valueSemantics: 'authoritative_total' as const,
-        authoritativeTotal: 0,
+        authoritativeTotal: '0',
         coveredSubtotal: null,
         accountCount,
         positionCount: 0,
@@ -292,13 +292,13 @@ function makeSnapshot(options: {
     costMethod: 'fifo' as const,
     currency: 'CNY',
     accountCount,
-    totalCash: options.includePosition ? 1000 : 0,
-    totalMarketValue: options.includePosition ? 2000 : 0,
-    totalEquity: options.includePosition ? 3000 : 0,
-    realizedPnl: 0,
-    unrealizedPnl: 0,
-    feeTotal: 0,
-    taxTotal: 0,
+    totalCash: options.includePosition ? '1000' : '0',
+    totalMarketValue: options.includePosition ? '2000' : '0',
+    totalEquity: options.includePosition ? '3000' : '0',
+    realizedPnl: '0',
+    unrealizedPnl: '0',
+    feeTotal: '0',
+    taxTotal: '0',
     fxStale: options.fxStale ?? true,
     portfolioTruth,
     ...(options.exposureResearchContext !== undefined ? { exposureResearchContext: options.exposureResearchContext } : {}),
@@ -309,7 +309,7 @@ function makeSnapshot(options: {
       {
         fromCurrency: 'USD',
         toCurrency: 'CNY',
-        rate: 7.245,
+        rate: '7.245',
         rateDate: '2026-03-19',
         source: 'manual',
         isStale: false,
@@ -319,7 +319,7 @@ function makeSnapshot(options: {
       {
         fromCurrency: 'HKD',
         toCurrency: 'CNY',
-        rate: 0.921,
+        rate: '0.921',
         rateDate: '2026-03-19',
         source: 'manual',
         isStale: false,
@@ -358,13 +358,13 @@ function makeSnapshot(options: {
         baseCurrency: 'CNY',
         asOf: '2026-03-19',
         costMethod: 'fifo' as const,
-        totalCash: options.includePosition ? 1000 : 0,
-        totalMarketValue: options.includePosition ? 2000 : 0,
-        totalEquity: options.includePosition ? 3000 : 0,
-        realizedPnl: 0,
-        unrealizedPnl: 0,
-        feeTotal: 0,
-        taxTotal: 0,
+        totalCash: options.includePosition ? '1000' : '0',
+        totalMarketValue: options.includePosition ? '2000' : '0',
+        totalEquity: options.includePosition ? '3000' : '0',
+        realizedPnl: '0',
+        unrealizedPnl: '0',
+        feeTotal: '0',
+        taxTotal: '0',
         fxStale: options.fxStale ?? true,
         positions,
       },
@@ -380,7 +380,7 @@ function makeExposureResearchContext(overrides: Record<string, unknown> = {}) {
       label: 'AAPL',
       market: 'us',
       currency: 'USD',
-      marketValue: 1600,
+      marketValue: '1600',
       weightPct: 42,
       fxStatus: 'live',
       source: 'snapshot_analytics',
@@ -534,7 +534,7 @@ function makeValuationEvidenceSnapshot(overrides: Record<string, unknown> = {}) 
       valuationState: 'partial' as const,
       valueSemantics: 'covered_subtotal' as const,
       authoritativeTotal: null,
-      coveredSubtotal: 3000,
+      coveredSubtotal: '3000',
       accountCount: 1,
       positionCount: 1,
     },
@@ -606,7 +606,7 @@ function makeStructureReview(options: {
       {
         key: 'ai_infrastructure',
         label: 'AI Infrastructure',
-        marketValue: 1500,
+        marketValue: '1500',
         percent: 75,
         holdingCount: 2,
       },
@@ -769,13 +769,13 @@ function makeRisk() {
     currency: 'CNY',
     thresholds: {},
     concentration: {
-      totalMarketValue: 0,
+      totalMarketValue: '0',
       topWeightPct: 0,
       alert: false,
       topPositions: [],
     },
     sectorConcentration: {
-      totalMarketValue: 0,
+      totalMarketValue: '0',
       topWeightPct: 0,
       alert: false,
       topSectors: [],
@@ -871,41 +871,42 @@ describe('PortfolioPage FX refresh', () => {
       tradeExecution: false,
       executionReadiness: 'advisory_only_not_trade_execution',
       asOf: '2026-03-19T00:00:00Z',
+      baseCurrency: 'CNY',
       coverage: {
         totalPositions: 1,
         positionsWithUsableWeight: 1,
         positionsWithMarketValue: 1,
-        effectiveWeightSum: 1,
-        totalMarketValue: 1600,
+        effectiveWeightSum: '1',
+        totalMarketValue: '1600',
         explicitExposureRows: 0,
         labelsWithExplicitCoverage: [],
       },
       scenarios: [
         {
           name: 'symbol_aapl_down_-8',
-          portfolioImpactPct: -8,
-          portfolioImpactAmount: -128,
-          coveredWeight: 1,
-          coveredMarketValue: 1600,
+          portfolioImpactPct: '-8',
+          portfolioImpactAmount: '-128',
+          coveredWeight: '1',
+          coveredMarketValue: '1600',
           warnings: [],
           missingCoverage: [],
           positionContributions: [
             {
               symbol: 'AAPL',
               bucket: 'Main',
-              weight: 1,
-              marketValue: 1600,
-              impactPct: -8,
-              impactAmount: -128,
-              contributionToScenarioLoss: 1,
+              weight: '1',
+              marketValue: '1600',
+              impactPct: '-8',
+              impactAmount: '-128',
+              contributionToScenarioLoss: '1',
               warnings: [],
               appliedShocks: [
                 {
                   label: 'AAPL',
-                  shockPct: -8,
-                  exposure: 1,
-                  impactPct: -8,
-                  impactAmount: -128,
+                  shockPct: '-8',
+                  exposure: '1',
+                  impactPct: '-8',
+                  impactAmount: '-128',
                 },
               ],
             },
@@ -914,9 +915,9 @@ describe('PortfolioPage FX refresh', () => {
             {
               bucket: 'Main',
               positionCount: 1,
-              impactPct: -8,
-              impactAmount: -128,
-              contributionToScenarioLoss: 1,
+              impactPct: '-8',
+              impactAmount: '-128',
+              contributionToScenarioLoss: '1',
             },
           ],
         },
@@ -934,7 +935,7 @@ describe('PortfolioPage FX refresh', () => {
     refreshFxRate.mockResolvedValue({
       baseCurrency: 'USD',
       quoteCurrency: 'CNY',
-      rate: 7.2468,
+      rate: '7.2468',
       provider: 'frankfurter',
       fetchedAt: '2026-03-19T10:05:00',
       cacheHit: false,
@@ -953,11 +954,11 @@ describe('PortfolioPage FX refresh', () => {
       snapshotDate: '2026-03-19',
       syncedAt: '2026-03-19T10:00:00',
       baseCurrency: 'USD',
-      totalCash: 5000,
-      totalMarketValue: 1600,
-      totalEquity: 6600,
-      realizedPnl: 0,
-      unrealizedPnl: 100,
+      totalCash: '5000',
+      totalMarketValue: '1600',
+      totalEquity: '6600',
+      realizedPnl: '0',
+      unrealizedPnl: '100',
       positionCount: 1,
       cashBalanceCount: 1,
       fxStale: false,
@@ -979,10 +980,10 @@ describe('PortfolioPage FX refresh', () => {
       currency: 'USD',
       tradeDate: '2026-03-18',
       side: 'buy',
-      quantity: 2,
-      price: 101,
-      fee: 0,
-      tax: 0,
+      quantity: '2',
+      price: '101',
+      fee: '0',
+      tax: '0',
       note: 'seed',
       isActive: true,
       voidedAt: null,
@@ -1238,7 +1239,7 @@ describe('PortfolioPage FX refresh', () => {
   it('renders empty portfolio start card and recent activity after analytics for small history', async () => {
     listTrades.mockResolvedValueOnce({
       items: [
-        { id: 7, accountId: 1, symbol: 'AAPL', market: 'us', tradeDate: '2026-03-18', side: 'buy', quantity: 1, price: 100, fee: 0, tax: 0, currency: 'USD', createdAt: '2026-03-18T00:00:00Z' },
+        { id: 7, accountId: 1, symbol: 'AAPL', market: 'us', tradeDate: '2026-03-18', side: 'buy', quantity: '1', price: '100', fee: '0', tax: '0', currency: 'USD', createdAt: '2026-03-18T00:00:00Z' },
       ],
       total: 1,
       page: 1,
@@ -1537,7 +1538,7 @@ describe('PortfolioPage FX refresh', () => {
         valuationState: 'partial',
         valueSemantics: 'covered_subtotal',
         authoritativeTotal: null,
-        coveredSubtotal: 3000,
+        coveredSubtotal: '3000',
         accountCount: 1,
         positionCount: 1,
       },
@@ -1731,14 +1732,13 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(projectScenarioRisk).toHaveBeenCalledWith({
       asOf: '2026-03-19',
+      baseCurrency: 'USD',
       positions: [
         {
           symbol: 'AAPL',
-          weightPct: 100,
-          marketValue: 1600,
-          marketValueBase: 1600,
+          marketValueBase: '1600',
+          baseCurrency: 'USD',
           bucketLabel: 'Account 1',
-          currency: 'USD',
         },
       ],
       exposures: [],
@@ -1747,7 +1747,7 @@ describe('PortfolioPage FX refresh', () => {
           name: 'symbol_aapl_down_-8',
           shocks: {
             AAPL: {
-              shockPct: -8,
+              shockPct: '-8',
             },
           },
         },
@@ -1761,7 +1761,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(createCashLedger).not.toHaveBeenCalled();
     expect(createCorporateAction).not.toHaveBeenCalled();
     expect(syncIbkrReadOnly).not.toHaveBeenCalled();
-    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('预估影响');
+    await waitFor(() => expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('预估影响'));
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('仅做观察性推演，不改变当前组合状态。');
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('模型结果仅供观察，不作为行动依据。');
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).not.toHaveTextContent(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
@@ -1783,17 +1783,17 @@ describe('PortfolioPage FX refresh', () => {
             market: 'hk',
             currency: 'HKD',
             valuationCurrency: 'HKD',
-            costBasisNative: 1800,
-            marketValueNative: 2000,
-            unrealizedPnlNative: 200,
-            displayMarketValue: 2000,
-            displayUnrealizedPnl: 200,
-            totalCost: 1800,
-            avgCost: 180,
-            lastPrice: 200,
-            marketValueBase: 2000,
-            unrealizedPnlBase: 200,
-            quantity: 10,
+            costBasisNative: '1800',
+            marketValueNative: '2000',
+            unrealizedPnlNative: '200',
+            displayMarketValue: '2000',
+            displayUnrealizedPnl: '200',
+            totalCost: '1800',
+            avgCost: '180',
+            lastPrice: '200',
+            marketValueBase: '2000',
+            unrealizedPnlBase: '200',
+            quantity: '10',
             displayCurrency: 'HKD',
           },
         });
@@ -1831,11 +1831,12 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitFor(() => expect(projectScenarioRisk).toHaveBeenCalledTimes(1));
     expect(projectScenarioRisk).toHaveBeenCalledWith(expect.objectContaining({
-      positions: [expect.objectContaining({ symbol: '00700.HK', currency: 'HKD' })],
+      baseCurrency: 'HKD',
+      positions: [expect.objectContaining({ symbol: '00700.HK', marketValueBase: '2000', baseCurrency: 'HKD' })],
       scenarioShocks: [expect.objectContaining({
         shocks: {
           '00700.HK': {
-            shockPct: -5,
+            shockPct: '-5',
           },
         },
       })],
@@ -1847,9 +1848,9 @@ describe('PortfolioPage FX refresh', () => {
       includePosition: true,
       fxStale: false,
       positionOverrides: {
-        lastPrice: 150,
-        marketValueBase: 1500,
-        unrealizedPnlBase: 0,
+        lastPrice: '150',
+        marketValueBase: '1500',
+        unrealizedPnlBase: '0',
         unrealizedPnlPct: 0,
         priceSource: 'avg_cost_fallback',
         priceSourceLabel: 'Average cost fallback',
@@ -1952,9 +1953,9 @@ describe('PortfolioPage FX refresh', () => {
       {
         ...basePosition,
         symbol: 'COST',
-        lastPrice: 150,
-        marketValueBase: 1500,
-        unrealizedPnlBase: 0,
+        lastPrice: '150',
+        marketValueBase: '1500',
+        unrealizedPnlBase: '0',
         unrealizedPnlPct: 0,
         priceSource: 'avg_cost_fallback',
         priceSourceLabel: 'Avg-cost fallback',
@@ -1994,45 +1995,45 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'AAPL',
         label: 'AAPL',
-        marketValue: 1600,
-        displayValue: 1600,
+        marketValue: '1600',
+        displayValue: '1600',
         displayCurrency: 'USD',
         percent: 42,
         fxStatus: 'live' as const,
         symbol: 'AAPL',
         market: 'us',
         currency: 'USD',
-        unrealizedPnl: 180,
+        unrealizedPnl: '180',
         unrealizedPnlPct: 12.5,
         holdingCount: 1,
       },
       {
         key: 'MSFT',
         label: 'MSFT',
-        marketValue: 900,
-        displayValue: 900,
+        marketValue: '900',
+        displayValue: '900',
         displayCurrency: 'USD',
         percent: 24,
         fxStatus: 'live' as const,
         symbol: 'MSFT',
         market: 'us',
         currency: 'USD',
-        unrealizedPnl: 60,
+        unrealizedPnl: '60',
         unrealizedPnlPct: 4.2,
         holdingCount: 1,
       },
       {
         key: '00700',
         label: '00700',
-        marketValue: 700,
-        displayValue: 700,
+        marketValue: '700',
+        displayValue: '700',
         displayCurrency: 'HKD',
         percent: 18,
         fxStatus: 'live' as const,
         symbol: '00700',
         market: 'hk',
         currency: 'HKD',
-        unrealizedPnl: -45,
+        unrealizedPnl: '-45',
         unrealizedPnlPct: -3.1,
         holdingCount: 1,
       },
@@ -2041,12 +2042,12 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'USD',
         label: 'USD',
-        marketValue: 2500,
-        displayValue: 2500,
+        marketValue: '2500',
+        displayValue: '2500',
         displayCurrency: 'USD',
         percent: 66,
         fxStatus: 'live' as const,
-        nativeValue: 2500,
+        nativeValue: '2500',
         nativeCurrency: 'USD',
         currency: 'USD',
         holdingCount: 2,
@@ -2054,12 +2055,12 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'HKD',
         label: 'HKD',
-        marketValue: 700,
-        displayValue: 700,
+        marketValue: '700',
+        displayValue: '700',
         displayCurrency: 'HKD',
         percent: 18,
         fxStatus: 'live' as const,
-        nativeValue: 700,
+        nativeValue: '700',
         nativeCurrency: 'HKD',
         currency: 'HKD',
         holdingCount: 1,
@@ -2069,8 +2070,8 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'us',
         label: 'US',
-        marketValue: 2500,
-        displayValue: 2500,
+        marketValue: '2500',
+        displayValue: '2500',
         displayCurrency: 'USD',
         percent: 66,
         fxStatus: 'live' as const,
@@ -2080,8 +2081,8 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'hk',
         label: 'HK',
-        marketValue: 700,
-        displayValue: 700,
+        marketValue: '700',
+        displayValue: '700',
         displayCurrency: 'HKD',
         percent: 18,
         fxStatus: 'live' as const,
@@ -2129,8 +2130,8 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: '1',
         label: 'Account 1',
-        marketValue: 2200,
-        displayValue: 2200,
+        marketValue: '2200',
+        displayValue: '2200',
         displayCurrency: 'CNY',
         percent: 58,
         fxStatus: 'live' as const,
@@ -2142,8 +2143,8 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: '2',
         label: 'Account 2',
-        marketValue: 1600,
-        displayValue: 1600,
+        marketValue: '1600',
+        displayValue: '1600',
         displayCurrency: 'CNY',
         percent: 42,
         fxStatus: 'live' as const,
@@ -2157,8 +2158,8 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'AAPL',
         label: 'AAPL',
-        marketValue: 1600,
-        displayValue: 1600,
+        marketValue: '1600',
+        displayValue: '1600',
         displayCurrency: 'USD',
         percent: 42,
         fxStatus: 'live' as const,
@@ -2172,12 +2173,12 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'USD',
         label: 'USD',
-        marketValue: 2500,
-        displayValue: 2500,
+        marketValue: '2500',
+        displayValue: '2500',
         displayCurrency: 'USD',
         percent: 66,
         fxStatus: 'unavailable' as const,
-        nativeValue: 2500,
+        nativeValue: '2500',
         nativeCurrency: 'USD',
         currency: 'USD',
         holdingCount: 2,
@@ -2187,8 +2188,8 @@ describe('PortfolioPage FX refresh', () => {
       {
         key: 'us',
         label: 'US',
-        marketValue: 2500,
-        displayValue: 2500,
+        marketValue: '2500',
+        displayValue: '2500',
         displayCurrency: 'USD',
         percent: 66,
         fxStatus: 'live' as const,
@@ -2753,9 +2754,9 @@ describe('PortfolioPage FX refresh', () => {
   it('renders unavailable valuation truth without exposing a zero as total assets', async () => {
     getSnapshot.mockResolvedValue({
       ...makeSnapshot({ includePosition: true, fxStale: false }),
-      totalCash: 0,
-      totalMarketValue: 0,
-      totalEquity: 0,
+      totalCash: '0',
+      totalMarketValue: '0',
+      totalEquity: '0',
       portfolioTruth: {
         state: 'valuation_unavailable',
         accountState: 'holdings_present',
@@ -2778,14 +2779,116 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-trade-station-summary')).not.toHaveTextContent('CNY 0.00');
   });
 
+  it.each([
+    [
+      'unavailable',
+      {
+        state: 'valuation_unavailable' as const,
+        accountState: 'holdings_present' as const,
+        valuationState: 'unavailable' as const,
+        valueSemantics: 'unavailable' as const,
+        authoritativeTotal: null,
+        coveredSubtotal: null,
+        accountCount: 1,
+        positionCount: 1,
+      },
+    ],
+    [
+      'partial',
+      {
+        state: 'valuation_partial' as const,
+        accountState: 'holdings_present' as const,
+        valuationState: 'partial' as const,
+        valueSemantics: 'covered_subtotal' as const,
+        authoritativeTotal: null,
+        coveredSubtotal: '0.00',
+        accountCount: 1,
+        positionCount: 1,
+      },
+    ],
+  ])('does not submit a scenario for %s valuation truth represented by a canonical zero holding', async (_state, portfolioTruth) => {
+    getSnapshot.mockResolvedValue({
+      ...makeSnapshot({
+        includePosition: true,
+        fxStale: false,
+        positionOverrides: {
+          marketValueBase: '0.00',
+          unrealizedPnlBase: '0.00',
+          valuationCurrency: 'CNY',
+          displayMarketValue: '0.00',
+          displayUnrealizedPnl: '0.00',
+        },
+      }),
+      totalCash: '0.00',
+      totalMarketValue: '0.00',
+      totalEquity: '0.00',
+      portfolioTruth,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-8' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    expect(await screen.findByText('当前组合估值尚未完整，暂时无法推演。')).toBeInTheDocument();
+    expect(projectScenarioRisk).not.toHaveBeenCalled();
+  });
+
+  it('permits an authoritative zero valuation without treating it as unavailable', async () => {
+    getSnapshot.mockResolvedValue({
+      ...makeSnapshot({
+        includePosition: true,
+        fxStale: false,
+        positionOverrides: {
+          marketValueBase: '0.00',
+          unrealizedPnlBase: '0.00',
+          valuationCurrency: 'CNY',
+          displayMarketValue: '0.00',
+          displayUnrealizedPnl: '0.00',
+        },
+      }),
+      totalCash: '0.00',
+      totalMarketValue: '0.00',
+      totalEquity: '0.00',
+      portfolioTruth: {
+        state: 'fully_valued_zero',
+        accountState: 'holdings_present',
+        valuationState: 'fully_valued',
+        valueSemantics: 'authoritative_total',
+        authoritativeTotal: '0.00',
+        coveredSubtotal: null,
+        accountCount: 1,
+        positionCount: 1,
+      },
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-8' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    await waitFor(() => expect(projectScenarioRisk).toHaveBeenCalledTimes(1));
+    expect(projectScenarioRisk).toHaveBeenCalledWith(expect.objectContaining({
+      positions: [expect.objectContaining({ marketValueBase: '0.00' })],
+    }));
+  });
+
   it('renders missing market category cleanly without raw unknown text', async () => {
     const snapshot = makeSnapshot({ includePosition: true, fxStale: false });
     snapshot.analytics.exposure.byMarket = [
       {
         key: 'unknown',
         label: 'UNKNOWN',
-        marketValue: 1600,
-        displayValue: 1600,
+        marketValue: '1600',
+        displayValue: '1600',
         displayCurrency: 'USD',
         percent: 100,
         fxStatus: 'live' as const,
@@ -2823,7 +2926,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).toBeDisabled();
   });
 
-  it('reads display currency from shared settings storage and converts totals and holdings without hiding original currency', async () => {
+  it('keeps exact native totals when the selected display currency has no direct FX rate', async () => {
     window.localStorage.setItem(PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY, 'USD');
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
 
@@ -2832,15 +2935,47 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
-    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('USD 414.08');
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('CNY 3,000.00');
     expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('+USD 100.00').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('portfolio-valuation-panel')).toHaveTextContent('折算暂不可用');
     expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /手工记账台|Trade Station/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '汇率' })).toBeInTheDocument();
   });
 
-  it('migrates the legacy portfolio display currency key to the shared settings key', async () => {
+  it('rounds FX-converted display amounts to the destination money scale', async () => {
+    window.localStorage.setItem(PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY, 'USD');
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+      fxRates: [
+        {
+          fromCurrency: 'CNY',
+          toCurrency: 'USD',
+          rate: '0.1379851',
+          rateDate: '2026-03-19',
+          source: 'manual',
+          isStale: false,
+          updatedAt: '2026-03-19T10:00:00',
+          sourceDirection: 'direct',
+        },
+      ],
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const totalAssets = screen.getByTestId('portfolio-total-assets-value');
+    expect(totalAssets).toHaveTextContent('USD 413.96');
+    expect(totalAssets).not.toHaveTextContent('USD 413.955');
+    const totalCash = screen.getByTestId('portfolio-summary-cash-value');
+    expect(totalCash).toHaveTextContent('USD 137.99');
+    expect(totalCash).not.toHaveTextContent('USD 137.9851');
+  });
+
+  it('migrates the legacy portfolio display currency key without inventing an inverse FX rate', async () => {
     window.localStorage.setItem(LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY, 'HKD');
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
 
@@ -2850,7 +2985,8 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(window.localStorage.getItem(PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY)).toBe('HKD');
     expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('HKD 3,257.33');
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('CNY 3,000.00');
+    expect(screen.queryByText('HKD 3,257.33')).not.toBeInTheDocument();
   });
 
   it('shows an exchange-rate unavailable state instead of fake converted values when a display rate is missing', async () => {
@@ -3453,10 +3589,10 @@ describe('PortfolioPage FX refresh', () => {
     const syncedSnapshot = {
       ...makeSnapshot({ accountId: 1, fxStale: false }),
       currency: 'USD',
-      totalCash: 5000,
-      totalMarketValue: 1600,
-      totalEquity: 6600,
-      unrealizedPnl: 100,
+      totalCash: '5000',
+      totalMarketValue: '1600',
+      totalEquity: '6600',
+      unrealizedPnl: '100',
       fxStale: false,
       accounts: [
         {
@@ -3468,25 +3604,25 @@ describe('PortfolioPage FX refresh', () => {
           baseCurrency: 'USD',
           asOf: '2026-03-19',
           costMethod: 'fifo' as const,
-          totalCash: 5000,
-          totalMarketValue: 1600,
-          totalEquity: 6600,
-          realizedPnl: 0,
-          unrealizedPnl: 100,
-          feeTotal: 0,
-          taxTotal: 0,
+          totalCash: '5000',
+          totalMarketValue: '1600',
+          totalEquity: '6600',
+          realizedPnl: '0',
+          unrealizedPnl: '100',
+          feeTotal: '0',
+          taxTotal: '0',
           fxStale: false,
           positions: [
             {
               symbol: 'AAPL',
               market: 'us',
               currency: 'USD',
-              quantity: 10,
-              avgCost: 150,
-              totalCost: 1500,
-              lastPrice: 160,
-              marketValueBase: 1600,
-              unrealizedPnlBase: 100,
+              quantity: '10',
+              avgCost: '150',
+              totalCost: '1500',
+              lastPrice: '160',
+              marketValueBase: '1600',
+              unrealizedPnlBase: '100',
               valuationCurrency: 'USD',
             },
           ],
@@ -3611,7 +3747,7 @@ describe('PortfolioPage FX refresh', () => {
     refreshFxRate.mockResolvedValueOnce({
       baseCurrency: 'USD',
       quoteCurrency: 'CNY',
-      rate: 7.2,
+      rate: '7.2',
       provider: 'frankfurter',
       fetchedAt: '2026-03-19T10:05:00',
       cacheHit: true,
@@ -4127,10 +4263,10 @@ describe('PortfolioPage FX refresh', () => {
         market: 'us',
         tradeDate: '2026-03-18',
         side: 'buy',
-        quantity: 1,
-        price: 100 + index,
-        fee: 0,
-        tax: 0,
+        quantity: '1',
+        price: String(100 + index),
+        fee: '0',
+        tax: '0',
         currency: 'USD',
         note: null,
         isActive: true,
@@ -4183,10 +4319,10 @@ describe('PortfolioPage FX refresh', () => {
           market: 'us',
           tradeDate: '2026-03-18',
           side: 'buy',
-          quantity: 1,
-          price: 100,
-          fee: 0,
-          tax: 0,
+          quantity: '1',
+          price: '100',
+          fee: '0',
+          tax: '0',
           currency: 'USD',
           note: 'seed',
           isActive: true,
@@ -4201,7 +4337,7 @@ describe('PortfolioPage FX refresh', () => {
     });
     listCashLedger.mockResolvedValueOnce({
       items: [
-        { id: 3, accountId: 1, eventDate: '2026-03-17', direction: 'in', amount: 1000, currency: 'USD', note: 'seed', createdAt: '2026-03-17T00:00:00Z' },
+        { id: 3, accountId: 1, eventDate: '2026-03-17', direction: 'in', amount: '1000', currency: 'USD', note: 'seed', createdAt: '2026-03-17T00:00:00Z' },
       ],
       total: 1,
       page: 1,
@@ -4232,10 +4368,10 @@ describe('PortfolioPage FX refresh', () => {
           market: 'us',
           tradeDate: '2026-03-18',
           side: 'buy',
-          quantity: 1,
-          price: 100,
-          fee: 0,
-          tax: 0,
+          quantity: '1',
+          price: '100',
+          fee: '0',
+          tax: '0',
           currency: 'USD',
           note: 'seed',
           isActive: true,
@@ -4287,8 +4423,8 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(updateTrade).toHaveBeenCalledWith(7, expect.objectContaining({
       symbol: 'HK00700',
       market: 'hk',
-      quantity: 2,
-      price: 101,
+      quantity: '2',
+      price: '101',
     })));
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('持仓流水已更新 · 持仓已刷新')).toBeInTheDocument();
@@ -4309,10 +4445,10 @@ describe('PortfolioPage FX refresh', () => {
           market: 'hk',
           tradeDate: '2026-03-18',
           side: 'buy',
-          quantity: 1,
-          price: 100,
-          fee: 0,
-          tax: 0,
+          quantity: '1',
+          price: '100',
+          fee: '0',
+          tax: '0',
           currency: 'HKD',
           note: 'seed',
           isActive: true,
@@ -4357,10 +4493,10 @@ describe('PortfolioPage FX refresh', () => {
           market: 'us',
           tradeDate: '2026-03-18',
           side: 'buy',
-          quantity: 1,
-          price: 100,
-          fee: 0,
-          tax: 0,
+          quantity: '1',
+          price: '100',
+          fee: '0',
+          tax: '0',
           currency: 'USD',
           note: 'seed',
           isActive: true,
@@ -4407,10 +4543,10 @@ describe('PortfolioPage FX refresh', () => {
           market: 'us',
           tradeDate: '2026-03-18',
           side: 'buy',
-          quantity: 1,
-          price: 100,
-          fee: 0,
-          tax: 0,
+          quantity: '1',
+          price: '100',
+          fee: '0',
+          tax: '0',
           currency: 'USD',
           note: 'seed',
           isActive: true,
@@ -4453,7 +4589,7 @@ describe('PortfolioPage FX refresh', () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
     listCashLedger.mockResolvedValueOnce({
       items: [
-        { id: 3, accountId: 1, eventDate: '2026-03-17', direction: 'in', amount: 1000, currency: 'USD', note: 'seed', createdAt: '2026-03-17T00:00:00Z' },
+        { id: 3, accountId: 1, eventDate: '2026-03-17', direction: 'in', amount: '1000', currency: 'USD', note: 'seed', createdAt: '2026-03-17T00:00:00Z' },
       ],
       total: 1,
       page: 1,
@@ -4469,7 +4605,7 @@ describe('PortfolioPage FX refresh', () => {
           currency: 'USD',
           effectiveDate: '2026-03-16',
           actionType: 'cash_dividend',
-          cashDividendPerShare: 0.5,
+          cashDividendPerShare: '0.5',
           splitRatio: null,
           note: 'seed',
           createdAt: '2026-03-16T00:00:00Z',
@@ -4489,7 +4625,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(await screen.findByText('2026-03-17 · USD 1,000.00')).toBeInTheDocument();
     fireEvent.click(within(screen.getByTestId('portfolio-history-full')).getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
 
-    expect(await screen.findByText('永久删除 2026-03-17 的资金流水（流入 1000 USD）吗？此操作不可恢复，仅删除这条记录，不会自动重建。')).toBeInTheDocument();
+    expect(await screen.findByText('永久删除 2026-03-17 的资金流水（流入 1,000 USD）吗？此操作不可恢复，仅删除这条记录，不会自动重建。')).toBeInTheDocument();
     expect(deleteCashLedger).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText(translate('zh', 'portfolio.deleteConfirm')));
     await waitFor(() => expect(deleteCashLedger).toHaveBeenCalledWith(3));
@@ -4517,10 +4653,10 @@ describe('PortfolioPage FX refresh', () => {
           market: 'us',
           tradeDate: '2026-03-18',
           side: 'buy',
-          quantity: 1,
-          price: 100,
-          fee: 0,
-          tax: 0,
+          quantity: '1',
+          price: '100',
+          fee: '0',
+          tax: '0',
           currency: 'USD',
           note: 'seed',
           isActive: true,

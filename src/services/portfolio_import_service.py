@@ -10,6 +10,7 @@ import re
 import csv
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from datetime import date, datetime
 from functools import partial
 from threading import BoundedSemaphore, Lock
@@ -955,6 +956,23 @@ class PortfolioImportService:
                 )
                 if trade_date_obj is None:
                     raise ValueError("trade_date is required")
+                if not trade_uid:
+                    current_dedup_hash = self._build_dedup_hash(record)
+                    if (
+                        dedup_hash == current_dedup_hash
+                        and self._legacy_v1_numeric_fields_round_trip_exactly(record)
+                    ):
+                        legacy_dedup_hash = self._build_legacy_v1_dedup_hash(record)
+                        if (
+                            legacy_dedup_hash != dedup_hash
+                            and self.portfolio_service._has_trade_dedup_hash(
+                                account_id=account_id,
+                                dedup_hash=legacy_dedup_hash,
+                                session=session,
+                            )
+                        ):
+                            duplicate_count += 1
+                            continue
                 self.portfolio_service._record_trade_in_session(
                     session=session,
                     owner_kwargs=owner_kwargs,
@@ -962,10 +980,10 @@ class PortfolioImportService:
                     symbol=str(record["symbol"]),
                     trade_date=trade_date_obj,
                     side=str(record["side"]),
-                    quantity=float(record["quantity"]),
-                    price=float(record["price"]),
-                    fee=float(record.get("fee", 0.0) or 0.0),
-                    tax=float(record.get("tax", 0.0) or 0.0),
+                    quantity=self._parse_decimal(record["quantity"]),
+                    price=self._parse_decimal(record["price"]),
+                    fee=self._parse_decimal(record.get("fee", "0") or "0"),
+                    tax=self._parse_decimal(record.get("tax", "0") or "0"),
                     market=record.get("market"),
                     currency=record.get("currency"),
                     trade_uid=trade_uid,
@@ -1043,7 +1061,7 @@ class PortfolioImportService:
                 key = (
                     event_date_obj.isoformat(),
                     str(entry.get("direction") or ""),
-                    f"{float(entry.get('amount', 0.0)):.8f}",
+                    self._dedup_decimal_text(entry.get("amount", "0")),
                     str(entry.get("currency") or ""),
                     str(entry.get("note") or ""),
                 )
@@ -1056,7 +1074,7 @@ class PortfolioImportService:
                     account_id=account_id,
                     event_date=event_date_obj,
                     direction=str(entry["direction"]),
-                    amount=abs(float(entry["amount"])),
+                    amount=abs(self._parse_decimal(entry["amount"])),
                     currency=entry.get("currency"),
                     note=(entry.get("note") or "").strip() or "ibkr_flex_cash",
                 )
@@ -1112,8 +1130,8 @@ class PortfolioImportService:
                     action_type=str(action["action_type"]),
                     market=action.get("market"),
                     currency=action.get("currency"),
-                    cash_dividend_per_share=action.get("cash_dividend_per_share"),
-                    split_ratio=action.get("split_ratio"),
+                    cash_dividend_per_share=self._parse_decimal(action.get("cash_dividend_per_share")),
+                    split_ratio=self._parse_decimal(action.get("split_ratio")),
                     note=(action.get("note") or "").strip() or "ibkr_flex_corporate_action",
                 )
                 inserted_count += 1
@@ -1408,7 +1426,7 @@ class PortfolioImportService:
         as_of_date: date,
     ) -> bool:
         _, _, source = self.portfolio_service.convert_amount(
-            amount=1.0,
+            amount="1",
             from_currency=currency,
             to_currency=account_base,
             as_of_date=as_of_date,
@@ -1534,24 +1552,24 @@ class PortfolioImportService:
         if side is None:
             return None
 
-        quantity = self._parse_float(
+        quantity = self._parse_decimal(
             self._pick(row, *(broker_hints.get("quantity") or ()), "成交数量", "数量", "成交股数")
         )
-        price = self._parse_float(
+        price = self._parse_decimal(
             self._pick(row, *(broker_hints.get("price") or ()), "成交均价", "成交价格", "价格", "成交价", "均价")
         )
         if quantity is None or quantity <= 0 or price is None or price <= 0:
             return None
 
-        fee = 0.0
+        fee = Decimal("0")
         for col in ("手续费", "佣金", "交易费", "规费", "过户费"):
-            value = self._parse_float(self._pick(row, col))
+            value = self._parse_decimal(self._pick(row, col))
             if value is not None:
                 fee += value
 
-        tax = 0.0
+        tax = Decimal("0")
         for col in ("印花税", "税费", "其他税费"):
-            value = self._parse_float(self._pick(row, col))
+            value = self._parse_decimal(self._pick(row, col))
             if value is not None:
                 tax += value
 
@@ -1570,10 +1588,10 @@ class PortfolioImportService:
             "trade_date": trade_date_obj,
             "symbol": symbol,
             "side": side,
-            "quantity": float(quantity),
-            "price": float(price),
-            "fee": float(fee),
-            "tax": float(tax),
+            "quantity": self._canonical_decimal_text(quantity),
+            "price": self._canonical_decimal_text(price),
+            "fee": self._canonical_decimal_text(fee),
+            "tax": self._canonical_decimal_text(tax),
             "trade_uid": (str(trade_uid).strip() if trade_uid is not None else None) or None,
             "currency": (str(currency).strip().upper() if currency is not None else None) or None,
         }
@@ -1588,16 +1606,40 @@ class PortfolioImportService:
         return None
 
     @staticmethod
-    def _parse_float(value: Any) -> Optional[float]:
+    def _parse_decimal(value: Any) -> Optional[Decimal]:
         if value is None:
             return None
         text = str(value).strip().replace(",", "")
         if not text or text.lower() == "nan":
             return None
         try:
-            return float(text)
-        except ValueError:
+            parsed = Decimal(text)
+        except (InvalidOperation, ValueError):
             return None
+        return parsed if parsed.is_finite() else None
+
+    @staticmethod
+    def _canonical_decimal_text(value: Any) -> str:
+        parsed = PortfolioImportService._parse_decimal(value)
+        if parsed is None:
+            raise ValueError("numeric import value is invalid")
+        return format(parsed, "f")
+
+    @staticmethod
+    def _dedup_decimal_text(value: Any) -> str:
+        parsed = PortfolioImportService._parse_decimal(value)
+        if parsed is None:
+            raise ValueError("numeric import value is invalid")
+        if parsed.is_zero():
+            return "0"
+        return format(parsed.normalize(), "f")
+
+    @staticmethod
+    def _raw_ibkr_currency(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text.upper() if text else None
 
     @staticmethod
     def _parse_date(value: Any) -> Optional[date]:
@@ -1636,6 +1678,24 @@ class PortfolioImportService:
                 str(record.get("trade_date") or ""),
                 str(record.get("symbol") or ""),
                 str(record.get("side") or ""),
+                PortfolioImportService._dedup_decimal_text(record.get("quantity", "0")),
+                PortfolioImportService._dedup_decimal_text(record.get("price", "0")),
+                PortfolioImportService._dedup_decimal_text(record.get("fee", "0")),
+                PortfolioImportService._dedup_decimal_text(record.get("tax", "0")),
+                str(record.get("currency") or ""),
+                str(record.get("_source_line_number") or record.get("source_line_number") or ""),
+            ]
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _build_legacy_v1_dedup_hash(record: Dict[str, Any]) -> str:
+        """Read pre-R05 hashes only; current imports continue to write v2 hashes."""
+        payload = "|".join(
+            [
+                str(record.get("trade_date") or ""),
+                str(record.get("symbol") or ""),
+                str(record.get("side") or ""),
                 f"{float(record.get('quantity', 0.0)):.8f}",
                 f"{float(record.get('price', 0.0)):.8f}",
                 f"{float(record.get('fee', 0.0)):.8f}",
@@ -1645,6 +1705,21 @@ class PortfolioImportService:
             ]
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _legacy_v1_numeric_fields_round_trip_exactly(record: Dict[str, Any]) -> bool:
+        """Only trust a v1 hash when its float representation preserves the event."""
+        for field in ("quantity", "price", "fee", "tax"):
+            parsed = PortfolioImportService._parse_decimal(record.get(field, "0"))
+            if parsed is None:
+                return False
+            try:
+                legacy_value = Decimal(f"{float(parsed):.8f}")
+            except (OverflowError, ValueError):
+                return False
+            if not legacy_value.is_finite() or parsed != legacy_value:
+                return False
+        return True
 
     @staticmethod
     def _fingerprint_bytes(content: bytes) -> str:
@@ -1806,10 +1881,10 @@ class PortfolioImportService:
         )
         if trade_date_obj is None:
             return None
-        quantity_raw = self._parse_float(self._pick_attr(element, "quantity", "tradeQuantity"))
+        quantity_raw = self._parse_decimal(self._pick_attr(element, "quantity", "tradeQuantity"))
         if quantity_raw is None or abs(quantity_raw) <= 0:
             return None
-        price = self._parse_float(self._pick_attr(element, "tradePrice", "price", "costBasisPrice"))
+        price = self._parse_decimal(self._pick_attr(element, "tradePrice", "price", "costBasisPrice"))
         if price is None or price <= 0:
             return None
         side = self._normalize_ibkr_side(
@@ -1818,20 +1893,22 @@ class PortfolioImportService:
         )
         if side is None:
             return None
-        currency = self._pick_attr(element, "currency", "currencyPrimary", "fxCurrency")
-        fee = abs(self._parse_float(self._pick_attr(element, "ibCommission", "commission")) or 0.0)
-        tax = abs(self._parse_float(self._pick_attr(element, "taxes", "tax", "salesTax")) or 0.0)
+        currency = self._raw_ibkr_currency(
+            self._pick_attr(element, "currency", "currencyPrimary", "fxCurrency")
+        )
+        fee = abs(self._parse_decimal(self._pick_attr(element, "ibCommission", "commission")) or Decimal("0"))
+        tax = abs(self._parse_decimal(self._pick_attr(element, "taxes", "tax", "salesTax")) or Decimal("0"))
         trade_uid = self._pick_attr(element, "ibExecID", "executionId", "tradeID", "transactionID", "orderID")
         record = {
             "trade_date": trade_date_obj,
             "symbol": symbol,
             "market": market,
-            "currency": str(currency).upper() if currency is not None else None,
+            "currency": currency,
             "side": side,
-            "quantity": abs(float(quantity_raw)),
-            "price": float(price),
-            "fee": float(fee),
-            "tax": float(tax),
+            "quantity": self._canonical_decimal_text(abs(quantity_raw)),
+            "price": self._canonical_decimal_text(price),
+            "fee": self._canonical_decimal_text(fee),
+            "tax": self._canonical_decimal_text(tax),
             "trade_uid": trade_uid,
             "note": (self._pick_attr(element, "description", "notes") or "ibkr_flex_trade").strip(),
             "_source_line_number": source_index + 1,
@@ -1849,19 +1926,19 @@ class PortfolioImportService:
         )
         if event_date_obj is None:
             return None
-        amount = self._parse_float(self._pick_attr(element, "amount", "amountLocal", "amountBase"))
+        amount = self._parse_decimal(self._pick_attr(element, "amount", "amountLocal", "amountBase"))
         if amount is None or abs(amount) <= 0:
             return None
-        currency = self._pick_attr(element, "currency", "currencyPrimary")
+        currency = self._raw_ibkr_currency(self._pick_attr(element, "currency", "currencyPrimary"))
         description = (
             self._pick_attr(element, "description", "type", "activityDescription")
             or "ibkr_flex_cash"
         ).strip()
         return {
             "event_date": event_date_obj,
-            "direction": "in" if float(amount) > 0 else "out",
-            "amount": abs(float(amount)),
-            "currency": str(currency).upper() if currency is not None else None,
+            "direction": "in" if amount > 0 else "out",
+            "amount": self._canonical_decimal_text(abs(amount)),
+            "currency": currency,
             "note": description[:255],
         }
 
@@ -1891,14 +1968,14 @@ class PortfolioImportService:
         if identity is None:
             return None
         symbol, market = identity
-        currency = self._pick_attr(element, "currency", "currencyPrimary")
+        currency = self._raw_ibkr_currency(self._pick_attr(element, "currency", "currencyPrimary"))
         return {
             "effective_date": effective_date_obj,
             "symbol": symbol,
             "market": market,
-            "currency": str(currency).upper() if currency is not None else None,
+            "currency": currency,
             "action_type": "split_adjustment",
-            "split_ratio": float(split_ratio),
+            "split_ratio": self._canonical_decimal_text(split_ratio),
             "note": description[:255] or "ibkr_flex_split",
         }
 
@@ -1920,12 +1997,12 @@ class PortfolioImportService:
         if identity is None:
             return None
         symbol, market = identity
-        quantity = self._parse_float(self._pick_attr(element, "position", "quantity"))
+        quantity = self._parse_decimal(self._pick_attr(element, "position", "quantity"))
         if quantity is None or abs(quantity) <= 0:
             return None
-        if float(quantity) < 0:
+        if quantity < 0:
             raise ValueError(f"IBKR short open position for {symbol} is not supported in this import phase")
-        price = self._parse_float(self._pick_attr(element, "costBasisPrice", "costPrice", "openPrice"))
+        price = self._parse_decimal(self._pick_attr(element, "costBasisPrice", "costPrice", "openPrice"))
         if price is None or price <= 0:
             return None
         trade_date_obj = self._parse_date(
@@ -1934,18 +2011,18 @@ class PortfolioImportService:
         )
         if trade_date_obj is None:
             return None
-        currency = self._pick_attr(element, "currency", "currencyPrimary")
+        currency = self._raw_ibkr_currency(self._pick_attr(element, "currency", "currencyPrimary"))
         trade_uid = f"ibkr-open:{broker_account_ref or 'unknown'}:{symbol}:{trade_date_obj.isoformat()}"
         record = {
             "trade_date": trade_date_obj,
             "symbol": symbol,
             "market": market,
-            "currency": str(currency).upper() if currency is not None else None,
+            "currency": currency,
             "side": "buy",
-            "quantity": abs(float(quantity)),
-            "price": float(price),
-            "fee": 0.0,
-            "tax": 0.0,
+            "quantity": self._canonical_decimal_text(abs(quantity)),
+            "price": self._canonical_decimal_text(price),
+            "fee": "0",
+            "tax": "0",
             "trade_uid": trade_uid,
             "note": "ibkr_flex_open_position_seed",
             "_source_line_number": source_index + 1,
@@ -1955,14 +2032,14 @@ class PortfolioImportService:
         return record
 
     @staticmethod
-    def _normalize_ibkr_side(value: Optional[str], *, quantity_raw: Optional[float] = None) -> Optional[str]:
+    def _normalize_ibkr_side(value: Optional[str], *, quantity_raw: Optional[Decimal] = None) -> Optional[str]:
         text = str(value or "").strip().lower()
         if text in {"buy", "b", "bot"}:
             return "buy"
         if text in {"sell", "s", "sld"}:
             return "sell"
         if quantity_raw is not None:
-            return "buy" if float(quantity_raw) > 0 else "sell"
+            return "buy" if quantity_raw > 0 else "sell"
         return None
 
     @staticmethod
@@ -1994,13 +2071,13 @@ class PortfolioImportService:
         return None
 
     @staticmethod
-    def _parse_split_ratio(value: Any) -> Optional[float]:
+    def _parse_split_ratio(value: Any) -> Optional[Decimal]:
         if value is None:
             return None
         text = str(value).strip()
         if not text:
             return None
-        direct = PortfolioImportService._parse_float(text)
+        direct = PortfolioImportService._parse_decimal(text)
         if direct is not None and direct > 0:
             return direct
         patterns = [
@@ -2012,8 +2089,8 @@ class PortfolioImportService:
             match = re.search(pattern, lowered)
             if not match:
                 continue
-            left = float(match.group(1))
-            right = float(match.group(2))
+            left = Decimal(match.group(1))
+            right = Decimal(match.group(2))
             if right > 0:
                 return left / right
         return None

@@ -3,10 +3,106 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from datetime import date
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    WithJsonSchema,
+    field_serializer,
+    model_validator,
+)
+
+from src.portfolio_exact_numeric import (
+    parse_portfolio_decimal,
+    parse_portfolio_decimal_transport,
+    serialize_portfolio_decimal_value,
+)
+
+
+def _parse_portfolio_transport_decimal(value: Any) -> Decimal:
+    """Preserve a public decimal token until its owner resolves precision."""
+
+    return parse_portfolio_decimal_transport(value)
+
+
+def _serialize_portfolio_decimal_wire(value: Decimal) -> str:
+    """Render an already-resolved Decimal without exponent notation."""
+
+    return format(value, "f")
+
+
+def _serialize_portfolio_decimal_tree(value: Any) -> Any:
+    """Preserve dynamic response values while rendering Decimal leaves as wire text."""
+
+    if isinstance(value, Decimal):
+        return _serialize_portfolio_decimal_wire(value)
+    if isinstance(value, list):
+        return [_serialize_portfolio_decimal_tree(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _serialize_portfolio_decimal_tree(item) for key, item in value.items()}
+    return value
+
+
+_PORTFOLIO_DECIMAL_TEXT_PATTERN = r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$"
+_PORTFOLIO_EXACT_DECIMAL_INPUT_SCHEMA = {
+    "anyOf": [
+        {"type": "integer"},
+        {"type": "string", "pattern": _PORTFOLIO_DECIMAL_TEXT_PATTERN},
+    ]
+}
+_PORTFOLIO_EXACT_DECIMAL_OUTPUT_SCHEMA = {
+    "type": "string",
+    "pattern": _PORTFOLIO_DECIMAL_TEXT_PATTERN,
+}
+
+
+class _PortfolioTransportDecimalJsonSchema:
+    def __get_pydantic_json_schema__(self, core_schema: Any, handler: Any) -> Dict[str, Any]:
+        schema = handler(core_schema)
+        if handler.mode == "serialization":
+            return {**schema, **_PORTFOLIO_EXACT_DECIMAL_OUTPUT_SCHEMA}
+
+        variants = schema.get("anyOf")
+        if not isinstance(variants, list):
+            return schema
+        return {
+            **schema,
+            "anyOf": [
+                {**variant, "type": "integer"}
+                if isinstance(variant, dict) and variant.get("type") == "number"
+                else variant
+                for variant in variants
+            ],
+        }
+
+
+PortfolioTransportDecimal = Annotated[
+    Decimal,
+    BeforeValidator(_parse_portfolio_transport_decimal),
+    PlainSerializer(_serialize_portfolio_decimal_wire, return_type=str, when_used="json"),
+    _PortfolioTransportDecimalJsonSchema(),
+]
+
+PortfolioContextualDecimal = Annotated[
+    Decimal,
+    WithJsonSchema(_PORTFOLIO_EXACT_DECIMAL_INPUT_SCHEMA, mode="validation"),
+    WithJsonSchema(_PORTFOLIO_EXACT_DECIMAL_OUTPUT_SCHEMA, mode="serialization"),
+]
+
+_IBKR_SYNC_MONEY_FIELDS = (
+    "total_cash",
+    "total_market_value",
+    "total_equity",
+    "realized_pnl",
+    "unrealized_pnl",
+)
 
 
 class PortfolioAccountCreateRequest(BaseModel):
@@ -103,11 +199,11 @@ class PortfolioIbkrSyncResponse(BaseModel):
     snapshot_date: str
     synced_at: str
     base_currency: str
-    total_cash: float
-    total_market_value: float
-    total_equity: float
-    realized_pnl: float
-    unrealized_pnl: float
+    total_cash: PortfolioContextualDecimal
+    total_market_value: PortfolioContextualDecimal
+    total_equity: PortfolioContextualDecimal
+    realized_pnl: PortfolioContextualDecimal
+    unrealized_pnl: PortfolioContextualDecimal
     position_count: int
     cash_balance_count: int
     fx_stale: bool
@@ -117,16 +213,31 @@ class PortfolioIbkrSyncResponse(BaseModel):
     verify_ssl: bool
     warnings: List[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_money_against_base_currency(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        for field_name in _IBKR_SYNC_MONEY_FIELDS:
+            if field_name in payload:
+                payload[field_name] = parse_portfolio_decimal(
+                    payload[field_name],
+                    kind="money",
+                    currency=payload.get("base_currency"),
+                )
+        return payload
+
 
 class PortfolioTradeCreateRequest(BaseModel):
     account_id: int
     symbol: str = Field(..., min_length=1, max_length=16)
     trade_date: date
     side: Literal["buy", "sell"]
-    quantity: float = Field(..., gt=0)
-    price: float = Field(..., gt=0)
-    fee: float = Field(0.0, ge=0)
-    tax: float = Field(0.0, ge=0)
+    quantity: PortfolioTransportDecimal = Field(..., gt=0)
+    price: PortfolioTransportDecimal = Field(..., gt=0)
+    fee: PortfolioTransportDecimal = Field(Decimal("0"), ge=0)
+    tax: PortfolioTransportDecimal = Field(Decimal("0"), ge=0)
     market: Optional[Literal["cn", "hk", "us"]] = None
     currency: Optional[str] = Field(None, min_length=3, max_length=8)
     trade_uid: Optional[str] = Field(None, max_length=128)
@@ -138,10 +249,10 @@ class PortfolioTradeUpdateRequest(BaseModel):
     symbol: Optional[str] = Field(None, min_length=1, max_length=16)
     trade_date: Optional[date] = None
     side: Optional[Literal["buy", "sell"]] = None
-    quantity: Optional[float] = Field(None, gt=0)
-    price: Optional[float] = Field(None, gt=0)
-    fee: Optional[float] = Field(None, ge=0)
-    tax: Optional[float] = Field(None, ge=0)
+    quantity: Optional[PortfolioTransportDecimal] = Field(None, gt=0)
+    price: Optional[PortfolioTransportDecimal] = Field(None, gt=0)
+    fee: Optional[PortfolioTransportDecimal] = Field(None, ge=0)
+    tax: Optional[PortfolioTransportDecimal] = Field(None, ge=0)
     market: Optional[Literal["cn", "hk", "us"]] = None
     currency: Optional[str] = Field(None, min_length=3, max_length=8)
     note: Optional[str] = Field(None, max_length=255)
@@ -151,7 +262,7 @@ class PortfolioCashLedgerCreateRequest(BaseModel):
     account_id: int
     event_date: date
     direction: Literal["in", "out"]
-    amount: float = Field(..., gt=0)
+    amount: PortfolioTransportDecimal = Field(..., gt=0)
     currency: Optional[str] = Field(None, min_length=3, max_length=8)
     note: Optional[str] = Field(None, max_length=255)
 
@@ -163,8 +274,8 @@ class PortfolioCorporateActionCreateRequest(BaseModel):
     action_type: Literal["cash_dividend", "split_adjustment"]
     market: Optional[Literal["cn", "hk", "us"]] = None
     currency: Optional[str] = Field(None, min_length=3, max_length=8)
-    cash_dividend_per_share: Optional[float] = Field(None, ge=0)
-    split_ratio: Optional[float] = Field(None, gt=0)
+    cash_dividend_per_share: Optional[PortfolioTransportDecimal] = Field(None, ge=0)
+    split_ratio: Optional[PortfolioTransportDecimal] = Field(None, gt=0)
     note: Optional[str] = Field(None, max_length=255)
 
 
@@ -193,10 +304,10 @@ class PortfolioTradeListItem(BaseModel):
     currency: str
     trade_date: str
     side: str
-    quantity: float
-    price: float
-    fee: float
-    tax: float
+    quantity: PortfolioTransportDecimal
+    price: PortfolioTransportDecimal
+    fee: PortfolioTransportDecimal
+    tax: PortfolioTransportDecimal
     note: Optional[str] = None
     is_active: bool = True
     voided_at: Optional[str] = None
@@ -216,7 +327,7 @@ class PortfolioCashLedgerListItem(BaseModel):
     account_id: int
     event_date: str
     direction: str
-    amount: float
+    amount: PortfolioTransportDecimal
     currency: str
     note: Optional[str] = None
     created_at: Optional[str] = None
@@ -237,8 +348,8 @@ class PortfolioCorporateActionListItem(BaseModel):
     currency: str
     effective_date: str
     action_type: str
-    cash_dividend_per_share: Optional[float] = None
-    split_ratio: Optional[float] = None
+    cash_dividend_per_share: Optional[PortfolioTransportDecimal] = None
+    split_ratio: Optional[PortfolioTransportDecimal] = None
     note: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -254,27 +365,58 @@ class PortfolioPositionItem(BaseModel):
     symbol: str
     market: str
     currency: str
-    quantity: float
-    avg_cost: float
-    total_cost: float
-    last_price: float
+    quantity: Decimal
+    avg_cost: Decimal
+    total_cost: Decimal
+    last_price: Decimal
     price_source: Optional[str] = None
     price_source_label: Optional[str] = None
     price_as_of: Optional[str] = None
     is_price_fallback: Optional[bool] = None
     price_fallback_reason: Optional[str] = None
     valuation_confidence: Optional[float] = None
-    market_value_base: float
-    unrealized_pnl_base: float
+    market_value_base: Decimal
+    unrealized_pnl_base: Decimal
     valuation_currency: str
-    cost_basis_native: Optional[float] = None
-    market_value_native: Optional[float] = None
-    unrealized_pnl_native: Optional[float] = None
+    cost_basis_native: Optional[Decimal] = None
+    market_value_native: Optional[Decimal] = None
+    unrealized_pnl_native: Optional[Decimal] = None
     unrealized_pnl_pct: Optional[float] = None
-    display_market_value: Optional[float] = None
-    display_unrealized_pnl: Optional[float] = None
+    display_market_value: Optional[Decimal] = None
+    display_unrealized_pnl: Optional[Decimal] = None
     display_currency: Optional[str] = None
     display_fx_status: Optional[Literal["live", "stale", "unavailable"]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_contextual_decimals(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        market = payload.get("market")
+        currency = payload.get("currency")
+        valuation_currency = payload.get("valuation_currency")
+        display_currency = payload.get("display_currency")
+        for field_name in ("quantity",):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(payload[field_name], kind="quantity", market=market)
+        for field_name in ("avg_cost", "last_price"):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(payload[field_name], kind="price", market=market)
+        for field_name in ("total_cost", "cost_basis_native", "market_value_native", "unrealized_pnl_native"):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(payload[field_name], kind="money", currency=currency)
+        for field_name in ("market_value_base", "unrealized_pnl_base"):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(
+                    payload[field_name], kind="money", currency=valuation_currency
+                )
+        for field_name in ("display_market_value", "display_unrealized_pnl"):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(
+                    payload[field_name], kind="money", currency=display_currency
+                )
+        return payload
 
 
 class PortfolioAccountSnapshot(BaseModel):
@@ -286,13 +428,13 @@ class PortfolioAccountSnapshot(BaseModel):
     base_currency: str
     as_of: str
     cost_method: str
-    total_cash: float
-    total_market_value: float
-    total_equity: float
-    realized_pnl: float
-    unrealized_pnl: float
-    fee_total: float
-    tax_total: float
+    total_cash: Decimal
+    total_market_value: Decimal
+    total_equity: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    fee_total: Decimal
+    tax_total: Decimal
     fx_stale: bool
     data_status: Optional[
         Literal[
@@ -307,31 +449,79 @@ class PortfolioAccountSnapshot(BaseModel):
     valuation_lineage: Optional[Dict[str, Any]] = None
     positions: List[PortfolioPositionItem] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_base_money(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(
+                    payload[field_name], kind="money", currency=payload.get("base_currency")
+                )
+        return payload
+
 
 class PortfolioMarketBreakdownItem(BaseModel):
     market: str
     position_count: int
-    total_market_value: float
+    total_market_value: Decimal
     weight_pct: float
 
 
 class PortfolioFxRateItem(BaseModel):
     from_currency: str
     to_currency: str
-    rate: Optional[float] = None
+    rate: Optional[Decimal] = None
     rate_date: Optional[str] = None
     source: str
     is_stale: bool
     updated_at: Optional[str] = None
     source_direction: str
 
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_rate(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        if payload.get("rate") is not None:
+            payload["rate"] = parse_portfolio_decimal(
+                payload["rate"],
+                kind="fx_rate",
+                from_currency=payload.get("from_currency"),
+                to_currency=payload.get("to_currency"),
+            )
+        return payload
+
 
 class PortfolioPnlMetric(BaseModel):
-    amount: float
+    amount: Decimal
     amount_display: Optional[str] = None
     percent: Optional[float] = None
     currency: str
     fx_status: Literal["live", "stale", "unavailable"] = "live"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_money(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        if payload.get("amount") is not None:
+            payload["amount"] = parse_portfolio_decimal(
+                payload["amount"], kind="money", currency=payload.get("currency")
+            )
+        return payload
 
 
 class PortfolioPnlSummary(BaseModel):
@@ -344,12 +534,12 @@ class PortfolioPnlSummary(BaseModel):
 class PortfolioExposureItem(BaseModel):
     key: str
     label: str
-    market_value: float
-    display_value: float
+    market_value: Decimal
+    display_value: Decimal
     display_currency: str
     percent: float
     fx_status: Literal["live", "stale", "unavailable"] = "live"
-    native_value: Optional[float] = None
+    native_value: Optional[Decimal] = None
     native_currency: Optional[str] = None
     account_id: Optional[int] = None
     account_name: Optional[str] = None
@@ -359,8 +549,25 @@ class PortfolioExposureItem(BaseModel):
     symbol: Optional[str] = None
     sector: Optional[str] = None
     holding_count: Optional[int] = None
-    unrealized_pnl: Optional[float] = None
+    unrealized_pnl: Optional[Decimal] = None
     unrealized_pnl_pct: Optional[float] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_money(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        for field_name in ("market_value", "display_value", "unrealized_pnl"):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(
+                    payload[field_name], kind="money", currency=payload.get("display_currency")
+                )
+        if payload.get("native_value") is not None:
+            payload["native_value"] = parse_portfolio_decimal(
+                payload["native_value"], kind="money", currency=payload.get("native_currency")
+            )
+        return payload
 
 
 class PortfolioExposureSummary(BaseModel):
@@ -373,9 +580,9 @@ class PortfolioExposureSummary(BaseModel):
 
 
 class PortfolioRiskSummary(BaseModel):
-    largest_position: Optional[Dict[str, Any]] = None
-    largest_currency: Optional[Dict[str, Any]] = None
-    largest_market: Optional[Dict[str, Any]] = None
+    largest_position: Optional[PortfolioExposureItem] = None
+    largest_currency: Optional[PortfolioExposureItem] = None
+    largest_market: Optional[PortfolioExposureItem] = None
     holding_count: int = 0
     account_count: int = 0
     cash_percent: Optional[float] = None
@@ -441,8 +648,8 @@ class PortfolioTruth(BaseModel):
     account_state: Literal["no_account", "no_holdings", "holdings_present"]
     valuation_state: Literal["not_applicable", "unavailable", "partial", "fully_valued"]
     value_semantics: Literal["not_applicable", "unavailable", "covered_subtotal", "authoritative_total"]
-    authoritative_total: Optional[float] = None
-    covered_subtotal: Optional[float] = None
+    authoritative_total: Optional[Decimal] = None
+    covered_subtotal: Optional[Decimal] = None
     account_count: int = Field(ge=0)
     position_count: int = Field(ge=0)
 
@@ -514,13 +721,13 @@ class PortfolioSnapshotResponse(BaseModel):
     cost_method: str
     currency: str
     account_count: int
-    total_cash: float
-    total_market_value: float
-    total_equity: float
-    realized_pnl: float
-    unrealized_pnl: float
-    fee_total: float
-    tax_total: float
+    total_cash: Decimal
+    total_market_value: Decimal
+    total_equity: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    fee_total: Decimal
+    tax_total: Decimal
     fx_stale: bool
     portfolio_truth: PortfolioTruth
     data_status: Optional[
@@ -557,23 +764,90 @@ class PortfolioSnapshotResponse(BaseModel):
     confidenceCap: Optional[Dict[str, Any]] = None
     accounts: List[PortfolioAccountSnapshot] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_aggregate_money(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(
+                    payload[field_name], kind="money", currency=payload.get("currency")
+                )
+        market_breakdown = payload.get("market_breakdown")
+        if isinstance(market_breakdown, list):
+            payload["market_breakdown"] = [
+                {
+                    **item,
+                    "total_market_value": parse_portfolio_decimal(
+                        item["total_market_value"], kind="money", currency=payload.get("currency")
+                    ),
+                }
+                if isinstance(item, dict) and item.get("total_market_value") is not None
+                else item
+                for item in market_breakdown
+            ]
+        portfolio_truth = payload.get("portfolio_truth")
+        if isinstance(portfolio_truth, dict):
+            payload["portfolio_truth"] = {
+                **portfolio_truth,
+                **{
+                    field_name: parse_portfolio_decimal(
+                        portfolio_truth[field_name], kind="money", currency=payload.get("currency")
+                    )
+                    for field_name in ("authoritative_total", "covered_subtotal")
+                    if portfolio_truth.get(field_name) is not None
+                },
+            }
+        return payload
+
 
 class PortfolioHistorySnapshotItem(BaseModel):
     account_id: int
     snapshot_date: str
     cost_method: str
     base_currency: str
-    total_cash: float
-    total_market_value: float
-    total_equity: float
-    realized_pnl: float
-    unrealized_pnl: float
-    fee_total: float
-    tax_total: float
+    total_cash: Decimal
+    total_market_value: Decimal
+    total_equity: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    fee_total: Decimal
+    tax_total: Decimal
     fx_stale: bool
     valuation_lineage: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_base_money(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+            "fee_total",
+            "tax_total",
+        ):
+            if payload.get(field_name) is not None:
+                payload[field_name] = parse_portfolio_decimal(
+                    payload[field_name], kind="money", currency=payload.get("base_currency")
+                )
+        return payload
 
 
 class PortfolioHistoryCoverage(BaseModel):
@@ -621,6 +895,36 @@ class PortfolioStructureReviewHolding(BaseModel):
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class PortfolioStructureReviewExposureItem(BaseModel):
+    key: str
+    label: str
+    marketValue: str = Field(..., pattern=_PORTFOLIO_DECIMAL_TEXT_PATTERN)
+    displayCurrency: str = Field(..., min_length=3, max_length=8)
+    percent: float
+    holdingCount: int = Field(..., ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_exact_market_value(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        market_value = payload.get("marketValue")
+        display_currency = payload.get("displayCurrency")
+        if not isinstance(market_value, str):
+            raise ValueError("structure review exposure market value must be an exact decimal string")
+        if not isinstance(display_currency, str) or not display_currency.strip():
+            raise ValueError("structure review exposure requires display currency")
+        currency = display_currency.strip().upper()
+        payload["marketValue"] = serialize_portfolio_decimal_value(
+            market_value,
+            kind="money",
+            currency=currency,
+        )
+        payload["displayCurrency"] = currency
+        return payload
+
+
 class PortfolioStructureReviewLinkTarget(BaseModel):
     label: str
     route: str
@@ -666,7 +970,7 @@ class PortfolioStructureReviewResearchLinkage(BaseModel):
 class PortfolioStructureReviewResponse(BaseModel):
     schemaVersion: str
     aggregateSummary: Dict[str, Any] = Field(default_factory=dict)
-    exposureByThemeOrSector: List[Dict[str, Any]] = Field(default_factory=list)
+    exposureByThemeOrSector: List[PortfolioStructureReviewExposureItem] = Field(default_factory=list)
     countsByStructureState: Dict[str, int] = Field(default_factory=dict)
     holdingsStructure: List[PortfolioStructureReviewHolding] = Field(default_factory=list)
     strongestStructures: List[Dict[str, Any]] = Field(default_factory=list)
@@ -689,10 +993,10 @@ class PortfolioImportTradeItem(BaseModel):
     trade_date: str
     symbol: str
     side: Literal["buy", "sell"]
-    quantity: float
-    price: float
-    fee: float
-    tax: float
+    quantity: PortfolioTransportDecimal
+    price: PortfolioTransportDecimal
+    fee: PortfolioTransportDecimal
+    tax: PortfolioTransportDecimal
     trade_uid: Optional[str] = None
     dedup_hash: str
     market: Optional[str] = None
@@ -703,7 +1007,7 @@ class PortfolioImportTradeItem(BaseModel):
 class PortfolioImportCashEntryItem(BaseModel):
     event_date: str
     direction: Literal["in", "out"]
-    amount: float
+    amount: PortfolioTransportDecimal
     currency: str
     note: Optional[str] = None
 
@@ -714,8 +1018,8 @@ class PortfolioImportCorporateActionItem(BaseModel):
     market: str
     currency: str
     action_type: Literal["cash_dividend", "split_adjustment"]
-    cash_dividend_per_share: Optional[float] = None
-    split_ratio: Optional[float] = None
+    cash_dividend_per_share: Optional[PortfolioTransportDecimal] = None
+    split_ratio: Optional[PortfolioTransportDecimal] = None
     note: Optional[str] = None
 
 
@@ -789,12 +1093,27 @@ class PortfolioFxRefreshResponse(BaseModel):
 class PortfolioLiveFxRateResponse(BaseModel):
     base_currency: str
     quote_currency: str
-    rate: float
+    rate: Decimal
     provider: str
     fetched_at: str
     cache_hit: bool
     stale: bool
     error: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_rate(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        if payload.get("rate") is not None:
+            payload["rate"] = parse_portfolio_decimal(
+                payload["rate"],
+                kind="fx_rate",
+                from_currency=payload.get("base_currency"),
+                to_currency=payload.get("quote_currency"),
+            )
+        return payload
 
 
 class PortfolioRiskResponse(BaseModel):
@@ -857,11 +1176,80 @@ class PortfolioRiskResponse(BaseModel):
     confidenceCap: Optional[Dict[str, Any]] = None
 
 
+class PortfolioScenarioRiskPositionRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    symbol: Optional[str] = Field(None, min_length=1, max_length=64)
+    weight: Optional[PortfolioTransportDecimal] = None
+    weightPct: Optional[PortfolioTransportDecimal] = None
+    marketValueBase: Optional[PortfolioTransportDecimal] = Field(
+        None,
+        validation_alias=AliasChoices("marketValueBase", "market_value_base"),
+    )
+    baseCurrency: Optional[str] = Field(
+        None,
+        min_length=3,
+        max_length=8,
+        validation_alias=AliasChoices("baseCurrency", "base_currency"),
+    )
+    bucket: Optional[str] = None
+    bucketLabel: Optional[str] = None
+    theme: Optional[str] = None
+    factor: Optional[str] = None
+
+
+class PortfolioScenarioRiskInputError(ValueError):
+    """Raised when the caller-supplied scenario money context is incomplete."""
+
+
 class PortfolioScenarioRiskRequest(BaseModel):
     asOf: str = Field(..., min_length=1)
-    positions: List[Dict[str, Any]] | Dict[str, Any]
+    baseCurrency: str = Field(..., min_length=3, max_length=8)
+    positions: List[PortfolioScenarioRiskPositionRequest] | PortfolioScenarioRiskPositionRequest
     exposures: List[Dict[str, Any]] | Dict[str, Any]
     scenarioShocks: List[Dict[str, Any]] | Dict[str, Any]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_position_mapping(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        payload = dict(value)
+        positions = payload.get("positions")
+        if not isinstance(positions, dict):
+            return payload
+        if any(
+            key in positions
+            for key in (
+                "symbol",
+                "weight",
+                "weightPct",
+                "marketValueBase",
+                "market_value_base",
+                "baseCurrency",
+                "base_currency",
+            )
+        ):
+            return payload
+        payload["positions"] = [
+            ({**item, "symbol": symbol} if isinstance(item, dict) else {"symbol": symbol, "weight": item})
+            for symbol, item in positions.items()
+        ]
+        return payload
+
+    def validate_position_money_currency(self) -> None:
+        positions = self.positions if isinstance(self.positions, list) else [self.positions]
+        for position in positions:
+            if position.marketValueBase is None:
+                continue
+            row_currency = position.baseCurrency.strip().upper() if position.baseCurrency else ""
+            if not row_currency:
+                raise PortfolioScenarioRiskInputError("marketValueBase requires baseCurrency")
+            if row_currency != self.baseCurrency.strip().upper():
+                raise PortfolioScenarioRiskInputError(
+                    "marketValueBase baseCurrency must match request baseCurrency"
+                )
+            parse_portfolio_decimal(position.marketValueBase, kind="money", currency=row_currency)
 
 
 class PortfolioScenarioRiskResponse(BaseModel):
@@ -872,8 +1260,13 @@ class PortfolioScenarioRiskResponse(BaseModel):
     tradeExecution: bool = False
     executionReadiness: str
     asOf: Optional[str] = None
+    baseCurrency: str
     coverage: Dict[str, Any] = Field(default_factory=dict)
     scenarios: List[Dict[str, Any]] = Field(default_factory=list)
     insufficientDataReasons: List[str] = Field(default_factory=list)
     missingDataWarnings: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_serializer("coverage", "scenarios", "metadata", when_used="json")
+    def _serialize_dynamic_decimal_fields(self, value: Any) -> Any:
+        return _serialize_portfolio_decimal_tree(value)

@@ -106,6 +106,13 @@ class TwelveDataFetcherTestCase(unittest.TestCase):
         self.assertEqual(source, "TwelveDataFetcher")
         self.assertEqual(list(frame["code"].unique()), ["HK00700"])
         self.assertEqual(frame.iloc[-1]["close"], 503.5)
+        self.assertEqual(
+            frame.attrs["wolfystock.stock_daily.close_tokens.v1"],
+            {
+                "2026-04-14": "496.0",
+                "2026-04-15": "503.5",
+            },
+        )
         self.assertIn("pct_chg", frame.columns)
         self.assertGreater(float(frame.iloc[-1]["amount"]), 0.0)
         session.get.assert_called_once()

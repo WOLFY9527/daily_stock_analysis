@@ -10,6 +10,7 @@ import json
 import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -33,6 +34,10 @@ from src.storage import (
     PortfolioTrade,
     StockDaily,
 )
+from src.portfolio_exact_numeric import (
+    parse_portfolio_decimal,
+    round_portfolio_decimal_value,
+)
 from src.utils.symbol_normalization import canonical_symbol_storage_values, parse_canonical_symbol
 
 logger = logging.getLogger(__name__)
@@ -44,8 +49,8 @@ class _PortfolioRiskSnapshotProjection:
     account_id: int
     snapshot_date: date
     base_currency: str
-    total_equity: float
-    cumulative_cash_flow: float
+    total_equity: Decimal
+    cumulative_cash_flow: Decimal
     fx_stale: bool
 
 
@@ -70,6 +75,115 @@ class PortfolioRepository:
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db = db_manager or DatabaseManager.get_instance()
+
+    @staticmethod
+    def _preflight_storage_values(**values: Any) -> Dict[str, Decimal]:
+        return {
+            name: parse_portfolio_decimal(value, kind="storage")
+            for name, value in values.items()
+        }
+
+    @staticmethod
+    def _preflight_snapshot_cache_rows(
+        *,
+        positions: Iterable[Dict[str, Any]],
+        lots: Iterable[Dict[str, Any]],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        prepared_positions: List[Dict[str, Any]] = []
+        for item in positions:
+            prepared = dict(item)
+            prepared.update(
+                {
+                    field: round_portfolio_decimal_value(prepared[field], kind="storage")
+                    for field in (
+                        "quantity",
+                        "avg_cost",
+                        "total_cost",
+                        "last_price",
+                        "market_value_base",
+                        "unrealized_pnl_base",
+                    )
+                }
+            )
+            price_cost = prepared.get("price_cost")
+            prepared["price_cost"] = (
+                round_portfolio_decimal_value(price_cost, kind="storage")
+                if price_cost is not None
+                else None
+            )
+            prepared_positions.append(prepared)
+
+        prepared_lots: List[Dict[str, Any]] = []
+        for item in lots:
+            prepared = dict(item)
+            prepared.update(
+                {
+                    field: round_portfolio_decimal_value(prepared[field], kind="storage")
+                    for field in ("remaining_quantity", "unit_cost")
+                }
+            )
+            prepared_lots.append(prepared)
+        return prepared_positions, prepared_lots
+
+    @staticmethod
+    def _preflight_broker_sync_rows(
+        *,
+        positions: Iterable[Dict[str, Any]],
+        cash_balances: Iterable[Dict[str, Any]],
+        base_currency: str,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        prepared_positions: List[Dict[str, Any]] = []
+        for item in positions:
+            prepared = dict(item)
+            market = str(prepared["market"] or "").strip().lower()
+            currency = str(prepared["currency"] or "").strip().upper()
+            valuation_currency = str(prepared["valuation_currency"] or "").strip().upper()
+            parse_portfolio_decimal(Decimal("0"), kind="money", currency=currency)
+            prepared.update(
+                {
+                    "market": market,
+                    "currency": currency,
+                    "valuation_currency": valuation_currency,
+                    "quantity": parse_portfolio_decimal(
+                        prepared["quantity"], kind="quantity", market=market
+                    ),
+                    "avg_cost": parse_portfolio_decimal(
+                        prepared["avg_cost"], kind="price", market=market
+                    ),
+                    "last_price": parse_portfolio_decimal(
+                        prepared["last_price"], kind="price", market=market
+                    ),
+                    "market_value_base": parse_portfolio_decimal(
+                        prepared["market_value_base"],
+                        kind="money",
+                        currency=valuation_currency,
+                    ),
+                    "unrealized_pnl_base": parse_portfolio_decimal(
+                        prepared["unrealized_pnl_base"],
+                        kind="money",
+                        currency=valuation_currency,
+                    ),
+                }
+            )
+            prepared_positions.append(prepared)
+
+        prepared_cash_balances: List[Dict[str, Any]] = []
+        for item in cash_balances:
+            prepared = dict(item)
+            currency = str(prepared["currency"] or "").strip().upper()
+            prepared.update(
+                {
+                    "currency": currency,
+                    "amount": parse_portfolio_decimal(
+                        prepared["amount"], kind="money", currency=currency
+                    ),
+                    "amount_base": parse_portfolio_decimal(
+                        prepared["amount_base"], kind="money", currency=base_currency
+                    ),
+                }
+            )
+            prepared_cash_balances.append(prepared)
+        return prepared_positions, prepared_cash_balances
 
     @staticmethod
     def _market_data_storage_lookup(symbol: str) -> Optional[Tuple[str, Tuple[str, ...]]]:
@@ -472,11 +586,11 @@ class PortfolioRepository:
         snapshot_date: date,
         synced_at: datetime,
         base_currency: str,
-        total_cash: float,
-        total_market_value: float,
-        total_equity: float,
-        realized_pnl: float,
-        unrealized_pnl: float,
+        total_cash: Any,
+        total_market_value: Any,
+        total_equity: Any,
+        realized_pnl: Any,
+        unrealized_pnl: Any,
         fx_stale: bool,
         payload_json: Optional[str],
         positions: Iterable[Dict[str, Any]],
@@ -484,6 +598,27 @@ class PortfolioRepository:
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
     ) -> PortfolioBrokerSyncState:
+        normalized_base_currency = str(base_currency or "").strip().upper()
+        normalized_total_cash = parse_portfolio_decimal(
+            total_cash, kind="money", currency=normalized_base_currency
+        )
+        normalized_total_market_value = parse_portfolio_decimal(
+            total_market_value, kind="money", currency=normalized_base_currency
+        )
+        normalized_total_equity = parse_portfolio_decimal(
+            total_equity, kind="money", currency=normalized_base_currency
+        )
+        normalized_realized_pnl = parse_portfolio_decimal(
+            realized_pnl, kind="money", currency=normalized_base_currency
+        )
+        normalized_unrealized_pnl = parse_portfolio_decimal(
+            unrealized_pnl, kind="money", currency=normalized_base_currency
+        )
+        prepared_positions, prepared_cash_balances = self._preflight_broker_sync_rows(
+            positions=positions,
+            cash_balances=cash_balances,
+            base_currency=normalized_base_currency,
+        )
         resolved_owner_id = self.db.require_user_id(owner_id)
         with self.db.get_session() as session:
             connection = self.get_broker_connection_in_session(
@@ -531,12 +666,12 @@ class PortfolioRepository:
             row.sync_status = sync_status
             row.snapshot_date = snapshot_date
             row.synced_at = synced_at
-            row.base_currency = base_currency
-            row.total_cash = total_cash
-            row.total_market_value = total_market_value
-            row.total_equity = total_equity
-            row.realized_pnl = realized_pnl
-            row.unrealized_pnl = unrealized_pnl
+            row.base_currency = normalized_base_currency
+            row.total_cash = normalized_total_cash
+            row.total_market_value = normalized_total_market_value
+            row.total_equity = normalized_total_equity
+            row.realized_pnl = normalized_realized_pnl
+            row.unrealized_pnl = normalized_unrealized_pnl
             row.fx_stale = bool(fx_stale)
             row.payload_json = payload_json
             row.updated_at = datetime.now()
@@ -552,7 +687,7 @@ class PortfolioRepository:
                 )
             )
 
-            for item in positions:
+            for item in prepared_positions:
                 session.add(
                     PortfolioBrokerSyncPosition(
                         owner_id=resolved_owner_id,
@@ -562,25 +697,25 @@ class PortfolioRepository:
                         symbol=item["symbol"],
                         market=item["market"],
                         currency=item["currency"],
-                        quantity=float(item["quantity"]),
-                        avg_cost=float(item["avg_cost"]),
-                        last_price=float(item["last_price"]),
-                        market_value_base=float(item["market_value_base"]),
-                        unrealized_pnl_base=float(item["unrealized_pnl_base"]),
+                        quantity=item["quantity"],
+                        avg_cost=item["avg_cost"],
+                        last_price=item["last_price"],
+                        market_value_base=item["market_value_base"],
+                        unrealized_pnl_base=item["unrealized_pnl_base"],
                         valuation_currency=item["valuation_currency"],
                         payload_json=item.get("payload_json"),
                     )
                 )
 
-            for item in cash_balances:
+            for item in prepared_cash_balances:
                 session.add(
                     PortfolioBrokerSyncCashBalance(
                         owner_id=resolved_owner_id,
                         broker_connection_id=broker_connection_id,
                         portfolio_account_id=portfolio_account_id,
                         currency=item["currency"],
-                        amount=float(item["amount"]),
-                        amount_base=float(item["amount_base"]),
+                        amount=item["amount"],
+                        amount_base=item["amount_base"],
                     )
                 )
 
@@ -814,10 +949,10 @@ class PortfolioRepository:
         currency: str,
         trade_date: date,
         side: str,
-        quantity: float,
-        price: float,
-        fee: float,
-        tax: float,
+        quantity: Decimal,
+        price: Decimal,
+        fee: Decimal,
+        tax: Decimal,
         note: Optional[str] = None,
         dedup_hash: Optional[str] = None,
     ) -> PortfolioTrade:
@@ -847,7 +982,7 @@ class PortfolioRepository:
         account_id: int,
         event_date: date,
         direction: str,
-        amount: float,
+        amount: Decimal,
         currency: str,
         note: Optional[str] = None,
     ) -> PortfolioCashLedger:
@@ -873,8 +1008,8 @@ class PortfolioRepository:
         currency: str,
         effective_date: date,
         action_type: str,
-        cash_dividend_per_share: Optional[float] = None,
-        split_ratio: Optional[float] = None,
+        cash_dividend_per_share: Optional[Decimal] = None,
+        split_ratio: Optional[Decimal] = None,
         note: Optional[str] = None,
     ) -> PortfolioCorporateAction:
         with self.portfolio_write_session() as session:
@@ -991,10 +1126,10 @@ class PortfolioRepository:
         currency: str,
         trade_date: date,
         side: str,
-        quantity: float,
-        price: float,
-        fee: float,
-        tax: float,
+        quantity: Decimal,
+        price: Decimal,
+        fee: Decimal,
+        tax: Decimal,
         note: Optional[str] = None,
         dedup_hash: Optional[str] = None,
     ) -> PortfolioTrade:
@@ -1039,7 +1174,7 @@ class PortfolioRepository:
         account_id: int,
         event_date: date,
         direction: str,
-        amount: float,
+        amount: Decimal,
         currency: str,
         note: Optional[str] = None,
     ) -> PortfolioCashLedger:
@@ -1072,8 +1207,8 @@ class PortfolioRepository:
         currency: str,
         effective_date: date,
         action_type: str,
-        cash_dividend_per_share: Optional[float] = None,
-        split_ratio: Optional[float] = None,
+        cash_dividend_per_share: Optional[Decimal] = None,
+        split_ratio: Optional[Decimal] = None,
         note: Optional[str] = None,
     ) -> PortfolioCorporateAction:
         row = PortfolioCorporateAction(
@@ -1495,7 +1630,7 @@ class PortfolioRepository:
     # ------------------------------------------------------------------
     # Price / FX
     # ------------------------------------------------------------------
-    def get_latest_close(self, symbol: str, as_of: date) -> Optional[float]:
+    def get_latest_close(self, symbol: str, as_of: date) -> Optional[Decimal]:
         lookup = self._market_data_storage_lookup(symbol)
         if lookup is None:
             return None
@@ -1503,7 +1638,7 @@ class PortfolioRepository:
         latest_close = self.get_latest_closes_with_dates(symbols=[symbol], as_of=as_of).get(canonical_symbol)
         return latest_close[0] if latest_close is not None else None
 
-    def get_latest_closes(self, *, symbols: Iterable[str], as_of: date) -> Dict[str, float]:
+    def get_latest_closes(self, *, symbols: Iterable[str], as_of: date) -> Dict[str, Decimal]:
         return {
             symbol: close
             for symbol, (close, _latest_date) in self.get_latest_closes_with_dates(
@@ -1517,7 +1652,7 @@ class PortfolioRepository:
         *,
         symbols: Iterable[str],
         as_of: date,
-    ) -> Dict[str, Tuple[float, Optional[date]]]:
+    ) -> Dict[str, Tuple[Decimal, Optional[date]]]:
         lookups = self._market_data_storage_lookups(symbols)
         storage_symbols = sorted(
             {
@@ -1554,7 +1689,7 @@ class PortfolioRepository:
                     ),
                 )
             ).all()
-        closes_by_storage_symbol: Dict[str, Tuple[float, Optional[date]]] = {}
+        closes_by_storage_symbol: Dict[str, Tuple[Decimal, Optional[date]]] = {}
         for code, close, latest_date in rows:
             if code is None or close is None:
                 continue
@@ -1570,11 +1705,14 @@ class PortfolioRepository:
                     close_date = None
             else:
                 close_date = None
-            closes_by_storage_symbol[str(code).upper()] = (float(close), close_date)
+            closes_by_storage_symbol[str(code).upper()] = (
+                parse_portfolio_decimal(close, kind="storage"),
+                close_date,
+            )
 
-        latest_closes: Dict[str, Tuple[float, Optional[date]]] = {}
+        latest_closes: Dict[str, Tuple[Decimal, Optional[date]]] = {}
         for canonical_symbol, values in lookups.items():
-            selected_close: Tuple[float, Optional[date]] | None = None
+            selected_close: Tuple[Decimal, Optional[date]] | None = None
             selected_date = date.min
             for storage_symbol in values:
                 latest_close = closes_by_storage_symbol.get(storage_symbol)
@@ -1620,10 +1758,16 @@ class PortfolioRepository:
         from_currency: str,
         to_currency: str,
         rate_date: date,
-        rate: float,
+        rate: Any,
         source: str = "manual",
         is_stale: bool = False,
     ) -> None:
+        normalized_rate = parse_portfolio_decimal(
+            rate,
+            kind="fx_rate",
+            from_currency=from_currency,
+            to_currency=to_currency,
+        )
         with self.db.get_session() as session:
             existing = session.execute(
                 select(PortfolioFxRate).where(
@@ -1640,13 +1784,13 @@ class PortfolioRepository:
                         from_currency=from_currency,
                         to_currency=to_currency,
                         rate_date=rate_date,
-                        rate=rate,
+                        rate=normalized_rate,
                         source=source,
                         is_stale=is_stale,
                     )
                 )
             else:
-                existing.rate = rate
+                existing.rate = normalized_rate
                 existing.source = source
                 existing.is_stale = is_stale
                 existing.updated_at = datetime.now()
@@ -1769,15 +1913,23 @@ class PortfolioRepository:
         cumulative_cash_flow = cash_flows.get("net")
         if isinstance(cumulative_cash_flow, bool) or cumulative_cash_flow is None:
             return None
+        base_currency = str(row.base_currency or "").strip().upper()
         try:
-            cumulative_cash_flow_value = float(cumulative_cash_flow)
+            cumulative_cash_flow_value = parse_portfolio_decimal(
+                cumulative_cash_flow,
+                kind="storage",
+            )
+            total_equity = parse_portfolio_decimal(
+                Decimal("0") if row.total_equity is None else row.total_equity,
+                kind="storage",
+            )
         except (TypeError, ValueError):
             return None
         return _PortfolioRiskSnapshotProjection(
             account_id=int(row.account_id),
             snapshot_date=row.snapshot_date,
-            base_currency=str(row.base_currency),
-            total_equity=float(row.total_equity or 0.0),
+            base_currency=base_currency,
+            total_equity=total_equity,
             cumulative_cash_flow=cumulative_cash_flow_value,
             fx_stale=bool(row.fx_stale),
         )
@@ -1786,20 +1938,23 @@ class PortfolioRepository:
     def _unitize_risk_snapshot_projections(
         rows: List[_PortfolioRiskSnapshotProjection],
     ) -> List[_PortfolioRiskSnapshotProjection]:
-        states: Dict[int, Tuple[float, float, float]] = {}
+        states: Dict[int, Tuple[Decimal, Decimal, Decimal]] = {}
         adjusted_rows: List[_PortfolioRiskSnapshotProjection] = []
         for row in rows:
             state = states.get(row.account_id)
-            if state is None or abs(state[0]) <= 1e-8:
-                unitized_equity = float(row.total_equity)
+            if state is None or state[0].is_zero():
+                unitized_equity = row.total_equity
             else:
                 previous_equity, previous_cash_flow, previous_unitized_equity = state
-                period_cash_flow = float(row.cumulative_cash_flow) - previous_cash_flow
-                period_factor = (float(row.total_equity) - period_cash_flow) / previous_equity
-                unitized_equity = previous_unitized_equity * period_factor
+                period_cash_flow = row.cumulative_cash_flow - previous_cash_flow
+                period_factor = (row.total_equity - period_cash_flow) / previous_equity
+                unitized_equity = round_portfolio_decimal_value(
+                    previous_unitized_equity * period_factor,
+                    kind="storage",
+                )
             states[row.account_id] = (
-                float(row.total_equity),
-                float(row.cumulative_cash_flow),
+                row.total_equity,
+                row.cumulative_cash_flow,
                 unitized_equity,
             )
             adjusted_rows.append(
@@ -1944,6 +2099,10 @@ class PortfolioRepository:
         lots: Iterable[Dict[str, Any]],
         valuation_currency: str,
     ) -> None:
+        prepared_positions, prepared_lots = self._preflight_snapshot_cache_rows(
+            positions=positions,
+            lots=lots,
+        )
         with self.db.get_session() as session:
             session.execute(
                 delete(PortfolioPosition).where(
@@ -1962,7 +2121,7 @@ class PortfolioRepository:
                 )
             )
 
-            for item in positions:
+            for item in prepared_positions:
                 session.add(
                     PortfolioPosition(
                         account_id=account_id,
@@ -1970,17 +2129,18 @@ class PortfolioRepository:
                         symbol=item["symbol"],
                         market=item["market"],
                         currency=item["currency"],
-                        quantity=float(item["quantity"]),
-                        avg_cost=float(item["avg_cost"]),
-                        total_cost=float(item["total_cost"]),
-                        last_price=float(item["last_price"]),
-                        market_value_base=float(item["market_value_base"]),
-                        unrealized_pnl_base=float(item["unrealized_pnl_base"]),
+                        quantity=item["quantity"],
+                        avg_cost=item["avg_cost"],
+                        total_cost=item["total_cost"],
+                        price_cost=item["price_cost"],
+                        last_price=item["last_price"],
+                        market_value_base=item["market_value_base"],
+                        unrealized_pnl_base=item["unrealized_pnl_base"],
                         valuation_currency=valuation_currency,
                     )
                 )
 
-            for lot in lots:
+            for lot in prepared_lots:
                 session.add(
                     PortfolioPositionLot(
                         account_id=account_id,
@@ -1989,8 +2149,8 @@ class PortfolioRepository:
                         market=lot["market"],
                         currency=lot["currency"],
                         open_date=lot["open_date"],
-                        remaining_quantity=float(lot["remaining_quantity"]),
-                        unit_cost=float(lot["unit_cost"]),
+                        remaining_quantity=lot["remaining_quantity"],
+                        unit_cost=lot["unit_cost"],
                         source_trade_id=lot.get("source_trade_id"),
                     )
                 )
@@ -2059,16 +2219,25 @@ class PortfolioRepository:
         snapshot_date: date,
         cost_method: str,
         base_currency: str,
-        total_cash: float,
-        total_market_value: float,
-        total_equity: float,
-        unrealized_pnl: float,
-        realized_pnl: float,
-        fee_total: float,
-        tax_total: float,
+        total_cash: Any,
+        total_market_value: Any,
+        total_equity: Any,
+        unrealized_pnl: Any,
+        realized_pnl: Any,
+        fee_total: Any,
+        tax_total: Any,
         fx_stale: bool,
         payload: str,
     ) -> None:
+        snapshot_values = self._preflight_storage_values(
+            total_cash=total_cash,
+            total_market_value=total_market_value,
+            total_equity=total_equity,
+            unrealized_pnl=unrealized_pnl,
+            realized_pnl=realized_pnl,
+            fee_total=fee_total,
+            tax_total=tax_total,
+        )
         with self.db.get_session() as session:
             existing = session.execute(
                 select(PortfolioDailySnapshot).where(
@@ -2087,26 +2256,26 @@ class PortfolioRepository:
                         snapshot_date=snapshot_date,
                         cost_method=cost_method,
                         base_currency=base_currency,
-                        total_cash=total_cash,
-                        total_market_value=total_market_value,
-                        total_equity=total_equity,
-                        unrealized_pnl=unrealized_pnl,
-                        realized_pnl=realized_pnl,
-                        fee_total=fee_total,
-                        tax_total=tax_total,
+                        total_cash=snapshot_values["total_cash"],
+                        total_market_value=snapshot_values["total_market_value"],
+                        total_equity=snapshot_values["total_equity"],
+                        unrealized_pnl=snapshot_values["unrealized_pnl"],
+                        realized_pnl=snapshot_values["realized_pnl"],
+                        fee_total=snapshot_values["fee_total"],
+                        tax_total=snapshot_values["tax_total"],
                         fx_stale=fx_stale,
                         payload=payload,
                     )
                 )
             else:
                 existing.base_currency = base_currency
-                existing.total_cash = total_cash
-                existing.total_market_value = total_market_value
-                existing.total_equity = total_equity
-                existing.unrealized_pnl = unrealized_pnl
-                existing.realized_pnl = realized_pnl
-                existing.fee_total = fee_total
-                existing.tax_total = tax_total
+                existing.total_cash = snapshot_values["total_cash"]
+                existing.total_market_value = snapshot_values["total_market_value"]
+                existing.total_equity = snapshot_values["total_equity"]
+                existing.unrealized_pnl = snapshot_values["unrealized_pnl"]
+                existing.realized_pnl = snapshot_values["realized_pnl"]
+                existing.fee_total = snapshot_values["fee_total"]
+                existing.tax_total = snapshot_values["tax_total"]
                 existing.fx_stale = fx_stale
                 existing.payload = payload
                 existing.updated_at = datetime.now()
@@ -2123,13 +2292,13 @@ class PortfolioRepository:
         snapshot_date: date,
         cost_method: str,
         base_currency: str,
-        total_cash: float,
-        total_market_value: float,
-        total_equity: float,
-        unrealized_pnl: float,
-        realized_pnl: float,
-        fee_total: float,
-        tax_total: float,
+        total_cash: Any,
+        total_market_value: Any,
+        total_equity: Any,
+        unrealized_pnl: Any,
+        realized_pnl: Any,
+        fee_total: Any,
+        tax_total: Any,
         fx_stale: bool,
         payload: str,
         positions: Iterable[Dict[str, Any]],
@@ -2137,6 +2306,19 @@ class PortfolioRepository:
         valuation_currency: str,
     ) -> None:
         """Atomically refresh position cache and daily snapshot in one transaction."""
+        prepared_positions, prepared_lots = self._preflight_snapshot_cache_rows(
+            positions=positions,
+            lots=lots,
+        )
+        snapshot_values = self._preflight_storage_values(
+            total_cash=total_cash,
+            total_market_value=total_market_value,
+            total_equity=total_equity,
+            unrealized_pnl=unrealized_pnl,
+            realized_pnl=realized_pnl,
+            fee_total=fee_total,
+            tax_total=tax_total,
+        )
         with self.db.get_session() as session:
             session.execute(
                 delete(PortfolioPosition).where(
@@ -2155,7 +2337,7 @@ class PortfolioRepository:
                 )
             )
 
-            for item in positions:
+            for item in prepared_positions:
                 session.add(
                     PortfolioPosition(
                         account_id=account_id,
@@ -2163,17 +2345,18 @@ class PortfolioRepository:
                         symbol=item["symbol"],
                         market=item["market"],
                         currency=item["currency"],
-                        quantity=float(item["quantity"]),
-                        avg_cost=float(item["avg_cost"]),
-                        total_cost=float(item["total_cost"]),
-                        last_price=float(item["last_price"]),
-                        market_value_base=float(item["market_value_base"]),
-                        unrealized_pnl_base=float(item["unrealized_pnl_base"]),
+                        quantity=item["quantity"],
+                        avg_cost=item["avg_cost"],
+                        total_cost=item["total_cost"],
+                        price_cost=item["price_cost"],
+                        last_price=item["last_price"],
+                        market_value_base=item["market_value_base"],
+                        unrealized_pnl_base=item["unrealized_pnl_base"],
                         valuation_currency=valuation_currency,
                     )
                 )
 
-            for lot in lots:
+            for lot in prepared_lots:
                 session.add(
                     PortfolioPositionLot(
                         account_id=account_id,
@@ -2182,8 +2365,8 @@ class PortfolioRepository:
                         market=lot["market"],
                         currency=lot["currency"],
                         open_date=lot["open_date"],
-                        remaining_quantity=float(lot["remaining_quantity"]),
-                        unit_cost=float(lot["unit_cost"]),
+                        remaining_quantity=lot["remaining_quantity"],
+                        unit_cost=lot["unit_cost"],
                         source_trade_id=lot.get("source_trade_id"),
                     )
                 )
@@ -2205,26 +2388,26 @@ class PortfolioRepository:
                         snapshot_date=snapshot_date,
                         cost_method=cost_method,
                         base_currency=base_currency,
-                        total_cash=total_cash,
-                        total_market_value=total_market_value,
-                        total_equity=total_equity,
-                        unrealized_pnl=unrealized_pnl,
-                        realized_pnl=realized_pnl,
-                        fee_total=fee_total,
-                        tax_total=tax_total,
+                        total_cash=snapshot_values["total_cash"],
+                        total_market_value=snapshot_values["total_market_value"],
+                        total_equity=snapshot_values["total_equity"],
+                        unrealized_pnl=snapshot_values["unrealized_pnl"],
+                        realized_pnl=snapshot_values["realized_pnl"],
+                        fee_total=snapshot_values["fee_total"],
+                        tax_total=snapshot_values["tax_total"],
                         fx_stale=fx_stale,
                         payload=payload,
                     )
                 )
             else:
                 existing.base_currency = base_currency
-                existing.total_cash = total_cash
-                existing.total_market_value = total_market_value
-                existing.total_equity = total_equity
-                existing.unrealized_pnl = unrealized_pnl
-                existing.realized_pnl = realized_pnl
-                existing.fee_total = fee_total
-                existing.tax_total = tax_total
+                existing.total_cash = snapshot_values["total_cash"]
+                existing.total_market_value = snapshot_values["total_market_value"]
+                existing.total_equity = snapshot_values["total_equity"]
+                existing.unrealized_pnl = snapshot_values["unrealized_pnl"]
+                existing.realized_pnl = snapshot_values["realized_pnl"]
+                existing.fee_total = snapshot_values["fee_total"]
+                existing.tax_total = snapshot_values["tax_total"]
                 existing.fx_stale = fx_stale
                 existing.payload = payload
                 existing.updated_at = datetime.now()

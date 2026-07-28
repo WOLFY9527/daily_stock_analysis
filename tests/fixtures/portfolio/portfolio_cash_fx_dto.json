@@ -12,7 +12,7 @@
   "live_fx_rate": {
     "base_currency": "USD",
     "quote_currency": "CNY",
-    "rate": 7.12,
+    "rate": "7.12000000",
     "provider": "fixture_manual_rate",
     "fetched_at": "2026-05-10T16:00:00+08:00",
     "cache_hit": true,

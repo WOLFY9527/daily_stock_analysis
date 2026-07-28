@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import json
 import os
 import sys
@@ -445,7 +447,7 @@ class MultiUserAuthorizationApiTestCase(unittest.TestCase):
             action_type="cash_dividend",
             market="us",
             currency="USD",
-            cash_dividend_per_share=0.24,
+            cash_dividend_per_share=Decimal("0.24"),
         )["id"]
         connection = service_a.create_broker_connection(
             portfolio_account_id=account_a["id"],

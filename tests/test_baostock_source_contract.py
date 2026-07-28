@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 from data_provider.baostock_fetcher import BaostockFetcher
+from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.services.provider_capability_matrix import list_provider_capability_support_contracts
 
 
@@ -45,3 +48,51 @@ def test_baostock_contracts_remain_cautious_observation_only_metadata() -> None:
     assert "reliable" not in {item.trust_level for item in contracts}
     assert "live" not in {item.freshness_expectation for item in contracts}
     assert "fresh" not in {item.freshness_expectation for item in contracts}
+
+
+def test_baostock_daily_normalization_keeps_exact_close_provenance() -> None:
+    fetcher = BaostockFetcher()
+    normalized = fetcher._normalize_data(
+        pd.DataFrame(
+            {
+                "date": ["2026-04-14", "2026-04-15"],
+                "open": ["10.0", "10.2"],
+                "high": ["10.5", "10.4"],
+                "low": ["9.8", "10.1"],
+                "close": ["10.3", "10.35"],
+                "volume": ["1000", "1200"],
+                "amount": ["10300", "12420"],
+                "pctChg": ["1.0", "0.49"],
+            }
+        ),
+        "600519",
+    )
+
+    frame = fetcher._clean_data(normalized)
+
+    assert pd.api.types.is_numeric_dtype(frame["close"])
+    assert frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] == {
+        "2026-04-14": "10.3",
+        "2026-04-15": "10.35",
+    }
+
+
+def test_baostock_cleaning_preserves_existing_exact_close_provenance() -> None:
+    fetcher = BaostockFetcher()
+    close_tokens = {
+        "2026-04-14": "9007199254740993.12345678",
+        "2026-04-15": "9007199254740994.12345678",
+    }
+    frame = pd.DataFrame(
+        {
+            "date": ["2026-04-15", "2026-04-14"],
+            "close": [9007199254740994.0, 9007199254740992.0],
+            "volume": [1200.0, 1000.0],
+        }
+    )
+    frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = close_tokens
+
+    cleaned = fetcher._clean_data(frame)
+
+    assert cleaned["date"].dt.date.astype(str).tolist() == ["2026-04-14", "2026-04-15"]
+    assert cleaned.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] == close_tokens

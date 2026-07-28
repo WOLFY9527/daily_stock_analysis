@@ -73,6 +73,32 @@ class TestFetcherLogging(unittest.TestCase):
         self.assertIn("[SuccessFetcher] 600519 获取成功:", log_text)
         self.assertIn("rows=2", log_text)
 
+    def test_base_fetcher_keeps_string_close_provenance_while_close_stays_numeric(self):
+        fetcher = _SuccessFetcher()
+        fetcher._fetch_raw_data = lambda _code, _start, _end: pd.DataFrame(
+            {
+                "date": ["2026-03-06", "2026-03-07"],
+                "open": [10.0, 10.2],
+                "high": [10.5, 10.4],
+                "low": [9.8, 10.1],
+                "close": ["1234567890123456.12345678", "10.35"],
+                "volume": [1000, 1200],
+                "amount": [10300, 12420],
+                "pct_chg": [1.0, 0.49],
+            }
+        )
+
+        frame = fetcher.get_daily_data("600519", start_date="2026-03-01", end_date="2026-03-08")
+
+        self.assertTrue(pd.api.types.is_numeric_dtype(frame["close"]))
+        self.assertEqual(
+            frame.attrs["wolfystock.stock_daily.close_tokens.v1"],
+            {
+                "2026-03-06": "1234567890123456.12345678",
+                "2026-03-07": "10.35",
+            },
+        )
+
     def test_manager_logs_fallback_and_final_success(self):
         manager = DataFetcherManager(fetchers=[_FailureFetcher(), _SuccessFetcher()])
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import date
 from typing import Any
 
@@ -52,7 +53,7 @@ class _Snapshot:
     cost_method: str = "fifo"
     base_currency: str = "USD"
     total_cash: float = 100.0
-    total_market_value: float = 2000.0
+    total_market_value: Decimal = Decimal("2000.00")
     total_equity: float = 2100.0
     unrealized_pnl: float = 100.0
     realized_pnl: float = 0.0
@@ -66,7 +67,7 @@ class _Snapshot:
 class _Position:
     account_id: int
     symbol: str
-    market_value_base: float
+    market_value_base: Decimal
     market: str = "us"
     currency: str = "USD"
     cost_method: str = "fifo"
@@ -268,7 +269,8 @@ def test_structure_review_uses_cached_holdings_and_batch_structure_without_portf
                     {
                         "key": "ai_infrastructure",
                         "label": "AI Infrastructure",
-                        "market_value": 1500.0,
+                        "market_value": "1500.00",
+                        "display_currency": "USD",
                         "percent": 75.0,
                         "holding_count": 2,
                     }
@@ -281,13 +283,25 @@ def test_structure_review_uses_cached_holdings_and_batch_structure_without_portf
         accounts=[_Account(id=1)],
         bundles={
             (1, review_date, "fifo"): {
-                "snapshot": _Snapshot(account_id=1, snapshot_date=review_date, payload=json.dumps(sector_payload)),
+                "snapshot": _Snapshot(
+                    account_id=1,
+                    snapshot_date=review_date,
+                    payload=json.dumps(sector_payload),
+                ),
                 "positions": [
-                    _Position(account_id=1, symbol="aapl", market_value_base=1200.0),
-                    _Position(account_id=1, symbol="MSFT", market_value_base=800.0),
+                    _Position(
+                        account_id=1,
+                        symbol="aapl",
+                        market_value_base=Decimal("1200.00"),
+                    ),
+                    _Position(
+                        account_id=1,
+                        symbol="MSFT",
+                        market_value_base=Decimal("800.00"),
+                    ),
                 ],
                 "lots": [],
-            }
+            },
         },
     )
     structure_service = _FakeStructureService(_batch_payload())
@@ -302,7 +316,16 @@ def test_structure_review_uses_cached_holdings_and_batch_structure_without_portf
     assert payload["aggregateSummary"]["holdingCount"] == 2
     assert payload["aggregateSummary"]["largestHolding"]["ticker"] == "AAPL"
     assert payload["aggregateSummary"]["largestHolding"]["percent"] == 60.0
-    assert payload["exposureByThemeOrSector"] == sector_payload["analytics"]["exposure"]["by_sector"]
+    assert payload["exposureByThemeOrSector"] == [
+        {
+            "key": "ai_infrastructure",
+            "label": "AI Infrastructure",
+            "marketValue": "1500.00",
+            "displayCurrency": "USD",
+            "percent": 75.0,
+            "holdingCount": 2,
+        }
+    ]
     assert payload["countsByStructureState"] == {"breakout": 1, "lowConfidence": 1}
     assert [item["ticker"] for item in payload["holdingsStructure"]] == ["AAPL", "MSFT"]
     assert payload["holdingsStructure"][0]["evidenceQuality"] == {"score": 92, "status": "available"}
@@ -350,6 +373,179 @@ def test_structure_review_uses_cached_holdings_and_batch_structure_without_portf
     assert payload["dataQuality"]["readOnly"] is True
     assert structure_service.calls == [{"tickers": ["AAPL", "MSFT"], "benchmark": "SPY", "max_items": None}]
     assert repo.write_calls == []
+
+    high_scale_repo = _FakePortfolioRepo(
+        accounts=[_Account(id=1), _Account(id=2)],
+        bundles={
+            (1, review_date, "fifo"): {
+                "snapshot": _Snapshot(
+                    account_id=1,
+                    snapshot_date=review_date,
+                    total_market_value=Decimal("9007199254740992.00"),
+                ),
+                "positions": [
+                    _Position(
+                        account_id=1,
+                        symbol="AAPL",
+                        market_value_base=Decimal("9007199254740992.00"),
+                    )
+                ],
+                "lots": [],
+            },
+            (2, review_date, "fifo"): {
+                "snapshot": _Snapshot(
+                    account_id=2,
+                    snapshot_date=review_date,
+                    total_market_value=Decimal("9007199254740993.00"),
+                ),
+                "positions": [
+                    _Position(
+                        account_id=2,
+                        symbol="MSFT",
+                        market_value_base=Decimal("9007199254740993.00"),
+                    )
+                ],
+                "lots": [],
+            },
+        },
+    )
+    high_scale_payload = PortfolioStructureReviewService(
+        portfolio_repo=high_scale_repo,
+        structure_service=_FakeStructureService(_batch_payload()),
+    ).build_review(account_id=None, as_of=review_date, cost_method="fifo", owner_id="user-1")
+
+    assert high_scale_payload["aggregateSummary"]["largestHolding"] == {
+        "ticker": "MSFT",
+        "percent": 100.0,
+    }
+    assert high_scale_repo.write_calls == []
+
+    for malformed_sector_row in (
+        {
+            "key": "ai_infrastructure",
+            "label": "AI Infrastructure",
+            "market_value": 1500.0,
+            "display_currency": "USD",
+            "percent": 75.0,
+            "holding_count": 2,
+        },
+        {
+            "key": "ai_infrastructure",
+            "label": "AI Infrastructure",
+            "market_value": "1500.00",
+            "percent": 75.0,
+            "holding_count": 2,
+        },
+    ):
+        malformed_payload = {
+            "analytics": {
+                "exposure": {
+                    "by_sector": [malformed_sector_row],
+                    "sector_status": "available",
+                }
+            }
+        }
+        malformed_repo = _FakePortfolioRepo(
+            accounts=[_Account(id=1)],
+            bundles={
+                (1, review_date, "fifo"): {
+                    "snapshot": _Snapshot(
+                        account_id=1,
+                        snapshot_date=review_date,
+                        payload=json.dumps(malformed_payload),
+                    ),
+                    "positions": [
+                        _Position(account_id=1, symbol="AAPL", market_value_base=Decimal("2000.00"))
+                    ],
+                    "lots": [],
+                }
+            },
+        )
+        malformed_review = PortfolioStructureReviewService(
+            portfolio_repo=malformed_repo,
+            structure_service=_FakeStructureService(_batch_payload()),
+        ).build_review(account_id=1, as_of=review_date, cost_method="fifo", owner_id="user-1")
+
+        assert malformed_review["exposureByThemeOrSector"] == []
+        assert {
+            "kind": "theme_or_sector_exposure",
+            "message": "Theme or sector exposure is unavailable from cached portfolio holdings.",
+        } in malformed_review["missingEvidence"]
+
+    malformed_numeric_repo = _FakePortfolioRepo(
+        accounts=[_Account(id=1), _Account(id=2), _Account(id=3)],
+        bundles={
+            (1, review_date, "fifo"): {
+                "snapshot": _Snapshot(account_id=1, snapshot_date=review_date),
+                "positions": [
+                    _Position(account_id=1, symbol="AAPL", market_value_base=Decimal("2000.00"))
+                ],
+                "lots": [],
+            },
+            (2, review_date, "fifo"): {
+                "snapshot": _Snapshot(
+                    account_id=2,
+                    snapshot_date=review_date,
+                    total_market_value=Decimal("NaN"),
+                ),
+                "positions": [
+                    _Position(account_id=2, symbol="MSFT", market_value_base=Decimal("2000.00"))
+                ],
+                "lots": [],
+            },
+            (3, review_date, "fifo"): {
+                "snapshot": _Snapshot(account_id=3, snapshot_date=review_date),
+                "positions": [
+                    _Position(account_id=3, symbol="NVDA", market_value_base=Decimal("NaN"))
+                ],
+                "lots": [],
+            },
+        },
+    )
+    malformed_numeric_structure_service = _FakeStructureService(_batch_payload())
+    malformed_numeric_review = PortfolioStructureReviewService(
+        portfolio_repo=malformed_numeric_repo,
+        structure_service=malformed_numeric_structure_service,
+    ).build_review(account_id=None, as_of=review_date, cost_method="fifo", owner_id="user-1")
+
+    assert malformed_numeric_review["aggregateSummary"]["holdingCount"] == 1
+    assert [item["ticker"] for item in malformed_numeric_review["holdingsStructure"]] == ["AAPL"]
+    assert {
+        "kind": "cached_portfolio_holdings",
+        "message": "Cached portfolio holdings are unavailable.",
+    } in malformed_numeric_review["missingEvidence"]
+    assert malformed_numeric_structure_service.calls == [
+        {"tickers": ["AAPL"], "benchmark": None, "max_items": None}
+    ]
+
+    high_ratio_repo = _FakePortfolioRepo(
+        accounts=[_Account(id=1)],
+        bundles={
+            (1, review_date, "fifo"): {
+                "snapshot": _Snapshot(
+                    account_id=1,
+                    snapshot_date=review_date,
+                    total_market_value=Decimal("0.00000017"),
+                ),
+                "positions": [
+                    _Position(
+                        account_id=1,
+                        symbol="AAPL",
+                        market_value_base=Decimal("9999999999999999.99999999"),
+                    )
+                ],
+                "lots": [],
+            }
+        },
+    )
+    high_ratio_payload = PortfolioStructureReviewService(
+        portfolio_repo=high_ratio_repo,
+        structure_service=_FakeStructureService(_batch_payload()),
+    ).build_review(account_id=1, as_of=review_date, cost_method="fifo", owner_id="user-1")
+
+    high_ratio_percent = high_ratio_payload["aggregateSummary"]["largestHolding"]["percent"]
+    assert isinstance(high_ratio_percent, float)
+    assert high_ratio_percent > 10**24
 
 
 def test_structure_review_fails_closed_when_cached_holdings_are_unavailable() -> None:
@@ -417,7 +613,7 @@ def test_structure_review_fails_closed_for_missing_security_metadata() -> None:
         bundles={
             (1, review_date, "fifo"): {
                 "snapshot": _Snapshot(account_id=1, snapshot_date=review_date),
-                "positions": [_Position(account_id=1, symbol="", market_value_base=1000.0)],
+                "positions": [_Position(account_id=1, symbol="", market_value_base=Decimal("1000.00"))],
                 "lots": [],
             }
         },
@@ -482,7 +678,7 @@ def test_structure_review_output_avoids_research_instruction_language() -> None:
         bundles={
             (1, review_date, "fifo"): {
                 "snapshot": _Snapshot(account_id=1, snapshot_date=review_date),
-                "positions": [_Position(account_id=1, symbol="AAPL", market_value_base=1000.0)],
+                "positions": [_Position(account_id=1, symbol="AAPL", market_value_base=Decimal("1000.00"))],
                 "lots": [],
             }
         },

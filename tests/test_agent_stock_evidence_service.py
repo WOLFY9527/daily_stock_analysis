@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -126,6 +127,44 @@ def test_stock_evidence_base_fields_are_preserved_with_packet_without_sec_sideca
     assert readiness["observationOnly"] is True
     assert "个性化行动指令" in readiness["noAdviceDisclosure"]
     assert "secFilingEvidence" not in payload["items"][0]
+
+
+def test_stock_evidence_projects_decimal_backed_technical_rows_as_numeric_analytics() -> None:
+    rows = [
+        SimpleNamespace(
+            date=date(2026, 1, 1) + timedelta(days=offset),
+            close=Decimal(offset + 1),
+            low=Decimal(offset) + Decimal("0.5"),
+            high=Decimal(offset) + Decimal("1.5"),
+        )
+        for offset in range(19, -1, -1)
+    ]
+    service = StockEvidenceService(
+        fetcher_manager=MagicMock(get_realtime_quote=lambda symbol: None),
+        stock_repo=MagicMock(get_recent_daily_rows=lambda code, limit=80: rows),
+        analysis_repo=MagicMock(get_latest_record=lambda code: None),
+    )
+
+    technical = service.get_stock_evidence(["AAPL"])["items"][0]["technical"]
+
+    assert technical == {
+        "status": "available",
+        "trend": "bullish",
+        "ma5": 18.0,
+        "ma10": 15.5,
+        "ma20": 10.5,
+        "ma60": None,
+        "rsi14": 100.0,
+        "support": 0.5,
+        "resistance": 20.5,
+        "provider": "stock_daily",
+        "updatedAt": "2026-01-20",
+    }
+    assert all(
+        isinstance(technical[key], float)
+        for key in ("ma5", "ma10", "ma20", "rsi14", "support", "resistance")
+    )
+    json.dumps(technical)
 
 
 def test_stock_evidence_packet_includes_fundamentals_summary_from_analysis_history() -> None:

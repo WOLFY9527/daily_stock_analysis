@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import argparse
 import json
 import os
@@ -111,7 +112,7 @@ def _temporary_portfolio_env() -> Iterator[None]:
         temp_dir.cleanup()
 
 
-def _save_close(db: DatabaseManager, *, symbol: str, on_date: date, close: float) -> None:
+def _save_close(db: DatabaseManager, *, symbol: str, on_date: date, close: Decimal) -> None:
     df = pd.DataFrame(
         [
             {
@@ -120,21 +121,24 @@ def _save_close(db: DatabaseManager, *, symbol: str, on_date: date, close: float
                 "high": close,
                 "low": close,
                 "close": close,
-                "volume": 1.0,
+                "volume": 1,
                 "amount": close,
-                "pct_chg": 0.0,
+                "pct_chg": 0,
             }
         ]
     )
     db.save_daily_data(df, code=symbol, data_source="portfolio-snapshot-benchmark")
 
 
-def _make_symbol(symbol_index: int, *, mix_currencies: bool) -> tuple[str, str, str, float]:
+def _make_symbol(symbol_index: int, *, mix_currencies: bool) -> tuple[str, str, str, Decimal]:
     if mix_currencies and symbol_index % 2 == 1:
         code = f"HK{700 + symbol_index:05d}"
-        return code, "hk", "HKD", 320.0 + float(symbol_index % 17)
-    code = f"US{symbol_index:04d}"
-    return code, "us", "USD", 100.0 + float(symbol_index % 31)
+        return code, "hk", "HKD", Decimal("320") + Decimal(symbol_index % 17)
+
+    if symbol_index >= 26**4:
+        raise ValueError("benchmark symbol index exceeds the canonical US symbol space")
+    suffix = "".join(chr(ord("A") + ((symbol_index // (26**power)) % 26)) for power in (3, 2, 1, 0))
+    return f"B{suffix}", "us", "USD", Decimal("100") + Decimal(symbol_index % 31)
 
 
 def _seed_account(
@@ -156,7 +160,7 @@ def _seed_account(
         account_id=account_id,
         event_date=as_of_date,
         direction="in",
-        amount=2_000_000.0,
+        amount=Decimal("2000000"),
         currency="USD",
     )
     if scenario.mix_currencies:
@@ -164,7 +168,7 @@ def _seed_account(
             account_id=account_id,
             event_date=as_of_date,
             direction="in",
-            amount=10_000_000.0,
+            amount=Decimal("10000000"),
             currency="HKD",
         )
         db_repo = service.repo
@@ -172,7 +176,7 @@ def _seed_account(
             from_currency="HKD",
             to_currency="USD",
             rate_date=as_of_date,
-            rate=0.128,
+            rate=Decimal("0.128"),
             source="benchmark",
             is_stale=False,
         )
@@ -186,15 +190,15 @@ def _seed_account(
                 trade_date=as_of_date,
                 side="buy",
                 quantity=10 + trade_index,
-                price=base_price + trade_index,
-                fee=1.0,
-                tax=0.2,
+                price=base_price + Decimal(trade_index),
+                fee=Decimal("1"),
+                tax=Decimal("0.20"),
                 market=market,
                 currency=currency,
                 trade_uid=f"bench-{account_index}-{symbol}-{trade_index}",
                 dedup_hash=f"bench-{account_index}-{symbol}-{trade_index}",
             )
-        _save_close(db, symbol=symbol, on_date=as_of_date, close=base_price + 5.0)
+        _save_close(db, symbol=symbol, on_date=as_of_date, close=base_price + Decimal("5"))
     return account_id
 
 

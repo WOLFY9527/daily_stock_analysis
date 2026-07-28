@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import os
 import sys
 import tempfile
@@ -124,7 +126,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 10),
             direction="in",
-            amount=5000.0,
+            amount=Decimal("5000.0"),
             currency="USD",
         )
         service.record_trade(
@@ -132,10 +134,10 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             symbol="AAPL",
             trade_date=date(2026, 4, 11),
             side="buy",
-            quantity=10.0,
-            price=150.0,
-            fee=1.0,
-            tax=0.0,
+            quantity=Decimal("10.0"),
+            price=Decimal("150.0"),
+            fee=Decimal("1.0"),
+            tax=Decimal("0.0"),
             market="us",
             currency="USD",
             trade_uid="real-pg-trade-1",
@@ -170,11 +172,11 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 16),
             synced_at=datetime(2026, 4, 16, 8, 45, 0),
             base_currency="USD",
-            total_cash=1000.0,
-            total_market_value=1600.0,
-            total_equity=2600.0,
-            realized_pnl=0.0,
-            unrealized_pnl=100.0,
+            total_cash=Decimal("1000.00"),
+            total_market_value=Decimal("1600.00"),
+            total_equity=Decimal("2600.00"),
+            realized_pnl=Decimal("0.00"),
+            unrealized_pnl=Decimal("100.00"),
             fx_stale=False,
             payload={"snapshot": "real-pg"},
             positions=[
@@ -183,15 +185,15 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 10.0,
-                    "avg_cost": 150.0,
-                    "last_price": 160.0,
-                    "market_value_base": 1600.0,
-                    "unrealized_pnl_base": 100.0,
+                    "quantity": Decimal("10.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("160.00000000"),
+                    "market_value_base": Decimal("1600.00"),
+                    "unrealized_pnl_base": Decimal("100.00"),
                     "valuation_currency": "USD",
                 }
             ],
-            cash_balances=[{"currency": "USD", "amount": 1000.0, "amount_base": 1000.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("1000.00"), "amount_base": Decimal("1000.00")}],
         )
         shadow = db.get_phase_f_portfolio_shadow_bundle(account_id=account["id"])
         authority = db.get_phase_f_portfolio_shadow_authority_state(account_id=account["id"])
@@ -372,7 +374,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
             note="phase_f_cash_non_empty_seed_1",
         )
@@ -380,7 +382,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 2),
             direction="out",
-            amount=25.0,
+            amount=Decimal("25.0"),
             currency="USD",
             note="phase_f_cash_non_empty_seed_2",
         )
@@ -388,7 +390,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             account_id=account["id"],
             event_date=date(2026, 4, 3),
             direction="in",
-            amount=50.0,
+            amount=Decimal("50.0"),
             currency="USD",
             note="phase_f_cash_non_empty_seed_3",
         )
@@ -502,7 +504,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             account_id=account_a["id"],
             event_date=date(2026, 4, 5),
             direction="in",
-            amount=250.0,
+            amount=Decimal("250.0"),
             currency="USD",
             note="phase_f_cash_scope_a_seed_1",
         )
@@ -510,7 +512,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             account_id=account_b["id"],
             event_date=date(2026, 4, 6),
             direction="in",
-            amount=500.0,
+            amount=Decimal("500.0"),
             currency="USD",
             note="phase_f_cash_scope_b_seed_1",
         )
@@ -627,11 +629,11 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             snapshot_date=date(2026, 4, 16),
             synced_at=datetime(2026, 4, 16, 8, 45, 0),
             base_currency="USD",
-            total_cash=1200.0,
-            total_market_value=1800.0,
-            total_equity=3000.0,
-            realized_pnl=10.0,
-            unrealized_pnl=120.0,
+            total_cash=Decimal("1200.00"),
+            total_market_value=Decimal("1800.00"),
+            total_equity=Decimal("3000.00"),
+            realized_pnl=Decimal("10.00"),
+            unrealized_pnl=Decimal("120.00"),
             fx_stale=False,
             payload={"snapshot": "partial-sync"},
             positions=[
@@ -640,15 +642,15 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
                     "symbol": "AAPL",
                     "market": "us",
                     "currency": "USD",
-                    "quantity": 12.0,
-                    "avg_cost": 150.0,
-                    "last_price": 160.0,
-                    "market_value_base": 1920.0,
-                    "unrealized_pnl_base": 120.0,
+                    "quantity": Decimal("12.00000000"),
+                    "avg_cost": Decimal("150.00000000"),
+                    "last_price": Decimal("160.00000000"),
+                    "market_value_base": Decimal("1920.00"),
+                    "unrealized_pnl_base": Decimal("120.00"),
                     "valuation_currency": "USD",
                 }
             ],
-            cash_balances=[{"currency": "USD", "amount": 1200.0, "amount_base": 1200.0}],
+            cash_balances=[{"currency": "USD", "amount": Decimal("1200.00"), "amount_base": Decimal("1200.00")}],
         )
 
         with self.pg_engine.begin() as conn:
@@ -683,7 +685,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             symbol="AAPL",
             effective_date=date(2026, 4, 1),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.25,
+            cash_dividend_per_share=Decimal("0.25"),
             market="us",
             currency="USD",
             note="phase_f_corp_actions_non_empty_seed_1",
@@ -693,7 +695,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             symbol="AAPL",
             effective_date=date(2026, 4, 2),
             action_type="split_adjustment",
-            split_ratio=2.0,
+            split_ratio=Decimal("2.0"),
             market="us",
             currency="USD",
             note="phase_f_corp_actions_non_empty_seed_2",
@@ -703,7 +705,7 @@ class PostgresPhaseFRealPgTestCase(unittest.TestCase):
             symbol="MSFT",
             effective_date=date(2026, 4, 3),
             action_type="cash_dividend",
-            cash_dividend_per_share=0.4,
+            cash_dividend_per_share=Decimal("0.4"),
             market="us",
             currency="USD",
             note="phase_f_corp_actions_non_empty_seed_3",

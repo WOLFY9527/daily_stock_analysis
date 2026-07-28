@@ -5,14 +5,21 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from decimal import Decimal
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from src.config import get_config
+from src.portfolio_exact_numeric import (
+    normalize_portfolio_decimal,
+    parse_portfolio_decimal,
+    round_portfolio_decimal_value,
+    serialize_portfolio_decimal,
+    serialize_portfolio_decimal_value,
+)
 from src.repositories.portfolio_repo import (
     DuplicateBrokerConnectionRefError,
     DuplicateTradeDedupHashError,
@@ -38,6 +45,46 @@ PortfolioBusyError = RepoPortfolioBusyError
 _PHASE_F_CORPORATE_ACTIONS_SOURCE_UNAVAILABLE = "phase_f_corporate_actions_pg_source_unavailable"
 
 EPS = 1e-8
+INTERNAL_SNAPSHOT_QUANTUM = Decimal("0.00000001")
+SNAPSHOT_CACHE_CONTRACT_VERSION = 2
+_CACHE_SNAPSHOT_EXACT_SCALAR_FIELDS = (
+    "total_cash",
+    "total_market_value",
+    "total_equity",
+    "realized_pnl",
+    "unrealized_pnl",
+    "fee_total",
+    "tax_total",
+)
+_CACHE_SNAPSHOT_EXACT_POSITION_FIELDS = (
+    "quantity",
+    "avg_cost",
+    "total_cost",
+    "last_price",
+    "market_value_base",
+    "unrealized_pnl_base",
+)
+_CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS = (
+    "cost_basis_native",
+    "price_cost_basis_native",
+    "market_value_native",
+    "price_pnl_native",
+    "unrealized_pnl_native",
+    "display_market_value",
+    "display_unrealized_pnl",
+)
+_CACHE_SNAPSHOT_POSITION_IDENTITY_FIELDS = (
+    "symbol",
+    "market",
+    "currency",
+    "valuation_currency",
+)
+_CACHE_SNAPSHOT_PERFORMANCE_MONEY_FIELDS = (
+    ("cash_flows", ("deposits", "withdrawals", "net")),
+    ("pnl", ("price", "income", "fx", "fees", "taxes", "gross", "net")),
+    ("return", ("numerator", "denominator")),
+)
+_CACHE_SNAPSHOT_INDUSTRY_MONEY_FIELD = "market_value_base"
 VALID_ACCOUNT_MARKETS = {"cn", "hk", "us", "global"}
 VALID_EVENT_MARKETS = {"cn", "hk", "us"}
 VALID_COST_METHODS = {"fifo", "avg", "futu_diluted", "ths_pnl"}
@@ -75,6 +122,230 @@ _PHASE_F_QUERY_FAILURE_REASON_CODES = frozenset(
         "query_timeout",
     }
 )
+_PHASE_F_STORAGE_COMPARE_FIELDS = frozenset(
+    {
+        "amount",
+        "cash_dividend_per_share",
+        "fee",
+        "price",
+        "quantity",
+        "split_ratio",
+        "tax",
+    }
+)
+_PHASE_F_INVALID_COMPARE_VALUE = object()
+
+
+def _internal_snapshot_decimal(value: Any) -> Decimal:
+    return round_portfolio_decimal_value(value, kind="storage")
+
+
+def _snapshot_cache_json_default(value: Any) -> str:
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    raise TypeError(f"snapshot cache value is not JSON serializable: {type(value).__name__}")
+
+
+def _cache_snapshot_position_key(position: Dict[str, Any]) -> Tuple[str, ...]:
+    key = tuple(position.get(field) for field in _CACHE_SNAPSHOT_POSITION_IDENTITY_FIELDS)
+    if not all(
+        isinstance(value, str) and value and value == value.strip()
+        for value in key
+    ):
+        raise ValueError("cached portfolio position identity is incomplete or not canonical")
+    return key
+
+
+def _cache_snapshot_public_position_values(exact_position: Dict[str, Any]) -> Dict[str, Decimal]:
+    values: Dict[str, Decimal] = {}
+    for field in _CACHE_SNAPSHOT_EXACT_POSITION_FIELDS:
+        value = exact_position.get(field)
+        if value is None:
+            raise ValueError(f"cached portfolio position exact value is unavailable: {field}")
+        values[field] = normalize_portfolio_decimal(value)
+
+    price_cost = exact_position.get("price_cost")
+    if price_cost is None:
+        raise ValueError("cached portfolio position price cost is unavailable")
+    price_cost = normalize_portfolio_decimal(price_cost)
+    market_value_native = normalize_portfolio_decimal(values["quantity"] * values["last_price"])
+    return {
+        **values,
+        "cost_basis_native": values["total_cost"],
+        "price_cost_basis_native": price_cost,
+        "market_value_native": market_value_native,
+        "price_pnl_native": normalize_portfolio_decimal(market_value_native - price_cost),
+        "unrealized_pnl_native": normalize_portfolio_decimal(
+            market_value_native - values["total_cost"]
+        ),
+        "display_market_value": values["market_value_base"],
+        "display_unrealized_pnl": values["unrealized_pnl_base"],
+    }
+
+
+def _cache_snapshot_payload_with_exact_values(
+    public_payload: Dict[str, Any],
+    scalar_values: Dict[str, Any],
+    *,
+    position_values: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    cache_payload = dict(public_payload)
+    for field in _CACHE_SNAPSHOT_EXACT_SCALAR_FIELDS:
+        cache_payload[field] = serialize_portfolio_decimal(scalar_values[field])
+    public_positions = public_payload.get("positions")
+    if not isinstance(public_positions, list) or len(public_positions) != len(position_values):
+        raise ValueError("cached portfolio position payload is inconsistent")
+    cache_positions: List[Dict[str, Any]] = []
+    for public_position, exact_position in zip(public_positions, position_values):
+        if _cache_snapshot_position_key(public_position) != _cache_snapshot_position_key(exact_position):
+            raise ValueError("cached portfolio position identity does not match exact values")
+        cache_position = dict(public_position)
+        for field in _CACHE_SNAPSHOT_EXACT_POSITION_FIELDS:
+            exact_value = exact_position.get(field)
+            if exact_value is None:
+                raise ValueError(f"cached portfolio position exact value is unavailable: {field}")
+            cache_position[field] = serialize_portfolio_decimal(exact_value)
+        derived_fields_present = {
+            field for field in _CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS if field in cache_position
+        }
+        if derived_fields_present:
+            if len(derived_fields_present) != len(_CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS):
+                raise ValueError("cached portfolio position derived values are incomplete")
+            derived_values = _cache_snapshot_public_position_values(exact_position)
+            for field in _CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS:
+                cache_position[field] = serialize_portfolio_decimal(derived_values[field])
+        cache_positions.append(cache_position)
+    cache_payload["positions"] = cache_positions
+    return cache_payload
+
+
+def _cache_snapshot_money_currency(value: Any, *, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"cached portfolio {field_name} is unavailable")
+    currency = value.strip().upper()
+    if not currency or value != currency:
+        raise ValueError(f"cached portfolio {field_name} is not canonical")
+    parse_portfolio_decimal(Decimal("0"), kind="money", currency=currency)
+    return currency
+
+
+def _cache_snapshot_canonical_money_value(
+    value: Any,
+    *,
+    currency: str,
+    field_name: str,
+    allow_none: bool = False,
+) -> Optional[Decimal]:
+    if value is None:
+        if allow_none:
+            return None
+        raise ValueError(f"cached portfolio {field_name} is unavailable")
+    if not isinstance(value, str):
+        raise ValueError(f"cached portfolio {field_name} is not exact text")
+    canonical_value = serialize_portfolio_decimal_value(
+        value,
+        kind="money",
+        currency=currency,
+    )
+    if value != canonical_value:
+        raise ValueError(f"cached portfolio {field_name} is not canonical")
+    return parse_portfolio_decimal(value, kind="money", currency=currency)
+
+
+def _cache_snapshot_payload_with_rehydrated_nested_money_values(
+    payload: Dict[str, Any],
+    *,
+    base_currency: Any,
+) -> Dict[str, Any]:
+    trusted_base_currency = _cache_snapshot_money_currency(
+        base_currency,
+        field_name="snapshot base currency",
+    )
+    performance_payload = payload.get("performance")
+    if not isinstance(performance_payload, dict):
+        raise ValueError("cached portfolio performance is unavailable")
+
+    if "_cache_meta" not in payload:
+        if (
+            set(performance_payload) != {"contract_version", "calculation_state", "cash_flows"}
+            or performance_payload.get("calculation_state") != "available"
+            or "industry_attribution" in payload
+        ):
+            raise ValueError("cached legacy portfolio performance shape is unsupported")
+        cash_flows_payload = performance_payload.get("cash_flows")
+        if not isinstance(cash_flows_payload, dict) or set(cash_flows_payload) != {"net"}:
+            raise ValueError("cached legacy portfolio cash-flow shape is unsupported")
+        cash_flows = dict(cash_flows_payload)
+        cash_flows["net"] = _cache_snapshot_canonical_money_value(
+            cash_flows["net"],
+            currency=trusted_base_currency,
+            field_name="legacy performance cash_flows.net",
+        )
+        return {
+            **payload,
+            "performance": {
+                **performance_payload,
+                "cash_flows": cash_flows,
+            },
+        }
+
+    performance = dict(performance_payload)
+    performance_currency = _cache_snapshot_money_currency(
+        performance.get("currency"),
+        field_name="performance currency",
+    )
+    if performance_currency != trusted_base_currency:
+        raise ValueError("cached portfolio performance currency does not match snapshot base currency")
+    for group_name, field_names in _CACHE_SNAPSHOT_PERFORMANCE_MONEY_FIELDS:
+        group_payload = performance.get(group_name)
+        if not isinstance(group_payload, dict):
+            raise ValueError(f"cached portfolio performance {group_name} is unavailable")
+        group = dict(group_payload)
+        for field_name in field_names:
+            if field_name not in group:
+                raise ValueError(f"cached portfolio performance {group_name}.{field_name} is unavailable")
+            group[field_name] = _cache_snapshot_canonical_money_value(
+                group[field_name],
+                currency=performance_currency,
+                field_name=f"performance {group_name}.{field_name}",
+                allow_none=True,
+            )
+        performance[group_name] = group
+
+    industry_payload = payload.get("industry_attribution")
+    if not isinstance(industry_payload, dict):
+        raise ValueError("cached portfolio industry attribution is unavailable")
+    industry = dict(industry_payload)
+    if "total_market_value" not in industry:
+        raise ValueError("cached portfolio industry total market value is unavailable")
+    industry["total_market_value"] = _cache_snapshot_canonical_money_value(
+        industry["total_market_value"],
+        currency=trusted_base_currency,
+        field_name="industry total market value",
+    )
+    top_industries = industry.get("top_industries")
+    if not isinstance(top_industries, list):
+        raise ValueError("cached portfolio industry rows are unavailable")
+    rehydrated_industries: List[Dict[str, Any]] = []
+    for index, industry_row in enumerate(top_industries):
+        if not isinstance(industry_row, dict):
+            raise ValueError("cached portfolio industry row is invalid")
+        if _CACHE_SNAPSHOT_INDUSTRY_MONEY_FIELD not in industry_row:
+            raise ValueError("cached portfolio industry market value is unavailable")
+        rehydrated_row = dict(industry_row)
+        rehydrated_row[_CACHE_SNAPSHOT_INDUSTRY_MONEY_FIELD] = _cache_snapshot_canonical_money_value(
+            rehydrated_row[_CACHE_SNAPSHOT_INDUSTRY_MONEY_FIELD],
+            currency=trusted_base_currency,
+            field_name=f"industry row {index} market value",
+        )
+        rehydrated_industries.append(rehydrated_row)
+    industry["top_industries"] = rehydrated_industries
+
+    return {
+        **payload,
+        "performance": performance,
+        "industry_attribution": industry,
+    }
 
 
 def _phase_f_query_failure_reason_code(exc: BaseException) -> str:
@@ -134,26 +405,26 @@ class PortfolioOversellError(ValueError):
         *,
         symbol: str,
         trade_date: Optional[date],
-        requested_quantity: float,
-        available_quantity: float,
+        requested_quantity: Decimal,
+        available_quantity: Decimal,
     ) -> None:
         self.symbol = symbol
         self.trade_date = trade_date
-        self.requested_quantity = float(requested_quantity)
-        self.available_quantity = max(0.0, float(available_quantity))
+        self.requested_quantity = requested_quantity
+        self.available_quantity = max(Decimal("0"), available_quantity)
         date_hint = f" on {trade_date.isoformat()}" if trade_date is not None else ""
         super().__init__(
             "Oversell detected for "
-            f"{symbol}{date_hint}: requested={round(self.requested_quantity, 8)}, "
-            f"available={round(self.available_quantity, 8)}"
+            f"{symbol}{date_hint}: requested={format(self.requested_quantity, 'f')}, "
+            f"available={format(self.available_quantity, 'f')}"
         )
 
 
 @dataclass
 class _AvgState:
-    quantity: float = 0.0
-    total_cost: float = 0.0
-    price_cost: float = 0.0
+    quantity: Decimal = Decimal("0")
+    total_cost: Decimal = Decimal("0")
+    price_cost: Decimal = Decimal("0")
 
 
 class PortfolioService:
@@ -554,11 +825,11 @@ class PortfolioService:
         snapshot_date: date,
         synced_at: datetime,
         base_currency: str,
-        total_cash: float,
-        total_market_value: float,
-        total_equity: float,
-        realized_pnl: float,
-        unrealized_pnl: float,
+        total_cash: Any,
+        total_market_value: Any,
+        total_equity: Any,
+        realized_pnl: Any,
+        unrealized_pnl: Any,
         fx_stale: bool,
         payload: Optional[Dict[str, Any]],
         positions: Iterable[Dict[str, Any]],
@@ -572,6 +843,7 @@ class PortfolioService:
                 "Broker sync state cannot be written to a different portfolio account than the linked broker connection",
                 reason_code="broker_sync_mapping_conflict",
             )
+        normalized_base_currency = self._normalize_currency(base_currency)
         row = self.repo.replace_broker_sync_state(
             broker_connection_id=broker_connection_id,
             portfolio_account_id=portfolio_account_id,
@@ -581,14 +853,29 @@ class PortfolioService:
             sync_status=(sync_status or "").strip().lower() or "success",
             snapshot_date=snapshot_date,
             synced_at=synced_at,
-            base_currency=self._normalize_currency(base_currency),
-            total_cash=float(total_cash),
-            total_market_value=float(total_market_value),
-            total_equity=float(total_equity),
-            realized_pnl=float(realized_pnl),
-            unrealized_pnl=float(unrealized_pnl),
+            base_currency=normalized_base_currency,
+            total_cash=parse_portfolio_decimal(
+                total_cash, kind="money", currency=normalized_base_currency
+            ),
+            total_market_value=parse_portfolio_decimal(
+                total_market_value, kind="money", currency=normalized_base_currency
+            ),
+            total_equity=parse_portfolio_decimal(
+                total_equity, kind="money", currency=normalized_base_currency
+            ),
+            realized_pnl=parse_portfolio_decimal(
+                realized_pnl, kind="money", currency=normalized_base_currency
+            ),
+            unrealized_pnl=parse_portfolio_decimal(
+                unrealized_pnl, kind="money", currency=normalized_base_currency
+            ),
             fx_stale=bool(fx_stale),
-            payload_json=json.dumps(payload or {}, ensure_ascii=False, sort_keys=True),
+            payload_json=json.dumps(
+                payload or {},
+                default=_snapshot_cache_json_default,
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
             positions=list(positions),
             cash_balances=list(cash_balances),
             **self._owner_kwargs(),
@@ -636,10 +923,10 @@ class PortfolioService:
         symbol: str,
         trade_date: date,
         side: str,
-        quantity: float,
-        price: float,
-        fee: float = 0.0,
-        tax: float = 0.0,
+        quantity: Any,
+        price: Any,
+        fee: Any = Decimal("0"),
+        tax: Any = Decimal("0"),
         market: Optional[str] = None,
         currency: Optional[str] = None,
         trade_uid: Optional[str] = None,
@@ -690,10 +977,10 @@ class PortfolioService:
         symbol: str,
         trade_date: date,
         side: str,
-        quantity: float,
-        price: float,
-        fee: float = 0.0,
-        tax: float = 0.0,
+        quantity: Any,
+        price: Any,
+        fee: Any = Decimal("0"),
+        tax: Any = Decimal("0"),
         market: Optional[str] = None,
         currency: Optional[str] = None,
         trade_uid: Optional[str] = None,
@@ -703,10 +990,6 @@ class PortfolioService:
         side_norm = (side or "").strip().lower()
         if side_norm not in VALID_SIDES:
             raise ValueError("side must be buy or sell")
-        if quantity <= 0 or price <= 0:
-            raise ValueError("quantity and price must be > 0")
-        if fee < 0 or tax < 0:
-            raise ValueError("fee and tax must be >= 0")
         trade_uid_norm = (trade_uid or "").strip() or None
         dedup_hash_norm = (dedup_hash or "").strip() or None
         account = self._require_active_account_in_session(
@@ -722,6 +1005,14 @@ class PortfolioService:
         currency_norm = self._normalize_currency(
             currency or self._default_currency_for_market(market_norm)
         )
+        quantity_value = parse_portfolio_decimal(quantity, kind="quantity", market=market_norm)
+        price_value = parse_portfolio_decimal(price, kind="price", market=market_norm)
+        fee_value = parse_portfolio_decimal(fee, kind="money", currency=currency_norm)
+        tax_value = parse_portfolio_decimal(tax, kind="money", currency=currency_norm)
+        if quantity_value <= 0 or price_value <= 0:
+            raise ValueError("quantity and price must be > 0")
+        if fee_value < 0 or tax_value < 0:
+            raise ValueError("fee and tax must be >= 0")
         self._validate_trade_identity(
             account_id=account_id,
             trade_uid=trade_uid_norm,
@@ -735,7 +1026,7 @@ class PortfolioService:
                 market=market_norm,
                 currency=currency_norm,
                 trade_date=trade_date,
-                quantity=float(quantity),
+                quantity=quantity_value,
                 session=session,
             )
         row = self.repo.add_trade_in_session(
@@ -747,10 +1038,10 @@ class PortfolioService:
             currency=currency_norm,
             trade_date=trade_date,
             side=side_norm,
-            quantity=float(quantity),
-            price=float(price),
-            fee=float(fee),
-            tax=float(tax),
+            quantity=quantity_value,
+            price=price_value,
+            fee=fee_value,
+            tax=tax_value,
             note=(note or "").strip() or None,
             dedup_hash=dedup_hash_norm,
         )
@@ -762,7 +1053,7 @@ class PortfolioService:
         account_id: int,
         event_date: date,
         direction: str,
-        amount: float,
+        amount: Any,
         currency: Optional[str] = None,
         note: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -787,27 +1078,28 @@ class PortfolioService:
         account_id: int,
         event_date: date,
         direction: str,
-        amount: float,
+        amount: Any,
         currency: Optional[str] = None,
         note: Optional[str] = None,
     ) -> Dict[str, Any]:
         direction_norm = (direction or "").strip().lower()
         if direction_norm not in VALID_CASH_DIRECTIONS:
             raise ValueError("direction must be in or out")
-        if amount <= 0:
-            raise ValueError("amount must be > 0")
         account = self._require_active_account_in_session(
             session=session,
             account_id=account_id,
             owner_kwargs=owner_kwargs,
         )
         currency_norm = self._normalize_currency(currency or account.base_currency)
+        amount_value = parse_portfolio_decimal(amount, kind="money", currency=currency_norm)
+        if amount_value <= 0:
+            raise ValueError("amount must be > 0")
         row = self.repo.add_cash_ledger_in_session(
             session=session,
             account_id=account_id,
             event_date=event_date,
             direction=direction_norm,
-            amount=float(amount),
+            amount=amount_value,
             currency=currency_norm,
             note=(note or "").strip() or None,
         )
@@ -822,8 +1114,8 @@ class PortfolioService:
         action_type: str,
         market: Optional[str] = None,
         currency: Optional[str] = None,
-        cash_dividend_per_share: Optional[float] = None,
-        split_ratio: Optional[float] = None,
+        cash_dividend_per_share: Optional[Any] = None,
+        split_ratio: Optional[Any] = None,
         note: Optional[str] = None,
     ) -> Dict[str, Any]:
         owner_kwargs = self._write_owner_kwargs()
@@ -853,20 +1145,14 @@ class PortfolioService:
         action_type: str,
         market: Optional[str] = None,
         currency: Optional[str] = None,
-        cash_dividend_per_share: Optional[float] = None,
-        split_ratio: Optional[float] = None,
+        cash_dividend_per_share: Optional[Any] = None,
+        split_ratio: Optional[Any] = None,
         note: Optional[str] = None,
     ) -> Dict[str, Any]:
         action_type_norm = (action_type or "").strip().lower()
         if action_type_norm not in VALID_CORPORATE_ACTIONS:
             raise ValueError("action_type must be cash_dividend or split_adjustment")
 
-        if action_type_norm == "cash_dividend":
-            if cash_dividend_per_share is None or cash_dividend_per_share < 0:
-                raise ValueError("cash_dividend_per_share must be >= 0 for cash_dividend")
-        if action_type_norm == "split_adjustment":
-            if split_ratio is None or split_ratio <= 0:
-                raise ValueError("split_ratio must be > 0 for split_adjustment")
         account = self._require_active_account_in_session(
             session=session,
             account_id=account_id,
@@ -880,6 +1166,24 @@ class PortfolioService:
         currency_norm = self._normalize_currency(
             currency or self._default_currency_for_market(market_norm)
         )
+        dividend_value = None
+        split_ratio_value = None
+        if action_type_norm == "cash_dividend":
+            if cash_dividend_per_share is None:
+                raise ValueError("cash_dividend_per_share must be >= 0 for cash_dividend")
+            dividend_value = parse_portfolio_decimal(
+                cash_dividend_per_share,
+                kind="price",
+                market=market_norm,
+            )
+            if dividend_value < 0:
+                raise ValueError("cash_dividend_per_share must be >= 0 for cash_dividend")
+        if action_type_norm == "split_adjustment":
+            if split_ratio is None:
+                raise ValueError("split_ratio must be > 0 for split_adjustment")
+            split_ratio_value = parse_portfolio_decimal(split_ratio, kind="ratio")
+            if split_ratio_value <= 0:
+                raise ValueError("split_ratio must be > 0 for split_adjustment")
         row = self.repo.add_corporate_action_in_session(
             session=session,
             account_id=account_id,
@@ -888,8 +1192,8 @@ class PortfolioService:
             currency=currency_norm,
             effective_date=effective_date,
             action_type=action_type_norm,
-            cash_dividend_per_share=cash_dividend_per_share,
-            split_ratio=split_ratio,
+            cash_dividend_per_share=dividend_value,
+            split_ratio=split_ratio_value,
             note=(note or "").strip() or None,
         )
         return {"id": int(row.id)}
@@ -911,10 +1215,10 @@ class PortfolioService:
         symbol: Optional[str] = None,
         trade_date: Optional[date] = None,
         side: Optional[str] = None,
-        quantity: Optional[float] = None,
-        price: Optional[float] = None,
-        fee: Optional[float] = None,
-        tax: Optional[float] = None,
+        quantity: Optional[Any] = None,
+        price: Optional[Any] = None,
+        fee: Optional[Any] = None,
+        tax: Optional[Any] = None,
         market: Optional[str] = None,
         currency: Optional[str] = None,
         note: Optional[str] = None,
@@ -947,19 +1251,6 @@ class PortfolioService:
             if side_norm not in VALID_SIDES:
                 raise ValueError("side must be buy or sell")
 
-            quantity_value = float(row.quantity if quantity is None else quantity)
-            if quantity_value <= 0:
-                raise ValueError("quantity must be > 0")
-
-            price_value = float(row.price if price is None else price)
-            if price_value <= 0:
-                raise ValueError("price must be > 0")
-
-            fee_value = float(row.fee if fee is None else fee)
-            tax_value = float(row.tax if tax is None else tax)
-            if fee_value < 0 or tax_value < 0:
-                raise ValueError("fee and tax must be >= 0")
-
             trade_date_value = trade_date or row.trade_date
             market_hint = market if market is not None else (row.market or account.market)
             symbol_norm, market_norm = self._canonical_event_symbol(
@@ -967,6 +1258,36 @@ class PortfolioService:
                 market_hint=market_hint,
             )
             currency_norm = self._normalize_currency(currency or row.currency or self._default_currency_for_market(market_norm))
+            if market is not None and (quantity is None or price is None):
+                raise ValueError("market updates require quantity and price")
+            if currency is not None and (fee is None or tax is None):
+                raise ValueError("currency updates require fee and tax")
+            quantity_value = parse_portfolio_decimal(
+                row.quantity if quantity is None else quantity,
+                kind="quantity",
+                market=market_norm,
+            )
+            price_value = parse_portfolio_decimal(
+                row.price if price is None else price,
+                kind="price",
+                market=market_norm,
+            )
+            fee_value = parse_portfolio_decimal(
+                row.fee if fee is None else fee,
+                kind="money",
+                currency=currency_norm,
+            )
+            tax_value = parse_portfolio_decimal(
+                row.tax if tax is None else tax,
+                kind="money",
+                currency=currency_norm,
+            )
+            if quantity_value <= 0:
+                raise ValueError("quantity must be > 0")
+            if price_value <= 0:
+                raise ValueError("price must be > 0")
+            if fee_value < 0 or tax_value < 0:
+                raise ValueError("fee and tax must be >= 0")
 
             original_trade_date = row.trade_date
             row.account_id = next_account_id
@@ -1321,12 +1642,18 @@ class PortfolioService:
             for field_name in contract_fields:
                 legacy_value = legacy_item.get(field_name)
                 candidate_value = candidate_item.get(field_name)
-                if self._normalize_phase_f_compare_value(
+                normalized_legacy_value = self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=legacy_value,
-                ) == self._normalize_phase_f_compare_value(
+                )
+                normalized_candidate_value = self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=candidate_value,
+                )
+                if (
+                    normalized_legacy_value is not _PHASE_F_INVALID_COMPARE_VALUE
+                    and normalized_candidate_value is not _PHASE_F_INVALID_COMPARE_VALUE
+                    and normalized_legacy_value == normalized_candidate_value
                 ):
                     continue
                 mismatch_class = "owner_scope_mismatch" if field_name == "account_id" else "payload_field_mismatch"
@@ -1362,17 +1689,16 @@ class PortfolioService:
                 suitable for equality checks.
 
         Returns:
-            Any: The original value for all fields except ``created_at``. For
-            ``created_at``, the return value is a timezone-naive ISO-8601 string
-            when the input is a parseable ``datetime`` or datetime-like string.
-            Unparseable strings and unsupported objects are returned unchanged so
-            real payload drift remains visible to the caller.
+            Any: The original value for non-normalized fields. ``created_at``
+            becomes a timezone-naive ISO-8601 string when parseable. Numeric
+            Phase F storage fields become exact storage-scale ``Decimal`` values.
+            Invalid numeric values return an internal mismatch sentinel.
 
         Assumptions:
-            - Only ``created_at`` is allowed to normalize away representation-only
-              drift in this comparison contract.
-            - Other fields must preserve their original values because a mismatch
-              should remain blocking and visible in diagnostics.
+            - ``created_at`` and the established numeric storage fields are the
+              only representation-only normalizations in this contract.
+            - Binary floats, malformed numeric values, and values beyond storage
+              precision remain blocking mismatches instead of being coerced.
 
         Edge cases:
             - ``None`` stays ``None``.
@@ -1382,6 +1708,8 @@ class PortfolioService:
               cross-timezone instant equivalence.
             - Invalid datetime strings are returned unchanged and will still
               trigger a mismatch if the opposite side differs.
+            - Invalid numeric values return a sentinel which callers must never
+              treat as an equality match.
 
         Example:
             >>> PortfolioService._normalize_phase_f_compare_value(
@@ -1395,9 +1723,14 @@ class PortfolioService:
             ... )
             'AAPL'
         """
-        if field_name != "created_at":
+        if field_name == "created_at":
+            return PortfolioService._normalize_phase_f_created_at_compare_value(value)
+        if field_name not in _PHASE_F_STORAGE_COMPARE_FIELDS or value is None:
             return value
-        return PortfolioService._normalize_phase_f_created_at_compare_value(value)
+        try:
+            return parse_portfolio_decimal(value, kind="storage")
+        except (TypeError, ValueError):
+            return _PHASE_F_INVALID_COMPARE_VALUE
 
     @staticmethod
     def _normalize_phase_f_created_at_compare_value(value: Any) -> Any:
@@ -2018,12 +2351,18 @@ class PortfolioService:
             for field_name in contract_fields:
                 legacy_value = legacy_item.get(field_name)
                 candidate_value = candidate_item.get(field_name)
-                if self._normalize_phase_f_compare_value(
+                normalized_legacy_value = self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=legacy_value,
-                ) == self._normalize_phase_f_compare_value(
+                )
+                normalized_candidate_value = self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=candidate_value,
+                )
+                if (
+                    normalized_legacy_value is not _PHASE_F_INVALID_COMPARE_VALUE
+                    and normalized_candidate_value is not _PHASE_F_INVALID_COMPARE_VALUE
+                    and normalized_legacy_value == normalized_candidate_value
                 ):
                     continue
                 mismatch_class = "owner_scope_mismatch" if field_name == "account_id" else "payload_field_mismatch"
@@ -2549,12 +2888,18 @@ class PortfolioService:
             for field_name in contract_fields:
                 legacy_value = legacy_item.get(field_name)
                 candidate_value = candidate_item.get(field_name)
-                if self._normalize_phase_f_compare_value(
+                normalized_legacy_value = self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=legacy_value,
-                ) == self._normalize_phase_f_compare_value(
+                )
+                normalized_candidate_value = self._normalize_phase_f_compare_value(
                     field_name=field_name,
                     value=candidate_value,
+                )
+                if (
+                    normalized_legacy_value is not _PHASE_F_INVALID_COMPARE_VALUE
+                    and normalized_candidate_value is not _PHASE_F_INVALID_COMPARE_VALUE
+                    and normalized_legacy_value == normalized_candidate_value
                 ):
                     continue
                 mismatch_class = "owner_scope_mismatch" if field_name == "account_id" else "payload_field_mismatch"
@@ -2667,16 +3012,16 @@ class PortfolioService:
             requested_account_id=account_id,
         )
         aggregate = {
-            "total_cash": 0.0,
-            "total_market_value": 0.0,
-            "total_equity": 0.0,
-            "realized_pnl": 0.0,
-            "unrealized_pnl": 0.0,
-            "fee_total": 0.0,
-            "tax_total": 0.0,
+            "total_cash": Decimal("0"),
+            "total_market_value": Decimal("0"),
+            "total_equity": Decimal("0"),
+            "realized_pnl": Decimal("0"),
+            "unrealized_pnl": Decimal("0"),
+            "fee_total": Decimal("0"),
+            "tax_total": Decimal("0"),
             "fx_stale": False,
         }
-        market_breakdown: Dict[str, Dict[str, float]] = {}
+        market_breakdown: Dict[str, Dict[str, Any]] = {}
         aggregate_valuation_coverage = self._new_conversion_coverage()
 
         for account in account_rows:
@@ -2720,7 +3065,11 @@ class PortfolioService:
                     fee_total=account_snapshot["fee_total"],
                     tax_total=account_snapshot["tax_total"],
                     fx_stale=account_snapshot["fx_stale"],
-                    payload=json.dumps(account_snapshot["payload"], ensure_ascii=False),
+                    payload=json.dumps(
+                        account_snapshot["payload"],
+                        ensure_ascii=False,
+                        default=_snapshot_cache_json_default,
+                    ),
                     positions=account_snapshot["positions_cache"],
                     lots=account_snapshot["lots_cache"],
                     valuation_currency=account.base_currency,
@@ -2749,43 +3098,43 @@ class PortfolioService:
                 as_of_date=as_of_date,
             )
 
-            cash_cny, stale_cash, cash_source = self._convert_amount(
+            cash_cny, stale_cash, cash_source = self._convert_amount_decimal(
                 amount=account_snapshot["total_cash"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
-            mv_cny, stale_mv, mv_source = self._convert_amount(
+            mv_cny, stale_mv, mv_source = self._convert_amount_decimal(
                 amount=account_snapshot["total_market_value"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
-            eq_cny, stale_eq, _ = self._convert_amount(
+            eq_cny, stale_eq, _ = self._convert_amount_decimal(
                 amount=account_snapshot["total_equity"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
-            realized_cny, stale_realized, _ = self._convert_amount(
+            realized_cny, stale_realized, _ = self._convert_amount_decimal(
                 amount=account_snapshot["realized_pnl"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
-            unrealized_cny, stale_unrealized, _ = self._convert_amount(
+            unrealized_cny, stale_unrealized, _ = self._convert_amount_decimal(
                 amount=account_snapshot["unrealized_pnl"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
-            fee_cny, stale_fee, _ = self._convert_amount(
+            fee_cny, stale_fee, _ = self._convert_amount_decimal(
                 amount=account_snapshot["fee_total"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
-            tax_cny, stale_tax, _ = self._convert_amount(
+            tax_cny, stale_tax, _ = self._convert_amount_decimal(
                 amount=account_snapshot["tax_total"],
                 from_currency=account.base_currency,
                 to_currency=aggregate_currency,
@@ -2833,18 +3182,33 @@ class PortfolioService:
             "cost_method": method,
             "currency": aggregate_currency,
             "account_count": len(account_rows),
-            "total_cash": round(aggregate["total_cash"], 6),
-            "total_market_value": round(aggregate["total_market_value"], 6),
-            "total_equity": round(aggregate["total_equity"], 6),
-            "realized_pnl": round(aggregate["realized_pnl"], 6),
-            "unrealized_pnl": round(aggregate["unrealized_pnl"], 6),
-            "fee_total": round(aggregate["fee_total"], 6),
-            "tax_total": round(aggregate["tax_total"], 6),
+            "total_cash": round_portfolio_decimal_value(
+                aggregate["total_cash"], kind="money", currency=aggregate_currency
+            ),
+            "total_market_value": round_portfolio_decimal_value(
+                aggregate["total_market_value"], kind="money", currency=aggregate_currency
+            ),
+            "total_equity": round_portfolio_decimal_value(
+                aggregate["total_equity"], kind="money", currency=aggregate_currency
+            ),
+            "realized_pnl": round_portfolio_decimal_value(
+                aggregate["realized_pnl"], kind="money", currency=aggregate_currency
+            ),
+            "unrealized_pnl": round_portfolio_decimal_value(
+                aggregate["unrealized_pnl"], kind="money", currency=aggregate_currency
+            ),
+            "fee_total": round_portfolio_decimal_value(
+                aggregate["fee_total"], kind="money", currency=aggregate_currency
+            ),
+            "tax_total": round_portfolio_decimal_value(
+                aggregate["tax_total"], kind="money", currency=aggregate_currency
+            ),
             "fx_stale": aggregate["fx_stale"],
             "valuation": valuation,
             "market_breakdown": self._build_market_breakdown_payload(
                 market_breakdown=market_breakdown,
                 total_market_value=aggregate["total_market_value"],
+                aggregate_currency=aggregate_currency,
             ),
             "fx_rates": self._build_fx_rate_snapshot(
                 account_rows=account_rows,
@@ -2985,14 +3349,10 @@ class PortfolioService:
         }
 
     @staticmethod
-    def _portfolio_truth_number(value: Any) -> Optional[float]:
-        if isinstance(value, bool):
+    def _portfolio_truth_money(value: Any, *, currency: str) -> Optional[Decimal]:
+        if value is None or isinstance(value, bool):
             return None
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            return None
-        return number if math.isfinite(number) else None
+        return parse_portfolio_decimal(value, kind="money", currency=currency)
 
     def _build_portfolio_truth(self, *, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """Classify whether a portfolio total is authoritative, partial, or unavailable."""
@@ -3000,7 +3360,10 @@ class PortfolioService:
         positions = self._snapshot_positions(snapshot)
         account_count = len(accounts)
         position_count = len(positions)
-        total_equity = self._portfolio_truth_number(snapshot.get("total_equity"))
+        currency = str(snapshot.get("currency") or "").strip().upper()
+        if not currency:
+            raise ValueError("portfolio truth requires an aggregate currency")
+        total_equity = self._portfolio_truth_money(snapshot.get("total_equity"), currency=currency)
         valuation = snapshot.get("valuation") if isinstance(snapshot.get("valuation"), dict) else {}
         valuation_state = str(valuation.get("state") or "unavailable").strip().lower()
         valuation_snapshot_lineage = (
@@ -3770,7 +4133,11 @@ class PortfolioService:
             )
             source_direction = "direct"
             row = direct
-            rate_value: Optional[float] = float(direct.rate) if direct is not None and direct.rate > 0 else None
+            rate_value: Optional[Decimal] = (
+                _internal_snapshot_decimal(direct.rate)
+                if direct is not None and direct.rate > 0
+                else None
+            )
 
             if rate_value is None:
                 inverse = self.repo.get_latest_fx_rate(
@@ -3780,13 +4147,22 @@ class PortfolioService:
                 )
                 if inverse is not None and inverse.rate > 0:
                     row = inverse
-                    rate_value = 1.0 / float(inverse.rate)
+                    rate_value = Decimal("1") / _internal_snapshot_decimal(inverse.rate)
                     source_direction = "inverse"
 
             rows.append({
                 "from_currency": from_currency,
                 "to_currency": to_currency,
-                "rate": round(rate_value, 8) if rate_value is not None else None,
+                "rate": (
+                    round_portfolio_decimal_value(
+                        rate_value,
+                        kind="fx_rate",
+                        from_currency=from_currency,
+                        to_currency=to_currency,
+                    )
+                    if rate_value is not None
+                    else None
+                ),
                 "rate_date": row.rate_date.isoformat() if row is not None and row.rate_date else None,
                 "source": row.source if row is not None else "missing",
                 "is_stale": True if row is None else bool(row.is_stale),
@@ -3864,7 +4240,7 @@ class PortfolioService:
         market: str,
         currency: str,
         trade_date: date,
-        quantity: float,
+        quantity: Decimal,
         session: Optional[Any] = None,
     ) -> None:
         key = self._event_position_key(symbol=symbol, market=market, currency=currency)
@@ -3874,7 +4250,7 @@ class PortfolioService:
             as_of_date=trade_date,
             session=session,
         )
-        if available_quantity + EPS < quantity:
+        if available_quantity < quantity:
             raise PortfolioOversellError(
                 symbol=key[0],
                 trade_date=trade_date,
@@ -3889,7 +4265,7 @@ class PortfolioService:
         key: Tuple[str, str, str],
         as_of_date: date,
         session: Optional[Any] = None,
-    ) -> float:
+    ) -> Decimal:
         if session is None:
             trades = self.repo.list_trades(account_id, as_of=as_of_date)
             corporate_actions = self.repo.list_corporate_actions(account_id, as_of=as_of_date)
@@ -3925,21 +4301,25 @@ class PortfolioService:
         event_priority = {"corp": 1, "trade": 2}
         events.sort(key=lambda item: (item[1], event_priority[item[0]], item[2]))
 
-        quantity_held = 0.0
+        quantity_held = Decimal("0")
         for event_type, event_date, _, event in events:
             if event_type == "corp":
                 action_type = (event.action_type or "").strip().lower()
                 if action_type != "split_adjustment":
                     continue
-                split_ratio = float(event.split_ratio or 0.0)
+                split_ratio = parse_portfolio_decimal(event.split_ratio or Decimal("0"), kind="ratio")
                 if split_ratio <= 0:
                     raise ValueError(f"Invalid split_ratio for {key[0]}")
-                if abs(split_ratio - 1.0) <= EPS:
+                if split_ratio == 1:
                     continue
                 quantity_held *= split_ratio
                 continue
 
-            qty = float(event.quantity or 0.0)
+            qty = parse_portfolio_decimal(
+                event.quantity or Decimal("0"),
+                kind="quantity",
+                market=event.market,
+            )
             if qty <= 0:
                 raise ValueError(f"Invalid trade quantity for {key[0]}")
             side = (event.side or "").strip().lower()
@@ -3948,7 +4328,7 @@ class PortfolioService:
                 continue
             if side != "sell":
                 raise ValueError(f"Unsupported trade side: {event.side}")
-            if quantity_held + EPS < qty:
+            if quantity_held < qty:
                 raise PortfolioOversellError(
                     symbol=key[0],
                     trade_date=event_date,
@@ -3956,8 +4336,8 @@ class PortfolioService:
                     available_quantity=quantity_held,
                 )
             quantity_held -= qty
-            if quantity_held <= EPS:
-                quantity_held = 0.0
+            if quantity_held == 0:
+                quantity_held = Decimal("0")
 
         return quantity_held
 
@@ -3982,16 +4362,16 @@ class PortfolioService:
         event_priority = {"corp": 1, "trade": 2}
         events.sort(key=lambda item: (item[1], event_priority[item[0]], item[2]))
 
-        quantity_held: Dict[Tuple[str, str, str], float] = defaultdict(float)
+        quantity_held: Dict[Tuple[str, str, str], Decimal] = defaultdict(Decimal)
         for event_type, event_date, _, event in events:
             if event_type == "corp":
                 action_type = (event.action_type or "").strip().lower()
                 if action_type != "split_adjustment":
                     continue
-                split_ratio = float(event.split_ratio or 0.0)
+                split_ratio = parse_portfolio_decimal(event.split_ratio or Decimal("0"), kind="ratio")
                 if split_ratio <= 0:
                     raise ValueError(f"Invalid split_ratio for {event.symbol}")
-                if abs(split_ratio - 1.0) <= EPS:
+                if split_ratio == 1:
                     continue
                 key = self._event_position_key(
                     symbol=event.symbol,
@@ -4006,7 +4386,11 @@ class PortfolioService:
                 market=event.market,
                 currency=event.currency,
             )
-            qty = float(event.quantity or 0.0)
+            qty = parse_portfolio_decimal(
+                event.quantity or Decimal("0"),
+                kind="quantity",
+                market=event.market,
+            )
             if qty <= 0:
                 raise ValueError(f"Invalid trade quantity for {event.symbol}")
             side = (event.side or "").strip().lower()
@@ -4016,7 +4400,7 @@ class PortfolioService:
             if side != "sell":
                 raise ValueError(f"Unsupported trade side: {event.side}")
             available_quantity = quantity_held[key]
-            if available_quantity + EPS < qty:
+            if available_quantity < qty:
                 raise PortfolioOversellError(
                     symbol=key[0],
                     trade_date=event_date,
@@ -4024,8 +4408,8 @@ class PortfolioService:
                     available_quantity=available_quantity,
                 )
             quantity_held[key] -= qty
-            if quantity_held[key] <= EPS:
-                quantity_held[key] = 0.0
+            if quantity_held[key] == 0:
+                quantity_held[key] = Decimal("0")
 
     def _replay_account(self, *, account: Any, as_of_date: date, cost_method: str) -> Dict[str, Any]:
         trades = self.repo.list_trades(account.id, as_of=as_of_date)
@@ -4044,15 +4428,15 @@ class PortfolioService:
         event_priority = {"cash": 0, "corp": 1, "trade": 2}
         events.sort(key=lambda item: (item[1], event_priority[item[0]], item[2]))
 
-        cash_balances: Dict[str, float] = defaultdict(float)
-        fees_total_base = 0.0
-        taxes_total_base = 0.0
-        realized_pnl_base = 0.0
-        realized_price_pnl_base = 0.0
-        income_pnl_base = 0.0
-        deposits_base = 0.0
-        withdrawals_base = 0.0
-        external_cash_flows: List[Tuple[date, float]] = []
+        cash_balances: Dict[str, Decimal] = defaultdict(Decimal)
+        fees_total_base = Decimal("0")
+        taxes_total_base = Decimal("0")
+        realized_pnl_base = Decimal("0")
+        realized_price_pnl_base = Decimal("0")
+        income_pnl_base = Decimal("0")
+        deposits_base = Decimal("0")
+        withdrawals_base = Decimal("0")
+        external_cash_flows: List[Tuple[date, Decimal]] = []
         realized_pnl_by_symbol: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
         fx_stale = False
         fx_currencies_used: Set[str] = set()
@@ -4065,8 +4449,8 @@ class PortfolioService:
         for event_type, event_date, _, event in events:
             if event_type == "cash":
                 currency = self._normalize_currency(event.currency)
-                amount = float(event.amount or 0.0)
-                converted_flow, stale_flow, flow_source = self._convert_amount(
+                amount = _internal_snapshot_decimal(event.amount or Decimal("0"))
+                converted_flow, stale_flow, flow_source = self._convert_amount_decimal(
                     amount=amount,
                     from_currency=currency,
                     to_currency=account.base_currency,
@@ -4099,10 +4483,10 @@ class PortfolioService:
                     market=event.market,
                     currency=event.currency,
                 )
-                qty = float(event.quantity or 0.0)
-                price = float(event.price or 0.0)
-                fee = float(event.fee or 0.0)
-                tax = float(event.tax or 0.0)
+                qty = _internal_snapshot_decimal(event.quantity or Decimal("0"))
+                price = _internal_snapshot_decimal(event.price or Decimal("0"))
+                fee = _internal_snapshot_decimal(event.fee or Decimal("0"))
+                tax = _internal_snapshot_decimal(event.tax or Decimal("0"))
                 if qty <= 0 or price <= 0:
                     raise ValueError(f"Invalid trade quantity or price for {event.symbol}")
 
@@ -4164,12 +4548,12 @@ class PortfolioService:
                             key[0],
                             event_date,
                         )
-                        if state.quantity > EPS and cost_method == "futu_diluted":
+                        if state.quantity > 0 and cost_method == "futu_diluted":
                             state.total_cost -= gross - cost_basis
-                        elif state.quantity > EPS and cost_method == "ths_pnl":
+                        elif state.quantity > 0 and cost_method == "ths_pnl":
                             state.total_cost -= proceeds_net - cost_basis
                     realized_price_local = gross - price_cost_basis
-                    realized_price_base, stale_price, price_source = self._convert_amount(
+                    realized_price_base, stale_price, price_source = self._convert_amount_decimal(
                         amount=realized_price_local,
                         from_currency=key[2],
                         to_currency=account.base_currency,
@@ -4185,7 +4569,7 @@ class PortfolioService:
                     )
                     realized_price_pnl_base += realized_price_base
                     realized_local = proceeds_net - cost_basis
-                    realized_base, stale_realized, realized_source = self._convert_amount(
+                    realized_base, stale_realized, realized_source = self._convert_amount_decimal(
                         amount=realized_local,
                         from_currency=key[2],
                         to_currency=account.base_currency,
@@ -4200,9 +4584,9 @@ class PortfolioService:
                             "symbol": key[0],
                             "market": key[1],
                             "currency": key[2],
-                            "amount_native": 0.0,
-                            "amount_base": 0.0,
-                            "quantity_sold": 0.0,
+                            "amount_native": Decimal("0"),
+                            "amount_base": Decimal("0"),
+                            "quantity_sold": Decimal("0"),
                             "fx_status": FX_STATUS_LIVE,
                         },
                     )
@@ -4218,13 +4602,13 @@ class PortfolioService:
                 else:
                     raise ValueError(f"Unsupported trade side: {event.side}")
 
-                fee_base, stale_fee, fee_source = self._convert_amount(
+                fee_base, stale_fee, fee_source = self._convert_amount_decimal(
                     amount=fee,
                     from_currency=key[2],
                     to_currency=account.base_currency,
                     as_of_date=event_date,
                 )
-                tax_base, stale_tax, tax_source = self._convert_amount(
+                tax_base, stale_tax, tax_source = self._convert_amount_decimal(
                     amount=tax,
                     from_currency=key[2],
                     to_currency=account.base_currency,
@@ -4261,7 +4645,9 @@ class PortfolioService:
                 )
                 action_type = (event.action_type or "").strip().lower()
                 if action_type == "cash_dividend":
-                    per_share = float(event.cash_dividend_per_share or 0.0)
+                    per_share = _internal_snapshot_decimal(
+                        event.cash_dividend_per_share or Decimal("0")
+                    )
                     if per_share <= 0:
                         continue
                     qty_held = self._held_quantity(
@@ -4270,10 +4656,10 @@ class PortfolioService:
                         fifo_lots=fifo_lots,
                         avg_state=avg_state,
                     )
-                    if qty_held > EPS:
+                    if qty_held > 0:
                         income_native = qty_held * per_share
                         cash_balances[key[2]] += income_native
-                        income_base, stale_income, income_source = self._convert_amount(
+                        income_base, stale_income, income_source = self._convert_amount_decimal(
                             amount=income_native,
                             from_currency=key[2],
                             to_currency=account.base_currency,
@@ -4292,10 +4678,10 @@ class PortfolioService:
                         if cost_method in {"futu_diluted", "ths_pnl"}:
                             avg_state[key].total_cost -= income_native
                 elif action_type == "split_adjustment":
-                    split_ratio = float(event.split_ratio or 0.0)
+                    split_ratio = _internal_snapshot_decimal(event.split_ratio or Decimal("0"))
                     if split_ratio <= 0:
                         raise ValueError(f"Invalid split_ratio for {event.symbol}")
-                    if abs(split_ratio - 1.0) <= EPS:
+                    if split_ratio == 1:
                         continue
                     if cost_method == "fifo":
                         for lot in fifo_lots[key]:
@@ -4309,7 +4695,8 @@ class PortfolioService:
                     raise ValueError(f"Unsupported corporate action type: {event.action_type}")
 
         (
-            position_rows,
+            public_position_rows,
+            cache_position_rows,
             lot_rows,
             market_value_base,
             total_cost_base,
@@ -4329,9 +4716,9 @@ class PortfolioService:
         self._merge_conversion_coverage(valuation_coverage, position_valuation_coverage)
         self._merge_conversion_coverage(performance_coverage, position_performance_coverage)
 
-        total_cash_base = 0.0
+        total_cash_base = Decimal("0")
         for currency, amount in cash_balances.items():
-            converted, stale, source = self._convert_amount(
+            converted, stale, source = self._convert_amount_decimal(
                 amount=amount,
                 from_currency=currency,
                 to_currency=account.base_currency,
@@ -4378,41 +4765,71 @@ class PortfolioService:
             "base_currency": account.base_currency,
             "as_of": as_of_date.isoformat(),
             "cost_method": cost_method,
-            "total_cash": round(total_cash_base, 6),
-            "total_market_value": round(market_value_base, 6),
-            "total_equity": round(total_equity_base, 6),
-            "realized_pnl": round(realized_pnl_base, 6),
-            "unrealized_pnl": round(unrealized_pnl_base, 6),
-            "fee_total": round(fees_total_base, 6),
-            "tax_total": round(taxes_total_base, 6),
+            "total_cash": round_portfolio_decimal_value(
+                total_cash_base, kind="money", currency=account.base_currency
+            ),
+            "total_market_value": round_portfolio_decimal_value(
+                market_value_base, kind="money", currency=account.base_currency
+            ),
+            "total_equity": round_portfolio_decimal_value(
+                total_equity_base, kind="money", currency=account.base_currency
+            ),
+            "realized_pnl": round_portfolio_decimal_value(
+                realized_pnl_base, kind="money", currency=account.base_currency
+            ),
+            "unrealized_pnl": round_portfolio_decimal_value(
+                unrealized_pnl_base, kind="money", currency=account.base_currency
+            ),
+            "fee_total": round_portfolio_decimal_value(
+                fees_total_base, kind="money", currency=account.base_currency
+            ),
+            "tax_total": round_portfolio_decimal_value(
+                taxes_total_base, kind="money", currency=account.base_currency
+            ),
             "fx_stale": fx_stale,
             "valuation": valuation,
             "performance": performance,
-            "positions": position_rows,
-            "realized_pnl_by_symbol": self._realized_symbol_payload(realized_pnl_by_symbol),
+            "positions": public_position_rows,
+            "realized_pnl_by_symbol": self._realized_symbol_payload(
+                realized_pnl_by_symbol,
+                base_currency=account.base_currency,
+            ),
         }
         account_payload["industry_attribution"] = self._build_snapshot_industry_attribution(
             snapshot=self._wrap_account_snapshot_payload(account_payload),
             as_of_date=as_of_date,
         )
 
-        cache_payload = dict(account_payload)
+        cache_payload = _cache_snapshot_payload_with_exact_values(
+            account_payload,
+            {
+                "total_cash": total_cash_base,
+                "total_market_value": market_value_base,
+                "total_equity": total_equity_base,
+                "realized_pnl": realized_pnl_base,
+                "unrealized_pnl": unrealized_pnl_base,
+                "fee_total": fees_total_base,
+                "tax_total": taxes_total_base,
+            },
+            position_values=cache_position_rows,
+        )
         cache_payload["_cache_meta"] = {
+            "contract_version": SNAPSHOT_CACHE_CONTRACT_VERSION,
             "fx_currencies": sorted(fx_currencies_used),
         }
 
         return {
             "public": account_payload,
             "payload": cache_payload,
-            "positions_cache": position_rows,
+            "positions_cache": cache_position_rows,
             "lots_cache": lot_rows,
-            "total_cash": float(total_cash_base),
-            "total_market_value": float(market_value_base),
-            "total_equity": float(total_equity_base),
-            "realized_pnl": float(realized_pnl_base),
-            "unrealized_pnl": float(unrealized_pnl_base),
-            "fee_total": float(fees_total_base),
-            "tax_total": float(taxes_total_base),
+            "total_cash": _internal_snapshot_decimal(total_cash_base),
+            "total_market_value": _internal_snapshot_decimal(market_value_base),
+            "total_equity": _internal_snapshot_decimal(total_equity_base),
+            "realized_pnl": _internal_snapshot_decimal(realized_pnl_base),
+            "unrealized_pnl": _internal_snapshot_decimal(unrealized_pnl_base),
+            "fee_total": _internal_snapshot_decimal(fees_total_base),
+            "tax_total": _internal_snapshot_decimal(taxes_total_base),
             "fx_stale": fx_stale,
         }
 
@@ -4449,29 +4866,79 @@ class PortfolioService:
         as_of_date: date,
     ) -> Dict[str, Any]:
         snapshot_date = str(sync_state.get("snapshot_date") or "").strip() or as_of_date.isoformat()
-        positions = []
+        public_positions = []
+        cache_positions = []
         for item in list(sync_state.get("positions") or []):
-            positions.append(
+            quantity = _internal_snapshot_decimal(item["quantity"])
+            avg_cost = _internal_snapshot_decimal(item["avg_cost"])
+            total_cost = _internal_snapshot_decimal(quantity * avg_cost)
+            last_price = _internal_snapshot_decimal(item["last_price"])
+            market_value_base = _internal_snapshot_decimal(item["market_value_base"])
+            unrealized_pnl_base = _internal_snapshot_decimal(item["unrealized_pnl_base"])
+            price_metadata = self._build_position_price_metadata(
+                price_source=PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT,
+                price_as_of=snapshot_date,
+                is_price_fallback=False,
+                price_fallback_reason=None,
+                valuation_confidence=PORTFOLIO_PRICE_CONFIDENCE_SYNC,
+            )
+            public_positions.append(
                 {
                     "symbol": item["symbol"],
                     "market": item["market"],
                     "currency": item["currency"],
-                    "quantity": float(item["quantity"]),
-                    "avg_cost": float(item["avg_cost"]),
-                    "total_cost": round(float(item["quantity"]) * float(item["avg_cost"]), 8),
-                    "last_price": float(item["last_price"]),
-                    "market_value_base": float(item["market_value_base"]),
-                    "unrealized_pnl_base": float(item["unrealized_pnl_base"]),
-                    "valuation_currency": item["valuation_currency"],
-                    **self._build_position_price_metadata(
-                        price_source=PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT,
-                        price_as_of=snapshot_date,
-                        is_price_fallback=False,
-                        price_fallback_reason=None,
-                        valuation_confidence=PORTFOLIO_PRICE_CONFIDENCE_SYNC,
+                    "quantity": round_portfolio_decimal_value(
+                        quantity, kind="quantity", market=item["market"]
                     ),
+                    "avg_cost": round_portfolio_decimal_value(
+                        avg_cost, kind="price", market=item["market"]
+                    ),
+                    "total_cost": round_portfolio_decimal_value(
+                        total_cost, kind="money", currency=item["currency"]
+                    ),
+                    "last_price": round_portfolio_decimal_value(
+                        last_price, kind="price", market=item["market"]
+                    ),
+                    "market_value_base": round_portfolio_decimal_value(
+                        market_value_base, kind="money", currency=item["valuation_currency"]
+                    ),
+                    "unrealized_pnl_base": round_portfolio_decimal_value(
+                        unrealized_pnl_base, kind="money", currency=item["valuation_currency"]
+                    ),
+                    "valuation_currency": item["valuation_currency"],
+                    **price_metadata,
                 }
             )
+            cache_positions.append(
+                {
+                    "symbol": item["symbol"],
+                    "market": item["market"],
+                    "currency": item["currency"],
+                    "quantity": quantity,
+                    "avg_cost": avg_cost,
+                    "total_cost": total_cost,
+                    # IBKR exposes average cost but not the independent entry-price cost.
+                    "price_cost": None,
+                    "last_price": last_price,
+                    "market_value_base": market_value_base,
+                    "unrealized_pnl_base": unrealized_pnl_base,
+                    "valuation_currency": item["valuation_currency"],
+                }
+            )
+
+        total_cash = _internal_snapshot_decimal(sync_state.get("total_cash", Decimal("0")) or Decimal("0"))
+        total_market_value = _internal_snapshot_decimal(
+            sync_state.get("total_market_value", Decimal("0")) or Decimal("0")
+        )
+        total_equity = _internal_snapshot_decimal(
+            sync_state.get("total_equity", Decimal("0")) or Decimal("0")
+        )
+        realized_pnl = _internal_snapshot_decimal(
+            sync_state.get("realized_pnl", Decimal("0")) or Decimal("0")
+        )
+        unrealized_pnl = _internal_snapshot_decimal(
+            sync_state.get("unrealized_pnl", Decimal("0")) or Decimal("0")
+        )
         payload = {
             "account_id": account.id,
             "account_name": account.name,
@@ -4481,18 +4948,32 @@ class PortfolioService:
             "base_currency": sync_state.get("base_currency") or account.base_currency,
             "as_of": as_of_date.isoformat(),
             "cost_method": cost_method,
-            "total_cash": round(float(sync_state.get("total_cash", 0.0) or 0.0), 6),
-            "total_market_value": round(float(sync_state.get("total_market_value", 0.0) or 0.0), 6),
-            "total_equity": round(float(sync_state.get("total_equity", 0.0) or 0.0), 6),
-            "realized_pnl": round(float(sync_state.get("realized_pnl", 0.0) or 0.0), 6),
-            "unrealized_pnl": round(float(sync_state.get("unrealized_pnl", 0.0) or 0.0), 6),
-            "fee_total": 0.0,
-            "tax_total": 0.0,
+            "total_cash": round_portfolio_decimal_value(
+                total_cash, kind="money", currency=sync_state.get("base_currency") or account.base_currency
+            ),
+            "total_market_value": round_portfolio_decimal_value(
+                total_market_value, kind="money", currency=sync_state.get("base_currency") or account.base_currency
+            ),
+            "total_equity": round_portfolio_decimal_value(
+                total_equity, kind="money", currency=sync_state.get("base_currency") or account.base_currency
+            ),
+            "realized_pnl": round_portfolio_decimal_value(
+                realized_pnl, kind="money", currency=sync_state.get("base_currency") or account.base_currency
+            ),
+            "unrealized_pnl": round_portfolio_decimal_value(
+                unrealized_pnl, kind="money", currency=sync_state.get("base_currency") or account.base_currency
+            ),
+            "fee_total": round_portfolio_decimal_value(
+                Decimal("0"), kind="money", currency=sync_state.get("base_currency") or account.base_currency
+            ),
+            "tax_total": round_portfolio_decimal_value(
+                Decimal("0"), kind="money", currency=sync_state.get("base_currency") or account.base_currency
+            ),
             "fx_stale": bool(sync_state.get("fx_stale")),
-            "positions": positions,
+            "positions": public_positions,
         }
-        valuation_components = [f"broker_position:{item['symbol']}" for item in positions]
-        if abs(float(payload["total_cash"])) > EPS:
+        valuation_components = [f"broker_position:{item['symbol']}" for item in public_positions]
+        if total_cash.copy_abs() > 0:
             valuation_components.append("broker_cash")
         payload["valuation"] = {
             "state": "available",
@@ -4515,20 +4996,33 @@ class PortfolioService:
         return {
             "public": payload,
             "payload": {
-                **payload,
+                **_cache_snapshot_payload_with_exact_values(
+                    payload,
+                    {
+                        "total_cash": total_cash,
+                        "total_market_value": total_market_value,
+                        "total_equity": total_equity,
+                        "realized_pnl": realized_pnl,
+                        "unrealized_pnl": unrealized_pnl,
+                        "fee_total": Decimal("0"),
+                        "tax_total": Decimal("0"),
+                    },
+                    position_values=cache_positions,
+                ),
                 "_cache_meta": {
+                    "contract_version": SNAPSHOT_CACHE_CONTRACT_VERSION,
                     "fx_currencies": [],
                 },
             },
-            "positions_cache": positions,
+            "positions_cache": cache_positions,
             "lots_cache": [],
-            "total_cash": float(payload["total_cash"]),
-            "total_market_value": float(payload["total_market_value"]),
-            "total_equity": float(payload["total_equity"]),
-            "realized_pnl": float(payload["realized_pnl"]),
-            "unrealized_pnl": float(payload["unrealized_pnl"]),
-            "fee_total": 0.0,
-            "tax_total": 0.0,
+            "total_cash": total_cash,
+            "total_market_value": total_market_value,
+            "total_equity": total_equity,
+            "realized_pnl": realized_pnl,
+            "unrealized_pnl": unrealized_pnl,
+            "fee_total": _internal_snapshot_decimal(Decimal("0")),
+            "tax_total": _internal_snapshot_decimal(Decimal("0")),
             "fx_stale": bool(payload["fx_stale"]),
         }
 
@@ -4569,6 +5063,7 @@ class PortfolioService:
                 snapshot_row=snapshot_row,
                 as_of_date=as_of_date,
                 cost_method=cost_method,
+                exact_positions=positions_cache,
             ),
         )
         if not decoded_payload.is_valid or decoded_payload.state is PersistedJsonState.VALID_EMPTY:
@@ -4608,13 +5103,17 @@ class PortfolioService:
             "payload": payload,
             "positions_cache": positions_cache,
             "lots_cache": lots_cache,
-            "total_cash": float(snapshot_row.total_cash or 0.0),
-            "total_market_value": float(snapshot_row.total_market_value or 0.0),
-            "total_equity": float(snapshot_row.total_equity or 0.0),
-            "realized_pnl": float(snapshot_row.realized_pnl or 0.0),
-            "unrealized_pnl": float(snapshot_row.unrealized_pnl or 0.0),
-            "fee_total": float(snapshot_row.fee_total or 0.0),
-            "tax_total": float(snapshot_row.tax_total or 0.0),
+            "total_cash": _internal_snapshot_decimal(snapshot_row.total_cash or Decimal("0")),
+            "total_market_value": _internal_snapshot_decimal(
+                snapshot_row.total_market_value or Decimal("0")
+            ),
+            "total_equity": _internal_snapshot_decimal(snapshot_row.total_equity or Decimal("0")),
+            "realized_pnl": _internal_snapshot_decimal(snapshot_row.realized_pnl or Decimal("0")),
+            "unrealized_pnl": _internal_snapshot_decimal(
+                snapshot_row.unrealized_pnl or Decimal("0")
+            ),
+            "fee_total": _internal_snapshot_decimal(snapshot_row.fee_total or Decimal("0")),
+            "tax_total": _internal_snapshot_decimal(snapshot_row.tax_total or Decimal("0")),
             "fx_stale": bool(snapshot_row.fx_stale),
         }
 
@@ -4630,18 +5129,20 @@ class PortfolioService:
     ) -> Tuple[
         List[Dict[str, Any]],
         List[Dict[str, Any]],
-        float,
-        float,
-        float,
+        List[Dict[str, Any]],
+        Decimal,
+        Decimal,
+        Decimal,
         bool,
         Dict[str, Any],
         Dict[str, Any],
     ]:
-        position_rows: List[Dict[str, Any]] = []
+        public_position_rows: List[Dict[str, Any]] = []
+        cache_position_rows: List[Dict[str, Any]] = []
         lot_rows: List[Dict[str, Any]] = []
-        market_value_base = 0.0
-        total_cost_base = 0.0
-        unrealized_price_pnl_base = 0.0
+        market_value_base = Decimal("0")
+        total_cost_base = Decimal("0")
+        unrealized_price_pnl_base = Decimal("0")
         fx_stale = False
         valuation_coverage = self._new_conversion_coverage()
         performance_coverage = self._new_conversion_coverage()
@@ -4660,25 +5161,25 @@ class PortfolioService:
             symbol, market, currency = key
 
             if cost_method == "fifo":
-                active_lots = [lot for lot in fifo_lots[key] if lot["remaining_quantity"] > EPS]
-                qty = sum(float(lot["remaining_quantity"]) for lot in active_lots)
-                if qty <= EPS:
+                active_lots = [lot for lot in fifo_lots[key] if lot["remaining_quantity"] > 0]
+                qty = sum((lot["remaining_quantity"] for lot in active_lots), Decimal("0"))
+                if qty <= 0:
                     continue
-                total_cost = sum(float(lot["remaining_quantity"]) * float(lot["unit_cost"]) for lot in active_lots)
+                total_cost = sum((lot["remaining_quantity"] * lot["unit_cost"] for lot in active_lots), Decimal("0"))
                 price_cost = sum(
-                    float(lot["remaining_quantity"]) * float(lot["unit_price_cost"])
-                    for lot in active_lots
+                    (lot["remaining_quantity"] * lot["unit_price_cost"] for lot in active_lots),
+                    Decimal("0"),
                 )
-                avg_cost = total_cost / qty
+                avg_cost = _internal_snapshot_decimal(total_cost / qty)
                 lot_rows.extend(active_lots)
             else:
                 state = avg_state[key]
-                qty = float(state.quantity)
-                total_cost = float(state.total_cost)
-                price_cost = float(state.price_cost)
-                if qty <= EPS:
+                qty = state.quantity
+                total_cost = state.total_cost
+                price_cost = state.price_cost
+                if qty <= 0:
                     continue
-                avg_cost = total_cost / qty
+                avg_cost = _internal_snapshot_decimal(total_cost / qty)
                 lot_rows.append(
                     {
                         "symbol": symbol,
@@ -4687,7 +5188,7 @@ class PortfolioService:
                         "open_date": as_of_date,
                         "remaining_quantity": qty,
                         "unit_cost": avg_cost,
-                        "unit_price_cost": price_cost / qty,
+                        "unit_price_cost": _internal_snapshot_decimal(price_cost / qty),
                         "source_trade_id": None,
                     }
                 )
@@ -4696,7 +5197,18 @@ class PortfolioService:
             raw_last_price = latest_close[0] if latest_close is not None else None
             latest_close_date = latest_close[1] if latest_close is not None else None
             is_price_fallback = raw_last_price is None or raw_last_price <= 0
-            last_price = avg_cost if is_price_fallback else float(raw_last_price)
+            last_price = (
+                avg_cost
+                if is_price_fallback
+                else parse_portfolio_decimal(raw_last_price, kind="price", market=market)
+            )
+            # Cache-backed positions can retain only storage precision; project cold reads
+            # from the same terminal values that a warm read will rehydrate.
+            qty = round_portfolio_decimal_value(qty, kind="storage")
+            avg_cost = round_portfolio_decimal_value(avg_cost, kind="storage")
+            total_cost = round_portfolio_decimal_value(total_cost, kind="storage")
+            price_cost = round_portfolio_decimal_value(price_cost, kind="storage")
+            last_price = round_portfolio_decimal_value(last_price, kind="storage")
             price_metadata = self._build_position_price_metadata(
                 price_source=(
                     PORTFOLIO_PRICE_SOURCE_AVG_COST_FALLBACK
@@ -4726,21 +5238,21 @@ class PortfolioService:
             ):
                 fx_currencies_used.add(self._normalize_currency(currency))
 
-            local_market_value = qty * float(last_price)
-            market_base, stale_market, market_source = self._convert_amount(
+            local_market_value = _internal_snapshot_decimal(qty * last_price)
+            market_base, stale_market, market_source = self._convert_amount_decimal(
                 amount=local_market_value,
                 from_currency=currency,
                 to_currency=account.base_currency,
                 as_of_date=as_of_date,
             )
-            cost_base, stale_cost, cost_source = self._convert_amount(
+            cost_base, stale_cost, cost_source = self._convert_amount_decimal(
                 amount=total_cost,
                 from_currency=currency,
                 to_currency=account.base_currency,
                 as_of_date=as_of_date,
             )
-            unrealized_price_native = local_market_value - price_cost
-            unrealized_price_base, stale_price, price_source = self._convert_amount(
+            unrealized_price_native = _internal_snapshot_decimal(local_market_value - price_cost)
+            unrealized_price_base, stale_price, price_source = self._convert_amount_decimal(
                 amount=unrealized_price_native,
                 from_currency=currency,
                 to_currency=account.base_currency,
@@ -4762,38 +5274,77 @@ class PortfolioService:
                 to_currency=account.base_currency,
                 source=price_source,
             )
-            unrealized_base = market_base - cost_base
-            unrealized_native = local_market_value - total_cost
-            unrealized_pct = (unrealized_native / abs(total_cost)) * 100.0 if abs(total_cost) > EPS else None
+            unrealized_base = _internal_snapshot_decimal(market_base - cost_base)
+            unrealized_native = _internal_snapshot_decimal(local_market_value - total_cost)
+            unrealized_pct = (
+                float((unrealized_native / total_cost.copy_abs()) * Decimal("100"))
+                if total_cost != 0
+                else None
+            )
             fx_stale = fx_stale or stale_market or stale_cost or stale_price
             display_fx_status = self._combine_fx_statuses(
                 self._fx_status(stale_market, market_source),
                 self._fx_status(stale_cost, cost_source),
             )
 
-            position_rows.append(
+            public_position_rows.append(
                 {
                     "symbol": symbol,
                     "market": market,
                     "currency": currency,
-                    "quantity": round(qty, 8),
-                    "avg_cost": round(avg_cost, 8),
-                    "total_cost": round(total_cost, 8),
-                    "last_price": round(float(last_price), 8),
-                    "market_value_base": round(market_base, 8),
-                    "unrealized_pnl_base": round(unrealized_base, 8),
+                    "quantity": round_portfolio_decimal_value(qty, kind="quantity", market=market),
+                    "avg_cost": round_portfolio_decimal_value(avg_cost, kind="price", market=market),
+                    "total_cost": round_portfolio_decimal_value(
+                        total_cost, kind="money", currency=currency
+                    ),
+                    "last_price": round_portfolio_decimal_value(last_price, kind="price", market=market),
+                    "market_value_base": round_portfolio_decimal_value(
+                        market_base, kind="money", currency=account.base_currency
+                    ),
+                    "unrealized_pnl_base": round_portfolio_decimal_value(
+                        unrealized_base, kind="money", currency=account.base_currency
+                    ),
                     "valuation_currency": account.base_currency,
-                    "cost_basis_native": round(total_cost, 8),
-                    "price_cost_basis_native": round(price_cost, 8),
-                    "market_value_native": round(local_market_value, 8),
-                    "price_pnl_native": round(unrealized_price_native, 8),
-                    "unrealized_pnl_native": round(unrealized_native, 8),
+                    "cost_basis_native": round_portfolio_decimal_value(
+                        total_cost, kind="money", currency=currency
+                    ),
+                    "price_cost_basis_native": round_portfolio_decimal_value(
+                        price_cost, kind="money", currency=currency
+                    ),
+                    "market_value_native": round_portfolio_decimal_value(
+                        local_market_value, kind="money", currency=currency
+                    ),
+                    "price_pnl_native": round_portfolio_decimal_value(
+                        unrealized_price_native, kind="money", currency=currency
+                    ),
+                    "unrealized_pnl_native": round_portfolio_decimal_value(
+                        unrealized_native, kind="money", currency=currency
+                    ),
                     "unrealized_pnl_pct": round(unrealized_pct, 6) if unrealized_pct is not None else None,
-                    "display_market_value": round(market_base, 8),
-                    "display_unrealized_pnl": round(unrealized_base, 8),
+                    "display_market_value": round_portfolio_decimal_value(
+                        market_base, kind="money", currency=account.base_currency
+                    ),
+                    "display_unrealized_pnl": round_portfolio_decimal_value(
+                        unrealized_base, kind="money", currency=account.base_currency
+                    ),
                     "display_currency": account.base_currency,
                     "display_fx_status": display_fx_status,
                     **price_metadata,
+                }
+            )
+            cache_position_rows.append(
+                {
+                    "symbol": symbol,
+                    "market": market,
+                    "currency": currency,
+                    "quantity": qty,
+                    "avg_cost": avg_cost,
+                    "total_cost": total_cost,
+                    "price_cost": price_cost,
+                    "last_price": last_price,
+                    "market_value_base": market_base,
+                    "unrealized_pnl_base": unrealized_base,
+                    "valuation_currency": account.base_currency,
                 }
             )
 
@@ -4802,7 +5353,8 @@ class PortfolioService:
             unrealized_price_pnl_base += unrealized_price_base
 
         return (
-            position_rows,
+            public_position_rows,
+            cache_position_rows,
             lot_rows,
             market_value_base,
             total_cost_base,
@@ -4850,14 +5402,14 @@ class PortfolioService:
     @staticmethod
     def _consume_fifo_lots(
         lots: List[Dict[str, Any]],
-        quantity: float,
+        quantity: Decimal,
         symbol: str,
         trade_date: Optional[date] = None,
-    ) -> Tuple[float, float]:
+    ) -> Tuple[Decimal, Decimal]:
         remaining = quantity
-        cost_basis = 0.0
-        price_cost_basis = 0.0
-        while remaining > EPS:
+        cost_basis = Decimal("0")
+        price_cost_basis = Decimal("0")
+        while remaining > 0:
             if not lots:
                 raise PortfolioOversellError(
                     symbol=symbol,
@@ -4866,35 +5418,35 @@ class PortfolioService:
                     available_quantity=quantity - remaining,
                 )
             head = lots[0]
-            take = min(remaining, float(head["remaining_quantity"]))
-            cost_basis += take * float(head["unit_cost"])
-            price_cost_basis += take * float(head["unit_price_cost"])
-            head["remaining_quantity"] = float(head["remaining_quantity"]) - take
+            take = min(remaining, head["remaining_quantity"])
+            cost_basis += take * head["unit_cost"]
+            price_cost_basis += take * head["unit_price_cost"]
+            head["remaining_quantity"] = head["remaining_quantity"] - take
             remaining -= take
-            if head["remaining_quantity"] <= EPS:
+            if head["remaining_quantity"] <= 0:
                 lots.pop(0)
         return cost_basis, price_cost_basis
 
     @staticmethod
     def _consume_avg_position(
         state: _AvgState,
-        quantity: float,
+        quantity: Decimal,
         symbol: str,
         trade_date: Optional[date] = None,
-    ) -> Tuple[float, float]:
-        if state.quantity + EPS < quantity:
+    ) -> Tuple[Decimal, Decimal]:
+        if state.quantity < quantity:
             raise PortfolioOversellError(
                 symbol=symbol,
                 trade_date=trade_date,
                 requested_quantity=quantity,
                 available_quantity=state.quantity,
             )
-        if state.quantity <= EPS:
+        if state.quantity <= 0:
             raise PortfolioOversellError(
                 symbol=symbol,
                 trade_date=trade_date,
                 requested_quantity=quantity,
-                available_quantity=0.0,
+                available_quantity=Decimal("0"),
             )
         avg_cost = state.total_cost / state.quantity
         avg_price_cost = state.price_cost / state.quantity
@@ -4903,10 +5455,10 @@ class PortfolioService:
         state.quantity -= quantity
         state.total_cost -= cost_basis
         state.price_cost -= price_cost_basis
-        if state.quantity <= EPS:
-            state.quantity = 0.0
-            state.total_cost = 0.0
-            state.price_cost = 0.0
+        if state.quantity <= 0:
+            state.quantity = Decimal("0")
+            state.total_cost = Decimal("0")
+            state.price_cost = Decimal("0")
         return cost_basis, price_cost_basis
 
     @staticmethod
@@ -4916,10 +5468,10 @@ class PortfolioService:
         cost_method: str,
         fifo_lots: Dict[Tuple[str, str, str], List[Dict[str, Any]]],
         avg_state: Dict[Tuple[str, str, str], _AvgState],
-    ) -> float:
+    ) -> Decimal:
         if cost_method == "fifo":
-            return sum(float(lot["remaining_quantity"]) for lot in fifo_lots.get(key, []))
-        return float(avg_state.get(key, _AvgState()).quantity)
+            return sum((lot["remaining_quantity"] for lot in fifo_lots.get(key, [])), Decimal("0"))
+        return avg_state.get(key, _AvgState()).quantity
 
     @staticmethod
     def _new_conversion_coverage() -> Dict[str, Any]:
@@ -4936,22 +5488,23 @@ class PortfolioService:
         coverage: Dict[str, Any],
         *,
         component: str,
-        amount: float,
+        amount: Any,
         from_currency: str,
         to_currency: str,
         source: str,
     ) -> None:
-        if abs(float(amount)) <= EPS:
+        from_norm = cls._normalize_currency(from_currency)
+        amount_decimal = _internal_snapshot_decimal(amount)
+        if amount_decimal == 0:
             return
         component_key = str(component)
         if source == "missing_rate":
             coverage["unavailable_components"].add(component_key)
-            from_norm = cls._normalize_currency(from_currency)
             to_norm = cls._normalize_currency(to_currency)
             coverage["missing_fx_pairs"].add(f"{from_norm}/{to_norm}")
             coverage["unavailable_native_values"][component_key] = {
                 "component": component_key,
-                "amount": round(float(amount), 8),
+                "amount": format(amount_decimal, "f"),
                 "currency": from_norm,
             }
             return
@@ -5014,36 +5567,37 @@ class PortfolioService:
     @staticmethod
     def _modified_dietz_denominator(
         *,
-        external_cash_flows: List[Tuple[date, float]],
+        external_cash_flows: List[Tuple[date, Decimal]],
         as_of_date: date,
-    ) -> Optional[float]:
+    ) -> Optional[Decimal]:
         if not external_cash_flows:
             return None
         first_date = min(flow_date for flow_date, _ in external_cash_flows)
         span_days = (as_of_date - first_date).days
-        denominator = 0.0
+        denominator = Decimal("0")
         for flow_date, signed_amount in external_cash_flows:
             if span_days <= 0:
-                weight = 1.0
+                weight = Decimal("1")
             else:
-                weight = max(0.0, min(1.0, (as_of_date - flow_date).days / span_days))
-            denominator += float(signed_amount) * weight
-        return denominator if denominator > EPS else None
+                weight = Decimal((as_of_date - flow_date).days) / Decimal(span_days)
+                weight = max(Decimal("0"), min(Decimal("1"), weight))
+            denominator += signed_amount * weight
+        return denominator if denominator > Decimal(str(EPS)) else None
 
     def _build_account_performance(
         self,
         *,
         as_of_date: date,
         currency: str,
-        total_equity: float,
-        realized_price_pnl: float,
-        unrealized_price_pnl: float,
-        income_pnl: float,
-        fees: float,
-        taxes: float,
-        deposits: float,
-        withdrawals: float,
-        external_cash_flows: List[Tuple[date, float]],
+        total_equity: Decimal,
+        realized_price_pnl: Decimal,
+        unrealized_price_pnl: Decimal,
+        income_pnl: Decimal,
+        fees: Decimal,
+        taxes: Decimal,
+        deposits: Decimal,
+        withdrawals: Decimal,
+        external_cash_flows: List[Tuple[date, Decimal]],
         valuation: Dict[str, Any],
         conversion_coverage: Dict[str, Any],
     ) -> Dict[str, Any]:
@@ -5074,7 +5628,7 @@ class PortfolioService:
             )
 
         return_status = "available" if denominator is not None and net_pnl is not None else "unavailable"
-        return_percent = (net_pnl / denominator) * 100.0 if return_status == "available" else None
+        return_percent = (net_pnl / denominator) * Decimal("100") if return_status == "available" else None
         if calculation_state != "available":
             return_reason = "partial_or_unavailable_valuation"
         elif denominator is None:
@@ -5082,8 +5636,12 @@ class PortfolioService:
         else:
             return_reason = None
 
-        def rounded(value: Optional[float]) -> Optional[float]:
-            return round(float(value), 6) if value is not None else None
+        def rounded_money(value: Optional[Decimal]) -> Optional[Decimal]:
+            return (
+                round_portfolio_decimal_value(value, kind="money", currency=currency)
+                if value is not None
+                else None
+            )
 
         return {
             "contract_version": PORTFOLIO_PERFORMANCE_CONTRACT_VERSION,
@@ -5091,28 +5649,28 @@ class PortfolioService:
             "currency": self._normalize_currency(currency),
             "price_basis": "snapshot_valuation_price_not_executable",
             "cash_flows": {
-                "deposits": rounded(deposits) if calculation_state == "available" else None,
-                "withdrawals": rounded(withdrawals) if calculation_state == "available" else None,
-                "net": rounded(net_cash_flow) if calculation_state == "available" else None,
+                "deposits": rounded_money(deposits) if calculation_state == "available" else None,
+                "withdrawals": rounded_money(withdrawals) if calculation_state == "available" else None,
+                "net": rounded_money(net_cash_flow) if calculation_state == "available" else None,
                 "performance_treatment": "excluded_from_investment_pnl",
             },
             "pnl": {
-                "price": rounded(price_pnl),
-                "income": rounded(income_pnl) if calculation_state == "available" else None,
-                "fx": rounded(fx_pnl),
-                "fees": rounded(fees) if calculation_state == "available" else None,
-                "taxes": rounded(taxes) if calculation_state == "available" else None,
-                "gross": rounded(gross_pnl),
-                "net": rounded(net_pnl),
+                "price": rounded_money(price_pnl),
+                "income": rounded_money(income_pnl) if calculation_state == "available" else None,
+                "fx": rounded_money(fx_pnl),
+                "fees": rounded_money(fees) if calculation_state == "available" else None,
+                "taxes": rounded_money(taxes) if calculation_state == "available" else None,
+                "gross": rounded_money(gross_pnl),
+                "net": rounded_money(net_pnl),
             },
             "return": {
                 "status": return_status,
                 "method": "modified_dietz",
-                "numerator": rounded(net_pnl),
-                "denominator": rounded(denominator),
+                "numerator": rounded_money(net_pnl),
+                "denominator": rounded_money(denominator),
                 "denominator_semantics": "time_weighted_external_cash_flows",
                 "cash_flow_timing": "end_of_day",
-                "percent": rounded(return_percent),
+                "percent": round(float(return_percent), 6) if return_percent is not None else None,
                 "reason": return_reason,
             },
             "valuation": dict(valuation),
@@ -5169,20 +5727,23 @@ class PortfolioService:
             },
         }
 
-    def _convert_amount(
+    def _convert_amount_decimal(
         self,
         *,
-        amount: float,
+        amount: Any,
         from_currency: str,
         to_currency: str,
         as_of_date: date,
-    ) -> Tuple[float, bool, str]:
+    ) -> Tuple[Decimal, bool, str]:
+        if isinstance(amount, float):
+            raise ValueError("portfolio conversion amounts must not be binary floats")
+        amount_decimal = _internal_snapshot_decimal(amount)
         from_norm = self._normalize_currency(from_currency)
         to_norm = self._normalize_currency(to_currency)
-        if abs(amount) <= EPS:
-            return 0.0, False, "zero"
+        if amount_decimal == 0:
+            return _internal_snapshot_decimal(Decimal("0")), False, "zero"
         if from_norm == to_norm:
-            return float(amount), False, "identity"
+            return amount_decimal, False, "identity"
 
         direct = self.repo.get_latest_fx_rate(
             from_currency=from_norm,
@@ -5190,7 +5751,8 @@ class PortfolioService:
             as_of=as_of_date,
         )
         if direct is not None and direct.rate > 0:
-            return float(amount) * float(direct.rate), bool(direct.is_stale), "direct_rate"
+            rate = _internal_snapshot_decimal(direct.rate)
+            return _internal_snapshot_decimal(amount_decimal * rate), bool(direct.is_stale), "direct_rate"
 
         inverse = self.repo.get_latest_fx_rate(
             from_currency=to_norm,
@@ -5198,20 +5760,53 @@ class PortfolioService:
             as_of=as_of_date,
         )
         if inverse is not None and inverse.rate > 0:
-            return float(amount) / float(inverse.rate), bool(inverse.is_stale), "inverse_rate"
+            rate = _internal_snapshot_decimal(inverse.rate)
+            return _internal_snapshot_decimal(amount_decimal / rate), bool(inverse.is_stale), "inverse_rate"
 
-        return 0.0, True, "missing_rate"
+        return _internal_snapshot_decimal(Decimal("0")), True, "missing_rate"
+
+    def _convert_amount(
+        self,
+        *,
+        amount: Any,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Tuple[Decimal, bool, str]:
+        converted, stale, source = self._convert_amount_decimal(
+            amount=amount,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            as_of_date=as_of_date,
+        )
+        return converted, stale, source
 
     def convert_amount(
         self,
         *,
-        amount: float,
+        amount: Any,
         from_currency: str,
         to_currency: str,
         as_of_date: date,
-    ) -> Tuple[float, bool, str]:
-        """Public conversion entry for cross-service consumers."""
+    ) -> Tuple[Decimal, bool, str]:
+        """Public exact conversion entry for cross-service consumers."""
         return self._convert_amount(
+            amount=amount,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            as_of_date=as_of_date,
+        )
+
+    def convert_amount_exact(
+        self,
+        *,
+        amount: Any,
+        from_currency: str,
+        to_currency: str,
+        as_of_date: date,
+    ) -> Tuple[Decimal, bool, str]:
+        """Exact cross-service conversion for Portfolio monetary authorities."""
+        return self._convert_amount_decimal(
             amount=amount,
             from_currency=from_currency,
             to_currency=to_currency,
@@ -5282,12 +5877,22 @@ class PortfolioService:
                     to_currency=base_currency,
                     as_of_date=as_of_date,
                 )
-                if rate is not None and rate > 0:
+                fresh_rate = (
+                    parse_portfolio_decimal(
+                        rate,
+                        kind="fx_rate",
+                        from_currency=from_currency,
+                        to_currency=base_currency,
+                    )
+                    if rate is not None
+                    else None
+                )
+                if fresh_rate is not None and fresh_rate > 0:
                     self.repo.save_fx_rate(
                         from_currency=from_currency,
                         to_currency=base_currency,
                         rate_date=as_of_date,
-                        rate=rate,
+                        rate=fresh_rate,
                         source="frankfurter",
                         is_stale=False,
                     )
@@ -5307,12 +5912,22 @@ class PortfolioService:
                 to_currency=base_currency,
                 as_of=as_of_date,
             )
-            if fallback is not None and float(fallback.rate or 0.0) > 0:
+            fallback_rate = (
+                parse_portfolio_decimal(
+                    fallback.rate,
+                    kind="fx_rate",
+                    from_currency=from_currency,
+                    to_currency=base_currency,
+                )
+                if fallback is not None
+                else None
+            )
+            if fallback_rate is not None and fallback_rate > 0:
                 self.repo.save_fx_rate(
                     from_currency=from_currency,
                     to_currency=base_currency,
                     rate_date=as_of_date,
-                    rate=float(fallback.rate),
+                    rate=fallback_rate,
                     source=(fallback.source or "cache_fallback"),
                     is_stale=True,
                 )
@@ -5327,14 +5942,19 @@ class PortfolioService:
         from_currency: str,
         to_currency: str,
         as_of_date: date,
-    ) -> Optional[float]:
+    ) -> Optional[Decimal]:
         """Fetch latest public FX rate.
 
         The method name is kept for older tests and patches; the provider is now
         Frankfurter rather than yfinance.
         """
         result = default_fx_rate_service.fetch_rate(from_currency, to_currency, force_refresh=True)
-        value = float(result.get("rate") or 0.0)
+        value = parse_portfolio_decimal(
+            result.get("rate"),
+            kind="fx_rate",
+            from_currency=from_currency,
+            to_currency=to_currency,
+        )
         return value if value > 0 else None
 
     def _require_active_account(self, account_id: int) -> Any:
@@ -5454,11 +6074,31 @@ class PortfolioService:
             "snapshot_date": row.snapshot_date.isoformat() if row.snapshot_date else None,
             "synced_at": row.synced_at.isoformat() if row.synced_at else None,
             "base_currency": row.base_currency,
-            "total_cash": float(row.total_cash or 0.0),
-            "total_market_value": float(row.total_market_value or 0.0),
-            "total_equity": float(row.total_equity or 0.0),
-            "realized_pnl": float(row.realized_pnl or 0.0),
-            "unrealized_pnl": float(row.unrealized_pnl or 0.0),
+            "total_cash": serialize_portfolio_decimal_value(
+                row.total_cash if row.total_cash is not None else Decimal("0"),
+                kind="money",
+                currency=row.base_currency,
+            ),
+            "total_market_value": serialize_portfolio_decimal_value(
+                row.total_market_value if row.total_market_value is not None else Decimal("0"),
+                kind="money",
+                currency=row.base_currency,
+            ),
+            "total_equity": serialize_portfolio_decimal_value(
+                row.total_equity if row.total_equity is not None else Decimal("0"),
+                kind="money",
+                currency=row.base_currency,
+            ),
+            "realized_pnl": serialize_portfolio_decimal_value(
+                row.realized_pnl if row.realized_pnl is not None else Decimal("0"),
+                kind="money",
+                currency=row.base_currency,
+            ),
+            "unrealized_pnl": serialize_portfolio_decimal_value(
+                row.unrealized_pnl if row.unrealized_pnl is not None else Decimal("0"),
+                kind="money",
+                currency=row.base_currency,
+            ),
             "fx_stale": bool(row.fx_stale),
             "payload": payload,
         }
@@ -5477,11 +6117,31 @@ class PortfolioService:
                 "symbol": item.symbol,
                 "market": item.market,
                 "currency": item.currency,
-                "quantity": float(item.quantity or 0.0),
-                "avg_cost": float(item.avg_cost or 0.0),
-                "last_price": float(item.last_price or 0.0),
-                "market_value_base": float(item.market_value_base or 0.0),
-                "unrealized_pnl_base": float(item.unrealized_pnl_base or 0.0),
+                "quantity": serialize_portfolio_decimal_value(
+                    item.quantity if item.quantity is not None else Decimal("0"),
+                    kind="quantity",
+                    market=item.market,
+                ),
+                "avg_cost": serialize_portfolio_decimal_value(
+                    item.avg_cost if item.avg_cost is not None else Decimal("0"),
+                    kind="price",
+                    market=item.market,
+                ),
+                "last_price": serialize_portfolio_decimal_value(
+                    item.last_price if item.last_price is not None else Decimal("0"),
+                    kind="price",
+                    market=item.market,
+                ),
+                "market_value_base": serialize_portfolio_decimal_value(
+                    item.market_value_base if item.market_value_base is not None else Decimal("0"),
+                    kind="money",
+                    currency=item.valuation_currency,
+                ),
+                "unrealized_pnl_base": serialize_portfolio_decimal_value(
+                    item.unrealized_pnl_base if item.unrealized_pnl_base is not None else Decimal("0"),
+                    kind="money",
+                    currency=item.valuation_currency,
+                ),
                 "valuation_currency": item.valuation_currency,
             }
             for item in positions
@@ -5489,8 +6149,16 @@ class PortfolioService:
         data["cash_balances"] = [
             {
                 "currency": item.currency,
-                "amount": float(item.amount or 0.0),
-                "amount_base": float(item.amount_base or 0.0),
+                "amount": serialize_portfolio_decimal_value(
+                    item.amount if item.amount is not None else Decimal("0"),
+                    kind="money",
+                    currency=item.currency,
+                ),
+                "amount_base": serialize_portfolio_decimal_value(
+                    item.amount_base if item.amount_base is not None else Decimal("0"),
+                    kind="money",
+                    currency=row.base_currency,
+                ),
             }
             for item in cash_balances
         ]
@@ -5498,16 +6166,22 @@ class PortfolioService:
 
     @staticmethod
     def _cached_position_row_to_dict(row: Any) -> Dict[str, Any]:
+        price_cost = getattr(row, "price_cost", None)
         return {
             "symbol": row.symbol,
             "market": row.market,
             "currency": row.currency,
-            "quantity": round(float(row.quantity or 0.0), 8),
-            "avg_cost": round(float(row.avg_cost or 0.0), 8),
-            "total_cost": round(float(row.total_cost or 0.0), 8),
-            "last_price": round(float(row.last_price or 0.0), 8),
-            "market_value_base": round(float(row.market_value_base or 0.0), 8),
-            "unrealized_pnl_base": round(float(row.unrealized_pnl_base or 0.0), 8),
+            "quantity": _internal_snapshot_decimal(row.quantity or Decimal("0")),
+            "avg_cost": _internal_snapshot_decimal(row.avg_cost or Decimal("0")),
+            "total_cost": _internal_snapshot_decimal(row.total_cost or Decimal("0")),
+            "price_cost": _internal_snapshot_decimal(price_cost) if price_cost is not None else None,
+            "last_price": _internal_snapshot_decimal(row.last_price or Decimal("0")),
+            "market_value_base": _internal_snapshot_decimal(
+                row.market_value_base or Decimal("0")
+            ),
+            "unrealized_pnl_base": _internal_snapshot_decimal(
+                row.unrealized_pnl_base or Decimal("0")
+            ),
             "valuation_currency": row.valuation_currency,
         }
 
@@ -5518,8 +6192,10 @@ class PortfolioService:
             "market": row.market,
             "currency": row.currency,
             "open_date": row.open_date,
-            "remaining_quantity": float(row.remaining_quantity or 0.0),
-            "unit_cost": float(row.unit_cost or 0.0),
+            "remaining_quantity": _internal_snapshot_decimal(
+                row.remaining_quantity or Decimal("0")
+            ),
+            "unit_cost": _internal_snapshot_decimal(row.unit_cost or Decimal("0")),
             "source_trade_id": row.source_trade_id,
         }
 
@@ -5538,38 +6214,96 @@ class PortfolioService:
         snapshot_row: Any,
         as_of_date: date,
         cost_method: str,
+        exact_positions: List[Dict[str, Any]],
     ) -> bool:
-        required_numeric_fields = (
-            "total_cash",
-            "total_market_value",
-            "total_equity",
-            "realized_pnl",
-            "unrealized_pnl",
-            "fee_total",
-            "tax_total",
-        )
-        if any(field not in payload or isinstance(payload.get(field), bool) for field in required_numeric_fields):
+        is_metadata_less_legacy = "_cache_meta" not in payload
+        if not is_metadata_less_legacy:
+            cache_meta = payload["_cache_meta"]
+            if not isinstance(cache_meta, dict) or set(cache_meta) != {
+                "contract_version",
+                "fx_currencies",
+            }:
+                return False
+            if (
+                type(cache_meta.get("contract_version")) is not int
+                or cache_meta["contract_version"] != SNAPSHOT_CACHE_CONTRACT_VERSION
+            ):
+                return False
+            fx_currencies = cache_meta.get("fx_currencies")
+            if not isinstance(fx_currencies, list):
+                return False
+            try:
+                canonical_fx_currencies = [
+                    _cache_snapshot_money_currency(
+                        value,
+                        field_name="cache FX currency",
+                    )
+                    for value in fx_currencies
+                ]
+            except ValueError:
+                return False
+            if fx_currencies != sorted(set(canonical_fx_currencies)):
+                return False
+        if any(
+            field not in payload or isinstance(payload.get(field), bool)
+            for field in _CACHE_SNAPSHOT_EXACT_SCALAR_FIELDS
+        ):
             return False
         try:
-            for field in required_numeric_fields:
-                float(payload[field])
-        except (TypeError, ValueError):
-            return False
-        if any(
-            abs(float(payload[field]) - float(getattr(snapshot_row, field) or 0.0)) > 1e-6
-            for field in required_numeric_fields
-        ):
+            trusted_base_currency = _cache_snapshot_money_currency(
+                snapshot_row.base_currency or account.base_currency,
+                field_name="snapshot base currency",
+            )
+            for field in _CACHE_SNAPSHOT_EXACT_SCALAR_FIELDS:
+                payload_value = payload[field]
+                if not isinstance(payload_value, str):
+                    return False
+                persisted_value = getattr(snapshot_row, field)
+                persisted_value = Decimal("0") if persisted_value is None else persisted_value
+                if is_metadata_less_legacy:
+                    if payload_value != serialize_portfolio_decimal_value(
+                        payload_value,
+                        kind="money",
+                        currency=trusted_base_currency,
+                    ):
+                        return False
+                    if payload_value != serialize_portfolio_decimal_value(
+                        persisted_value,
+                        kind="money",
+                        currency=trusted_base_currency,
+                    ):
+                        return False
+                else:
+                    if payload_value != serialize_portfolio_decimal(payload_value):
+                        return False
+                    if payload_value != serialize_portfolio_decimal(persisted_value):
+                        return False
+        except ValueError:
             return False
         if not isinstance(payload.get("fx_stale"), bool) or payload["fx_stale"] is not bool(snapshot_row.fx_stale):
             return False
-        positions = payload.get("positions")
-        if not isinstance(positions, list) or not all(isinstance(item, dict) for item in positions):
+        payload_positions = payload.get("positions")
+        if not isinstance(payload_positions, list) or not all(
+            isinstance(item, dict) for item in payload_positions
+        ):
+            return False
+        if not PortfolioService._cached_snapshot_positions_are_compatible(
+            payload_positions=payload_positions,
+            exact_positions=exact_positions,
+        ):
             return False
         performance = payload.get("performance")
         if (
             not isinstance(performance, dict)
             or performance.get("contract_version") != PORTFOLIO_PERFORMANCE_CONTRACT_VERSION
         ):
+            return False
+        try:
+            _cache_snapshot_payload_with_rehydrated_nested_money_values(
+                payload,
+                base_currency=snapshot_row.base_currency or account.base_currency,
+            )
+        except (TypeError, ValueError):
             return False
         valuation = payload.get("valuation")
         if not isinstance(valuation, dict) or valuation.get("state") not in {"available", "partial", "unavailable"}:
@@ -5581,6 +6315,69 @@ class PortfolioService:
             and str(payload.get("base_currency") or "")
             == str(snapshot_row.base_currency or account.base_currency)
         )
+
+    @staticmethod
+    def _cached_snapshot_positions_are_compatible(
+        *,
+        payload_positions: List[Dict[str, Any]],
+        exact_positions: List[Dict[str, Any]],
+    ) -> bool:
+        if len(payload_positions) != len(exact_positions):
+            return False
+        try:
+            exact_by_key = {_cache_snapshot_position_key(item): item for item in exact_positions}
+            if len(exact_by_key) != len(exact_positions):
+                return False
+            seen_keys: Set[Tuple[str, ...]] = set()
+            for payload_position in payload_positions:
+                key = _cache_snapshot_position_key(payload_position)
+                if key in seen_keys:
+                    return False
+                seen_keys.add(key)
+                exact_position = exact_by_key.get(key)
+                if exact_position is None:
+                    return False
+                for field in _CACHE_SNAPSHOT_EXACT_POSITION_FIELDS:
+                    payload_value = payload_position.get(field)
+                    exact_value = exact_position.get(field)
+                    if exact_value is None:
+                        return False
+                    if not isinstance(payload_value, str):
+                        return False
+                    if payload_value != serialize_portfolio_decimal(payload_value):
+                        return False
+                    if payload_value != serialize_portfolio_decimal(exact_value):
+                        return False
+                derived_fields_present = {
+                    field
+                    for field in _CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS
+                    if field in payload_position
+                }
+                if derived_fields_present:
+                    if len(derived_fields_present) != len(_CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS):
+                        return False
+                    display_currency = _cache_snapshot_money_currency(
+                        payload_position.get("display_currency"),
+                        field_name="position display currency",
+                    )
+                    valuation_currency = _cache_snapshot_money_currency(
+                        exact_position.get("valuation_currency"),
+                        field_name="position valuation currency",
+                    )
+                    if display_currency != valuation_currency:
+                        return False
+                    derived_values = _cache_snapshot_public_position_values(exact_position)
+                    for field in _CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS:
+                        payload_value = payload_position.get(field)
+                        if not isinstance(payload_value, str):
+                            return False
+                        if payload_value != serialize_portfolio_decimal(payload_value):
+                            return False
+                        if payload_value != serialize_portfolio_decimal(derived_values[field]):
+                            return False
+        except ValueError:
+            return False
+        return True
 
     def _cached_snapshot_public_payload(
         self,
@@ -5597,10 +6394,54 @@ class PortfolioService:
             resolved_payload = self._parse_snapshot_payload(getattr(snapshot_row, "payload", None))
         if resolved_payload is None:
             raise ValueError("cached portfolio snapshot payload is unavailable")
-        public_payload = dict(resolved_payload)
+        base_currency = snapshot_row.base_currency or account.base_currency
+        public_payload = _cache_snapshot_payload_with_rehydrated_nested_money_values(
+            resolved_payload,
+            base_currency=base_currency,
+        )
         public_payload.pop("_cache_meta", None)
         payload_positions = list(public_payload.get("positions") or [])
-        resolved_positions = payload_positions if payload_positions else positions
+        exact_positions_by_key = {_cache_snapshot_position_key(item): item for item in positions}
+        resolved_positions: List[Dict[str, Any]] = []
+        for payload_position in payload_positions:
+            exact_position = exact_positions_by_key[_cache_snapshot_position_key(payload_position)]
+            public_position = dict(payload_position)
+            market = public_position["market"]
+            currency = public_position["currency"]
+            valuation_currency = public_position["valuation_currency"]
+            public_position["quantity"] = round_portfolio_decimal_value(
+                exact_position["quantity"], kind="quantity", market=market
+            )
+            for field in ("avg_cost", "last_price"):
+                public_position[field] = round_portfolio_decimal_value(
+                    exact_position[field], kind="price", market=market
+                )
+            public_position["total_cost"] = round_portfolio_decimal_value(
+                exact_position["total_cost"], kind="money", currency=currency
+            )
+            for field in ("market_value_base", "unrealized_pnl_base"):
+                public_position[field] = round_portfolio_decimal_value(
+                    exact_position[field], kind="money", currency=valuation_currency
+                )
+            if all(
+                field in payload_position for field in _CACHE_SNAPSHOT_DERIVED_POSITION_FIELDS
+            ):
+                derived_values = _cache_snapshot_public_position_values(exact_position)
+                for field in (
+                    "cost_basis_native",
+                    "price_cost_basis_native",
+                    "market_value_native",
+                    "price_pnl_native",
+                    "unrealized_pnl_native",
+                ):
+                    public_position[field] = round_portfolio_decimal_value(
+                        derived_values[field], kind="money", currency=currency
+                    )
+                for field in ("display_market_value", "display_unrealized_pnl"):
+                    public_position[field] = round_portfolio_decimal_value(
+                        derived_values[field], kind="money", currency=public_position["display_currency"]
+                    )
+            resolved_positions.append(public_position)
         public_payload.update(
             {
                 "account_id": int(account.id),
@@ -5608,16 +6449,30 @@ class PortfolioService:
                 "owner_id": account.owner_id,
                 "broker": account.broker,
                 "market": account.market,
-                "base_currency": snapshot_row.base_currency or account.base_currency,
+                "base_currency": base_currency,
                 "as_of": as_of_date.isoformat(),
                 "cost_method": cost_method,
-                "total_cash": round(float(snapshot_row.total_cash or 0.0), 6),
-                "total_market_value": round(float(snapshot_row.total_market_value or 0.0), 6),
-                "total_equity": round(float(snapshot_row.total_equity or 0.0), 6),
-                "realized_pnl": round(float(snapshot_row.realized_pnl or 0.0), 6),
-                "unrealized_pnl": round(float(snapshot_row.unrealized_pnl or 0.0), 6),
-                "fee_total": round(float(snapshot_row.fee_total or 0.0), 6),
-                "tax_total": round(float(snapshot_row.tax_total or 0.0), 6),
+                "total_cash": round_portfolio_decimal_value(
+                    snapshot_row.total_cash or Decimal("0"), kind="money", currency=base_currency
+                ),
+                "total_market_value": round_portfolio_decimal_value(
+                    snapshot_row.total_market_value or Decimal("0"), kind="money", currency=base_currency
+                ),
+                "total_equity": round_portfolio_decimal_value(
+                    snapshot_row.total_equity or Decimal("0"), kind="money", currency=base_currency
+                ),
+                "realized_pnl": round_portfolio_decimal_value(
+                    snapshot_row.realized_pnl or Decimal("0"), kind="money", currency=base_currency
+                ),
+                "unrealized_pnl": round_portfolio_decimal_value(
+                    snapshot_row.unrealized_pnl or Decimal("0"), kind="money", currency=base_currency
+                ),
+                "fee_total": round_portfolio_decimal_value(
+                    snapshot_row.fee_total or Decimal("0"), kind="money", currency=base_currency
+                ),
+                "tax_total": round_portfolio_decimal_value(
+                    snapshot_row.tax_total or Decimal("0"), kind="money", currency=base_currency
+                ),
                 "fx_stale": bool(snapshot_row.fx_stale),
                 "positions": resolved_positions,
             }
@@ -5655,16 +6510,16 @@ class PortfolioService:
     ) -> Dict[str, Any]:
         coverage = self._new_conversion_coverage()
         totals = {
-            "deposits": 0.0,
-            "withdrawals": 0.0,
-            "price": 0.0,
-            "income": 0.0,
-            "fx": 0.0,
-            "fees": 0.0,
-            "taxes": 0.0,
-            "gross": 0.0,
-            "net": 0.0,
-            "denominator": 0.0,
+            "deposits": Decimal("0"),
+            "withdrawals": Decimal("0"),
+            "price": Decimal("0"),
+            "income": Decimal("0"),
+            "fx": Decimal("0"),
+            "fees": Decimal("0"),
+            "taxes": Decimal("0"),
+            "gross": Decimal("0"),
+            "net": Decimal("0"),
+            "denominator": Decimal("0"),
         }
         denominator_count = 0
         unavailable_accounts = 0
@@ -5692,8 +6547,8 @@ class PortfolioService:
                 "net": dict(performance.get("pnl") or {}).get("net"),
             }
             for component, raw_value in values.items():
-                amount = float(raw_value or 0.0)
-                converted, _stale, source = self._convert_amount(
+                amount = _internal_snapshot_decimal(raw_value or Decimal("0"))
+                converted, _stale, source = self._convert_amount_decimal(
                     amount=amount,
                     from_currency=account_currency,
                     to_currency=display_currency,
@@ -5711,8 +6566,9 @@ class PortfolioService:
 
             denominator = dict(performance.get("return") or {}).get("denominator")
             if denominator is not None:
-                converted, _stale, source = self._convert_amount(
-                    amount=float(denominator),
+                denominator_amount = _internal_snapshot_decimal(denominator)
+                converted, _stale, source = self._convert_amount_decimal(
+                    amount=denominator_amount,
                     from_currency=account_currency,
                     to_currency=display_currency,
                     as_of_date=as_of_date,
@@ -5720,7 +6576,7 @@ class PortfolioService:
                 self._record_conversion_coverage(
                     coverage,
                     component=f"account:{account_id}:return_denominator",
-                    amount=float(denominator),
+                    amount=denominator_amount,
                     from_currency=account_currency,
                     to_currency=display_currency,
                     source=source,
@@ -5741,9 +6597,13 @@ class PortfolioService:
         else:
             calculation_state = "available"
 
-        denominator = totals["denominator"] if denominator_count > 0 and totals["denominator"] > EPS else None
+        denominator = (
+            totals["denominator"]
+            if denominator_count > 0 and totals["denominator"] > Decimal(str(EPS))
+            else None
+        )
         return_available = calculation_state == "available" and denominator is not None
-        return_percent = (totals["net"] / denominator) * 100.0 if return_available else None
+        return_percent = (totals["net"] / denominator) * Decimal("100") if return_available else None
         if calculation_state != "available":
             return_reason = "partial_or_unavailable_valuation"
         elif denominator is None:
@@ -5751,8 +6611,12 @@ class PortfolioService:
         else:
             return_reason = None
 
-        def rounded(value: Optional[float]) -> Optional[float]:
-            return round(float(value), 6) if value is not None else None
+        def rounded_money(value: Optional[Decimal]) -> Optional[Decimal]:
+            return (
+                round_portfolio_decimal_value(value, kind="money", currency=display_currency)
+                if value is not None
+                else None
+            )
 
         values_available = calculation_state == "available"
         return {
@@ -5761,23 +6625,23 @@ class PortfolioService:
             "currency": display_currency,
             "price_basis": "snapshot_valuation_price_not_executable",
             "cash_flows": {
-                "deposits": rounded(totals["deposits"]) if values_available else None,
-                "withdrawals": rounded(totals["withdrawals"]) if values_available else None,
-                "net": rounded(totals["deposits"] - totals["withdrawals"]) if values_available else None,
+                "deposits": rounded_money(totals["deposits"]) if values_available else None,
+                "withdrawals": rounded_money(totals["withdrawals"]) if values_available else None,
+                "net": rounded_money(totals["deposits"] - totals["withdrawals"]) if values_available else None,
                 "performance_treatment": "excluded_from_investment_pnl",
             },
             "pnl": {
-                key: rounded(totals[key]) if values_available else None
+                key: rounded_money(totals[key]) if values_available else None
                 for key in ("price", "income", "fx", "fees", "taxes", "gross", "net")
             },
             "return": {
                 "status": "available" if return_available else "unavailable",
                 "method": "modified_dietz",
-                "numerator": rounded(totals["net"]) if values_available else None,
-                "denominator": rounded(denominator),
+                "numerator": rounded_money(totals["net"]) if values_available else None,
+                "denominator": rounded_money(denominator),
                 "denominator_semantics": "time_weighted_external_cash_flows",
                 "cash_flow_timing": "end_of_day",
-                "percent": rounded(return_percent),
+                "percent": round(float(return_percent), 6) if return_percent is not None else None,
                 "reason": return_reason,
             },
             "valuation": valuation,
@@ -5828,10 +6692,10 @@ class PortfolioService:
             "currency": row.currency,
             "trade_date": row.trade_date.isoformat() if row.trade_date else "",
             "side": row.side,
-            "quantity": float(row.quantity),
-            "price": float(row.price),
-            "fee": float(row.fee),
-            "tax": float(row.tax),
+            "quantity": serialize_portfolio_decimal_value(row.quantity, kind="quantity", market=row.market),
+            "price": serialize_portfolio_decimal_value(row.price, kind="price", market=row.market),
+            "fee": serialize_portfolio_decimal_value(row.fee, kind="money", currency=row.currency),
+            "tax": serialize_portfolio_decimal_value(row.tax, kind="money", currency=row.currency),
             "note": row.note,
             "is_active": bool(getattr(row, "is_active", True)),
             "voided_at": row.voided_at.isoformat() if getattr(row, "voided_at", None) else None,
@@ -5854,7 +6718,7 @@ class PortfolioService:
             "account_id": int(row.account_id),
             "event_date": row.event_date.isoformat() if row.event_date else "",
             "direction": row.direction,
-            "amount": float(row.amount),
+            "amount": serialize_portfolio_decimal_value(row.amount, kind="money", currency=row.currency),
             "currency": row.currency,
             "note": row.note,
             "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -5871,9 +6735,19 @@ class PortfolioService:
             "effective_date": row.effective_date.isoformat() if row.effective_date else "",
             "action_type": row.action_type,
             "cash_dividend_per_share": (
-                float(row.cash_dividend_per_share) if row.cash_dividend_per_share is not None else None
+                serialize_portfolio_decimal_value(
+                    row.cash_dividend_per_share,
+                    kind="price",
+                    market=row.market,
+                )
+                if row.cash_dividend_per_share is not None
+                else None
             ),
-            "split_ratio": float(row.split_ratio) if row.split_ratio is not None else None,
+            "split_ratio": (
+                serialize_portfolio_decimal_value(row.split_ratio, kind="ratio")
+                if row.split_ratio is not None
+                else None
+            ),
             "note": row.note,
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
@@ -5970,7 +6844,7 @@ class PortfolioService:
     def _accumulate_market_breakdown(
         self,
         *,
-        market_breakdown: Dict[str, Dict[str, float]],
+        market_breakdown: Dict[str, Dict[str, Any]],
         account_snapshot: Dict[str, Any],
         aggregate_currency: str,
         as_of_date: date,
@@ -5982,8 +6856,8 @@ class PortfolioService:
             )
             if market is None:
                 continue
-            converted_market_value, _stale, _ = self._convert_amount(
-                amount=float(position.get("market_value_base") or 0.0),
+            converted_market_value, _stale, _ = self._convert_amount_decimal(
+                amount=position.get("market_value_base") or Decimal("0"),
                 from_currency=position.get("valuation_currency") or account_snapshot.get("base_currency"),
                 to_currency=aggregate_currency,
                 as_of_date=as_of_date,
@@ -5991,34 +6865,41 @@ class PortfolioService:
             bucket = market_breakdown.setdefault(
                 market,
                 {
-                    "position_count": 0.0,
-                    "total_market_value": 0.0,
+                    "position_count": 0,
+                    "total_market_value": Decimal("0"),
                 },
             )
-            bucket["position_count"] += 1.0
-            bucket["total_market_value"] += float(converted_market_value)
+            bucket["position_count"] += 1
+            bucket["total_market_value"] += converted_market_value
 
     @staticmethod
     def _build_market_breakdown_payload(
         *,
-        market_breakdown: Dict[str, Dict[str, float]],
-        total_market_value: float,
+        market_breakdown: Dict[str, Dict[str, Any]],
+        total_market_value: Decimal,
+        aggregate_currency: str,
     ) -> List[Dict[str, Any]]:
         if not market_breakdown:
             return []
         rows: List[Dict[str, Any]] = []
-        denominator = float(total_market_value or 0.0)
+        denominator = _internal_snapshot_decimal(total_market_value or Decimal("0"))
         for market, bucket in market_breakdown.items():
-            market_value = float(bucket.get("total_market_value") or 0.0)
+            market_value = _internal_snapshot_decimal(bucket.get("total_market_value") or Decimal("0"))
             rows.append(
                 {
                     "market": market,
                     "position_count": int(bucket.get("position_count") or 0),
-                    "total_market_value": round(market_value, 6),
-                    "weight_pct": round((market_value / denominator) * 100.0, 4) if denominator > 0 else 0.0,
+                    "total_market_value": round_portfolio_decimal_value(
+                        market_value, kind="money", currency=aggregate_currency
+                    ),
+                    "weight_pct": (
+                        round(float((market_value / denominator) * Decimal("100")), 4)
+                        if denominator > 0
+                        else 0.0
+                    ),
                 }
             )
-        rows.sort(key=lambda item: (-float(item["total_market_value"]), str(item["market"])))
+        rows.sort(key=lambda item: (-item["total_market_value"], str(item["market"])))
         return rows
 
     def _build_snapshot_analytics(
@@ -6031,14 +6912,15 @@ class PortfolioService:
     ) -> Dict[str, Any]:
         account_lookup = {int(account.id): account for account in account_rows}
         display_currency = self._normalize_currency(aggregate_currency)
-        total_market_value = float(snapshot.get("total_market_value") or 0.0)
-        total_cash = float(snapshot.get("total_cash") or 0.0)
-        realized_amount = float(snapshot.get("realized_pnl") or 0.0)
-        unrealized_amount = float(snapshot.get("unrealized_pnl") or 0.0)
+        total_market_value = _internal_snapshot_decimal(snapshot.get("total_market_value") or Decimal("0"))
+        total_cash = _internal_snapshot_decimal(snapshot.get("total_cash") or Decimal("0"))
+        total_equity = _internal_snapshot_decimal(snapshot.get("total_equity") or Decimal("0"))
+        realized_amount = _internal_snapshot_decimal(snapshot.get("realized_pnl") or Decimal("0"))
+        unrealized_amount = _internal_snapshot_decimal(snapshot.get("unrealized_pnl") or Decimal("0"))
         performance = snapshot.get("performance") if isinstance(snapshot.get("performance"), dict) else {}
         performance_pnl = performance.get("pnl") if isinstance(performance.get("pnl"), dict) else {}
         performance_return = performance.get("return") if isinstance(performance.get("return"), dict) else {}
-        total_pnl = float(performance_pnl.get("net") or 0.0)
+        total_pnl = _internal_snapshot_decimal(performance_pnl.get("net") or Decimal("0"))
         cost_basis = total_market_value - unrealized_amount
         pnl_percent_raw = performance_return.get("percent")
         pnl_percent = float(pnl_percent_raw) if pnl_percent_raw is not None else None
@@ -6059,8 +6941,11 @@ class PortfolioService:
             base_currency = self._normalize_currency(
                 account_snapshot.get("base_currency") or getattr(account, "base_currency", display_currency)
             )
-            account_market_value, account_stale, account_source = self._convert_amount(
-                amount=float(account_snapshot.get("total_market_value") or 0.0),
+            account_native_value = _internal_snapshot_decimal(
+                account_snapshot.get("total_market_value") or Decimal("0")
+            )
+            account_market_value, account_stale, account_source = self._convert_amount_decimal(
+                amount=account_native_value,
                 from_currency=base_currency,
                 to_currency=display_currency,
                 as_of_date=as_of_date,
@@ -6075,7 +6960,9 @@ class PortfolioService:
                     total_market_value=total_market_value,
                     display_currency=display_currency,
                     fx_status=account_fx_status,
-                    native_value=float(account_snapshot.get("total_market_value") or 0.0),
+                    native_value=round_portfolio_decimal_value(
+                        account_native_value, kind="money", currency=base_currency
+                    ),
                     native_currency=base_currency,
                     account_id=account_id,
                     account_name=account_snapshot.get("account_name"),
@@ -6095,8 +6982,8 @@ class PortfolioService:
                     fallback_market=account_snapshot.get("market"),
                 ) or "unknown"
                 native_currency = self._normalize_currency(position.get("currency") or base_currency)
-                native_value = float(position.get("market_value_native") or 0.0)
-                display_value, display_stale, display_source = self._convert_amount(
+                native_value = _internal_snapshot_decimal(position.get("market_value_native") or Decimal("0"))
+                display_value, display_stale, display_source = self._convert_amount_decimal(
                     amount=native_value,
                     from_currency=native_currency,
                     to_currency=display_currency,
@@ -6112,8 +6999,8 @@ class PortfolioService:
                         "label": native_currency,
                         "currency": native_currency,
                         "native_currency": native_currency,
-                        "native_value": 0.0,
-                        "display_value": 0.0,
+                        "native_value": Decimal("0"),
+                        "display_value": Decimal("0"),
                         "fx_status": FX_STATUS_LIVE,
                         "holding_count": 0,
                     },
@@ -6129,7 +7016,7 @@ class PortfolioService:
                         "key": market,
                         "label": market.upper(),
                         "market": market,
-                        "display_value": 0.0,
+                        "display_value": Decimal("0"),
                         "fx_status": FX_STATUS_LIVE,
                         "holding_count": 0,
                     },
@@ -6146,28 +7033,32 @@ class PortfolioService:
                         "symbol": symbol,
                         "market": market,
                         "currency": native_currency,
-                        "display_value": 0.0,
+                        "display_value": Decimal("0"),
                         "fx_status": FX_STATUS_LIVE,
-                        "unrealized_pnl": 0.0,
+                        "unrealized_pnl": Decimal("0"),
                         "unrealized_pnl_pct": position.get("unrealized_pnl_pct"),
                         "holding_count": 0,
                     },
                 )
                 symbol_bucket["display_value"] += display_value
-                symbol_bucket["unrealized_pnl"] += float(position.get("display_unrealized_pnl") or 0.0)
+                symbol_bucket["unrealized_pnl"] += _internal_snapshot_decimal(
+                    position.get("display_unrealized_pnl") or Decimal("0")
+                )
                 symbol_bucket["holding_count"] += 1
                 symbol_bucket["fx_status"] = self._combine_fx_statuses(symbol_bucket["fx_status"], position_fx_status)
 
-        by_account.sort(key=lambda item: (-float(item["market_value"]), str(item["label"])))
+        by_account.sort(key=lambda item: (-item["market_value"], str(item["label"])))
         currency_rows = [
             self._exposure_row(
                 key=item["key"],
                 label=item["label"],
-                market_value=float(item["display_value"]),
+                market_value=item["display_value"],
                 total_market_value=total_market_value,
                 display_currency=display_currency,
                 fx_status=item["fx_status"],
-                native_value=round(float(item["native_value"]), 6),
+                native_value=round_portfolio_decimal_value(
+                    item["native_value"], kind="money", currency=item["native_currency"]
+                ),
                 native_currency=item["native_currency"],
                 currency=item["currency"],
                 holding_count=int(item["holding_count"]),
@@ -6178,7 +7069,7 @@ class PortfolioService:
             self._exposure_row(
                 key=item["key"],
                 label=item["label"],
-                market_value=float(item["display_value"]),
+                market_value=item["display_value"],
                 total_market_value=total_market_value,
                 display_currency=display_currency,
                 fx_status=item["fx_status"],
@@ -6191,21 +7082,23 @@ class PortfolioService:
             self._exposure_row(
                 key=item["key"],
                 label=item["label"],
-                market_value=float(item["display_value"]),
+                market_value=item["display_value"],
                 total_market_value=total_market_value,
                 display_currency=display_currency,
                 fx_status=item["fx_status"],
                 symbol=item["symbol"],
                 market=item["market"],
                 currency=item["currency"],
-                unrealized_pnl=round(float(item["unrealized_pnl"]), 6),
+                unrealized_pnl=round_portfolio_decimal_value(
+                    item["unrealized_pnl"], kind="money", currency=display_currency
+                ),
                 unrealized_pnl_pct=item.get("unrealized_pnl_pct"),
                 holding_count=int(item["holding_count"]),
             )
             for item in by_symbol.values()
         ]
         for rows in (currency_rows, market_rows, symbol_rows):
-            rows.sort(key=lambda item: (-float(item["market_value"]), str(item["label"])))
+            rows.sort(key=lambda item: (-item["market_value"], str(item["label"])))
 
         largest_position = symbol_rows[0] if symbol_rows else None
         largest_currency = currency_rows[0] if currency_rows else None
@@ -6233,7 +7126,11 @@ class PortfolioService:
                 ),
                 "unrealized": self._pnl_metric(
                     amount=unrealized_amount,
-                    percent=(unrealized_amount / abs(cost_basis)) * 100.0 if abs(cost_basis) > EPS else None,
+                    percent=(
+                        float((unrealized_amount / abs(cost_basis)) * Decimal("100"))
+                        if abs(cost_basis) > Decimal(str(EPS))
+                        else None
+                    ),
                     currency=display_currency,
                     fx_status=FX_STATUS_UNAVAILABLE if any_fx_unavailable else fx_status,
                 ),
@@ -6258,8 +7155,8 @@ class PortfolioService:
                 "largest_market": largest_market,
                 "holding_count": len(symbol_rows),
                 "account_count": int(snapshot.get("account_count") or 0),
-                "cash_percent": round((total_cash / float(snapshot.get("total_equity") or 0.0)) * 100.0, 4)
-                if abs(float(snapshot.get("total_equity") or 0.0)) > EPS
+                "cash_percent": round(float((total_cash / total_equity) * Decimal("100")), 4)
+                if abs(total_equity) > Decimal(str(EPS))
                 else None,
                 "fx_unavailable": any_fx_unavailable,
                 "warnings": warnings,
@@ -6276,21 +7173,42 @@ class PortfolioService:
         positions = []
         for raw_position in list(payload.get("positions") or []):
             position = dict(raw_position)
-            currency = self._normalize_currency(position.get("currency") or display_currency)
-            total_cost = float(position.get("total_cost") or 0.0)
-            market_value = float(position.get("market_value_native", position.get("market_value_base") or 0.0) or 0.0)
-            unrealized = float(
-                position.get(
-                    "unrealized_pnl_native",
-                    position.get("unrealized_pnl_base") or (market_value - total_cost),
-                )
-                or 0.0
+            market = self._normalize_snapshot_position_market(
+                position.get("market"), fallback_market=payload.get("market")
             )
-            position.setdefault("cost_basis_native", round(total_cost, 8))
-            position.setdefault("market_value_native", round(market_value, 8))
-            position.setdefault("unrealized_pnl_native", round(unrealized, 8))
-            if position.get("unrealized_pnl_pct") is None:
-                position["unrealized_pnl_pct"] = round((unrealized / abs(total_cost)) * 100.0, 6) if abs(total_cost) > EPS else None
+            if market is None:
+                raise ValueError("snapshot position market is unavailable")
+            currency = self._normalize_currency(position.get("currency") or display_currency)
+            total_cost = round_portfolio_decimal_value(
+                position.get("total_cost") or Decimal("0"), kind="money", currency=currency
+            )
+            native_market_value = position.get("market_value_native")
+            market_value = (
+                round_portfolio_decimal_value(
+                    native_market_value, kind="money", currency=currency
+                )
+                if native_market_value is not None
+                else None
+            )
+            native_unrealized = position.get("unrealized_pnl_native")
+            unrealized = (
+                round_portfolio_decimal_value(
+                    native_unrealized, kind="money", currency=currency
+                )
+                if native_unrealized is not None
+                else None
+            )
+            position.setdefault("cost_basis_native", total_cost)
+            if market_value is not None:
+                position.setdefault("market_value_native", market_value)
+            if unrealized is not None:
+                position.setdefault("unrealized_pnl_native", unrealized)
+            if position.get("unrealized_pnl_pct") is None and unrealized is not None:
+                position["unrealized_pnl_pct"] = (
+                    round(float((unrealized / total_cost.copy_abs()) * Decimal("100")), 6)
+                    if total_cost.copy_abs() > Decimal(str(EPS))
+                    else None
+                )
             position.setdefault("display_market_value", position.get("market_value_base", market_value))
             position.setdefault("display_unrealized_pnl", position.get("unrealized_pnl_base", unrealized))
             position.setdefault("display_currency", display_currency)
@@ -6305,14 +7223,15 @@ class PortfolioService:
     @staticmethod
     def _pnl_metric(
         *,
-        amount: float,
+        amount: Decimal,
         percent: Optional[float],
         currency: str,
         fx_status: str,
     ) -> Dict[str, Any]:
+        money_amount = round_portfolio_decimal_value(amount, kind="money", currency=currency)
         return {
-            "amount": round(float(amount), 6),
-            "amount_display": f"{currency} {float(amount):,.2f}",
+            "amount": money_amount,
+            "amount_display": f"{currency} {money_amount:,.2f}",
             "percent": round(float(percent), 6) if percent is not None else None,
             "currency": currency,
             "fx_status": fx_status,
@@ -6323,20 +7242,23 @@ class PortfolioService:
         *,
         key: str,
         label: str,
-        market_value: float,
-        total_market_value: float,
+        market_value: Decimal,
+        total_market_value: Decimal,
         display_currency: str,
         fx_status: str,
         **extra: Any,
     ) -> Dict[str, Any]:
+        money_market_value = round_portfolio_decimal_value(
+            market_value, kind="money", currency=display_currency
+        )
         row = {
             "key": key,
             "label": label,
-            "market_value": round(float(market_value), 6),
-            "display_value": round(float(market_value), 6),
+            "market_value": money_market_value,
+            "display_value": money_market_value,
             "display_currency": display_currency,
-            "percent": round((float(market_value) / total_market_value) * 100.0, 4)
-            if abs(total_market_value) > EPS
+            "percent": round(float((market_value / total_market_value) * Decimal("100")), 4)
+            if abs(total_market_value) > Decimal(str(EPS))
             else 0.0,
             "fx_status": fx_status,
         }
@@ -6360,22 +7282,46 @@ class PortfolioService:
         return FX_STATUS_LIVE
 
     @staticmethod
-    def _realized_symbol_payload(realized_pnl_by_symbol: Dict[Tuple[str, str, str], Dict[str, Any]]) -> List[Dict[str, Any]]:
-        rows = []
+    def _realized_symbol_payload(
+        realized_pnl_by_symbol: Dict[Tuple[str, str, str], Dict[str, Any]],
+        *,
+        base_currency: str,
+    ) -> List[Dict[str, Any]]:
+        rows: List[Tuple[Decimal, Dict[str, Any]]] = []
         for item in realized_pnl_by_symbol.values():
-            rows.append(
-                {
-                    "symbol": item["symbol"],
-                    "market": item["market"],
-                    "currency": item["currency"],
-                    "amount_native": round(float(item["amount_native"]), 8),
-                    "amount_base": round(float(item["amount_base"]), 8),
-                    "quantity_sold": round(float(item["quantity_sold"]), 8),
-                    "fx_status": item["fx_status"],
-                }
+            market = str(item["market"] or "").strip().lower()
+            currency = PortfolioService._normalize_currency(item["currency"])
+            native_amount = round_portfolio_decimal_value(
+                item["amount_native"], kind="money", currency=currency
             )
-        rows.sort(key=lambda item: (-abs(float(item["amount_base"])), str(item["symbol"])))
-        return rows
+            base_amount = round_portfolio_decimal_value(
+                item["amount_base"], kind="money", currency=base_currency
+            )
+            quantity_sold = round_portfolio_decimal_value(
+                item["quantity_sold"], kind="quantity", market=market
+            )
+            rows.append(
+                (
+                    base_amount.copy_abs(),
+                    {
+                        "symbol": item["symbol"],
+                        "market": market,
+                        "currency": currency,
+                        "amount_native": serialize_portfolio_decimal_value(
+                            native_amount, kind="money", currency=currency
+                        ),
+                        "amount_base": serialize_portfolio_decimal_value(
+                            base_amount, kind="money", currency=base_currency
+                        ),
+                        "quantity_sold": serialize_portfolio_decimal_value(
+                            quantity_sold, kind="quantity", market=market
+                        ),
+                        "fx_status": item["fx_status"],
+                    },
+                )
+            )
+        rows.sort(key=lambda item: (-item[0], str(item[1]["symbol"])))
+        return [item[1] for item in rows]
 
     @staticmethod
     def _normalize_snapshot_position_market(value: Any, *, fallback_market: Any = None) -> Optional[str]:

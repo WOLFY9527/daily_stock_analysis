@@ -7,25 +7,31 @@ import json
 import os
 import socket
 import unittest
+from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import requests
 
 from data_provider.alpaca_fetcher import AlpacaFetcher
 from data_provider.realtime_types import RealtimeSource
+from src.portfolio_exact_numeric import PortfolioExactNumericError, STOCK_DAILY_CLOSE_PROVENANCE_ATTR
 from src.services.uat_provider_isolation import UatProviderIsolationError
+from src.storage import DatabaseManager
 
 
 class _MockResponse:
-    def __init__(self, payload, status_code: int = 200):
+    def __init__(self, payload, status_code: int = 200, *, raw_json: str | None = None):
         self._payload = payload
         self.status_code = status_code
+        self._raw_json = raw_json
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
             raise RuntimeError(f"HTTP {self.status_code}")
 
-    def json(self):
+    def json(self, **kwargs):
+        if self._raw_json is not None:
+            return json.loads(self._raw_json, **kwargs)
         return self._payload
 
 
@@ -94,12 +100,11 @@ class AlpacaFetcherTestCase(unittest.TestCase):
     def test_get_daily_data_requests_adjusted_bars(self) -> None:
         session = Mock()
         session.get.return_value = _MockResponse(
-            {
-                "bars": [
-                    {"t": "2026-04-11T00:00:00Z", "o": 100.0, "h": 101.0, "l": 99.5, "c": 100.4, "v": 1000, "vw": 100.2},
-                    {"t": "2026-04-14T00:00:00Z", "o": 100.5, "h": 102.0, "l": 100.0, "c": 101.6, "v": 1200, "vw": 101.1},
-                ]
-            }
+            {},
+            raw_json=(
+                '{"bars":[{"t":"2026-04-11T00:00:00Z","o":100.0,"h":101.0,'
+                '"l":99.5,"c":1234567890123456.12345678,"v":1000,"vw":100.2}]}'
+            ),
         )
         fetcher = AlpacaFetcher(
             api_key_id="alpaca-id",
@@ -112,6 +117,40 @@ class AlpacaFetcherTestCase(unittest.TestCase):
         self.assertEqual(source, "AlpacaFetcher")
         self.assertEqual(list(frame["code"].unique()), ["AAPL"])
         self.assertIn("pct_chg", frame.columns)
+        self.assertEqual(
+            frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR],
+            {"2026-04-11": Decimal("1234567890123456.12345678")},
+        )
+
+        DatabaseManager.reset_instance()
+        self.addCleanup(DatabaseManager.reset_instance)
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        self.assertEqual(db.save_daily_data(frame, code="AAPL", data_source=source), 1)
+        self.assertEqual(
+            db.get_latest_data("AAPL", days=1)[0].close,
+            Decimal("1234567890123456.12345678"),
+        )
+
+        float_session = Mock()
+        float_session.get.return_value = _MockResponse(
+            {
+                "bars": [
+                    {"t": "2026-04-14T00:00:00Z", "o": 100.0, "h": 102.0, "l": 99.0, "c": 100.4, "v": 1200, "vw": 100.8},
+                ]
+            }
+        )
+        float_fetcher = AlpacaFetcher(
+            api_key_id="alpaca-id",
+            secret_key="alpaca-secret",
+            session=float_session,
+        )
+        float_frame, _ = float_fetcher.get_daily_data(
+            "MSFT", start_date="2026-04-10", end_date="2026-04-15", days=10
+        )
+        self.assertNotIn(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, float_frame.attrs)
+        with self.assertRaises(PortfolioExactNumericError):
+            db.save_daily_data(float_frame, code="MSFT", data_source="injected-float")
+
         session.get.assert_called_once()
         args, kwargs = session.get.call_args
         self.assertEqual(args[0], "https://data.alpaca.markets/v2/stocks/AAPL/bars")

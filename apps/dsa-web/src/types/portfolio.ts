@@ -2,6 +2,7 @@ export type PortfolioCostMethod = 'fifo' | 'avg' | 'futu_diluted' | 'ths_pnl';
 export type PortfolioSide = 'buy' | 'sell';
 export type PortfolioCashDirection = 'in' | 'out';
 export type PortfolioCorporateActionType = 'cash_dividend' | 'split_adjustment';
+export type PortfolioDecimal = string;
 
 export interface PortfolioAccountItem {
   id: number;
@@ -74,11 +75,11 @@ export interface PortfolioIbkrSyncResponse {
   snapshotDate: string;
   syncedAt: string;
   baseCurrency: string;
-  totalCash: number;
-  totalMarketValue: number;
-  totalEquity: number;
-  realizedPnl: number;
-  unrealizedPnl: number;
+  totalCash: PortfolioDecimal;
+  totalMarketValue: PortfolioDecimal;
+  totalEquity: PortfolioDecimal;
+  realizedPnl: PortfolioDecimal;
+  unrealizedPnl: PortfolioDecimal;
   positionCount: number;
   cashBalanceCount: number;
   fxStale: boolean;
@@ -93,25 +94,25 @@ export interface PortfolioPositionItem {
   symbol: string;
   market: string;
   currency: string;
-  quantity: number;
-  avgCost: number;
-  totalCost: number;
-  lastPrice: number;
+  quantity: PortfolioDecimal;
+  avgCost: PortfolioDecimal;
+  totalCost: PortfolioDecimal;
+  lastPrice: PortfolioDecimal;
   priceSource?: string | null;
   priceSourceLabel?: string | null;
   priceAsOf?: string | null;
   isPriceFallback?: boolean | null;
   priceFallbackReason?: string | null;
   valuationConfidence?: number | null;
-  marketValueBase: number;
-  unrealizedPnlBase: number;
+  marketValueBase: PortfolioDecimal;
+  unrealizedPnlBase: PortfolioDecimal;
   valuationCurrency: string;
-  costBasisNative?: number | null;
-  marketValueNative?: number | null;
-  unrealizedPnlNative?: number | null;
+  costBasisNative?: PortfolioDecimal | null;
+  marketValueNative?: PortfolioDecimal | null;
+  unrealizedPnlNative?: PortfolioDecimal | null;
   unrealizedPnlPct?: number | null;
-  displayMarketValue?: number | null;
-  displayUnrealizedPnl?: number | null;
+  displayMarketValue?: PortfolioDecimal | null;
+  displayUnrealizedPnl?: PortfolioDecimal | null;
   displayCurrency?: string | null;
   displayFxStatus?: PortfolioFxStatus | null;
 }
@@ -125,13 +126,13 @@ export interface PortfolioAccountSnapshot {
   baseCurrency: string;
   asOf: string;
   costMethod: PortfolioCostMethod;
-  totalCash: number;
-  totalMarketValue: number;
-  totalEquity: number;
-  realizedPnl: number;
-  unrealizedPnl: number;
-  feeTotal: number;
-  taxTotal: number;
+  totalCash: PortfolioDecimal;
+  totalMarketValue: PortfolioDecimal;
+  totalEquity: PortfolioDecimal;
+  realizedPnl: PortfolioDecimal;
+  unrealizedPnl: PortfolioDecimal;
+  feeTotal: PortfolioDecimal;
+  taxTotal: PortfolioDecimal;
   fxStale: boolean;
   positions: PortfolioPositionItem[];
 }
@@ -139,7 +140,7 @@ export interface PortfolioAccountSnapshot {
 export interface PortfolioFxRateItem {
   fromCurrency: string;
   toCurrency: string;
-  rate?: number | null;
+  rate?: PortfolioDecimal | null;
   rateDate?: string | null;
   source: string;
   isStale: boolean;
@@ -150,7 +151,7 @@ export interface PortfolioFxRateItem {
 export interface PortfolioLiveFxRateResponse {
   baseCurrency: string;
   quoteCurrency: string;
-  rate: number;
+  rate: PortfolioDecimal;
   provider: string;
   fetchedAt: string;
   cacheHit: boolean;
@@ -161,7 +162,7 @@ export interface PortfolioLiveFxRateResponse {
 export type PortfolioFxStatus = 'live' | 'stale' | 'unavailable';
 
 export interface PortfolioPnlMetric {
-  amount: number;
+  amount: PortfolioDecimal;
   amountDisplay?: string | null;
   percent?: number | null;
   currency: string;
@@ -178,12 +179,12 @@ export interface PortfolioPnlSummary {
 export interface PortfolioExposureItem {
   key: string;
   label: string;
-  marketValue: number;
-  displayValue: number;
+  marketValue: PortfolioDecimal;
+  displayValue: PortfolioDecimal;
   displayCurrency: string;
   percent: number;
   fxStatus: PortfolioFxStatus;
-  nativeValue?: number | null;
+  nativeValue?: PortfolioDecimal | null;
   nativeCurrency?: string | null;
   accountId?: number | null;
   accountName?: string | null;
@@ -193,7 +194,7 @@ export interface PortfolioExposureItem {
   symbol?: string | null;
   sector?: string | null;
   holdingCount?: number | null;
-  unrealizedPnl?: number | null;
+  unrealizedPnl?: PortfolioDecimal | null;
   unrealizedPnlPct?: number | null;
 }
 
@@ -381,7 +382,7 @@ export interface PortfolioExposureResearchDominantExposure {
   label?: string | null;
   market?: string | null;
   currency?: string | null;
-  marketValue?: number | null;
+  marketValue?: PortfolioDecimal | null;
   weightPct?: number | null;
   fxStatus?: string | null;
 }
@@ -510,8 +511,8 @@ export interface PortfolioTruth {
   accountState: PortfolioTruthAccountState;
   valuationState: PortfolioTruthValuationState;
   valueSemantics: PortfolioTruthValueSemantics;
-  authoritativeTotal: number | null;
-  coveredSubtotal: number | null;
+  authoritativeTotal: PortfolioDecimal | null;
+  coveredSubtotal: PortfolioDecimal | null;
   accountCount: number;
   positionCount: number;
 }
@@ -521,13 +522,13 @@ export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, Po
   costMethod: PortfolioCostMethod;
   currency: string;
   accountCount: number;
-  totalCash: number;
-  totalMarketValue: number;
-  totalEquity: number;
-  realizedPnl: number;
-  unrealizedPnl: number;
-  feeTotal: number;
-  taxTotal: number;
+  totalCash: PortfolioDecimal;
+  totalMarketValue: PortfolioDecimal;
+  totalEquity: PortfolioDecimal;
+  realizedPnl: PortfolioDecimal;
+  unrealizedPnl: PortfolioDecimal;
+  feeTotal: PortfolioDecimal;
+  taxTotal: PortfolioDecimal;
   fxStale: boolean;
   portfolioTruth: PortfolioTruth;
   fxRates?: PortfolioFxRateItem[];
@@ -540,14 +541,14 @@ export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, Po
 
 export interface PortfolioConcentrationItem {
   symbol: string;
-  marketValueBase: number;
+  marketValueBase: PortfolioDecimal;
   weightPct: number;
   isAlert: boolean;
 }
 
 export interface PortfolioSectorConcentrationItem {
   sector: string;
-  marketValueBase: number;
+  marketValueBase: PortfolioDecimal;
   weightPct: number;
   symbolCount: number;
   isAlert: boolean;
@@ -564,8 +565,8 @@ export interface PortfolioDrawdownBlock {
 export interface PortfolioStopLossItem {
   accountId: number;
   symbol: string;
-  avgCost: number;
-  lastPrice: number;
+  avgCost: PortfolioDecimal;
+  lastPrice: PortfolioDecimal;
   lossPct: number;
   nearThresholdPct: number;
   isTriggered: boolean;
@@ -578,13 +579,13 @@ export interface PortfolioRiskResponse extends PortfolioEvidenceMetadata, Portfo
   currency: string;
   thresholds: Record<string, number>;
   concentration: {
-    totalMarketValue: number;
+    totalMarketValue: PortfolioDecimal;
     topWeightPct: number;
     alert: boolean;
     topPositions: PortfolioConcentrationItem[];
   };
   sectorConcentration: {
-    totalMarketValue: number;
+    totalMarketValue: PortfolioDecimal;
     topWeightPct: number;
     alert: boolean;
     topSectors: PortfolioSectorConcentrationItem[];
@@ -609,10 +610,10 @@ export interface PortfolioTradeCreateRequest {
   symbol: string;
   tradeDate: string;
   side: PortfolioSide;
-  quantity: number;
-  price: number;
-  fee?: number;
-  tax?: number;
+  quantity: PortfolioDecimal;
+  price: PortfolioDecimal;
+  fee?: PortfolioDecimal;
+  tax?: PortfolioDecimal;
   market?: 'cn' | 'hk' | 'us';
   currency?: string;
   tradeUid?: string;
@@ -624,10 +625,10 @@ export interface PortfolioTradeUpdateRequest {
   symbol?: string;
   tradeDate?: string;
   side?: PortfolioSide;
-  quantity?: number;
-  price?: number;
-  fee?: number;
-  tax?: number;
+  quantity?: PortfolioDecimal;
+  price?: PortfolioDecimal;
+  fee?: PortfolioDecimal;
+  tax?: PortfolioDecimal;
   market?: 'cn' | 'hk' | 'us';
   currency?: string;
   note?: string;
@@ -637,7 +638,7 @@ export interface PortfolioCashLedgerCreateRequest {
   accountId: number;
   eventDate: string;
   direction: PortfolioCashDirection;
-  amount: number;
+  amount: PortfolioDecimal;
   currency?: string;
   note?: string;
 }
@@ -649,8 +650,8 @@ export interface PortfolioCorporateActionCreateRequest {
   actionType: PortfolioCorporateActionType;
   market?: 'cn' | 'hk' | 'us';
   currency?: string;
-  cashDividendPerShare?: number;
-  splitRatio?: number;
+  cashDividendPerShare?: PortfolioDecimal;
+  splitRatio?: PortfolioDecimal;
   note?: string;
 }
 
@@ -672,10 +673,10 @@ export interface PortfolioTradeListItem {
   currency: string;
   tradeDate: string;
   side: PortfolioSide;
-  quantity: number;
-  price: number;
-  fee: number;
-  tax: number;
+  quantity: PortfolioDecimal;
+  price: PortfolioDecimal;
+  fee: PortfolioDecimal;
+  tax: PortfolioDecimal;
   note?: string | null;
   isActive?: boolean;
   voidedAt?: string | null;
@@ -695,7 +696,7 @@ export interface PortfolioCashLedgerListItem {
   accountId: number;
   eventDate: string;
   direction: PortfolioCashDirection;
-  amount: number;
+  amount: PortfolioDecimal;
   currency: string;
   note?: string | null;
   createdAt?: string | null;
@@ -716,8 +717,8 @@ export interface PortfolioCorporateActionListItem {
   currency: string;
   effectiveDate: string;
   actionType: PortfolioCorporateActionType;
-  cashDividendPerShare?: number | null;
-  splitRatio?: number | null;
+  cashDividendPerShare?: PortfolioDecimal | null;
+  splitRatio?: PortfolioDecimal | null;
   note?: string | null;
   createdAt?: string | null;
 }
@@ -733,10 +734,10 @@ export interface PortfolioImportTradeItem {
   tradeDate: string;
   symbol: string;
   side: PortfolioSide;
-  quantity: number;
-  price: number;
-  fee: number;
-  tax: number;
+  quantity: PortfolioDecimal;
+  price: PortfolioDecimal;
+  fee: PortfolioDecimal;
+  tax: PortfolioDecimal;
   tradeUid?: string | null;
   dedupHash: string;
   market?: string | null;
@@ -747,7 +748,7 @@ export interface PortfolioImportTradeItem {
 export interface PortfolioImportCashEntryItem {
   eventDate: string;
   direction: PortfolioCashDirection;
-  amount: number;
+  amount: PortfolioDecimal;
   currency: string;
   note?: string | null;
 }
@@ -758,8 +759,8 @@ export interface PortfolioImportCorporateActionItem {
   market: string;
   currency: string;
   actionType: PortfolioCorporateActionType;
-  cashDividendPerShare?: number | null;
-  splitRatio?: number | null;
+  cashDividendPerShare?: PortfolioDecimal | null;
+  splitRatio?: PortfolioDecimal | null;
   note?: string | null;
 }
 
@@ -844,11 +845,12 @@ export interface PortfolioStructureReviewAggregateSummary {
 }
 
 export interface PortfolioStructureReviewExposureItem {
-  key?: string | null;
-  label?: string | null;
-  marketValue?: number | null;
-  percent?: number | null;
-  holdingCount?: number | null;
+  key: string;
+  label: string;
+  marketValue: PortfolioDecimal;
+  displayCurrency: string;
+  percent: number;
+  holdingCount: number;
 }
 
 export interface PortfolioStructureReviewEvidenceQuality {
@@ -981,14 +983,13 @@ export interface PortfolioStructureReviewResponse {
 
 export interface PortfolioScenarioRiskPositionInput {
   symbol: string;
-  weight?: number | null;
-  weightPct?: number | null;
-  marketValue?: number | null;
-  marketValueBase?: number | null;
+  weight?: PortfolioDecimal | null;
+  weightPct?: PortfolioDecimal | null;
+  marketValueBase?: PortfolioDecimal | null;
+  baseCurrency?: string | null;
   bucket?: string | null;
   bucketLabel?: string | null;
   theme?: string | null;
-  currency?: string | null;
   factor?: string | null;
 }
 
@@ -996,21 +997,22 @@ export interface PortfolioScenarioRiskExposureInput {
   symbol: string;
   label: string;
   labelType?: string | null;
-  exposure?: number | null;
+  exposure?: PortfolioDecimal | null;
 }
 
 export interface PortfolioScenarioRiskShockValueInput {
-  shockPct?: number | null;
+  shockPct?: PortfolioDecimal | null;
   labelType?: string | null;
 }
 
 export interface PortfolioScenarioRiskScenarioInput {
   name: string;
-  shocks: Record<string, number | PortfolioScenarioRiskShockValueInput>;
+  shocks: Record<string, PortfolioDecimal | PortfolioScenarioRiskShockValueInput>;
 }
 
 export interface PortfolioScenarioRiskRequest {
   asOf: string;
+  baseCurrency: string;
   positions: PortfolioScenarioRiskPositionInput[];
   exposures: PortfolioScenarioRiskExposureInput[];
   scenarioShocks: PortfolioScenarioRiskScenarioInput[];
@@ -1020,8 +1022,8 @@ export interface PortfolioScenarioRiskCoverage {
   totalPositions?: number;
   positionsWithUsableWeight?: number;
   positionsWithMarketValue?: number;
-  effectiveWeightSum?: number;
-  totalMarketValue?: number | null;
+  effectiveWeightSum?: PortfolioDecimal;
+  totalMarketValue?: PortfolioDecimal | null;
   explicitExposureRows?: number;
   labelsWithExplicitCoverage?: string[];
 }
@@ -1029,20 +1031,20 @@ export interface PortfolioScenarioRiskCoverage {
 export interface PortfolioScenarioRiskAppliedShock {
   label: string;
   labelType?: string;
-  shockPct?: number | null;
-  exposure?: number | null;
-  impactPct?: number | null;
-  impactAmount?: number | null;
+  shockPct?: PortfolioDecimal | null;
+  exposure?: PortfolioDecimal | null;
+  impactPct?: PortfolioDecimal | null;
+  impactAmount?: PortfolioDecimal | null;
 }
 
 export interface PortfolioScenarioRiskPositionContribution {
   symbol: string;
   bucket?: string | null;
-  weight?: number | null;
-  marketValue?: number | null;
-  impactPct?: number | null;
-  impactAmount?: number | null;
-  contributionToScenarioLoss?: number | null;
+  weight?: PortfolioDecimal | null;
+  marketValue?: PortfolioDecimal | null;
+  impactPct?: PortfolioDecimal | null;
+  impactAmount?: PortfolioDecimal | null;
+  contributionToScenarioLoss?: PortfolioDecimal | null;
   warnings?: string[];
   appliedShocks?: PortfolioScenarioRiskAppliedShock[];
 }
@@ -1050,9 +1052,9 @@ export interface PortfolioScenarioRiskPositionContribution {
 export interface PortfolioScenarioRiskBucketContribution {
   bucket: string;
   positionCount?: number;
-  impactPct?: number | null;
-  impactAmount?: number | null;
-  contributionToScenarioLoss?: number | null;
+  impactPct?: PortfolioDecimal | null;
+  impactAmount?: PortfolioDecimal | null;
+  contributionToScenarioLoss?: PortfolioDecimal | null;
 }
 
 export interface PortfolioScenarioRiskMissingCoverage {
@@ -1063,10 +1065,10 @@ export interface PortfolioScenarioRiskMissingCoverage {
 
 export interface PortfolioScenarioRiskScenarioResult {
   name: string;
-  portfolioImpactPct?: number | null;
-  portfolioImpactAmount?: number | null;
-  coveredWeight?: number | null;
-  coveredMarketValue?: number | null;
+  portfolioImpactPct?: PortfolioDecimal | null;
+  portfolioImpactAmount?: PortfolioDecimal | null;
+  coveredWeight?: PortfolioDecimal | null;
+  coveredMarketValue?: PortfolioDecimal | null;
   warnings?: string[];
   missingCoverage?: PortfolioScenarioRiskMissingCoverage[];
   positionContributions?: PortfolioScenarioRiskPositionContribution[];
@@ -1089,6 +1091,7 @@ export interface PortfolioScenarioRiskResponse {
   tradeExecution: boolean | undefined;
   executionReadiness: string | undefined;
   asOf?: string | null;
+  baseCurrency: string;
   coverage: PortfolioScenarioRiskCoverage;
   scenarios: PortfolioScenarioRiskScenarioResult[];
   insufficientDataReasons: string[];

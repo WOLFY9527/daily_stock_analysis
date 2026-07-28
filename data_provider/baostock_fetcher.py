@@ -428,7 +428,7 @@ class BaostockFetcher(BaseFetcher):
         df = df.rename(columns=column_mapping)
         
         # 数值类型转换（Baostock 返回的都是字符串）
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg']
+        numeric_cols = ['open', 'high', 'low', 'volume', 'amount', 'pct_chg']
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')

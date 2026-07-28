@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { AxiosResponse } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,6 +39,11 @@ function walkKeys(value: unknown): string[] {
   return [];
 }
 
+const portfolioSnapshotGoldenDto = JSON.parse(readFileSync(
+  resolve(process.cwd(), '../../tests/fixtures/portfolio/portfolio_snapshot_read_model_dto.json'),
+  'utf8',
+)) as Record<string, unknown>;
+
 describe('portfolioApi scenario risk adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -50,13 +57,13 @@ describe('portfolioApi scenario risk adapter', () => {
         as_of: '2026-03-19',
         cost_method: 'fifo',
         currency: 'CNY',
-        total_cash: 1000,
-        total_market_value: 2000,
-        total_equity: 3000,
-        realized_pnl: 0,
-        unrealized_pnl: 120,
-        fee_total: 0,
-        tax_total: 0,
+        total_cash: '1000',
+        total_market_value: '2000',
+        total_equity: '3000',
+        realized_pnl: '0',
+        unrealized_pnl: '120',
+        fee_total: '0',
+        tax_total: '0',
         fx_stale: true,
         portfolio_truth: {
           state: 'valuation_partial',
@@ -64,7 +71,7 @@ describe('portfolioApi scenario risk adapter', () => {
           valuation_state: 'partial',
           value_semantics: 'covered_subtotal',
           authoritative_total: null,
-          covered_subtotal: 3000,
+          covered_subtotal: '3000',
           account_count: 1,
           position_count: 1,
         },
@@ -98,6 +105,13 @@ describe('portfolioApi scenario risk adapter', () => {
             debug_trace: 'collapsed',
           },
         },
+        risk_diagnostics: {
+          valuation_lineage: {
+            details: {
+              price: { state: 'fallback', missing_count: 1 },
+            },
+          },
+        },
         exposure_research_context: {
           dominant_exposure: {
             type: 'position',
@@ -106,7 +120,7 @@ describe('portfolioApi scenario risk adapter', () => {
             label: 'AAPL',
             market: 'us',
             currency: 'USD',
-            market_value: 1600,
+            market_value: '1600',
             weight_pct: 100,
             fx_status: 'live',
             raw_payload: 'hidden',
@@ -196,31 +210,31 @@ describe('portfolioApi scenario risk adapter', () => {
             base_currency: 'CNY',
             as_of: '2026-03-19',
             cost_method: 'fifo',
-            total_cash: 1000,
-            total_market_value: 2000,
-            total_equity: 3000,
-            realized_pnl: 0,
-            unrealized_pnl: 120,
-            fee_total: 0,
-            tax_total: 0,
+            total_cash: '1000',
+            total_market_value: '2000',
+            total_equity: '3000',
+            realized_pnl: '0',
+            unrealized_pnl: '120',
+            fee_total: '0',
+            tax_total: '0',
             fx_stale: true,
             positions: [
               {
                 symbol: 'AAPL',
                 market: 'us',
                 currency: 'USD',
-                quantity: 10,
-                avg_cost: 150,
-                total_cost: 1500,
-                last_price: 160,
-                market_value_base: 1600,
-                unrealized_pnl_base: 100,
+                quantity: '10',
+                avg_cost: '150',
+                total_cost: '1500',
+                last_price: '160',
+                market_value_base: '1600',
+                unrealized_pnl_base: '100',
                 valuation_currency: 'USD',
-                cost_basis_native: 1500,
-                market_value_native: 1600,
-                unrealized_pnl_native: 100,
-                display_market_value: 1600,
-                display_unrealized_pnl: 100,
+                cost_basis_native: '1500',
+                market_value_native: '1600',
+                unrealized_pnl_native: '100',
+                display_market_value: '1600',
+                display_unrealized_pnl: '100',
                 display_currency: 'USD',
                 display_fx_status: 'live',
                 price_source: 'daily_close_quote',
@@ -263,6 +277,13 @@ describe('portfolioApi scenario risk adapter', () => {
         debugTrace: 'collapsed',
       },
     });
+    expect(payload.riskDiagnostics).toEqual({
+      valuationLineage: {
+        details: {
+          price: { state: 'fallback', missingCount: 1 },
+        },
+      },
+    });
     expect(payload.exposureResearchContext).toEqual({
       dominantExposure: {
         type: 'position',
@@ -270,7 +291,7 @@ describe('portfolioApi scenario risk adapter', () => {
         label: 'AAPL',
         market: 'us',
         currency: 'USD',
-        marketValue: 1600,
+        marketValue: '1600',
         weightPct: 100,
         fxStatus: 'live',
       },
@@ -422,13 +443,13 @@ describe('portfolioApi scenario risk adapter', () => {
         as_of: '2026-03-20',
         cost_method: 'fifo',
         currency: 'CNY',
-        total_cash: 1000,
-        total_market_value: 2000,
-        total_equity: 3000,
-        realized_pnl: 0,
-        unrealized_pnl: 120,
-        fee_total: 0,
-        tax_total: 0,
+        total_cash: '1000',
+        total_market_value: '2000',
+        total_equity: '3000',
+        realized_pnl: '0',
+        unrealized_pnl: '120',
+        fee_total: '0',
+        tax_total: '0',
         fx_stale: false,
         portfolio_truth: {
           state: 'valuation_partial',
@@ -436,7 +457,7 @@ describe('portfolioApi scenario risk adapter', () => {
           valuation_state: 'partial',
           value_semantics: 'covered_subtotal',
           authoritative_total: null,
-          covered_subtotal: 3000,
+          covered_subtotal: '3000',
           account_count: 1,
           position_count: 2,
         },
@@ -589,20 +610,20 @@ describe('portfolioApi scenario risk adapter', () => {
         as_of: '2026-03-20',
         cost_method: 'fifo',
         currency: 'CNY',
-        total_cash: 1000,
-        total_market_value: 2000,
-        total_equity: 3000,
-        realized_pnl: 0,
-        unrealized_pnl: 120,
-        fee_total: 0,
-        tax_total: 0,
+        total_cash: '1000',
+        total_market_value: '2000',
+        total_equity: '3000',
+        realized_pnl: '0',
+        unrealized_pnl: '120',
+        fee_total: '0',
+        tax_total: '0',
         fx_stale: false,
         portfolio_truth: {
           state: 'fully_valued_nonzero',
           account_state: 'holdings_present',
           valuation_state: 'fully_valued',
           value_semantics: 'authoritative_total',
-          authoritative_total: 3000,
+          authoritative_total: '3000',
           covered_subtotal: null,
           account_count: 1,
           position_count: 1,
@@ -631,13 +652,13 @@ describe('portfolioApi scenario risk adapter', () => {
         as_of: '2026-03-20',
         cost_method: 'fifo',
         currency: 'CNY',
-        total_cash: 0,
-        total_market_value: 0,
-        total_equity: 0,
-        realized_pnl: 0,
-        unrealized_pnl: 0,
-        fee_total: 0,
-        tax_total: 0,
+        total_cash: '0',
+        total_market_value: '0',
+        total_equity: '0',
+        realized_pnl: '0',
+        unrealized_pnl: '0',
+        fee_total: '0',
+        tax_total: '0',
         fx_stale: false,
         accounts: [],
       },
@@ -649,13 +670,13 @@ describe('portfolioApi scenario risk adapter', () => {
         as_of: '2026-03-20',
         cost_method: 'fifo',
         currency: 'CNY',
-        total_cash: 0,
-        total_market_value: 0,
-        total_equity: 0,
-        realized_pnl: 0,
-        unrealized_pnl: 0,
-        fee_total: 0,
-        tax_total: 0,
+        total_cash: '0',
+        total_market_value: '0',
+        total_equity: '0',
+        realized_pnl: '0',
+        unrealized_pnl: '0',
+        fee_total: '0',
+        tax_total: '0',
         fx_stale: false,
         portfolio_truth: {
           state: 'valuation_unavailable',
@@ -683,8 +704,8 @@ describe('portfolioApi scenario risk adapter', () => {
         cost_method: 'fifo',
         currency: 'CNY',
         thresholds: {},
-        concentration: { total_market_value: 2000, top_weight_pct: 55, alert: true, top_positions: [] },
-        sector_concentration: { total_market_value: 2000, top_weight_pct: 0, alert: false, top_sectors: [], coverage: {}, errors: [] },
+        concentration: { total_market_value: '2000', top_weight_pct: 55, alert: true, top_positions: [] },
+        sector_concentration: { total_market_value: '2000', top_weight_pct: 0, alert: false, top_sectors: [], coverage: {}, errors: [] },
         drawdown: { series_points: 0, max_drawdown_pct: 0, current_drawdown_pct: 0, alert: false, fx_stale: false },
         stop_loss: { near_alert: false, triggered_count: 0, near_count: 0, items: [] },
         exposure_research_context: {
@@ -745,6 +766,7 @@ describe('portfolioApi scenario risk adapter', () => {
         readModelType: 'portfolio_scenario_risk_advisory_v1',
         advisoryOnly: true,
         executionReadiness: 'advisory_only_not_trade_execution',
+        baseCurrency: 'USD',
         coverage: {},
         scenarios: [],
         insufficientDataReasons: [],
@@ -761,10 +783,12 @@ describe('portfolioApi scenario risk adapter', () => {
 
     await portfolioApi.projectScenarioRisk({
       asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
       positions: [
         {
           symbol: 'NVDA',
-          marketValue: 1000,
+          marketValueBase: '1000',
+          baseCurrency: 'USD',
           bucketLabel: 'AI Semis',
         },
       ],
@@ -773,7 +797,7 @@ describe('portfolioApi scenario risk adapter', () => {
           symbol: 'NVDA',
           label: 'QQQ',
           labelType: 'index_proxy',
-          exposure: 1,
+          exposure: '1',
         },
       ],
       scenarioShocks: [
@@ -781,7 +805,7 @@ describe('portfolioApi scenario risk adapter', () => {
           name: 'qqq_proxy_down',
           shocks: {
             QQQ: {
-              shockPct: -5,
+              shockPct: '-5',
               labelType: 'index_proxy',
             },
           },
@@ -791,10 +815,12 @@ describe('portfolioApi scenario risk adapter', () => {
 
     expect(post).toHaveBeenCalledWith('/api/v1/portfolio/scenario-risk', {
       asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
       positions: [
         {
           symbol: 'NVDA',
-          marketValue: 1000,
+          marketValueBase: '1000',
+          baseCurrency: 'USD',
           bucketLabel: 'AI Semis',
         },
       ],
@@ -803,7 +829,7 @@ describe('portfolioApi scenario risk adapter', () => {
           symbol: 'NVDA',
           label: 'QQQ',
           labelType: 'index_proxy',
-          exposure: 1,
+          exposure: '1',
         },
       ],
       scenarioShocks: [
@@ -811,13 +837,411 @@ describe('portfolioApi scenario risk adapter', () => {
           name: 'qqq_proxy_down',
           shocks: {
             QQQ: {
-              shockPct: -5,
+              shockPct: '-5',
               labelType: 'index_proxy',
             },
           },
         },
       ],
     });
+  });
+
+  it('rejects unsupported or empty scenario shocks before posting', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    const numericShockPayload = {
+      asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
+      positions: [],
+      exposures: [],
+      scenarioShocks: [{
+        name: 'numeric_shock',
+        shocks: { QQQ: -5 },
+      }],
+    } as unknown as Parameters<typeof portfolioApi.projectScenarioRisk>[0];
+    await expect(portfolioApi.projectScenarioRisk(numericShockPayload)).rejects.toThrow(
+      'Scenario shock must be a canonical decimal string or structured shock object',
+    );
+
+    const emptyShockPayload = {
+      asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
+      positions: [],
+      exposures: [],
+      scenarioShocks: [{
+        name: 'empty_shock',
+        shocks: { QQQ: {} },
+      }],
+    } as unknown as Parameters<typeof portfolioApi.projectScenarioRisk>[0];
+    await expect(portfolioApi.projectScenarioRisk(emptyShockPayload)).rejects.toThrow(
+      'Scenario shocks must include at least one supported shock',
+    );
+
+    const labelOnlyShockPayload = {
+      asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
+      positions: [],
+      exposures: [],
+      scenarioShocks: [{
+        name: 'label_only_shock',
+        shocks: { QQQ: { labelType: 'index_proxy' } },
+      }],
+    } as unknown as Parameters<typeof portfolioApi.projectScenarioRisk>[0];
+    await expect(portfolioApi.projectScenarioRisk(labelOnlyShockPayload)).rejects.toThrow(
+      'Scenario shocks must include at least one supported shock',
+    );
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('rejects a scenario response without required base currency context', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    post.mockResolvedValueOnce({
+      data: {
+        readModelType: 'portfolio_scenario_risk_advisory_v1',
+        advisoryOnly: true,
+        coverage: {},
+        scenarios: [],
+        metadata: {},
+      },
+    });
+
+    await expect(portfolioApi.projectScenarioRisk({
+      asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
+      positions: [],
+      exposures: [],
+      scenarioShocks: [],
+    })).rejects.toThrow('Invalid scenario risk response base currency');
+  });
+
+  it('preserves high-precision portfolio decimals and rejects numeric wire values', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    post.mockResolvedValueOnce({ data: { id: 9 } });
+    await portfolioApi.createTrade({
+      accountId: 1,
+      symbol: 'AAPL',
+      tradeDate: '2026-05-18',
+      side: 'buy',
+      quantity: '1234567890123456.12345678',
+      price: '0.00000001',
+      fee: '0',
+      tax: '0',
+      market: 'us',
+      currency: 'USD',
+    });
+
+    expect(post).toHaveBeenCalledWith('/api/v1/portfolio/trades', expect.objectContaining({
+      quantity: '1234567890123456.12345678',
+      price: '0.00000001',
+      fee: '0',
+      tax: '0',
+    }));
+
+    await expect(portfolioApi.createTrade({
+      accountId: 1,
+      symbol: 'AAPL',
+      tradeDate: '2026-05-18',
+      side: 'buy',
+      quantity: 1 as unknown as string,
+      price: '1',
+    })).rejects.toThrow('Trade quantity must be a canonical decimal string');
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-05-18',
+        cost_method: 'fifo',
+        currency: 'USD',
+        total_cash: '0',
+        total_market_value: '0',
+        total_equity: '0',
+        realized_pnl: '0',
+        unrealized_pnl: '0',
+        fee_total: '0',
+        tax_total: '0',
+        fx_stale: false,
+        portfolio_truth: {
+          state: 'fully_valued_nonzero',
+          account_state: 'holdings_present',
+          valuation_state: 'fully_valued',
+          value_semantics: 'authoritative_total',
+          authoritative_total: '1234567890123456.12345678',
+          covered_subtotal: null,
+          account_count: 1,
+          position_count: 1,
+        },
+        accounts: [],
+      },
+    });
+    await expect(portfolioApi.getSnapshot()).resolves.toMatchObject({
+      portfolioTruth: { authoritativeTotal: '1234567890123456.12345678' },
+    });
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-05-18',
+        cost_method: 'fifo',
+        currency: 'USD',
+        total_cash: 0,
+        total_market_value: '0',
+        total_equity: '0',
+        realized_pnl: '0',
+        unrealized_pnl: '0',
+        fee_total: '0',
+        tax_total: '0',
+        fx_stale: false,
+        portfolio_truth: {
+          state: 'account_no_holdings',
+          account_state: 'no_holdings',
+          valuation_state: 'fully_valued',
+          value_semantics: 'authoritative_total',
+          authoritative_total: '0',
+          covered_subtotal: null,
+          account_count: 1,
+          position_count: 0,
+        },
+        accounts: [],
+      },
+    });
+    await expect(portfolioApi.getSnapshot()).rejects.toThrow('Invalid portfolio decimal contract at portfolio.totalCash');
+
+    const unavailableValuationSnapshot = {
+      as_of: '2026-05-18',
+      cost_method: 'fifo',
+      currency: 'USD',
+      total_cash: '0.00',
+      total_market_value: '0.00',
+      total_equity: '0.00',
+      realized_pnl: '0.00',
+      unrealized_pnl: '0.00',
+      fee_total: '0.00',
+      tax_total: '0.00',
+      fx_stale: true,
+      portfolio_truth: {
+        state: 'valuation_unavailable',
+        account_state: 'holdings_present',
+        valuation_state: 'unavailable',
+        value_semantics: 'unavailable',
+        authoritative_total: null,
+        covered_subtotal: null,
+        account_count: 1,
+        position_count: 1,
+      },
+      availability: {
+        valuation: {
+          unavailable_native_values: [{
+            component: 'account:1:position:AAPL:us:USD',
+            amount: '1234567890123456.12',
+            currency: 'USD',
+          }],
+        },
+      },
+      accounts: [],
+    };
+
+    get.mockResolvedValueOnce({ data: unavailableValuationSnapshot });
+    await expect(portfolioApi.getSnapshot()).resolves.toMatchObject({
+      availability: {
+        valuation: {
+          unavailableNativeValues: [{ amount: '1234567890123456.12', currency: 'USD' }],
+        },
+      },
+    });
+
+    get.mockResolvedValueOnce({
+      data: {
+        ...unavailableValuationSnapshot,
+        availability: {
+          valuation: {
+            unavailable_native_values: [{
+              component: 'account:1:position:AAPL:us:USD',
+              amount: 1234567890123456.12,
+              currency: 'USD',
+            }],
+          },
+        },
+      },
+    });
+    await expect(portfolioApi.getSnapshot()).rejects.toThrow(
+      'Invalid portfolio decimal contract at portfolio.availability.valuation.unavailableNativeValues[0].amount',
+    );
+  });
+
+  it('accepts populated analytics money as canonical text and rejects numeric analytics wire values', async () => {
+    const { portfolioApi } = await import('../portfolio');
+    const snapshot = {
+      as_of: '2026-05-18',
+      cost_method: 'fifo',
+      currency: 'USD',
+      total_cash: '0.00',
+      total_market_value: '1300.00',
+      total_equity: '1300.00',
+      realized_pnl: '0.00',
+      unrealized_pnl: '300.00',
+      fee_total: '0.00',
+      tax_total: '0.00',
+      fx_stale: false,
+      portfolio_truth: {
+        state: 'fully_valued_nonzero',
+        account_state: 'holdings_present',
+        valuation_state: 'fully_valued',
+        value_semantics: 'authoritative_total',
+        authoritative_total: '1300.00',
+        covered_subtotal: null,
+        account_count: 1,
+        position_count: 1,
+      },
+      market_breakdown: [
+        { market: 'us', position_count: 1, total_market_value: '1300.00', weight_pct: 100 },
+      ],
+      portfolio_attribution: {
+        performance: {
+          pnl: { price: '300.00', net: '300.00' },
+        },
+      },
+      analytics: {
+        pnl: {
+          display_currency: 'USD',
+          realized: { amount: '0.00', currency: 'USD', fx_status: 'live' },
+          unrealized: { amount: '300.00', currency: 'USD', fx_status: 'live' },
+          total: { amount: '300.00', currency: 'USD', fx_status: 'live' },
+        },
+        exposure: {
+          by_account: [],
+          by_currency: [],
+          by_market: [],
+          by_symbol: [
+            {
+              key: 'AAPL',
+              label: 'AAPL',
+              symbol: 'AAPL',
+              market: 'us',
+              currency: 'USD',
+              market_value: '1300.00',
+              display_value: '1300.00',
+              display_currency: 'USD',
+              native_value: '1300.00',
+              native_currency: 'USD',
+              unrealized_pnl: '300.00',
+              percent: 100,
+              fx_status: 'live',
+            },
+          ],
+          by_sector: [],
+          sector_status: 'unavailable',
+        },
+        risk: {
+          largest_position: {
+            key: 'AAPL',
+            label: 'AAPL',
+            symbol: 'AAPL',
+            market: 'us',
+            currency: 'USD',
+            market_value: '1300.00',
+            display_value: '1300.00',
+            display_currency: 'USD',
+            unrealized_pnl: '300.00',
+            percent: 100,
+            fx_status: 'live',
+          },
+          largest_currency: null,
+          largest_market: null,
+          holding_count: 1,
+          account_count: 1,
+          cash_percent: 0,
+          fx_unavailable: false,
+          warnings: [],
+        },
+      },
+      exposure_research_context: {
+        dominant_exposure: {
+          type: 'position',
+          symbol: 'AAPL',
+          label: 'AAPL',
+          market: 'us',
+          currency: 'USD',
+          market_value: '1300.00',
+          weight_pct: 100,
+          fx_status: 'live',
+        },
+      },
+      accounts: [],
+    };
+
+    get.mockResolvedValueOnce({ data: snapshot });
+    await expect(portfolioApi.getSnapshot()).resolves.toMatchObject({
+      marketBreakdown: [{ totalMarketValue: '1300.00' }],
+      analytics: {
+        pnl: { unrealized: { amount: '300.00' } },
+        exposure: { bySymbol: [{ marketValue: '1300.00', unrealizedPnl: '300.00' }] },
+      },
+      exposureResearchContext: { dominantExposure: { marketValue: '1300.00', currency: 'USD' } },
+    });
+
+    get.mockResolvedValueOnce({
+      data: {
+        ...snapshot,
+        analytics: {
+          ...snapshot.analytics,
+          pnl: {
+            ...snapshot.analytics.pnl,
+            unrealized: { ...snapshot.analytics.pnl.unrealized, amount: 300 },
+          },
+        },
+      },
+    });
+    await expect(portfolioApi.getSnapshot()).rejects.toThrow(
+      'Invalid portfolio decimal contract at portfolio.analytics.pnl.unrealized.amount',
+    );
+
+    get.mockResolvedValueOnce({
+      data: {
+        ...snapshot,
+        portfolio_attribution: { performance: { pnl: { price: 300 } } },
+      },
+    });
+    await expect(portfolioApi.getSnapshot()).rejects.toThrow(
+      'Invalid portfolio decimal contract at portfolio.portfolioAttribution.performance.pnl.price',
+    );
+  });
+
+  it('decodes the canonical portfolio snapshot golden DTO and rejects numeric risk exposure money', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    get.mockResolvedValueOnce({ data: portfolioSnapshotGoldenDto });
+    await expect(portfolioApi.getSnapshot()).resolves.toMatchObject({
+      totalCash: '3500.00',
+      analytics: {
+        risk: {
+          largestPosition: {
+            key: 'symbol:600519',
+            marketValue: '12000.00',
+            displayValue: '12000.00',
+          },
+          largestCurrency: {
+            key: 'currency:CNY',
+            marketValue: '12000.00',
+            displayValue: '12000.00',
+          },
+          largestMarket: {
+            key: 'market:cn',
+            marketValue: '12000.00',
+            displayValue: '12000.00',
+          },
+        },
+      },
+    });
+
+    const numericRiskMoney = structuredClone(portfolioSnapshotGoldenDto) as {
+      analytics: { risk: { largest_position: { market_value: unknown } } };
+    };
+    numericRiskMoney.analytics.risk.largest_position.market_value = 12000;
+    get.mockResolvedValueOnce({ data: numericRiskMoney });
+    await expect(portfolioApi.getSnapshot()).rejects.toThrow(
+      'Invalid portfolio decimal contract at portfolio.analytics.risk.largestPosition.marketValue',
+    );
   });
 
 
@@ -835,7 +1259,14 @@ describe('portfolioApi scenario risk adapter', () => {
           largest_holding: { ticker: 'AAPL', percent: 60 },
         },
         exposure_by_theme_or_sector: [
-          { key: 'ai', label: 'AI Infrastructure', market_value: 1500, percent: 75, holding_count: 2 },
+          {
+            key: 'ai',
+            label: 'AI Infrastructure',
+            market_value: '1500.00',
+            display_currency: 'USD',
+            percent: 75,
+            holding_count: 2,
+          },
         ],
         counts_by_structure_state: { breakout: 1, mixed: 1 },
         holdings_structure: [
@@ -968,6 +1399,16 @@ describe('portfolioApi scenario risk adapter', () => {
       },
     });
     expect(payload.schemaVersion).toBe('portfolio_structure_review_v1');
+    expect(payload.exposureByThemeOrSector).toEqual([
+      {
+        key: 'ai',
+        label: 'AI Infrastructure',
+        marketValue: '1500.00',
+        displayCurrency: 'USD',
+        percent: 75,
+        holdingCount: 2,
+      },
+    ]);
     expect(payload.holdingsStructure[0]).toMatchObject({
       ticker: 'AAPL',
       structureState: 'breakout',
@@ -1038,6 +1479,24 @@ describe('portfolioApi scenario risk adapter', () => {
     for (const forbiddenKey of ['schema_version', 'aggregate_summary', 'exposure_by_theme_or_sector', 'counts_by_structure_state', 'holdings_structure', 'strongest_structures', 'weakest_evidence', 'common_risk_flags', 'missing_evidence', 'no_advice_disclosure', 'provider', 'debug_trace']) {
       expect(keys.has(forbiddenKey)).toBe(false);
     }
+
+    get.mockResolvedValueOnce({
+      data: {
+        exposure_by_theme_or_sector: [
+          {
+            key: 'ai',
+            label: 'AI Infrastructure',
+            market_value: 1500,
+            display_currency: 'USD',
+            percent: 75,
+            holding_count: 2,
+          },
+        ],
+      },
+    });
+    await expect(portfolioApi.getStructureReview()).rejects.toThrow(
+      'Invalid portfolio decimal contract at portfolio.exposureByThemeOrSector[0].marketValue',
+    );
   });
   it('normalizes scenario risk response to consumer-safe advisory fields only', async () => {
     const { portfolioApi } = await import('../portfolio');
@@ -1045,6 +1504,7 @@ describe('portfolioApi scenario risk adapter', () => {
     post.mockResolvedValueOnce({
       data: {
         read_model_type: 'portfolio_scenario_risk_advisory_v1',
+        base_currency: 'USD',
         advisory_only: true,
         accounting_mutation: false,
         broker_integration: false,
@@ -1055,18 +1515,18 @@ describe('portfolioApi scenario risk adapter', () => {
           total_positions: 3,
           positions_with_usable_weight: 3,
           positions_with_market_value: 3,
-          effective_weight_sum: 1,
-          total_market_value: 2000,
+          effective_weight_sum: '1',
+          total_market_value: '2000',
           explicit_exposure_rows: 4,
           labels_with_explicit_coverage: ['AI_THEME', 'QQQ'],
         },
         scenarios: [
           {
             name: 'qqq_proxy_down',
-            portfolio_impact_pct: -3.5,
-            portfolio_impact_amount: -70,
-            covered_weight: 0.75,
-            covered_market_value: 1500,
+            portfolio_impact_pct: '-3.5',
+            portfolio_impact_amount: '-70',
+            covered_weight: '0.75',
+            covered_market_value: '1500',
             warnings: ['missing_scenario_coverage'],
             missing_coverage: [
               {
@@ -1079,20 +1539,20 @@ describe('portfolioApi scenario risk adapter', () => {
               {
                 symbol: 'NVDA',
                 bucket: 'AI Semis',
-                weight: 0.5,
-                market_value: 1000,
-                impact_pct: -2.5,
-                impact_amount: -50,
-                contribution_to_scenario_loss: 0.7143,
+                weight: '0.5',
+                market_value: '1000',
+                impact_pct: '-2.5',
+                impact_amount: '-50',
+                contribution_to_scenario_loss: '0.7143',
                 warnings: [],
                 applied_shocks: [
                   {
                     label: 'QQQ',
                     label_type: 'index_proxy',
-                    shock_pct: -5,
-                    exposure: 1,
-                    impact_pct: -2.5,
-                    impact_amount: -50,
+                    shock_pct: '-5',
+                    exposure: '1',
+                    impact_pct: '-2.5',
+                    impact_amount: '-50',
                   },
                 ],
               },
@@ -1101,9 +1561,9 @@ describe('portfolioApi scenario risk adapter', () => {
               {
                 bucket: 'AI Semis',
                 position_count: 1,
-                impact_pct: -2.5,
-                impact_amount: -50,
-                contribution_to_scenario_loss: 0.7143,
+                impact_pct: '-2.5',
+                impact_amount: '-50',
+                contribution_to_scenario_loss: '0.7143',
               },
             ],
           },
@@ -1127,6 +1587,7 @@ describe('portfolioApi scenario risk adapter', () => {
 
     const payload = await portfolioApi.projectScenarioRisk({
       asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
       positions: [],
       exposures: [],
       scenarioShocks: [],
@@ -1140,22 +1601,23 @@ describe('portfolioApi scenario risk adapter', () => {
       tradeExecution: false,
       executionReadiness: 'advisory_only_not_trade_execution',
       asOf: '2026-05-18T09:30:00Z',
+      baseCurrency: 'USD',
       coverage: {
         totalPositions: 3,
         positionsWithUsableWeight: 3,
         positionsWithMarketValue: 3,
-        effectiveWeightSum: 1,
-        totalMarketValue: 2000,
+        effectiveWeightSum: '1',
+        totalMarketValue: '2000',
         explicitExposureRows: 4,
         labelsWithExplicitCoverage: ['AI_THEME', 'QQQ'],
       },
       scenarios: [
         {
           name: 'qqq_proxy_down',
-          portfolioImpactPct: -3.5,
-          portfolioImpactAmount: -70,
-          coveredWeight: 0.75,
-          coveredMarketValue: 1500,
+          portfolioImpactPct: '-3.5',
+          portfolioImpactAmount: '-70',
+          coveredWeight: '0.75',
+          coveredMarketValue: '1500',
           warnings: ['missing_scenario_coverage'],
           missingCoverage: [
             {
@@ -1168,20 +1630,20 @@ describe('portfolioApi scenario risk adapter', () => {
             {
               symbol: 'NVDA',
               bucket: 'AI Semis',
-              weight: 0.5,
-              marketValue: 1000,
-              impactPct: -2.5,
-              impactAmount: -50,
-              contributionToScenarioLoss: 0.7143,
+              weight: '0.5',
+              marketValue: '1000',
+              impactPct: '-2.5',
+              impactAmount: '-50',
+              contributionToScenarioLoss: '0.7143',
               warnings: [],
               appliedShocks: [
                 {
                   label: 'QQQ',
                   labelType: 'index_proxy',
-                  shockPct: -5,
-                  exposure: 1,
-                  impactPct: -2.5,
-                  impactAmount: -50,
+                  shockPct: '-5',
+                  exposure: '1',
+                  impactPct: '-2.5',
+                  impactAmount: '-50',
                 },
               ],
             },
@@ -1190,9 +1652,9 @@ describe('portfolioApi scenario risk adapter', () => {
             {
               bucket: 'AI Semis',
               positionCount: 1,
-              impactPct: -2.5,
-              impactAmount: -50,
-              contributionToScenarioLoss: 0.7143,
+              impactPct: '-2.5',
+              impactAmount: '-50',
+              contributionToScenarioLoss: '0.7143',
             },
           ],
         },
@@ -1228,6 +1690,7 @@ describe('portfolioApi scenario risk adapter', () => {
     post.mockResolvedValueOnce({
       data: {
         read_model_type: 'portfolio_scenario_risk_advisory_v1',
+        base_currency: 'USD',
         advisory_only: true,
         execution_readiness: 'advisory_only_not_trade_execution',
         coverage: {
@@ -1266,6 +1729,7 @@ describe('portfolioApi scenario risk adapter', () => {
 
     const payload = await portfolioApi.projectScenarioRisk({
       asOf: '2026-05-18',
+      baseCurrency: 'USD',
       positions: [],
       exposures: [],
       scenarioShocks: [],
@@ -1286,6 +1750,118 @@ describe('portfolioApi scenario risk adapter', () => {
     ]);
   });
 
+  it('decodes import-commit decimal fields without allowing numeric wire values', async () => {
+    const { portfolioApi } = await import('../portfolio');
+    const file = new File(['symbol,quantity,price\nAAPL,1,1\n'], 'portfolio.csv', { type: 'text/csv' });
+    const response = {
+      account_id: 1,
+      record_count: 1,
+      inserted_count: 1,
+      duplicate_count: 0,
+      failed_count: 0,
+      cash_record_count: 0,
+      cash_inserted_count: 0,
+      cash_failed_count: 0,
+      corporate_action_count: 0,
+      corporate_action_inserted_count: 0,
+      corporate_action_failed_count: 0,
+      dry_run: true,
+      duplicate_import: false,
+      warnings: [],
+      metadata: {
+        preview_record: {
+          quantity: '1234567890123456.12345678',
+          price: '0.00000001',
+        },
+      },
+      errors: [],
+    };
+
+    post.mockResolvedValueOnce({ data: response });
+    await expect(portfolioApi.commitCsvImport(1, 'huatai', file, true)).resolves.toMatchObject({
+      metadata: {
+        previewRecord: {
+          quantity: '1234567890123456.12345678',
+          price: '0.00000001',
+        },
+      },
+    });
+
+    post.mockResolvedValueOnce({
+      data: {
+        ...response,
+        metadata: {
+          preview_record: {
+            quantity: 1,
+            price: '1',
+          },
+        },
+      },
+    });
+    await expect(portfolioApi.commitCsvImport(1, 'huatai', file, true))
+      .rejects.toThrow('Invalid portfolio decimal contract at portfolio.metadata.previewRecord.quantity');
+  });
+
+  it('decodes import-preview decimal fields without allowing numeric wire values', async () => {
+    const { portfolioApi } = await import('../portfolio');
+    const file = new File(['symbol,quantity,price\nAAPL,1,1\n'], 'portfolio.csv', { type: 'text/csv' });
+    const response = {
+      broker: 'csv',
+      record_count: 1,
+      skipped_count: 0,
+      error_count: 0,
+      records: [{
+        trade_date: '2026-01-01',
+        symbol: 'AAPL',
+        side: 'buy',
+        quantity: '9007199254740993.12345678',
+        price: '1234567890123456.12345678',
+        fee: '0.00000001',
+        tax: '0.00000001',
+        dedup_hash: 'preview',
+      }],
+      cash_record_count: 1,
+      cash_entries: [{
+        event_date: '2026-01-01',
+        direction: 'in',
+        amount: '1234567890123456.12345678',
+        currency: 'USD',
+      }],
+      corporate_action_count: 1,
+      corporate_actions: [{
+        effective_date: '2026-01-01',
+        symbol: 'AAPL',
+        market: 'us',
+        currency: 'USD',
+        action_type: 'cash_dividend',
+        cash_dividend_per_share: '0.00000001',
+        split_ratio: '2.00000000',
+      }],
+      warnings: [],
+      metadata: {},
+      errors: [],
+    };
+
+    post.mockResolvedValueOnce({ data: response });
+    await expect(portfolioApi.parseCsvImport('csv', file)).resolves.toMatchObject({
+      records: [{
+        quantity: '9007199254740993.12345678',
+        price: '1234567890123456.12345678',
+      }],
+      cashEntries: [{ amount: '1234567890123456.12345678' }],
+      corporateActions: [{ splitRatio: '2.00000000' }],
+    });
+
+    post.mockResolvedValueOnce({
+      data: {
+        ...response,
+        records: [{ ...response.records[0], quantity: 1 }],
+      },
+    });
+    await expect(portfolioApi.parseCsvImport('csv', file))
+      .rejects.toThrow('Invalid portfolio decimal contract at portfolio.records[0].quantity');
+  });
+
   it('propagates backend validation errors unchanged', async () => {
     const { portfolioApi } = await import('../portfolio');
     const error = httpError(422, {
@@ -1301,6 +1877,7 @@ describe('portfolioApi scenario risk adapter', () => {
 
     await expect(portfolioApi.projectScenarioRisk({
       asOf: '',
+      baseCurrency: 'USD',
       positions: [],
       exposures: [],
       scenarioShocks: [],

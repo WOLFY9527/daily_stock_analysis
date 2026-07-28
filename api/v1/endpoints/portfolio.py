@@ -45,6 +45,7 @@ from api.v1.schemas.portfolio import (
     PortfolioHistoryResponse,
     PortfolioHistorySnapshotItem,
     PortfolioRiskResponse,
+    PortfolioScenarioRiskInputError,
     PortfolioScenarioRiskRequest,
     PortfolioScenarioRiskResponse,
     PortfolioSnapshotResponse,
@@ -55,6 +56,7 @@ from api.v1.schemas.portfolio import (
     PortfolioTradeUpdateRequest,
 )
 from src.config import get_config
+from src.portfolio_exact_numeric import round_portfolio_decimal_value, serialize_portfolio_decimal_value
 from src.runtime.settings import PortfolioImportLimits
 from src.services.fx_rate_service import default_fx_rate_service
 from src.repositories.portfolio_repo import PortfolioRepository
@@ -806,6 +808,7 @@ def _portfolio_dominant_exposure(payload: dict[str, Any]) -> dict[str, Any]:
     analytics_risk = _portfolio_analytics_risk(payload)
     largest_position = _safe_dict(analytics_risk.get("largest_position"))
     if largest_position:
+        display_currency = largest_position.get("display_currency")
         return {
             "type": "position",
             "source": "snapshot_analytics",
@@ -814,8 +817,10 @@ def _portfolio_dominant_exposure(payload: dict[str, Any]) -> dict[str, Any]:
                 largest_position.get("label") or largest_position.get("symbol") or "Largest position"
             ),
             "market": largest_position.get("market"),
-            "currency": largest_position.get("currency"),
-            "marketValue": _safe_float(largest_position.get("market_value")),
+            "currency": display_currency,
+            "marketValue": _portfolio_optional_money_text(
+                largest_position.get("market_value"), currency=display_currency
+            ),
             "weightPct": _safe_float(largest_position.get("percent")),
             "fxStatus": largest_position.get("fx_status"),
         }
@@ -825,27 +830,33 @@ def _portfolio_dominant_exposure(payload: dict[str, Any]) -> dict[str, Any]:
     top_position = top_positions[0] if top_positions and isinstance(top_positions[0], dict) else {}
     if top_position:
         symbol = str(top_position.get("symbol") or "").upper()
+        currency = payload.get("currency")
         return {
             "type": "position",
             "source": "risk_concentration",
             "symbol": symbol or None,
             "label": symbol or "Largest position",
             "market": None,
-            "currency": payload.get("currency"),
-            "marketValue": _safe_float(top_position.get("market_value_base")),
+            "currency": currency,
+            "marketValue": _portfolio_optional_money_text(
+                top_position.get("market_value_base"), currency=currency
+            ),
             "weightPct": _safe_float(top_position.get("weight_pct")),
             "fxStatus": payload.get("fxFreshnessState"),
         }
 
     largest_currency = _safe_dict(analytics_risk.get("largest_currency"))
     if largest_currency:
-        currency = str(largest_currency.get("currency") or largest_currency.get("key") or "").upper()
+        native_currency = str(largest_currency.get("currency") or largest_currency.get("key") or "").upper()
+        display_currency = largest_currency.get("display_currency")
         return {
             "type": "currency",
             "source": "snapshot_analytics",
-            "currency": currency or None,
-            "label": str(largest_currency.get("label") or currency or "Largest currency"),
-            "marketValue": _safe_float(largest_currency.get("market_value")),
+            "currency": display_currency,
+            "label": str(largest_currency.get("label") or native_currency or "Largest currency"),
+            "marketValue": _portfolio_optional_money_text(
+                largest_currency.get("market_value"), currency=display_currency
+            ),
             "weightPct": _safe_float(largest_currency.get("percent")),
             "fxStatus": largest_currency.get("fx_status"),
         }
@@ -853,12 +864,16 @@ def _portfolio_dominant_exposure(payload: dict[str, Any]) -> dict[str, Any]:
     largest_market = _safe_dict(analytics_risk.get("largest_market"))
     if largest_market:
         market = str(largest_market.get("market") or largest_market.get("key") or "").lower()
+        display_currency = largest_market.get("display_currency")
         return {
             "type": "market",
             "source": "snapshot_analytics",
             "market": market or None,
             "label": str(largest_market.get("label") or market.upper() or "Largest market"),
-            "marketValue": _safe_float(largest_market.get("market_value")),
+            "currency": display_currency,
+            "marketValue": _portfolio_optional_money_text(
+                largest_market.get("market_value"), currency=display_currency
+            ),
             "weightPct": _safe_float(largest_market.get("percent")),
             "fxStatus": largest_market.get("fx_status"),
         }
@@ -869,6 +884,12 @@ def _portfolio_dominant_exposure(payload: dict[str, Any]) -> dict[str, Any]:
         "label": "No portfolio exposure available",
         "weightPct": None,
     }
+
+
+def _portfolio_optional_money_text(value: Any, *, currency: Any) -> Optional[str]:
+    if value is None or currency is None:
+        return None
+    return serialize_portfolio_decimal_value(value, kind="money", currency=str(currency))
 
 
 def _portfolio_analytics_risk(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1576,18 +1597,27 @@ def _datetime_to_str(value: object) -> Optional[str]:
 
 def _serialize_history_item(row: object) -> PortfolioHistorySnapshotItem:
     payload = _safe_dict(_parse_json_payload(getattr(row, "payload", None)))
+    base_currency = str(getattr(row, "base_currency"))
+
+    def base_money(field_name: str):
+        return round_portfolio_decimal_value(
+            getattr(row, field_name),
+            kind="money",
+            currency=base_currency,
+        )
+
     return PortfolioHistorySnapshotItem(
         account_id=int(getattr(row, "account_id")),
         snapshot_date=_date_to_str(getattr(row, "snapshot_date")),
         cost_method=str(getattr(row, "cost_method")),
-        base_currency=str(getattr(row, "base_currency")),
-        total_cash=float(getattr(row, "total_cash")),
-        total_market_value=float(getattr(row, "total_market_value")),
-        total_equity=float(getattr(row, "total_equity")),
-        realized_pnl=float(getattr(row, "realized_pnl")),
-        unrealized_pnl=float(getattr(row, "unrealized_pnl")),
-        fee_total=float(getattr(row, "fee_total")),
-        tax_total=float(getattr(row, "tax_total")),
+        base_currency=base_currency,
+        total_cash=base_money("total_cash"),
+        total_market_value=base_money("total_market_value"),
+        total_equity=base_money("total_equity"),
+        realized_pnl=base_money("realized_pnl"),
+        unrealized_pnl=base_money("unrealized_pnl"),
+        fee_total=base_money("fee_total"),
+        tax_total=base_money("tax_total"),
         fx_stale=bool(getattr(row, "fx_stale")),
         valuation_lineage=_safe_dict(payload.get("valuation_lineage")) or None,
         created_at=_datetime_to_str(getattr(row, "created_at", None)),
@@ -2635,7 +2665,7 @@ def refresh_fx_rates(
 @router.post(
     "/scenario-risk",
     response_model=PortfolioScenarioRiskResponse,
-    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, 422: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Project caller-supplied portfolio scenario risk",
 )
 def project_scenario_risk(
@@ -2644,13 +2674,23 @@ def project_scenario_risk(
 ) -> PortfolioScenarioRiskResponse:
     del current_user  # Auth convention only; the projection is caller-supplied and account-free.
     try:
+        request.validate_position_money_currency()
         projection = PortfolioScenarioRiskService().build_projection(
             as_of=request.asOf,
+            base_currency=request.baseCurrency,
             positions=request.positions,
             exposures=request.exposures,
             scenario_shocks=request.scenarioShocks,
         )
         return PortfolioScenarioRiskResponse.model_validate(projection.model_dump())
+    except PortfolioScenarioRiskInputError as exc:
+        raise safe_api_error(
+            status_code=422,
+            error="validation_error",
+            message=safe_exception_message(exc, fallback=PORTFOLIO_VALIDATION_ERROR_MESSAGE),
+            retryable=False,
+            fallback_message=PORTFOLIO_VALIDATION_ERROR_MESSAGE,
+        ) from exc
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:

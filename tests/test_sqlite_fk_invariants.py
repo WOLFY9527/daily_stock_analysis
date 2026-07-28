@@ -13,6 +13,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -321,9 +322,12 @@ def _create_fk_drift_portfolio_database(
     path: Path,
     *,
     owner_variant: str = "historical",
+    trade_exact_storage: str = "canonical",
 ) -> None:
     if owner_variant not in {"historical", "collated", "constrained", "wrong_fk"}:
         raise ValueError(f"unsupported legacy owner variant: {owner_variant}")
+    if trade_exact_storage not in {"canonical", "legacy"}:
+        raise ValueError(f"unsupported trade exact storage: {trade_exact_storage}")
     engine = create_engine_with_sqlite_foreign_keys(f"sqlite:///{path}")
     metadata = MetaData()
     users = AppUser.__table__.to_metadata(metadata)
@@ -359,6 +363,9 @@ def _create_fk_drift_portfolio_database(
     )
     Index("ix_legacy_portfolio_owner", accounts.c.owner_id)
     trades = PortfolioTrade.__table__.to_metadata(metadata)
+    if trade_exact_storage == "legacy":
+        for column_name in ("quantity", "price", "fee", "tax"):
+            trades.c[column_name].type = Float()
     metadata.create_all(engine)
     with engine.begin() as connection:
         if rogue_users is not None:
@@ -430,6 +437,45 @@ def test_valid_legacy_fk_migration_repairs_schema_and_retains_parent_and_child_r
     assert inventory == declared_sqlite_foreign_keys(Base.metadata)
     assert "ix_legacy_portfolio_owner" in index_names
     assert violations == []
+
+    DatabaseManager.reset_instance()
+    sparse_legacy_path = tmp_path / "legacy-float-portfolio.sqlite"
+    _create_fk_drift_portfolio_database(
+        sparse_legacy_path,
+        trade_exact_storage="legacy",
+    )
+    with connect_sqlite(sparse_legacy_path) as connection:
+        source_rows = connection.execute(
+            "SELECT account_id, symbol, quantity, price FROM portfolio_trades"
+        ).fetchall()
+        source_types = {
+            row[1]: str(row[2]).upper()
+            for row in connection.execute("PRAGMA table_xinfo(portfolio_trades)")
+        }
+
+    try:
+        with pytest.raises(
+            RuntimeError,
+            match="SQLite exact-numeric migration refuses incomplete pre-broker-sync portfolio schema",
+        ):
+            DatabaseManager(db_url=f"sqlite:///{sparse_legacy_path}")
+    finally:
+        DatabaseManager.reset_instance()
+
+    with connect_sqlite(sparse_legacy_path) as connection:
+        assert connection.execute(
+            "SELECT account_id, symbol, quantity, price FROM portfolio_trades"
+        ).fetchall() == source_rows
+        assert {source_types[column] for column in ("quantity", "price", "fee", "tax")} == {
+            "FLOAT"
+        }
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'portfolio_cash_ledger'"
+        ).fetchone() is None
+        assert connection.execute(
+            "SELECT name FROM sqlite_schema WHERE type = 'table' "
+            "AND name LIKE '%__wolfy_precision_old'"
+        ).fetchall() == []
 
 
 @pytest.mark.parametrize(

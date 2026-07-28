@@ -19,7 +19,7 @@ import logging
 import re
 from datetime import datetime, date, timedelta, time
 from types import SimpleNamespace
-from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Iterable
+from typing import Callable, Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Iterable
 from urllib.parse import unquote_plus, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
@@ -56,6 +56,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.schema import CreateIndex, CreateTable
 
 from src.config import get_config
 from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
@@ -84,6 +85,17 @@ from src.postgres_analysis_chat_store import PostgresPhaseBStore
 from src.postgres_market_metadata_store import PostgresPhaseCStore
 from src.postgres_scanner_watchlist_store import PostgresPhaseDStore
 from src.postgres_backtest_store import PostgresPhaseEStore
+from src.portfolio_exact_numeric import (
+    PortfolioExactNumeric,
+    PortfolioExactNumericError,
+    normalize_legacy_portfolio_decimal,
+    normalize_portfolio_decimal,
+    parse_portfolio_decimal,
+    serialize_legacy_portfolio_decimal,
+    serialize_portfolio_decimal,
+    serialize_portfolio_decimal_value,
+    STOCK_DAILY_CLOSE_PROVENANCE_ATTR,
+)
 from src.postgres_portfolio_coexistence_store import PostgresPhaseFStore, phase_f_ledger_shadow_id
 from src.postgres_control_plane_store import PostgresPhaseGStore
 import src.storage_phase_g_observability as storage_phase_g_observability
@@ -252,7 +264,7 @@ class StockDaily(Base):
     open = Column(Float)
     high = Column(Float)
     low = Column(Float)
-    close = Column(Float)
+    close = Column(PortfolioExactNumeric())
     
     # 成交数据
     volume = Column(Float)  # 成交量（股）
@@ -1953,11 +1965,11 @@ class PortfolioBrokerSyncState(Base):
     snapshot_date = Column(Date, nullable=False, index=True)
     synced_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
     base_currency = Column(String(8), nullable=False, default='USD')
-    total_cash = Column(Float, nullable=False, default=0.0)
-    total_market_value = Column(Float, nullable=False, default=0.0)
-    total_equity = Column(Float, nullable=False, default=0.0)
-    realized_pnl = Column(Float, nullable=False, default=0.0)
-    unrealized_pnl = Column(Float, nullable=False, default=0.0)
+    total_cash = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_market_value = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_equity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    realized_pnl = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    unrealized_pnl = Column(PortfolioExactNumeric(), nullable=False, default=0)
     fx_stale = Column(Boolean, nullable=False, default=False)
     payload_json = Column(Text)
     created_at = Column(DateTime, default=datetime.now, index=True)
@@ -1982,11 +1994,11 @@ class PortfolioBrokerSyncPosition(Base):
     symbol = Column(String(16), nullable=False, index=True)
     market = Column(String(8), nullable=False, default='us')
     currency = Column(String(8), nullable=False, default='USD')
-    quantity = Column(Float, nullable=False, default=0.0)
-    avg_cost = Column(Float, nullable=False, default=0.0)
-    last_price = Column(Float, nullable=False, default=0.0)
-    market_value_base = Column(Float, nullable=False, default=0.0)
-    unrealized_pnl_base = Column(Float, nullable=False, default=0.0)
+    quantity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    avg_cost = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    last_price = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    market_value_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    unrealized_pnl_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
     valuation_currency = Column(String(8), nullable=False, default='USD')
     payload_json = Column(Text)
     created_at = Column(DateTime, default=datetime.now, index=True)
@@ -2014,8 +2026,8 @@ class PortfolioBrokerSyncCashBalance(Base):
     broker_connection_id = Column(Integer, ForeignKey('portfolio_broker_connections.id'), nullable=False, index=True)
     portfolio_account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
     currency = Column(String(8), nullable=False, default='USD')
-    amount = Column(Float, nullable=False, default=0.0)
-    amount_base = Column(Float, nullable=False, default=0.0)
+    amount = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    amount_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.now, index=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -2042,10 +2054,10 @@ class PortfolioTrade(Base):
     currency = Column(String(8), nullable=False, default='CNY')
     trade_date = Column(Date, nullable=False, index=True)
     side = Column(String(8), nullable=False)  # buy/sell
-    quantity = Column(Float, nullable=False)
-    price = Column(Float, nullable=False)
-    fee = Column(Float, default=0.0)
-    tax = Column(Float, default=0.0)
+    quantity = Column(PortfolioExactNumeric(), nullable=False)
+    price = Column(PortfolioExactNumeric(), nullable=False)
+    fee = Column(PortfolioExactNumeric(), default=0)
+    tax = Column(PortfolioExactNumeric(), default=0)
     note = Column(String(255))
     dedup_hash = Column(String(64), index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
@@ -2070,7 +2082,7 @@ class PortfolioCashLedger(Base):
     account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
     event_date = Column(Date, nullable=False, index=True)
     direction = Column(String(8), nullable=False)  # in/out
-    amount = Column(Float, nullable=False)
+    amount = Column(PortfolioExactNumeric(), nullable=False)
     currency = Column(String(8), nullable=False, default='CNY')
     note = Column(String(255))
     created_at = Column(DateTime, default=datetime.now, index=True)
@@ -2092,8 +2104,8 @@ class PortfolioCorporateAction(Base):
     currency = Column(String(8), nullable=False, default='CNY')
     effective_date = Column(Date, nullable=False, index=True)
     action_type = Column(String(24), nullable=False)  # cash_dividend/split_adjustment
-    cash_dividend_per_share = Column(Float)
-    split_ratio = Column(Float)
+    cash_dividend_per_share = Column(PortfolioExactNumeric())
+    split_ratio = Column(PortfolioExactNumeric())
     note = Column(String(255))
     created_at = Column(DateTime, default=datetime.now, index=True)
 
@@ -2113,14 +2125,16 @@ class PortfolioPosition(Base):
     symbol = Column(String(16), nullable=False, index=True)
     market = Column(String(8), nullable=False, default='cn')
     currency = Column(String(8), nullable=False, default='CNY')
-    quantity = Column(Float, nullable=False, default=0.0)
-    avg_cost = Column(Float, nullable=False, default=0.0)
-    total_cost = Column(Float, nullable=False, default=0.0)
-    last_price = Column(Float, nullable=False, default=0.0)
-    market_value_base = Column(Float, nullable=False, default=0.0)
-    unrealized_pnl_base = Column(Float, nullable=False, default=0.0)
+    quantity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    avg_cost = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_cost = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    last_price = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    market_value_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    unrealized_pnl_base = Column(PortfolioExactNumeric(), nullable=False, default=0)
     valuation_currency = Column(String(8), nullable=False, default='CNY')
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+    # Added append-only so legacy replay rows remain explicitly unavailable until replayed.
+    price_cost = Column(PortfolioExactNumeric())
 
     __table_args__ = (
         UniqueConstraint(
@@ -2146,8 +2160,8 @@ class PortfolioPositionLot(Base):
     market = Column(String(8), nullable=False, default='cn')
     currency = Column(String(8), nullable=False, default='CNY')
     open_date = Column(Date, nullable=False, index=True)
-    remaining_quantity = Column(Float, nullable=False, default=0.0)
-    unit_cost = Column(Float, nullable=False, default=0.0)
+    remaining_quantity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    unit_cost = Column(PortfolioExactNumeric(), nullable=False, default=0)
     source_trade_id = Column(Integer, ForeignKey('portfolio_trades.id'))
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
 
@@ -2166,13 +2180,13 @@ class PortfolioDailySnapshot(Base):
     snapshot_date = Column(Date, nullable=False, index=True)
     cost_method = Column(String(8), nullable=False, default='fifo')  # fifo/avg
     base_currency = Column(String(8), nullable=False, default='CNY')
-    total_cash = Column(Float, nullable=False, default=0.0)
-    total_market_value = Column(Float, nullable=False, default=0.0)
-    total_equity = Column(Float, nullable=False, default=0.0)
-    unrealized_pnl = Column(Float, nullable=False, default=0.0)
-    realized_pnl = Column(Float, nullable=False, default=0.0)
-    fee_total = Column(Float, nullable=False, default=0.0)
-    tax_total = Column(Float, nullable=False, default=0.0)
+    total_cash = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_market_value = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    total_equity = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    unrealized_pnl = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    realized_pnl = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    fee_total = Column(PortfolioExactNumeric(), nullable=False, default=0)
+    tax_total = Column(PortfolioExactNumeric(), nullable=False, default=0)
     fx_stale = Column(Boolean, nullable=False, default=False)
     payload = Column(Text)
     created_at = Column(DateTime, default=datetime.now, index=True)
@@ -2197,7 +2211,7 @@ class PortfolioFxRate(Base):
     from_currency = Column(String(8), nullable=False, index=True)
     to_currency = Column(String(8), nullable=False, index=True)
     rate_date = Column(Date, nullable=False, index=True)
-    rate = Column(Float, nullable=False)
+    rate = Column(PortfolioExactNumeric(), nullable=False)
     source = Column(String(32), nullable=False, default='manual')
     is_stale = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -2424,12 +2438,23 @@ class DatabaseManager:
             # Keep schema creation, legacy migration, and invariant verification
             # in one transaction so a failed FK qualification cannot be committed.
             with self._engine.begin() as connection:
+                sqlite_preexisting_table_names: Optional[set[str]] = None
                 if connection.dialect.name == "sqlite":
                     connection.exec_driver_sql("BEGIN IMMEDIATE")
                     self._assert_no_sqlite_migration_artifacts(connection)
                     self._assert_no_unmanaged_sqlite_triggers(connection)
+                    sqlite_preexisting_table_names = {
+                        str(row[0])
+                        for row in connection.exec_driver_sql(
+                            "SELECT name FROM sqlite_schema WHERE type = 'table' "
+                            "AND name NOT LIKE 'sqlite_%'"
+                        ).fetchall()
+                    }
                 Base.metadata.create_all(connection)
-                bootstrap_identity_required = self._run_multi_user_migrations(connection)
+                bootstrap_identity_required = self._run_multi_user_migrations(
+                    connection,
+                    sqlite_preexisting_table_names=sqlite_preexisting_table_names,
+                )
             self._initialized = True
             if bootstrap_identity_required:
                 self.ensure_bootstrap_admin_user()
@@ -2675,7 +2700,12 @@ class DatabaseManager:
             row.last_error = concise_error
             row.last_error_at = datetime.now()
 
-    def _run_multi_user_migrations(self, connection) -> bool:
+    def _run_multi_user_migrations(
+        self,
+        connection,
+        *,
+        sqlite_preexisting_table_names: Optional[set[str]] = None,
+    ) -> bool:
         """Apply lightweight SQLite-safe schema migrations for Phase 1 ownership."""
         bootstrap_user_id = BOOTSTRAP_ADMIN_USER_ID
         migration_context = nullcontext(connection)
@@ -3155,6 +3185,12 @@ class DatabaseManager:
                 "WHERE updated_at IS NULL"
             )
 
+            self._migrate_stock_daily_close_to_exact_numeric(conn)
+            self._migrate_legacy_portfolio_exact_numeric_tables(
+                conn,
+                sqlite_preexisting_table_names=sqlite_preexisting_table_names,
+            )
+
             self._backfill_market_scanner_ownership(conn, bootstrap_user_id=bootstrap_user_id)
             self._backfill_conversation_sessions(conn, bootstrap_user_id=bootstrap_user_id)
             bootstrap_identity_required = self._has_bootstrap_owner_references(conn)
@@ -3332,6 +3368,791 @@ class DatabaseManager:
                 )
 
     @classmethod
+    def _portfolio_exact_numeric_table_specs(cls) -> Tuple[Tuple[Any, Tuple[Any, ...]], ...]:
+        """Return the metadata-derived closure for the Portfolio exact-value migration."""
+        specs: List[Tuple[Any, Tuple[Any, ...]]] = []
+        for table in Base.metadata.sorted_tables:
+            if table.name == StockDaily.__tablename__:
+                continue
+            exact_columns = tuple(
+                column
+                for column in table.columns
+                if isinstance(column.type, PortfolioExactNumeric)
+            )
+            if exact_columns:
+                specs.append((table, exact_columns))
+        return tuple(specs)
+
+    @classmethod
+    def _portfolio_broker_sync_exact_numeric_table_specs(
+        cls,
+    ) -> Tuple[Tuple[Any, Tuple[Any, ...]], ...]:
+        broker_sync_table_names = {
+            PortfolioBrokerSyncState.__tablename__,
+            PortfolioBrokerSyncPosition.__tablename__,
+            PortfolioBrokerSyncCashBalance.__tablename__,
+        }
+        return tuple(
+            spec
+            for spec in cls._portfolio_exact_numeric_table_specs()
+            if str(spec[0].name) in broker_sync_table_names
+        )
+
+    @classmethod
+    def _stock_daily_exact_numeric_table_specs(cls) -> Tuple[Tuple[Any, Tuple[Any, ...]], ...]:
+        """Keep the shared quote migration separate from the Portfolio ledger graph."""
+        table = StockDaily.__table__
+        return ((table, (table.c.close,)),)
+
+    @classmethod
+    def _portfolio_exact_numeric_artifact_name(cls, table_name: str) -> str:
+        return f"{table_name}__wolfy_precision_old"
+
+    @classmethod
+    def _assert_sqlite_exact_numeric_migration_environment(cls, conn) -> None:
+        if conn.dialect.name != "sqlite":
+            return
+        foreign_keys_enabled = int(conn.exec_driver_sql("PRAGMA foreign_keys").scalar_one())
+        if foreign_keys_enabled != 1:
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires foreign-key enforcement"
+            )
+        legacy_alter_table = int(
+            conn.exec_driver_sql("PRAGMA legacy_alter_table").scalar_one()
+        )
+        if legacy_alter_table != 0:
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires legacy_alter_table = 0"
+            )
+        version_text = str(conn.exec_driver_sql("SELECT sqlite_version()").scalar_one())
+        try:
+            version = tuple(int(part) for part in version_text.split(".")[:3])
+        except ValueError as exc:
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires a parseable SQLite version"
+            ) from exc
+        if version < (3, 26, 0):
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires SQLite 3.26 or newer"
+            )
+
+    @classmethod
+    def _expected_sqlite_exact_numeric_type(cls, conn, column) -> str:
+        if isinstance(column.type, PortfolioExactNumeric):
+            return "TEXT"
+        return str(conn.dialect.type_compiler.process(column.type)).strip().upper()
+
+    @classmethod
+    def _expected_sqlite_exact_numeric_explicit_indexes(
+        cls,
+        table,
+    ) -> Tuple[Tuple[Any, ...], ...]:
+        indexes: List[Tuple[Any, ...]] = []
+        for index in table.indexes:
+            if index.dialect_options["sqlite"].get("where") is not None:
+                raise RuntimeError(
+                    "SQLite exact-numeric migration requires manual partial-index review: "
+                    f"{table.name}.{index.name}"
+                )
+            indexes.append(
+                (
+                    str(index.name),
+                    int(bool(index.unique)),
+                    0,
+                    tuple((str(column.name), 0, "BINARY") for column in index.columns),
+                )
+            )
+        return tuple(sorted(indexes))
+
+    @classmethod
+    def _expected_sqlite_exact_numeric_unique_constraints(
+        cls,
+        table,
+    ) -> Tuple[Tuple[Any, ...], ...]:
+        constraints: List[Tuple[Any, ...]] = []
+        for constraint in table.constraints:
+            if not isinstance(constraint, UniqueConstraint):
+                continue
+            constraints.append(
+                (
+                    0,
+                    tuple(
+                        (str(column.name), 0, "BINARY")
+                        for column in constraint.columns
+                    ),
+                )
+            )
+        return tuple(sorted(constraints))
+
+    @classmethod
+    def _assert_sqlite_exact_numeric_source_shape(
+        cls,
+        conn,
+        *,
+        table,
+        exact_columns: Tuple[Any, ...],
+        allowed_missing_columns: Tuple[str, ...] = (),
+    ) -> str:
+        table_name = str(table.name)
+        cls._assert_sqlite_table_has_no_triggers(conn, table_name)
+        rows = cls._sqlite_table_xinfo(conn, table_name)
+        allowed_missing = {str(column_name) for column_name in allowed_missing_columns}
+        expected_columns = tuple(
+            column for column in table.columns if str(column.name) not in allowed_missing
+        )
+        if tuple(str(row["name"]) for row in rows) != tuple(
+            str(column.name) for column in expected_columns
+        ):
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires manual column review: "
+                f"{table_name}"
+            )
+
+        exact_column_names = {
+            str(column.name)
+            for column in exact_columns
+            if str(column.name) not in allowed_missing
+        }
+        observed_exact_types: set[str] = set()
+        for row, column in zip(rows, expected_columns):
+            observed_type = str(row["type"] or "").strip().upper()
+            observed_identity = (
+                int(row["notnull"]),
+                None if row["dflt_value"] is None else str(row["dflt_value"]),
+                int(row["pk"]),
+                int(row["hidden"]),
+            )
+            if column.server_default is not None:
+                raise RuntimeError(
+                    "SQLite exact-numeric migration requires manual default review: "
+                    f"{table_name}.{column.name}"
+                )
+            expected_identity = (
+                int(not column.nullable),
+                None,
+                int(column.primary_key),
+                0,
+            )
+            if observed_identity != expected_identity:
+                raise RuntimeError(
+                    "SQLite exact-numeric migration requires manual column review: "
+                    f"{table_name}.{column.name}"
+                )
+            if str(column.name) in exact_column_names:
+                observed_exact_types.add(observed_type)
+            elif observed_type != cls._expected_sqlite_exact_numeric_type(conn, column):
+                raise RuntimeError(
+                    "SQLite exact-numeric migration requires manual column review: "
+                    f"{table_name}.{column.name}"
+                )
+
+        if observed_exact_types == {"TEXT"}:
+            storage_state = "canonical"
+        elif observed_exact_types == {"FLOAT"}:
+            storage_state = "legacy"
+        else:
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires all canonical TEXT or all "
+                f"legacy FLOAT columns: {table_name}"
+            )
+
+        declared_foreign_keys = declared_sqlite_foreign_keys(Base.metadata)
+        expected_foreign_keys = type(declared_foreign_keys)(
+            {
+                identity: count
+                for identity, count in declared_foreign_keys.items()
+                if identity[0] == table_name
+            }
+        )
+        actual_foreign_keys = read_sqlite_foreign_keys(conn, (table_name,))
+        if actual_foreign_keys != expected_foreign_keys:
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires manual foreign-key review: "
+                f"{table_name}"
+            )
+        if inspect(conn).get_check_constraints(table_name):
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires manual constraint review: "
+                f"{table_name}"
+            )
+        if cls._sqlite_explicit_index_inventory(
+            conn,
+            table_name=table_name,
+        ) != cls._expected_sqlite_exact_numeric_explicit_indexes(table):
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires manual index review: "
+                f"{table_name}"
+            )
+        if cls._sqlite_unique_constraint_inventory(
+            conn,
+            table_name=table_name,
+        ) != cls._expected_sqlite_exact_numeric_unique_constraints(table):
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires manual unique-constraint review: "
+                f"{table_name}"
+            )
+        table_sql = str(
+            conn.exec_driver_sql(
+                "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = :table_name",
+                {"table_name": table_name},
+            ).scalar_one()
+        )
+        normalized_sql = re.sub(r"\s+", " ", table_sql.upper())
+        if (
+            " AUTOINCREMENT" in normalized_sql
+            or any(marker in table_sql for marker in ("--", "/*", "*/"))
+            or re.search(
+                r"\b(?:CHECK|COLLATE|DEFERRABLE|INITIALLY)\b|\bON\s+CONFLICT\b",
+                normalized_sql,
+            )
+            is not None
+        ):
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires manual constraint review: "
+                f"{table_name}"
+            )
+        return storage_state
+
+    @classmethod
+    def _migrate_sqlite_portfolio_position_price_cost_column(cls, conn) -> None:
+        """Append the unknown price-cost field without inventing legacy values."""
+        if conn.dialect.name != "sqlite" or not cls._sqlite_table_exists(conn, "portfolio_positions"):
+            return
+        table = PortfolioPosition.__table__
+        existing_columns = {
+            str(row["name"])
+            for row in cls._sqlite_table_xinfo(conn, str(table.name))
+        }
+        if "price_cost" in existing_columns:
+            return
+
+        price_cost_column = table.c.price_cost
+        if not price_cost_column.nullable or price_cost_column.server_default is not None:
+            raise RuntimeError(
+                "SQLite portfolio price-cost migration requires a nullable append-only column"
+            )
+        storage_state = cls._assert_sqlite_exact_numeric_source_shape(
+            conn,
+            table=table,
+            exact_columns=tuple(
+                column
+                for column in table.columns
+                if isinstance(column.type, PortfolioExactNumeric)
+            ),
+            allowed_missing_columns=("price_cost",),
+        )
+        column_type = "TEXT" if storage_state == "canonical" else "FLOAT"
+        conn.exec_driver_sql(
+            f"ALTER TABLE {cls._quote_sqlite_identifier(str(table.name))} ADD COLUMN "
+            f"{cls._quote_sqlite_identifier('price_cost')} {column_type}"
+        )
+
+    @classmethod
+    def _assert_no_external_sqlite_exact_numeric_references(
+        cls,
+        conn,
+        *,
+        target_table_names: set[str],
+    ) -> None:
+        table_names = tuple(
+            str(row[0])
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_schema WHERE type = 'table' "
+                "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).fetchall()
+        )
+        inbound = sorted(
+            identity
+            for identity in read_sqlite_foreign_keys(conn, table_names).elements()
+            if identity[2] in target_table_names and identity[0] not in target_table_names
+        )
+        if inbound:
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires manual inbound foreign-key review: "
+                f"{inbound[0]!r}"
+            )
+        for view in conn.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_schema WHERE type = 'view' ORDER BY name"
+        ).mappings():
+            view_sql = str(view["sql"] or "")
+            referenced_table = next(
+                (
+                    table_name
+                    for table_name in target_table_names
+                    if re.search(rf"\b{re.escape(table_name)}\b", view_sql, re.IGNORECASE)
+                    is not None
+                ),
+                None,
+            )
+            if referenced_table is not None:
+                raise RuntimeError(
+                    "SQLite exact-numeric migration requires manual view review: "
+                    f"{view['name']}.{referenced_table}"
+                )
+
+    @classmethod
+    def _read_sqlite_exact_numeric_source_rows(
+        cls,
+        conn,
+        *,
+        table,
+        exact_columns: Tuple[Any, ...],
+        value_serializer: Optional[Callable[[Dict[str, Any], Any], str]] = None,
+    ) -> List[Dict[str, Any]]:
+        table_name = str(table.name)
+        quoted_table = cls._quote_sqlite_identifier(table_name)
+        rows = [
+            dict(row)
+            for row in conn.exec_driver_sql(
+                f"SELECT * FROM {quoted_table} ORDER BY {cls._quote_sqlite_identifier('id')}"
+            ).mappings()
+        ]
+        for row in rows:
+            for column in exact_columns:
+                column_name = str(column.name)
+                value = row[column_name]
+                if value is None:
+                    continue
+                try:
+                    row[column_name] = (
+                        value_serializer(row, column)
+                        if value_serializer is not None
+                        else serialize_portfolio_decimal(value)
+                    )
+                except ValueError as exc:
+                    raise RuntimeError(
+                        "SQLite exact-numeric migration found an invalid value: "
+                        f"{table_name}.{column_name} id={row.get('id')!r}"
+                    ) from exc
+        return rows
+
+    @classmethod
+    def _drop_sqlite_exact_numeric_explicit_indexes(cls, conn, *, table) -> None:
+        for index_name, _statement in cls._explicit_index_sql(
+            conn,
+            table_name=str(table.name),
+        ):
+            conn.exec_driver_sql(
+                f"DROP INDEX {cls._quote_sqlite_identifier(index_name)}"
+            )
+
+    @classmethod
+    def _copy_sqlite_exact_numeric_rows(
+        cls,
+        conn,
+        *,
+        table,
+        rows: List[Dict[str, Any]],
+    ) -> None:
+        if not rows:
+            return
+        column_names = tuple(str(column.name) for column in table.columns)
+        quoted_table = cls._quote_sqlite_identifier(str(table.name))
+        quoted_columns = ", ".join(
+            cls._quote_sqlite_identifier(column_name) for column_name in column_names
+        )
+        parameter_names = tuple(f"value_{index}" for index in range(len(column_names)))
+        statement = (
+            f"INSERT INTO {quoted_table} ({quoted_columns}) VALUES "
+            f"({', '.join(f':{name}' for name in parameter_names)})"
+        )
+        parameters = [
+            {
+                parameter_name: row[column_name]
+                for parameter_name, column_name in zip(parameter_names, column_names)
+            }
+            for row in rows
+        ]
+        conn.exec_driver_sql(statement, parameters)
+
+    @classmethod
+    def _verify_sqlite_exact_numeric_migration(
+        cls,
+        conn,
+        *,
+        specs: Tuple[Tuple[Any, Tuple[Any, ...]], ...],
+        source_rows: Dict[str, List[Dict[str, Any]]],
+    ) -> None:
+        for table, exact_columns in specs:
+            table_name = str(table.name)
+            quoted_table = cls._quote_sqlite_identifier(table_name)
+            actual_rows = [
+                dict(row)
+                for row in conn.exec_driver_sql(
+                    f"SELECT * FROM {quoted_table} ORDER BY {cls._quote_sqlite_identifier('id')}"
+                ).mappings()
+            ]
+            if actual_rows != source_rows[table_name]:
+                raise RuntimeError(
+                    "SQLite exact-numeric migration did not preserve rows: "
+                    f"{table_name}"
+                )
+            for column in exact_columns:
+                column_name = str(column.name)
+                quoted_column = cls._quote_sqlite_identifier(column_name)
+                non_text_count = int(
+                    conn.exec_driver_sql(
+                        f"SELECT COUNT(*) FROM {quoted_table} WHERE {quoted_column} IS NOT NULL "
+                        f"AND typeof({quoted_column}) != 'text'"
+                    ).scalar_one()
+                )
+                if non_text_count:
+                    raise RuntimeError(
+                        "SQLite exact-numeric migration did not persist canonical TEXT values: "
+                        f"{table_name}.{column_name}"
+                    )
+            cls._assert_sqlite_exact_numeric_source_shape(
+                conn,
+                table=table,
+                exact_columns=exact_columns,
+            )
+        integrity_rows = conn.exec_driver_sql("PRAGMA integrity_check").fetchall()
+        if integrity_rows != [("ok",)]:
+            raise RuntimeError("SQLite exact-numeric migration integrity check failed")
+        verify_sqlite_foreign_key_schema(conn, Base.metadata)
+
+    def _migrate_sqlite_exact_numeric_specs(
+        self,
+        conn,
+        *,
+        specs: Tuple[Tuple[Any, Tuple[Any, ...]], ...],
+        value_serializer: Optional[Callable[[Dict[str, Any], Any], str]] = None,
+    ) -> None:
+        """Rebuild one reviewed exact-value table set without mixing storage states."""
+        target_table_names = {str(table.name) for table, _columns in specs}
+        self._assert_no_external_sqlite_exact_numeric_references(
+            conn,
+            target_table_names=target_table_names,
+        )
+        if conn.exec_driver_sql("PRAGMA foreign_key_check").first() is not None:
+            raise RuntimeError(
+                "SQLite exact-numeric migration requires a foreign-key-clean source database"
+            )
+
+        storage_states = {
+            self._assert_sqlite_exact_numeric_source_shape(
+                conn,
+                table=table,
+                exact_columns=exact_columns,
+            )
+            for table, exact_columns in specs
+        }
+        if storage_states == {"canonical"}:
+            return
+        if storage_states != {"legacy"}:
+            raise RuntimeError(
+                "SQLite exact-numeric migration refuses mixed legacy and canonical storage"
+            )
+
+        source_rows = {
+            str(table.name): self._read_sqlite_exact_numeric_source_rows(
+                conn,
+                table=table,
+                exact_columns=exact_columns,
+                value_serializer=value_serializer,
+            )
+            for table, exact_columns in specs
+        }
+        for table, _exact_columns in specs:
+            table_name = str(table.name)
+            artifact_name = self._portfolio_exact_numeric_artifact_name(table_name)
+            conn.exec_driver_sql(
+                f"ALTER TABLE {self._quote_sqlite_identifier(table_name)} RENAME TO "
+                f"{self._quote_sqlite_identifier(artifact_name)}"
+            )
+        for table, _exact_columns in specs:
+            self._drop_sqlite_exact_numeric_explicit_indexes(conn, table=table)
+        for table, _exact_columns in specs:
+            conn.execute(CreateTable(table))
+        for table, _exact_columns in specs:
+            self._copy_sqlite_exact_numeric_rows(
+                conn,
+                table=table,
+                rows=source_rows[str(table.name)],
+            )
+        for table, _exact_columns in reversed(specs):
+            artifact_name = self._portfolio_exact_numeric_artifact_name(str(table.name))
+            conn.exec_driver_sql(
+                f"DROP TABLE {self._quote_sqlite_identifier(artifact_name)}"
+            )
+        for table, _exact_columns in specs:
+            for index in sorted(table.indexes, key=lambda item: str(item.name)):
+                conn.execute(CreateIndex(index))
+        self._verify_sqlite_exact_numeric_migration(
+            conn,
+            specs=specs,
+            source_rows=source_rows,
+        )
+
+    @staticmethod
+    def _serialize_legacy_stock_daily_close(row: Dict[str, Any], _column: Any) -> str:
+        market = get_market_for_stock(str(row.get("code") or ""))
+        if market not in {"cn", "hk", "us"}:
+            raise ValueError("stock_daily close migration requires a supported market")
+        return serialize_legacy_portfolio_decimal(
+            row["close"],
+            kind="price",
+            market=market,
+        )
+
+    @staticmethod
+    def _legacy_broker_sync_base_currency_by_connection_id(
+        rows: Iterable[Dict[str, Any]],
+    ) -> Dict[Any, Any]:
+        base_currency_by_connection_id: Dict[Any, Any] = {}
+        for row in rows:
+            broker_connection_id = row.get("broker_connection_id")
+            if broker_connection_id is None:
+                raise PortfolioExactNumericError(
+                    "legacy broker sync state is missing its broker connection context"
+                )
+            if broker_connection_id in base_currency_by_connection_id:
+                raise PortfolioExactNumericError(
+                    "legacy broker sync state has ambiguous broker connection context"
+                )
+            base_currency_by_connection_id[broker_connection_id] = row.get("base_currency")
+        return base_currency_by_connection_id
+
+    @staticmethod
+    def _serialize_legacy_portfolio_trade_or_cash_value(
+        row: Dict[str, Any],
+        column: Any,
+        *,
+        broker_sync_base_currency_by_connection_id: Optional[Dict[Any, Any]] = None,
+    ) -> str:
+        table_name = str(column.table.name)
+        column_name = str(column.name)
+        value = row[column_name]
+        context: Dict[str, Any]
+
+        if table_name == PortfolioTrade.__tablename__:
+            if column_name == "quantity":
+                context = {"kind": "quantity", "market": row.get("market")}
+            elif column_name == "price":
+                context = {"kind": "price", "market": row.get("market")}
+            elif column_name in {"fee", "tax"}:
+                context = {"kind": "money", "currency": row.get("currency")}
+            else:
+                return serialize_portfolio_decimal(value)
+        elif table_name == PortfolioCashLedger.__tablename__ and column_name == "amount":
+            context = {"kind": "money", "currency": row.get("currency")}
+        elif table_name == PortfolioBrokerSyncState.__tablename__:
+            if column_name in {
+                "total_cash",
+                "total_market_value",
+                "total_equity",
+                "realized_pnl",
+                "unrealized_pnl",
+            }:
+                context = {"kind": "money", "currency": row.get("base_currency")}
+            else:
+                return serialize_portfolio_decimal(value)
+        elif table_name == PortfolioBrokerSyncPosition.__tablename__:
+            if column_name == "quantity":
+                context = {"kind": "quantity", "market": row.get("market")}
+            elif column_name in {"avg_cost", "last_price"}:
+                context = {"kind": "price", "market": row.get("market")}
+            elif column_name in {"market_value_base", "unrealized_pnl_base"}:
+                context = {"kind": "money", "currency": row.get("valuation_currency")}
+            else:
+                return serialize_portfolio_decimal(value)
+        elif table_name == PortfolioBrokerSyncCashBalance.__tablename__:
+            if column_name == "amount":
+                context = {"kind": "money", "currency": row.get("currency")}
+            elif column_name == "amount_base":
+                broker_connection_id = row.get("broker_connection_id")
+                if (
+                    broker_sync_base_currency_by_connection_id is None
+                    or broker_connection_id not in broker_sync_base_currency_by_connection_id
+                ):
+                    raise PortfolioExactNumericError(
+                        "legacy broker sync cash balance is missing its state currency context"
+                    )
+                context = {
+                    "kind": "money",
+                    "currency": broker_sync_base_currency_by_connection_id[broker_connection_id],
+                }
+            else:
+                return serialize_portfolio_decimal(value)
+        else:
+            return serialize_portfolio_decimal(value)
+
+        storage_value = normalize_portfolio_decimal(value)
+        contextual_value = normalize_legacy_portfolio_decimal(value, **context)
+        if storage_value != contextual_value:
+            raise PortfolioExactNumericError(
+                "legacy portfolio value exceeds its canonical context precision"
+            )
+        return format(storage_value, "f")
+
+    def _migrate_legacy_stock_daily_close(self, conn) -> None:
+        """Migrate the shared quote source independently of Portfolio ledger history."""
+        if conn.dialect.name != "sqlite" or not self._sqlite_table_exists(conn, "stock_daily"):
+            return
+        self._assert_no_sqlite_migration_artifacts(conn)
+        self._assert_sqlite_exact_numeric_migration_environment(conn)
+        self._migrate_sqlite_exact_numeric_specs(
+            conn,
+            specs=self._stock_daily_exact_numeric_table_specs(),
+            value_serializer=self._serialize_legacy_stock_daily_close,
+        )
+
+    def _migrate_stock_daily_close_to_exact_numeric(self, conn) -> None:
+        """Migrate the SQLite primary quote store through the canonical legacy serializer."""
+        if conn.dialect.name != "sqlite":
+            raise RuntimeError(
+                "stock_daily.close exact migration supports only the SQLite primary store"
+            )
+        self._migrate_legacy_stock_daily_close(conn)
+
+    def _migrate_legacy_portfolio_exact_numeric_tables(
+        self,
+        conn,
+        *,
+        sqlite_preexisting_table_names: Optional[set[str]] = None,
+    ) -> None:
+        """Rebuild one qualified legacy Portfolio FLOAT graph as canonical SQLite TEXT."""
+        if conn.dialect.name != "sqlite":
+            return
+        self._assert_no_sqlite_migration_artifacts(conn)
+        self._assert_sqlite_exact_numeric_migration_environment(conn)
+        self._migrate_sqlite_portfolio_position_price_cost_column(conn)
+        all_specs = self._portfolio_exact_numeric_table_specs()
+        broker_sync_specs = self._portfolio_broker_sync_exact_numeric_table_specs()
+        broker_sync_table_names = {str(table.name) for table, _columns in broker_sync_specs}
+        broker_sync_feature_table_names = {
+            PortfolioBrokerConnection.__tablename__,
+            *broker_sync_table_names,
+        }
+        core_specs = tuple(
+            spec for spec in all_specs if str(spec[0].name) not in broker_sync_table_names
+        )
+        preexisting_broker_sync_feature_table_names = (
+            broker_sync_feature_table_names
+            if sqlite_preexisting_table_names is None
+            else broker_sync_feature_table_names.intersection(sqlite_preexisting_table_names)
+        )
+
+        if preexisting_broker_sync_feature_table_names and (
+            preexisting_broker_sync_feature_table_names != broker_sync_feature_table_names
+        ):
+            raise RuntimeError(
+                "SQLite exact-numeric migration refuses partial broker-sync schema"
+            )
+
+        migration_specs = all_specs
+        broker_sync_base_currency_by_connection_id: Dict[Any, Any] = {}
+        if not preexisting_broker_sync_feature_table_names:
+            preexisting_core_table_names = (
+                set()
+                if sqlite_preexisting_table_names is None
+                else {
+                    str(table.name)
+                    for table, _columns in core_specs
+                    if str(table.name) in sqlite_preexisting_table_names
+                }
+            )
+            core_table_names = {str(table.name) for table, _columns in core_specs}
+            preexisting_core_specs = tuple(
+                spec
+                for spec in core_specs
+                if str(spec[0].name) in preexisting_core_table_names
+            )
+            newly_created_core_specs = tuple(
+                spec
+                for spec in core_specs
+                if str(spec[0].name) not in preexisting_core_table_names
+            )
+            if preexisting_core_specs:
+                core_storage_states = {
+                    self._assert_sqlite_exact_numeric_source_shape(
+                        conn,
+                        table=table,
+                        exact_columns=exact_columns,
+                    )
+                    for table, exact_columns in preexisting_core_specs
+                }
+                if preexisting_core_table_names != core_table_names:
+                    if core_storage_states != {"canonical"}:
+                        raise RuntimeError(
+                            "SQLite exact-numeric migration refuses incomplete pre-broker-sync portfolio schema"
+                        )
+                    for table, exact_columns in newly_created_core_specs:
+                        table_name = str(table.name)
+                        if (
+                            self._assert_sqlite_exact_numeric_source_shape(
+                                conn,
+                                table=table,
+                                exact_columns=exact_columns,
+                            )
+                            != "canonical"
+                        ):
+                            raise RuntimeError(
+                                "SQLite exact-numeric migration requires canonical newly-created pre-broker-sync storage: "
+                                f"{table_name}"
+                            )
+                        if int(
+                            conn.exec_driver_sql(
+                                f"SELECT COUNT(*) FROM {self._quote_sqlite_identifier(table_name)}"
+                            ).scalar_one()
+                        ):
+                            raise RuntimeError(
+                                "SQLite exact-numeric migration requires empty newly-created pre-broker-sync storage: "
+                                f"{table_name}"
+                            )
+                elif core_storage_states != {"legacy"}:
+                    raise RuntimeError(
+                        "SQLite exact-numeric migration refuses unrecognized pre-broker-sync exact storage"
+                    )
+                else:
+                    migration_specs = core_specs
+
+            for table, exact_columns in broker_sync_specs:
+                table_name = str(table.name)
+                if (
+                    self._assert_sqlite_exact_numeric_source_shape(
+                        conn,
+                        table=table,
+                        exact_columns=exact_columns,
+                    )
+                    != "canonical"
+                ):
+                    raise RuntimeError(
+                        "SQLite exact-numeric migration requires canonical newly-created broker-sync storage: "
+                        f"{table_name}"
+                    )
+                if int(
+                    conn.exec_driver_sql(
+                        f"SELECT COUNT(*) FROM {self._quote_sqlite_identifier(table_name)}"
+                    ).scalar_one()
+                ):
+                    raise RuntimeError(
+                        "SQLite exact-numeric migration requires empty newly-created broker-sync storage: "
+                        f"{table_name}"
+                    )
+        else:
+            broker_sync_base_currency_by_connection_id = (
+                self._legacy_broker_sync_base_currency_by_connection_id(
+                    [
+                        dict(row)
+                        for row in conn.exec_driver_sql(
+                            "SELECT broker_connection_id, base_currency "
+                            "FROM portfolio_broker_sync_states ORDER BY id"
+                        ).mappings()
+                    ]
+                )
+            )
+        self._migrate_sqlite_exact_numeric_specs(
+            conn,
+            specs=migration_specs,
+            value_serializer=lambda row, column: self._serialize_legacy_portfolio_trade_or_cash_value(
+                row,
+                column,
+                broker_sync_base_currency_by_connection_id=broker_sync_base_currency_by_connection_id,
+            ),
+        )
+
+    @classmethod
     def _assert_no_sqlite_migration_artifacts(cls, conn) -> None:
         if conn.dialect.name != "sqlite":
             return
@@ -3340,6 +4161,17 @@ class DatabaseManager:
                 "SQLite partial migration artifact requires manual recovery: "
                 "backtest_summaries__new"
             )
+        exact_specs = (
+            *cls._portfolio_exact_numeric_table_specs(),
+            *cls._stock_daily_exact_numeric_table_specs(),
+        )
+        for table, _exact_columns in exact_specs:
+            artifact_name = cls._portfolio_exact_numeric_artifact_name(str(table.name))
+            if cls._sqlite_table_exists(conn, artifact_name):
+                raise RuntimeError(
+                    "SQLite partial exact-numeric migration artifact requires manual recovery: "
+                    f"{artifact_name}"
+                )
         for table_name in Base.metadata.tables:
             if not cls._sqlite_table_exists(conn, table_name):
                 continue
@@ -8006,21 +8838,26 @@ class DatabaseManager:
                             symbol=str(row.get("canonical_symbol", "") or ""),
                             market=str(row.get("market", "") or ""),
                             currency=str(row.get("currency", "") or ""),
-                            quantity=float(row.get("quantity", 0.0) or 0.0),
-                            avg_cost=float(row.get("avg_cost", 0.0) or 0.0),
-                            total_cost=float(row.get("total_cost", 0.0) or 0.0),
+                            quantity=normalize_portfolio_decimal(row.get("quantity", 0) or 0),
+                            avg_cost=normalize_portfolio_decimal(row.get("avg_cost", 0) or 0),
+                            total_cost=normalize_portfolio_decimal(row.get("total_cost", 0) or 0),
+                            price_cost=(
+                                normalize_portfolio_decimal(row.get("price_cost"))
+                                if row.get("price_cost") is not None
+                                else None
+                            ),
                             last_price=(
-                                float(row.get("last_price"))
+                                normalize_portfolio_decimal(row.get("last_price"))
                                 if row.get("last_price") is not None
                                 else None
                             ),
                             market_value_base=(
-                                float(row.get("market_value_base"))
+                                normalize_portfolio_decimal(row.get("market_value_base"))
                                 if row.get("market_value_base") is not None
                                 else None
                             ),
                             unrealized_pnl_base=(
-                                float(row.get("unrealized_pnl_base"))
+                                normalize_portfolio_decimal(row.get("unrealized_pnl_base"))
                                 if row.get("unrealized_pnl_base") is not None
                                 else None
                             ),
@@ -8169,6 +9006,7 @@ class DatabaseManager:
 
     @classmethod
     def _phase_f_shadow_sync_state_payload(cls, row: Any) -> Dict[str, Any]:
+        base_currency = str(getattr(row, "base_currency", "") or "")
         return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "owner_user_id": str(getattr(row, "owner_id", "") or ""),
@@ -8180,12 +9018,31 @@ class DatabaseManager:
             "sync_status": str(getattr(row, "sync_status", "") or ""),
             "snapshot_date": getattr(row, "snapshot_date", None),
             "synced_at": getattr(row, "synced_at", None),
-            "base_currency": str(getattr(row, "base_currency", "") or ""),
-            "total_cash": float(getattr(row, "total_cash", 0.0) or 0.0),
-            "total_market_value": float(getattr(row, "total_market_value", 0.0) or 0.0),
-            "total_equity": float(getattr(row, "total_equity", 0.0) or 0.0),
-            "realized_pnl": float(getattr(row, "realized_pnl", 0.0) or 0.0),
-            "unrealized_pnl": float(getattr(row, "unrealized_pnl", 0.0) or 0.0),
+            "base_currency": base_currency,
+            "total_cash": serialize_portfolio_decimal_value(
+                getattr(row, "total_cash", 0) if getattr(row, "total_cash", None) is not None else 0,
+                kind="storage",
+            ),
+            "total_market_value": serialize_portfolio_decimal_value(
+                getattr(row, "total_market_value", 0)
+                if getattr(row, "total_market_value", None) is not None
+                else 0,
+                kind="storage",
+            ),
+            "total_equity": serialize_portfolio_decimal_value(
+                getattr(row, "total_equity", 0) if getattr(row, "total_equity", None) is not None else 0,
+                kind="storage",
+            ),
+            "realized_pnl": serialize_portfolio_decimal_value(
+                getattr(row, "realized_pnl", 0) if getattr(row, "realized_pnl", None) is not None else 0,
+                kind="storage",
+            ),
+            "unrealized_pnl": serialize_portfolio_decimal_value(
+                getattr(row, "unrealized_pnl", 0)
+                if getattr(row, "unrealized_pnl", None) is not None
+                else 0,
+                kind="storage",
+            ),
             "fx_stale": bool(getattr(row, "fx_stale", False)),
             "payload_json": DatabaseManager._phase_f_json_payload(getattr(row, "payload_json", None)),
             "created_at": getattr(row, "created_at", None),
@@ -8194,6 +9051,8 @@ class DatabaseManager:
 
     @classmethod
     def _phase_f_shadow_sync_position_payload(cls, row: Any) -> Dict[str, Any]:
+        market = str(getattr(row, "market", "") or "")
+        valuation_currency = str(getattr(row, "valuation_currency", "") or "")
         return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "portfolio_sync_state_id": int(getattr(row, "broker_connection_id", 0) or 0),
@@ -8201,29 +9060,62 @@ class DatabaseManager:
             "portfolio_account_id": int(row.portfolio_account_id),
             "broker_position_ref": getattr(row, "broker_position_ref", None),
             "canonical_symbol": str(getattr(row, "symbol", "") or ""),
-            "market": str(getattr(row, "market", "") or ""),
+            "market": market,
             "currency": str(getattr(row, "currency", "") or ""),
-            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
-            "avg_cost": float(getattr(row, "avg_cost", 0.0) or 0.0),
-            "last_price": float(getattr(row, "last_price", 0.0) or 0.0),
-            "market_value_base": float(getattr(row, "market_value_base", 0.0) or 0.0),
-            "unrealized_pnl_base": float(getattr(row, "unrealized_pnl_base", 0.0) or 0.0),
-            "valuation_currency": getattr(row, "valuation_currency", None),
+            "quantity": serialize_portfolio_decimal_value(
+                getattr(row, "quantity", 0) if getattr(row, "quantity", None) is not None else 0,
+                kind="storage",
+            ),
+            "avg_cost": serialize_portfolio_decimal_value(
+                getattr(row, "avg_cost", 0) if getattr(row, "avg_cost", None) is not None else 0,
+                kind="storage",
+            ),
+            "last_price": serialize_portfolio_decimal_value(
+                getattr(row, "last_price", 0) if getattr(row, "last_price", None) is not None else 0,
+                kind="storage",
+            ),
+            "market_value_base": serialize_portfolio_decimal_value(
+                getattr(row, "market_value_base", 0)
+                if getattr(row, "market_value_base", None) is not None
+                else 0,
+                kind="storage",
+            ),
+            "unrealized_pnl_base": serialize_portfolio_decimal_value(
+                getattr(row, "unrealized_pnl_base", 0)
+                if getattr(row, "unrealized_pnl_base", None) is not None
+                else 0,
+                kind="storage",
+            ),
+            "valuation_currency": valuation_currency,
             "payload_json": DatabaseManager._phase_f_json_payload(getattr(row, "payload_json", None)),
             "created_at": getattr(row, "created_at", None),
             "updated_at": getattr(row, "updated_at", None),
         }, fields=("created_at", "updated_at"))
 
     @classmethod
-    def _phase_f_shadow_sync_cash_balance_payload(cls, row: Any) -> Dict[str, Any]:
+    def _phase_f_shadow_sync_cash_balance_payload(
+        cls,
+        row: Any,
+        *,
+        base_currency: str,
+    ) -> Dict[str, Any]:
+        currency = str(getattr(row, "currency", "") or "")
         return cls._phase_f_normalize_compare_time_fields({
             "id": int(row.id),
             "portfolio_sync_state_id": int(getattr(row, "broker_connection_id", 0) or 0),
             "owner_user_id": str(getattr(row, "owner_id", "") or ""),
             "portfolio_account_id": int(row.portfolio_account_id),
-            "currency": str(getattr(row, "currency", "") or ""),
-            "amount": float(getattr(row, "amount", 0.0) or 0.0),
-            "amount_base": float(getattr(row, "amount_base", 0.0) or 0.0),
+            "currency": currency,
+            "amount": serialize_portfolio_decimal_value(
+                getattr(row, "amount", 0) if getattr(row, "amount", None) is not None else 0,
+                kind="storage",
+            ),
+            "amount_base": serialize_portfolio_decimal_value(
+                getattr(row, "amount_base", 0)
+                if getattr(row, "amount_base", None) is not None
+                else 0,
+                kind="storage",
+            ),
             "created_at": getattr(row, "created_at", None),
             "updated_at": getattr(row, "updated_at", None),
         }, fields=("created_at", "updated_at"))
@@ -8255,6 +9147,7 @@ class DatabaseManager:
 
     @staticmethod
     def _phase_f_broker_sync_state_row(row: Dict[str, Any]) -> Any:
+        base_currency = str(row.get("base_currency", "") or "")
         return SimpleNamespace(
             id=int(row["id"]),
             owner_id=str(row.get("owner_user_id", "") or ""),
@@ -8266,12 +9159,32 @@ class DatabaseManager:
             sync_status=str(row.get("sync_status", "") or ""),
             snapshot_date=date.fromisoformat(row["snapshot_date"]) if row.get("snapshot_date") else None,
             synced_at=datetime.fromisoformat(row["synced_at"]) if row.get("synced_at") else None,
-            base_currency=str(row.get("base_currency", "") or ""),
-            total_cash=float(row.get("total_cash", 0.0) or 0.0),
-            total_market_value=float(row.get("total_market_value", 0.0) or 0.0),
-            total_equity=float(row.get("total_equity", 0.0) or 0.0),
-            realized_pnl=float(row.get("realized_pnl", 0.0) or 0.0),
-            unrealized_pnl=float(row.get("unrealized_pnl", 0.0) or 0.0),
+            base_currency=base_currency,
+            total_cash=parse_portfolio_decimal(
+                row.get("total_cash", 0) if row.get("total_cash") is not None else 0,
+                kind="money",
+                currency=base_currency,
+            ),
+            total_market_value=parse_portfolio_decimal(
+                row.get("total_market_value", 0) if row.get("total_market_value") is not None else 0,
+                kind="money",
+                currency=base_currency,
+            ),
+            total_equity=parse_portfolio_decimal(
+                row.get("total_equity", 0) if row.get("total_equity") is not None else 0,
+                kind="money",
+                currency=base_currency,
+            ),
+            realized_pnl=parse_portfolio_decimal(
+                row.get("realized_pnl", 0) if row.get("realized_pnl") is not None else 0,
+                kind="money",
+                currency=base_currency,
+            ),
+            unrealized_pnl=parse_portfolio_decimal(
+                row.get("unrealized_pnl", 0) if row.get("unrealized_pnl") is not None else 0,
+                kind="money",
+                currency=base_currency,
+            ),
             fx_stale=bool(row.get("fx_stale", False)),
             payload_json=DatabaseManager._phase_f_json_text(row.get("payload_json")),
             created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
@@ -8280,27 +9193,64 @@ class DatabaseManager:
 
     @staticmethod
     def _phase_f_broker_sync_position_row(row: Dict[str, Any]) -> Any:
+        market = str(row.get("market", "") or "")
+        valuation_currency = str(row.get("valuation_currency", "") or "")
         return SimpleNamespace(
             id=int(row["id"]),
             broker_position_ref=row.get("broker_position_ref"),
             symbol=str(row.get("canonical_symbol", "") or ""),
-            market=str(row.get("market", "") or ""),
+            market=market,
             currency=str(row.get("currency", "") or ""),
-            quantity=float(row.get("quantity", 0.0) or 0.0),
-            avg_cost=float(row.get("avg_cost", 0.0) or 0.0),
-            last_price=float(row.get("last_price", 0.0) or 0.0),
-            market_value_base=float(row.get("market_value_base", 0.0) or 0.0),
-            unrealized_pnl_base=float(row.get("unrealized_pnl_base", 0.0) or 0.0),
-            valuation_currency=row.get("valuation_currency"),
+            quantity=parse_portfolio_decimal(
+                row.get("quantity", 0) if row.get("quantity") is not None else 0,
+                kind="quantity",
+                market=market,
+            ),
+            avg_cost=parse_portfolio_decimal(
+                row.get("avg_cost", 0) if row.get("avg_cost") is not None else 0,
+                kind="price",
+                market=market,
+            ),
+            last_price=parse_portfolio_decimal(
+                row.get("last_price", 0) if row.get("last_price") is not None else 0,
+                kind="price",
+                market=market,
+            ),
+            market_value_base=parse_portfolio_decimal(
+                row.get("market_value_base", 0) if row.get("market_value_base") is not None else 0,
+                kind="money",
+                currency=valuation_currency,
+            ),
+            unrealized_pnl_base=parse_portfolio_decimal(
+                row.get("unrealized_pnl_base", 0)
+                if row.get("unrealized_pnl_base") is not None
+                else 0,
+                kind="money",
+                currency=valuation_currency,
+            ),
+            valuation_currency=valuation_currency,
         )
 
     @staticmethod
-    def _phase_f_broker_sync_cash_balance_row(row: Dict[str, Any]) -> Any:
+    def _phase_f_broker_sync_cash_balance_row(
+        row: Dict[str, Any],
+        *,
+        base_currency: str,
+    ) -> Any:
+        currency = str(row.get("currency", "") or "")
         return SimpleNamespace(
             id=int(row["id"]),
-            currency=str(row.get("currency", "") or ""),
-            amount=float(row.get("amount", 0.0) or 0.0),
-            amount_base=float(row.get("amount_base", 0.0) or 0.0),
+            currency=currency,
+            amount=parse_portfolio_decimal(
+                row.get("amount", 0) if row.get("amount") is not None else 0,
+                kind="money",
+                currency=currency,
+            ),
+            amount_base=parse_portfolio_decimal(
+                row.get("amount_base", 0) if row.get("amount_base") is not None else 0,
+                kind="money",
+                currency=base_currency,
+            ),
         )
 
     def _build_phase_f_portfolio_shadow_authority_state(
@@ -8364,8 +9314,17 @@ class DatabaseManager:
         legacy_sync_position_payloads = [
             self._phase_f_shadow_sync_position_payload(row) for row in legacy_sync_position_rows
         ]
+        legacy_sync_base_currency = (
+            str(getattr(legacy_sync_state_row, "base_currency", "") or "")
+            if legacy_sync_state_row is not None
+            else ""
+        )
         legacy_sync_cash_balance_payloads = [
-            self._phase_f_shadow_sync_cash_balance_payload(row) for row in legacy_sync_cash_balance_rows
+            self._phase_f_shadow_sync_cash_balance_payload(
+                row,
+                base_currency=legacy_sync_base_currency,
+            )
+            for row in legacy_sync_cash_balance_rows
         ]
         if legacy_sync_state_row is not None:
             for payload in legacy_sync_position_payloads:
@@ -8698,14 +9657,18 @@ class DatabaseManager:
         if state_row is None:
             return None
 
+        hydrated_state_row = self._phase_f_broker_sync_state_row(state_row)
         return {
-            "state_row": self._phase_f_broker_sync_state_row(state_row),
+            "state_row": hydrated_state_row,
             "positions": [
                 self._phase_f_broker_sync_position_row(row)
                 for row in list(shadow_bundle.get("sync_positions") or [])
             ],
             "cash_balances": [
-                self._phase_f_broker_sync_cash_balance_row(row)
+                self._phase_f_broker_sync_cash_balance_row(
+                    row,
+                    base_currency=hydrated_state_row.base_currency,
+                )
                 for row in list(shadow_bundle.get("sync_cash_balances") or [])
             ],
         }
@@ -8739,7 +9702,13 @@ class DatabaseManager:
         return parsed.isoformat()
 
     @staticmethod
-    def _phase_f_normalize_ledger_payload_json(payload: Dict[str, Any], *, entry_type: str) -> Dict[str, Any]:
+    def _phase_f_normalize_ledger_payload_json(
+        payload: Dict[str, Any],
+        *,
+        entry_type: str,
+        market: Optional[str] = None,
+        currency: Optional[str] = None,
+    ) -> Dict[str, Any]:
         normalized_payload = dict(payload or {})
         if entry_type == "trade":
             return {
@@ -8747,26 +9716,18 @@ class DatabaseManager:
                 "legacy_row_id": int(normalized_payload.get("legacy_row_id") or 0),
                 "trade_uid": normalized_payload.get("trade_uid"),
                 "side": normalized_payload.get("side"),
-                "quantity": (
-                    float(normalized_payload.get("quantity"))
-                    if normalized_payload.get("quantity") is not None
-                    else None
-                ),
-                "price": (
-                    float(normalized_payload.get("price"))
-                    if normalized_payload.get("price") is not None
-                    else None
-                ),
-                "fee": (
-                    float(normalized_payload.get("fee"))
-                    if normalized_payload.get("fee") is not None
-                    else None
-                ),
-                "tax": (
-                    float(normalized_payload.get("tax"))
-                    if normalized_payload.get("tax") is not None
-                    else None
-                ),
+                "quantity": serialize_portfolio_decimal_value(
+                    normalized_payload["quantity"], kind="quantity", market=market
+                ) if normalized_payload.get("quantity") is not None else None,
+                "price": serialize_portfolio_decimal_value(
+                    normalized_payload["price"], kind="price", market=market
+                ) if normalized_payload.get("price") is not None else None,
+                "fee": serialize_portfolio_decimal_value(
+                    normalized_payload["fee"], kind="money", currency=currency
+                ) if normalized_payload.get("fee") is not None else None,
+                "tax": serialize_portfolio_decimal_value(
+                    normalized_payload["tax"], kind="money", currency=currency
+                ) if normalized_payload.get("tax") is not None else None,
                 "note": normalized_payload.get("note"),
             }
         if entry_type == "cash":
@@ -8774,11 +9735,9 @@ class DatabaseManager:
                 "legacy_table": normalized_payload.get("legacy_table"),
                 "legacy_row_id": int(normalized_payload.get("legacy_row_id") or 0),
                 "direction": normalized_payload.get("direction"),
-                "amount": (
-                    float(normalized_payload.get("amount"))
-                    if normalized_payload.get("amount") is not None
-                    else None
-                ),
+                "amount": serialize_portfolio_decimal_value(
+                    normalized_payload["amount"], kind="money", currency=currency
+                ) if normalized_payload.get("amount") is not None else None,
                 "currency": normalized_payload.get("currency"),
                 "note": normalized_payload.get("note"),
             }
@@ -8787,22 +9746,20 @@ class DatabaseManager:
                 "legacy_table": normalized_payload.get("legacy_table"),
                 "legacy_row_id": int(normalized_payload.get("legacy_row_id") or 0),
                 "action_type": normalized_payload.get("action_type"),
-                "cash_dividend_per_share": (
-                    float(normalized_payload.get("cash_dividend_per_share"))
-                    if normalized_payload.get("cash_dividend_per_share") is not None
-                    else None
-                ),
-                "split_ratio": (
-                    float(normalized_payload.get("split_ratio"))
-                    if normalized_payload.get("split_ratio") is not None
-                    else None
-                ),
+                "cash_dividend_per_share": serialize_portfolio_decimal_value(
+                    normalized_payload["cash_dividend_per_share"], kind="price", market=market
+                ) if normalized_payload.get("cash_dividend_per_share") is not None else None,
+                "split_ratio": serialize_portfolio_decimal_value(
+                    normalized_payload["split_ratio"], kind="ratio", market=market
+                ) if normalized_payload.get("split_ratio") is not None else None,
                 "note": normalized_payload.get("note"),
             }
         return dict(normalized_payload)
 
     @classmethod
     def _phase_f_legacy_trade_ledger_payload(cls, row: Any) -> Dict[str, Any]:
+        market = str(getattr(row, "market", "") or "")
+        currency = str(getattr(row, "currency", "") or "")
         payload_json = cls._phase_f_normalize_ledger_payload_json(
             {
                 "legacy_table": "portfolio_trades",
@@ -8815,7 +9772,7 @@ class DatabaseManager:
                 "tax": getattr(row, "tax", None),
                 "note": getattr(row, "note", None),
             },
-            entry_type="trade",
+            entry_type="trade", market=market, currency=currency,
         )
         return {
             "id": int(phase_f_ledger_shadow_id("trade", int(getattr(row, "id", 0) or 0))),
@@ -8825,14 +9782,22 @@ class DatabaseManager:
                 entry_type="trade",
             ),
             "canonical_symbol": getattr(row, "symbol", None),
-            "market": getattr(row, "market", None),
-            "currency": getattr(row, "currency", None),
+            "market": market,
+            "currency": currency,
             "direction": getattr(row, "side", None),
-            "quantity": float(getattr(row, "quantity", 0.0) or 0.0),
-            "price": float(getattr(row, "price", 0.0) or 0.0),
+            "quantity": serialize_portfolio_decimal_value(
+                getattr(row, "quantity", 0) or 0, kind="quantity", market=market
+            ),
+            "price": serialize_portfolio_decimal_value(
+                getattr(row, "price", 0) or 0, kind="price", market=market
+            ),
             "amount": None,
-            "fee": float(getattr(row, "fee", 0.0) or 0.0),
-            "tax": float(getattr(row, "tax", 0.0) or 0.0),
+            "fee": serialize_portfolio_decimal_value(
+                getattr(row, "fee", 0) or 0, kind="money", currency=currency
+            ),
+            "tax": serialize_portfolio_decimal_value(
+                getattr(row, "tax", 0) or 0, kind="money", currency=currency
+            ),
             "corporate_action_type": None,
             "external_ref": getattr(row, "trade_uid", None),
             "dedup_hash": getattr(row, "dedup_hash", None),
@@ -8842,6 +9807,7 @@ class DatabaseManager:
 
     @classmethod
     def _phase_f_legacy_cash_ledger_payload(cls, row: Any) -> Dict[str, Any]:
+        currency = str(getattr(row, "currency", "") or "")
         payload_json = cls._phase_f_normalize_ledger_payload_json(
             {
                 "legacy_table": "portfolio_cash_ledger",
@@ -8851,7 +9817,7 @@ class DatabaseManager:
                 "currency": getattr(row, "currency", None),
                 "note": getattr(row, "note", None),
             },
-            entry_type="cash",
+            entry_type="cash", currency=currency,
         )
         return {
             "id": int(phase_f_ledger_shadow_id("cash", int(getattr(row, "id", 0) or 0))),
@@ -8862,11 +9828,13 @@ class DatabaseManager:
             ),
             "canonical_symbol": None,
             "market": None,
-            "currency": getattr(row, "currency", None),
+            "currency": currency,
             "direction": getattr(row, "direction", None),
             "quantity": None,
             "price": None,
-            "amount": float(getattr(row, "amount", 0.0) or 0.0),
+            "amount": serialize_portfolio_decimal_value(
+                getattr(row, "amount", 0) or 0, kind="money", currency=currency
+            ),
             "fee": None,
             "tax": None,
             "corporate_action_type": None,
@@ -8878,6 +9846,8 @@ class DatabaseManager:
 
     @classmethod
     def _phase_f_legacy_corporate_action_ledger_payload(cls, row: Any) -> Dict[str, Any]:
+        market = str(getattr(row, "market", "") or "")
+        currency = str(getattr(row, "currency", "") or "")
         payload_json = cls._phase_f_normalize_ledger_payload_json(
             {
                 "legacy_table": "portfolio_corporate_actions",
@@ -8887,7 +9857,7 @@ class DatabaseManager:
                 "split_ratio": getattr(row, "split_ratio", None),
                 "note": getattr(row, "note", None),
             },
-            entry_type="corporate_action",
+            entry_type="corporate_action", market=market, currency=currency,
         )
         return {
             "id": int(
@@ -8899,8 +9869,8 @@ class DatabaseManager:
                 entry_type="corporate_action",
             ),
             "canonical_symbol": getattr(row, "symbol", None),
-            "market": getattr(row, "market", None),
-            "currency": getattr(row, "currency", None),
+            "market": market,
+            "currency": currency,
             "direction": None,
             "quantity": None,
             "price": None,
@@ -8917,26 +9887,40 @@ class DatabaseManager:
     @classmethod
     def _phase_f_normalize_shadow_ledger_payload(cls, row: Dict[str, Any]) -> Dict[str, Any]:
         entry_type = str(row.get("entry_type", "") or "")
+        market = row.get("market")
+        currency = row.get("currency")
+        market_context = str(market or "")
+        currency_context = str(currency or "")
         return {
             "id": int(row.get("id") or 0),
             "entry_type": entry_type,
             "event_time": cls._phase_f_ledger_event_time(value=row.get("event_time"), entry_type=entry_type),
             "canonical_symbol": row.get("canonical_symbol"),
-            "market": row.get("market"),
-            "currency": row.get("currency"),
+            "market": market,
+            "currency": currency,
             "direction": row.get("direction"),
-            "quantity": float(row.get("quantity")) if row.get("quantity") is not None else None,
-            "price": float(row.get("price")) if row.get("price") is not None else None,
-            "amount": float(row.get("amount")) if row.get("amount") is not None else None,
-            "fee": float(row.get("fee")) if row.get("fee") is not None else None,
-            "tax": float(row.get("tax")) if row.get("tax") is not None else None,
+            "quantity": serialize_portfolio_decimal_value(
+                row["quantity"], kind="quantity", market=market_context
+            ) if row.get("quantity") is not None else None,
+            "price": serialize_portfolio_decimal_value(
+                row["price"], kind="price", market=market_context
+            ) if row.get("price") is not None else None,
+            "amount": serialize_portfolio_decimal_value(
+                row["amount"], kind="money", currency=currency_context
+            ) if row.get("amount") is not None else None,
+            "fee": serialize_portfolio_decimal_value(
+                row["fee"], kind="money", currency=currency_context
+            ) if row.get("fee") is not None else None,
+            "tax": serialize_portfolio_decimal_value(
+                row["tax"], kind="money", currency=currency_context
+            ) if row.get("tax") is not None else None,
             "corporate_action_type": row.get("corporate_action_type"),
             "external_ref": row.get("external_ref"),
             "dedup_hash": row.get("dedup_hash"),
             "note": row.get("note"),
             "payload_json": cls._phase_f_normalize_ledger_payload_json(
                 cls._phase_f_json_payload(row.get("payload_json")),
-                entry_type=entry_type,
+                entry_type=entry_type, market=market_context, currency=currency_context,
             ),
         }
 
@@ -11283,6 +12267,17 @@ class DatabaseManager:
         if df is None or df.empty:
             logger.warning(f"保存数据为空，跳过 {code}")
             return 0
+
+        market = get_market_for_stock(code)
+        if market not in {"cn", "hk", "us"}:
+            raise PortfolioExactNumericError(
+                "stock_daily close ingress requires a supported market"
+            )
+        close_tokens = df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+        if close_tokens is not None and not isinstance(close_tokens, dict):
+            raise PortfolioExactNumericError(
+                "stock_daily close provenance must be a date-keyed token map"
+            )
         
         saved_count = 0
         
@@ -11297,6 +12292,21 @@ class DatabaseManager:
                         row_date = row_date.date()
                     elif isinstance(row_date, pd.Timestamp):
                         row_date = row_date.date()
+
+                    close = row.get('close')
+                    if close_tokens is not None and close is not None:
+                        date_key = getattr(row_date, "isoformat", lambda: "")()
+                        if date_key not in close_tokens:
+                            raise PortfolioExactNumericError(
+                                "stock_daily close provenance is incomplete for the row date"
+                            )
+                        close = close_tokens[date_key]
+                    if close is not None:
+                        close = parse_portfolio_decimal(
+                            close,
+                            kind="price",
+                            market=market,
+                        )
                     
                     # 检查是否已存在
                     existing = session.execute(
@@ -11313,7 +12323,7 @@ class DatabaseManager:
                         existing.open = row.get('open')
                         existing.high = row.get('high')
                         existing.low = row.get('low')
-                        existing.close = row.get('close')
+                        existing.close = close
                         existing.volume = row.get('volume')
                         existing.amount = row.get('amount')
                         existing.pct_chg = row.get('pct_chg')
@@ -11331,7 +12341,7 @@ class DatabaseManager:
                             open=row.get('open'),
                             high=row.get('high'),
                             low=row.get('low'),
-                            close=row.get('close'),
+                            close=close,
                             volume=row.get('volume'),
                             amount=row.get('amount'),
                             pct_chg=row.get('pct_chg'),

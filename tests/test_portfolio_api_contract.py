@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import json
 import os
 import re
@@ -15,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 try:
     import litellm  # noqa: F401
@@ -23,6 +25,25 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from api.app import create_app
+from api.v1.endpoints.portfolio import _build_import_parse_response
+from api.v1.schemas.portfolio import (
+    PortfolioCashLedgerCreateRequest,
+    PortfolioCorporateActionCreateRequest,
+    PortfolioAccountSnapshot,
+    PortfolioExposureItem,
+    PortfolioFxRateItem,
+    PortfolioHistorySnapshotItem,
+    PortfolioIbkrSyncResponse,
+    PortfolioLiveFxRateResponse,
+    PortfolioImportCashEntryItem,
+    PortfolioImportCorporateActionItem,
+    PortfolioImportTradeItem,
+    PortfolioPnlMetric,
+    PortfolioPositionItem,
+    PortfolioSnapshotResponse,
+    PortfolioTradeCreateRequest,
+    PortfolioTradeUpdateRequest,
+)
 from src.config import Config
 from src.storage import DatabaseManager
 
@@ -88,6 +109,425 @@ def _reset_auth_globals() -> None:
     auth._rate_limit = {}
 
 
+class PortfolioExactWireContractTestCase(unittest.TestCase):
+    def test_openapi_exact_decimal_schema_excludes_binary_float(self) -> None:
+        app_schema = create_app().openapi()
+        components = app_schema["components"]["schemas"]
+        trade_quantity_schema = components["PortfolioTradeCreateRequest"]["properties"][
+            "quantity"
+        ]
+        sync_properties = components["PortfolioIbkrSyncResponse"]["properties"]
+        import_trade_properties = components["PortfolioImportTradeItem"]["properties"]
+        import_cash_properties = components["PortfolioImportCashEntryItem"]["properties"]
+        import_corporate_action_properties = components["PortfolioImportCorporateActionItem"]["properties"]
+
+        self.assertEqual(
+            {branch["type"] for branch in trade_quantity_schema["anyOf"]},
+            {"integer", "string"},
+        )
+        self.assertNotIn(
+            "number",
+            {branch["type"] for branch in trade_quantity_schema["anyOf"]},
+        )
+        integer_branch = next(
+            branch for branch in trade_quantity_schema["anyOf"] if branch["type"] == "integer"
+        )
+        self.assertEqual(integer_branch["exclusiveMinimum"], 0.0)
+
+        for properties, field_names in (
+            (import_trade_properties, ("quantity", "price", "fee", "tax")),
+            (import_cash_properties, ("amount",)),
+            (import_corporate_action_properties, ("cash_dividend_per_share", "split_ratio")),
+        ):
+            for field_name in field_names:
+                with self.subTest(import_field=field_name):
+                    field_schema = properties[field_name]
+                    schema_types = (
+                        {field_schema["type"]}
+                        if "type" in field_schema
+                        else {
+                            branch.get("type")
+                            for branch in field_schema.get("anyOf", [])
+                            if isinstance(branch, dict)
+                        }
+                    )
+                    self.assertIn("string", schema_types)
+                    self.assertNotIn("number", schema_types)
+
+        validation_schema = PortfolioIbkrSyncResponse.model_json_schema(mode="validation")
+        for field_name in (
+            "total_cash",
+            "total_market_value",
+            "total_equity",
+            "realized_pnl",
+            "unrealized_pnl",
+        ):
+            with self.subTest(field=field_name):
+                self.assertEqual(sync_properties[field_name]["type"], "string")
+                self.assertEqual(
+                    {
+                        branch["type"]
+                        for branch in validation_schema["properties"][field_name]["anyOf"]
+                    },
+                    {"integer", "string"},
+                )
+
+    def test_ibkr_sync_response_uses_base_currency_precision_and_rejects_float(self) -> None:
+        payload = {
+            "account_id": 1,
+            "broker_connection_id": 1,
+            "broker_account_ref": "ref",
+            "connection_name": "name",
+            "snapshot_date": "2026-01-01",
+            "synced_at": "2026-01-01T00:00:00Z",
+            "base_currency": "USD",
+            "total_cash": "1234567890123456.12",
+            "total_market_value": "0.00",
+            "total_equity": "0.00",
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "0.00",
+            "position_count": 0,
+            "cash_balance_count": 0,
+            "fx_stale": False,
+            "snapshot_overlay_active": True,
+            "used_existing_connection": True,
+            "api_base_url": "https://example.invalid",
+            "verify_ssl": True,
+        }
+
+        response = PortfolioIbkrSyncResponse(**payload)
+
+        self.assertEqual(response.total_cash, Decimal("1234567890123456.12"))
+        self.assertEqual(
+            response.model_dump(mode="json")["total_cash"],
+            "1234567890123456.12",
+        )
+        with self.assertRaises(ValidationError):
+            PortfolioIbkrSyncResponse(**{**payload, "total_cash": 0.1})
+        with self.assertRaises(ValidationError):
+            PortfolioIbkrSyncResponse(**{**payload, "total_cash": "1.001"})
+
+    def test_trade_request_preserves_canonical_decimal_text_and_rejects_float(self) -> None:
+        payload = {
+            "account_id": 1,
+            "symbol": "AAPL",
+            "trade_date": "2026-01-01",
+            "side": "buy",
+            "quantity": "9007199254740993.12345678",
+            "price": "1234567890123456.12345678",
+            "fee": "0.01",
+            "tax": "0.00",
+            "market": "us",
+            "currency": "USD",
+        }
+
+        request = PortfolioTradeCreateRequest(**payload)
+
+        self.assertEqual(request.quantity, Decimal("9007199254740993.12345678"))
+        self.assertEqual(request.price, Decimal("1234567890123456.12345678"))
+        self.assertEqual(request.fee, Decimal("0.01"))
+        self.assertEqual(request.tax, Decimal("0.00"))
+        self.assertEqual(request.model_dump(mode="json")["quantity"], "9007199254740993.12345678")
+        with self.assertRaises(ValidationError):
+            PortfolioTradeCreateRequest(**{**payload, "quantity": 0.1})
+
+    def test_import_preview_response_preserves_decimal_text_and_rejects_float(self) -> None:
+        response = _build_import_parse_response(
+            {
+                "broker": "csv",
+                "record_count": 1,
+                "skipped_count": 0,
+                "error_count": 0,
+                "records": [
+                    {
+                        "trade_date": "2026-01-01",
+                        "symbol": "AAPL",
+                        "side": "buy",
+                        "quantity": "9007199254740993.12345678",
+                        "price": "1234567890123456.12345678",
+                        "fee": "0.00000001",
+                        "tax": "0.00000001",
+                        "dedup_hash": "import-preview",
+                    }
+                ],
+                "cash_record_count": 1,
+                "cash_entries": [
+                    {
+                        "event_date": "2026-01-01",
+                        "direction": "in",
+                        "amount": "1234567890123456.12345678",
+                        "currency": "USD",
+                    }
+                ],
+                "corporate_action_count": 1,
+                "corporate_actions": [
+                    {
+                        "effective_date": "2026-01-01",
+                        "symbol": "AAPL",
+                        "market": "us",
+                        "currency": "USD",
+                        "action_type": "cash_dividend",
+                        "cash_dividend_per_share": "0.00000001",
+                        "split_ratio": "2.00000000",
+                    }
+                ],
+            }
+        ).model_dump(mode="json")
+
+        self.assertEqual(response["records"][0]["quantity"], "9007199254740993.12345678")
+        self.assertEqual(response["records"][0]["price"], "1234567890123456.12345678")
+        self.assertEqual(response["records"][0]["fee"], "0.00000001")
+        self.assertEqual(response["records"][0]["tax"], "0.00000001")
+        self.assertEqual(response["cash_entries"][0]["amount"], "1234567890123456.12345678")
+        self.assertEqual(
+            response["corporate_actions"][0]["cash_dividend_per_share"],
+            "0.00000001",
+        )
+        self.assertEqual(response["corporate_actions"][0]["split_ratio"], "2.00000000")
+
+        with self.assertRaises(ValidationError):
+            PortfolioImportTradeItem(
+                trade_date="2026-01-01",
+                symbol="AAPL",
+                side="buy",
+                quantity=0.1,
+                price="1",
+                fee="0",
+                tax="0",
+                dedup_hash="float",
+            )
+        with self.assertRaises(ValidationError):
+            PortfolioImportCashEntryItem(
+                event_date="2026-01-01",
+                direction="in",
+                amount=0.1,
+                currency="USD",
+            )
+        with self.assertRaises(ValidationError):
+            PortfolioImportCorporateActionItem(
+                effective_date="2026-01-01",
+                symbol="AAPL",
+                market="us",
+                currency="USD",
+                action_type="split_adjustment",
+                split_ratio=0.1,
+            )
+
+    def test_remaining_event_requests_preserve_decimal_transport_and_reject_float(self) -> None:
+        trade_update = PortfolioTradeUpdateRequest(
+            quantity="9007199254740993.12345678",
+            price="1234567890123456.12345678",
+            fee="0.01",
+            tax="0.00",
+        )
+        cash = PortfolioCashLedgerCreateRequest(
+            account_id=1,
+            event_date="2026-01-01",
+            direction="in",
+            amount="1234567890123456.12",
+            currency="USD",
+        )
+        corporate_action = PortfolioCorporateActionCreateRequest(
+            account_id=1,
+            symbol="AAPL",
+            effective_date="2026-01-01",
+            action_type="cash_dividend",
+            market="us",
+            currency="USD",
+            cash_dividend_per_share="0.01",
+        )
+
+        self.assertEqual(trade_update.quantity, Decimal("9007199254740993.12345678"))
+        self.assertEqual(trade_update.model_dump(mode="json")["price"], "1234567890123456.12345678")
+        self.assertEqual(cash.model_dump(mode="json")["amount"], "1234567890123456.12")
+        self.assertEqual(corporate_action.cash_dividend_per_share, Decimal("0.01"))
+        with self.assertRaises(ValidationError):
+            PortfolioTradeUpdateRequest(quantity=0.1)
+        with self.assertRaises(ValidationError):
+            PortfolioCashLedgerCreateRequest(
+                account_id=1,
+                event_date="2026-01-01",
+                direction="in",
+                amount=0.1,
+            )
+        with self.assertRaises(ValidationError):
+            PortfolioCorporateActionCreateRequest(
+                account_id=1,
+                symbol="AAPL",
+                effective_date="2026-01-01",
+                action_type="split_adjustment",
+                split_ratio=0.1,
+            )
+
+    def test_snapshot_history_and_fx_responses_preserve_contextual_decimal_text(self) -> None:
+        position = PortfolioPositionItem(
+            symbol="AAPL",
+            market="us",
+            currency="USD",
+            quantity="9007199254740993.12345678",
+            avg_cost="0.00000001",
+            total_cost="1234567890123456.12",
+            last_price="0.00000001",
+            market_value_base="1234567890123456.12",
+            unrealized_pnl_base="0.00",
+            valuation_currency="USD",
+        )
+        account = PortfolioAccountSnapshot(
+            account_id=1,
+            account_name="Main",
+            market="us",
+            base_currency="USD",
+            as_of="2026-01-01",
+            cost_method="fifo",
+            total_cash="1234567890123456.12",
+            total_market_value="0.00",
+            total_equity="1234567890123456.12",
+            realized_pnl="0.00",
+            unrealized_pnl="0.00",
+            fee_total="0.00",
+            tax_total="0.00",
+            fx_stale=False,
+            positions=[position],
+        )
+        history = PortfolioHistorySnapshotItem(
+            account_id=1,
+            snapshot_date="2026-01-01",
+            cost_method="fifo",
+            base_currency="USD",
+            total_cash="1234567890123456.12",
+            total_market_value="0.00",
+            total_equity="1234567890123456.12",
+            realized_pnl="0.00",
+            unrealized_pnl="0.00",
+            fee_total="0.00",
+            tax_total="0.00",
+            fx_stale=False,
+        )
+        fx_snapshot = PortfolioFxRateItem(
+            from_currency="USD",
+            to_currency="CNY",
+            rate="7.24680000",
+            source="manual",
+            is_stale=False,
+            source_direction="direct",
+        )
+        live_fx = PortfolioLiveFxRateResponse(
+            base_currency="USD",
+            quote_currency="CNY",
+            rate="7.24680000",
+            provider="frankfurter",
+            fetched_at="2026-01-01T00:00:00Z",
+            cache_hit=False,
+            stale=False,
+        )
+
+        self.assertEqual(position.model_dump(mode="json")["quantity"], "9007199254740993.12345678")
+        self.assertEqual(account.model_dump(mode="json")["total_cash"], "1234567890123456.12")
+        self.assertEqual(history.model_dump(mode="json")["total_equity"], "1234567890123456.12")
+        self.assertEqual(fx_snapshot.model_dump(mode="json")["rate"], "7.24680000")
+        self.assertEqual(live_fx.model_dump(mode="json")["rate"], "7.24680000")
+
+        with self.assertRaises(ValidationError):
+            PortfolioPositionItem(**{**position.model_dump(), "quantity": 0.1})
+        with self.assertRaises(ValidationError):
+            PortfolioAccountSnapshot(**{**account.model_dump(), "total_cash": 0.1})
+        with self.assertRaises(ValidationError):
+            PortfolioHistorySnapshotItem(**{**history.model_dump(), "total_equity": 0.1})
+        with self.assertRaises(ValidationError):
+            PortfolioFxRateItem(**{**fx_snapshot.model_dump(), "rate": 0.1})
+        with self.assertRaises(ValidationError):
+            PortfolioLiveFxRateResponse(**{**live_fx.model_dump(), "rate": 0.1})
+
+    def test_snapshot_analytics_money_preserves_canonical_decimal_text_and_rejects_float(self) -> None:
+        high_value = "1234567890123456.12"
+        pnl_payload = {
+            "amount": high_value,
+            "amount_display": f"USD {high_value}",
+            "percent": 1.0,
+            "currency": "USD",
+            "fx_status": "live",
+        }
+        exposure_payload = {
+            "key": "AAPL",
+            "label": "AAPL",
+            "market_value": high_value,
+            "display_value": high_value,
+            "display_currency": "USD",
+            "percent": 100.0,
+            "fx_status": "live",
+            "native_value": high_value,
+            "native_currency": "USD",
+            "unrealized_pnl": "0.01",
+        }
+
+        pnl = PortfolioPnlMetric(**pnl_payload)
+        exposure = PortfolioExposureItem(**exposure_payload)
+        pnl_json = pnl.model_dump(mode="json")
+        exposure_json = exposure.model_dump(mode="json")
+
+        with self.subTest(model="pnl", field="amount"):
+            self.assertIsInstance(pnl_json["amount"], str)
+            self.assertEqual(pnl_json["amount"], high_value)
+        for field_name, expected in (
+            ("market_value", high_value),
+            ("display_value", high_value),
+            ("native_value", high_value),
+            ("unrealized_pnl", "0.01"),
+        ):
+            with self.subTest(model="exposure", field=field_name):
+                self.assertIsInstance(exposure_json[field_name], str)
+                self.assertEqual(exposure_json[field_name], expected)
+
+        with self.subTest(model="pnl", float_field="amount"):
+            with self.assertRaises(ValidationError):
+                PortfolioPnlMetric(**{**pnl_payload, "amount": 0.1})
+        for field_name in ("market_value", "display_value", "native_value", "unrealized_pnl"):
+            with self.subTest(model="exposure", float_field=field_name):
+                with self.assertRaises(ValidationError):
+                    PortfolioExposureItem(**{**exposure_payload, field_name: 0.1})
+
+    def test_snapshot_truth_money_preserves_canonical_decimal_text_and_rejects_float(self) -> None:
+        high_value = "1234567890123456.12"
+        payload = {
+            "as_of": "2026-01-01",
+            "cost_method": "fifo",
+            "currency": "USD",
+            "account_count": 1,
+            "total_cash": high_value,
+            "total_market_value": "0.00",
+            "total_equity": high_value,
+            "realized_pnl": "0.00",
+            "unrealized_pnl": "0.00",
+            "fee_total": "0.00",
+            "tax_total": "0.00",
+            "fx_stale": False,
+            "portfolio_truth": {
+                "state": "fully_valued_nonzero",
+                "account_state": "holdings_present",
+                "valuation_state": "fully_valued",
+                "value_semantics": "authoritative_total",
+                "authoritative_total": high_value,
+                "covered_subtotal": None,
+                "account_count": 1,
+                "position_count": 1,
+            },
+        }
+
+        snapshot = PortfolioSnapshotResponse(**payload)
+        self.assertEqual(snapshot.model_dump(mode="json")["portfolio_truth"]["authoritative_total"], high_value)
+
+        with self.assertRaises(ValidationError):
+            PortfolioSnapshotResponse(
+                **{
+                    **payload,
+                    "portfolio_truth": {
+                        **payload["portfolio_truth"],
+                        "authoritative_total": 0.1,
+                    },
+                }
+            )
+
+
 class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
     def setUp(self) -> None:
         _reset_auth_globals()
@@ -130,7 +570,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         _reset_public_limiter_state_if_available()
         self.temp_dir.cleanup()
 
-    def _save_close(self, symbol: str, on_date: date, close: float) -> None:
+    def _save_close(self, symbol: str, on_date: date, close: Decimal) -> None:
         df = pd.DataFrame(
             [
                 {
@@ -481,7 +921,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
                 "account_id": account_id,
                 "event_date": "2026-05-10",
                 "direction": "in",
-                "amount": 1000.0,
+                "amount": "1000.00",
                 "currency": "CNY",
             },
         )
@@ -492,13 +932,13 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
                 "symbol": "600519",
                 "trade_date": "2026-05-10",
                 "side": "buy",
-                "quantity": 10.0,
-                "price": 100.0,
+                "quantity": "10.00000000",
+                "price": "100.00000000",
                 "market": "cn",
                 "currency": "CNY",
             },
         )
-        self._save_close("600519", date(2026, 5, 10), 100.0)
+        self._save_close("600519", date(2026, 5, 10), Decimal("100.00"))
 
         response = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -555,7 +995,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
                 "account_id": account_id,
                 "event_date": "2026-05-10",
                 "direction": "in",
-                "amount": 1000.0,
+                "amount": "1000.00",
                 "currency": "USD",
             },
         )
@@ -566,13 +1006,13 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
                 "symbol": "AAPL",
                 "trade_date": "2026-05-10",
                 "side": "buy",
-                "quantity": 1.0,
-                "price": 100.0,
+                "quantity": "1.00000000",
+                "price": "100.00000000",
                 "market": "us",
                 "currency": "USD",
             },
         )
-        self._save_close("AAPL", date(2026, 5, 10), 100.0)
+        self._save_close("AAPL", date(2026, 5, 10), Decimal("100.00"))
 
         response = self.client.get(
             "/api/v1/portfolio/risk",
@@ -701,7 +1141,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
                 "account_id": account_id,
                 "event_date": "2026-05-10",
                 "direction": "in",
-                "amount": 1000.0,
+                "amount": "1000.00",
                 "currency": "CNY",
             },
         )
@@ -712,13 +1152,13 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
                 "symbol": "600519",
                 "trade_date": "2026-05-10",
                 "side": "buy",
-                "quantity": 10.0,
-                "price": 100.0,
+                "quantity": "10.00000000",
+                "price": "100.00000000",
                 "market": "cn",
                 "currency": "CNY",
             },
         )
-        self._save_close("600519", date(2026, 5, 10), 100.0)
+        self._save_close("600519", date(2026, 5, 10), Decimal("100.00"))
 
         with patch(
             "src.services.portfolio_risk_service.PortfolioRiskService._fetch_belong_boards",

@@ -9,6 +9,8 @@ from typing import Any
 
 import pandas as pd
 
+from data_provider.base import attach_stock_daily_close_tokens
+from src.portfolio_exact_numeric import STOCK_DAILY_CLOSE_PROVENANCE_ATTR, parse_portfolio_decimal
 from src.repositories.stock_repo import StockRepository
 
 
@@ -21,6 +23,7 @@ RUNTIME_ENABLED_ENV = "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED"
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _UNAVAILABLE_SOURCE = "unavailable"
+_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN = "__wolfystock_akshare_close_token"
 
 
 def historical_ohlcv_runtime_enabled(env: Mapping[str, str] | None = None) -> bool:
@@ -105,6 +108,7 @@ class AkshareCnOhlcvRuntime:
                 source=LOCAL_CN_DB_SOURCE,
                 requested_days=requested_days,
                 cache_hit=True,
+                cache_write_state="not_applicable",
             )
 
         try:
@@ -149,15 +153,26 @@ class AkshareCnOhlcvRuntime:
                 reason="runtime_unavailable",
             )
 
-        if self.persist_cache and self.repository is not None:
+        cache_write_state = "not_requested"
+        if self.persist_cache and self.repository is None:
+            cache_write_state = "not_configured"
+        elif self.persist_cache and self.repository is not None:
             try:
+                cache_frame = normalized.drop(columns=["adjustedClose"], errors="ignore")
                 self.repository.save_dataframe(
-                    normalized.drop(columns=["adjustedClose"], errors="ignore"),
+                    cache_frame,
                     code=symbol,
                     data_source=AKSHARE_CN_DAILY_SOURCE,
                 )
             except Exception:
                 logger.warning("CN daily OHLCV cache persist skipped for %s", symbol)
+                cache_write_state = "not_persisted"
+            else:
+                cache_write_state = "persisted" if _cache_write_verified(
+                    self.repository,
+                    code=symbol,
+                    frame=cache_frame,
+                ) else "not_persisted"
 
         return _payload_from_frame(
             symbol=symbol,
@@ -166,6 +181,7 @@ class AkshareCnOhlcvRuntime:
             source=AKSHARE_CN_DAILY_SOURCE,
             requested_days=requested_days,
             cache_hit=False,
+            cache_write_state=cache_write_state,
         )
 
     def _load_cache(self, symbol: str, requested_days: int) -> pd.DataFrame | None:
@@ -244,6 +260,11 @@ def _normalize_ohlcv_frame(frame: Any, symbol: str) -> pd.DataFrame:
     df = frame.copy() if isinstance(frame, pd.DataFrame) else pd.DataFrame(frame)
     if df.empty:
         return pd.DataFrame()
+    has_existing_close_tokens = STOCK_DAILY_CLOSE_PROVENANCE_ATTR in df.attrs
+    existing_close_tokens = df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+    df.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+    if has_existing_close_tokens and not isinstance(existing_close_tokens, dict):
+        return pd.DataFrame()
     rename_map = {
         "日期": "date",
         "开盘": "open",
@@ -262,6 +283,8 @@ def _normalize_ohlcv_frame(frame: Any, symbol: str) -> pd.DataFrame:
     required = {"open", "high", "low", "close", "volume"}
     if not required.issubset(set(df.columns)):
         return pd.DataFrame()
+    if not has_existing_close_tokens:
+        df[_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN] = df["close"]
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["code"] = symbol
     for column in ("open", "high", "low", "close", "volume", "amount", "pct_chg", "adjustedClose"):
@@ -279,7 +302,79 @@ def _normalize_ohlcv_frame(frame: Any, symbol: str) -> pd.DataFrame:
         # close only for that explicitly adjusted source path.
         df["adjustedClose"] = df["close"]
     columns = ["date", "code", "open", "high", "low", "close", "volume", "amount", "pct_chg", "adjustedClose"]
-    return df[columns].sort_values("date").reset_index(drop=True)
+    if _STOCK_DAILY_CLOSE_PROVENANCE_COLUMN in df.columns:
+        columns.append(_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN)
+    normalized = df[columns].sort_values("date").reset_index(drop=True)
+    if has_existing_close_tokens:
+        raw_close_tokens = [
+            existing_close_tokens.get(row_date.date().isoformat())
+            for row_date in normalized["date"].tolist()
+        ]
+    else:
+        raw_close_tokens = normalized.pop(_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN).tolist()
+    return attach_stock_daily_close_tokens(normalized, raw_close_tokens)
+
+
+def _cache_write_verified(
+    repository: StockRepository,
+    *,
+    code: str,
+    frame: pd.DataFrame,
+) -> bool:
+    close_tokens = frame.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+    if frame.empty or not isinstance(close_tokens, dict):
+        return False
+
+    expected_by_date: dict[str, Any] = {}
+    for row_date in frame["date"].tolist():
+        parsed_date = pd.to_datetime(row_date, errors="coerce")
+        if pd.isna(parsed_date):
+            return False
+        date_key = parsed_date.date().isoformat()
+        if date_key in expected_by_date or date_key not in close_tokens:
+            return False
+        try:
+            expected_by_date[date_key] = parse_portfolio_decimal(
+                close_tokens[date_key],
+                kind="price",
+                market="cn",
+            )
+        except ValueError:
+            return False
+
+    try:
+        stored_rows = repository.get_recent_daily_rows(code=code, limit=len(expected_by_date))
+    except Exception:
+        return False
+
+    stored_by_date: dict[str, Any] = {}
+    for row in stored_rows:
+        parsed_date = pd.to_datetime(getattr(row, "date", None), errors="coerce")
+        if pd.isna(parsed_date):
+            return False
+        date_key = parsed_date.date().isoformat()
+        if date_key in stored_by_date:
+            return False
+        stored_by_date[date_key] = row
+
+    if set(stored_by_date) != set(expected_by_date):
+        return False
+
+    for date_key, expected_close in expected_by_date.items():
+        row = stored_by_date[date_key]
+        if getattr(row, "data_source", None) != AKSHARE_CN_DAILY_SOURCE:
+            return False
+        try:
+            stored_close = parse_portfolio_decimal(
+                getattr(row, "close", None),
+                kind="price",
+                market="cn",
+            )
+        except ValueError:
+            return False
+        if stored_close != expected_close:
+            return False
+    return True
 
 
 def _payload_from_frame(
@@ -290,6 +385,7 @@ def _payload_from_frame(
     source: str,
     requested_days: int,
     cache_hit: bool,
+    cache_write_state: str,
 ) -> dict[str, Any]:
     normalized = _normalize_ohlcv_frame(frame, symbol).tail(requested_days).reset_index(drop=True)
     data = [_row_payload(row) for _, row in normalized.iterrows()]
@@ -301,6 +397,7 @@ def _payload_from_frame(
         "rows": len(data),
         "requestedDays": requested_days,
         "cacheHit": bool(cache_hit),
+        "cacheWriteState": cache_write_state,
         "consumerSafe": True,
     }
     return {

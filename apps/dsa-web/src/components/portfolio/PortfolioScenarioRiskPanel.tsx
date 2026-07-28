@@ -3,9 +3,19 @@ import { Input } from '../common/Input';
 import { PillBadge } from '../common/PillBadge';
 import { Select } from '../common/Select';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import {
+  absolutePortfolioDecimal,
+  comparePortfolioDecimals,
+  formatPortfolioDecimal,
+  multiplyPortfolioDecimals,
+  parsePortfolioDecimal,
+  portfolioDecimalSign,
+} from '../../utils/portfolioDecimal';
 import type {
+  PortfolioDecimal,
   PortfolioScenarioRiskRequest,
   PortfolioScenarioRiskResponse,
+  PortfolioTruthValueSemantics,
 } from '../../types/portfolio';
 import {
   TerminalButton,
@@ -19,14 +29,15 @@ type ScenarioKind = 'symbol' | 'index_proxy' | 'theme_proxy';
 
 export interface PortfolioScenarioRiskVisiblePosition {
   symbol: string;
-  marketValue?: number | null;
-  marketValueBase?: number | null;
+  marketValueBase?: PortfolioDecimal | null;
+  baseCurrency?: string | null;
   bucketLabel?: string | null;
-  currency?: string | null;
 }
 
 interface PortfolioScenarioRiskPanelProps {
   snapshotAsOf?: string | null;
+  baseCurrency?: string | null;
+  portfolioTruthValueSemantics: PortfolioTruthValueSemantics | null;
   positions: PortfolioScenarioRiskVisiblePosition[];
   onRunScenario: (payload: PortfolioScenarioRiskRequest) => Promise<PortfolioScenarioRiskResponse>;
 }
@@ -34,20 +45,6 @@ interface PortfolioScenarioRiskPanelProps {
 const FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-[color:var(--wolfy-text-secondary)]';
 const INPUT_CLASS = 'h-10 rounded-lg border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-primary)] placeholder:text-[color:var(--wolfy-text-muted)] outline-none focus:border-emerald-500/50';
 const SELECT_CLASS = 'min-w-0';
-const SIGNED_AMOUNT_FORMATTER = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  signDisplay: 'always',
-});
-const PERCENT_FORMATTER = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 1,
-});
-const DECIMAL_FORMATTER = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-
 type LocalizedCopy = {
   zh: string;
   en: string;
@@ -177,49 +174,64 @@ function buildConsumerWarningRows(values: string[], isEnglish: boolean): string[
   );
 }
 
-function formatSignedAmount(value?: number | null): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return SIGNED_AMOUNT_FORMATTER.format(value);
+function formatSignedAmount(value?: PortfolioDecimal | null): string {
+  if (!value) return '--';
+  const sign = portfolioDecimalSign(value);
+  const formatted = formatPortfolioDecimal(absolutePortfolioDecimal(value), { minimumFractionDigits: 2 });
+  return sign > 0 ? `+${formatted}` : sign < 0 ? `-${formatted}` : formatted;
 }
 
-function formatPercent(value?: number | null): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return `${PERCENT_FORMATTER.format(value)}%`;
+function formatPercent(value?: PortfolioDecimal | null): string {
+  return value ? `${formatPortfolioDecimal(value, { minimumFractionDigits: 1 })}%` : '--';
 }
 
-function formatDecimal(value?: number | null): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return DECIMAL_FORMATTER.format(value);
+function formatDecimal(value?: PortfolioDecimal | null): string {
+  return value ? formatPortfolioDecimal(value, { minimumFractionDigits: 2 }) : '--';
 }
 
-function buildScenarioName(kind: ScenarioKind, target: string, shockPercentRaw: string): string {
+function buildScenarioName(kind: ScenarioKind, target: string, shockPercent: PortfolioDecimal): string {
   const slug = target.trim().toLowerCase().replace(/\s+/g, '_');
-  const direction = Number(shockPercentRaw) >= 0 ? 'up' : 'down';
-  return `${kind}_${slug}_${direction}_${shockPercentRaw.trim()}`;
+  const direction = portfolioDecimalSign(shockPercent) >= 0 ? 'up' : 'down';
+  return `${kind}_${slug}_${direction}_${shockPercent}`;
 }
 
 function toScenarioPositions(positions: PortfolioScenarioRiskVisiblePosition[]) {
-  const totalMarketValue = positions.reduce((sum, position) => {
-    const value = position.marketValueBase ?? position.marketValue ?? 0;
-    return sum + (Number.isFinite(value) ? Number(value) : 0);
-  }, 0);
-
   return positions.map((position) => {
-    const marketValue = position.marketValueBase ?? position.marketValue ?? 0;
-    const weightPct = totalMarketValue > 0 ? Number(((marketValue / totalMarketValue) * 100).toFixed(4)) : undefined;
     return {
       symbol: position.symbol,
-      ...(weightPct != null ? { weightPct } : {}),
-      marketValue,
-      marketValueBase: marketValue,
+      ...(position.marketValueBase != null ? { marketValueBase: position.marketValueBase } : {}),
+      ...(position.marketValueBase != null && position.baseCurrency ? { baseCurrency: position.baseCurrency } : {}),
       ...(position.bucketLabel ? { bucketLabel: position.bucketLabel } : {}),
-      ...(position.currency ? { currency: position.currency } : {}),
     };
   });
 }
 
+function normalizeScenarioCurrency(value?: string | null): string | null {
+  const normalized = value?.trim().toUpperCase();
+  return normalized || null;
+}
+
+function resolveScenarioBaseCurrency(
+  positions: PortfolioScenarioRiskVisiblePosition[],
+  fallbackCurrency?: string | null,
+): string | null {
+  const valuedPositions = positions.filter((position) => position.marketValueBase != null);
+  if (!valuedPositions.length) {
+    return normalizeScenarioCurrency(fallbackCurrency);
+  }
+
+  const currencies = valuedPositions.map((position) => normalizeScenarioCurrency(position.baseCurrency));
+  if (currencies.some((currency) => currency === null)) {
+    return null;
+  }
+  const [currency] = currencies as string[];
+  return currencies.every((item) => item === currency) ? currency : null;
+}
+
 export function PortfolioScenarioRiskPanel({
   snapshotAsOf,
+  baseCurrency,
+  portfolioTruthValueSemantics,
   positions,
   onRunScenario,
 }: PortfolioScenarioRiskPanelProps) {
@@ -266,8 +278,8 @@ export function PortfolioScenarioRiskPanel({
     setMappingError(null);
     setSubmitError(null);
 
-    const parsedShock = Number(shockPercent);
-    if (!shockPercent.trim() || !Number.isFinite(parsedShock) || Math.abs(parsedShock) > 100) {
+    const parsedShock = parsePortfolioDecimal(shockPercent.trim());
+    if (!parsedShock || comparePortfolioDecimals(absolutePortfolioDecimal(parsedShock), '100') > 0) {
       setShockError(isEnglish ? 'Enter a valid shock percent.' : '请填写有效的冲击幅度');
       return;
     }
@@ -283,9 +295,32 @@ export function PortfolioScenarioRiskPanel({
       return;
     }
 
+    if (portfolioTruthValueSemantics !== 'authoritative_total') {
+      setSubmitError(isEnglish
+        ? 'Current portfolio valuation is incomplete, so scenario projection is unavailable.'
+        : '当前组合估值尚未完整，暂时无法推演。');
+      return;
+    }
+
+    if (positions.some((position) => position.marketValueBase == null || !normalizeScenarioCurrency(position.baseCurrency))) {
+      setSubmitError(isEnglish
+        ? 'Visible holding valuations are incomplete, so scenario projection is unavailable.'
+        : '当前可见持仓缺少估值或计价币种，暂时无法推演。');
+      return;
+    }
+
+    const scenarioBaseCurrency = resolveScenarioBaseCurrency(positions, baseCurrency);
+    if (!scenarioBaseCurrency) {
+      setSubmitError(isEnglish
+        ? 'Visible holding valuation currencies do not match, so scenario projection is unavailable.'
+        : '当前可见持仓的计价币种不一致，暂时无法推演。');
+      return;
+    }
+
     const targetLabel = scenarioKind === 'symbol' ? effectiveSelectedSymbol : trimmedLabel;
     const payload: PortfolioScenarioRiskRequest = {
       asOf: snapshotAsOf,
+      baseCurrency: scenarioBaseCurrency,
       positions: toScenarioPositions(positions),
       exposures: scenarioKind === 'symbol'
         ? []
@@ -294,12 +329,12 @@ export function PortfolioScenarioRiskPanel({
             symbol: effectiveSelectedSymbol,
             label: targetLabel,
             labelType: scenarioKind,
-            exposure: 1,
+            exposure: '1',
           },
         ],
       scenarioShocks: [
         {
-          name: buildScenarioName(scenarioKind, targetLabel, shockPercent),
+          name: buildScenarioName(scenarioKind, targetLabel, parsedShock),
           shocks: {
             [targetLabel]: scenarioKind === 'symbol'
               ? { shockPct: parsedShock }
@@ -393,7 +428,9 @@ export function PortfolioScenarioRiskPanel({
                 />
               ) : null}
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                pattern="-?(?:0|[1-9]\\d*)(?:\\.\\d+)?"
                 label={isEnglish ? 'Shock percent (%)' : '冲击幅度（%）'}
                 labelClassName={FIELD_LABEL_CLASS}
                 value={shockPercent}
@@ -464,7 +501,7 @@ export function PortfolioScenarioRiskPanel({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Coverage' : '覆盖情况'}</div>
-                <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{formatPercent(scenarioResult.coveredWeight != null ? scenarioResult.coveredWeight * 100 : null)}</div>
+                <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{scenarioResult.coveredWeight != null ? formatPercent(multiplyPortfolioDecimals(scenarioResult.coveredWeight, '100')) : '--'}</div>
                 <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
                   {isEnglish ? 'Covered market value' : '覆盖市值'} {formatDecimal(scenarioResult.coveredMarketValue)}
                 </div>
@@ -531,7 +568,7 @@ export function PortfolioScenarioRiskPanel({
                         <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
                           {entry.bucket || '--'}
                           {' · '}
-                          {formatPercent(entry.weight != null ? entry.weight * 100 : null)}
+                          {entry.weight != null ? formatPercent(multiplyPortfolioDecimals(entry.weight, '100')) : '--'}
                         </div>
                       </div>
                       <div className="text-right">

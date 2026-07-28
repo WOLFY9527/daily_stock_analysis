@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import os
 import sys
 import tempfile
@@ -227,6 +229,135 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertEqual(first_hash["duplicate_count"], 1)
         self.assertEqual(second_hash["inserted_count"], 0)
 
+    def test_csv_import_dedup_hash_ignores_cosmetic_decimal_scale(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        canonical = (
+            "成交日期,证券代码,买卖标志,成交数量,成交均价,手续费,印花税\n"
+            "2026-01-02,600519,买入,10,100,1,0\n"
+        ).encode("utf-8")
+        cosmetic_scale = (
+            "成交日期,证券代码,买卖标志,成交数量,成交均价,手续费,印花税\n"
+            "2026-01-02,600519,买入,10.0,100.00,1.0,0.00\n"
+        ).encode("utf-8")
+
+        first = self.import_service.parse_trade_csv(broker="huatai", content=canonical)
+        second = self.import_service.parse_trade_csv(broker="huatai", content=cosmetic_scale)
+
+        self.assertEqual(first["records"][0]["quantity"], "10")
+        self.assertEqual(second["records"][0]["quantity"], "10.0")
+        self.assertEqual(first["records"][0]["dedup_hash"], second["records"][0]["dedup_hash"])
+
+        first_commit = self.import_service.commit_trade_records(
+            account_id=aid,
+            broker="huatai",
+            records=first["records"],
+        )
+        second_commit = self.import_service.commit_trade_records(
+            account_id=aid,
+            broker="huatai",
+            records=second["records"],
+        )
+
+        self.assertEqual(first_commit["inserted_count"], 1)
+        self.assertEqual(second_commit["inserted_count"], 0)
+        self.assertEqual(second_commit["duplicate_count"], 1)
+
+    def test_no_uid_import_recognizes_pre_r05_v1_dedup_hash(self) -> None:
+        account = self.service.create_account(name="Legacy Import", broker="Demo", market="cn", base_currency="CNY")
+        record = self.import_service.parse_trade_csv(
+            broker="huatai",
+            content=self._csv_bytes(with_trade_uid=False),
+        )["records"][0]
+        legacy_hash = self.import_service._build_legacy_v1_dedup_hash(record)
+
+        self.assertIsNone(record.get("trade_uid"))
+        self.assertNotEqual(record["dedup_hash"], legacy_hash)
+        self.service.record_trade(
+            account_id=account["id"],
+            symbol=record["symbol"],
+            trade_date=date(2026, 1, 2),
+            side=record["side"],
+            quantity=record["quantity"],
+            price=record["price"],
+            fee=record["fee"],
+            tax=record["tax"],
+            market="cn",
+            currency="CNY",
+            dedup_hash=legacy_hash,
+        )
+
+        replay = self.import_service.commit_trade_records(
+            account_id=account["id"],
+            broker="huatai",
+            records=[record],
+        )
+
+        self.assertEqual(replay["inserted_count"], 0)
+        self.assertEqual(replay["duplicate_count"], 1)
+        self.assertEqual(
+            self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"],
+            1,
+        )
+
+    def test_no_uid_import_does_not_drop_adjacent_exact_value_on_legacy_v1_hash_collision(self) -> None:
+        account = self.service.create_account(
+            name="Legacy Import Collision",
+            broker="Demo",
+            market="cn",
+            base_currency="CNY",
+        )
+        header = "成交日期,证券代码,买卖标志,成交数量,成交均价,手续费,印花税\n"
+        legacy_record = self.import_service.parse_trade_csv(
+            broker="huatai",
+            content=(header + "2026-01-02,600519,买入,9007199254740992,1,0,0\n").encode("utf-8"),
+        )["records"][0]
+        adjacent_record = self.import_service.parse_trade_csv(
+            broker="huatai",
+            content=(header + "2026-01-02,600519,买入,9007199254740993,1,0,0\n").encode("utf-8"),
+        )["records"][0]
+        legacy_hash = self.import_service._build_legacy_v1_dedup_hash(legacy_record)
+
+        self.assertIsNone(legacy_record.get("trade_uid"))
+        self.assertEqual(
+            legacy_hash,
+            self.import_service._build_legacy_v1_dedup_hash(adjacent_record),
+        )
+        self.assertNotEqual(legacy_record["dedup_hash"], adjacent_record["dedup_hash"])
+        self.service.record_trade(
+            account_id=account["id"],
+            symbol=legacy_record["symbol"],
+            trade_date=date(2026, 1, 2),
+            side=legacy_record["side"],
+            quantity=legacy_record["quantity"],
+            price=legacy_record["price"],
+            fee=legacy_record["fee"],
+            tax=legacy_record["tax"],
+            market="cn",
+            currency="CNY",
+            dedup_hash=legacy_hash,
+        )
+
+        exact_replay = self.import_service.commit_trade_records(
+            account_id=account["id"],
+            broker="huatai",
+            records=[legacy_record],
+        )
+        adjacent_import = self.import_service.commit_trade_records(
+            account_id=account["id"],
+            broker="huatai",
+            records=[adjacent_record],
+        )
+
+        self.assertEqual(exact_replay["inserted_count"], 0)
+        self.assertEqual(exact_replay["duplicate_count"], 1)
+        self.assertEqual(adjacent_import["inserted_count"], 1)
+        self.assertEqual(adjacent_import["duplicate_count"], 0)
+        self.assertEqual(
+            self.service.list_trade_events(account_id=account["id"], page=1, page_size=20)["total"],
+            2,
+        )
+
     def test_import_side_parser_avoids_false_sell_match(self) -> None:
         csv_text = (
             "成交日期,证券代码,买卖标志,成交数量,成交均价,成交编号\n"
@@ -260,6 +391,23 @@ class PortfolioPr2TestCase(unittest.TestCase):
         )
         self.assertEqual(parsed["record_count"], 1)
         self.assertEqual(parsed["records"][0]["symbol"], "000001")
+
+    def test_csv_import_preserves_decimal_text_before_account_context_is_known(self) -> None:
+        csv_text = (
+            "成交日期,证券代码,买卖标志,成交数量,成交均价,成交编号,手续费,印花税\n"
+            "2026-01-02,600519,买入,10.12345678,100.12345678,HT-EXACT,0.12345678,0.00000001\n"
+        )
+
+        parsed = self.import_service.parse_trade_csv(
+            broker="huatai",
+            content=csv_text.encode("utf-8"),
+        )
+
+        record = parsed["records"][0]
+        self.assertEqual(record["quantity"], "10.12345678")
+        self.assertEqual(record["price"], "100.12345678")
+        self.assertEqual(record["fee"], "0.12345678")
+        self.assertEqual(record["tax"], "0.00000001")
 
     def test_import_dry_run_counts_in_file_duplicates(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -396,7 +544,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             from_currency="HKD",
             to_currency="USD",
             rate_date=date(2026, 1, 1),
-            rate=0.128,
+            rate=Decimal("0.128"),
             source="unit-test",
             is_stale=False,
         )
@@ -454,6 +602,33 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertTrue(repeat["duplicate_import"])
         self.assertEqual(repeat["inserted_count"], 0)
         self.assertEqual(repeat["cash_inserted_count"], 0)
+
+    def test_ibkr_import_collapses_cash_rows_that_differ_only_by_decimal_scale(self) -> None:
+        account = self.service.create_account(name="Cash Scale", broker="IBKR", market="us", base_currency="USD")
+        content = b'''<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U-CASH-SCALE" fromDate="2026-01-01" toDate="2026-01-31" currency="USD">
+    <CashTransactions>
+      <CashTransaction reportDate="2026-01-02" currency="USD" amount="100" description="Deposit"/>
+      <CashTransaction reportDate="2026-01-02" currency="USD" amount="100.0" description="Deposit"/>
+    </CashTransactions>
+  </FlexStatement>
+</FlexStatements>
+'''
+        parsed = self.import_service.parse_import_file(broker="ibkr", content=content)
+
+        self.assertEqual([item["amount"] for item in parsed["cash_entries"]], ["100", "100.0"])
+        result = self.import_service.commit_import_records(
+            account_id=account["id"],
+            broker="ibkr",
+            parsed_payload=parsed,
+        )
+
+        self.assertEqual(result["cash_inserted_count"], 1)
+        self.assertEqual(
+            self.service.list_cash_ledger_events(account_id=account["id"], page=1, page_size=20)["total"],
+            1,
+        )
 
     def test_ibkr_flex_preview_classifies_statement_and_record_currency_issues(self) -> None:
         account = self.service.create_account(name="Currency Preview", broker="IBKR", market="us", base_currency="USD")
@@ -642,7 +817,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             from_currency="HKD",
             to_currency="USD",
             rate_date=date(2026, 1, 1),
-            rate=0.128,
+            rate=Decimal("0.128"),
             source="unit-test",
             is_stale=False,
         )
@@ -971,7 +1146,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 2, 1),
             direction="in",
-            amount=10000.0,
+            amount=Decimal("10000.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -980,7 +1155,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 2, 1),
             side="buy",
             quantity=1,
-            price=150.0,
+            price=Decimal("150.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -989,16 +1164,16 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 2, 1),
             side="buy",
             quantity=10,
-            price=320.0,
+            price=Decimal("320.0"),
             currency="HKD",
         )
-        self._save_close("AAPL", date(2026, 2, 1), 150.0)
-        self._save_close("HK00700", date(2026, 2, 1), 320.0)
+        self._save_close("AAPL", date(2026, 2, 1), Decimal("150.0"))
+        self._save_close("HK00700", date(2026, 2, 1), Decimal("320.0"))
         self.service.repo.save_fx_rate(
             from_currency="HKD",
             to_currency="USD",
             rate_date=date(2026, 2, 1),
-            rate=0.128,
+            rate=Decimal("0.128"),
             source="manual",
             is_stale=False,
         )
@@ -1011,7 +1186,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
         report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 2, 1), cost_method="fifo")
         self.assertEqual(report["currency"], "USD")
         positions = {item["symbol"]: item for item in report["concentration"]["top_positions"]}
-        self.assertAlmostEqual(positions["HK00700"]["market_value_base"], 409.6, places=4)
+        self.assertEqual(positions["HK00700"]["market_value_base"], Decimal("409.60"))
 
     def test_risk_threshold_boundary(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
@@ -1044,12 +1219,12 @@ class PortfolioPr2TestCase(unittest.TestCase):
             currency="CNY",
         )
 
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("000001", date(2026, 1, 1), 20.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
+        self._save_close("000001", date(2026, 1, 1), Decimal("20.0"))
         self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
 
-        self._save_close("600519", date(2026, 1, 2), 70.0)
-        self._save_close("000001", date(2026, 1, 2), 20.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("70.0"))
+        self._save_close("000001", date(2026, 1, 2), Decimal("20.0"))
         report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
 
         self.assertTrue(report["concentration"]["alert"])
@@ -1078,8 +1253,8 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("600519", date(2026, 1, 2), 70.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
+        self._save_close("600519", date(2026, 1, 2), Decimal("70.0"))
 
         report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
         self.assertGreaterEqual(report["drawdown"]["series_points"], 2)
@@ -1096,7 +1271,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=cn_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -1114,7 +1289,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=us_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1127,13 +1302,13 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1154,7 +1329,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=cn_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -1172,7 +1347,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=us_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1185,13 +1360,13 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1238,7 +1413,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=cn_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -1247,7 +1422,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=10,
-            price=100.0,
+            price=Decimal("100.0"),
             market="cn",
             currency="CNY",
         )
@@ -1255,7 +1430,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=us_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1264,17 +1439,17 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=1,
-            price=100.0,
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1312,7 +1487,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=cn_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -1321,7 +1496,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=10,
-            price=100.0,
+            price=Decimal("100.0"),
             market="cn",
             currency="CNY",
         )
@@ -1329,7 +1504,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=us_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1338,17 +1513,17 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=1,
-            price=100.0,
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1385,7 +1560,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             [
                 {
                     "industry": "白酒",
-                    "market_value_base": 1000.0,
+                    "market_value_base": "1000.00",
                     "weight_pct": 100.0,
                     "symbol_count": 1,
                 }
@@ -1402,7 +1577,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=cn_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -1411,7 +1586,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=10,
-            price=100.0,
+            price=Decimal("100.0"),
             market="cn",
             currency="CNY",
         )
@@ -1420,7 +1595,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=us_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1429,18 +1604,18 @@ class PortfolioPr2TestCase(unittest.TestCase):
             trade_date=date(2026, 1, 1),
             side="buy",
             quantity=1,
-            price=100.0,
+            price=Decimal("100.0"),
             market="us",
             currency="USD",
         )
 
-        self._save_close("600519", date(2026, 1, 1), 100.0)
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1473,7 +1648,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=us_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=100.0,
+            amount=Decimal("100.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1486,7 +1661,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         report = self.risk_service.get_risk_report(account_id=us_id, as_of=date(2026, 1, 1), cost_method="fifo")
         self.assertIn("sector_concentration", report)
         sectors = report["sector_concentration"]["top_sectors"]
@@ -1501,7 +1676,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=10000.0,
+            amount=Decimal("10000.0"),
             currency="CNY",
         )
         self.service.record_trade(
@@ -1514,7 +1689,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="cn",
             currency="CNY",
         )
-        self._save_close("600519", date(2026, 1, 1), 100.0)
+        self._save_close("600519", date(2026, 1, 1), Decimal("100.0"))
         report = self.risk_service.get_risk_report(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
         sectors = report["sector_concentration"]["top_sectors"]
         self.assertTrue(len(sectors) >= 1)
@@ -1527,7 +1702,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1540,12 +1715,12 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1560,7 +1735,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1573,12 +1748,12 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1588,7 +1763,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=8.0,
+            rate=Decimal("8.0"),
             source="manual",
             is_stale=False,
         )
@@ -1606,7 +1781,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
         self.service.record_trade(
@@ -1619,12 +1794,12 @@ class PortfolioPr2TestCase(unittest.TestCase):
             market="us",
             currency="USD",
         )
-        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self._save_close("AAPL", date(2026, 1, 1), Decimal("100.0"))
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1633,7 +1808,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             from_currency="EUR",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=8.1,
+            rate=Decimal("8.1"),
             source="manual",
             is_stale=False,
         )
@@ -1655,14 +1830,14 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
         self.service.repo.save_fx_rate(
             from_currency="USD",
             to_currency="CNY",
             rate_date=date(2026, 1, 1),
-            rate=7.0,
+            rate=Decimal("7.0"),
             source="manual",
             is_stale=False,
         )
@@ -1693,7 +1868,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=aid,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
 
@@ -1749,7 +1924,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
 
@@ -1780,7 +1955,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
             account_id=account_id,
             event_date=date(2026, 1, 1),
             direction="in",
-            amount=1000.0,
+            amount=Decimal("1000.0"),
             currency="USD",
         )
 
@@ -1819,7 +1994,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
         self.assertEqual(import_resp.status_code, 200)
         self.assertEqual(import_resp.json()["inserted_count"], 1)
 
-        self._save_close("600519", date(2026, 1, 2), 95.0)
+        self._save_close("600519", date(2026, 1, 2), Decimal("95.0"))
         self.service.get_portfolio_snapshot(account_id=account_id, as_of=date(2026, 1, 2), cost_method="fifo")
         risk_resp = self.client.get(
             "/api/v1/portfolio/risk",

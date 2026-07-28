@@ -222,6 +222,12 @@ class StockTrendAnalyzer:
         
         # 确保数据按日期排序
         df = df.sort_values('date').reset_index(drop=True)
+
+        # Persisted market bars may retain Decimal exactness; indicators are float analytics.
+        df = df.copy()
+        for column in ('open', 'high', 'low', 'close', 'volume'):
+            if column in df:
+                df[column] = pd.to_numeric(df[column], errors='raise').astype(float)
         
         # 计算均线
         df = self._calculate_mas(df)

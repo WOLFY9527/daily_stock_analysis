@@ -6,21 +6,67 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Mapping, Optional, Tuple, Union
 
 import pandas as pd
 
-from data_provider.base import DataFetcherManager
+from data_provider.base import DataFetcherManager, attach_stock_daily_close_tokens
+from src.portfolio_exact_numeric import (
+    PortfolioExactNumericError,
+    STOCK_DAILY_CLOSE_PROVENANCE_ATTR,
+    parse_portfolio_decimal,
+)
 from src.utils.symbol_classification import is_us_stock_code
 
 
 DEFAULT_US_STOCK_PARQUET_DIR = "/root/us_test/data/normalized/us"
 US_STOCK_PARQUET_ENV_KEYS = ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR")
 LOCAL_US_PARQUET_SOURCE = "local_us_parquet"
+_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN = "__wolfystock_local_us_close_token"
 DateLike = Union[str, date, datetime]
 
 logger = logging.getLogger(__name__)
+
+
+def has_complete_local_us_close_provenance(frame: object) -> bool:
+    """Return whether every local-US close token is bound to its visible row."""
+
+    close_tokens = getattr(frame, "attrs", {}).get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+    if not isinstance(close_tokens, dict):
+        return False
+    if not {"date", "close"}.issubset(getattr(frame, "columns", ())):
+        return False
+
+    seen_dates: set[str] = set()
+    for _, row in frame.iterrows():
+        close = row.get("close")
+        if close is None or pd.isna(close):
+            return False
+
+        row_date = pd.to_datetime(row.get("date"), errors="coerce")
+        if pd.isna(row_date):
+            return False
+        date_key = row_date.date().isoformat()
+        if date_key in seen_dates:
+            return False
+        seen_dates.add(date_key)
+
+        token = close_tokens.get(date_key)
+        if not isinstance(token, (Decimal, str)):
+            return False
+        try:
+            token_value = parse_portfolio_decimal(token, kind="price", market="us")
+            # Float rows are compared only; they never create or replace provenance tokens.
+            visible_close = close if isinstance(close, (Decimal, int, str)) else str(close)
+            visible_close_value = parse_portfolio_decimal(visible_close, kind="price", market="us")
+        except PortfolioExactNumericError:
+            return False
+        if token_value != visible_close_value:
+            return False
+
+    return True
 
 
 @dataclass(frozen=True)
@@ -195,7 +241,14 @@ def persist_local_us_daily_history(
         )
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        normalized.to_parquet(path, index=False)
+        parquet_frame = normalized.copy()
+        close_tokens = parquet_frame.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+        if isinstance(close_tokens, dict):
+            parquet_frame.attrs[STOCK_DAILY_CLOSE_PROVENANCE_ATTR] = {
+                date_key: format(token, "f") if isinstance(token, Decimal) else token
+                for date_key, token in close_tokens.items()
+            }
+        parquet_frame.to_parquet(path, index=False)
     except Exception as exc:
         return LocalUsHistoryPersistResult(
             stock_code=normalized_code,
@@ -296,6 +349,11 @@ def _normalize_local_us_history_frame(raw_df: Optional[pd.DataFrame]) -> Optiona
         return None
 
     df = raw_df.copy()
+    has_existing_close_tokens = STOCK_DAILY_CLOSE_PROVENANCE_ATTR in df.attrs
+    existing_close_tokens = df.attrs.get(STOCK_DAILY_CLOSE_PROVENANCE_ATTR)
+    df.attrs.pop(STOCK_DAILY_CLOSE_PROVENANCE_ATTR, None)
+    if has_existing_close_tokens and not isinstance(existing_close_tokens, dict):
+        return None
     date_column = None
     for candidate in ("trade_date", "date"):
         if candidate in df.columns:
@@ -309,6 +367,10 @@ def _normalize_local_us_history_frame(raw_df: Optional[pd.DataFrame]) -> Optiona
         return None
 
     df = df.rename(columns={date_column: "date"})
+    if not has_existing_close_tokens:
+        # Retain only original textual/Decimal source tokens. The shared helper
+        # refuses binary-float tokens when attaching storage provenance.
+        df[_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN] = df["close"]
     for candidate in ("adjusted_close", "adjustedClose", "adj_close", "Adj Close", "Adjusted Close"):
         if candidate in df.columns:
             df = df.rename(columns={candidate: "adjusted_close"})
@@ -330,7 +392,19 @@ def _normalize_local_us_history_frame(raw_df: Optional[pd.DataFrame]) -> Optiona
         if column in df.columns:
             df[column] = pd.to_numeric(df[column], errors="coerce")
 
-    return df
+    if has_existing_close_tokens:
+        raw_close_tokens = [
+            existing_close_tokens.get(row_date.date().isoformat())
+            for row_date in df["date"].tolist()
+        ]
+    else:
+        raw_close_tokens = df.pop(_STOCK_DAILY_CLOSE_PROVENANCE_COLUMN).tolist()
+    normalized = attach_stock_daily_close_tokens(df, raw_close_tokens)
+    if (
+        has_existing_close_tokens or STOCK_DAILY_CLOSE_PROVENANCE_ATTR in normalized.attrs
+    ) and not has_complete_local_us_close_provenance(normalized):
+        return None
+    return normalized
 
 
 def _normalize_date_arg(value: Optional[DateLike]) -> Optional[str]:
